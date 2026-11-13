@@ -35,6 +35,8 @@ export interface Prefs {
 	zoom: Record<string, number>;
 	/** Whether each result's id and state stand in the left gutter. Off by default: a reader reading the paper does not need every key beside it, and the reader who does is working on the corpus rather than reading it. */
 	ids: boolean;
+	/** Whether a document's right margin draws an icon beside each annotation and pending change (`fragments/gutter.ts`). On by default; off, the marks in the text remain and open their popups as before. */
+	marginMarks: boolean;
 	/** Whether the project's tree leaves out LaTeX's auxiliary files (`shell/aux.ts`). On by default: a compile writes them for its own next run, and they crowd the documents they sit beside. */
 	hideAux: boolean;
 	/** Whether the project's tree leaves out the agents' config documents, which an agent's app reads its instructions from (`AGENTS.md`, `CLAUDE.md` and the like; `shell/aux.ts`). Off by default: they are the project's files, which the tree shows as they are. */
@@ -47,7 +49,7 @@ export interface Prefs {
 	format: Format;
 }
 
-export const DEFAULTS: Prefs = { divider: 0.5, outline: 0.55, column: 252, panel: true, ids: false, hideAux: true, hideAgentConfig: false, zoom: { pdf: 1.4 }, face: 'serif', size: 'm', width: 'mid', theme: 'system', format: 'p1' };
+export const DEFAULTS: Prefs = { divider: 0.5, outline: 0.55, column: 252, panel: true, ids: false, marginMarks: true, hideAux: true, hideAgentConfig: false, zoom: { pdf: 1.4 }, face: 'serif', size: 'm', width: 'mid', theme: 'system', format: 'p1' };
 
 /** The left column's narrowest and widest: below the first a document's name no longer fits beside its marks, past the second the column takes the room a pane reads in. */
 export const COLUMN_MIN = 200;
@@ -76,6 +78,7 @@ export function coerce(raw: unknown): Prefs {
 		column: typeof o.column === 'number' && Number.isFinite(o.column) ? Math.round(Math.min(COLUMN_MAX, Math.max(COLUMN_MIN, o.column))) : DEFAULTS.column,
 		panel: o.panel !== false,
 		ids: o.ids === true,
+		marginMarks: o.marginMarks !== false,
 		hideAux: o.hideAux !== false,
 		hideAgentConfig: o.hideAgentConfig === true,
 		zoom,
@@ -113,6 +116,7 @@ export function attributes(p: Prefs): Record<string, string | null> {
 		'data-theme': p.theme === 'system' ? null : p.theme,
 		'data-format': p.format,
 		'data-ids': p.ids ? 'yes' : null,
+		'data-margin-marks': p.marginMarks ? null : 'off',
 	};
 }
 
@@ -122,6 +126,7 @@ class PrefsState {
 	column = $state<number>(DEFAULTS.column);
 	panel = $state<boolean>(DEFAULTS.panel);
 	ids = $state<boolean>(DEFAULTS.ids);
+	marginMarks = $state<boolean>(DEFAULTS.marginMarks);
 	hideAux = $state<boolean>(DEFAULTS.hideAux);
 	hideAgentConfig = $state<boolean>(DEFAULTS.hideAgentConfig);
 	zoom = $state<Record<string, number>>({ ...DEFAULTS.zoom });
@@ -132,7 +137,7 @@ class PrefsState {
 	format = $state<Format>(DEFAULTS.format);
 
 	get current(): Prefs {
-		return { divider: this.divider, outline: this.outline, column: this.column, panel: this.panel, ids: this.ids, hideAux: this.hideAux, hideAgentConfig: this.hideAgentConfig, zoom: this.zoom, face: this.face, size: this.size, width: this.width, theme: this.theme, format: this.format };
+		return { divider: this.divider, outline: this.outline, column: this.column, panel: this.panel, ids: this.ids, marginMarks: this.marginMarks, hideAux: this.hideAux, hideAgentConfig: this.hideAgentConfig, zoom: this.zoom, face: this.face, size: this.size, width: this.width, theme: this.theme, format: this.format };
 	}
 
 	load(override?: Partial<Prefs>): void {
@@ -142,6 +147,7 @@ class PrefsState {
 		this.column = p.column;
 		this.panel = p.panel;
 		this.ids = p.ids;
+		this.marginMarks = p.marginMarks;
 		this.hideAux = p.hideAux;
 		this.hideAgentConfig = p.hideAgentConfig;
 		this.zoom = { ...p.zoom };

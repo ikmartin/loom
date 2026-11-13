@@ -27,7 +27,7 @@ def test_the_defaults_are_four_types_with_their_looks() -> None:
     types, problems = parse_types(default_text())
     assert problems == []
     assert [(t.id, t.name, t.look.color, t.look.style, t.look.opacity, t.open, t.notes) for t in types] == [
-        ("revision", "Revision", "red", "highlight", 65, True, False),
+        ("revision", "Revision", "red", "highlight", 60, True, False),
         ("suggestion", "Suggestion", "orange", "highlight", 60, True, False),
         ("question", "Question", "blue", "highlight", 60, True, False),
         ("note", "Note", "grey", "highlight", 60, False, True),

@@ -877,6 +877,23 @@ test.describe('the margin', () => {
 		await expect.poll(async () => Math.abs((await middle(icon)) - (await middle(markOf(page, 'a-2026-09-16-ecnav2')))) < 10).toBe(true);
 	});
 
+	test("Settings › Annotations › Display turns the margin's markers off and on, and the marks in the text stay", async ({ page }) => {
+		await page.goto('/master/drafting/main');
+		const icons = page.getByTestId('margin-icon');
+		await expect(icons.first()).toBeVisible();
+		await settings(page, 'annotations');
+		const toggle = page.getByTestId('margin-marks');
+		await expect(toggle).toBeChecked();
+		await toggle.uncheck();
+		await page.keyboard.press('Escape');
+		await expect(icons.first()).toBeHidden();
+		await expect(markOf(page, 'a-2026-09-16-a91hwf')).toBeVisible();
+		await settings(page, 'annotations');
+		await page.getByTestId('margin-marks').check();
+		await page.keyboard.press('Escape');
+		await expect(icons.first()).toBeVisible();
+	});
+
 	test('where several start on one line, a count opens the line chooser, which opens the one picked', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		// the lemma's label carries the untyped suggestion, and its words the question
