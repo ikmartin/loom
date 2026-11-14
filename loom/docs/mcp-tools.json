@@ -1637,7 +1637,7 @@
      "type": "string"
     },
     "quote": {
-     "description": "The words it replaces, once in the key's own text; without it, the key's body.",
+     "description": "The words it replaces, once in the key's own text and inside the block, short of its \\begin and \\end; without it, the key's body.",
      "type": "string"
     },
     "why": {

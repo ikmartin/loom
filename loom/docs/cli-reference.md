@@ -269,7 +269,7 @@ The person keeps or discards it with `loom changes`: keeping writes it into the 
 | option | description |
 |---|---|
 | `--with` `NEW` | The new text; '' deletes the quoted words, and - reads it from stdin. |
-| `--quote` `OLD` | The words it replaces, once in the key's own text; without it, the key's body. |
+| `--quote` `OLD` | The words it replaces, once in the key's own text and inside the block, short of its \begin and \end; without it, the key's body. |
 | `--before` | Put the new text right before the quoted words, or at the head of the body. |
 | `--after` | Put the new text right after the quoted words, or at the end of the body. |
 | `--answers` `ID` | The annotation it answers; keeping the edit resolves it. |
@@ -1154,6 +1154,7 @@ The viewer is at /, and the build directory it reads at /build/. One server runs
 | `--port` | Port to listen on; fails if busy. |
 | `--open` | Open the browser. |
 | `--no-compile` | Run no TeX: compile nothing, neither after a change nor on starting, and make no snippets. |
+| `--viewer` `PATH` | Serve the built viewer at PATH from where it lies, read on every request, so a rebuild of it shows on a reload: for trying a change to the viewer. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ### `loom compile`
