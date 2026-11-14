@@ -33,18 +33,13 @@ def read_snapshot(root: Path, digest: str, history_dir: Path) -> str | None:
 
 
 def write_raw(root: Path, text: str, history_dir: Path) -> str:
-    """Store `text` exactly, as `<hex>.md`, and return its hash: a page's Markdown, which `normalize` would change (it drops `%` lines and the trailing spaces of a hard break)."""
-    from loom.scan.hashing import sha256
+    """Store `text` exactly, as `<hex>.md`, and return its hash: a page's Markdown, which `normalize` would change (it drops `%` lines and the trailing spaces of a hard break), and a file's text as loom found it, its own line endings kept (`writes.store`)."""
+    from loom.writes import store
 
-    digest = sha256(text)
-    d = snapshots_dir(root, history_dir)
-    d.mkdir(parents=True, exist_ok=True)
-    p = d / f"{digest.split(':', 1)[1]}.md"
-    if not p.exists():
-        p.write_text(text, encoding="utf-8")
-    return digest
+    return store(history_dir, text.encode("utf-8"))
 
 
 def read_raw(root: Path, digest: str, history_dir: Path) -> str | None:
+    """The text stored as `digest`, exactly: its own line endings, never read as LF; None when the store holds no UTF-8 text by that name."""
     p = snapshots_dir(root, history_dir) / f"{digest.split(':', 1)[-1]}.md"
-    return p.read_text(encoding="utf-8") if p.is_file() else None
+    return p.read_bytes().decode("utf-8") if p.is_file() else None
