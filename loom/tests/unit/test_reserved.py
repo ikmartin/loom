@@ -1,0 +1,60 @@
+"""The page of reserved names (docs/specs/reserved.md) lists only what is not built: a name is taken off it by the change that builds it, and what loom can check of that it checks here."""
+
+from __future__ import annotations
+
+import re
+from pathlib import Path
+
+from loom import paths
+from loom.agents import AGENT_PLACES, denied_by
+from loom.render.api import CAPABILITIES, HANDLERS
+from loom.render.attach import ATTACH
+from loom.scan.quilt import QuiltConfig
+
+PAGE = (Path(__file__).resolve().parents[3] / "docs" / "specs" / "reserved.md").read_text(encoding="utf-8")
+
+
+def section(title: str) -> str:
+    """The page's text under the heading `title`, up to the next heading."""
+    found = re.search(rf"^## {re.escape(title)}\n(.*?)(?=^## |\Z)", PAGE, re.M | re.S)
+    assert found is not None, f"docs/specs/reserved.md has no section {title!r}"
+    return found.group(1)
+
+
+def first_cells(text: str) -> list[str]:
+    """Every backticked name in the first cell of each row of the tables in `text`."""
+    rows = [line.split("|")[1] for line in text.splitlines() if line.startswith("| `")]
+    return [name for cell in rows for name in re.findall(r"`([^`]+)`", cell)]
+
+
+def test_no_reserved_write_operation_is_served() -> None:
+    """An operation that is served belongs in specs/write-api.md, whose rows are the served endpoints, and its row here is deleted by the change that serves it."""
+    reserved = first_cells(section("Write operations"))
+    assert len(reserved) >= 10 and all(re.fullmatch(r"[a-z]+(-[a-z]+)+", name) for name in reserved), reserved
+    served = sorted(set(reserved) & (set(CAPABILITIES) | set(HANDLERS)))
+    assert served == [], f"served, and still on the page of reserved names: {served}"
+
+
+def test_every_reserved_path_is_named_once_and_kept_from_agents() -> None:
+    """A reserved path is a constant in `loom.paths` already, so that two pieces of work do not spell it twice, and no agent may write it, so that the permission files a quilt has today already say so."""
+    named = {v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str)}
+    reserved = [name for name in first_cells(section("Paths in a quilt")) if name.startswith(".loom/")]
+    assert len(reserved) >= 5, reserved
+    for path in reserved:
+        rel = path.rstrip("/")
+        assert rel in named, f"{path} is reserved and loom.paths does not name it"
+        assert not any(rel == place or rel.startswith(place + "/") for place in AGENT_PLACES), path
+        assert denied_by(QuiltConfig(), rel if "." in Path(rel).name else f"{rel}/any") is not None, path
+    for inside in (paths.FORMAL_EVIDENCE, paths.FORMAL_ATTESTED, paths.SUGGESTED_WORKS):
+        assert denied_by(QuiltConfig(), inside) is not None, inside
+
+
+def test_a_part_of_the_manifest_that_is_not_built_adds_nothing() -> None:
+    """Each subject has its function in `ATTACH` already, in a module of its own, so the work that builds one edits that module and nothing shared."""
+    assert [part.__module__.rsplit(".", 1)[-1] for part in ATTACH] == [
+        "records",
+        "review",
+        "library",
+        "agents",
+        "formal",
+    ]

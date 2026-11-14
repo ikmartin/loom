@@ -11,6 +11,7 @@ This directory specifies what loom publishes into `.loom/build/` and what its vi
 - `digests.md` : digests of cited works: their files, ids, result states, postnote edges and the library store.
 - `fixture.md` : the fixture and how it is used.
 - `write-api.md` : the write API, the HTTP form of loom's local commands that the viewer calls.
+- `reserved.md` : the names work in progress will add to all of the above, none of them built yet.
 - `tools/validate-dialect.py` : the fragment validator both codebases vendor; `tools/refresh-fixture.sh` : regenerates `fixture/` and both vendored snapshots.
 
 ## Changing what crosses

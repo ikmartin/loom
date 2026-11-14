@@ -761,6 +761,11 @@ export interface Manifest {
   links?: AssertedLink[];
   macros: { default: Macro[]; sets: Record<string, Macro[]> };
   search: SearchEntry[];
+  /** Reserved for work not built yet, which will give each its shape (docs/specs/reserved.md); loom writes none of them. */
+  published?: unknown;
+  unplaced?: unknown;
+  suggested_works?: unknown;
+  formal?: unknown;
 }
 
 export interface IncorporationMathItem {

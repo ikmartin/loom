@@ -48,6 +48,19 @@ ANNOTATION_LOG = f"{ANNOTATIONS}/log.jsonl"
 #: Suggested edits, and what the person did with each: their own log (`records/edits.py`).
 EDITS = f"{LOOM}/edits"
 EDIT_LOG = f"{EDITS}/log.jsonl"
+#: Reserved for work not built yet (docs/specs/reserved.md): nothing writes these, and an agent is already kept from them.
+#: The quilt's format number, which a loom older than the quilt reads to say so.
+FORMAT = f"{LOOM}/format"
+#: A record for each agent server process attached to the quilt.
+LIVE = f"{LOOM}/live"
+#: Files dropped on the viewer and not yet filed.
+INCOMING = f"{LOOM}/incoming"
+#: Formal evidence, and the person's attestations.
+FORMAL = f"{LOOM}/formal"
+FORMAL_EVIDENCE = f"{FORMAL}/evidence.jsonl"
+FORMAL_ATTESTED = f"{FORMAL}/attest.toml"
+#: The works an agent suggested.
+SUGGESTED_WORKS = f"{DIGESTS}/suggested.jsonl"
 #: The quilt's annotation types: presets a person picks from and an agent reads, written by `loom init` with the defaults.
 ANNOTATION_TYPES = f"{LOOM}/annotation-types.toml"
 #: The running server's address and token.
