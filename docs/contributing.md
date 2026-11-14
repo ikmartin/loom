@@ -57,10 +57,11 @@ The construction principles C1–C5 (`docs/design/principles.md`) govern how the
 
 ## Where a new thing goes
 
-Each of these was once a line added to one long function or list that every change met in. Each now has a place of its own, so that two changes made at once do not touch the same lines.
+Each of these has a place of its own, so that two changes made at once do not touch the same lines.
 
 - **An endpoint of the write API** is a handler in its family's module under `loom/src/loom/render/endpoints/` and an entry in that module's `HANDLERS` (and in its `READS`, `NO_REBUILD` or `RECORD_WRITES` where it is one); a case in `loom/tests/unit/render/write_api/cases_<family>.py`; and a row in `docs/specs/write-api.md`. `render/api.py` gathers the families and is not edited.
 - **A part of the manifest** is a function in `ATTACH` (`loom/src/loom/render/attach.py`), given the scan, the records, the renderer and the manifest being made. `build()` is not edited.
+- **Something the viewer's column draws** is in the child that draws it, under `arras/src/lib/shell/column/`: the files' shelf, the list of documents, the Library's shelf and its dialog, Review's sections, the foot. `Column.svelte` is the frame they stand in. What a child must remember while it is off screen (a shelf open, a filter typed) is kept in a module beside it, since the column takes its children down when it folds. A file dropped on the window is `arras/src/lib/components/DropZone.svelte`'s to take in.
 
 ## Rules for every change
 
