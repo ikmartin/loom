@@ -55,6 +55,13 @@ The construction principles C1–C5 (`docs/design/principles.md`) govern how the
 - C4, author files are sacred: the test comes before the command that touches a file.
 - C5, one tool in two languages: loom and its viewer each have their own build and tests, the viewer ships inside loom, and `docs/specs/` changes with the code on either side.
 
+## Where a new thing goes
+
+Each of these was once a line added to one long function or list that every change met in. Each now has a place of its own, so that two changes made at once do not touch the same lines.
+
+- **An endpoint of the write API** is a handler in its family's module under `loom/src/loom/render/endpoints/` and an entry in that module's `HANDLERS` (and in its `READS`, `NO_REBUILD` or `RECORD_WRITES` where it is one); a case in `loom/tests/unit/render/write_api/cases_<family>.py`; and a row in `docs/specs/write-api.md`. `render/api.py` gathers the families and is not edited.
+- **A part of the manifest** is a function in `ATTACH` (`loom/src/loom/render/attach.py`), given the scan, the records, the renderer and the manifest being made. `build()` is not edited.
+
 ## Rules for every change
 
 - Never edit anything under `~/notes/`. Paper sources, the author's included, are copies under the workspace's gitignored `tests/fixtures/`, never committed, and neither are the quilts `demos/build.py` builds from them.

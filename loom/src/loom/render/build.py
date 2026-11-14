@@ -20,6 +20,7 @@ from loom.paths import BUILD, document_build, document_name
 from loom.records.lastseen import freeze_moved
 from loom.records.store import Records
 from loom.refs.pages import storage_root, store_home
+from loom.render.attach import ATTACH, Attaching
 from loom.render.canon import CanonRenderer, canon_fragment_path, load_canon
 from loom.render.fragments import FragmentRenderer, RenderPlan
 from loom.render.keys import aux_bytes, code_hash
@@ -588,6 +589,9 @@ def build(
     # every change waiting on the person, each drawn in its block, and the suggested edits' record
     attach_pending(result, records, renderer, manifest, files, marks)
     attach_versions(result, records, renderer, manifest, files, gone)
+    # what the other parts of loom publish, each by its own function (`render/attach.py`)
+    for attach in ATTACH:
+        attach(Attaching(result, records, renderer, manifest, files))
     # every preview asked for above, made by TeX together, one batch per preamble
     renderer.previews.make()
     from loom.review_queue import rows_for
