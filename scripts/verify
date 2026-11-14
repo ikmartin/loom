@@ -173,11 +173,13 @@ def share_workers(chosen: list[Step], workers: int | None) -> list[Step]:
     total = sum(weight.get(s.name, 1) for s in suites)
     out: list[Step] = []
     for s in chosen:
+        # asked of the step as it was chosen: once it carries the budget it equals none of them
+        is_pytest, is_suite = s in pytest, s in suites
         if workers is not None:
             s = replace(s, env=s.env | {"VERIFY_WORKERS": str(workers)})
-        if s in pytest:
+        if is_pytest:
             s = replace(s, env=s.env | {"PYTEST_XDIST_AUTO_NUM_WORKERS": str(for_pytest)})
-        elif s in suites:
+        elif is_suite:
             extra = ["--workers", str(max(1, for_suites * weight.get(s.name, 1) // total))]
             s = replace(s, cmd=s.cmd + (["--", *extra] if s.cmd[:2] == ["npm", "run"] else extra))
         elif workers is not None and s.cmd[:2] == ["npx", "vitest"]:
