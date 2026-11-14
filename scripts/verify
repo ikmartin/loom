@@ -2,16 +2,19 @@
 """Run the workspace's verification: one command, one table, CI's state last (docs/contributing.md).
 
 Usage:
-    scripts/verify [fast|full|paper|client] [--only loom|arras|docs]
-    scripts/verify --steps NAME[,NAME...] [--only loom|arras|docs]
+    scripts/verify [fast|full|paper|client] [--only loom|arras|docs] [--workers N]
+    scripts/verify --steps NAME[,NAME...] [--only loom|arras|docs] [--workers N]
 
-    fast     the inner loop: loom lint, types and unit tier; arras check and vitest; the docs checks
-    full     before a commit: fast, plus loom's TeX tier and every arras Playwright suite
+    fast     the everyday lane: loom lint, types and unit tier; arras check and vitest; the docs checks that judge what a change wrote
+    full     before a commit: fast, plus the checks that compare the working tree with git and with the generators' output, loom's TeX tier and every arras Playwright suite
     paper    the paper tier, which needs LOOM_PAPER_FIXTURES; run by hand
     client   the client tier: a quilt's generated agent configuration tried against the real Claude Code, which calls a hosted model on your account; run by hand
     --steps  exactly the named steps (the table's names without the lane, e.g. "pytest tex"), whatever their tier
+    --workers  how many test workers the run may use in all (`VERIFY_WORKERS` says the same); by default half the cores less what the machine is already carrying, never under two
 
 CI runs this script and nothing else, each lane's workflow in `.github/workflows/` with the arguments it names (docs/contributing.md). Under GitHub Actions (`GITHUB_ACTIONS` set) a failing step's output is printed whole and the CI state is not printed.
+
+The machine is shared, so a run keeps to a budget of workers (`budget`): loom's pytest and the Playwright suites divide it, and a suite started by hand reads the same `VERIFY_WORKERS` (`arras/tests/sites.ts`). Under GitHub Actions there is no budget and every suite takes what it takes alone.
 
 Lanes run in parallel and the steps within a lane in order, except that consecutive steps marked `concurrent` run together once the steps before them are done: arras builds once, then its three Playwright suites and the figure script run at the same time, each on its own copy of that build and its own ports (`arras/tests/sites.ts`). Those ports are the machine's, so a run takes the first slot no other run or server holds, and keeps it until it ends. Every deselection and skip lives here with its reason, never in a plan.
 """
@@ -31,7 +34,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-UNIT = "not tex and not paper and not network and not client"
+#: The unit tier: what needs no real TeX, paper, network or client, and does not compare the working tree with git or with a generator's output (`tree`), which a session with files not yet added, or a branch that leaves generated files to the integrator, fails for no fault of its change.
+UNIT = "not tex and not paper and not network and not client and not tree"
 LOOM_XDIST = ["-n", "auto", "--dist", "loadgroup"]
 # the one arras build of a run, which every Playwright suite copies; a slot gives the suites ports and scratch directories apart from a suite started by hand and from another worktree's run (arras/tests/sites.ts); `{slot}` is filled in by `in_slot`
 ARRAS_BUILD = ".tmp-e2e/slot-{slot}/bundle"
@@ -66,9 +70,10 @@ STEPS = [
         ("fast", "full"),
     ),
     Step("loom", "mypy", "loom", ["uv", "run", "mypy", "src"], ("fast", "full")),
-    # the unit tier holds the tracked-file guard, the CLI reference check and the quilts-match-generator check, so neither `gen_quilts --check` nor `gen_cli_reference --check` runs again here
     # every loom tier runs on xdist workers, one process each; nothing is serialised, and `loadgroup` only keeps the tests sharing a module's `once` quilt on one worker so it is built once (tests/conftest.py)
     Step("loom", "pytest unit", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", UNIT], ("fast", "full")),
+    # the tracked-file guard and the checks that the committed quilts, tool list and command reference are what their generators write
+    Step("loom", "pytest tree", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "tree"], ("full",)),
     # the biber test skips itself where biber is absent; nothing is deselected by hand
     Step("loom", "pytest tex", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "tex"], ("full",)),
     Step("loom", "pytest paper", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "paper"], ("paper",)),
@@ -99,14 +104,14 @@ STEPS = [
         ["uv", "run", "--project", "loom", "python", "docs/work-queue/check.py"],
         ("fast", "full"),
     ),
-    # the agreement checks: each standard library only, runnable alone, printing what disagrees and the command that fixes it
+    # the agreement checks: each standard library only, runnable alone, printing what disagrees and the command that fixes it; the two that compare committed copies and the vendored bundle with their sources run with the other working-tree checks, in `full`
     *(
-        Step("docs", name, ".", [sys.executable, f"scripts/checks/{script}"], ("fast", "full"))
-        for name, script in (
-            ("principles", "principles.py"),
-            ("fixtures", "fixtures.py"),
-            ("bundle", "bundle.py"),
-            ("hard wrap", "hardwrap.py"),
+        Step("docs", name, ".", [sys.executable, f"scripts/checks/{script}"], tiers)
+        for name, script, tiers in (
+            ("principles", "principles.py", ("fast", "full")),
+            ("fixtures", "fixtures.py", ("full",)),
+            ("bundle", "bundle.py", ("full",)),
+            ("hard wrap", "hardwrap.py", ("fast", "full")),
         )
     ),
 ]
@@ -129,27 +134,52 @@ def env() -> dict[str, str]:
     return out
 
 
-def share_cores(chosen: list[Step]) -> list[Step]:
-    """When loom's pytest and the concurrent Playwright suites run at once, split the cores between them.
+def budget(asked: int | None) -> int | None:
+    """How many test workers this run may use in all, or None for no limit.
 
-    Each takes every core by default, which on eight cores put eight pytest workers beside sixteen browsers and timed out the heaviest reading tests. Loom's pytest takes half the cores; each Playwright suite a share of the rest by its weight. A lane run alone keeps its defaults.
+    What was asked for (`--workers`, else `VERIFY_WORKERS`); else, under GitHub Actions, no limit, since the runner is the run's alone; else half the cores less the load the machine already carries, and never fewer than two.
+    """
+    if asked is None and os.environ.get("VERIFY_WORKERS", "").isdigit():
+        asked = int(os.environ["VERIFY_WORKERS"])
+    if asked is not None:
+        return max(1, asked)
+    if os.environ.get("GITHUB_ACTIONS"):
+        return None
+    cores = os.cpu_count() or 4
+    try:
+        carrying = round(os.getloadavg()[0])
+    except OSError:
+        carrying = 0
+    return max(2, min(cores // 2, cores - carrying))
+
+
+def share_workers(chosen: list[Step], workers: int | None) -> list[Step]:
+    """Each step with its share of the run's workers.
+
+    Loom's pytest and the concurrent Playwright suites each take every core by default, which on eight cores put eight pytest workers beside sixteen browsers and timed out the heaviest reading tests. Run together, pytest takes half and each suite a share of the rest by its weight; run without the other, each takes the whole. With no budget (`workers` None) the whole is the machine's cores, and a lane run alone keeps its tools' defaults. Every step is told the budget as `VERIFY_WORKERS`, which the Playwright configs read.
     """
     # the figure script keeps its one worker, so that a picture is taken with nothing else moving in its browser
     suites = [s for s in chosen if s.concurrent and not s.name.startswith("shots")]
-    pytest = [s for s in chosen if s.lane == "loom" and "pytest" in s.cmd]
-    if not suites or not pytest:
+    pytest = [s for s in chosen if s.lane == "loom" and "pytest" in s.cmd and "-n" in s.cmd]
+    together = bool(suites and pytest)
+    if workers is None and not together:
         return chosen
-    cores = os.cpu_count() or 4
+    whole = workers if workers is not None else (os.cpu_count() or 4)
+    for_pytest = max(2 if workers is None else 1, whole // 2) if together else whole
+    for_suites = max(1, whole - whole // 2) if together else whole
     weight = {"e2e": 2, "write": 1, "reading": 1}
     total = sum(weight.get(s.name, 1) for s in suites)
     out: list[Step] = []
     for s in chosen:
+        if workers is not None:
+            s = replace(s, env=s.env | {"VERIFY_WORKERS": str(workers)})
         if s in pytest:
-            s = replace(s, env=s.env | {"PYTEST_XDIST_AUTO_NUM_WORKERS": str(max(2, cores // 2))})
+            s = replace(s, env=s.env | {"PYTEST_XDIST_AUTO_NUM_WORKERS": str(for_pytest)})
         elif s in suites:
-            workers = max(1, (cores - cores // 2) * weight.get(s.name, 1) // total)
-            extra = ["--workers", str(workers)]
+            extra = ["--workers", str(max(1, for_suites * weight.get(s.name, 1) // total))]
             s = replace(s, cmd=s.cmd + (["--", *extra] if s.cmd[:2] == ["npm", "run"] else extra))
+        elif workers is not None and s.cmd[:2] == ["npx", "vitest"]:
+            s = replace(s, cmd=[*s.cmd, f"--maxWorkers={workers}"])
         out.append(s)
     return out
 
@@ -277,6 +307,7 @@ def main() -> int:
     parser.add_argument("tier", nargs="?", choices=("fast", "full", "paper", "client"), help="default fast")
     parser.add_argument("--only", choices=("loom", "arras", "docs"))
     parser.add_argument("--steps", help="comma-separated step names to run whatever their tier, instead of a tier")
+    parser.add_argument("--workers", type=int, help="test workers the run may use in all; default from the cores and the load")
     args = parser.parse_args()
     if args.steps is None:
         tier = args.tier or "fast"
@@ -289,7 +320,10 @@ def main() -> int:
         if unknown or not names:
             parser.error(f"no step {', '.join(map(repr, unknown)) or 'named'}; the steps are {', '.join(s.name for s in STEPS)}")
         chosen = [s for s in STEPS if s.name in names and (args.only is None or s.lane == args.only)]
-    chosen = share_cores(chosen)
+    workers = budget(args.workers)
+    chosen = share_workers(chosen, workers)
+    if workers is not None:
+        print(f"{workers} test workers ({os.cpu_count() or 4} cores; --workers or VERIFY_WORKERS chooses)", flush=True)
     # held until the process ends; only a run that serves anything needs one
     if any("ARRAS_SLOT" in s.env for s in chosen):
         slot, claim = claim_slot()

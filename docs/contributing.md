@@ -14,7 +14,7 @@ One repository: loom, and its viewer arras in a codebase of its own, each with i
 | `demos/` | the committed example quilts, rebuilt by `demos/build.py` |
 | `scripts/` | `verify`, and the documentation checks it runs (`scripts/checks/`) |
 
-To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the arras write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `arras/`.
+To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the arras write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `arras/`. A session in a worktree of its own does the `uv sync` and the `npm ci` there, so that what it tests is its own tree and not the main checkout's.
 
 The workspace's documents and loom are GPL-3.0-or-later; arras AGPL-3.0-or-later; `loom.sty` and the demo quilt MIT (`loom/src/loom/assets/LICENSE`), so they can travel with a paper.
 
@@ -22,12 +22,13 @@ The workspace's documents and loom are GPL-3.0-or-later; arras AGPL-3.0-or-later
 
 `scripts/verify` is the one verification command, and CI runs it and nothing else, one lane per workflow (`loom.yml`, `arras.yml`, `docs.yml`). It ends by printing the branch's latest CI runs; read them.
 
-- `scripts/verify` (`fast`): while working. loom's ruff, format check, mypy and unit tier; arras's svelte-check and vitest; the docs lane.
-- `scripts/verify full`: before a commit. Adds loom's TeX tier, an arras build, the three Playwright suites and the figure script.
+- `scripts/verify` (`fast`): the everyday lane, while working. loom's ruff, format check, mypy and unit tier; arras's svelte-check and vitest; the work queue, principles and hard-wrap checks. It judges only what the change did: nothing in it compares the working tree with git or a committed generated file with its generator, so a file not yet added, or a generated file left for whoever merges (see "Working in parallel"), does not fail it.
+- `scripts/verify full`: before a commit. Adds the checks `fast` leaves out (loom's tests marked `tree`: the tracked-file guard, and every test that reads a committed generated file as it stands, which are the quilts, tool list and command reference against their generators, the generated quilts' expected lint and doctor on the demo; the fixture copies; the vendored bundle), loom's TeX tier, an arras build, the three Playwright suites and the figure script.
 - `scripts/verify paper`: the paper tier, by hand, with `LOOM_PAPER_FIXTURES` naming a directory holding `0805.2065/` and `1709.09864/`. Never in CI.
 - `scripts/verify client`: the real-client tier, by hand, after a change to what loom generates for an agent client. It runs Claude Code against the generated settings and spends on the account of whoever runs it, so it never runs in CI.
 - `--only loom|arras|docs`: one lane, when a change touches one codebase or only documents.
-- `--steps "pytest tex"`: named steps whatever their tier; CI runs the TeX tier this way.
+- `--steps "pytest tex"`: named steps whatever their tier; CI runs the TeX tier this way, and on `main` the `tree` tests.
+- `--workers N`, or `VERIFY_WORKERS=N`: how many test workers the run may use in all. The machine is shared, so by default a run takes half the cores less the load already on it, and never fewer than two; loom's pytest and the Playwright suites divide what it takes. A Playwright suite started by hand reads the same variable.
 
 The docs lane runs `docs/work-queue/check.py` and the checks in `scripts/checks/`, each runnable alone and printing the command that fixes what it finds.
 
@@ -39,8 +40,8 @@ The docs lane runs `docs/work-queue/check.py` and the checks in `scripts/checks/
 - Fixture quilts are written from `loom/tests/quilts/sources/` by loom's own commands under a fixed clock (`uv run python scripts/gen_quilts.py all` in `loom/`); `test_the_checked_in_quilt_is_what_the_generator_writes` compares them byte for byte. Never edit one by hand. The viewer's served suites run no TeX, so the pages TeX makes of the synthetic and showcase quilts' documents are kept in `arras/tests/pages/` (`uv run python scripts/gen_pages.py` in `loom/`, which needs TeX Live); a change to those quilts' documents, or to how loom configures TeX4ht, makes them again, and a page left behind is read as edited since.
 - `test_never_modifies_author_files` runs every command on every fixture quilt and fails if an author file's hash changes.
 - Every diagnostic code is in `docs/specs/diagnostics.md` before loom emits it, and some test emits it. `test_all_emitted_codes_are_known` checks only that the fixtures' codes are in loom's table, not that every code is emitted.
-- CI sees only committed files, so `loom/tests/unit/test_tracked.py` fails on a shipped file under `loom/src`, `loom/tests/quilts` or `arras/src` that is untracked or ignored.
-- When loom's pytest runs beside the Playwright suites, `scripts/verify` gives it half the cores and splits the rest among the suites, because together they once starved the reading suite into timeouts.
+- CI sees only committed files, so `loom/tests/unit/test_tracked.py` fails on a shipped file under `loom/src`, `loom/tests/quilts` or `arras/src` that is untracked or ignored. It is marked `tree`, so it runs in `full`, before a commit, and not while a new file is still being written.
+- When loom's pytest runs beside the Playwright suites, `scripts/verify` gives it half the run's workers and splits the rest among the suites: left to themselves each takes every core, and together they starve the reading suite into timeouts.
 - `scripts/verify` takes the first slot nothing on the machine holds, so its Playwright servers never meet another worktree's or a suite started by hand; `arras/tests/sites.ts` says what a slot is. Suites started by hand run in slot 0, so two of them in two checkouts need `ARRAS_SLOT=N` on one.
 - A test fails on what happened, never on how busy the machine is. Waits are bounded generously and end as soon as the thing happens (`PATIENCE` in `loom/tests/helpers.py`; `patient` in `arras/tests/sites.ts`; `testTimeout` in `arras/vite.config.ts`), so only a real failure spends them. A claim about speed is made structurally, by holding back what must not be waited for and asserting what still arrives (`noPolls` in `arras/tests/polls.ts`), or timed by `scripts/bench`, never by a stopwatch inside a test. loom's tests run with `LOOM_PROGRESS=off`, since how long a command took decides whether it prints progress; a test of the progress line asks for it with the `progress` fixture.
 

@@ -17,6 +17,7 @@ SCRIPT = REPO / "scripts" / "gen_quilts.py"
 
 
 # The demo and the showcase need the real poppler: gathering reads the page text of the PDFs they file, and the shim on the unit tier writes nothing, so the work would be filed under a content hash rather than the identifier its first page prints.
+@pytest.mark.tree
 @pytest.mark.parametrize(
     "which",
     [pytest.param("demo", marks=pytest.mark.poppler), "synthetic", pytest.param("showcase", marks=pytest.mark.poppler)],

@@ -49,6 +49,7 @@ markers = [
   "poppler: needs the real pdftotext for page text and word boxes; TeX stays the shim",
   "paper: needs LOOM_PAPER_FIXTURES pointing at the arXiv sources (paper tier)",
   "network: needs network access",
+  "tree: compares the working tree with git, or a committed generated file with what its generator writes; run before a merge and on main, not in the everyday lane",
   "client: runs the real Claude Code against a quilt's generated agent configuration, calling a hosted model on the account of whoever runs it; needs LOOM_CLIENT_TESTS=1 and claude on PATH (client tier)",
 ]
 

@@ -23,6 +23,16 @@ export function results(name: string): string {
  */
 export const patient = { timeout: 300000, expect: { timeout: 120000 }, maxFailures: 10 };
 
+/**
+ * How many workers a suite runs: the run's budget when `VERIFY_WORKERS` gives one (`scripts/verify` sets it, and passes each suite its share as `--workers`, which wins), else the config's own number, else Playwright's default.
+ *
+ * A suite started by hand on a machine other sessions are using is run as `VERIFY_WORKERS=2 npm run test:write`.
+ */
+export function workers(own?: number): number | undefined {
+	const budget = Number(process.env.VERIFY_WORKERS);
+	return Number.isInteger(budget) && budget > 0 ? budget : own;
+}
+
 /** Each statically served config's base port, read by `scripts/verify`, which claims a slot on 4175, so that one stays out of this table; the write and reading suites take a free port per server instead. */
 const PORTS = { e2e: 4173, shots: 4174 };
 
