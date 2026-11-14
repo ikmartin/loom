@@ -86,6 +86,33 @@ def test_a_text_made_once_is_read_from_the_cache(tmp_path: Path) -> None:
     assert all(s.cached for s in again.made) and again.made[2].html == first.made[1].html
 
 
+@pytest.mark.tex
+def test_a_page_break_that_moves_remakes_only_a_text_that_prints_a_page(tmp_path: Path) -> None:
+    """A text keyed on its aux's numbers alone stays in the cache when only pages move; one that prints a page is made again and prints the new one."""
+    import os
+
+    q = tmp_path / "q"
+    q.mkdir()
+    aux = q / "main.aux"
+
+    def pages_from(page: int) -> None:
+        aux.write_text(f"\\relax\n\\newlabel{{q1}}{{{{4.2}}{{{page}}}}}\n", encoding="utf-8")
+        os.utime(aux, ns=(aux.stat().st_atime_ns, aux.stat().st_mtime_ns + 1_000_000))
+
+    texts = ["See Lemma~\\ref{q1} again.", "See the lemma on page~\\pageref{q1}."]
+
+    def made():  # type: ignore[no-untyped-def]
+        return render_snippets(q, "", PREAMBLE, texts, q / ".loom/build/cache/snippets", aux=aux)
+
+    pages_from(7)
+    first = made()
+    assert "4.2" in (first.made[0].html or "") and ">7</a>" in (first.made[1].html or ""), [s.error for s in first.made]
+    pages_from(8)
+    again = made()
+    assert again.made[0].cached and again.made[0].html == first.made[0].html
+    assert not again.made[1].cached and ">8</a>" in (again.made[1].html or "") and again.runs == 1
+
+
 MASTER = r"""\documentclass{amsart}
 \usepackage{amsmath,amsthm,tikz-cd}
 \newtheorem{lemma}{Lemma}

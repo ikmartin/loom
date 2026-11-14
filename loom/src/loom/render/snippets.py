@@ -124,7 +124,7 @@ def snippet_key(
     math: str = "mathjax",
     aux: str = "",
 ) -> str:
-    """A text's cache key: everything its HTML is made from, the aux's digest among it, since the aux is what its references and citations print."""
+    """A text's cache key: everything its HTML is made from, `aux` among it (`keys.aux_digest`), since the aux is what its references and citations print."""
     said = json.dumps([VERSION, _code(), salt, engine, math, base, sorted(set(envs)), aux, preamble, text])
     return hashlib.sha256(said.encode("utf-8")).hexdigest()[:32]
 
@@ -182,8 +182,13 @@ def render_snippets(
     """
     began = time.monotonic()
     out = Snippets(made=[Snippet(None) for _ in texts])
-    said = hashlib.sha256(aux.read_bytes()).hexdigest() if aux is not None and aux.is_file() else ""
-    keys = [snippet_key(preamble, base, t, engine=engine, envs=envs, salt=salt, math=math, aux=said) for t in texts]
+    from loom.render.keys import aux_digest, preamble_prints_pages
+
+    pages = aux is not None and preamble_prints_pages(root, base, preamble)
+    keys = [
+        snippet_key(preamble, base, t, engine=engine, envs=envs, salt=salt, math=math, aux=aux_digest(aux, t, pages))
+        for t in texts
+    ]
     first: dict[str, int] = {}  # a text asked for twice is made once
     for i, k in enumerate(keys):
         made, failed = cache_dir / f"{k}.html", cache_dir / f"{k}.failed"
