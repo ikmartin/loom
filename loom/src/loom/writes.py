@@ -10,14 +10,14 @@ import json
 import os
 import posixpath
 import secrets
-import sys
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.locks import locked
+from loom.errors import ContentError
+from loom.locks import flush, locked
 
 #: The journal, the lock every act holds, and the journal's index, in the history directory.
 JOURNAL = "writes.jsonl"
@@ -27,13 +27,12 @@ INDEX = "writes-index.json"
 TEMP = ".loom-tmp"
 
 
-class WriteRefused(Exception):
-    """A write the door will not make, and why in the person's words; `code` is the write API's."""
+class WriteRefused(ContentError):
+    """A write the door will not make, and why in the person's words; `code` is the write API's, and a command exits 1 with the message."""
 
     def __init__(self, code: str, message: str, status: int = 409) -> None:
         super().__init__(message)
         self.code = code
-        self.message = message
         self.status = status
 
 
@@ -46,17 +45,9 @@ def digest(data: bytes | None) -> str | None:
 
 
 def _flush(fh: Any, full: bool = False) -> None:
-    """Flush a written file to the disk; `full` asks the drive itself to empty its cache, where macOS can (`F_FULLFSYNC`)."""
+    """Flush a written file to the disk; `full` asks the drive itself to empty its cache (`locks.flush`)."""
     fh.flush()
-    if full and sys.platform == "darwin":
-        import fcntl
-
-        try:
-            fcntl.fcntl(fh.fileno(), fcntl.F_FULLFSYNC)
-            return
-        except OSError:
-            pass
-    os.fsync(fh.fileno())
+    flush(fh.fileno(), full)
 
 
 def store(history: Path, data: bytes) -> str:

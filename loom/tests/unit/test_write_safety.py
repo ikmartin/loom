@@ -412,11 +412,6 @@ def test_keep_leaves_line_endings_alone(q: Path) -> None:
     assert node.read_bytes().count(b"\r\n") == 3
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="SAFE-10: saving Settings keeps nothing of config.toml first, and leaves it mode 0600",
-)
 def test_saving_settings_keeps_the_config_first(q: Path) -> None:
     config = q / "config.toml"
     old = config.read_bytes()
@@ -470,3 +465,86 @@ def test_keeping_an_insertion_writes_it_even_when_its_words_stand_elsewhere_in_t
     eid = suggest(q, "sy-000A", "\\cite[Theorem 2.1]{Kre99}", "--quote", "Gadgets exist:", "--after")
     call(q, "change-keep", {"changes": [eid]})
     assert node.read_text().count("\\cite[Theorem 2.1]{Kre99}") == 2
+
+
+# The door (`loom.writes`, docs/design/writes.md): each writer it carries, cut short by a crash between the journal and the file, leaves the file as it was, and the next act settles it. A crash is a BaseException raised just before the rename, which the door's own failure handling does not catch, so the journal and the temp file are left as a dead process leaves them.
+
+
+class Died(BaseException):
+    """The process dies here."""
+
+
+def dying_before_the_rename(monkeypatch: pytest.MonkeyPatch) -> Any:
+    """Make the next rename of a person's file die; returns what puts the real one back."""
+    import loom.writes as writes
+
+    real = writes._rename
+
+    def rename(tmp: Path, target: Path) -> None:
+        raise Died
+
+    monkeypatch.setattr(writes, "_rename", rename)
+    return lambda: monkeypatch.setattr(writes, "_rename", real)
+
+
+def door(root: Path) -> list[str]:
+    """The journal's events, in order."""
+    p = root / ".loom/history/writes.jsonl"
+    return [json.loads(line)["event"] for line in p.read_text().splitlines()] if p.is_file() else []
+
+
+def no_temps(root: Path) -> bool:
+    return not [p for p in root.rglob("*.loom-tmp") if ".loom" not in p.relative_to(root).parts]
+
+
+def test_a_tick_cut_short_before_its_write_leaves_the_file_and_ticks_once_after(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.tasks import items
+
+    tasks = q / "tasks.md"
+    before = tasks.read_bytes()
+    task = items(tasks.read_text())[0].id
+    revive = dying_before_the_rename(monkeypatch)
+    with pytest.raises(Died):
+        call(q, "file-tick", {"path": "tasks.md", "task": task, "done": True})
+    revive()
+    assert tasks.read_bytes() == before
+    assert "error" not in call(q, "file-tick", {"path": "tasks.md", "task": task, "done": True})
+    assert tasks.read_bytes() == before.replace(b"- [ ] read", b"- [x] read")
+    assert door(q)[-4:] == ["begin", "aborted", "begin", "done"] and no_temps(q)
+    assert kept_in_history(q, before)
+
+
+def test_a_tick_changes_one_character_of_a_crlf_task_list(q: Path) -> None:
+    from loom.tasks import items
+
+    tasks = q / "tasks.md"
+    tasks.write_bytes(tasks.read_bytes().replace(b"\n", b"\r\n"))
+    before = tasks.read_bytes()
+    task = items(tasks.read_bytes().decode())[0].id
+    assert "error" not in call(q, "file-tick", {"path": "tasks.md", "task": task, "done": True})
+    assert tasks.read_bytes() == before.replace(b"- [ ] read", b"- [x] read")
+
+
+def test_a_task_list_that_is_not_utf8_is_never_ticked(q: Path) -> None:
+    tasks = q / "tasks.md"
+    tasks.write_bytes("# Tâches\n\n- [ ] relire Schröder\n".encode("latin-1"))
+    before = tasks.read_bytes()
+    said = call(q, "file-tick", {"path": "tasks.md", "task": "t-1", "done": True})
+    assert said == {"error": "not-a-task"} and tasks.read_bytes() == before
+
+
+def test_settings_cut_short_before_the_write_leave_config_as_it_was(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config = q / "config.toml"
+    before = config.read_bytes()
+    revive = dying_before_the_rename(monkeypatch)
+    with pytest.raises(Died):
+        call(q, "settings-save", {"changes": {"quilt.name": "widgets"}})
+    revive()
+    assert config.read_bytes() == before
+    assert "error" not in call(q, "settings-save", {"changes": {"quilt.name": "widgets"}})
+    assert no_temps(q)
+    assert b'name = "widgets"' in config.read_bytes() and kept_in_history(q, before)
+    assert door(q)[-4:] == ["begin", "aborted", "begin", "done"]
+    assert config.stat().st_mode & 0o777 == 0o644

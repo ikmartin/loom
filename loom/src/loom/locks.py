@@ -41,6 +41,10 @@ if sys.platform == "win32":
         os.lseek(fd, _FAR, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
+    def flush(fd: int, full: bool = False) -> None:
+        """Flush what was written to `fd` to the disk."""
+        os.fsync(fd)
+
 else:
     import fcntl
 
@@ -54,6 +58,16 @@ else:
 
     def _release(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
+
+    def flush(fd: int, full: bool = False) -> None:
+        """Flush what was written to `fd` to the disk; `full` also asks the drive to empty its own cache where macOS can (`F_FULLFSYNC`), which a plain `fsync` there does not."""
+        if full and hasattr(fcntl, "F_FULLFSYNC"):
+            try:
+                fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+                return
+            except OSError:
+                pass
+        os.fsync(fd)
 
 
 _mine = threading.local()

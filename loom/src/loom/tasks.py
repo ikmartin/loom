@@ -105,13 +105,12 @@ def items(text: str) -> list[Task]:
 def tick(quilt: Quilt, who: str, path: str, task: str, done: bool) -> bool:
     """Set the box `task` of the Markdown file `path` to `done`; whether the file changed.
 
-    The person's act (P7): the old text goes into the history first, one character of the file changes, the same change goes into `who`'s look so that it is not listed back to them (`looks.take_line`), and the ledger records it. A box already in that state writes nothing. Raises TickRefused for a file the viewer does not show, one that is not Markdown, and a line that no longer reads as the page drew it.
+    The person's act (P7), through the door (`loom.writes`): the file is read and the box found under its lock, one character changes and its old bytes are kept, the ledger records it, and the same change goes into `who`'s look so that it is not listed back to them (`looks.take_line`). A box already in that state writes nothing. Raises TickRefused for a file the viewer does not show, one that is not Markdown or not UTF-8, and a line that no longer reads as the page drew it.
     """
+    from loom import writes
     from loom.files import Shown, kind_of
-    from loom.history.acts import write_file
-    from loom.history.ledger import append_entry
+    from loom.history.acts import ledger_line
     from loom.looks import take_line
-    from loom.records.snapshots import write_raw
 
     root = quilt.root.resolve()
     target = (quilt.root / path).resolve()
@@ -119,26 +118,27 @@ def tick(quilt: Quilt, who: str, path: str, task: str, done: bool) -> bool:
         raise TickRefused("no-such-file", f"{path} is not a file the viewer shows")
     if kind_of(quilt.root, path) != "markdown":
         raise TickRefused("not-a-task", f"{path} is not a Markdown file, so it has no boxes to tick")
-    try:
-        text = target.read_bytes().decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise TickRefused("not-a-task", f"{path} is not UTF-8 text, so loom leaves it as it is") from exc
-    got = next((t for t in items(text) if t.id == task), None)
-    if got is None:
-        raise TickRefused("stale", f"{path} changed since the page was drawn; look at it again")
-    if got.done == done:
-        return False
-    lines = split_lines(text)
-    source = lines[got.line]
-    box = _BOX.search(source)
-    assert box is not None  # an item is only ever marked on a line holding a box
-    lines[got.line] = source[: box.start()] + ("[x]" if done else "[ ]") + source[box.end() :]
-    after = "".join(lines)
-    before = write_raw(quilt.root, text, quilt.history_dir)
-    write_file(target, after)
-    if who:
-        take_line(quilt, who, path, text, after, got.line)
-    words = source[box.end() :].strip()[:WORDS]
-    entry = {"path": path, "line": got.line + 1, "done": done, "words": words, "from": before}
-    append_entry(quilt.history_dir, TICK, entry, who or None)
+    with writes.act(quilt.root, quilt.history_dir, "tick", who or None) as w:
+        try:
+            text = w.text(path) or ""
+        except writes.WriteRefused as exc:
+            raise TickRefused("not-a-task", f"{path} is not UTF-8 text, so loom leaves it as it is") from exc
+        got = next((t for t in items(text) if t.id == task), None)
+        if got is None:
+            raise TickRefused("stale", f"{path} changed since the page was drawn; look at it again")
+        if got.done == done:
+            return False
+        lines = split_lines(text)
+        source = lines[got.line]
+        box = _BOX.search(source)
+        assert box is not None  # an item is only ever marked on a line holding a box
+        lines[got.line] = source[: box.start()] + ("[x]" if done else "[ ]") + source[box.end() :]
+        after = "".join(lines)
+        w.replace(path, after.encode("utf-8"))
+        words = source[box.end() :].strip()[:WORDS]
+        entry = {"path": path, "line": got.line + 1, "done": done, "words": words, "from": writes.digest(text.encode())}
+        w.log(*ledger_line(quilt.history_dir, TICK, entry, who or None))
+        if who:
+            line = got.line
+            w.then(lambda: take_line(quilt, who, path, text, after, line))
     return True

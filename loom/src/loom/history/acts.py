@@ -85,6 +85,18 @@ def keep_versions(result: ScanResult, paths: list[str] | None, kept_for: str, me
     return out
 
 
+def ledger_line(history_dir: Path, action: str, data: dict[str, Any], actor: str | None) -> tuple[Path, str]:
+    """The ledger and one line for it, as `append_entry` writes it: what an act through the door (`loom.writes`) journals and appends with its files."""
+    import json
+
+    from loom.clock import stamp
+    from loom.history.ledger import LEDGER
+
+    return history_dir / LEDGER, json.dumps(
+        {"when": stamp(), "actor": actor, "action": action, **data}, ensure_ascii=False
+    )
+
+
 class RestoreRefused(Exception):
     """A version that cannot be put back, and why; `code` is the write API's."""
 
