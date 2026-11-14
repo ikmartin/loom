@@ -21,7 +21,7 @@ The steps, in order:
 
 It ends by saying what changed, by path. The viewer's bundle is not regenerated here: it is vendored at a release (`loom/scripts/vendor_arras.py`).
 
-The two TeX steps write what the TeX on this machine makes, and a page differs between years of TeX Live, so they print the TeX they ran and are for the machine whose TeX the checks run on.
+The two TeX steps write what the TeX on this machine makes, and print which TeX that is. `pages` is due after any change to loom's rendering code, which names the snippets kept beside the pages; the fixture is compared with a fresh build by CI's TeX tier.
 """
 
 from __future__ import annotations
