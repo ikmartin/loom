@@ -64,7 +64,7 @@ Several branches are worked on at once, each in a worktree of its own, and one p
 - **A conflict in a generated path is never resolved by hand.** Take `main`'s side of every such path, finish the merge, and run `scripts/regen`.
 - **The two steps that run TeX** (`pages`, `fixture`) are run only on the TeX that CI runs, since a page differs between years of TeX Live; `scripts/regen --no-tex` leaves them out, and each prints the TeX it used.
 - **Merges that touch `loom/src/loom/render/`, `scan/` or `tex/` are batched**: each changes the hash every cached page is kept under, so each costs every quilt a full rebuild.
-- **The viewer is vendored at a release**, not by a branch and not by `scripts/regen`.
+- **A branch does not vendor the viewer**, and neither does `scripts/regen`. The bundle loom ships is vendored at a release, and by CI on `main` (not built yet); until that is built the integrator vendors when `main` is to be used with a changed viewer. A change to the viewer is tried without vendoring (`arras/CONTRIBUTING.md`).
 - **Only the integrator edits the plan a branch works to.** A branch reports in its pull request: what landed, which checks it ran with their output, what it changed outside its own files, whether a regeneration is due, and what it needs decided.
 
 To try a generator's change on a branch, run `scripts/regen` there and leave what it writes uncommitted; `git checkout -- $(scripts/regen --list)` puts the committed files back.

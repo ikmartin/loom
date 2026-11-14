@@ -1,9 +1,10 @@
-"""`loom serve [--port N] [--open] [--no-compile]`."""
+"""`loom serve [--port N] [--open] [--no-compile]`, and for work on the viewer `--viewer PATH`."""
 
 from __future__ import annotations
 
 import time
 import webbrowser
+from pathlib import Path
 
 import click
 
@@ -21,8 +22,15 @@ from loom.render.serve import BUILD_URL, DEFAULT_PORT, ServeSession, locate_bund
     is_flag=True,
     help="Run no TeX: compile nothing, neither after a change nor on starting, and make no snippets.",
 )
+@click.option(
+    "--viewer",
+    default=None,
+    metavar="PATH",
+    hidden=True,
+    help="Serve the built viewer at PATH from where it lies, read on every request, so a rebuild of it shows on a reload: for trying a change to the viewer.",
+)
 @quilt_option
-def serve(port: int, open_browser: bool, no_compile: bool, quilt_path: str | None) -> None:
+def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, quilt_path: str | None) -> None:
     """Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
     The viewer is at /, and the build directory it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
@@ -31,9 +39,11 @@ def serve(port: int, open_browser: bool, no_compile: bool, quilt_path: str | Non
 
     quilt = open_quilt(quilt_path)
     try:
-        bundle = locate_bundle()
+        bundle = Path(viewer).expanduser().resolve() if viewer else locate_bundle()
     except BundleEnvError as e:
         raise EnvError(f"{e}: point it at a built arras (the directory holding index.html), or unset it") from None
+    if viewer and (bundle is None or not (bundle / "index.html").is_file()):
+        raise EnvError(f"--viewer {viewer} has no index.html; build the viewer there first, then start loom serve")
     if bundle is None:
         raise EnvError(
             "the arras viewer bundle is not installed: set LOOM_ARRAS_BUNDLE, or use a loom checkout with the vendored bundle"
@@ -42,7 +52,7 @@ def serve(port: int, open_browser: bool, no_compile: bool, quilt_path: str | Non
     if running:
         # two servers on one quilt rebuild after each other's writes and hand out two tokens for one write API
         raise EnvError(f"loom serve is already running for this quilt at {running}; open that, or stop it first")
-    session = ServeSession(quilt, bundle, port, compile_masters=not no_compile)
+    session = ServeSession(quilt, bundle, port, compile_masters=not no_compile, live=bool(viewer))
     try:
         session.listen()
     except OSError as exc:

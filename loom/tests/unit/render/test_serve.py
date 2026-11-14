@@ -50,6 +50,47 @@ def test_serve_keeps_the_viewer_it_started_with_and_says_when_loom_moves_on(sess
     assert json.loads(get(s.url + "_api")[2])["stale"] is True
 
 
+def test_a_viewer_served_from_where_it_is_built_shows_a_rebuild_with_no_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`loom serve --viewer PATH` is for trying a change to the viewer: the server reads the built viewer on every request, so a rebuild is served at once, and `/_api` names the build there now, which tells an open tab it is behind. It is stale only when loom's own code has moved."""
+    from loom.render import serve as serve_mod
+    from loom.render.serve import ServeSession
+    from loom.scan.quilt import load_quilt
+    from tests.unit.render._serve import QuickServer, fake_bundle
+
+    monkeypatch.setattr(serve_mod, "ThreadingHTTPServer", QuickServer)
+    d, bundle = demo(tmp_path), fake_bundle(tmp_path)
+    s = ServeSession(load_quilt(d), bundle, port=0, compile_masters=False, interval=0.2, live=True)
+    s.listen()
+    try:
+        assert get(s.url + "_app/x.js")[2] == b"console.log(1)"
+        assert json.loads(get(s.url + "_api")[2])["viewer"] == ""
+        # built again where it lies: a new version named, the script changed
+        (bundle / "_app" / "version.json").write_text('{"version":"2"}', encoding="utf-8")
+        (bundle / "_app" / "x.js").write_text("console.log(2)", encoding="utf-8")
+        assert get(s.url + "_app/x.js")[2] == b"console.log(2)"
+        body = json.loads(get(s.url + "_api")[2])
+        assert body["viewer"] == "2" and body["stale"] is False
+    finally:
+        s.stop()
+
+
+def test_serve_refuses_a_viewer_path_that_holds_no_built_viewer(tmp_path: Path) -> None:
+    d = demo(tmp_path)
+    (tmp_path / "unbuilt").mkdir()
+    refused(
+        "serve",
+        "--port",
+        "0",
+        "--viewer",
+        str(tmp_path / "unbuilt"),
+        cwd=d,
+        code=2,
+        match="has no index.html; build the viewer there first",
+    )
+
+
 def test_serve_republishes_on_change(session) -> None:  # type: ignore[no-untyped-def]
     s, d = session
     _, headers, _ = get(s.url + "build/manifest.json")
