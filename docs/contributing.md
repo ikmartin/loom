@@ -12,7 +12,7 @@ One repository: loom, and its viewer arras in a codebase of its own, each with i
 | `arras/` | the viewer, Svelte, built with `npm` |
 | `docs/` | the design, the specs, the work queue, the plans, frozen history |
 | `demos/` | the committed example quilts, rebuilt by `demos/build.py` |
-| `scripts/` | `verify`, and the documentation checks it runs (`scripts/checks/`) |
+| `scripts/` | `verify`, `regen`, and the documentation checks `verify` runs (`scripts/checks/`) |
 
 To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the arras write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `arras/`. A session in a worktree of its own does the `uv sync` and the `npm ci` there, so that what it tests is its own tree and not the main checkout's.
 
@@ -37,8 +37,8 @@ The docs lane runs `docs/work-queue/check.py` and the checks in `scripts/checks/
 - loom's tests run loom through `loom/tests/helpers.py`, in process with exceptions let through, so a crash surfaces as a traceback. A test asserts one exit code (`ok`, `exits`, `refused`), never a set of them.
 - The fake TeX toolchain (`loom/tests/fake_latex/fake_tex.py`) exists only in the directory `loom/tests/conftest.py` makes per session, never on the real PATH. Look up every external tool on PATH so a test can substitute it.
 - Every LaTeX compile in a test runs isolated: empty HOME, TEXMFHOME, TEXMFLOCAL, TEXMFVAR and TEXMFCONFIG, no TEXINPUTS, the quilt root as cwd. A test never passes because of a file elsewhere on the machine.
-- Fixture quilts are written from `loom/tests/quilts/sources/` by loom's own commands under a fixed clock (`uv run python scripts/gen_quilts.py all` in `loom/`); `test_the_checked_in_quilt_is_what_the_generator_writes` compares them byte for byte. Never edit one by hand. The viewer's served suites run no TeX, so the pages TeX makes of the synthetic and showcase quilts' documents are kept in `arras/tests/pages/` (`uv run python scripts/gen_pages.py` in `loom/`, which needs TeX Live); a change to those quilts' documents, or to how loom configures TeX4ht, makes them again, and a page left behind is read as edited since.
-- `test_never_modifies_author_files` runs every command on every fixture quilt and fails if an author file's hash changes.
+- Fixture quilts are written from `loom/tests/quilts/sources/` by loom's own commands under a fixed clock (`uv run python scripts/gen_quilts.py all` in `loom/`, which `scripts/regen` runs with every other generator); `test_the_checked_in_quilt_is_what_the_generator_writes` compares them byte for byte. Never edit one by hand. The viewer's served suites run no TeX, so the pages TeX makes of the synthetic and showcase quilts' documents are kept in `arras/tests/pages/` (`uv run python scripts/gen_pages.py` in `loom/`, which needs TeX Live); a change to those quilts' documents, or to how loom configures TeX4ht, makes them again, and a page left behind is read as edited since.
+- `test_never_modifies_author_files` runs a fixed list of commands that read or record (lint, search, doctor, history, stamp and the like) on every fixture quilt and fails if an author file's hash changes; it runs none that writes a person's text. `test_write_safety.py` is the test of those: it runs sequences of suggestions, hand edits, Keep, Discard, ticks and settings through the write API and checks the person's files after every act.
 - Every diagnostic code is in `docs/specs/diagnostics.md` before loom emits it, and some test emits it. `test_all_emitted_codes_are_known` checks only that the fixtures' codes are in loom's table, not that every code is emitted.
 - CI sees only committed files, so `loom/tests/unit/test_tracked.py` fails on a shipped file under `loom/src`, `loom/tests/quilts` or `arras/src` that is untracked or ignored. It is marked `tree`, so it runs in `full`, before a commit, and not while a new file is still being written.
 - When loom's pytest runs beside the Playwright suites, `scripts/verify` gives it half the run's workers and splits the rest among the suites: left to themselves each takes every core, and together they starve the reading suite into timeouts.
@@ -54,6 +54,20 @@ The construction principles C1–C5 (`docs/design/principles.md`) govern how the
 - C3, the fixture is the contract's executable form: a change to loom's output regenerates it (`docs/specs/tools/refresh-fixture.sh`); a change to the interface changes it first.
 - C4, author files are sacred: the test comes before the command that touches a file.
 - C5, one tool in two languages: loom and its viewer each have their own build and tests, the viewer ships inside loom, and `docs/specs/` changes with the code on either side.
+
+## Working in parallel
+
+Several branches are worked on at once, each in a worktree of its own, and one person merges them: the integrator, who is the author or a session he names. What follows keeps their merges from meeting in files nobody wrote.
+
+- **A branch never commits a generated file.** The generated files are the ones `scripts/regen --list` prints: the test quilts with their agent permission files and expected lint, the demo `loom init --demo` writes, the copies under `demos/`, the list of the agent's tools, the command reference, the tables in the list of principles, the pages TeX makes for the viewer's served suites, and the conformance fixture with its two copies. A change that alters what a generator writes leaves the committed files stale on its branch, says so in its pull request, and is still green there: `scripts/verify` (`fast`) and CI on a branch run no check that compares a generated file with its generator.
+- **The integrator regenerates after each merge**, with `scripts/regen`, and commits what it changed alone, as "Regenerate after …". `scripts/regen --check` writes nothing and says what is stale; CI runs the same comparisons on `main`.
+- **A conflict in a generated path is never resolved by hand.** Take `main`'s side of every such path, finish the merge, and run `scripts/regen`.
+- **The two steps that run TeX** (`pages`, `fixture`) are run only on the TeX that CI runs, since a page differs between years of TeX Live; `scripts/regen --no-tex` leaves them out, and each prints the TeX it used.
+- **Merges that touch `loom/src/loom/render/`, `scan/` or `tex/` are batched**: each changes the hash every cached page is kept under, so each costs every quilt a full rebuild.
+- **The viewer is vendored at a release**, not by a branch and not by `scripts/regen`.
+- **Only the integrator edits the plan a branch works to.** A branch reports in its pull request: what landed, which checks it ran with their output, what it changed outside its own files, whether a regeneration is due, and what it needs decided.
+
+To try a generator's change on a branch, run `scripts/regen` there and leave what it writes uncommitted; `git checkout -- $(scripts/regen --list)` puts the committed files back.
 
 ## Where a new thing goes
 
