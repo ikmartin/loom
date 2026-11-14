@@ -1,6 +1,6 @@
 """Suggested edits (plan 0.30, decision 10): old words replaced with new on a key, kept or discarded by the person, in their own log.
 
-An edit names its key, the words it replaces as a selector (`anchor`; None means the key's body), the new text (`with`; empty deletes the quoted words), where the new text goes (`placement`: `replace` takes exactly the quoted words' place, `after` and `before` go right beside them), an optional `comment`, and the annotation it `answers`. It records the key's hash when it was written (`against`).
+An edit names its key, the words it replaces as a selector (`anchor`; None means the key's body), the new text (`with`; empty deletes the quoted words), where the new text goes (`placement`: `replace` takes exactly the quoted words' place, `after` and `before` go right beside them), an optional `comment`, and the annotation it `answers`. It records the key's hash when it was written (`against`) and, on a key named by its place in its file, the line above the block (`near`).
 
 `.loom/edits/log.jsonl` holds its events, appended under the log's lock: `created`; `kept`, with the key's hash once the edit is in; `discarded`, with an optional `why`; and `reopened`, the viewer's undo of either. Replay gives each edit's status; whether its key already reads as it taken is computed, never stored. Keeping an edit that answers an open annotation resolves that annotation, with the edit as its reason. `apply` writes an edit into its file on the author's act, keeping a version of each document it changes first; nothing else writes the author's source.
 """
@@ -43,6 +43,7 @@ class Edit:
     selector: Selector | None  # the words it replaces or stands beside; None: the key's body
     with_text: str  # the new text; empty deletes the quoted words
     placement: str
+    near: str = ""  # on a key named by place: the line above its block when it was written; '' when none was recorded
     comment: str = ""
     answers: str | None = None  # the annotation it answers
     status: str = "open"
@@ -125,6 +126,7 @@ def replay(root: Path) -> tuple[list[Edit], list[str]]:
                 created=str(e.get("when", "")),
                 target_key=str(e["target"]),
                 target_hash=str(e.get("against") or ""),
+                near=str(e.get("near") or ""),
                 selector=Selector.from_dict(anchor) if isinstance(anchor, dict) else None,
                 with_text=e["with"],
                 placement=placement,
@@ -191,13 +193,43 @@ def node_of(result: ScanResult, key: str) -> NodeRec | None:
 
 
 def home(result: ScanResult, edit: Edit) -> NodeRec | None:
-    """The block `edit` is on now: the key it names, unless that key is named by its place in its file and no longer holds the text the edit was written against while exactly one other block of the same file does (`written_on`).
+    """The block `edit` is on now, or None when no block can be said to be it (`filed_on`).
 
-    Keeping an edit that adds a proof renumbers every proof after it; the edit goes with the text it was written against, wherever that now stands. None when its key is gone and no block of its file holds that text.
+    A key named by a label names its block. A key named by its place in its file names another block once one is put in before it, so an edit on one goes with the text it was filed on and the line above it, wherever they now stand, and is on no block when they do not say which.
     """
-    from loom.records.store import written_on
+    from loom.records.store import filed_on
 
-    return written_on(result, edit.target_key, node_of(result, edit.target_key), edit.target_hash)
+    return filed_on(
+        result,
+        edit.target_key,
+        node_of(result, edit.target_key),
+        edit.target_hash,
+        edit.near,
+        quoted=edit.selector is not None,
+    )
+
+
+def _delimiters(own: str) -> tuple[int, int] | None:
+    """Where an environment's own text stops opening and starts closing: the end of its `\\begin{…}` and the start of its last `\\end{…}`; None for a text that is no environment."""
+    opening = re.match(r"\s*\\begin\{[^}]*\}", own)
+    closing = own.rfind("\\end{")
+    if not opening or closing < opening.end():
+        return None
+    return opening.end(), closing
+
+
+def misplaced(own: str, pieces: list[tuple[int, int, int]], span: tuple[int, int]) -> str | None:
+    """Why the quoted words at `span` of a block's own text are no place for an edit, or None when they are.
+
+    Two places are refused. Words that reach the block's `\\begin{…}` or `\\end{…}`: text put beside them lands outside the block, where nothing afterwards reads it as the edit taken, and Keep would write it again. And words that run across a child cut out of the own text: they are not in one piece of the file, and only the first piece would be replaced.
+    """
+    a, b = span
+    edges = _delimiters(own)
+    if edges is not None and (a < edges[0] or b > edges[1]):
+        return "reach the block's \\begin or \\end, so the new text would land outside the block"
+    if a < b and not any(start <= a and b <= start + length for start, _, length in pieces):
+        return "run across a block inside this one, so they are not in one piece of the file"
+    return None
 
 
 def _balanced(text: str, at: int, opening: str, closing: str) -> int:
@@ -272,12 +304,17 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone, or its quote no longer stands in the text exactly once.
+        When its key is gone or, named by place, no longer says which block; when its quote no longer stands in the text exactly once; and when the quoted words are no place for an edit (`misplaced`).
     """
     from loom.scan.owntext import key_hash
 
     node = home(result, edit)
     if node is None or node.file not in result.files:
+        there = node_of(result, edit.target_key)
+        if node is None and there is not None:
+            raise Unplaced(
+                f"{edit.id} was suggested on {edit.target_key}, a block named by its place in {there.file}; the block there has changed since or reads the same as another, so which block it is on is not known"
+            )
         raise Unplaced(f"{edit.target_key}, which {edit.id} is on, is no longer in the quilt")
     own, pieces = Records.own_pieces(result, node)
     new = edit.with_text
@@ -298,6 +335,9 @@ def place(result: ScanResult, edit: Edit) -> Placed:
                 f"the text {edit.id} quotes now stands {len(found)} times in {node.key}, so where it goes is not known"
             )
         a, b = found[0]
+        why = misplaced(own, pieces, (a, b))
+        if why is not None:
+            raise Unplaced(f"the words {edit.id} quotes in {node.key} {why}")
         if edit.placement == "after":
             span, text = (b, b), _joined(own, b, new, before=False) if new else ""
         elif edit.placement == "before":

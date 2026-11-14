@@ -30,6 +30,18 @@ try:
 except ImportError:  # today's code has none
     place_context = None
 
+try:  # what `loom suggest` records on a key named by place, where loom has it
+    from loom.records.store import line_before, named_by_place
+except ImportError:
+    line_before = named_by_place = None
+
+
+def near_of(result, key: str, node) -> dict:
+    """The `near` a created edit carries, as `loom suggest` writes it: the line above a block named by place."""
+    if named_by_place is None or not named_by_place(result, key, node):
+        return {}
+    return {"near": line_before(result, node)}
+
 WORD = re.compile(r"^[A-Za-z][A-Za-z,.;:'-]*$")
 
 
@@ -180,6 +192,7 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
             said = _one_comment(result, ("human", "Tester"), t.key, f"whole-block note on {t.tid}", None, None, None, None)
             recs.append({"tid": t.tid, "type": "ann", "id": said.split()[0], "quoted": False})
             event = {"event": "created", "when": stamp(), "author": "Agent Tester", "kind": "agent", "target": t.key, "against": _version(result, t.key) or key_hash(result, t.key), "anchor": None, "with": "The answer an agent wrote for this problem.", "placement": "replace"}
+            event.update(near_of(result, t.key, result.nodes[t.key]))
             if place_context:
                 event["context"] = place_context(result, result.nodes[t.key])
             recs.append({"tid": t.tid, "type": "edit", "id": E.append_new(root, event, today()), "quoted": False})
@@ -217,6 +230,7 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
             "with": new,
             "placement": "replace",
         }
+        event.update(near_of(result, t.key, node))
         if place_context:
             event["context"] = place_context(result, node, t.quote)
         eid = E.append_new(root, event, today())

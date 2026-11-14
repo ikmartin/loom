@@ -331,9 +331,6 @@ def test_text_written_in_and_worked_inside_is_not_written_again(q: Path) -> None
 # Damage the v0.1 safety study found (docs/reports/v0.1-study/raw/safety.md); each test passes once its finding is fixed.
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="SAFE-1: text placed after a block's \\end is never read as taken"
-)
 def test_an_edit_placed_after_its_blocks_end_is_not_written_twice(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     new = "A gadget with three points has one fixed point."
@@ -380,11 +377,6 @@ def test_a_save_made_while_keep_runs_is_not_lost(q: Path, monkeypatch: pytest.Mo
     assert "a line the editor saved" in node.read_text()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="SAFE-4: an edit on a key named by place goes into another block when the blocks cannot be told apart",
-)
 def test_an_edit_on_a_block_named_by_place_stays_on_that_block(q: Path) -> None:
     main = q / "drafting/main.tex"
     text = main.read_text()
