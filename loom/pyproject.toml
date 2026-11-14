@@ -57,7 +57,7 @@ markers = [
 line-length = 120
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["tests/tools"]  # vendored verbatim from the workspace specs
+extend-exclude = ["tests/tools"]  # kept as written elsewhere: the dialect validator vendored from the workspace specs, and the v0.1 study's anchoring harness
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]
