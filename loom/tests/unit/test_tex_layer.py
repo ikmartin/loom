@@ -21,24 +21,18 @@ def demo(tmp_path: Path) -> Path:
     return tmp_path / "demo"
 
 
-def test_a_tex_run_is_held_to_its_directory_whatever_the_shell_says(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    """Every run writes only below its directory and runs only TeX Live's safe commands; a document named in or below its directory also reads nothing outside it. kpathsea would refuse loom's own name for a document kept under `.loom/`, so that one keeps the shell's `openin_any`."""
+def test_a_tex_run_writes_only_below_its_directory_and_runs_only_safe_commands_whatever_the_shell_says(
+    monkeypatch,
+) -> None:  # type: ignore[no-untyped-def]
+    """A shell or a home configuration that opens writes to anywhere, or turns shell escape on, opens nothing in a run loom starts. What a document reads is not loom's to limit: TeX Live 2026 ignores `openin_any`, so it stays as the shell has it."""
     from loom.tex.runner import tex_env
 
     for var, loose in (("openin_any", "a"), ("openout_any", "a"), ("shell_escape", "t")):
         monkeypatch.setenv(var, loose)
-    for name in ("main.tex", "./main.tex", "sub/part.tex"):
-        env = tex_env(name)
-        assert (env["openin_any"], env["openout_any"], env["shell_escape"]) == ("p", "p", "p"), name
-    for other in (
-        "../.loom/copies/talk.tex",
-        ".loom/build/closures/dm-0003.tex",
-        "/tmp/main.tex",
-        "sub/../x.tex",
-        None,
-    ):
-        env = tex_env(other)
-        assert (env["openin_any"], env["openout_any"], env["shell_escape"]) == ("a", "p", "p"), other
+    env = tex_env()
+    assert (env["openin_any"], env["openout_any"], env["shell_escape"]) == ("a", "p", "p")
+    monkeypatch.delenv("openin_any")
+    assert "openin_any" not in tex_env()
 
 
 def test_aux_read_plain_and_hyperref() -> None:

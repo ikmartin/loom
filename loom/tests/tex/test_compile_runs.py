@@ -34,34 +34,31 @@ def test_neither_a_quilt_s_latexmkrc_nor_a_write18_runs_with_shell_escape_in_the
 
 
 @pytest.mark.tex
-def test_a_document_reads_no_file_from_outside_its_directory_whatever_the_shell_allows(
+def test_a_document_writes_nothing_outside_its_directory_and_runs_no_command_whatever_the_shell_allows(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """TeX Live lets a document `\\input` any file its reader can read, by its absolute path, and print it, so a cited paper's source or a co-author's file could carry the person's own files into a PDF. The PDF's run and the HTML's both refuse the name and still read what the document's directory holds, and a shell that turns shell escape on turns nothing on."""
+    """A shell that sets `shell_escape=t` lets any document's `\\write18` run a command, and one that sets `openout_any=a` lets it write any file the person can: a cited paper's source or a co-author's file would then do both. Neither the PDF's run nor the HTML's takes the shell's word."""
     from loom.tex.tex4ht import compile_html
 
-    monkeypatch.setenv("openin_any", "a")
     monkeypatch.setenv("shell_escape", "t")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "loot.tex").write_text("\\typeout{LOOT-READ}Loot.\n", encoding="utf-8")
+    monkeypatch.setenv("openout_any", "a")
     q = tmp_path / "q"
-    (q / "paper" / "sub").mkdir(parents=True)
-    (q / "paper" / "sub" / "part.tex").write_text("\\typeout{PART-READ}Part.\n", encoding="utf-8")
+    (q / "paper").mkdir(parents=True)
     (q / "paper" / "main.tex").write_text(
-        "\\documentclass{article}\\begin{document}\\input{sub/part}"
-        f"\\immediate\\write18{{touch {tmp_path}/ran}}\\input{{{outside}/loot.tex}}Done.\\end{{document}}\n",
+        "\\documentclass{article}\\begin{document}Done."
+        f"\\immediate\\write18{{touch {tmp_path}/ran}}"
+        f"\\newwrite\\w\\immediate\\openout\\w={tmp_path}/written.txt \\immediate\\write\\w{{x}}\\immediate\\closeout\\w"
+        "\\end{document}\n",
         encoding="utf-8",
     )
     out = q / ".loom/build/paper/main"
     res = compile_document(q, "paper", "paper/main.tex", out, halt_on_error=False)
     assert res.log is not None
-    log = res.log.read_text(errors="replace")
-    assert "PART-READ" in log and "LOOT-READ" not in log, log[-2000:]
-    assert res.first_error.startswith("! LaTeX Error: File `/"), res.errors  # the name it would not open
+    log = res.log.read_text(errors="replace").replace("\n", "")  # TeX breaks a log line at 79 columns
+    assert "disabled (restricted)" in log and "I can't write on file" in log, log[-2000:]
     page = compile_html(q, "paper", "paper/main.tex", out / "html", envs=[])
-    assert "PART-READ" in page.log and "LOOT-READ" not in page.log, page.log[-2000:]
-    assert not (tmp_path / "ran").exists()
+    assert "I can't write on file" in page.log.replace("\n", ""), page.log[-2000:]
+    assert not (tmp_path / "ran").exists() and not (tmp_path / "written.txt").exists()
 
 
 @pytest.mark.tex
