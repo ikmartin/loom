@@ -443,7 +443,7 @@ def _prepare(stage: Path, cwd: Path, envs: Sequence[str], *, snippets: bool = Fa
                     capture_output=True,
                     timeout=60,
                     check=False,
-                    env=tex_env(f.name),
+                    env=tex_env(),
                 )
     (cwd / "loom-html.cfg").write_text(configuration(envs, snippets=snippets, math=math), encoding="utf-8")
     (cwd / "loom-html.mk4").write_text("-- loom's build file: make4ht's defaults and nothing else\n", encoding="utf-8")
@@ -462,7 +462,7 @@ def _pass(
 ) -> tuple[int, str]:
     """One make4ht pass over `name` in `cwd`, writing into `out`, with `home` its own, formulas in `math` mode: its exit code and what it said; 124 when it ran past `timeout` and was killed with everything it started."""
     home.mkdir(exist_ok=True)
-    env = {**tex_env(name), "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}
+    env = {**tex_env(), "HOME": str(home), "XDG_CONFIG_HOME": str(home / ".config")}
     if "TEXMFHOME" not in os.environ:
         env["TEXMFHOME"] = _texmfhome()
     cmd = [exe, *ENGINE.get(engine, []), "-m", "draft", "-u", "-c", "loom-html.cfg", "-e", "loom-html.mk4"]
