@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import adapter from '@sveltejs/adapter-static';
 import { sveltekit } from '@sveltejs/kit/vite';
+import type { ProxyOptions } from 'vite';
 
 // arras is a single-page application served as files, by a publisher that serves index.html for unknown paths. The interface it renders is docs/specs in the loom-arras workspace.
 //
@@ -10,7 +11,29 @@ import { sveltekit } from '@sveltejs/kit/vite';
 const raw = (process.env.ARRAS_BASE ?? '').replace(/\/+$/, '');
 const base = (raw && !raw.startsWith('/') ? '/' + raw : raw) as '' | `/${string}`;
 
+// ARRAS_LOOM names a running `loom serve` (`ARRAS_LOOM=http://127.0.0.1:8791 npm run dev:loom`). The dev server then sends the quilt's own paths to it, so the viewer under development reads a real quilt and writes to it, with hot reload: the write API and its stream, the build directory, the fetched works and the project's files. Everything else, the app itself, is the dev server's.
+//
+// `loom serve` answers only a request that names it and comes from one of its own pages. A proxied request is therefore sent as the server's own: its `Host`, and, where the browser says the request came from a page of this dev server, the server's `Origin` and `Referer` in place of the dev server's. A request from any other page goes on as it came and is refused there as it would be.
+const loom = (process.env.ARRAS_LOOM ?? '').replace(/\/+$/, '');
+const LOOM_PATHS = ['/_api', '/build', '/digests', '/_files'];
+
+function toLoom(): ProxyOptions {
+	return {
+		target: loom,
+		changeOrigin: true,
+		configure(proxy) {
+			proxy.on('proxyReq', (sent, asked) => {
+				const own = `http://${asked.headers.host}`;
+				if (asked.headers.origin === own) sent.setHeader('origin', loom);
+				const referer = asked.headers.referer;
+				if (referer && (referer === own || referer.startsWith(own + '/'))) sent.setHeader('referer', loom + referer.slice(own.length));
+			});
+		}
+	};
+}
+
 export default defineConfig({
+	server: loom ? { proxy: Object.fromEntries(LOOM_PATHS.map((path) => [path, toLoom()])) } : undefined,
 	// the graph's force layout runs in a module worker (src/lib/graph/force.worker.ts)
 	worker: { format: 'es' },
 	plugins: [

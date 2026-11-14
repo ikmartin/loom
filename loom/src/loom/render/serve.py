@@ -245,10 +245,31 @@ class HeldBundle:
         self._tmp.cleanup()
 
 
+class LiveBundle:
+    """A viewer served from where it is built, for trying a change to it: every request reads the directory as it stands, so a rebuild shows on a reload, with no vendoring and no restart.
+
+    What `HeldBundle` is for does not hold here: the server may be older than the viewer it hands out, which is the price of the loop and why this is asked for by name (`loom serve --viewer`). `version` is the build there now, so `/_api` tells a tab holding an earlier one that it is behind; `stale()` is whether loom's own code has changed since the server started.
+    """
+
+    def __init__(self, source: Path) -> None:
+        self.source = self.path = source
+        self.code = code_stamp()
+
+    @property
+    def version(self) -> str:
+        return viewer_version(self.path)
+
+    def stale(self) -> bool:
+        return code_stamp() != self.code
+
+    def close(self) -> None:
+        """Nothing was copied, so nothing is removed."""
+
+
 class LoomHandler(SimpleHTTPRequestHandler):
     bundle_dir: Path = Path(".")
     #: The viewer copied aside at start, which `/_api` reports on; None where the bundle is served from where it lies.
-    held: HeldBundle | None = None
+    held: HeldBundle | LiveBundle | None = None
     build_dir: Path = Path(".")
     refs_dir: Path = Path(".")
     #: The quilt to write into. `None` serves the corpus read-only and answers `/_api` with 404, which is the
@@ -685,9 +706,12 @@ class ServeSession:
         port: int = DEFAULT_PORT,
         compile_masters: bool = True,
         interval: float = 1.0,
+        live: bool = False,
     ) -> None:
         self.quilt = quilt
         self.bundle_dir = bundle_dir
+        #: Serve the bundle from where it lies, read on every request (`LiveBundle`), in place of a copy held from the start.
+        self.live = live
         self.port = port
         self.compile_masters = compile_masters
         self.interval = interval
@@ -697,7 +721,7 @@ class ServeSession:
         self.frames: ThreadingHTTPServer | None = None
         self.shown = Shown.of(quilt)
         self.watcher: Watcher | None = None
-        self.held: HeldBundle | None = None
+        self.held: HeldBundle | LiveBundle | None = None
         self.last_report: BuildReport | None = None
         self.published: dict[Path, float] = {}  # the watched files as the last publication read them
         self.publications = Publications()
@@ -869,7 +893,7 @@ class ServeSession:
 
     def listen(self) -> None:
         """Bind the port and start serving. The build has not run yet, so until `start` finishes it `/build/` serves what an earlier build left, or 404."""
-        self.held = HeldBundle(self.bundle_dir)
+        self.held = LiveBundle(self.bundle_dir) if self.live else HeldBundle(self.bundle_dir)
         handler = type(
             "Handler",
             (LoomHandler,),

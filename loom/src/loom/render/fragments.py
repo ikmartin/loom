@@ -204,7 +204,7 @@ class FragmentRenderer:
         """
         import html
 
-        from loom.render.manifest import own_text
+        from loom.scan.owntext import own_text
 
         head = self.result.nodes.get(node.key.split("/", 1)[0])
         if head is None or not head.id:

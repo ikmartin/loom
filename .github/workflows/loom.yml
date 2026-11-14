@@ -1,6 +1,6 @@
 name: loom
 
-# loom's lane of scripts/verify, run as it is at a terminal: `fast --only loom` (ruff, the format check, mypy and the unit tier) over the Python matrix, and the TeX tier alone in a TeX Live container; and loom installed from the clone on a bare runner, where doctor must fail for want of TeX and serve must start.
+# loom's lane of scripts/verify, run as it is at a terminal: `fast --only loom` (ruff, the format check, mypy and the unit tier) over the Python matrix; on main alone, the checks that the committed quilts, tool list and command reference are what their generators write, which a branch leaves to whoever merges it (docs/contributing.md, "Working in parallel"); the TeX tier alone in a TeX Live container; and loom installed from the clone on a bare runner, where doctor must fail for want of TeX and serve must start.
 
 on:
   push:
@@ -25,6 +25,9 @@ jobs:
       - run: uv sync
         working-directory: loom
       - run: scripts/verify fast --only loom
+      - name: the committed generated files are what the generators write, checked where they are regenerated
+        if: github.ref == 'refs/heads/main' && matrix.python == '3.12'
+        run: scripts/verify --steps "pytest tree" --only loom
 
   install-from-clone:
     runs-on: ubuntu-latest

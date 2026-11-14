@@ -49,6 +49,7 @@ markers = [
   "poppler: needs the real pdftotext for page text and word boxes; TeX stays the shim",
   "paper: needs LOOM_PAPER_FIXTURES pointing at the arXiv sources (paper tier)",
   "network: needs network access",
+  "tree: compares the working tree with git, or a committed generated file with what its generator writes; run before a merge and on main, not in the everyday lane",
   "client: runs the real Claude Code against a quilt's generated agent configuration, calling a hosted model on the account of whoever runs it; needs LOOM_CLIENT_TESTS=1 and claude on PATH (client tier)",
 ]
 
@@ -56,7 +57,7 @@ markers = [
 line-length = 120
 target-version = "py311"
 src = ["src", "tests"]
-extend-exclude = ["tests/tools"]  # vendored verbatim from the workspace specs
+extend-exclude = ["tests/tools"]  # kept as written elsewhere: the dialect validator vendored from the workspace specs, and the v0.1 study's anchoring harness
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "W"]

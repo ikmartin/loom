@@ -4,6 +4,7 @@
 The two committed quilts come from loom's generator, so they are what `loom init --demo` writes and what the conformance fixture is made from; the quilts built from real papers are rebuilt by running the commands an author would run, in an environment that can read nothing but the fixture directory, TeX Live and poppler, so that a macro defined elsewhere on this machine can never make one of them work.
 
     python demos/build.py [--skip-papers] [--papers NAME ...]
+    python demos/build.py --copies
 """
 
 from __future__ import annotations
@@ -56,8 +57,8 @@ def run(*args: str, env: dict[str, str] | None = None, cwd: Path = WS) -> None:
         raise SystemExit(f"failed ({proc.returncode}): {' '.join(args)}")
 
 
-def build_committed() -> None:
-    run(str(VENV / "python"), str(LOOM / "scripts" / "gen_quilts.py"), "all", cwd=LOOM)
+def copy_committed() -> None:
+    """Copy the generated quilts into demos/, each as it stands under loom/tests/quilts/: the committed half of this script, which runs no loom and no TeX."""
     for name in ("demo", "synthetic", "showcase"):
         dest = HERE / name
         if dest.exists():
@@ -68,6 +69,11 @@ def build_committed() -> None:
             # than a fixture; the expected-lint file belongs to the test copy under loom/tests/quilts/
             (dest / "EXPECTED-LINT.txt").unlink(missing_ok=True)
         print(f"wrote demos/{name}")
+
+
+def build_committed() -> None:
+    run(str(VENV / "python"), str(LOOM / "scripts" / "gen_quilts.py"), "all", cwd=LOOM)
+    copy_committed()
     _publish_showcase()
     run("sh", str(WS / "docs" / "specs" / "tools" / "refresh-fixture.sh"))
 
@@ -120,7 +126,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--skip-papers", action="store_true", help="Only the two committed quilts and the fixture.")
     ap.add_argument("--papers", nargs="+", metavar="NAME", help="Only these paper quilts; the committed quilts are left alone.")
+    ap.add_argument("--copies", action="store_true", help="Only copy the generated quilts into demos/, as scripts/regen does: no generator, no TeX, no fixture.")
     args = ap.parse_args()
+    if args.copies:
+        copy_committed()
+        return 0
     if args.papers:
         unknown = sorted(set(args.papers) - {p[0] for p in PAPERS})
         if unknown:

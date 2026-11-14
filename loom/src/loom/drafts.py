@@ -9,9 +9,9 @@ from typing import Any
 
 from loom.history.ledger import History
 from loom.history.versions import read_version
-from loom.render.manifest import own_text
 from loom.reshape.linearize import flatten
 from loom.scan.hashing import mathematical_hash, normalize
+from loom.scan.owntext import own_text
 from loom.scan.scan import ScanResult
 
 _DOCUMENT = re.compile(r"\\begin\s*\{document\}")

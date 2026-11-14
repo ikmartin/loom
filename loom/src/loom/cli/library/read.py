@@ -9,10 +9,11 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EXIT_CONTENT, ContentError, EnvError, NotFoundError, note
+from loom.cli._common import note
 from loom.cli._quilt import open_bib, open_scan, quilt_option
 from loom.cli.library._works import find_result, logged, one_work, present, works
 from loom.cli.report import Group, Item, Report, counted, table
+from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 from loom.paths import DIGESTS
 from loom.scan.bib import BibEntry
 

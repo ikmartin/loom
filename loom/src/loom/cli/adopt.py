@@ -8,9 +8,10 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EnvError, agent_marker
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.report import Progress, Report, counted
+from loom.errors import EnvError
+from loom.identity import agent_marker
 from loom.scan.quilt import NoAuthorError
 from loom.sync import SyncError
 

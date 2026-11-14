@@ -15,7 +15,7 @@ from pathlib import Path
 import pytest
 
 import loom
-from loom.cli._common import EnvError
+from loom.errors import EnvError
 from loom.locks import locked
 from loom.paths import ID_LOCK
 from tests.helpers import ok

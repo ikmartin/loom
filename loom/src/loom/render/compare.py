@@ -16,11 +16,11 @@ from loom.history.versions import read_version
 from loom.paths import BUILD
 from loom.render.canon import CanonDoc, _preamble_for, load_canon
 from loom.render.fragments import FragmentRenderer, RenderPlan
-from loom.render.manifest import own_text
 from loom.render.publish import write_atomic
 from loom.render.review_compare import _render, word_changes
 from loom.scan.hashing import normalize, pair_hash
 from loom.scan.labels import plain_key
+from loom.scan.owntext import own_text
 from loom.scan.scan import ScanResult
 from loom.tex.aux import read_cite_labels, read_numbers
 

@@ -5,9 +5,12 @@ from __future__ import annotations
 import runpy
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.tree
 def test_cli_reference_matches_checked_in() -> None:
     mod = runpy.run_path(str(REPO / "scripts" / "gen_cli_reference.py"), run_name="not_main")
     generated = mod["generate"]()

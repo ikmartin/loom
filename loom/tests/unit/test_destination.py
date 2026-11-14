@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from loom.cli._common import EnvError, destination
+from loom.cli._common import destination
+from loom.errors import EnvError
 from loom.scan.quilt import load_quilt
 from tests.unit._quilts import demo
 

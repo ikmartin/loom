@@ -9,8 +9,8 @@ from typing import Any
 
 from loom.paths import REVIEW_DECISIONS
 from loom.records.store import Records
-from loom.render.manifest import own_text
 from loom.scan.hashing import mathematical_hash
+from loom.scan.owntext import own_text
 from loom.scan.scan import ScanResult
 
 

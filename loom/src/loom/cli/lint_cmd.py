@@ -6,13 +6,13 @@ from dataclasses import replace
 
 import click
 
-from loom.cli._common import EXIT_CONTENT
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.build_cmds import log_run
 from loom.cli.diagnostics import groups as diagnostic_groups
 from loom.cli.diagnostics import has_errors, tally
 from loom.cli.diagnostics import item as diag_item
 from loom.cli.report import Group, Report, counted
+from loom.errors import EXIT_CONTENT
 from loom.history.checks import verify
 from loom.history.ledger import History, load_history
 from loom.records.store import Records

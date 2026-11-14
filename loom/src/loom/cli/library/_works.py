@@ -10,8 +10,8 @@ from typing import Any, TypeVar, cast
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError
 from loom.cli.report import Group, counted
+from loom.errors import EnvError, NotFoundError
 from loom.scan.bib import BibEntry
 from loom.scan.scan import ScanResult
 

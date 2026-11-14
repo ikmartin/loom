@@ -12,10 +12,11 @@ from typing import Any
 
 import click
 
-from loom.cli._common import ContentError, EnvError, NotFoundError, refuse_under_agent
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.library import _works
 from loom.cli.report import Group, Item, Report, counted
+from loom.errors import ContentError, EnvError, NotFoundError
+from loom.identity import refuse_under_agent
 from loom.scan.scan import ScanResult
 
 _AS = "Who is deciding, when the user config and git do not say."

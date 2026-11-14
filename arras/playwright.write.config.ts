@@ -2,7 +2,7 @@
 //
 // There is no webServer: each test is served by the fixture in tests/served.ts, on its own copy of the synthetic quilt taken from what git tracks, so no test sees another's writes. LOOM_ARRAS_BUNDLE points loom at the build under test rather than the one vendored into it, which would be whatever was last released. The suite runs whatever `../loom/.venv/bin/loom` is installed.
 import { defineConfig } from '@playwright/test';
-import { patient, results, scratch } from './tests/sites';
+import { patient, results, scratch, workers } from './tests/sites';
 
 export default defineConfig({
 	...patient,
@@ -14,5 +14,5 @@ export default defineConfig({
 	// shots.e2e.ts writes the committed pictures under docs/reports/images, so it runs only when asked (`npm run shots:write`)
 	testIgnore: process.env.ARRAS_SHOTS ? [] : ['**/shots.e2e.ts'],
 	fullyParallel: true,
-	workers: 4
+	workers: workers(4)
 });

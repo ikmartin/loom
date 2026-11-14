@@ -6,9 +6,10 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError, from_stdin
+from loom.cli._common import from_stdin
 from loom.cli._quilt import open_scan, quilt_option, resolve_key
 from loom.cli.report import Report
+from loom.errors import EnvError, NotFoundError
 from loom.records.edits import EditRefused, find, replay
 
 
@@ -25,7 +26,7 @@ from loom.records.edits import EditRefused, find, replay
     "--quote",
     default=None,
     metavar="OLD",
-    help="The words it replaces, once in the key's own text; without it, the key's body.",
+    help="The words it replaces, once in the key's own text and inside the block, short of its \\begin and \\end; without it, the key's body.",
 )
 @click.option(
     "--before", is_flag=True, help="Put the new text right before the quoted words, or at the head of the body."
@@ -69,10 +70,10 @@ def suggest_command(
     from loom.cli.review import _annotator, _version
     from loom.clock import stamp, today
     from loom.records.annotations import find_annotation, load_records
-    from loom.records.edits import append_new
+    from loom.records.edits import append_new, misplaced
     from loom.records.selectors import find_quote, make_selector
-    from loom.records.store import Records
-    from loom.render.manifest import key_hash
+    from loom.records.store import Records, alike, line_before, named_by_place
+    from loom.scan.owntext import key_hash
 
     if withdraw is not None:
         _withdraw(withdraw, author, why, dry_run, as_json, quilt_path)
@@ -93,12 +94,17 @@ def suggest_command(
         raise NotFoundError("annotation", f"--answers {answers}: no annotation {answers}")
     selector = None
     if quote:
-        own, _ = Records.own_pieces(result, node)
+        own, pieces = Records.own_pieces(result, node)
         spans = find_quote(own, quote)
         if not spans:
             raise NotFoundError("quote", f"quote not found in {target}; `loom source {target}` prints its text")
         if len(spans) > 1:
             raise EnvError(f"quote is ambiguous ({len(spans)} occurrences); give a longer quote")
+        why = misplaced(own, pieces, spans[0])
+        if why is not None:
+            raise EnvError(
+                f"the quoted words {why}; quote words inside {target}, or leave --quote out and use --before or --after for the head or the foot of its body"
+            )
         selector = make_selector(own, quote)
         if placement == "replace" and with_text.strip() == quote.strip():
             raise EnvError("--with is the quoted text itself, so the edit changes nothing")
@@ -108,6 +114,15 @@ def suggest_command(
         )
     if not with_text and placement != "replace":
         raise EnvError("an empty --with deletes the quoted words, so it goes with neither --before nor --after")
+    # a key named by place names another block once one is put in before it: the line above the block is recorded, to find it again by, and a block no line tells from its like is refused now rather than written into the wrong one later
+    near = ""
+    if named_by_place(result, target, node):
+        near = line_before(result, node)
+        twins = alike(result, node)
+        if twins:
+            raise EnvError(
+                f"{target} is named by its place in {node.file}, and {len(twins)} other block{'s' if len(twins) != 1 else ''} there read{'s' if len(twins) == 1 else ''} the same under the same line, so an edit on it could not be told from one on them; suggest it on the block that holds it, quoting words beside it"
+            )
     akind, aid = _annotator(root, author)
     if comment and akind == "agent":
         from loom.links import refuse_bad_links
@@ -124,6 +139,8 @@ def suggest_command(
         "with": with_text,
         "placement": placement,
     }
+    if near:
+        event["near"] = near
     if comment:
         event["comment"] = comment
     if answers:

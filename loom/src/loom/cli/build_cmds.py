@@ -9,12 +9,13 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EXIT_CONTENT, ContentError, EnvError, NotFoundError, find_session, note
+from loom.cli._common import find_session, note
 from loom.cli._quilt import open_scan, quilt_option, require_text, resolve_key
 from loom.cli.diagnostics import groups as diagnostic_groups
 from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.clock import stamp
+from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 from loom.paths import CLOSURES, document_build
 from loom.reshape.linearize import flatten
 from loom.scan.model import Diagnostic
@@ -680,8 +681,8 @@ def source(target: str, closure: bool, at: str | None, diff: bool, run_dir: str 
     if at is not None:
         import difflib
 
-        from loom.render.manifest import own_text
         from loom.scan.hashing import normalize
+        from loom.scan.owntext import own_text
 
         what, before = text_at(result, key, at)
         if not diff:

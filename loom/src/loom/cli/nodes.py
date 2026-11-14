@@ -7,12 +7,14 @@ import shlex
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError, destination, find_session, refuse_protected, whoever, writer
+from loom.cli._common import destination, find_session, refuse_protected
 from loom.cli._quilt import draws_ids, open_scan, quilt_option
 from loom.cli.build_cmds import log_run
 from loom.cli.graph import keyed, natural
 from loom.cli.report import Group, Report, counted
 from loom.clock import today
+from loom.errors import EnvError, NotFoundError
+from loom.identity import whoever, writer
 from loom.paths import NODES, document_name, documents_named, under
 from loom.scan.alloc import visible_locals
 from loom.scan.labels import PREFIX, next_local

@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import EXIT_CONTENT
 from loom.cli._quilt import open_quilt, quilt_option, resolve_key
 from loom.cli.diagnostics import groups as diagnostic_groups
 from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Progress, Report, counted
+from loom.errors import EXIT_CONTENT
 from loom.paths import BUILD
 from loom.render.build import build
 from loom.scan.scan import scan

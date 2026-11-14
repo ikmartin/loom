@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.library._works import find_result, logged
 from loom.cli.report import Report
+from loom.errors import EnvError, NotFoundError
 from loom.paths import LINKS_REMOVED
 from loom.refs.links import KINDS
 
@@ -63,7 +63,7 @@ def relate_command(
         return
     if frm is None or to is None or kind is None:
         raise EnvError("give FROM TO --kind K to relate two results, or --undo LINK_ID to remove a relation")
-    from loom.cli._common import signed
+    from loom.identity import signed
     from loom.refs.links import add_link, check_link, next_id, read_links
     from loom.scan.quilt import NoAuthorError, resolve_author
 
@@ -105,8 +105,8 @@ def relate_command(
 
 def _undo(quilt_path: str | None, link_id: str, why: str, who: str | None, dry_run: bool, as_json: bool) -> None:
     """Remove one relation, recording who removed it and why; an agent is refused one a person asserted."""
-    from loom.cli._common import agent_marker, is_agent, whoever
     from loom.cli._quilt import open_quilt
+    from loom.identity import agent_marker, is_agent, whoever
     from loom.refs.links import read_links, record_removal, remove_link
 
     root = open_quilt(quilt_path).root

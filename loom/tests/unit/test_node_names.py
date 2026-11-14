@@ -4,8 +4,8 @@ from pathlib import Path
 from loom.cli._quilt import open_scan
 from loom.records.snapshots import read_snapshot
 from loom.records.store import Records
-from loom.render.manifest import key_hash
 from loom.review_queue import fingerprint
+from loom.scan.owntext import key_hash
 from tests.helpers import ok
 from tests.unit._quilts import demo
 

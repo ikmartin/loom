@@ -388,6 +388,7 @@ def test_no_quilt_section_outside_a_quilt(box: Box) -> None:
     assert data["quilt"] is None and not [i for i in data["items"] if i["severity"] == "quilt"]
 
 
+@pytest.mark.tree
 def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
     q = quilt(box)
     data = doctor(box, cwd=q / "drafting", code=0)

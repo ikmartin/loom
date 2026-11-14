@@ -98,7 +98,7 @@ def test_equation_support_and_enclosing_statement_are_distinct(tmp_path):
 def test_unknown_display_is_not_accepted_or_treated_as_fresh(tmp_path):
     import pytest
 
-    from loom.cli._common import ContentError
+    from loom.errors import ContentError
 
     root, path = quilt(tmp_path)
     r = scan(load_quilt(root))

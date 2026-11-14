@@ -10,9 +10,9 @@ from pathlib import Path
 from loom.history.ledger import History
 from loom.history.steps import file_hash
 from loom.history.versions import version_filename
-from loom.render.manifest import key_hash
 from loom.scan.hashing import hash_text
 from loom.scan.model import Diagnostic, Fix, Location
+from loom.scan.owntext import key_hash
 from loom.scan.scan import ScanResult
 
 

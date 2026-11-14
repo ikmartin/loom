@@ -6,9 +6,9 @@ import hashlib
 import re
 from typing import Any
 
-from loom.render.manifest import own_text
 from loom.render.review_compare import _changed, _render_into
 from loom.scan.hashing import normalize
+from loom.scan.owntext import own_text
 from loom.scan.scan import ScanResult
 
 

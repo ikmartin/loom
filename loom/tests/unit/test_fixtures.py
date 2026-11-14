@@ -34,8 +34,19 @@ def _tree(root: Path, skip: set[str]) -> dict[str, bytes]:
     return {rel: p.read_bytes() for rel, p in out.items() if rel not in skip}
 
 
+#: The quilts the generator writes, expected lint and agent permission files included: what lint says of one is compared with a generated file, so it is a `tree` check; the edge quilts are written by hand and checked in the everyday lane.
+GENERATED = ("demo", "showcase", "synthetic")
 #: The showcase's marks on its PDFs are found again on a changed file by their words, which want the real pdftotext; without it they read as detached.
-LINTED = [pytest.param(q, marks=pytest.mark.poppler) if q.name == "showcase" else q for q in QUILTS]
+LINTED = [
+    pytest.param(
+        q,
+        marks=[
+            *([pytest.mark.tree] if q.parent == QUILTS_DIR and q.name in GENERATED else []),
+            *([pytest.mark.poppler] if q.name == "showcase" else []),
+        ],
+    )
+    for q in QUILTS
+]
 
 
 @pytest.mark.parametrize("quilt", LINTED, ids=[q.name for q in QUILTS])
@@ -111,6 +122,7 @@ def test_every_code_loom_can_emit_is_reserved_or_namespaced() -> None:
     assert stray == [], "codes that are neither reserved nor loom:"
 
 
+@pytest.mark.tree
 def test_init_demo_matches_fixture(tmp_path: Path) -> None:
     ok("init", str(tmp_path / "demo"), "--demo", cwd=tmp_path)
     fixture = QUILTS_DIR / "demo"

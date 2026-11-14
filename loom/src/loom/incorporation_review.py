@@ -11,10 +11,10 @@ from typing import Any
 from loom.cli.review import _acceptance_master, _owned
 from loom.paths import BUILD
 from loom.records.store import Records
-from loom.render.manifest import own_text
 from loom.render.publish import write_atomic
 from loom.review_queue import fingerprint
 from loom.review_queue import refusal as _refusal
+from loom.scan.owntext import own_text
 from loom.scan.scan import ScanResult, scan
 from loom.sync import SyncError
 

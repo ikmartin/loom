@@ -19,9 +19,10 @@ def _git(*args: str) -> list[str]:
     ]
 
 
-pytestmark = pytest.mark.skipif(
-    shutil.which("git") is None or not (WORKSPACE / ".git").exists(), reason="not a git checkout"
-)
+pytestmark = [
+    pytest.mark.tree,
+    pytest.mark.skipif(shutil.which("git") is None or not (WORKSPACE / ".git").exists(), reason="not a git checkout"),
+]
 
 
 def test_nothing_shipped_is_ignored() -> None:

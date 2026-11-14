@@ -13,8 +13,8 @@ if TYPE_CHECKING:
 
 def named(quilt: Quilt, result: ScanResult, needles: tuple[str, ...]) -> list[str]:
     """The citekeys the WORK arguments name, each through `_works.works`; one that names nothing is refused, and one gathering would add says so."""
-    from loom.cli._common import NotFoundError
     from loom.cli.library._works import works as resolve_works
+    from loom.errors import NotFoundError
 
     out: set[str] = set()
     for needle in needles:

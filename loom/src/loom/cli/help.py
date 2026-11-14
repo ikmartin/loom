@@ -6,7 +6,8 @@ from pathlib import Path
 
 import click
 
-from loom.cli._common import EnvError, agent_marker, is_agent
+from loom.errors import EnvError
+from loom.identity import agent_marker, is_agent
 from loom.paths import AI
 
 #: Names a person reaches for that loom answers with a reason rather than a command (K1: a refusal is a line of help); `delete_answer` says it for what was typed.

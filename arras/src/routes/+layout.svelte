@@ -7,6 +7,7 @@
 	import { store } from '$lib/manifest/client.svelte';
 	import { listen } from '$lib/manifest/stream';
 	import Diagnostics from '$lib/components/Diagnostics.svelte';
+	import DropZone from '$lib/components/DropZone.svelte';
 	import Palette from '$lib/components/Palette.svelte';
 	import LinkPreview from '$lib/components/LinkPreview.svelte';
 	import PdfViewer from '$lib/components/PdfViewer.svelte';
@@ -179,6 +180,7 @@
 {/snippet}
 
 <Palette />
+<DropZone />
 <LinkPreview />
 <PdfViewer />
 <DeletedBar />

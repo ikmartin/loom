@@ -42,6 +42,7 @@ def test_every_agent_command_says_what_it_does() -> None:
     assert set(ACTS.values()) <= {"read", "derive", "write", "replace"}
 
 
+@pytest.mark.tree
 def test_the_checked_in_surface_is_what_the_tree_generates() -> None:
     """A changed flag is a changed tool, so the surface is checked in and shows as a diff (docs/mcp-tools.json)."""
     mod = runpy.run_path(str(REPO / "scripts" / "gen_mcp_tools.py"), run_name="not_main")

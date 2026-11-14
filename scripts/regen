@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""Regenerate every generated file the repository commits: one command, in the order the files depend on each other (docs/contributing.md, "Working in parallel").
+
+Usage:
+    scripts/regen [STEP ...] [--no-tex] [--check] [--list]
+
+    STEP      only these steps, by name, still in order; default every step
+    --no-tex  leave out the steps that run TeX, and say so
+    --check   write nothing: say which generated files are not what their generators write, and exit 1 if any are not
+    --list    print the generated paths, one a line, and stop
+
+The steps, in order:
+
+    quilts     the test quilts and the demo `loom init --demo` writes, with their agent permission files and expected lint
+    demos      the copies of those quilts under demos/
+    tools      the list of the agent's tools
+    reference  the command reference
+    principles the tables in the design's list of principles
+    pages      the pages TeX makes of the quilts' documents, which the viewer's served suites read (TeX)
+    fixture    the conformance fixture and its two copies (TeX)
+
+It ends by saying what changed, by path. The viewer's bundle is not regenerated here: it is vendored at a release (`loom/scripts/vendor_arras.py`).
+
+The two TeX steps write what the TeX on this machine makes, and print which TeX that is. `pages` is due after a change to the code that makes a snippet (`tex/tex4ht.py`, `render/normalise.py`, `render/snippets.py`), which is in the name of every snippet kept beside the pages; the fixture is compared with a fresh build by CI's TeX tier.
+"""
+
+from __future__ import annotations
+
+import argparse
+import shutil
+import subprocess
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+PY = ["uv", "run", "python"]
+
+
+@dataclass(frozen=True)
+class Step:
+    name: str
+    #: The command that writes the files, and where it runs.
+    write: list[str]
+    #: The command that only compares, exiting nonzero when a file is stale; None when the step has none.
+    check: list[str] | None
+    cwd: str
+    #: What it writes, relative to the repository's root.
+    paths: tuple[str, ...]
+    tex: bool = False
+
+
+STEPS = [
+    Step(
+        "quilts",
+        [*PY, "scripts/gen_quilts.py", "all"],
+        [*PY, "scripts/gen_quilts.py", "all", "--check"],
+        "loom",
+        ("loom/tests/quilts/demo", "loom/tests/quilts/synthetic", "loom/tests/quilts/showcase", "loom/src/loom/assets/demo"),
+    ),
+    Step(
+        "demos",
+        [sys.executable, "demos/build.py", "--copies"],
+        [sys.executable, "scripts/checks/fixtures.py"],
+        ".",
+        ("demos/demo", "demos/synthetic", "demos/showcase"),
+    ),
+    Step(
+        "tools",
+        [*PY, "scripts/gen_mcp_tools.py"],
+        [*PY, "scripts/gen_mcp_tools.py", "--check"],
+        "loom",
+        ("loom/docs/mcp-tools.json",),
+    ),
+    Step(
+        "reference",
+        [*PY, "scripts/gen_cli_reference.py"],
+        [*PY, "scripts/gen_cli_reference.py", "--check"],
+        "loom",
+        ("loom/docs/cli-reference.md",),
+    ),
+    Step(
+        "principles",
+        [sys.executable, "scripts/checks/principles.py", "--write"],
+        [sys.executable, "scripts/checks/principles.py"],
+        ".",
+        ("docs/design/principles.md",),
+    ),
+    Step(
+        "pages",
+        [*PY, "scripts/gen_pages.py", "all"],
+        [*PY, "scripts/gen_pages.py", "all", "--check"],
+        "loom",
+        ("arras/tests/pages",),
+        tex=True,
+    ),
+    Step(
+        "fixture",
+        ["sh", "docs/specs/tools/refresh-fixture.sh"],
+        # the copies against the fixture; that the fixture is what a build makes is the TeX tier's `test_fixture_vendored`
+        [sys.executable, "scripts/checks/fixtures.py"],
+        ".",
+        ("docs/specs/fixture", "loom/tests/fixture", "arras/tests/fixture"),
+        tex=True,
+    ),
+]
+
+
+def tex_said() -> str | None:
+    """The first line of what the TeX on PATH says it is, or None when there is none."""
+    if shutil.which("latexmk") is None or shutil.which("pdflatex") is None:
+        return None
+    said = subprocess.run(["pdflatex", "--version"], capture_output=True, text=True, check=False).stdout
+    return said.splitlines()[0] if said else None
+
+
+def changed(paths: tuple[str, ...]) -> list[str]:
+    """What git says differs from the last commit under `paths`, one line a file."""
+    out = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=all", "--", *paths],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    ).stdout
+    return [line for line in out.splitlines() if line.strip()]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
+    parser.add_argument("steps", nargs="*", metavar="STEP", help=f"some of: {', '.join(s.name for s in STEPS)}")
+    parser.add_argument("--no-tex", action="store_true", help="leave out the steps that run TeX")
+    parser.add_argument("--check", action="store_true", help="compare and write nothing; exit 1 when a file is stale")
+    parser.add_argument("--list", action="store_true", help="print the generated paths and stop")
+    args = parser.parse_args()
+    unknown = [n for n in args.steps if n not in {s.name for s in STEPS}]
+    if unknown:
+        parser.error(f"no step {', '.join(map(repr, unknown))}; the steps are {', '.join(s.name for s in STEPS)}")
+    if args.list:
+        for step in STEPS:
+            for path in step.paths:
+                print(path)
+        return 0
+    chosen = [s for s in STEPS if not args.steps or s.name in args.steps]
+    tex = tex_said()
+    failed: list[str] = []
+    ran: list[Step] = []
+    for step in chosen:
+        if step.tex and (args.no_tex or tex is None):
+            why = "--no-tex" if args.no_tex else "no TeX on PATH"
+            print(f"{step.name:<10}  left out ({why}): {', '.join(step.paths)}", flush=True)
+            if step.name in args.steps and not args.no_tex:
+                failed.append(step.name)
+            continue
+        cmd = step.check if args.check else step.write
+        if cmd is None:
+            print(f"{step.name:<10}  has no check", flush=True)
+            continue
+        if step.tex:
+            print(f"{step.name:<10}  with {tex}", flush=True)
+        proc = subprocess.run(cmd, cwd=ROOT / step.cwd, capture_output=True, text=True, errors="replace", check=False)
+        ok = proc.returncode == 0
+        print(f"{step.name:<10}  {'ok' if ok else 'STALE' if args.check else 'FAILED'}", flush=True)
+        if not ok:
+            failed.append(step.name)
+            print((proc.stdout + proc.stderr).rstrip()[-4000:], flush=True)
+            if not args.check:
+                # a later step would be made from what this one failed to write
+                break
+        ran.append(step)
+    if not args.check:
+        lines = [line for step in ran for line in changed(step.paths)]
+        if lines:
+            print(f"\n{len(lines)} generated file{'s' if len(lines) != 1 else ''} changed:")
+            by_dir: dict[str, int] = {}
+            for step in ran:
+                for path in step.paths:
+                    n = len(changed((path,)))
+                    if n:
+                        by_dir[path] = n
+            for path, n in by_dir.items():
+                print(f"  {n:4}  {path}")
+        else:
+            print("\nno generated file changed")
+    if failed:
+        what = "stale" if args.check else "failed"
+        print(f"\n{what}: {', '.join(failed)}" + ("; scripts/regen writes them again" if args.check else ""))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

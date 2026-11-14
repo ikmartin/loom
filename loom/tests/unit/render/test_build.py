@@ -149,6 +149,43 @@ def test_fragment_kinds_and_dialect_validity(tmp_path: Path) -> None:
     assert code == 0, out
 
 
+def test_a_part_added_to_the_list_publishes_with_the_build_and_an_empty_list_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`render.attach.ATTACH` is how a part of loom adds its own to the manifest: each function is called once a build, with the manifest and files of that publication, before the diagnostics are given their owners."""
+    from loom.render.attach import ATTACH, Attaching
+    from loom.scan.model import Diagnostic
+
+    q = demo(tmp_path)
+    plain = build(load_quilt(q)).manifest
+    assert plain is not None
+    calls: list[Attaching] = []
+
+    def part(given: Attaching) -> None:
+        calls.append(given)
+        given.manifest["of_a_part"] = {"nodes": len(given.result.nodes)}
+        given.files["of-a-part.txt"] = "written beside the manifest"
+        given.manifest["diagnostics"].append(Diagnostic("info", "loom:unlabelled-node", "said by a part").to_dict())
+
+    monkeypatch.setattr(build_mod, "ATTACH", (*ATTACH, part))
+    made = build(load_quilt(q), force=True).manifest
+    assert made is not None and len(calls) == 1 and calls[0].manifest is made
+    assert made["of_a_part"] == {"nodes": len(calls[0].result.nodes)}
+    assert (q / ".loom/build/of-a-part.txt").read_text(encoding="utf-8") == "written beside the manifest"
+    assert json.loads((q / ".loom/build/manifest.json").read_text(encoding="utf-8"))["of_a_part"] == made["of_a_part"]
+    # the part's diagnostic went through the stamping every diagnostic gets
+    said = [d for d in made["diagnostics"] if d["message"] == "said by a part"]
+    assert len(said) == 1 and "owner" in said[0]
+    # and but for what the part added, the manifest is what it was without it
+    for added in ("of_a_part",):
+        made.pop(added)
+    made["diagnostics"] = [d for d in made["diagnostics"] if d["message"] != "said by a part"]
+    for moving in ("generated",):
+        made.pop(moving, None)
+        plain.pop(moving, None)
+    assert made == plain
+
+
 def test_build_incremental_by_hash(tmp_path: Path) -> None:
     d = demo(tmp_path)
     first = build(load_quilt(d))

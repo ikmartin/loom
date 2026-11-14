@@ -2,7 +2,7 @@
 //
 // There is no webServer: tests/served.ts serves each test that writes on its own copy of the showcase, taken from what git tracks, and the tests that only read on one copy per worker.
 import { defineConfig } from '@playwright/test';
-import { patient, results, scratch } from './tests/sites';
+import { patient, results, scratch, workers } from './tests/sites';
 
 export default defineConfig({
 	...patient,
@@ -12,7 +12,7 @@ export default defineConfig({
 	testDir: 'tests/e2e-reading',
 	testMatch: '**/*.e2e.ts',
 	fullyParallel: true,
-	workers: 4,
+	workers: workers(4),
 	// tall enough that a page of a paper at the default zoom is mostly in view: a drag on a point the scroll column has clipped lands on whatever is drawn there instead, which is what the box test first found
 	use: { viewport: { width: 1440, height: 900 } }
 });

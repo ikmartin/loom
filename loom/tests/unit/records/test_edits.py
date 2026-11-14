@@ -203,7 +203,7 @@ def test_keep_writes_it_in_keeping_a_version_first_and_keeping_it_resolves_what_
     from loom.history.acts import APPLY
     from loom.history.ledger import load_history
     from loom.records.annotations import find_annotation, load_records
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     q = demo(tmp_path)
     ann = ok("annotate", "dm-0002", "Too vague.", "--type", "revision", "--as", "Tom", cwd=q).stdout.split()[0]
@@ -497,3 +497,145 @@ def test_keep_all_keeps_the_suggested_edits_where_edits_in_place_are_not_tracked
     said = handle(q, "change-keep", {"all": True, "author": "Tom"})
     assert a in said["done"] and "first look" not in said["result"]
     assert "at most two points" in (q / LEMMA).read_text()
+
+
+# ---- where an edit may go: inside its block, and on the block it was filed on ---------------------------------------
+
+SHEET = "drafting/sheet.tex"
+#: A document whose blocks are all named by their place: two empty answers that read the same, each under its own heading, and a remark.
+SHEET_TEXT = r"""\documentclass{amsart}
+\usepackage{amsthm}
+\newtheorem{remark}{Remark}
+\begin{document}
+\section*{One}
+What is asked first.
+\begin{proof}[Answer]
+\end{proof}
+\section*{Two}
+What is asked second.
+\begin{proof}[Answer]
+\end{proof}
+What follows the second answer.
+\begin{remark}
+Widgets are finite here, and every orbit is small.
+\end{remark}
+\end{document}
+"""
+
+
+def sheet(tmp_path: Path) -> Path:
+    q = demo(tmp_path)
+    (q / SHEET).write_text(SHEET_TEXT, encoding="utf-8")
+    return q
+
+
+def filed(q: Path, key: str, new: str, quote: str | None = None, placement: str = "replace") -> str:
+    """A suggested edit on `key` written as one was before the line above its block was recorded: its text's hash, and no `near`."""
+    from loom.clock import stamp, today
+    from loom.records.edits import append_new
+    from loom.records.selectors import make_selector
+    from loom.records.store import Records
+    from loom.scan.owntext import key_hash
+
+    result = scan(load_quilt(q))
+    own = Records.own_pieces(result, result.nodes[key])[0]
+    event = {
+        "event": "created",
+        "when": stamp(),
+        "author": "Referee Agent",
+        "kind": "agent",
+        "target": key,
+        "against": key_hash(result, key),
+        "anchor": make_selector(own, quote).to_dict() if quote else None,
+        "with": new,
+        "placement": placement,
+    }
+    return append_new(q, event, today())
+
+
+def test_words_that_reach_a_blocks_begin_or_end_are_no_place_for_an_edit(tmp_path: Path) -> None:
+    """Text put beside a block's `\\end{…}` lands outside the block, where nothing afterwards reads it as the edit taken, and Keep wrote it again each time it was pressed (SAFE-1 of the v0.1 study)."""
+    q = demo(tmp_path)
+    for quote, where in (
+        ("\\end{lemma}", "--after"),
+        ("\\begin{lemma}[Orbits]", "--before"),
+        ("one-point orbits.\n\\end{lemma}", None),
+    ):
+        more = [where] if where else []
+        refused("suggest", "dm-0002", "--quote", quote, "--with", "More.", *more, "--as", "Tom", cwd=q, code=2, match="reach the block's \\begin or \\end")  # fmt: skip
+    # the title, the label and the words are the block's own, and an edit goes there as before
+    for quote, new in (("Orbits", "Orbits of a widget"), ("one or two points", "at most two points")):
+        assert place(*placed(q, suggest(q, "--quote", quote, "--with", new))).key == "dm-0002"
+    # one filed before the refusal is on no place, and Keep writes nothing
+    old = filed(q, "dm-0002", "More.", "\\end{lemma}", "after")
+    with pytest.raises(Unplaced, match="reach the block's"):
+        place(*placed(q, old))
+    before = (q / LEMMA).read_text()
+    said = ok("changes", "--keep", old, cwd=q).stdout
+    assert said.startswith("kept nothing") and "reach the block's" in flat(said)
+    assert (q / LEMMA).read_text() == before and placed(q, old)[1].status == "open"
+
+
+def test_words_that_run_across_a_block_inside_are_no_place_for_an_edit(tmp_path: Path) -> None:
+    """A section's own text has its proofs cut out, so words either side of one read as one run and are two pieces of the file; replacing them would replace the first piece alone."""
+    q = sheet(tmp_path)
+    two = f"{SHEET}#section:2"
+    refused(
+        "suggest", two, "--quote", "What is asked second. What follows the second answer.", "--with", "Asked.",
+        "--as", "Tom", cwd=q, code=2, match="run across a block inside",
+    )  # fmt: skip
+    assert place(*placed(q, suggest(q, "--quote", "What is asked second.", "--with", "Asked.", key=two))).key == two
+    old = filed(q, two, "Asked.", "What is asked second. What follows the second answer.")
+    with pytest.raises(Unplaced, match="run across a block inside"):
+        place(*placed(q, old))
+
+
+def test_blocks_that_read_the_same_are_told_apart_by_the_line_above(tmp_path: Path) -> None:
+    """An answer suggested on the second of two empty answers stays on it when a third is put in above and every key after it is renumbered (SAFE-4): the line above the block was recorded with the edit."""
+    q = sheet(tmp_path)
+    a = suggest(q, "--with", "The answer to two.", key=f"{SHEET}#proof:2")
+    assert log(q)[-1]["near"] == "What is asked second." and find(q, a).near == "What is asked second."  # type: ignore[union-attr]
+    labelled = suggest(q, "--quote", "one or two points", "--with", "two")
+    assert "near" not in next(e for e in log(q) if e["id"] == labelled)
+    edit(
+        q / SHEET,
+        "\\section*{One}",
+        "\\section*{Zero}\nWhat is asked before.\n\\begin{proof}[Answer]\n\\end{proof}\n\\section*{One}",
+    )
+    assert place(*placed(q, a)).key == f"{SHEET}#proof:3"
+    ok("changes", "--keep", a, cwd=q)
+    text = (q / SHEET).read_text()
+    assert text.count("The answer to two.") == 1 and text.index("The answer to two.") > text.index(
+        "What is asked second."
+    )
+    # an edit with no line recorded has only its text to go by, and three blocks hold that
+    old = filed(q, f"{SHEET}#proof:1", "The answer to zero.")
+    with pytest.raises(Unplaced, match="named by its place"):
+        place(*placed(q, old))
+
+
+def test_blocks_that_read_the_same_under_the_same_line_take_no_edit(tmp_path: Path) -> None:
+    q = sheet(tmp_path)
+    edit(q / SHEET, "What is asked second.", "What is asked first.")
+    refused("suggest", f"{SHEET}#proof:2", "--with", "An answer.", "--as", "Tom", cwd=q, code=2, match="the same under the same line")  # fmt: skip
+    # the remark reads like no other block, and takes one
+    assert suggest(q, "--with", "A remark.", "--after", key=f"{SHEET}#remark:1")
+
+
+def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_its_quote(tmp_path: Path) -> None:
+    """Once the block's text has changed, no block holds what the edit was filed on. An edit that quotes words still goes on the block at its place while the line above stands, where `place` needs its quote; one on the body has nothing to say the block is the one, and is unplaced."""
+    q = sheet(tmp_path)
+    remark = f"{SHEET}#remark:1"
+    quoted = suggest(q, "--quote", "every orbit is small", "--with", "every orbit has at most two points", key=remark)
+    body = suggest(q, "--with", "It follows that the count is even.", "--after", key=remark)
+    old = filed(q, remark, "every orbit has two points", "every orbit is small")
+    edit(q / SHEET, "Widgets are finite here", "Widgets are finite throughout")
+    got = place(*placed(q, quoted))
+    assert got.key == remark and got.moved
+    for unplaced in (body, old):
+        with pytest.raises(Unplaced, match="named by its place"):
+            place(*placed(q, unplaced))
+    # a remark put in under the same line takes the key; the quote is not in it, so the edit is unplaced, never written there
+    edit(q / SHEET, "\\begin{remark}", "\\begin{remark}\nAnother remark altogether.\n\\end{remark}\n\\begin{remark}")
+    with pytest.raises(Unplaced, match="no longer stands"):
+        place(*placed(q, quoted))

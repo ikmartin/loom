@@ -12,9 +12,9 @@ One repository: loom, and its viewer arras in a codebase of its own, each with i
 | `arras/` | the viewer, Svelte, built with `npm` |
 | `docs/` | the design, the specs, the work queue, the plans, frozen history |
 | `demos/` | the committed example quilts, rebuilt by `demos/build.py` |
-| `scripts/` | `verify`, and the documentation checks it runs (`scripts/checks/`) |
+| `scripts/` | `verify`, `regen`, and the documentation checks `verify` runs (`scripts/checks/`) |
 
-To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the arras write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `arras/`.
+To set up: `uv tool install -e ./loom` puts this checkout's `loom` on your PATH; `uv sync` in `loom/` makes `loom/.venv`, which the arras write and reading suites serve with; `npm ci` and `npx playwright install chromium` in `arras/`. A session in a worktree of its own does the `uv sync` and the `npm ci` there, so that what it tests is its own tree and not the main checkout's.
 
 The workspace's documents and loom are GPL-3.0-or-later; arras AGPL-3.0-or-later; `loom.sty` and the demo quilt MIT (`loom/src/loom/assets/LICENSE`), so they can travel with a paper.
 
@@ -22,12 +22,13 @@ The workspace's documents and loom are GPL-3.0-or-later; arras AGPL-3.0-or-later
 
 `scripts/verify` is the one verification command, and CI runs it and nothing else, one lane per workflow (`loom.yml`, `arras.yml`, `docs.yml`). It ends by printing the branch's latest CI runs; read them.
 
-- `scripts/verify` (`fast`): while working. loom's ruff, format check, mypy and unit tier; arras's svelte-check and vitest; the docs lane.
-- `scripts/verify full`: before a commit. Adds loom's TeX tier, an arras build, the three Playwright suites and the figure script.
+- `scripts/verify` (`fast`): the everyday lane, while working. loom's ruff, format check, mypy and unit tier; arras's svelte-check and vitest; the work queue, principles and hard-wrap checks. It judges only what the change did: nothing in it compares the working tree with git or a committed generated file with its generator, so a file not yet added, or a generated file left for whoever merges (see "Working in parallel"), does not fail it.
+- `scripts/verify full`: before a commit. Adds the checks `fast` leaves out (loom's tests marked `tree`: the tracked-file guard, and every test that reads a committed generated file as it stands, which are the quilts, tool list and command reference against their generators, the generated quilts' expected lint and doctor on the demo; the fixture copies; the vendored bundle), loom's TeX tier, whether the pages the served suites read are what a fresh compile makes, an arras build, the three Playwright suites and the figure script.
 - `scripts/verify paper`: the paper tier, by hand, with `LOOM_PAPER_FIXTURES` naming a directory holding `0805.2065/` and `1709.09864/`. Never in CI.
 - `scripts/verify client`: the real-client tier, by hand, after a change to what loom generates for an agent client. It runs Claude Code against the generated settings and spends on the account of whoever runs it, so it never runs in CI.
 - `--only loom|arras|docs`: one lane, when a change touches one codebase or only documents.
-- `--steps "pytest tex"`: named steps whatever their tier; CI runs the TeX tier this way.
+- `--steps "pytest tex"`: named steps whatever their tier; CI runs the TeX tier this way, and on `main` the `tree` tests.
+- `--workers N`, or `VERIFY_WORKERS=N`: how many test workers the run may use in all. The machine is shared, so by default a run takes half the cores less the load already on it, and never fewer than two; loom's pytest and the Playwright suites divide what it takes. A Playwright suite started by hand reads the same variable.
 
 The docs lane runs `docs/work-queue/check.py` and the checks in `scripts/checks/`, each runnable alone and printing the command that fixes what it finds.
 
@@ -36,11 +37,11 @@ The docs lane runs `docs/work-queue/check.py` and the checks in `scripts/checks/
 - loom's tests run loom through `loom/tests/helpers.py`, in process with exceptions let through, so a crash surfaces as a traceback. A test asserts one exit code (`ok`, `exits`, `refused`), never a set of them.
 - The fake TeX toolchain (`loom/tests/fake_latex/fake_tex.py`) exists only in the directory `loom/tests/conftest.py` makes per session, never on the real PATH. Look up every external tool on PATH so a test can substitute it.
 - Every LaTeX compile in a test runs isolated: empty HOME, TEXMFHOME, TEXMFLOCAL, TEXMFVAR and TEXMFCONFIG, no TEXINPUTS, the quilt root as cwd. A test never passes because of a file elsewhere on the machine.
-- Fixture quilts are written from `loom/tests/quilts/sources/` by loom's own commands under a fixed clock (`uv run python scripts/gen_quilts.py all` in `loom/`); `test_the_checked_in_quilt_is_what_the_generator_writes` compares them byte for byte. Never edit one by hand. The viewer's served suites run no TeX, so the pages TeX makes of the synthetic and showcase quilts' documents are kept in `arras/tests/pages/` (`uv run python scripts/gen_pages.py` in `loom/`, which needs TeX Live); a change to those quilts' documents, or to how loom configures TeX4ht, makes them again, and a page left behind is read as edited since.
-- `test_never_modifies_author_files` runs every command on every fixture quilt and fails if an author file's hash changes.
+- Fixture quilts are written from `loom/tests/quilts/sources/` by loom's own commands under a fixed clock (`uv run python scripts/gen_quilts.py all` in `loom/`, which `scripts/regen` runs with every other generator); `test_the_checked_in_quilt_is_what_the_generator_writes` compares them byte for byte. Never edit one by hand. The viewer's served suites run no TeX, so the pages TeX makes of the synthetic and showcase quilts' documents are kept in `arras/tests/pages/` (`uv run python scripts/gen_pages.py` in `loom/`, which needs TeX Live); a change to those quilts' documents, to how loom configures TeX4ht, or to the code that makes a snippet (`tex/tex4ht.py`, `render/normalise.py` and `render/snippets.py`, whose code is in every snippet's name) makes them again, and a page left behind is read as edited since.
+- `test_never_modifies_author_files` runs a fixed list of commands that read or record (lint, search, doctor, history, stamp and the like) on every fixture quilt and fails if an author file's hash changes; it runs none that writes a person's text. `test_write_safety.py` is the test of those: it runs sequences of suggestions, hand edits, Keep, Discard, ticks and settings through the write API and checks the person's files after every act.
 - Every diagnostic code is in `docs/specs/diagnostics.md` before loom emits it, and some test emits it. `test_all_emitted_codes_are_known` checks only that the fixtures' codes are in loom's table, not that every code is emitted.
-- CI sees only committed files, so `loom/tests/unit/test_tracked.py` fails on a shipped file under `loom/src`, `loom/tests/quilts` or `arras/src` that is untracked or ignored.
-- When loom's pytest runs beside the Playwright suites, `scripts/verify` gives it half the cores and splits the rest among the suites, because together they once starved the reading suite into timeouts.
+- CI sees only committed files, so `loom/tests/unit/test_tracked.py` fails on a shipped file under `loom/src`, `loom/tests/quilts` or `arras/src` that is untracked or ignored. It is marked `tree`, so it runs in `full`, before a commit, and not while a new file is still being written.
+- When loom's pytest runs beside the Playwright suites, `scripts/verify` gives it half the run's workers and splits the rest among the suites: left to themselves each takes every core, and together they starve the reading suite into timeouts.
 - `scripts/verify` takes the first slot nothing on the machine holds, so its Playwright servers never meet another worktree's or a suite started by hand; `arras/tests/sites.ts` says what a slot is. Suites started by hand run in slot 0, so two of them in two checkouts need `ARRAS_SLOT=N` on one.
 - A test fails on what happened, never on how busy the machine is. Waits are bounded generously and end as soon as the thing happens (`PATIENCE` in `loom/tests/helpers.py`; `patient` in `arras/tests/sites.ts`; `testTimeout` in `arras/vite.config.ts`), so only a real failure spends them. A claim about speed is made structurally, by holding back what must not be waited for and asserting what still arrives (`noPolls` in `arras/tests/polls.ts`), or timed by `scripts/bench`, never by a stopwatch inside a test. loom's tests run with `LOOM_PROGRESS=off`, since how long a command took decides whether it prints progress; a test of the progress line asks for it with the `progress` fixture.
 
@@ -53,6 +54,28 @@ The construction principles C1–C5 (`docs/design/principles.md`) govern how the
 - C3, the fixture is the contract's executable form: a change to loom's output regenerates it (`docs/specs/tools/refresh-fixture.sh`); a change to the interface changes it first.
 - C4, author files are sacred: the test comes before the command that touches a file.
 - C5, one tool in two languages: loom and its viewer each have their own build and tests, the viewer ships inside loom, and `docs/specs/` changes with the code on either side.
+
+## Working in parallel
+
+Several branches are worked on at once, each in a worktree of its own, and one person merges them: the integrator, who is the author or a session he names. What follows keeps their merges from meeting in files nobody wrote.
+
+- **A branch never commits a generated file.** The generated files are the ones `scripts/regen --list` prints: the test quilts with their agent permission files and expected lint, the demo `loom init --demo` writes, the copies under `demos/`, the list of the agent's tools, the command reference, the tables in the list of principles, the pages TeX makes for the viewer's served suites, and the conformance fixture with its two copies. A change that alters what a generator writes leaves the committed files stale on its branch, says so in its pull request, and is still green there: `scripts/verify` (`fast`) and CI on a branch run no check that compares a generated file with its generator.
+- **The integrator regenerates after each merge**, with `scripts/regen`, and commits what it changed alone, as "Regenerate after …". `scripts/regen --check` writes nothing and says what is stale; CI runs the same comparisons on `main`.
+- **A conflict in a generated path is never resolved by hand.** Take `main`'s side of every such path, finish the merge, and run `scripts/regen`.
+- **The two steps that run TeX** (`pages`, `fixture`) print the TeX they ran, and `scripts/regen --no-tex` leaves them out. `pages` is due after a merge that changes the code of `loom/src/loom/tex/tex4ht.py`, `render/normalise.py` or `render/snippets.py` (a comment or a docstring is not code here), and after one that changes the synthetic or showcase quilt's documents: the name of each snippet kept beside the pages takes in the code of those three modules, so such a merge renames every one of them, and the viewer's served suites, which run no TeX, find none until they are regenerated. `scripts/regen --check pages` says whether they are current, and `scripts/verify full` runs it. The fixture is compared with a fresh build by CI's TeX tier, on CI's own TeX.
+- **Merges that touch `loom/src/loom/render/`, `scan/` or `tex/` are batched**: each changes the hash every cached page is kept under, so each costs every quilt a full rebuild.
+- **A branch does not vendor the viewer**, and neither does `scripts/regen`. The bundle loom ships is vendored at a release, and by CI on `main` (not built yet); until that is built the integrator vendors when `main` is to be used with a changed viewer. A change to the viewer is tried without vendoring (`arras/CONTRIBUTING.md`).
+- **Only the integrator edits the plan a branch works to.** A branch reports in its pull request: what landed, which checks it ran with their output, what it changed outside its own files, whether a regeneration is due, and what it needs decided.
+
+To try a generator's change on a branch, run `scripts/regen` there and leave what it writes uncommitted; `git checkout -- $(scripts/regen --list)` puts the committed files back.
+
+## Where a new thing goes
+
+Each of these has a place of its own, so that two changes made at once do not touch the same lines.
+
+- **An endpoint of the write API** is a handler in its family's module under `loom/src/loom/render/endpoints/` and an entry in that module's `HANDLERS` (and in its `READS`, `NO_REBUILD` or `RECORD_WRITES` where it is one); a case in `loom/tests/unit/render/write_api/cases_<family>.py`; and a row in `docs/specs/write-api.md`. `render/api.py` gathers the families and is not edited.
+- **A part of the manifest** is a function in `ATTACH` (`loom/src/loom/render/attach.py`), given the scan, the records, the renderer and the manifest being made. `build()` is not edited.
+- **Something the viewer's column draws** is in the child that draws it, under `arras/src/lib/shell/column/`: the files' shelf, the list of documents, the Library's shelf and its dialog, Review's sections, the foot. `Column.svelte` is the frame they stand in. What a child must remember while it is off screen (a shelf open, a filter typed) is kept in a module beside it, since the column takes its children down when it folds. A file dropped on the window is `arras/src/lib/components/DropZone.svelte`'s to take in.
 
 ## Rules for every change
 

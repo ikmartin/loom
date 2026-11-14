@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError
 from loom.cli._quilt import quilt_option
 from loom.cli.help import CommandGroup
 from loom.cli.library import add, agent, decide, read, relate, state, update, upkeep
+from loom.errors import EnvError, NotFoundError
 
 
 class _LibraryGroup(CommandGroup):
