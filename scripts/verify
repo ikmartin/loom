@@ -76,7 +76,7 @@ STEPS = [
     Step("loom", "pytest tree", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "tree"], ("full",)),
     # the biber test skips itself where biber is absent; nothing is deselected by hand
     Step("loom", "pytest tex", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "tex"], ("full",)),
-    # the pages TeX makes for the viewer's served suites, against a fresh compile: a change to the rendering code renames every snippet kept with them, and no other check says so (scripts/regen)
+    # the pages TeX makes for the viewer's served suites, against a fresh compile: a change to the code that makes a snippet renames every snippet kept with them, and no other check says so (scripts/regen)
     Step("loom", "pages", ".", [sys.executable, "scripts/regen", "--check", "pages"], ("full",)),
     Step("loom", "pytest paper", "loom", ["uv", "run", "pytest", *LOOM_XDIST, "-m", "paper"], ("paper",)),
     # choosing the tier is the consent its gate stands for, so the step sets it; one turn at a time, not on xdist workers, since each spends on the account of whoever runs it
