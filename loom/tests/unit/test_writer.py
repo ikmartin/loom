@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.cli._common import AGENT_MARKERS, is_agent, writer
+from loom.identity import AGENT_MARKERS, is_agent, writer
 from tests.helpers import ok, refused
 from tests.unit._quilts import demo, showcase
 
@@ -104,7 +104,7 @@ def test_under_a_marker_a_name_that_does_not_say_it_is_an_agent_is_refused(tmp_p
 def test_a_marker_names_the_agent_as_its_apps_server_does(monkeypatch: pytest.MonkeyPatch) -> None:
     """Over MCP the server signs as `<App> Agent`, so a shell agent told the same name writes the same records. Apps set the generic `AI_AGENT` beside their own marker, which says more; every name says it is an agent, or a session it opened would read as a person's."""
     from loom.ai.clients import CLIENTS
-    from loom.cli._common import AGENT_NAMES, agent_name
+    from loom.identity import AGENT_NAMES, agent_name
 
     apps = {c.agent for c in CLIENTS}
     for marker, name in AGENT_NAMES.items():

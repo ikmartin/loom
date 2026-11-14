@@ -164,7 +164,8 @@ def test_purge_at_a_terminal_asks_first(tmp_path: Path, answer: str) -> None:
 
 def test_one_resolver_names_an_ambiguous_session_and_writes_into_no_tombstone(tmp_path: Path) -> None:
     """An ambiguous name was reported as matching nothing, and a write could land in a deleted session (plan 0.18.4)."""
-    from loom.cli._common import ContentError, EnvError, NotFoundError, find_session
+    from loom.cli._common import find_session
+    from loom.errors import ContentError, EnvError, NotFoundError
     from loom.sessions import create, delete
 
     root = tmp_path

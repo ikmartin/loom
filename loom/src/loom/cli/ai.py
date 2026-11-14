@@ -11,11 +11,12 @@ from typing import TYPE_CHECKING, Any
 import click
 
 from loom.ai.clients import BY_KEY, CLIENTS
-from loom.cli._common import EXIT_CONTENT, EnvError, NotFoundError, find_session
+from loom.cli._common import find_session
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted, table
 from loom.cli.review import STATUSES
+from loom.errors import EXIT_CONTENT, EnvError, NotFoundError
 from loom.paths import AI, COPIES, DIGESTS
 
 if TYPE_CHECKING:
@@ -70,7 +71,7 @@ def delete_command(
 
     Deleting removes them from the log rather than marking them, so nothing of them stays to be read; an agent whose annotation is deleted hears so once, from `loom since`. One annotation is deleted with `loom annotate --delete ID`.
     """
-    from loom.cli._common import refuse_under_agent, whoever
+    from loom.identity import refuse_under_agent, whoever
     from loom.records.log import delete
     from loom.records.store import Records
     from loom.since import note_deletion
@@ -694,9 +695,9 @@ def refresh_draft(document: str, dry_run: bool, as_json: bool, quilt_path: str |
 @quilt_option
 def close_draft(document: str, yes: bool, dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     """Close an agent document, retaining its text and annotations and releasing its scope."""
-    from loom.cli._common import agent_marker, whoever
     from loom.cli._quilt import open_scan
     from loom.draft_lifecycle import close_draft as close
+    from loom.identity import agent_marker, whoever
     from loom.sync import SyncError
 
     if agent_marker():
@@ -721,9 +722,9 @@ def close_draft(document: str, yes: bool, dry_run: bool, as_json: bool, quilt_pa
 @quilt_option
 def reopen_draft(document: str, dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     """Reopen a retained agent document when its scope and identities are available."""
-    from loom.cli._common import agent_marker, whoever
     from loom.cli._quilt import open_scan
     from loom.draft_lifecycle import reopen_draft as reopen
+    from loom.identity import agent_marker, whoever
     from loom.sync import SyncError
 
     if agent_marker():

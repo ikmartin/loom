@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import ContentError, EnvError, find_session, from_stdin, writer
+from loom.cli._common import find_session, from_stdin
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.build_cmds import log_run
 from loom.cli.report import Report, counted
+from loom.errors import ContentError, EnvError
+from loom.identity import writer
 
 
 @click.command(name="write")

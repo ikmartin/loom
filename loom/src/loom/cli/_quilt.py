@@ -10,7 +10,7 @@ from typing import Any
 
 import click
 
-from loom.cli._common import ContentError, EnvError, NotFoundError
+from loom.errors import ContentError, EnvError, NotFoundError
 from loom.locks import locked
 from loom.paths import ID_LOCK
 from loom.scan.bib import BibEntry

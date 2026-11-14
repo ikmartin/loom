@@ -16,10 +16,10 @@ from typing import Any
 from loom.history.ledger import History, append_entry, load_history
 from loom.history.steps import free_name, plan_freeze, slug, stamp_document, text_hash, write_step
 from loom.paths import ADOPTION_DECISIONS, BUILD, REVIEW_ORIGINS, documents_named, under
-from loom.render.manifest import own_text
 from loom.reshape.linearize import flatten
 from loom.scan.hashing import pair_hash
 from loom.scan.labels import next_local, plain_key, rename_labels
+from loom.scan.owntext import own_text
 from loom.scan.quilt import Quilt, resolve_author
 from loom.scan.scan import ScanResult, scan
 from loom.sync import SyncError

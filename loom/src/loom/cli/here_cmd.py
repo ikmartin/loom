@@ -7,9 +7,9 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EnvError
 from loom.cli._quilt import open_quilt, open_scan, quilt_option
 from loom.cli.report import Report
+from loom.errors import EnvError
 from loom.scan.scan import ScanResult
 
 

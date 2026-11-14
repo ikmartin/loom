@@ -7,10 +7,11 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EnvError, refuse_under_agent, whoever
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.library._works import one_work, present
 from loom.cli.report import Group, Item, Progress, Report, counted
+from loom.errors import EnvError
+from loom.identity import refuse_under_agent, whoever
 
 
 def _documents(paths: tuple[Path, ...]) -> list[tuple[Path, str]]:

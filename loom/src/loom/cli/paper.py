@@ -13,10 +13,11 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EXIT_CONTENT, ContentError, EnvError, NotFoundError, destination, note
+from loom.cli._common import destination, note
 from loom.cli._quilt import open_quilt, open_scan, quilt_option
 from loom.cli.build_cmds import engine_for, log_run
 from loom.cli.report import Group, Item, Progress, Report, counted
+from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 from loom.history.ledger import LEDGER, actor_for, append_entry, load_history
 from loom.history.steps import FreezePlan, refuse_interrupted, text_hash, write_step
 from loom.locks import locked

@@ -17,10 +17,11 @@ from loom.render.fragments import digest_macro_set, master_title, plain_text
 from loom.render.threads import build_threads
 from loom.scan.digests import OtherVersion, extracted_from, loaded_packages, other_version, published_as, source_version
 from loom.scan.directives import list_value
-from loom.scan.hashing import child_marker, hash_text, pair_hash
+from loom.scan.hashing import pair_hash
 from loom.scan.macros import compatibility_macros, declared_alphabets, package_macros, to_mathjax
 from loom.scan.model import Diagnostic
 from loom.scan.nodes import NodeRec
+from loom.scan.owntext import key_hash
 from loom.scan.scan import ScanResult
 from loom.scan.sections import starred_at
 from loom.tex.aux import AuxNumber
@@ -129,58 +130,6 @@ def _results_for(root: Path, citekey: str, version: OtherVersion | None = None) 
     return out
 
 
-def _provided_by(result: ScanResult, file: str) -> list[str]:
-    """The keys a file brings in when it is included: its outermost nodes, in order."""
-    nodes = sorted(
-        (n for n in result.nodes.values() if n.file == file and n.kind not in ("file", "master")),
-        key=lambda n: n.start,
-    )
-    out: list[str] = []
-    reach = -1
-    for n in nodes:
-        if n.start >= reach:
-            out.append(n.key)
-            reach = n.end
-    return out
-
-
-def _cuts(result: ScanResult, node: NodeRec) -> list[tuple[int, int, str]]:
-    """(start, end, marker) for every child of `node` that its own text stands in for: a claimant cut out of the region, and an inclusion of a file whose nodes are children just the same."""
-    cuts = [(result.nodes[k].start, result.nodes[k].end, child_marker(k)) for k in node.claimants]
-    seen: set[int] = set()
-    for expansion in result.expansions.values():
-        for inc in expansion.inclusions:
-            if inc.parent != node.file or inc.child is None or inc.site_start in seen:
-                continue
-            if not (node.start <= inc.site_start and inc.site_end <= node.end):
-                continue
-            if any(a <= inc.site_start < b for a, b, _ in cuts):
-                continue  # inside a claimed child, which already stands for everything within it
-            keys = _provided_by(result, inc.child)
-            if keys:
-                seen.add(inc.site_start)
-                cuts.append((inc.site_start, inc.site_end, "".join(child_marker(k) for k in keys)))
-    return sorted(cuts, key=lambda c: c[0])
-
-
-def own_text(result: ScanResult, node: NodeRec) -> str:
-    """The raw own text of a node with a child marker where each child was cut out or included, the text every hash is taken over.
-
-    An inclusion line reads as the nodes the included file provides, so a node's hash is the same whether a child sits inline or in `nodes/<id>.tex`, and moving one there changes no state.
-    """
-    src = result.files[node.file]
-    pieces: list[str] = []
-    pos = node.start
-    for start, end, marker in _cuts(result, node):
-        if start > pos:
-            pieces.append(src.text[pos:start])
-        pieces.append(marker)
-        pos = max(pos, end)
-    if node.end > pos:
-        pieces.append(src.text[pos : node.end])
-    return "".join(pieces)
-
-
 def _base_math(record: Any, base: dict[str, Any]) -> dict[str, str]:
     """`{"math": pair_hash}` of a derived node's base version, so a viewer can tell a node changed on both sides without asking loom; {} when the version cannot be read."""
     from loom.history.versions import read_version
@@ -189,10 +138,6 @@ def _base_math(record: Any, base: dict[str, Any]) -> dict[str, str]:
         return {"math": pair_hash(read_version(record, str(base["key"]), str(base["step"]))[1])}
     except LookupError:
         return {}
-
-
-def key_hash(result: ScanResult, key: str) -> str:
-    return hash_text(own_text(result, result.nodes[key]))
 
 
 def _numbers(

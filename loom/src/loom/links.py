@@ -66,8 +66,8 @@ def resolve(result: Any, root: Path, href: str, records: list[Any] | None = None
 
 
 def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Target:
-    from loom.cli._common import EnvError
     from loom.cli._quilt import resolve_key
+    from loom.errors import EnvError
 
     body = href[len("quilt:") :]
     key, _, place = body.partition("#")
@@ -143,8 +143,8 @@ def _file(result: Any, root: Path, href: str, path: str, place: str) -> Target:
 
 
 def _key(result: Any, href: str, key: str) -> str:
-    from loom.cli._common import EnvError
     from loom.cli._quilt import resolve_key
+    from loom.errors import EnvError
 
     try:
         return resolve_key(result, key)
@@ -205,7 +205,7 @@ def check(result: Any, root: Path, text: str) -> list[str]:
 
 def refuse_bad_links(result: Any, root: Path, text: str) -> None:
     """Raise EnvError naming every bad link in `text`, with the command that prints a good one: a link that names nothing is an argument that names nothing, exit 2."""
-    from loom.cli._common import EnvError
+    from loom.errors import EnvError
 
     bad = check(result, root, text)
     if bad:

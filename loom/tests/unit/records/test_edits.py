@@ -203,7 +203,7 @@ def test_keep_writes_it_in_keeping_a_version_first_and_keeping_it_resolves_what_
     from loom.history.acts import APPLY
     from loom.history.ledger import load_history
     from loom.records.annotations import find_annotation, load_records
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     q = demo(tmp_path)
     ann = ok("annotate", "dm-0002", "Too vague.", "--type", "revision", "--as", "Tom", cwd=q).stdout.split()[0]

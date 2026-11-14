@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.cli._common import EnvError
+from loom.errors import EnvError
 from loom.history.ledger import append_entry, load_history
 from loom.history.steps import FreezePlan, refuse_interrupted, write_step
 from loom.locks import locked

@@ -16,7 +16,8 @@ from typing import Any, TextIO
 
 import click
 
-from loom.cli._common import emit_json, fit
+from loom.cli._common import emit_json
+from loom.errors import fit
 
 #: The width text output keeps within (T5).
 WIDTH = 100

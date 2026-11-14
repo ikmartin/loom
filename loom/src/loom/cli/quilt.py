@@ -11,9 +11,9 @@ from pathlib import Path
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError
 from loom.cli.paper import check_prefix
 from loom.cli.report import Group, Item, Report
+from loom.errors import EnvError, NotFoundError
 from loom.paths import AI, ANNOTATION_TYPES, HISTORY, LOOM, LOOM_GITIGNORE
 from loom.records.types import default_text
 from loom.scan.labels import PREFIX

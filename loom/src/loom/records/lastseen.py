@@ -54,7 +54,7 @@ def write_last_seen(root: Path, texts: dict[str, str], history_dir: Path) -> Non
 
 def current_texts(result: ScanResult) -> dict[str, str]:
     """The own text of every key that has one, which is what every hash is taken over."""
-    from loom.render.manifest import own_text
+    from loom.scan.owntext import own_text
 
     out: dict[str, str] = {}
     for key, node in result.assembly.nodes.items():

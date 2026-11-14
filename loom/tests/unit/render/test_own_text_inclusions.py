@@ -5,9 +5,9 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from loom.render.manifest import key_hash, own_text
 from loom.reshape.atomize import _directive_start, _line_bounds
 from loom.scan.hashing import child_marker
+from loom.scan.owntext import key_hash, own_text
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 

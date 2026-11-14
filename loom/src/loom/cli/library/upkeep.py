@@ -11,10 +11,11 @@ from pathlib import Path
 
 import click
 
-from loom.cli._common import EXIT_CONTENT, ContentError, EnvError, NotFoundError, refuse_under_agent
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.library import _works
 from loom.cli.report import Group, Item, Progress, Report, counted
+from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
+from loom.identity import refuse_under_agent
 from loom.paths import DIGESTS
 
 _JSON = "Print the report as one JSON object."

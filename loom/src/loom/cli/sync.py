@@ -10,10 +10,11 @@ from typing import TypeVar
 
 import click
 
-from loom.cli._common import ContentError, EnvError, destination
+from loom.cli._common import destination
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted
+from loom.errors import ContentError, EnvError
 from loom.scan.quilt import Quilt
 from loom.scan.scan import scan
 from loom.sync import (
@@ -312,7 +313,7 @@ def documents_sync(
 @quilt_option
 def incorporate_sync(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     """Apply the fetched pull to the quilt's files, stamping first each document it reaches; the viewer's Review does the same."""
-    from loom.cli._common import refuse_under_agent
+    from loom.identity import refuse_under_agent
 
     refuse_under_agent(
         "loom sync incorporate",
@@ -363,7 +364,7 @@ def incorporate_sync(dry_run: bool, as_json: bool, quilt_path: str | None) -> No
 def publish_sync(push: bool, dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     """Prepare the selected documents' sources as a workspace revision, check each compiles, and stamp each as published."""
     if push:
-        from loom.cli._common import refuse_under_agent
+        from loom.identity import refuse_under_agent
 
         refuse_under_agent(
             "loom sync publish --push",

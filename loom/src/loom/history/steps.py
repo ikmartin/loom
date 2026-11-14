@@ -14,9 +14,9 @@ from typing import Any
 from loom.history.ledger import Entry, History, append_entry, load_history
 from loom.history.versions import version_filename
 from loom.locks import locked
-from loom.render.manifest import key_hash, own_text
 from loom.scan.hashing import hash_text, sha256
 from loom.scan.nodes import NodeRec
+from loom.scan.owntext import key_hash, own_text
 from loom.scan.scan import ScanResult
 
 
@@ -133,7 +133,7 @@ def refuse_interrupted(history: History) -> None:
         stray = load_history(history.dir).unrecorded_dirs()
     if not stray:
         return
-    from loom.cli._common import EnvError
+    from loom.errors import EnvError
 
     def shown(d: Path) -> str:
         try:
@@ -165,7 +165,7 @@ def refuse_stale(history: History) -> None:
     """
     now = load_history(history.dir).next_step()
     if now != history.next_step():
-        from loom.cli._common import EnvError
+        from loom.errors import EnvError
 
         raise EnvError(
             f"another loom process recorded step {now - 1:04d} while this one was being prepared, so nothing was recorded; run this again"

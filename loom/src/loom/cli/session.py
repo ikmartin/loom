@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import ContentError, EnvError, find_session, from_stdin
+from loom.cli._common import find_session, from_stdin
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted
+from loom.errors import ContentError, EnvError
 from loom.sessions import (
     active,
     close,
@@ -34,7 +35,7 @@ def session() -> None:
 
 def _who(quilt_path: str | None, declared: str | None) -> tuple[object, str]:
     """(quilt, name) for a session writer: `--as` when given, else the configured author; an agent unnamed is refused (`writer`)."""
-    from loom.cli._common import writer
+    from loom.identity import writer
 
     quilt = open_quilt(quilt_path)
     return quilt, writer(quilt.root, declared)[0]
@@ -254,7 +255,7 @@ def delete_command(
         )
         return
     if purge:
-        from loom.cli._common import refuse_under_agent
+        from loom.identity import refuse_under_agent
 
         refuse_under_agent(
             "loom session delete --purge",
@@ -319,7 +320,8 @@ def _purge_index(root, sid: str) -> None:  # type: ignore[no-untyped-def]
 
 def _mail(quilt_path: str | None, which: str | None, declared: str | None):  # type: ignore[no-untyped-def]
     """(root, session, name, kind) for `say`: the session it is about and who is at the keyboard."""
-    from loom.cli._common import find_session, writer
+    from loom.cli._common import find_session
+    from loom.identity import writer
 
     quilt = open_quilt(quilt_path)
     found = find_session(quilt.root, which)

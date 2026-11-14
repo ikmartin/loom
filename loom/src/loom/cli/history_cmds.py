@@ -13,7 +13,7 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EXIT_CONTENT, ContentError, EnvError, NotFoundError, destination, writer
+from loom.cli._common import destination
 from loom.cli._quilt import drawing_ids, draws_ids, open_quilt, open_scan, quilt_option, require_text, resolve_key
 from loom.cli.build_cmds import engine_for
 from loom.cli.diagnostics import groups as diagnostic_groups
@@ -22,6 +22,7 @@ from loom.cli.diagnostics import item as diagnostic_item
 from loom.cli.help import CommandGroup
 from loom.cli.paper import bibliography_groups, identity_group, identity_said
 from loom.cli.report import Group, Item, Progress, Report, counted, table
+from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 from loom.history.checks import verify
 from loom.history.ledger import Entry, History, Version, actor_for, append_entry, load_history
 from loom.history.steps import (
@@ -36,6 +37,7 @@ from loom.history.steps import (
     write_step,
 )
 from loom.history.versions import matching_version, materialize, parse_address, read_version, version_at
+from loom.identity import writer
 from loom.locks import locked
 from loom.paths import BUILD, COPIES
 from loom.reshape.atomize import _single_node_file
@@ -883,7 +885,7 @@ def _version_lines(result: ScanResult, history: History, key: str) -> tuple[list
     n = result.nodes.get(key)
     head_hash = ""
     if n is not None and n.kind in ("environment", "proof"):
-        from loom.render.manifest import key_hash
+        from loom.scan.owntext import key_hash
 
         head_hash = key_hash(result, key)
     return versions, matching_version(history, key, head_hash) if head_hash else None, head_hash
@@ -1049,7 +1051,7 @@ def history_restore(name: str, to: str | None, dry_run: bool, as_json: bool, qui
 
     A new document from the landmark NAME, with the package line and an id on every node that has none; the author's alone.
     """
-    from loom.cli._common import refuse_under_agent
+    from loom.identity import refuse_under_agent
 
     quilt_path, as_json = _inherited(quilt_path, as_json)
     refuse_under_agent("loom history restore", "Ask the author to start the document.")

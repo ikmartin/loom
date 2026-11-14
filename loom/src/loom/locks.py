@@ -74,7 +74,7 @@ def _no_locks(path: Path) -> None:
 
 def _busy(path: Path, wait: float) -> Exception:
     """The refusal when the lock stays held; a click error, so a command exits 2 and the write API answers it."""
-    from loom.cli._common import EnvError
+    from loom.errors import EnvError
 
     return EnvError(
         f"another loom process has been writing to {path} for {wait:.0f} seconds, so this wrote nothing; run it again. "

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import EnvError, is_agent
 from loom.cli._quilt import open_quilt, quilt_option
+from loom.errors import EnvError
+from loom.identity import is_agent
 
 
 @click.command(name="mcp")

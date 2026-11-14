@@ -175,7 +175,7 @@ def plan_fork(
     else:
         region = node_region(result, node)
         region_text = region.text
-        from loom.render.manifest import key_hash
+        from loom.scan.owntext import key_hash
 
         plan.hash = key_hash(result, node.key)
     forked = _rewrite_refs(_relabel(region_text, node, node_id, new_id), names, new_id)

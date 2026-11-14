@@ -6,9 +6,10 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError, from_stdin
+from loom.cli._common import from_stdin
 from loom.cli._quilt import open_scan, quilt_option, resolve_key
 from loom.cli.report import Report
+from loom.errors import EnvError, NotFoundError
 from loom.records.edits import EditRefused, find, replay
 
 
@@ -72,7 +73,7 @@ def suggest_command(
     from loom.records.edits import append_new
     from loom.records.selectors import find_quote, make_selector
     from loom.records.store import Records
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     if withdraw is not None:
         _withdraw(withdraw, author, why, dry_run, as_json, quilt_path)

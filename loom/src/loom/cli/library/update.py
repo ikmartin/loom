@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import EnvError, agent_marker
 from loom.cli._quilt import open_quilt, open_scan, quilt_option
 from loom.cli.report import Progress
+from loom.errors import EnvError
+from loom.identity import agent_marker
 from loom.refs.build import STEPS, WORK_STEPS
 
 

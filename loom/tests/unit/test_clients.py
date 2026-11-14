@@ -16,7 +16,7 @@ import pytest
 
 from loom.ai.clients import CLIENTS, PROJECT, PROJECT_FILES, command
 from loom.ai.layout import CLAUDE_SETTINGS, MCP, SHELL, permissions_json, quilt_config, variant
-from loom.cli._common import is_agent
+from loom.identity import is_agent
 from tests.helpers import flat, json_of, ok
 from tests.unit._quilts import demo
 

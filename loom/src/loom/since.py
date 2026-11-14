@@ -344,7 +344,7 @@ def _acceptances(
 
 def _state(result: ScanResult, window: Marker, new: Any, out: Since) -> str | None:
     """A person's writes of the research state since, and an edit by hand after the last text loom knew; the page's text now."""
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.pages import read, state_page, text_hash, writes
     from loom.records.snapshots import read_raw
     from loom.reshape.ids import unified_diff
@@ -379,7 +379,7 @@ def _state(result: ScanResult, window: Marker, new: Any, out: Since) -> str | No
 
 def _said(root: Path, new: Any, out: Since) -> None:
     """What a person said in any session's transcript since."""
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.mailbox import read_events
     from loom.sessions import sessions
 
@@ -394,8 +394,8 @@ def _said(root: Path, new: Any, out: Since) -> None:
 
 def _ticks(result: ScanResult, new: Any, out: Since) -> None:
     """Each box a person set since, as it last stood, with its file, its line and its words."""
-    from loom.cli._common import is_agent
     from loom.history.ledger import load_history
+    from loom.identity import is_agent
     from loom.tasks import TICK
 
     last: dict[tuple[str, int], Any] = {}

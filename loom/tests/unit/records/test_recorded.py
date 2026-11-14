@@ -61,7 +61,7 @@ def test_a_version_written_against_survives_edits_before_any_build(q: Path) -> N
 
 def test_an_edit_restates_the_finding_against_the_text_as_it_is_now(q: Path) -> None:
     from loom.cli._quilt import open_scan
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     ann = comment(q, "dm-0002", "Say which orbits.")
     rewrite(q, "drafting/nodes/dm-0002.tex", "Every orbit", "Each orbit")
@@ -72,7 +72,7 @@ def test_an_edit_restates_the_finding_against_the_text_as_it_is_now(q: Path) -> 
 
 def test_a_reply_records_the_text_it_was_written_against(q: Path) -> None:
     from loom.cli._quilt import open_scan
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     parent = comment(q, "dm-0002", "Say which orbits.")
     before = key_hash(open_scan(str(q)), "dm-0002")

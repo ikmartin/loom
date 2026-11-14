@@ -6,9 +6,10 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EnvError, NotFoundError, refuse_under_agent
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.report import Group, Item, Report, counted, table
+from loom.errors import EnvError, NotFoundError
+from loom.identity import refuse_under_agent
 
 
 def _short(text: str | None, n: int = 40) -> str:

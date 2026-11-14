@@ -8,12 +8,13 @@ from typing import Any
 
 import click
 
-from loom.cli._common import EXIT_CONTENT, ContentError, EnvError, NotFoundError, from_stdin
+from loom.cli._common import from_stdin
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.library._works import home, logged, one_work, present
 from loom.cli.library.read import no_pages, page_range
 from loom.cli.report import Group, Item, Report, counted
 from loom.clock import stamp
+from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 
 #: A statement that brings its own environment or label: loom writes those itself.
 WRAPPER = re.compile(
@@ -81,9 +82,9 @@ def propose_command(
 
     The only write an agent makes to the library's results. SOURCE-TEXT must appear on PAGE — whitespace, hyphenation across lines and ligatures are normalised, nothing else is — and on failure nothing is stored and the page's text is printed so the quotation can be corrected in the same turn. For a work with a LaTeX source, quote the source with --source-file instead: the mathematics is there, and in a PDF's text layer it is often control bytes. A proposal lands in `.loom/digests/CITEKEY.proposed.tex`, which no bundle inputs, and waits there for the author to verify or discard it.
     """
-    from loom.cli._common import agent_marker, whoever
     from loom.cli._quilt import open_quilt
     from loom.cli.library._works import session
+    from loom.identity import agent_marker, whoever
     from loom.refs.pages import read_map, read_pages
     from loom.refs.proposals import (
         DISCARDED,

@@ -274,7 +274,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Unplaced
         When its key is gone, or its quote no longer stands in the text exactly once.
     """
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     node = home(result, edit)
     if node is None or node.file not in result.files:
@@ -495,7 +495,7 @@ def keep(result: ScanResult, edit: Edit, writer: tuple[str, str], *, written: bo
     from loom.records.annotations import find_annotation, load_records
     from loom.records.log import append as append_annotation
     from loom.records.types import load_types
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     if edit.status != "open":
         raise EditRefused("not-open", f"{edit.id} is {edit.status} already")

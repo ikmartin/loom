@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import click
 
-from loom.cli._common import EnvError
 from loom.cli._quilt import open_scan, quilt_option
+from loom.errors import EnvError
 
 
 @click.command(name="link")

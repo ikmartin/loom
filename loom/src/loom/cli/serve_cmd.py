@@ -7,8 +7,9 @@ import webbrowser
 
 import click
 
-from loom.cli._common import EnvError, note
+from loom.cli._common import note
 from loom.cli._quilt import open_quilt, quilt_option
+from loom.errors import EnvError
 from loom.render.serve import BUILD_URL, DEFAULT_PORT, ServeSession, locate_bundle, open_url
 
 

@@ -47,7 +47,7 @@ class Gen:
         self.time = when
 
     def env(self, agent: bool = False) -> dict[str, str | None]:
-        from loom.cli._common import AGENT_MARKERS
+        from loom.identity import AGENT_MARKERS
 
         # The generator plays both parties. As the author -- it accepts, verifies and discards to build the history --
         # an agent running it must not make loom refuse the author's verbs, so the markers are unset (None unsets the

@@ -10,12 +10,13 @@ from typing import Any
 
 import click
 
-from loom.cli._common import ContentError, EnvError, NotFoundError, from_stdin
+from loom.cli._common import from_stdin
 from loom.cli._quilt import describe, open_scan, quilt_option, require_text, resolve_key
 from loom.cli.build_cmds import engine_for, log_run
 from loom.cli.graph import keyed, natural, when
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.clock import stamp, today
+from loom.errors import ContentError, EnvError, NotFoundError
 from loom.paths import document_build
 from loom.records.annotations import (
     find_annotation,
@@ -30,8 +31,8 @@ from loom.records.snapshots import snapshots_dir, write_snapshot
 from loom.records.store import Records
 from loom.records.types import COLORS, STYLES, WEIGHTS, drawn_look, load_types, look_problem, type_named
 from loom.render.fragments import plain_title
-from loom.render.manifest import key_hash, own_text
 from loom.scan.hashing import normalize, sha256
+from loom.scan.owntext import key_hash, own_text
 from loom.scan.quilt import NoAuthorError, resolve_author
 from loom.scan.scan import ScanResult
 from loom.tex.runner import compile_document
@@ -183,7 +184,7 @@ def accept(
     quilt_path: str | None,
 ) -> None:
     """Record that you accept KEYS as mathematically correct, each against the document it is read in."""
-    from loom.cli._common import refuse_under_agent
+    from loom.identity import refuse_under_agent
 
     refuse_under_agent(
         "loom accept", "Accepting is you saying the mathematics holds; run it in your own terminal.", author
@@ -395,7 +396,7 @@ def _annotator(root: Path, author: str | None, *, sniff: bool = True) -> tuple[s
 
     A declared name decides the kind by what it calls itself; an agent's shell must declare a name that says so (`signed`), and anybody with no name to use is refused. `sniff=False` is the API's: a write over HTTP is somebody at a browser, and the shell `loom serve` was started in says nothing about them.
     """
-    from loom.cli._common import is_agent, signed
+    from loom.identity import is_agent, signed
 
     declared = signed(author) if sniff else (author or "").strip()
     name = declared or _author(author, root)

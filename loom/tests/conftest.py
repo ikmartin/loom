@@ -133,7 +133,7 @@ def isolated_env(
     for var in leaking(os.environ):
         monkeypatch.delenv(var)
     # an agent running the suite must not make loom refuse the author's verbs in every test that uses them
-    from loom.cli._common import AGENT_MARKERS
+    from loom.identity import AGENT_MARKERS
 
     for var in AGENT_MARKERS:
         monkeypatch.delenv(var, raising=False)

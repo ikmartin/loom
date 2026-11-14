@@ -119,7 +119,8 @@ def _busy(root: Path, citekey: str) -> None:
 
 def _library_update(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`library-update`: queue a library run on the publisher's runner and answer with its job at once; the author's, refused to a declared agent, so an agent never grants itself the network this way. No works is every work, its bibliography gathered first; `steps` runs only those (a digest made again is `extract` alone, with `redo`)."""
-    from loom.cli._common import NotFoundError, is_agent
+    from loom.errors import NotFoundError
+    from loom.identity import is_agent
     from loom.refs.build import STEPS, WORK_STEPS
     from loom.refs.update import named
     from loom.scan.quilt import load_quilt, reviewer_identity
@@ -162,7 +163,7 @@ def _library_add(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
     import base64
     import hashlib
 
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.refs.add import file_new, file_under, identify
     from loom.refs.added import NotDeletable, add_entry, delete_work
     from loom.refs.build import WORK_STEPS
@@ -277,7 +278,7 @@ def _library_add(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
 
 def _library_ignore(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`library-ignore` (plan 0.24.4): stop loom asking for a work's paper, or offering its stored document an entry, or withdraw that, as `loom library ignore` does; the author's, since whether a work can be had is a claim about the world."""
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.refs.unreadable import NotIgnorable, ignore
     from loom.scan.quilt import reviewer_identity
 
@@ -374,8 +375,8 @@ def _pdf_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
     Refuses a path that exists, leaves the quilt, is hidden from the viewer or is not a `.pdf`, bytes that are not a PDF, and an agent: page edits are the person's act at the viewer.
     """
-    from loom.cli._common import is_agent
     from loom.files import Shown
+    from loom.identity import is_agent
     from loom.scan.quilt import load_quilt, reviewer_identity
 
     name = (_str(body, "path", required=True) or "").strip()
@@ -406,8 +407,9 @@ def _pdf_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     """`change-keep` and `change-discard`: the person keeps or discards changes waiting on them (`pending.py`), by id, or every one with `all`, of one document with `document`; the author's acts, refused to a declared agent. `change-discard` takes `why`, and with `undo` opens again the suggested edits it names, kept or discarded."""
-    from loom.cli._common import ContentError, EnvError, is_agent
     from loom.cli.review import _annotator
+    from loom.errors import ContentError, EnvError
+    from loom.identity import is_agent
     from loom.looks import keep_all, read_look
     from loom.pending import PendingRefused, discard, keep, pending
 
@@ -484,7 +486,7 @@ def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, An
 
 def _file_tick(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`file-tick`: the person sets one box of a Markdown file (`loom.tasks`), `task` being the id the published body gives it; refused to a declared agent, which edits a file as it edits any other."""
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.scan.quilt import load_quilt, reviewer_identity
     from loom.tasks import TickRefused, tick
 
@@ -506,10 +508,10 @@ def _file_tick(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def _history(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     """`history-record` keeps a version of a document under the author's name for it, as `loom stamp DOC -m NAME`; `history-restore` puts a version back into its document (`document`, `version`), or the text an undo set aside back into its file (`path`, `text`), keeping what it replaces first. The author's acts, refused to a declared agent."""
-    from loom.cli._common import is_agent
     from loom.history.acts import RestoreRefused, put_back, restore
     from loom.history.ledger import actor_for, load_history
     from loom.history.steps import slug, stamp_document
+    from loom.identity import is_agent
     from loom.looks import open_texts
     from loom.scan.quilt import load_quilt, reviewer_identity
 
@@ -564,7 +566,7 @@ def _history(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
 def _types_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`types-save` writes `.loom/annotation-types.toml` whole from Settings › Annotations, the plain look with the types when `plain` is sent, or with `defaults` the defaults; the author's act, refused to a declared agent, which edits the file itself."""
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.records.types import TypesRefused, save_types
     from loom.scan.quilt import reviewer_identity
 
@@ -590,7 +592,7 @@ def _types_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     """`settings-save` writes the viewer's Settings into `config.toml`, all of them or none; `agents-update` rewrites the permission files to match it, as `loom upgrade` does. The author's acts, refused to a declared agent: the config is the person's, and an agent never moves its own boundary."""
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.scan.quilt import load_quilt, reviewer_identity
 
     if is_agent(_str(body, "author") or reviewer_identity(root)[0]):
@@ -744,7 +746,7 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     if endpoint == "compare":
         return _compare(root, body)
     if endpoint in ("sync-incorporate", "sync-preview"):
-        from loom.cli._common import is_agent
+        from loom.identity import is_agent
         from loom.incorporation_review import finish, preview, validate
 
         if endpoint == "sync-incorporate" and is_agent(_str(body, "author") or ""):
@@ -797,7 +799,7 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     ):
         from loom.adopt import comparison, decisions, incorporate, prepare
         from loom.adopt import decide as adopt_decide
-        from loom.cli._common import is_agent
+        from loom.identity import is_agent
         from loom.scan.quilt import load_quilt, reviewer_identity
         from loom.scan.scan import scan
         from loom.sync import SyncError
@@ -916,7 +918,7 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     if endpoint == "types-save":
         return _types_save(root, body)
     if endpoint == "reviewer-settings":
-        from loom.cli._common import is_agent
+        from loom.identity import is_agent
         from loom.scan.quilt import reviewer_identity, save_author
 
         if is_agent(_str(body, "author") or reviewer_identity(root)[0]):
@@ -933,7 +935,7 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     if endpoint == "review-accept":
         import json
 
-        from loom.cli._common import is_agent
+        from loom.identity import is_agent
         from loom.review_queue import accept
         from loom.scan.quilt import reviewer_identity
 
@@ -984,8 +986,8 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
 def _delete(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     """Delete an annotation, answering with the events removed, or put back events a delete removed: the viewer's undo of a delete is the second."""
-    from loom.cli._common import ContentError, EnvError, NotFoundError
     from loom.cli.review import _annotator, delete_annotation
+    from loom.errors import ContentError, EnvError, NotFoundError
     from loom.records.log import EVENTS, restore
 
     try:
@@ -1088,7 +1090,7 @@ def _session(root: Path, endpoint: str, body: dict[str, Any]) -> str:
 
     Through the same functions `loom session` calls, so the two surfaces cannot spell a session event differently. **Purging is not here and never will be**: it rewrites the annotation log, and the one place that should be reachable from is a terminal where the author typed the word.
     """
-    from loom.cli._common import whoever
+    from loom.identity import whoever
     from loom.sessions import active, close, create, delete, purpose, rename, resume, sessions, set_active
 
     who = _str(body, "author") or whoever(root, sniff=False)
@@ -1148,7 +1150,7 @@ def _library(root: Path, endpoint: str, body: dict[str, Any]) -> str:
 
     **Both are the author's verbs, and the guard is on the declared identity** (plan 0.13 §8). The server's own environment says nothing here -- loom may be serving from the terminal an agent is working in -- so the marker is not consulted; what is refused is a writer who names itself an agent. A post with no author is the author's own click in their own browser, which is what this endpoint is for.
     """
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.refs.proposals import discard_result, verify_result
     from loom.scan.quilt import resolve_author
 
@@ -1179,8 +1181,8 @@ def _library(root: Path, endpoint: str, body: dict[str, Any]) -> str:
 def _review(root: Path, endpoint: str, body: dict[str, Any]) -> str:
     # Imported here rather than at module scope: the CLI package pulls in click and the whole command tree, and a
     # server that is only ever asked for files should not pay for it at startup.
-    from loom.cli._common import ContentError, EnvError, NotFoundError
     from loom.cli.review import _annotator, _one_comment, edit_annotation
+    from loom.errors import ContentError, EnvError, NotFoundError
 
     # Validate the request before touching the quilt: a missing field is the caller's mistake and should be named as
     # one, not reported as whatever the first function to be handed nothing happens to complain about.
@@ -1267,8 +1269,8 @@ def _geometry(body: dict[str, Any], name: str) -> list[list[float]] | None:
 
 def _take(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`annotations-take`: a PDF's own annotations written as annotations on it, what is here already left alone (`marks.take_in`)."""
-    from loom.cli._common import ContentError, EnvError
     from loom.cli.review import _annotator
+    from loom.errors import ContentError, EnvError
     from loom.records.marks import MarkRefused, take_in
 
     items = body.get("items")

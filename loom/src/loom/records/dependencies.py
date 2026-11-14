@@ -55,7 +55,7 @@ class Dependencies:
     """Revision-local mathematical targets; equations have no acceptance state of their own."""
 
     def __init__(self, result: ScanResult) -> None:
-        from loom.render.manifest import own_text
+        from loom.scan.owntext import own_text
 
         self.result = result
         self.regions: dict[str, str] = {}

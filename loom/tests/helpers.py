@@ -123,7 +123,7 @@ def refused(*args: str | Path, code: int, match: str, **kw: Any) -> Result:
     *args, **kw
         As for `run`.
     code : int
-        The exit code: 1 for the quilt's content, 2 for the environment or usage (`loom.cli._common`).
+        The exit code: 1 for the quilt's content, 2 for the environment or usage (`loom.errors`).
     match : str
         A substring of the refusal, so a different refusal with the same code does not pass.
 

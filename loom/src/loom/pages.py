@@ -74,7 +74,7 @@ def linked(result: Any, root: Path, text: str) -> dict[str, dict[str, str]]:
     """Each link in `text` with what it names, and for a result its hash now, so a later reader can be told it has moved."""
     from loom.links import LINK, resolve
     from loom.records.annotations import load_records
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     records, _ = load_records(root)
     out: dict[str, dict[str, str]] = {}
@@ -128,11 +128,11 @@ def published(result: Any, page: Page) -> dict[str, Any] | None:
 
     Rendered as a transcript message is (`render_body`), so a page written in a report's `## [name]` blocks shows its blocks by name.
     """
-    from loom.cli._common import is_agent
+    from loom.identity import is_agent
     from loom.links import LINK, LinkError, resolve
     from loom.mailbox import render_body
     from loom.records.annotations import load_records
-    from loom.render.manifest import key_hash
+    from loom.scan.owntext import key_hash
 
     root = result.quilt.root
     text = read(root, page)

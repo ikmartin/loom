@@ -9,11 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from loom.records.store import Records
-from loom.render.manifest import own_text
 from loom.render.prose_changes import attach_prose, document_body, pair
 from loom.render.review_compare import _changed, _render_into
 from loom.scan.hashing import mathematical_hash, normalize
 from loom.scan.macros import parse_macros, to_mathjax
+from loom.scan.owntext import own_text
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import ScanResult, scan
 from loom.scan.source import blank_comments

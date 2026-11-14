@@ -23,10 +23,10 @@ from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
 from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
-from loom.render.manifest import key_hash, own_text
 from loom.scan.hashing import hash_text, mathematical_hash, normalize
 from loom.scan.model import Diagnostic, Fix
 from loom.scan.nodes import NodeRec
+from loom.scan.owntext import key_hash, own_text
 from loom.scan.scan import ScanResult
 from loom.sessions import INDEX as SESSION_INDEX
 
