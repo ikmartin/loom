@@ -92,6 +92,9 @@ def closure_of(paper_dir: Path, master: Path) -> tuple[dict[str, Path], list[str
                 target = _resolve(paper_dir, name or "", GRAPHIC_EXTS)
                 if target:
                     queue.append(target)
+                # named without an extension, a figure is read as its PDF by pdflatex and as its EPS by the DVI that TeX4ht makes HTML from, so every form the paper ships comes in
+                if name and not Path(name.strip()).suffix:
+                    queue += [twin for e in GRAPHIC_EXTS if (twin := paper_dir / f"{name.strip()}{e}").is_file()]
     return found, outside
 
 
