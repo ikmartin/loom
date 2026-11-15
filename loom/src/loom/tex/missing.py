@@ -26,6 +26,7 @@ _PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"Font \S+=([\w-]+) at [^\n]*not loadable: Metric \(TFM\) file not found", re.M), "{}.tfm"),
     (re.compile(r"Running mktextfm ([\w-]+)", re.M), "{}.tfm"),
     (re.compile(r"PostScript header file ([\w.-]+) not found", re.M), "{}"),
+    (re.compile(r"Cannot find PostScript (?:header )?file ([\w.-]+)", re.M), "{}"),
     (re.compile(r"I couldn't open style file ([\w.-]+)", re.M), "{}"),
 )
 _BITMAP = re.compile(r"^!\s*pdfTeX error: [^\n]*Font \S+ at \d+ not found", re.M)

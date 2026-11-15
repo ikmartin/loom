@@ -368,7 +368,8 @@ def compile_html(
         rounds.fetch(missing.preflight(root / base, os.path.relpath(root / tex, root / base)))
     res = _html_once(root, base, tex, outdir, envs=envs, engine=engine, seed=seed, timeout=timeout, started=started)
     for _ in range(missing.ROUNDS):
-        if not fetching or res.returncode in (124, 127) or (res.ok and "tex.pro" not in res.log):
+        # a run that made its page can still lack a picture's PostScript header, which only make4ht's own output names
+        if not fetching or res.returncode in (124, 127):
             break
         if not rounds.fetch(missing.from_log(res.log, res.said)):
             break
