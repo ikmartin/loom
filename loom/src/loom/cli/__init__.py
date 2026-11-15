@@ -50,6 +50,10 @@ def main() -> None:
 
     Every command except `init` and `doctor` runs against the nearest quilt, found by walking up from the current directory to a `config.toml` with a [quilt] table; `doctor` checks that quilt too when there is one.
     """
+    from loom.tex.private import activate
+
+    # loom's own TeX first on the path of everything this process starts or looks up
+    activate()
 
 
 main.add_command(doctor)

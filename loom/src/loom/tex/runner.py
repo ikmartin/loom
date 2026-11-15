@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from loom.clock import tex_date
+from loom.tex import missing, private
 
 ENGINE_FLAGS = {
     "pdflatex": ["-pdf"],
@@ -36,9 +37,9 @@ def tex_env() -> dict[str, str]:
     Returns
     -------
     dict of str to str
-        `os.environ` with `tex_date` and `LIMITS`.
+        `os.environ` with what the TeX in use takes (`private.tex_vars`), `tex_date` and `LIMITS`.
     """
-    return {**os.environ, **tex_date(), **LIMITS}
+    return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS}
 
 
 @dataclass
@@ -54,10 +55,15 @@ class CompileResult:
     log: Path | None = None
     warnings: list[str] = field(default_factory=list)
     cwd: Path | None = None  # where latexmk ran, which the log's relative paths are relative to
+    fetched: list[str] = field(default_factory=list)
+    needed: list[str] = field(default_factory=list)
+    note: str = ""  # what loom fetched for this compile and what it still needs, for the person
 
     @property
     def first_error(self) -> str:
-        """The first `! ` line of the log, which is what LaTeX calls an error; latexmk's closing advice is not one."""
+        """The first `!` line of the log, which is what TeX calls an error; latexmk's closing advice is not one. A package loom could not fetch comes first, since it is the cause."""
+        if self.needed:
+            return self.note
         if self.errors:
             return self.errors[0]
         summary = latexmk_summary(self.stdout)
@@ -241,7 +247,55 @@ def compile_tex(
     timeout: int = 600,
     started: Callable[[subprocess.Popen[str]], None] | None = None,
 ) -> CompileResult:
-    """Compile `tex_rel` (relative to `root`) with latexmk into `outdir`; return a result even when latexmk is missing.
+    """Compile `tex_rel` (relative to `root`) with latexmk into `outdir`, fetching what it lacks into loom's TeX; return a result even when latexmk is missing.
+
+    Under loom's own TeX the preamble is checked first and what it names that TeX lacks is installed in one go (`missing.preflight`); a run that still fails on a missing file, font or program has it fetched and runs again, up to `missing.ROUNDS` times. The person's own TeX is never installed into. `fetched`, `needed` and `note` say what happened.
+
+    Parameters
+    ----------
+    root : Path
+        The directory latexmk runs in.
+    tex_rel : str
+        The document, relative to `root`.
+    outdir : Path
+        Where latexmk writes.
+    engine : str, default 'pdflatex'
+    halt_on_error : bool, default True
+    timeout : int, default 600
+        Seconds for each run.
+    started : callable, optional
+        Handed latexmk's process as it starts, for a caller that may end it with `stop_run`.
+
+    Returns
+    -------
+    CompileResult
+    """
+    fetching = private.can_fetch()
+    rounds = missing.Round()
+    if fetching:
+        rounds.fetch(missing.preflight(root, tex_rel))
+    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started)
+    for _ in range(missing.ROUNDS):
+        if res.ok or not fetching or res.returncode == 124:
+            break
+        log = res.log.read_text(encoding="utf-8", errors="replace") if res.log is not None else ""
+        if not rounds.fetch(missing.from_log(log, res.stdout)):
+            break
+        res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started)
+    res.fetched, res.needed, res.note = rounds.fetched, rounds.needed, rounds.note
+    return res
+
+
+def _compile_once(
+    root: Path,
+    tex_rel: str,
+    outdir: Path,
+    engine: str,
+    halt_on_error: bool,
+    timeout: int,
+    started: Callable[[subprocess.Popen[str]], None] | None,
+) -> CompileResult:
+    """One latexmk run of `tex_rel` into `outdir`.
 
     latexmk reads no rc file (`-norc`): one in a quilt is a Perl program, and one at home may turn on shell escape. The run writes into a scratch directory beside `outdir`, seeded with `outdir`'s files so latexmk still runs only the passes it needs, and its output replaces `outdir`'s only when it made a PDF: a failed run leaves the last good PDF and aux in place, and only its log is kept. The run is a process group of its own, killed whole on timeout or by `stop_run` on the process `started` is handed.
     """
@@ -296,7 +350,7 @@ def compile_tex(
     warnings: list[str] = []
     if log.exists():
         text = log.read_text(encoding="utf-8", errors="replace")
-        errors = re.findall(r"^! .*$", text, re.M)
+        errors = re.findall(r"^!.*$", text, re.M)
         warnings = re.findall(r"^(?:LaTeX|Package \w+|Class \w+) Warning: .*$", text, re.M)
     pdf = outdir / f"{stem}.pdf"
     aux = outdir / f"{stem}.aux"
