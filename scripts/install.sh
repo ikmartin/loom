@@ -71,7 +71,11 @@ LOOM="$("$UV" tool dir --bin)/loom"
 [ -x "$LOOM" ] || fail "loom was installed but $LOOM is not there"
 
 # 4. loom's own TeX, Ghostscript and poppler: installed when absent, repaired when broken, kept when current
-say "setting up TeX for reading papers (the first time, about 100 MB)"
+if [ -d "$DATA/tex/bin" ]; then
+  say "checking loom's TeX"
+else
+  say "setting up TeX for reading papers (once, about 120 MB to download)"
+fi
 "$LOOM" doctor --repair --json >"$WORK/doctor.json" 2>"$WORK/repair.log" || true
 sed 's/^/loom: /' "$WORK/repair.log"
 PY="$("$UV" tool dir)/loomtex/bin/python"

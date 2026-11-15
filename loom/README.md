@@ -4,29 +4,19 @@ A tool for atomized mathematical development. loom turns a LaTeX paper into a *q
 
 Status: alpha. The design, the interface specification and the example quilts live in the [loom-arras workspace](https://github.com/ikmartin/loom-arras).
 
-## Install from a clone
-
-Nothing here depends on a package registry. You need:
-
-| dependency | why | macOS | Debian/Ubuntu |
-|---|---|---|---|
-| Python 3.11 or newer with `uv` or `pipx` | runs loom | `brew install uv` or `brew install pipx` | `pipx install uv` or `apt install pipx` |
-| TeX Live (`latexmk`, `pdflatex`, `dvisvgm`, `bibtex`/`biber`) | compiling, numbering, diagrams | `brew install --cask mactex-no-gui` | `apt install texlive-full` |
-| poppler (`pdftotext`, `pdfinfo`) | the identity test after import and atomize | `brew install poppler` | `apt install poppler-utils` |
-| git (optional) | recommended, never required | `brew install git` | `apt install git` |
-
-Then either
+## Install
 
 ```
-pipx install git+https://github.com/ikmartin/loom
-loom doctor
+curl -LsSf https://github.com/ikmartin/loom-arras/releases/latest/download/install.sh | sh
 ```
 
-or, for development,
+installs loom with its own TeX, Ghostscript and poppler, for this user, with no password; the same line updates it. Loom uses its own TeX first; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and then you need TeX Live with `latexmk`, `make4ht` and `dvisvgm`, and poppler and Ghostscript for figures and page text. git is optional.
+
+For development, from a clone:
 
 ```
-git clone https://github.com/ikmartin/loom
-cd loom
+git clone https://github.com/ikmartin/loom-arras
+cd loom-arras/loom
 uv sync
 uv run loom doctor
 ```
