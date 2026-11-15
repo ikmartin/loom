@@ -1,0 +1,128 @@
+name: release
+
+# A release of loom: the wheel built with the viewer built and vendored into it (a wheel built without that step ships whatever viewer was last committed), `scripts/install.sh`, and `loom-release.txt`, which names the wheel and its checksum for the install line. On a tag `v*` these become a draft GitHub release, which the author reviews and publishes; by hand the job only builds them as artifacts. Loom's TeX and its tools are separate archives, built by hand on the year's change or a new tool version (`tex`, `tools`), whose URLs and checksums then go into `ARCHIVE` and `TOOLS_ARCHIVE` in `loom/src/loom/tex/private.py`. Nothing here publishes to a package index.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tex:
+        description: "Also build loom's TeX archive (macOS)"
+        type: boolean
+        default: false
+      tools:
+        description: "Also build the Ghostscript and poppler archives (macOS, arm64 and x86_64)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  wheel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: arras/package-lock.json
+      - uses: astral-sh/setup-uv@v5
+      - name: the viewer, built from this commit
+        working-directory: arras
+        run: npm ci && npm run build
+      - name: vendored into loom; vendor_arras.py refuses an arras with uncommitted changes
+        working-directory: loom
+        run: uv run python scripts/vendor_arras.py ../arras/build
+      - name: the bundle names this commit, never -dirty
+        run: |
+          cat loom/src/loom/assets/arras/VERSION
+          if grep -q -- '-dirty' loom/src/loom/assets/arras/VERSION; then echo "the vendored viewer is stamped -dirty" >&2; exit 1; fi
+      - name: the version a tag names is the package's
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          want="${GITHUB_REF_NAME#v}"
+          have="$(sed -n 's/^version = "\(.*\)"/\1/p' loom/pyproject.toml)"
+          test "$want" = "$have" || { echo "tag $GITHUB_REF_NAME, package $have" >&2; exit 1; }
+      - name: the wheel
+        working-directory: loom
+        run: uv build --wheel --out-dir "$GITHUB_WORKSPACE/dist"
+      - name: the wheel runs and carries the viewer it was built with
+        run: |
+          uv tool install --managed-python --python 3.13 dist/*.whl
+          loom --version
+          installed="$(uv tool dir)/loomtex"
+          cmp loom/src/loom/assets/arras/VERSION "$(find "$installed" -path '*loom/assets/arras/VERSION' | head -1)"
+      - name: what the install line reads
+        run: |
+          wheel="$(basename dist/*.whl)"
+          printf 'wheel %s %s\n' "$wheel" "$(sha256sum "dist/$wheel" | cut -d' ' -f1)" > dist/loom-release.txt
+          cp scripts/install.sh dist/
+          cat dist/loom-release.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: dist/
+      - name: a draft release, for the author to read and publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Install or update: curl -LsSf https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/install.sh | sh"
+          gh release create "$GITHUB_REF_NAME" dist/* --draft --title "loom ${GITHUB_REF_NAME#v}" --notes "$notes"
+
+  tex:
+    if: github.event_name == 'workflow_dispatch' && inputs.tex
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: loom's TeX, built from the year's TinyTeX and loom's seed
+        working-directory: loom
+        run: uv run python -m loom.tex.private build "$RUNNER_TEMP/tex"
+      - name: the archive and its checksum
+        run: |
+          mkdir -p dist
+          tar -C "$RUNNER_TEMP/tex/unpacked" -cJf dist/loom-tex-darwin.tar.xz TinyTeX
+          shasum -a 256 dist/loom-tex-darwin.tar.xz | tee dist/loom-tex-darwin.tar.xz.sha256
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tex-darwin
+          path: dist/
+
+  tools:
+    if: github.event_name == 'workflow_dispatch' && inputs.tools
+    strategy:
+      matrix:
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-13
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-name: tools
+          create-args: -c conda-forge --override-channels ghostscript poppler
+          init-shell: none
+      - name: Ghostscript and poppler with the libraries they load, and a NOTICE of each package's licence
+        working-directory: loom
+        run: uv run python -m loom.tex.private tools "$MAMBA_ROOT_PREFIX/envs/tools" "$RUNNER_TEMP/tools"
+      - name: the archive runs from where it is unpacked
+        run: |
+          mkdir -p dist "$RUNNER_TEMP/try"
+          tar -C "$RUNNER_TEMP/tools" -cJf "dist/loom-tools-darwin-${{ matrix.arch }}.tar.xz" tools
+          tar -C "$RUNNER_TEMP/try" -xJf "dist/loom-tools-darwin-${{ matrix.arch }}.tar.xz"
+          "$RUNNER_TEMP/try/tools/bin/gs" --version
+          "$RUNNER_TEMP/try/tools/bin/pdftotext" -v
+          shasum -a 256 "dist/loom-tools-darwin-${{ matrix.arch }}.tar.xz" | tee "dist/loom-tools-darwin-${{ matrix.arch }}.tar.xz.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tools-darwin-${{ matrix.arch }}
+          path: dist/
