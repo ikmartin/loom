@@ -497,15 +497,16 @@ class Act:
     # what the caller reads
 
     def read(self, rel: str) -> bytes | None:
-        """The file's bytes now, under the lock; None for one that is not there. The first read of a file is what the act replaces."""
+        """The file's bytes now, under the lock; None for one that is not there. The last read before the file is staged (`replace`) is what the act replaces, and the commit refuses if the file holds anything else by then."""
         rel = contained(self.root, rel)
         data = _read(self.root, rel)
-        self.before.setdefault(rel, data)
+        if rel not in self.after:
+            self.before[rel] = data
         return data
 
-    def text(self, rel: str) -> str | None:
-        """The file as UTF-8 text with its own line endings; None for one that is not there. WriteRefused (`not-utf8`) for a file that is not UTF-8, which loom never writes into."""
-        data = self.read(rel)
+    def text(self, rel: str, *, again: bool = True) -> str | None:
+        """The file as UTF-8 text with its own line endings; None for one that is not there. WriteRefused (`not-utf8`) for a file that is not UTF-8, which loom never writes into. With `again` False, the bytes this act last read of it, so that what a plan was checked against is what it is spliced into."""
+        data = self.read(rel) if again or rel not in self.before else self.before[rel]
         if data is None:
             return None
         try:

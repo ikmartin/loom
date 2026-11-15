@@ -2,7 +2,7 @@
 
 An edit names its key, the words it replaces as a selector (`anchor`; None means the key's body), the new text (`with`; empty deletes the quoted words), where the new text goes (`placement`: `replace` takes exactly the quoted words' place, `after` and `before` go right beside them), an optional `comment`, and the annotation it `answers`. It records the key's hash when it was written (`against`) and, on a key named by its place in its file, the line above the block (`near`).
 
-`.loom/edits/log.jsonl` holds its events, appended under the log's lock: `created`; `kept`, with the key's hash once the edit is in; `discarded`, with an optional `why`; and `reopened`, the viewer's undo of either. Replay gives each edit's status; whether its key already reads as it taken is computed, never stored. Keeping an edit that answers an open annotation resolves that annotation, with the edit as its reason. `apply` writes an edit into its file on the author's act, keeping a version of each document it changes first; nothing else writes the author's source.
+`.loom/edits/log.jsonl` holds its events, appended under the log's lock: `created`; `kept`, with the key's hash once the edit is in; `discarded`, with an optional `why`; and `reopened`, the viewer's undo of either. Replay gives each edit's status; whether its key already reads as it taken is computed, never stored. Keeping an edit that answers an open annotation resolves that annotation, with the edit as its reason. Keeping writes an edit into its file on the author's act, through the door (`pending.keep`, `loom.writes`), which journals its `kept` event with the write.
 """
 
 from __future__ import annotations
@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.history.acts import Kept
 from loom.locks import locked
 from loom.paths import EDIT_LOG
 from loom.records.ids import EDIT, draw
@@ -494,89 +493,41 @@ class EditRefused(Exception):
         self.status = status
 
 
-def apply(result: ScanResult, edit: Edit, actor: str | None) -> tuple[list[str], Kept]:
-    """Write `edit` into its key's file: a version of each of the person's documents made of the file kept first (P7), then the file, then an `apply` act in the ledger.
-
-    The author's act: the caller refuses an agent, and records the edit kept against a scan of the file as written (`keep`). Raises EditRefused for an edit that is not open, one whose key already reads as it taken, one its quote no longer places, and one on a key none of the person's documents reads (an agent's copy, whose changes come in with the copy). Returns the person's documents the file is part of, and the versions kept.
-    """
-    from loom.history.acts import APPLY, documents_reaching, keep_versions, write_file
-    from loom.history.ledger import append_entry
-
-    if edit.status != "open":
-        raise EditRefused("not-open", f"It is {edit.status} already")
-    node = home(result, edit)
-    if node is not None and not any(result.document_role(d) == "person" for d in node.reached_by):
-        copy = next((d for d in node.reached_by if result.document_role(d) == "agent"), None)
-        raise EditRefused(
-            "on-a-copy",
-            f"It is on the agent's copy “{copy.rsplit('/', 1)[-1]}”; it comes in with the copy"
-            if copy
-            else "It is on a block none of your documents reads",
-        )
-    if is_taken(result, edit):
-        raise EditRefused("taken", "Its block reads as it taken already: keep it without applying it")
-    try:
-        placed = place(result, edit)
-    except Unplaced as exc:
-        raise EditRefused("unplaced", str(exc)) from exc
-    root = result.quilt.root
-    kept = keep_versions(result, [placed.file], APPLY, "Before applying a suggested edit", actor)
-    write_file(root / placed.file, taken_file(result, placed))
-    append_entry(result.quilt.history_dir, APPLY, {"edit": edit.id, "key": placed.key, "path": placed.file}, actor)
-    return documents_reaching(result, [placed.file]), kept
+def generation(edit: Edit) -> int:
+    """How many times `edit` has been opened again: the Keep of an edit is named by its id and this (`<id>:<generation>`), so an edit undone and kept again is a new write, and no other can repeat the name."""
+    return sum(1 for e in edit.acts if e.get("event") == "reopened")
 
 
-def keep(result: ScanResult, edit: Edit, writer: tuple[str, str], *, written: bool = False) -> str:
-    """Record `edit` kept, with its key's hash as the text now reads, and resolve the open annotation it answers, with the edit as the reason. Returns what to say.
+def kept_event(edit: Edit, writer: tuple[str, str], key_hash: str) -> dict[str, Any]:
+    """The `kept` event of `edit`, with the hash of its key's text with the edit in; what `pending.keep` journals with the write (`loom.writes`)."""
+    from loom.clock import stamp
 
-    Refused unless the key reads as the edit taken, or `written` says the caller has just written it in (`pending.keep`): an edit written in is kept whatever the text is read as, else keeping it again would write it again.
-    """
+    akind, aid = writer
+    return {"event": "kept", "id": edit.id, "when": stamp(), "author": aid, "kind": akind, "hash": key_hash}
+
+
+def answered_event(root: Path, edit: Edit, writer: tuple[str, str]) -> dict[str, Any] | None:
+    """The `resolved` event for the open annotation `edit` answers, with the edit as the reason; None when it answers none, or one that is not open or whose type does not open."""
     from loom.clock import stamp
     from loom.records.annotations import find_annotation, load_records
-    from loom.records.log import append as append_annotation
     from loom.records.types import load_types
-    from loom.scan.owntext import key_hash
 
-    if edit.status != "open":
-        raise EditRefused("not-open", f"{edit.id} is {edit.status} already")
-    if not written and not is_taken(result, edit):
-        raise EditRefused(
-            "not-taken",
-            f"{edit.target_key} does not yet read as {edit.id} taken; `loom changes {edit.id}` prints the patch that takes it",
-        )
+    found = find_annotation(load_records(root)[0], edit.answers) if edit.answers else None
+    if found is None:
+        return None
+    ann = found[1]
+    t = load_types(root).get(ann.type)
+    if ann.status != "open" or t is None or not t.open:
+        return None
     akind, aid = writer
-    node = home(result, edit)
-    when = stamp()
-    append(
-        result.quilt.root,
-        {
-            "event": "kept",
-            "id": edit.id,
-            "when": when,
-            "author": aid,
-            "kind": akind,
-            "hash": key_hash(result, node.key) if node else "",
-        },
-    )
-    said = f"kept {edit.id}"
-    found = find_annotation(load_records(result.quilt.root)[0], edit.answers) if edit.answers else None
-    if found is not None:
-        ann = found[1]
-        t = load_types(result.quilt.root).get(ann.type)
-        if ann.status == "open" and t is not None and t.open:
-            append_annotation(
-                result.quilt.root,
-                {
-                    "event": "resolved",
-                    "id": ann.id,
-                    "when": when,
-                    "author": aid,
-                    "kind": akind,
-                    "body": f"kept suggested edit {edit.id}",
-                },
-            )
-            said += f"; resolved {ann.id}, which it answers"
-    return said
+    return {
+        "event": "resolved",
+        "id": ann.id,
+        "when": stamp(),
+        "author": aid,
+        "kind": akind,
+        "body": f"kept suggested edit {edit.id}",
+    }
 
 
 def discard(root: Path, edit: Edit, writer: tuple[str, str], why: str | None = None, *, undo: bool = False) -> str:

@@ -15,6 +15,7 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     from loom.identity import is_agent
     from loom.looks import keep_all, read_look
     from loom.pending import PendingRefused, discard, keep, pending
+    from loom.writes import WriteRefused
 
     who = reviewer_identity_of(root)
     if is_agent(_str(body, "author") or who):
@@ -48,7 +49,7 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
             done, refused = keep(result, who, ids, writer, versions)
         else:
             done, refused = discard(result, who, ids, writer, _str(body, "why"), versions)
-    except PendingRefused as exc:
+    except (PendingRefused, WriteRefused) as exc:
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
     verb = "kept" if endpoint == "change-keep" else "discarded"
     parts = [f"{verb} {len(done)} change{'s' if len(done) != 1 else ''}"]

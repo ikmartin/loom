@@ -2,7 +2,7 @@
 
 An in-place change is a run of words that differs between the person's look (`looks.py`) and the file now: words the diff finds apart by fewer than `NEAR` words are one change, never across a blank line, and a file new or gone since the look is one change. Its id is `c-` and eight hex digits of a hash of its path, its old and new text and the 32 characters of the look before it, so it stands while it does, whatever changes elsewhere. A suggested edit is its record's (`records/edits.py`), placed in its key's text now; several on one key combine (`edits.compose`).
 
-Keeping an in-place change puts it into the look alone; discarding writes its old words back, a version of each document it is part of kept first (P7), with an `undo` line in the ledger. Keeping a suggested edit writes it into its file (`edits.apply`) and records it kept; discarding records it discarded. Every write loom makes on the person's word goes into their look too, so the file and the look agree on those words after it. Keeping carries each annotation on the changed words onto the new ones (`records/carry.py`); discarding writes no annotation.
+Keeping an in-place change puts it into the look alone; discarding writes its old words back, a version of each document it is part of kept first (P7), with an `undo` line in the ledger. Keeping a suggested edit writes it into its file and records it kept, through the door (`loom.writes`), every decision made again under its lock; discarding records it discarded. Every write loom makes on the person's word goes into their look too, so the file and the look agree on those words after it. Keeping carries each annotation on the changed words onto the new ones (`records/carry.py`); discarding writes no annotation.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from loom.records.edits import Edit
+    from loom.records.edits import Edit, Placed
     from loom.scan.nodes import NodeRec
     from loom.scan.scan import ScanResult
 
@@ -250,12 +250,14 @@ def _blocks(result: ScanResult, path: str, a: int, b: int) -> tuple[str | None, 
 
 
 def suggested(result: ScanResult) -> list[Pending]:
-    """The open suggested edits, each placed in its key's text now with its state: `ready` to keep, `taken` when its key reads as it taken already, `unplaced` when its words no longer stand once (or a suggested edit before it is on them), `on-a-copy` when none of the person's documents reads its key."""
+    """The open suggested edits, each placed in its key's text now with its state: `ready` to keep, `taken` when loom wrote it already (the door's journal) or its key reads as it taken, `unplaced` when its words no longer stand once (or a suggested edit before it is on them) or its file is not UTF-8, `on-a-copy` when none of the person's documents reads its key."""
     from loom.history.acts import documents_reaching
-    from loom.records.edits import Placed, compose, home, replay, taken_how
+    from loom.records.edits import Placed, compose, generation, home, replay, taken_how
+    from loom.writes import written
 
     out: list[Pending] = []
     edits = [e for e in replay(result.quilt.root)[0] if e.status == "open"]
+    loom_wrote = written(result.quilt.root, result.quilt.history_dir)
     for edit, placed in compose(result, edits):
         node = home(result, edit)
         p = Pending(
@@ -290,6 +292,11 @@ def suggested(result: ScanResult) -> list[Pending]:
                 if copy
                 else "It is on a block none of your documents reads"
             )
+        elif node is not None and node.file in result.files and result.files[node.file].encoding != "utf-8":
+            p.state, p.why = "unplaced", _not_utf8(node.file)
+        elif f"{edit.id}:{generation(edit)}" in loom_wrote:
+            p.state = "taken"
+            p.why = "Loom wrote it in already; keeping it records it kept and writes nothing"
         elif (how := taken_how(result, edit)) is not None:
             p.state = "taken"
             p.why = (
@@ -401,7 +408,9 @@ def _chosen(result: ScanResult, who: str, ids: list[str]) -> list[Pending]:
 def keep(
     result: ScanResult, who: str, ids: list[str], writer: tuple[str, str], said: list[str] | None = None
 ) -> tuple[list[str], list[dict[str, str]]]:
-    """Keep the changes `ids`: an in-place change goes into `who`'s look alone; a suggested edit is written into its file, a version of each document it changes kept first, and recorded kept, resolving the annotation it answers. Each annotation on the changed words is carried onto the new ones.
+    """Keep the changes `ids`: an in-place change goes into `who`'s look alone; a suggested edit is written into its file through the door (`loom.writes`), a version of each document it changes kept first, and recorded kept, resolving the annotation it answers. Each annotation on the changed words is carried onto the new ones.
+
+    Every decision is made again under the door's lock (`_keep_suggested`): the list was made before it.
 
     Parameters
     ----------
@@ -419,13 +428,13 @@ def keep(
     Returns
     -------
     (list of str, list of dict)
-        The ids kept, and `{id, why}` for each that cannot be: one unplaced, or on an agent's copy.
+        The ids kept, and `{id, why}` for each that cannot be, with `code` where it has one: one unplaced, on an agent's copy, no longer open, in a file that is not UTF-8 (`not-utf8`), or in a file that changed while it was being placed (`changed`).
     """
-    from loom.history.acts import APPLY, KEEP, keep_versions, write_file
+    from loom import writes
+    from loom.history.acts import KEEP, keep_versions
     from loom.history.ledger import append_entry
     from loom.records.carry import carry_all
-    from loom.records.edits import EditRefused, Placed, compose, find, is_taken
-    from loom.records.edits import keep as record_kept
+    from loom.records.edits import home
 
     chosen = _chosen(result, who, ids)
     refused = [{"id": p.id, "why": p.why or p.state} for p in chosen if p.state in ("unplaced", "on-a-copy")]
@@ -435,59 +444,179 @@ def keep(
     before = _kept_texts(result, chosen)
     root, hist = result.quilt.root, result.quilt.history_dir
     edits = [p for p in chosen if p.kind == "edit"]
-    for path in sorted({p.path for p in edits}):
-        mine = [p for p in edits if p.path == path]
-        _into_look(result, who, path, mine)
-        append_entry(hist, KEEP, {"who": who, "path": path, "changes": [p.id for p in mine]}, who)
-    if edits:
-        # what was kept is a version of each document it is part of
-        _say(said, keep_versions(result, sorted({p.path for p in edits}), KEEP, "Kept an edit", writer[1]))
-    written: dict[str, list[tuple[int, int]]] = {}
-    wrote: set[str] = set()
-    to_write = [p for p in chosen if p.kind == "suggested" and p.state == "ready"]
-    if to_write:
-        kept = keep_versions(
-            result, sorted({p.path for p in to_write}), APPLY, "Before keeping a suggested edit", writer[1]
-        )
-        _say(said, kept)
-        placed = {e.id: pl for e, pl in compose(result, [p.edit for p in to_write if p.edit]) if isinstance(pl, Placed)}
-        for path in sorted({p.path for p in to_write}):
-            text = result.files[path].text
-            mine = sorted((p for p in to_write if p.path == path and p.id in placed), key=lambda p: placed[p.id].at)
-            shift, spans = 0, []
-            for p in mine:
-                a, b = placed[p.id].at
-                spans.append((a + shift, a + shift + len(placed[p.id].text)))
-                shift += len(placed[p.id].text) - (b - a)
-            for p in reversed(mine):
-                a, b = placed[p.id].at
-                text = text[:a] + placed[p.id].text + text[b:]
-            write_file(root / path, text)
-            for p in mine:
-                append_entry(hist, APPLY, {"edit": p.id, "key": p.key, "path": path}, writer[1])
-                wrote.add(p.id)
-            written[path] = spans
-    after = _rescan(result)
-    done = [p.id for p in edits]
-    for p in chosen:
-        if p.kind != "suggested":
-            continue
-        edit = find(root, p.id)
-        if edit is None:
-            continue
-        try:
-            record_kept(after, edit, writer, written=p.id in wrote)
-        except EditRefused as exc:
-            refused.append({"id": p.id, "why": exc.message})
-            continue
-        done.append(p.id)
-        if p.state == "taken" and is_taken(after, edit):
-            written.setdefault(p.path, []).extend(_where_taken(after, edit))
-    for path, spans in written.items():
-        absorb(after, who, path, spans)
-    after = _rescan(after)
-    carry_all(after, before, [p for p in chosen if p.id in done], writer)
+    asked = [p for p in chosen if p.kind == "suggested" and p.edit is not None]
+    done: list[str] = []
+    kept: _Kept | None = None
+    try:
+        with writes.act(root, hist, "keep", writer[1]) as w:
+            for path in sorted({p.path for p in edits}):
+                mine = [p for p in edits if p.path == path]
+                _into_look(result, who, path, mine)
+                append_entry(hist, KEEP, {"who": who, "path": path, "changes": [p.id for p in mine]}, who)
+            if edits:
+                # what was kept is a version of each document it is part of
+                _say(said, keep_versions(result, sorted({p.path for p in edits}), KEEP, "Kept an edit", writer[1]))
+            done += [p.id for p in edits]
+            if asked:
+                kept = _keep_suggested(w, result, [p.id for p in asked], writer, said)
+                refused += kept.refused
+                done += kept.ids
+
+            def follow() -> None:
+                after = _rescan(kept.result if kept else result)
+                spans = {path: list(s) for path, s in kept.spans.items()} if kept else {}
+                for edit in kept.taken if kept else []:
+                    node = home(after, edit)
+                    if node is not None:
+                        spans.setdefault(node.file, []).extend(_where_taken(after, edit))
+                for path, s in spans.items():
+                    absorb(after, who, path, s)
+                after = _rescan(after)
+                carry_all(after, before, [p for p in chosen if p.id in done], writer)
+
+            w.then(follow)
+    except writes.WriteRefused as exc:
+        # the act was undone, its files and its records: no suggested edit of it is kept
+        lost = set(kept.ids if kept else [])
+        refused += [{"id": i, "why": exc.message, "code": exc.code} for i in sorted(lost)]
+        done = [i for i in done if i not in lost]
     return done, refused
+
+
+@dataclass
+class _Kept:
+    """What the Keep of suggested edits staged in an act: the scan its places are in, the ids recorded kept, the refusals, where in each file (in the scan's reading, after the write) loom's words now stand, and the edits recorded kept without writing."""
+
+    result: ScanResult
+    ids: list[str] = field(default_factory=list)
+    refused: list[dict[str, str]] = field(default_factory=list)
+    spans: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    taken: list[Edit] = field(default_factory=list)
+
+
+def _keep_suggested(
+    w: Any, result: ScanResult, ids: list[str], writer: tuple[str, str], said: list[str] | None
+) -> _Kept:
+    """Decide, place and stage in the act `w` the Keep of the suggested edits `ids`, all under the door's lock.
+
+    By record: an edit no longer open is refused; one whose `<id>:<generation>` the journal says loom wrote is recorded kept and not written again; one named by an act recovery could not settle is refused. From the files: each remaining edit is judged taken or placed in `result`, and when a file it writes no longer reads as `result` read it, the quilt is scanned again here and the edits placed again, once; a file that moved again is refused (`changed`). An edit in a file that is not UTF-8 is never written (`not-utf8`). What is written is spliced into the file's own bytes, with its `kept` line (the key's hash from the plan), the `resolved` line of the annotation it answers and the ledger's `apply` line journalled with it.
+    """
+    from loom import writes
+    from loom.history.acts import APPLY, keep_versions, ledger_line
+    from loom.paths import EDIT_LOG
+    from loom.records.edits import answered_event, generation, home, kept_event, replay
+    from loom.records.log import log_path as annotation_log
+    from loom.scan.hashing import hash_text
+    from loom.scan.owntext import key_hash
+
+    root, hist = result.quilt.root, result.quilt.history_dir
+    out = _Kept(result)
+    fresh = {e.id: e for e in replay(root)[0]}
+    live: list[Edit] = []
+    for i in ids:
+        e = fresh.get(i)
+        if e is None or e.status != "open":
+            out.refused.append({"id": i, "why": f"{i} is {e.status if e else 'gone'} already"})
+        elif w.wrote_before(f"{e.id}:{generation(e)}"):
+            out.taken.append(e)  # loom wrote it in already, and a crash kept its record from being written
+        elif f"{e.id}:{generation(e)}" in w.unsettled_edits():
+            out.refused.append(
+                {
+                    "id": i,
+                    "why": f"a write of {i} was cut short and its file changed since; look at the file before keeping it",
+                }
+            )
+        else:
+            live.append(e)
+    stale: set[str] = set()
+    for again in (False, True):
+        if again:
+            # a file moved since the scan this was planned from: plan once more, from a scan taken under the lock
+            result = out.result = _rescan(result)
+        taken, placed, refused = _place_kept(result, live)
+        files = sorted({pl.file for _, pl in placed})
+        stale = {f for f in files if not w.reads_as(f, result.files[f].text)}
+        if not stale and placed:
+            _say(said, keep_versions(result, files, APPLY, "Before keeping a suggested edit", writer[1]))
+            # stamping the versions takes a moment: what is spliced is the bytes read after it, still as planned
+            stale = {f for f in files if not w.reads_as(f, result.files[f].text)}
+        if not stale:
+            break
+    refused += [
+        {
+            "id": e.id,
+            "why": f"{pl.file} changed while loom was placing {e.id}; nothing was written, look at it again",
+            "code": "changed",
+        }
+        for e, pl in placed
+        if pl.file in stale
+    ]
+    placed = [(e, pl) for e, pl in placed if pl.file not in stale]
+    out.refused += refused
+    out.taken += taken
+    answered: set[str] = set()
+
+    def records(e: Edit, key_hash_: str) -> None:
+        w.log(root / EDIT_LOG, kept_event(e, writer, key_hash_))
+        line = answered_event(root, e, writer)
+        if line is not None and line["id"] not in answered:
+            answered.add(line["id"])
+            w.log(annotation_log(root), line)
+        out.ids.append(e.id)
+
+    for path in sorted({pl.file for _, pl in placed}):
+        mine = sorted(((e, pl) for e, pl in placed if pl.file == path), key=lambda x: x[1].at)
+        try:
+            raw = w.text(path, again=False) or ""  # the bytes just checked against the plan
+        except writes.WriteRefused as exc:
+            out.refused += [{"id": e.id, "why": exc.message, "code": exc.code} for e, _ in mine]
+            continue
+        new, made = writes.splice(raw, [(pl.at[0], pl.at[1], pl.text) for _, pl in mine])
+        shift = 0
+        for m, (e, pl) in zip(made, mine, strict=True):
+            m["edit"] = f"{e.id}:{generation(e)}"
+            a, b = pl.at
+            out.spans.setdefault(path, []).append((a + shift, a + shift + len(pl.text)))
+            shift += len(pl.text) - (b - a)
+        w.replace(path, new.encode("utf-8"), made)
+        for e, pl in mine:
+            w.wrote(f"{e.id}:{generation(e)}")
+            records(e, hash_text(pl.taken))
+            w.log(*ledger_line(hist, APPLY, {"edit": e.id, "key": pl.key, "path": path}, writer[1]))
+    for e in out.taken:
+        node = home(result, e)
+        records(e, key_hash(result, node.key) if node is not None else "")
+    return out
+
+
+def _place_kept(
+    result: ScanResult, edits: list[Edit]
+) -> tuple[list[Edit], list[tuple[Edit, Placed]], list[dict[str, str]]]:
+    """Each edit taken already, placed, or refused, in `result`: the edits whose block reads as them taken, the rest placed together (`edits.compose`), and `{id, why, code?}` for one unplaced or in a file that is not UTF-8."""
+    from loom.records.edits import Placed, compose, home, taken_how
+
+    taken: list[Edit] = []
+    rest: list[Edit] = []
+    refused: list[dict[str, str]] = []
+    for e in edits:
+        node = home(result, e)
+        if node is not None and node.file in result.files and result.files[node.file].encoding != "utf-8":
+            refused.append({"id": e.id, "why": _not_utf8(node.file), "code": "not-utf8"})
+        elif taken_how(result, e) is not None:
+            taken.append(e)
+        else:
+            rest.append(e)
+    placed: list[tuple[Edit, Placed]] = []
+    for e, pl in compose(result, rest):
+        if isinstance(pl, Placed):
+            placed.append((e, pl))
+        else:
+            refused.append({"id": e.id, "why": str(pl)})
+    return taken, placed, refused
+
+
+def _not_utf8(path: str) -> str:
+    return f"{path} is not UTF-8 text, so loom does not write into it; save it as UTF-8 first"
 
 
 def discard(

@@ -281,6 +281,16 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** Commit `3310c343`.
 
+### A write to a person's file is journalled first and keeps the bytes it replaces
+
+**Rule.** Keep, Discard, restoring a version or a set-aside text, a tick and Settings write a person's file only through the door (`loom/src/loom/writes.py`, `docs/design/writes.md`): under one lock that every loom process takes, every decision made again under it, the bytes the act replaces stored and a `begin` line in the journal before any file, and the file refused if it no longer holds what the act read. A write a crash cut short is finished or undone by the next act, never left half done; one whose file the person changed since is reported and left (P13). A file that is not UTF-8 is never spliced, and a path outside the quilt is never written.
+
+**Why.** The v0.1 safety study, on copies of real quilts (`docs/reports/v0.1-study/raw/safety.md`): a save made during Keep was lost; two Keeps at once wrote one edit twice or lost one; a crash between the write and its record let the next Keep write the edit again; Keep and restore rewrote Windows line endings and Discard in such a file corrupted it; restore overwrote a file it kept nowhere; Settings kept nothing first and left `config.toml` readable by its owner alone; put-back wrote outside the quilt.
+
+**Guard.** `loom/tests/unit/test_write_safety.py::test_a_save_made_while_keep_runs_moves_the_edit_with_it`, `loom/tests/unit/test_write_safety.py::test_two_keeps_in_one_file_at_once_both_land_once`, `loom/tests/unit/test_write_safety.py::test_a_keep_cut_short_anywhere_writes_the_edit_once`, `loom/tests/unit/test_write_safety.py::test_keep_leaves_line_endings_alone`, `loom/tests/unit/test_write_safety.py::test_discarding_an_agents_edit_in_a_crlf_file_gives_back_its_bytes`, `loom/tests/unit/test_write_safety.py::test_restoring_a_version_keeps_every_file_it_overwrites`, `loom/tests/unit/test_write_safety.py::test_saving_settings_keeps_the_config_first`, `loom/tests/unit/test_write_safety.py::test_putting_back_a_text_never_writes_outside_the_quilt`, `loom/tests/unit/test_write_safety.py::test_an_edit_in_a_file_that_is_not_utf8_is_never_written`, `loom/tests/unit/test_writes.py::test_the_journal_names_the_act_before_any_file_is_written`, `loom/tests/unit/test_writes.py::test_a_crash_between_two_files_is_undone_whole`, `loom/tests/unit/test_writes.py::test_a_real_process_killed_after_the_journal_is_settled_by_the_next`
+
+**Record.** The study's spike of the door (`docs/reports/v0.1-study/raw/spike-door.md`); plan 0.32, the Safe workstream, steps 1 to 3.
+
 ### Two definitions of one id leave it conflicted
 
 **Rule.** When an id is defined twice, by two files or within one, the id has no text and no winner; `duplicate-id` names every file, and whatever needs the text (accept, annotate, closure, stamp, revert) refuses until one definition goes.

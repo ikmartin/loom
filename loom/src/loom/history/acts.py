@@ -5,7 +5,6 @@ A version is a landmark (`stamp_document`): Keep and Undo in Your Changes keep o
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -17,7 +16,7 @@ from loom.scan.scan import ScanResult
 KEEP = "keep"
 #: The ledger's line for a version or a set-aside text put back.
 RESTORE = "restore"
-#: The ledger's line for a suggested edit written into its file (`records.edits.apply`).
+#: The ledger's line for a suggested edit written into its file (`pending.keep`).
 APPLY = "apply"
 
 
@@ -122,14 +121,6 @@ def cannot_restore(result: ScanResult, history: History, entry: Entry) -> str:
     if not entry.get("files") and len(document_files(result, doc)) > 1:
         return "This version was kept as one text, and the document is now several files."
     return ""
-
-
-def write_file(path: Path, text: str) -> None:
-    """Write `text` to `path` whole or not at all: through a sibling file moved into place."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".loom-tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
 
 
 def restore(result: ScanResult, doc: str, version: str, actor: str | None) -> dict[str, Any]:

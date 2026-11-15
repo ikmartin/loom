@@ -355,11 +355,6 @@ def test_a_short_edit_written_in_and_touched_is_not_written_twice(q: Path) -> No
     assert node.read_text().count("Each swap fixes") == 1
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="SAFE-2: Keep writes the file from its scan, so a save made meanwhile is lost",
-)
 def test_a_save_made_while_keep_runs_is_not_lost(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     import loom.history.acts as acts
 
@@ -375,6 +370,26 @@ def test_a_save_made_while_keep_runs_is_not_lost(q: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(acts, "keep_versions", and_a_save)
     call(q, "change-keep", {"changes": [eid]})
     assert "a line the editor saved" in node.read_text()
+
+
+def test_a_save_made_while_keep_runs_moves_the_edit_with_it(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import loom.history.acts as acts
+
+    node = q / "drafting/nodes/sy-000A.tex"
+    eid = suggest(q, "sy-000A", "Each swap fixes nothing.", "--quote", "with the swap.", "--after")
+    real = acts.keep_versions
+    saves = [b"% the editor saved\n"]
+
+    def and_a_save_above(*args: Any, **kw: Any) -> Any:
+        out = real(*args, **kw)
+        if saves:
+            node.write_bytes(saves.pop() + node.read_bytes())
+        return out
+
+    monkeypatch.setattr(acts, "keep_versions", and_a_save_above)
+    assert call(q, "change-keep", {"changes": [eid]})["done"] == [eid]
+    text = node.read_text()
+    assert text.startswith("% the editor saved\n") and text.count("with the swap. Each swap fixes nothing.") == 1
 
 
 def test_an_edit_on_a_block_named_by_place_stays_on_that_block(q: Path) -> None:
@@ -400,9 +415,6 @@ def test_an_edit_on_a_block_named_by_place_stays_on_that_block(q: Path) -> None:
     assert after.index("ANSWER-TWO") > after.index("\\section*{Two}")
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="SAFE-6: Keep rewrites the file from the scan's normalised text"
-)
 def test_keep_leaves_line_endings_alone(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))
@@ -640,3 +652,159 @@ def test_a_restore_cut_short_is_undone_whole(q: Path, monkeypatch: pytest.Monkey
     revive()
     assert recover(q, q / ".loom/history")[0].startswith("undid")
     assert {f: f.read_bytes() for f in mine} == mine and no_temps(q)
+
+
+def kept_lines(root: Path, eid: str) -> int:
+    log = root / ".loom/edits/log.jsonl"
+    return sum(
+        1
+        for line in log.read_text().splitlines()
+        if json.loads(line).get("event") == "kept" and json.loads(line)["id"] == eid
+    )
+
+
+def test_two_keeps_of_one_edit_at_once_write_it_once(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+    import time
+
+    import loom.pending as pending_
+
+    node = q / "drafting/nodes/sy-000A.tex"
+    eid = suggest(q, "sy-000A", "Each swap fixes nothing.", "--quote", "with the swap.", "--after")
+    real = pending_._rescan
+
+    def slow(result: Any) -> Any:
+        time.sleep(0.5)  # between the write and the records the old Keep made after it
+        return real(result)
+
+    monkeypatch.setattr(pending_, "_rescan", slow)
+    said: list[dict[str, Any]] = []
+    threads = [
+        threading.Thread(target=lambda: said.append(call(q, "change-keep", {"changes": [eid]}))) for _ in range(2)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert node.read_text().count("Each swap fixes nothing.") == 1 and kept_lines(q, eid) == 1
+
+
+def test_two_keeps_in_one_file_at_once_both_land_once(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import threading
+
+    import loom.history.acts as acts
+
+    node = q / "drafting/nodes/sy-000A.tex"
+    x = suggest(q, "sy-000A", "Each swap fixes nothing.", "--quote", "with the swap.", "--after")
+    y = suggest(q, "sy-000A", "Indeed.", "--quote", "Gadgets exist:", "--before")
+    real = acts.keep_versions
+    inside, go_on = threading.Event(), threading.Event()
+
+    def held(*args: Any, **kw: Any) -> Any:
+        out = real(*args, **kw)
+        if threading.current_thread().name == "B" and args[2] == acts.APPLY:
+            inside.set()
+            go_on.wait(5)  # B holds the door while A plans from a scan made before B writes
+        return out
+
+    monkeypatch.setattr(acts, "keep_versions", held)
+    said: dict[str, Any] = {}
+    b = threading.Thread(target=lambda: said.update(b=call(q, "change-keep", {"changes": [y]})), name="B")
+    b.start()
+    assert inside.wait(30)
+    a = threading.Thread(target=lambda: said.update(a=call(q, "change-keep", {"changes": [x]})), name="A")
+    a.start()
+    go_on.set()
+    a.join()
+    b.join()
+    text = node.read_text()
+    assert said["a"]["done"] == [x] and said["b"]["done"] == [y], said
+    assert text.count("Each swap fixes nothing.") == 1 and text.count("Indeed.") == 1
+
+
+def test_an_edit_in_a_file_that_is_not_utf8_is_never_written(q: Path) -> None:
+    node = q / "drafting/nodes/sy-000A.tex"
+    node.write_bytes(node.read_text().replace("Gadgets exist:", "Gadgets exist (Schröder, Gödel):").encode("latin-1"))
+    before = node.read_bytes()
+    eid = suggest(q, "sy-000A", "Each swap fixes nothing.", "--quote", "with the swap.", "--after")
+    listed = next(p for p in waiting(q) if p.id == eid)
+    assert listed.state == "unplaced" and "not UTF-8" in (listed.why or "")
+    said = call(q, "change-keep", {"changes": [eid]})
+    assert said["done"] == [] and "not UTF-8" in said["refused"][0]["why"]
+    assert node.read_bytes() == before
+
+
+def test_keeping_into_a_symlinked_file_writes_its_target_and_keeps_the_link(q: Path) -> None:
+    node = q / "drafting/nodes/sy-000A.tex"
+    shared = q / "shared" / "remark.txt"
+    shared.parent.mkdir()
+    shared.write_bytes(node.read_bytes())
+    node.unlink()
+    node.symlink_to(shared)
+    eid = suggest(q, "sy-000A", "Each swap fixes nothing.", "--quote", "with the swap.", "--after")
+    assert call(q, "change-keep", {"changes": [eid]})["done"] == [eid]
+    assert node.is_symlink() and shared.read_text().count("Each swap fixes nothing.") == 1
+
+
+def test_keeping_into_a_file_no_document_reads_keeps_its_bytes_first(q: Path) -> None:
+    scratch = q / "drafting/scratch.tex"
+    scratch.write_text("\\begin{lemma}\\label{sy-7777}\nMY-OWN-WORDS hold here.\n\\end{lemma}\n", encoding="utf-8")
+    before = scratch.read_bytes()
+    eid = suggest(q, "sy-7777", "as the count shows", "--quote", "MY-OWN-WORDS")
+    assert call(q, "change-keep", {"changes": [eid]})["done"] == [eid]
+    assert "as the count shows" in scratch.read_text() and kept_in_history(q, before)
+
+
+def dying(monkeypatch: pytest.MonkeyPatch, where: str) -> Any:
+    """Make Keep die at `where`; returns what puts every real function back."""
+    import loom.history.acts as acts
+    import loom.writes as writes
+
+    if where == "between the journal and the file":
+        return dying_before_the_rename(monkeypatch)
+    module, name, test = {
+        "before the journal": (acts, "keep_versions", lambda *a, **k: a[2] == acts.APPLY),
+        "between the file and its records": (writes, "_append_records", lambda *a, **k: True),
+        "between the records and done": (writes, "_append_journal", lambda *a, **k: a[1]["event"] == "done"),
+    }[where]
+    real = getattr(module, name)
+
+    def die(*args: Any, **kw: Any) -> Any:
+        if test(*args, **kw):
+            raise Died
+        return real(*args, **kw)
+
+    monkeypatch.setattr(module, name, die)
+    return lambda: monkeypatch.setattr(module, name, real)
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "before the journal",
+        "between the journal and the file",
+        "between the file and its records",
+        "between the records and done",
+    ],
+)
+@pytest.mark.parametrize(
+    "new",
+    [
+        "Each swap fixes nothing.",
+        "Each swap of the gadget's two points fixes neither, so a gadget with a swap has no fixed point.",
+    ],
+)
+def test_a_keep_cut_short_anywhere_writes_the_edit_once(
+    q: Path, monkeypatch: pytest.MonkeyPatch, where: str, new: str
+) -> None:
+    """The study's crash harness (`docs/reports/v0.1-study/safety-harness/crash/`): a Keep killed at each point, then pressed again."""
+    node = q / "drafting/nodes/sy-000A.tex"
+    eid = suggest(q, "sy-000A", new, "--quote", "with the swap.", "--after")
+    assert eid
+    revive = dying(monkeypatch, where)
+    with pytest.raises(Died):
+        call(q, "change-keep", {"changes": [eid]})
+    revive()
+    call(q, "change-keep", {"changes": [eid]})
+    assert node.read_text().count(new) == 1 and kept_lines(q, eid) == 1 and no_temps(q)
+    assert not [p for p in waiting(q) if p.id == eid]
