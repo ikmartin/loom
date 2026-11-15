@@ -102,6 +102,10 @@ def staleness(root: Path, commit: str, timeout: float = 10.0) -> list[str]:
         commit = commit.removesuffix("-dirty")
 
     def git(*args: str) -> subprocess.CompletedProcess[str] | None:
+        from loom import gitprog
+
+        if not gitprog.usable():
+            return None
         try:
             return subprocess.run(
                 ["git", *args], cwd=root, capture_output=True, text=True, timeout=timeout, check=False

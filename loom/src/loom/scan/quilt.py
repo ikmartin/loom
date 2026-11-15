@@ -212,6 +212,10 @@ def load_user_config() -> dict[str, Any]:
 
 
 def git_user_name(cwd: Path | None = None) -> str | None:
+    from loom import gitprog
+
+    if not gitprog.usable():
+        return None
     try:
         proc = subprocess.run(
             ["git", "config", "user.name"],

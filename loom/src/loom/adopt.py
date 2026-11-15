@@ -152,7 +152,11 @@ def _merge(base: str, ours: str, theirs: str) -> tuple[str, bool]:
         paths = [Path(temporary) / name for name in ("working", "base", "proposal")]
         for path, text in zip(paths, (ours, base, theirs), strict=True):
             path.write_text(text)
+        from loom import gitprog
+
         try:
+            if not gitprog.usable():
+                raise FileNotFoundError("git")
             run = subprocess.run(["git", "merge-file", "-p", *map(str, paths)], capture_output=True)
         except FileNotFoundError:
             raise SyncError(

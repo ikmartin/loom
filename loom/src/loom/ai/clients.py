@@ -160,6 +160,10 @@ def is_loom_file(client: Client, text: str) -> bool:
 
 def tracked(root: Path, files: tuple[str, ...]) -> set[str]:
     """Which of `files` git tracks in the quilt at `root`; none when it is not under git or git is not installed."""
+    from loom import gitprog
+
+    if not gitprog.usable():
+        return set()
     try:
         done = subprocess.run(["git", "ls-files", "-z", "--", *files], cwd=root, capture_output=True, check=False)
     except OSError:
