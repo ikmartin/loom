@@ -311,3 +311,19 @@ def test_doctor_repair_installs_loom_tex_and_the_report_names_it(
     tex = next(i for i in json.loads(r.stdout)["items"] if i["name"] == "tex")
     assert (tex["status"], tex["kind"]) == ("ok", "loom"), r.output
     assert "installed loom's TeX" in r.stderr
+
+
+def test_a_package_that_failed_is_not_tried_again_within_the_hour(loomtex: Path) -> None:
+    first = private.install_packages(["no-such-package"])
+    assert first.failed == ["no-such-package"]
+    runs = len(tlmgr_log(loomtex))
+    again = private.install_packages(["no-such-package"])
+    assert again.failed == ["no-such-package"] and "within the last hour" in again.reason
+    assert len(tlmgr_log(loomtex)) == runs  # no second run of the package tool
+
+
+def test_a_package_another_run_installed_meanwhile_counts_as_installed(loomtex: Path) -> None:
+    private.install_packages(["stmaryrd"])
+    runs = len(tlmgr_log(loomtex))
+    got = private.install_packages(["stmaryrd"])
+    assert got.installed == ["stmaryrd"] and len(tlmgr_log(loomtex)) == runs

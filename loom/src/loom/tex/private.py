@@ -423,7 +423,9 @@ class Fetched:
 
 
 def install_packages(packages: list[str], *, timeout: float = INSTALL_TIMEOUT) -> Fetched:
-    """Install `packages` into loom's TeX from `repository`, in one run.
+    """Install `packages` into loom's TeX from `repository`, one install at a time across every loom process.
+
+    A package another run installed while this one waited counts as installed. One that failed, or ran past the deadline, in the last `RETRY_AFTER` seconds is not tried again, so the many runs of one build pay for a failure once; past a deadline the repository is chosen afresh.
 
     Parameters
     ----------
@@ -436,23 +438,58 @@ def install_packages(packages: list[str], *, timeout: float = INSTALL_TIMEOUT) -
     Fetched
         Nothing is installed when loom's TeX is not in use, or no repository answers (offline).
     """
+    from loom.errors import EnvError
+    from loom.locks import locked
+
     wanted = sorted(set(packages))
     if not wanted:
         return Fetched()
     if not can_fetch():
         return Fetched([], wanted, "loom installs packages only into its own TeX")
+    try:
+        with locked(tex_dir().parent / "tex.lock", wait=timeout + 60):
+            return _install_held(wanted, timeout)
+    except EnvError:
+        return Fetched([], wanted, "another loom is installing packages; this one tries again on its next compile")
+
+
+#: Seconds a package that failed to install is left alone before loom tries it again.
+RETRY_AFTER = 3600
+
+
+def _install_held(wanted: list[str], timeout: float) -> Fetched:
+    """`install_packages` under the install lock."""
+    have = _installed()
+    present = [p for p in wanted if p in have]
+    now = time.time()
+    failed = read_state().get("failed")
+    recent = (
+        {k: v for k, v in failed.items() if isinstance(v, int | float) and now - v < RETRY_AFTER}
+        if isinstance(failed, dict)
+        else {}
+    )
+    skipped = [p for p in wanted if p not in have and p in recent]
+    need = [p for p in wanted if p not in have and p not in recent]
+    if not need:
+        reason = "it failed to install within the last hour; loom tries again later" if skipped else ""
+        return Fetched(present, skipped, reason)
     url = repository()
     if url is None:
-        return Fetched([], wanted, "no TeX Live repository answers (offline?); loom fetches them when it is online")
-    run = tlmgr(["--repository", url, "install", *wanted], timeout=timeout)
-    installed = sorted(set(re.findall(r"^\[\d+/\d+[^\]]*\] install: (\S+?)(?:\.[\w-]+-[\w-]+)? ", run.out, re.M)))
+        return Fetched(
+            present, [*need, *skipped], "no TeX Live repository answers (offline?); loom fetches them when it is online"
+        )
+    run = tlmgr(["--repository", url, "install", *need], timeout=timeout)
     have = _installed()
-    got = [p for p in wanted if p in have]
-    missing = [p for p in wanted if p not in have]
-    if installed or got:
-        _write_state(installs=int(str(read_state().get("installs", 0))) + 1)
-    reason = "" if not missing else (_last_line(run.out) or f"tlmgr exited {run.code}")
-    return Fetched(got, missing, reason)
+    got = [p for p in need if p in have]
+    lost = [p for p in need if p not in have]
+    changes: dict[str, object] = {"failed": {**recent, **{p: now for p in lost}}}
+    if got:
+        changes["installs"] = int(str(read_state().get("installs", 0))) + 1
+    if run.code == 124:
+        changes["repository"] = {}
+    _write_state(**changes)
+    reason = "" if not lost else (_last_line(run.out) or f"tlmgr exited {run.code}")
+    return Fetched(sorted([*present, *got]), sorted([*lost, *skipped]), reason)
 
 
 def _installed() -> set[str]:
