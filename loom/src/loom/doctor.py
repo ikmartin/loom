@@ -38,6 +38,12 @@ TEX = (
 )
 POPPLER = "brew install poppler" if _MAC else "apt install poppler-utils"
 GIT = "brew install git" if _MAC else "apt install git"
+#: The one remedy for loom's own TeX, which touches nothing but loom's directory.
+REPAIR = "Repair TeX: loom doctor --repair installs loom's own TeX (no password; about 60 MB, once)"
+#: The remedies `REPAIR` stands in for unless the person keeps their own TeX (`[tex] use = "mine"`).
+_TEX_REMEDIES = (TEX, "tlmgr install biber", "tlmgr install make4ht tex4ht")
+#: Seconds biber is given on top of `PROBE_TIMEOUT`: TeX Live's biber unpacks itself on its first run, which takes longer.
+BIBER_GRACE = 30.0
 VENDOR = "cd arras && npm run build && cd ../loom && uv run python scripts/vendor_arras.py ../arras/build"
 
 
@@ -171,13 +177,13 @@ class Report:
         ):
             if not items:
                 continue
-            # what is fine is counted and named on one line; what is not is listed, each remedy said once under the last item it fixes (T2)
+            # what is fine is counted and named on one line; what is not is listed, each remedy said once under the first item it fixes (T2)
             fine = [i for i in items if i.status == OK]
             lines = [Line(f"ok    {counted(len(fine), 'check')}: {', '.join(i.name for i in fine)}")] if fine else []
             rest = [i for i in items if i.status != OK]
             for n, i in enumerate(rest):
-                later = any(j.remedy == i.remedy for j in rest[n + 1 :])
-                fixes = [_home(i.remedy)] if i.remedy and not later else []
+                earlier = any(j.remedy == i.remedy for j in rest[:n])
+                fixes = [_home(i.remedy)] if i.remedy and not earlier else []
                 said = f"{i.status:<4}  {i.name:<{width}}  {_home(i.detail)}".rstrip()
                 lines.append(Line(said, fixes=fixes, data=i.to_dict()))
             groups.append(Group(section, lines, limit=None, problem=True))
@@ -358,14 +364,42 @@ def _biber(found: Answer, item: Item) -> None:
         item.remedy = "tlmgr update biber biblatex, so both come from one TeX Live; compiling a master that uses biblatex settles it"
 
 
+def check_tex() -> Item:
+    """Which TeX loom's runs use, its year and where it is: loom's own, the person's, or none."""
+    from loom.tex import private
+
+    tex = private.active()
+    extra: dict[str, Any] = {"path": str(tex.bin) if tex.bin else None, "kind": tex.kind, "year": tex.year}
+    if tex.kind == private.LOOM:
+        if not private.works():
+            return Item("tex", FAIL, REQUIRED, f"{tex.label} does not answer", REPAIR, extra)
+        if tex.year != private.YEAR:
+            return Item("tex", WARN, REQUIRED, f"{tex.label}; this loom expects TeX Live {private.YEAR}", REPAIR, extra)
+        return Item("tex", OK, REQUIRED, tex.label, "", extra)
+    if tex.kind == private.MINE:
+        why = (
+            '; loom\'s own is installed, and [tex] use = "mine" keeps yours'
+            if private.loom_bin() is not None
+            else "; packages it lacks are yours to install"
+        )
+        return Item("tex", OK, REQUIRED, f"{tex.label}{why}", "", extra)
+    return Item("tex", FAIL, REQUIRED, "none: documents show as their source and no PDF is made", REPAIR, extra)
+
+
 def check_tools() -> list[Item]:
     """Find every tool, ask its version, and probe what loom needs of it beyond presence: pdftotext's word boxes, and whether biber pairs with biblatex.
 
     Every probe starts before any is read and all share one deadline, so doctor takes as long as its slowest tool, and at most PROBE_TIMEOUT.
     """
+    from loom import gitprog
+    from loom.tex import private
+
+    tex = private.active()
     paths = {t.name: shutil.which(t.name) for t in TOOLS}
+    stub = paths["git"] is not None and gitprog.apple_stub(paths["git"])
     with tempfile.TemporaryDirectory(prefix="loom-doctor-") as tmp:
-        probes = {t.name: Probe([p, *t.flag]) for t in TOOLS if (p := paths[t.name])}
+        # running Apple's stub opens a dialog offering to install the Command Line Tools, so it is not run
+        probes = {t.name: Probe([p, *t.flag]) for t in TOOLS if (p := paths[t.name]) and not (t.name == "git" and stub)}
         if paths["pdftotext"]:
             pdf = Path(tmp) / "page.pdf"
             pdf.write_bytes(_tiny_pdf())
@@ -375,21 +409,43 @@ def check_tools() -> list[Item]:
         if paths["biber"] and paths["kpsewhich"]:
             probes["biblatex.sty"] = Probe([paths["kpsewhich"], "biblatex.sty"])
         deadline = time.monotonic() + PROBE_TIMEOUT
-        answers = {name: probe.answer(deadline) for name, probe in probes.items()}
+        answers = {
+            name: probe.answer(deadline + (BIBER_GRACE if name == "biber" else 0.0)) for name, probe in probes.items()
+        }
     items = []
     for tool in TOOLS:
         path = paths[tool.name]
+        remedy = REPAIR if tool.remedy in _TEX_REMEDIES and tex.kind != private.MINE else tool.remedy
+        if path is None and tool.name == "biber" and tex.kind == private.LOOM:
+            items.append(
+                Item(
+                    tool.name, OK, tool.severity, "fetched the first time a document uses biblatex", "", {"path": None}
+                )
+            )
+            continue
         if path is None:
             status = FAIL if tool.severity == REQUIRED else WARN
-            items.append(Item(tool.name, status, tool.severity, f"not found: {tool.use}", tool.remedy, {"path": None}))
+            items.append(Item(tool.name, status, tool.severity, f"not found: {tool.use}", remedy, {"path": None}))
+            continue
+        if tool.name == "git" and stub:
+            items.append(
+                Item(
+                    tool.name,
+                    WARN,
+                    tool.severity,
+                    "only Apple's installer stub: running it asks to install the Command Line Tools",
+                    "xcode-select --install, or leave it: loom works without git but for loom init --git and loom sync",
+                    {"path": path},
+                )
+            )
             continue
         got = answers[tool.name]
         item = Item(tool.name, OK, tool.severity, got.first_line or "found", "", {"path": path})
         if got.hung:
             item.status, item.detail = FAIL, f"hung: {' '.join(tool.flag)} did not answer in {PROBE_TIMEOUT:g} s"
-            item.remedy = f"reinstall it ({tool.remedy}), or take {path} off PATH"
+            item.remedy = f"reinstall it ({remedy}), or take {path} off PATH"
         elif got.code is None:
-            item.status, item.detail, item.remedy = FAIL, f"cannot run: {got.err}", tool.remedy
+            item.status, item.detail, item.remedy = FAIL, f"cannot run: {got.err}", remedy
         elif tool.name == "pdftotext":
             _bbox(answers["-bbox-layout"], item)
         elif tool.name == "biber" and "biblatex.sty" in answers:
@@ -476,7 +532,10 @@ def check_engine(quilt: Any) -> Item:
         )
     path = shutil.which(engine)
     if path is None:
-        return Item("engine", FAIL, QUILT, f"{engine}: not found, so every compile here fails", TEX, {"path": None})
+        from loom.tex import private
+
+        remedy = TEX if private.active().kind == private.MINE else REPAIR
+        return Item("engine", FAIL, QUILT, f"{engine}: not found, so every compile here fails", remedy, {"path": None})
     return Item("engine", OK, QUILT, engine, "", {"path": path})
 
 
@@ -675,7 +734,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
         # not being in a quilt is normal here; a quilt that cannot be read is not
         if quilt_path or not str(exc).startswith("not inside a quilt"):
             bad_quilt = str(exc)
-    report.items += check_tools()
+    report.items += [check_tex(), *check_tools()]
     report.items += [check_author(quilt), check_bundle()]
     if bad_quilt is not None:
         # a path with no quilt at it has no config.toml to fix
