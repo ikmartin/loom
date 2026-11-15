@@ -676,3 +676,44 @@ def test_a_quilt_path_with_no_quilt_at_it_names_loom_init(box: Box) -> None:
     missing = box.tmp / "nowhere" / "q"
     got = next(i for i in json_of("doctor", "--quilt", str(missing), "--json", code=2)["items"] if i["name"] == "quilt")
     assert got["remedy"].startswith(f"loom init {missing} makes a quilt there"), got
+
+
+# ---- machine: which TeX ---------------------------------------------------------------
+
+
+def test_the_tex_row_names_the_persons_tex_and_its_year(box: Box) -> None:
+    got = item(doctor(box), "tex")
+    assert got["status"] == "ok" and got["kind"] == "mine" and got["detail"].startswith("your own TeX")
+
+
+def test_with_no_tex_the_tex_row_fails_and_repair_tex_is_said_once_under_it(box: Box) -> None:
+    """LIVE-4: the remedy stood under the wrong rows, and offered Homebrew and tlmgr on a machine with neither."""
+    box.drop("latexmk", "pdflatex", "dvisvgm")
+    data = doctor(box)
+    got = item(data, "tex")
+    assert (got["status"], got["kind"]) == ("fail", "none") and got["remedy"].startswith("Repair TeX")
+    assert item(data, "latexmk")["remedy"] == got["remedy"]
+    assert not any("brew" in i["remedy"] or "tlmgr" in i["remedy"] for i in data["items"] if i["name"] != "git"), data
+    lines = exits(2, "doctor", cwd=box.tmp / "away").stdout.splitlines()
+    at = next(n for n, ln in enumerate(lines) if ln.startswith("  fail  tex"))
+    assert lines[at + 1].strip().startswith("fix: Repair TeX"), lines
+
+
+def test_the_tex_row_names_loom_tex_when_it_is_installed(box: Box) -> None:
+    from tests.unit.tex.test_private import make_tex
+
+    make_tex(box.tmp / "data" / "tex")
+    box.mp.setenv("LOOM_TEX_DIR", str(box.tmp / "data" / "tex"))
+    got = item(doctor(box), "tex")
+    assert (got["status"], got["kind"], got["year"]) == ("ok", "loom", 2026)
+    assert got["detail"] == "loom's TeX (TeX Live 2026)"
+
+
+def test_apples_git_stub_is_never_run(box: Box, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom import gitprog
+
+    box.script("git", "import sys\nopen(sys.argv[0] + '.ran', 'w').close()\n")
+    monkeypatch.setattr(gitprog, "apple_stub", lambda path: True)
+    got = item(doctor(box), "git")
+    assert got["status"] == "warn" and "installer stub" in got["detail"]
+    assert not (box.bin / "git.ran").exists()

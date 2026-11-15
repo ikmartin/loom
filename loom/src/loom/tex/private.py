@@ -389,13 +389,13 @@ def _answers(url: str, timeout: float = PROBE_TIMEOUT) -> bool:
         return False
 
 
-def repository(probe: Callable[[str], bool] = _answers) -> str | None:
+def repository(probe: Callable[[str], bool] | None = None) -> str | None:
     """The repository loom's installs come from: the year's frozen one once it answers, else the first named live mirror that does; None when none answers.
 
     Parameters
     ----------
-    probe : callable, default `_answers`
-        Says whether a repository answers; the answer is kept for a day.
+    probe : callable, optional
+        Says whether a repository answers; default `_answers`. The answer is kept for a day.
 
     Returns
     -------
@@ -406,7 +406,8 @@ def repository(probe: Callable[[str], bool] = _answers) -> str | None:
     kept = state.get("repository")
     if isinstance(kept, dict) and kept.get("checked") == today and isinstance(kept.get("url"), str):
         return str(kept["url"])
-    chosen = next((u for u in (*FROZEN, *LIVE) if probe(u)), None)
+    answers = probe or _answers
+    chosen = next((u for u in (*FROZEN, *LIVE) if answers(u)), None)
     if chosen is not None:
         _write_state(repository={"url": chosen, "checked": today})
     return chosen
