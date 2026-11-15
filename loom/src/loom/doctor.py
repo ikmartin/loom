@@ -38,10 +38,11 @@ TEX = (
 )
 POPPLER = "brew install poppler" if _MAC else "apt install poppler-utils"
 GIT = "brew install git" if _MAC else "apt install git"
+GHOSTSCRIPT = "brew install ghostscript" if _MAC else "apt install ghostscript"
 #: The one remedy for loom's own TeX, which touches nothing but loom's directory.
-REPAIR = "Repair TeX: loom doctor --repair installs loom's own TeX (no password; about 60 MB, once)"
-#: The remedies `REPAIR` stands in for unless the person keeps their own TeX (`[tex] use = "mine"`).
-_TEX_REMEDIES = (TEX, "tlmgr install biber", "tlmgr install make4ht tex4ht")
+REPAIR = "Repair TeX: loom doctor --repair installs loom's own TeX, Ghostscript and poppler (no password; about 120 MB, once)"
+#: The remedies `REPAIR` stands in for unless the person keeps their own TeX (`[tex] use = "mine"`); on a Mac it also installs Ghostscript and poppler.
+_TEX_REMEDIES = (TEX, "tlmgr install biber", "tlmgr install make4ht tex4ht", *((POPPLER, GHOSTSCRIPT) if _MAC else ()))
 #: Seconds biber is given on top of `PROBE_TIMEOUT`: TeX Live's biber unpacks itself on its first run, which takes longer.
 BIBER_GRACE = 30.0
 VENDOR = "cd arras && npm run build && cd ../loom && uv run python scripts/vendor_arras.py ../arras/build"
@@ -105,6 +106,13 @@ TOOLS = [
     Tool("extractbb", OPTIONAL, ("--version",), TEX, "the size of a PDF or image figure in a document's HTML"),
     Tool("pdftotext", OPTIONAL, ("-v",), POPPLER, "cited works' page text and geometry, and the identity test"),
     Tool("pdfinfo", OPTIONAL, ("-v",), POPPLER, "cited works' page rotation"),
+    Tool(
+        "gs",
+        OPTIONAL,
+        ("--version",),
+        GHOSTSCRIPT,
+        "EPS figures, the arrows of diagrams drawn in PostScript, and pictures TeX4ht makes as PNG",
+    ),
     Tool(
         "pdftocairo",
         OPTIONAL,
@@ -319,7 +327,13 @@ def _bbox(got: Answer, item: Item) -> None:
         )
     else:
         return
-    item.remedy = f"{POPPLER}, and put poppler's pdftotext first on PATH"
+    from loom.tex import private
+
+    item.remedy = (
+        REPAIR
+        if _MAC and private.active(year=False).kind != private.MINE
+        else f"{POPPLER}, and put poppler's pdftotext first on PATH"
+    )
 
 
 _BIBER = re.compile(r"biber version:?\s*(\d+)\.(\d+)", re.I)
