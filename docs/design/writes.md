@@ -122,7 +122,7 @@ The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.
 | writer | step | through the door |
 |---|---|---|
 | ticking a box (`tasks.tick`), saving Settings (`config_edit.set_values`) | 1 | yes |
-| Discard of an in-place change, put-back, restore | 2 | not built yet |
+| Discard of an in-place change, put-back, restore | 2 | yes |
 | Keep of a suggested edit | 3 | not built yet |
 | undo of a Keep in one step, and a restore or put-back that reopens what it takes out | 5 | not built yet |
 | taking in an agent's copy, a pull, `loom mv`, atomize, import, `init --from`, the agent layer, pages, new files; then a test that nothing else writes a person's file | 6 | not built yet |

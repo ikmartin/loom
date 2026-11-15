@@ -421,11 +421,6 @@ def test_saving_settings_keeps_the_config_first(q: Path) -> None:
     assert config.stat().st_mode & 0o777 == 0o644
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="SAFE-5: restore overwrites a file the document no longer reaches without keeping it",
-)
 def test_restoring_a_version_keeps_every_file_it_overwrites(q: Path) -> None:
     results, node = q / "drafting/sections/results.tex", q / "drafting/nodes/sy-0006.tex"
     results.write_text(
@@ -437,11 +432,6 @@ def test_restoring_a_version_keeps_every_file_it_overwrites(q: Path) -> None:
     assert "MY-NEW-PARAGRAPH" in node.read_text() or kept_in_history(q, kept)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="SAFE-7: discarding an in-place change in a CRLF file splices at offsets of another text",
-)
 def test_discarding_an_agents_edit_in_a_crlf_file_gives_back_its_bytes(q: Path) -> None:
     f = q / "drafting/sections/appendix.tex"
     f.write_bytes(f.read_bytes().replace(b"\n", b"\r\n"))
@@ -474,14 +464,18 @@ class Died(BaseException):
     """The process dies here."""
 
 
-def dying_before_the_rename(monkeypatch: pytest.MonkeyPatch) -> Any:
-    """Make the next rename of a person's file die; returns what puts the real one back."""
+def dying_before_the_rename(monkeypatch: pytest.MonkeyPatch, after: int = 0) -> Any:
+    """Make a rename of a person's file die, the first or the one after `after` others; returns what puts the real one back."""
     import loom.writes as writes
 
     real = writes._rename
+    count = [0]
 
     def rename(tmp: Path, target: Path) -> None:
-        raise Died
+        if count[0] == after:
+            raise Died
+        count[0] += 1
+        real(tmp, target)
 
     monkeypatch.setattr(writes, "_rename", rename)
     return lambda: monkeypatch.setattr(writes, "_rename", real)
@@ -548,3 +542,101 @@ def test_settings_cut_short_before_the_write_leave_config_as_it_was(q: Path, mon
     assert b'name = "widgets"' in config.read_bytes() and kept_in_history(q, before)
     assert door(q)[-4:] == ["begin", "aborted", "begin", "done"]
     assert config.stat().st_mode & 0o777 == 0o644
+
+
+def an_agents_edit(q: Path) -> tuple[Path, bytes, list[str]]:
+    """An agent's in-place edit to the appendix since the person's look: the file, its bytes before, and the change's ids."""
+    f = q / "drafting/sections/appendix.tex"
+    original = f.read_bytes()
+    text = original.decode()
+    at = text.rfind("the")
+    f.write_bytes((text[:at] + "AGENT-WORDS" + text[at + 3 :]).encode())
+    return f, original, [c.id for c in waiting(q) if c.kind == "edit" and c.path == "drafting/sections/appendix.tex"]
+
+
+def test_a_discard_cut_short_before_its_write_leaves_the_file_and_discards_once_after(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    f, original, ids = an_agents_edit(q)
+    edited = f.read_bytes()
+    revive = dying_before_the_rename(monkeypatch)
+    with pytest.raises(Died):
+        call(q, "change-discard", {"changes": ids})
+    revive()
+    assert f.read_bytes() == edited
+    assert call(q, "change-discard", {"changes": ids})["done"] == ids
+    assert f.read_bytes() == original and no_temps(q)
+    assert door(q)[-4:] == ["begin", "aborted", "begin", "done"]
+
+
+def test_a_save_made_while_discard_runs_is_kept(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import loom.history.acts as acts
+
+    f, original, ids = an_agents_edit(q)
+    real = acts.keep_versions
+
+    def and_a_save(*args: Any, **kw: Any) -> Any:
+        out = real(*args, **kw)
+        f.write_bytes(b"% the editor saved\n" + f.read_bytes())
+        return out
+
+    monkeypatch.setattr(acts, "keep_versions", and_a_save)
+    assert call(q, "change-discard", {"changes": ids})["done"] == ids
+    assert f.read_bytes() == b"% the editor saved\n" + original
+
+
+def test_a_put_back_cut_short_before_its_write_leaves_the_file_and_puts_back_once_after(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.history.ledger import load_history
+    from loom.scan.quilt import load_quilt
+
+    f, original, ids = an_agents_edit(q)
+    edited = f.read_bytes()
+    call(q, "change-discard", {"changes": ids})
+    undone = [e for e in load_history(load_quilt(q).history_dir).entries if e.action == "undo"][-1]
+    revive = dying_before_the_rename(monkeypatch)
+    with pytest.raises(Died):
+        call(q, "history-restore", {"path": "drafting/sections/appendix.tex", "text": undone.get("from")})
+    revive()
+    assert f.read_bytes() == original
+    assert "error" not in call(
+        q, "history-restore", {"path": "drafting/sections/appendix.tex", "text": undone.get("from")}
+    )
+    assert f.read_bytes() == edited and no_temps(q)
+
+
+def test_putting_back_a_text_never_writes_outside_the_quilt(q: Path) -> None:
+    stored = next((q / ".loom/history/texts").glob("*.md"))
+    for path in ("../outside-the-quilt.txt", "/tmp/outside-the-quilt.txt", "drafting/../../outside-the-quilt.txt"):
+        said = call(q, "history-restore", {"path": path, "text": "sha256:" + stored.stem})
+        assert said == {"error": "outside-quilt"}, path
+    assert not (q.parent / "outside-the-quilt.txt").exists()
+
+
+def test_a_version_gives_back_the_bytes_it_kept(q: Path) -> None:
+    node, other = q / "drafting/nodes/sy-000A.tex", q / "drafting/nodes/sy-0006.tex"
+    node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))
+    other.write_bytes(other.read_bytes() + "% Schröder\n".encode("latin-1"))
+    kept = {node: node.read_bytes(), other: other.read_bytes()}
+    assert "error" not in call(q, "history-record", {"document": "drafting/main.tex", "name": "bytes"})
+    node.write_bytes(node.read_bytes() + b"% later\r\n")
+    other.write_bytes(other.read_bytes() + "% später\n".encode("latin-1"))
+    assert "error" not in call(q, "history-restore", {"document": "drafting/main.tex", "version": "main-bytes"})
+    assert {f: f.read_bytes() for f in kept} == kept
+
+
+@pytest.mark.parametrize("after", [0, 1])
+def test_a_restore_cut_short_is_undone_whole(q: Path, monkeypatch: pytest.MonkeyPatch, after: int) -> None:
+    from loom.writes import recover
+
+    node, results = q / "drafting/nodes/sy-000A.tex", q / "drafting/sections/results.tex"
+    node.write_text(node.read_text() + "% MINE-A\n", encoding="utf-8")
+    results.write_text(results.read_text() + "% MINE-B\n", encoding="utf-8")
+    mine = {node: node.read_bytes(), results: results.read_bytes()}
+    revive = dying_before_the_rename(monkeypatch, after)
+    with pytest.raises(Died):
+        call(q, "history-restore", {"document": "drafting/main.tex", "version": "widgets-v1"})
+    revive()
+    assert recover(q, q / ".loom/history")[0].startswith("undid")
+    assert {f: f.read_bytes() for f in mine} == mine and no_temps(q)

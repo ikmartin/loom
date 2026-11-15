@@ -48,7 +48,6 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 | name | means | owner |
 |---|---|---|
 | `changed-since` | an undo refused: the text has changed where it was written | the safe write path |
-| `outside-quilt` | a restore or a put-back that would write outside the quilt | the safe write path |
 | `published`, in every write's answer and in the manifest | the number of the publication that will show the write, which the viewer waits for | designed with the safe write path, built by the speed work |
 
 ## Record fields

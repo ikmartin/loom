@@ -120,6 +120,13 @@ def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
     return out
 
 
+def cuts(path: str, old: str, text: str | None) -> list[tuple[str, tuple[int, int], tuple[int, int]]]:
+    """The changes of one file between its look's text `old` and its text now (None for a file gone), each as its id, its place in `old` and its place in the text now; a file new or gone since the look is one change."""
+    new = text or ""
+    spans = [(0, len(old), 0, len(new))] if not old or text is None else cut(old, text)
+    return [(change_id(path, old[o0:o1], new[n0:n1], old[:o0]), (o0, o1), (n0, n1)) for o0, o1, n0, n1 in spans]
+
+
 def change_id(path: str, old: str, new: str, before: str) -> str:
     """`c-` and eight hex digits of the change's path, its old and new text, and the look's text just before it."""
     said = "\0".join((path, old, new, before[-BEFORE:]))
@@ -203,10 +210,10 @@ def in_place(result: ScanResult, who: str | None = None) -> list[Pending]:
         for rel in then:
             old, text = then[rel], now[rel]
             docs = documents_reaching(result, [rel])
-            for o0, o1, n0, n1 in [(0, len(old), 0, len(text or ""))] if not old or text is None else cut(old, text):
-                new_text = text or ""
+            new_text = text or ""
+            for cid, (o0, o1), (n0, n1) in cuts(rel, old, text):
                 p = Pending(
-                    id=change_id(rel, old[o0:o1], new_text[n0:n1], old[:o0]),
+                    id=cid,
                     kind="edit",
                     path=rel,
                     key=None,
@@ -491,7 +498,7 @@ def discard(
     why: str | None = None,
     said: list[str] | None = None,
 ) -> tuple[list[str], list[dict[str, str]]]:
-    """Discard the changes `ids`: an in-place change's old words are written back, a version of each document it is part of kept first (P7), with an `undo` line naming it in the ledger; a suggested edit is recorded discarded, with `why`. No annotation is written.
+    """Discard the changes `ids`: an in-place change's old words are written back through the door (`loom.writes`), one act for every file, cut again under its lock from the bytes then, a version of each document it is part of kept first (P7), with an `undo` line naming it in the ledger; a suggested edit is recorded discarded, with `why`. No annotation is written.
 
     Parameters
     ----------
@@ -513,12 +520,11 @@ def discard(
     (list of str, list of dict)
         The ids discarded, and `{id, why}` for each that cannot be.
     """
-    from loom.history.acts import keep_versions, write_file
-    from loom.history.ledger import append_entry
+    from loom import writes
+    from loom.history.acts import keep_versions
     from loom.looks import UNDO
     from loom.records.edits import EditRefused
     from loom.records.edits import discard as record_discarded
-    from loom.records.snapshots import write_raw
 
     chosen = _chosen(result, who, ids)
     root, hist = result.quilt.root, result.quilt.history_dir
@@ -526,35 +532,35 @@ def discard(
     refused: list[dict[str, str]] = []
     edits = [p for p in chosen if p.kind == "edit"]
     if edits:
-        _say(
-            said, keep_versions(result, sorted({p.path for p in edits}), UNDO, "Before discarding a change", writer[1])
-        )
         texts = look_texts(result, who)
         then = texts[0] if texts else {}
-        for path in sorted({p.path for p in edits}):
-            mine = sorted((p for p in edits if p.path == path), key=lambda p: p.span, reverse=True)
-            current = (root / path).read_text(encoding="utf-8") if (root / path).is_file() else ""
-            from_hash = write_raw(root, current, hist) if (root / path).is_file() else None
-            text = current
-            for p in mine:
-                text = text[: p.span[0]] + then.get(path, "")[p.was[0] : p.was[1]] + text[p.span[1] :]
-            if not text and path not in _look_files(result, who):
-                (root / path).unlink(missing_ok=True)
-                to = None
-            else:
-                write_file(root / path, text)
-                to = write_raw(root, text, hist)
-            entry: dict[str, Any] = {
-                "who": who,
-                "path": path,
-                "from": from_hash,
-                "to": to,
-                "changes": [p.id for p in mine],
-            }
-            if why:
-                entry["why"] = why
-            append_entry(hist, UNDO, entry, writer[1])
-            done += [p.id for p in mine]
+        looked = _look_files(result, who)
+        try:
+            with writes.act(root, hist, "discard", writer[1]) as w:
+                _say(
+                    said,
+                    keep_versions(
+                        result, sorted({p.path for p in edits}), UNDO, "Before discarding a change", writer[1]
+                    ),
+                )
+                for path in sorted({p.path for p in edits}):
+                    done_here, refused_here = _discard_in(
+                        w,
+                        hist,
+                        who,
+                        path,
+                        then.get(path, ""),
+                        path in looked,
+                        [p.id for p in edits if p.path == path],
+                        why,
+                        writer,
+                    )
+                    done += done_here
+                    refused += refused_here
+        except writes.WriteRefused as exc:
+            # the commit undid every file: nothing of this request was discarded
+            refused += [{"id": i, "why": exc.message, "code": exc.code} for i in done]
+            done = []
     for p in chosen:
         if p.kind != "suggested" or p.edit is None:
             continue
@@ -564,6 +570,60 @@ def discard(
         except EditRefused as exc:
             refused.append({"id": p.id, "why": exc.message})
     return done, refused
+
+
+def _discard_in(
+    w: Any,
+    hist: Any,
+    who: str,
+    path: str,
+    old: str,
+    looked: bool,
+    wanted: list[str],
+    why: str | None,
+    writer: tuple[str, str],
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Stage in the act `w` the discard of the changes `wanted` of `path`, with its `undo` line; the ids discarded, and `{id, why, code}` for each refused.
+
+    The changes are cut again from the look's text `old` and the file's bytes read under the door's lock, since the list was made before it: a change still there is discarded however the file moved elsewhere, and one no longer there is refused (`changed`). A file the look did not hold that the discard empties is removed.
+    """
+    from loom import writes
+    from loom.history.acts import ledger_line
+    from loom.looks import UNDO
+
+    try:
+        current = w.text(path)
+    except writes.WriteRefused as exc:
+        return [], [{"id": i, "why": exc.message, "code": exc.code} for i in wanted]
+    mine = sorted((c for c in cuts(path, old, current) if c[0] in wanted), key=lambda c: c[2], reverse=True)
+    found = {c[0] for c in mine}
+    refused = [
+        {
+            "id": i,
+            "why": f"{path} changed where that change was since it was listed; look at it again",
+            "code": "changed",
+        }
+        for i in wanted
+        if i not in found
+    ]
+    if not mine:
+        return [], refused
+    text = current or ""
+    for _cid, (o0, o1), (n0, n1) in mine:
+        text = text[:n0] + old[o0:o1] + text[n1:]
+    data = None if not text and not looked else text.encode("utf-8")
+    w.replace(path, data)
+    entry: dict[str, Any] = {
+        "who": who,
+        "path": path,
+        "from": writes.digest(current.encode("utf-8")) if current is not None else None,
+        "to": writes.digest(data),
+        "changes": [c[0] for c in mine],
+    }
+    if why:
+        entry["why"] = why
+    w.log(*ledger_line(hist, UNDO, entry, writer[1]))
+    return [c[0] for c in mine], refused
 
 
 def _say(said: list[str] | None, kept: Any) -> None:
