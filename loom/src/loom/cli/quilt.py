@@ -49,6 +49,10 @@ USER_CONFIG_TEMPLATE = """# loom user configuration: settings that belong to a p
 
 
 def _inside_git(path: Path) -> bool:
+    from loom import gitprog
+
+    if not gitprog.usable():
+        return False
     try:
         proc = subprocess.run(
             ["git", "-C", str(path), "rev-parse", "--is-inside-work-tree"],
@@ -65,7 +69,9 @@ def _inside_git(path: Path) -> bool:
 
 def _git_init(path: Path) -> bool:
     """Create a repository at `path`, unless git is missing or the directory is already in a work tree. Returns whether one was created, so the caller can say so; a silent side effect outside the tool's own files is the hardest kind to defend."""
-    if shutil.which("git") is None or _inside_git(path):
+    from loom import gitprog
+
+    if not gitprog.usable() or _inside_git(path):
         return False
     proc = subprocess.run(["git", "init", "-q", str(path)], check=False, capture_output=True)
     return proc.returncode == 0

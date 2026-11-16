@@ -29,7 +29,11 @@ def visible_locals(result: ScanResult, prefix: str) -> set[str]:
     log = root / ANNOTATION_LOG
     if log.is_file():
         found.update(pat.findall(log.read_text(encoding="utf-8", errors="replace")))
+    from loom import gitprog
+
     try:
+        if not gitprog.usable():
+            raise FileNotFoundError("git")
         revs = subprocess.run(
             ["git", "-C", str(root), "rev-list", "--all", "--max-count=500"],
             capture_output=True,

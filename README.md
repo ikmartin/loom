@@ -23,7 +23,17 @@ They are the reason this repository exists, and they govern loom rather than des
 
 `demos/` holds example quilts: `demo/` is what `loom init --demo` writes, `synthetic/` exercises every construct of the source contract and generates the conformance fixture, and `showcase/` is the one to open when you want to see what loom does. Quilts built from real papers are gitignored, because they contain the paper sources.
 
-## Getting started
+## Installing
+
+On a Mac, with no password and nothing else installed first:
+
+```sh
+curl -LsSf https://github.com/ikmartin/loom-arras/releases/latest/download/install.sh | sh
+```
+
+It installs loom with a Python of its own, and loom's own TeX (TeX Live 2026, about 400 MB on disk) with Ghostscript and poppler beside it, all under `~/Library/Application Support/loom` and `~/.local`; it edits no shell file. The same line updates loom. Loom uses its own TeX even where another is installed; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and `home_tree = true` there lets loom's TeX read your `~/Library/texmf`. A package a paper needs is fetched the first time it is typeset. `loom doctor` names the TeX in use, and `loom doctor --repair` mends loom's own.
+
+## Getting started from a clone
 
 ```sh
 git clone https://github.com/ikmartin/loom-arras
@@ -59,7 +69,7 @@ A change that crosses loom and its viewer — a manifest field and the viewer co
 
 CI runs `scripts/verify`, one workflow per lane: `loom`, `arras` and `docs`, each triggered only by the paths its lane reads (`docs/contributing.md`).
 
-`loom` is released to PyPI, with arras vendored into it. Publishing is done by hand, never by CI.
+A release is a GitHub release holding the wheel, with arras built and vendored into it, and the install line (`.github/workflows/release.yml`); the workflow makes a draft, and publishing it is done by hand. Nothing is published to a package index.
 
 ## License
 

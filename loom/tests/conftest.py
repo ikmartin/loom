@@ -31,6 +31,7 @@ TOOLS = [
     "pdftocairo",
     "make4ht",
     "extractbb",
+    "gs",
 ]
 
 

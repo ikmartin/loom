@@ -119,7 +119,11 @@ class SyncState:
 
 def git(cwd: Path, *args: str, env: dict[str, str] | None = None, input: bytes | None = None) -> bytes:
     """Run git in `cwd`, which is the sync directory or a scratch directory, never the quilt's own repository."""
+    from loom import gitprog
+
     try:
+        if not gitprog.usable():
+            raise FileNotFoundError("git")
         run = subprocess.run(["git", *args], cwd=cwd, env=env, input=input, capture_output=True, check=False)
     except FileNotFoundError as exc:
         raise SyncError("Git is required to reach a document workspace") from exc
@@ -159,6 +163,10 @@ def _ask(cwd: Path, *args: str) -> str:
 
     Pairing asks these of the person's directory and of the quilt's own repository, where `git` is never run.
     """
+    from loom import gitprog
+
+    if not gitprog.usable():
+        return ""
     try:
         run = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=False)
     except FileNotFoundError:

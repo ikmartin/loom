@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from loom.scan.preamble import PreambleClosure
+from loom.tex import missing, private
 from loom.tex.runner import stage_document, stop_run, tex_env
 
 #: What a quilt could carry that TeX4ht or make4ht would run or obey: build files, make4ht's own configuration, and the commands `t4ht` reads.
@@ -294,7 +295,7 @@ def configuration(envs: Sequence[str], *, snippets: bool = False, math: str = "m
     if math == "svg":
         return "\\Preamble{xhtml,svg}\n\\begin{document}\n" + marks + "\n\\EndPreamble\n"
     nodes = "".join(f"\\loomnode{{{e}}}" for e in sorted(set(envs)) if _ENV.match(e))
-    return "\\Preamble{xhtml,mathjax}\n\\begin{document}\n" + ROWS + STAMPS + marks + nodes + "\n\\EndPreamble\n"
+    return "\\Preamble{xhtml,mathjax,svg}\n\\begin{document}\n" + ROWS + STAMPS + marks + nodes + "\n\\EndPreamble\n"
 
 
 @dataclass
@@ -310,9 +311,15 @@ class HtmlResult:
     passes: int = 0
     seconds: float = 0.0
     repaired: list[Repaired] = field(default_factory=list)
+    fetched: list[str] = field(default_factory=list)
+    needed: list[str] = field(default_factory=list)
+    note: str = ""
+    said: str = ""  # what make4ht itself printed, where dvisvgm's errors are
 
     @property
     def first_error(self) -> str:
+        if self.needed:
+            return self.note
         return self.errors[0] if self.errors else (f"make4ht exited {self.returncode}" if self.returncode else "")
 
 
@@ -353,7 +360,37 @@ def compile_html(
     Returns
     -------
     HtmlResult
+        With what loom fetched into its own TeX for the run, as `compile_tex` does.
     """
+    fetching = private.can_fetch()
+    rounds = missing.Round()
+    if fetching:
+        rounds.fetch(missing.preflight(root / base, os.path.relpath(root / tex, root / base)))
+    res = _html_once(root, base, tex, outdir, envs=envs, engine=engine, seed=seed, timeout=timeout, started=started)
+    for _ in range(missing.ROUNDS):
+        # a run that made its page can still lack a picture's PostScript header, which only make4ht's own output names
+        if not fetching or res.returncode in (124, 127):
+            break
+        if not rounds.fetch(missing.from_log(res.log, res.said)):
+            break
+        res = _html_once(root, base, tex, outdir, envs=envs, engine=engine, seed=seed, timeout=timeout, started=started)
+    res.fetched, res.needed, res.note = rounds.fetched, rounds.needed, rounds.note
+    return res
+
+
+def _html_once(
+    root: Path,
+    base: str,
+    tex: str,
+    outdir: Path,
+    *,
+    envs: list[str],
+    engine: str = "pdflatex",
+    seed: Path | None = None,
+    timeout: int = 600,
+    started: Callable[[subprocess.Popen[str]], None] | None = None,
+) -> HtmlResult:
+    """One make4ht run of `compile_html`: its passes until the aux settles."""
     exe = shutil.which("make4ht")
     if exe is None:
         return HtmlResult(False, outdir, 127, errors=["make4ht is not installed"])
@@ -404,7 +441,7 @@ def compile_html(
                 break
         log = cwd / f"{stem}.log"
         text = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else said
-        errors = re.findall(r"^! .*$", text, re.M)
+        errors = re.findall(r"^!.*$", text, re.M)
         page = out / f"{stem}.html"
         if page.is_file():
             outdir.parent.mkdir(parents=True, exist_ok=True)
@@ -425,7 +462,16 @@ def compile_html(
             shutil.rmtree(old, ignore_errors=True)
         made = outdir / f"{stem}.html" if page.is_file() else None
         return HtmlResult(
-            made is not None and code == 0, outdir, code, made, text, errors, passes, time.monotonic() - began, repaired
+            made is not None and code == 0,
+            outdir,
+            code,
+            made,
+            text,
+            errors,
+            passes,
+            time.monotonic() - began,
+            repaired,
+            said=said,
         )
 
 
@@ -447,6 +493,27 @@ def _prepare(stage: Path, cwd: Path, envs: Sequence[str], *, snippets: bool = Fa
                 )
     (cwd / "loom-html.cfg").write_text(configuration(envs, snippets=snippets, math=math), encoding="utf-8")
     (cwd / "loom-html.mk4").write_text("-- loom's build file: make4ht's defaults and nothing else\n", encoding="utf-8")
+    if not private.ghostscript_available():
+        _xy_without_postscript(cwd)
+
+
+#: The line of TeX4ht's `xy.4ht` that has xy draw lines and arrow tips as PostScript, which dvisvgm draws only with Ghostscript.
+_XY_POSTSCRIPT = "\\xyoption{dvips}\\xyoption{ps}"
+
+
+def _xy_without_postscript(cwd: Path) -> None:
+    """With no Ghostscript, a copy of TeX4ht's `xy.4ht` in `cwd` without `_XY_POSTSCRIPT`, which the run finds first: xy then draws with its own fonts, every arrow included, where it would otherwise draw none."""
+    try:
+        found = subprocess.run(
+            ["kpsewhich", "xy.4ht"], cwd=cwd, capture_output=True, text=True, timeout=30, env=tex_env()
+        ).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return
+    if not found or Path(found).parent == cwd:
+        return
+    text = Path(found).read_text(encoding="utf-8", errors="replace")
+    if _XY_POSTSCRIPT in text:
+        (cwd / "xy.4ht").write_text(text.replace(_XY_POSTSCRIPT, "", 1), encoding="utf-8")
 
 
 def _pass(
@@ -541,9 +608,18 @@ def make_html(
             shutil.copy2(aux, cwd / f"{name}.aux")
         _read_externals(root / base, [cwd / f"{name}.tex"], cwd / f"{name}.aux")
         out = Path(tmp) / "out"
-        code, said = _pass(exe, cwd, f"{name}.tex", out, Path(tmp) / "home", engine, timeout, math=math)
         log = cwd / f"{name}.log"
-        told = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else said
+        rounds = missing.Round()
+        fetching = private.can_fetch()
+        if fetching:
+            rounds.fetch(_preflight_once(cwd, f"{name}.tex"))
+        for _ in range(missing.ROUNDS + 1):
+            code, said = _pass(exe, cwd, f"{name}.tex", out, Path(tmp) / "home", engine, timeout, math=math)
+            told = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else said
+            if not fetching or code == 124 or not rounds.fetch(missing.from_log(told, said)):
+                break
+        if rounds.note:
+            told += f"\nloom: {rounds.note}\n"
         if code == 124:
             told += f"\n! make4ht timed out after {timeout}s\n"
         page = out / f"{name}.html"
@@ -562,6 +638,19 @@ def make_html(
                         rf"""(\bsrc=['"]){re.escape(f.name)}(['"])""", rf"\g<1>{named}/{kept.name}\g<2>", html
                     )
         return html, told
+
+
+_PREFLIGHTED: set[str] = set()
+
+
+def _preflight_once(cwd: Path, name: str) -> missing.Needs:
+    """`missing.preflight` for a snippet run, once per preamble in a process: a build makes many runs under one preamble."""
+    text = (cwd / name).read_text(encoding="utf-8", errors="replace")
+    key = hashlib.sha256(text.split("\\begin{document}", 1)[0].encode()).hexdigest()
+    if key in _PREFLIGHTED:
+        return missing.Needs()
+    _PREFLIGHTED.add(key)
+    return missing.preflight(cwd, name)
 
 
 @dataclass

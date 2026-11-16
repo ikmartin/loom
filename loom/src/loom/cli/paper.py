@@ -240,6 +240,15 @@ def _document_counts(result: ScanResult, doc: str) -> list[Item]:
     return items
 
 
+def _untypeset_fix(reason: str) -> str:
+    """What makes a paper that did not typeset at import typeset: loom's TeX when there is none, else the reason itself, which names what the paper lacks."""
+    from loom.tex import private
+
+    if private.active().kind == private.NONE:
+        return "Repair TeX (loom doctor --repair) installs loom's own TeX; the paper typesets on its next build"
+    return "the paper typesets on its next build once that is fixed; nothing needs importing again"
+
+
 def run_import(
     quilt: Quilt,
     paper: Path,
@@ -283,10 +292,8 @@ def run_import(
         staged = stage_sources(plan.paper_dir, scratch / "original", plan.outside)
         with Progress("compiling the paper as received"):
             before = compile_tex(staged, plan.master_rel, scratch / "before", quilt.config.engine, halt_on_error=False)
-        if not before.ok:
-            raise ContentError(
-                f"the original does not compile from a clean copy of {plan.paper_dir} ({before.first_error}); fix it before importing"
-            )
+        # a paper that does not typeset here still comes in, shown as its source, with the reason said
+        untypeset = None if before.ok or before.usable == "warnings" else before.first_error
         draft = plan_draft(scan(quilt), plan.text, plan.dest_rel, fix_anchors=fix_anchors, assets=plan.assets)
         if draft.violations:
             lines = [f"  line {v.line}: \\{v.kind}{{{v.env}}} is not alone on its line" for v in draft.violations[:20]]
@@ -336,7 +343,7 @@ def run_import(
         drafted.parent.mkdir(parents=True, exist_ok=True)
         drafted.write_text(draft.text, encoding="utf-8")
         written.append(plan.dest_rel)
-        if check:
+        if check and untypeset is None:
             with Progress("checking that the draft typesets as the paper"):
                 ident = identity_test(staged, plan.master_rel, root, plan.dest_rel, scratch, quilt.config.engine)
             if not ident.passed and not ident.skipped:
@@ -387,7 +394,19 @@ def run_import(
     groups.append(Group(f"in {plan.dest_rel}", _document_counts(after, plan.dest_rel), limit=None, counted=False))
     bib_groups, bib = bibliography_groups(quilt)
     groups += bib_groups
-    checked = identity_said(ident, plan.dest_rel, "the original") if check else "the identity test was skipped"
+    if untypeset is not None:
+        groups.insert(
+            0,
+            Group(
+                "not typeset",
+                [Item(untypeset, fixes=[_untypeset_fix(untypeset)])],
+                limit=None,
+                problem=True,
+            ),
+        )
+        checked = "not typeset here, so shown as its source and not compared with the original"
+    else:
+        checked = identity_said(ident, plan.dest_rel, "the original") if check else "the identity test was skipped"
     said = (
         f"imported {plan.master_rel} as {plan.dest_rel} with {len(draft.insertions)} ids; {checked}; "
         f"the paper as received is landmark {name}, step {entry.step:04d}"
@@ -403,6 +422,8 @@ def run_import(
         "outside": list(plan.outside),
         "main": plan.dest_rel if main_set else None,
         "identity": None if ident is None else ("skipped" if ident.skipped else "pass" if ident.passed else "fail"),
+        "typeset": untypeset is None,
+        "untypeset": untypeset,
         "bibliography": bib,
     }
     return Imported(said, ident, groups, data)

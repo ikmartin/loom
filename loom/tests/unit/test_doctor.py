@@ -652,7 +652,7 @@ def test_the_text_report_lines_up(box: Box) -> None:
     # what is fine is counted on one line a section, naming each check; what is not is listed, aligned, its fix beneath (T2)
     fine = [int(m.group(1)) for ln in lines if (m := re.match(r"^  ok    (\d+) checks?: ", ln))]
     checks = [m for ln in lines if (m := re.match(r"^  (?:warn|fail)\s+\S+(?: \S+)?\s{2,}", ln))]
-    assert len(fine) == 2 and sum(fine) + len(checks) == 17 + 7, lines  # the machine's items and the quilt's
+    assert len(fine) == 2 and sum(fine) + len(checks) == 19 + 7, lines  # the machine's items and the quilt's
     assert len({m.end() for m in checks}) == 1, "the details do not start in one column"
     at = lines.index(next(ln for ln in lines if ln.startswith("  warn  pdfinfo")))
     assert lines[at + 1] == f"    fix: {item(doctor(box), 'pdfinfo')['remedy']}"  # beneath the item it fixes
@@ -663,7 +663,7 @@ def test_the_text_report_lines_up(box: Box) -> None:
 
 
 def test_a_remedy_several_checks_share_is_said_once(box: Box) -> None:
-    """T2: with no TeX the re-grade's `doctor` printed one `fix:` line under ten items; it is said once, under the last of them."""
+    """T2: with no TeX the re-grade's `doctor` printed one `fix:` line under ten items; it is said once, under the first of them."""
     box.drop("latexmk", "dvisvgm")
     lines = exits(2, "doctor", cwd=box.tmp / "away").stdout.splitlines()
     shared = item(doctor(box), "latexmk")["remedy"]
@@ -676,3 +676,44 @@ def test_a_quilt_path_with_no_quilt_at_it_names_loom_init(box: Box) -> None:
     missing = box.tmp / "nowhere" / "q"
     got = next(i for i in json_of("doctor", "--quilt", str(missing), "--json", code=2)["items"] if i["name"] == "quilt")
     assert got["remedy"].startswith(f"loom init {missing} makes a quilt there"), got
+
+
+# ---- machine: which TeX ---------------------------------------------------------------
+
+
+def test_the_tex_row_names_the_persons_tex_and_its_year(box: Box) -> None:
+    got = item(doctor(box), "tex")
+    assert got["status"] == "ok" and got["kind"] == "mine" and got["detail"].startswith("your own TeX")
+
+
+def test_with_no_tex_the_tex_row_fails_and_repair_tex_is_said_once_under_it(box: Box) -> None:
+    """LIVE-4: the remedy stood under the wrong rows, and offered Homebrew and tlmgr on a machine with neither."""
+    box.drop("latexmk", "pdflatex", "dvisvgm")
+    data = doctor(box)
+    got = item(data, "tex")
+    assert (got["status"], got["kind"]) == ("fail", "none") and got["remedy"].startswith("Repair TeX")
+    assert item(data, "latexmk")["remedy"] == got["remedy"]
+    assert not any("brew" in i["remedy"] or "tlmgr" in i["remedy"] for i in data["items"] if i["name"] != "git"), data
+    lines = exits(2, "doctor", cwd=box.tmp / "away").stdout.splitlines()
+    at = next(n for n, ln in enumerate(lines) if ln.startswith("  fail  tex"))
+    assert lines[at + 1].strip().startswith("fix: Repair TeX"), lines
+
+
+def test_the_tex_row_names_loom_tex_when_it_is_installed(box: Box) -> None:
+    from tests.unit.tex.test_private import make_tex
+
+    make_tex(box.tmp / "data" / "tex")
+    box.mp.setenv("LOOM_TEX_DIR", str(box.tmp / "data" / "tex"))
+    got = item(doctor(box), "tex")
+    assert (got["status"], got["kind"], got["year"]) == ("ok", "loom", 2026)
+    assert got["detail"] == "loom's TeX (TeX Live 2026)"
+
+
+def test_apples_git_stub_is_never_run(box: Box, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom import gitprog
+
+    box.script("git", "import sys\nopen(sys.argv[0] + '.ran', 'w').close()\n")
+    monkeypatch.setattr(gitprog, "apple_stub", lambda path: True)
+    got = item(doctor(box), "git")
+    assert got["status"] == "warn" and "installer stub" in got["detail"]
+    assert not (box.bin / "git.ran").exists()

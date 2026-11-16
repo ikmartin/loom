@@ -172,15 +172,33 @@ def test_init_from_leaves_the_authors_preamble_alone(tmp_path: Path) -> None:
     assert "the paper as received is landmark paper" in r.output
 
 
-def test_init_from_leaves_nothing_behind_when_the_import_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A failed import is not half a quilt. The instinct after a refusal is to fix the paper and re-run the same command, and a surviving skeleton refuses that as "already inside a quilt"."""
+#: A paper whose import is refused before anything is written: a theorem that does not begin on its own line.
+UNANCHORED = (
+    "\\documentclass{article}\n\\newtheorem{thm}{Theorem}\n\\begin{document}\n"
+    "Text. \\begin{thm}Hello.\n\\end{thm}\n\\end{document}\n"
+)
+
+
+def test_init_from_a_paper_that_does_not_typeset_still_brings_it_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """I2b: with no TeX, or a paper TeX refuses, the paper still comes in, shown as its source, and the import says why it is not typeset."""
     src = tmp_path / "paper.tex"
     src.write_text(
         "\\documentclass{article}\n\\newtheorem{thm}{Theorem}\n\\begin{document}\nHello.\n\\end{document}\n",
         encoding="utf-8",
     )
-
     monkeypatch.setenv("FAKE_TEX_FAIL", "1")
+    r = ok("init", str(tmp_path / "q"), "--from", str(src), "--prefix", "pp", "--yes")
+    assert (tmp_path / "q" / "paper" / "paper.tex").is_file(), r.output
+    assert "not typeset" in r.output
+
+
+def test_init_from_leaves_nothing_behind_when_the_import_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A failed import is not half a quilt. The instinct after a refusal is to fix the paper and re-run the same command, and a surviving skeleton refuses that as "already inside a quilt"."""
+    src = tmp_path / "paper.tex"
+    src.write_text(UNANCHORED, encoding="utf-8")
+
     bad = refused(
         "init",
         str(tmp_path / "q"),
@@ -190,13 +208,12 @@ def test_init_from_leaves_nothing_behind_when_the_import_fails(tmp_path: Path, m
         "pp",
         "--yes",
         code=1,
-        match="does not compile from a clean copy",
+        match="line-anchoring violation",
     )
     assert not (tmp_path / "q").exists()
     assert "created quilt" not in bad.output  # nothing is announced that does not outlive the command
 
-    monkeypatch.delenv("FAKE_TEX_FAIL")
-    again = ok("init", str(tmp_path / "q"), "--from", str(src), "--prefix", "pp", "--yes")
+    again = ok("init", str(tmp_path / "q"), "--from", str(src), "--prefix", "pp", "--fix-anchoring", "--yes")
     assert (tmp_path / "q" / "paper" / "paper.tex").is_file() and "created quilt" in again.output
 
 
@@ -206,13 +223,9 @@ def test_init_from_inside_a_paper_directory_keeps_the_paper_when_the_import_fail
     """Undoing the skeleton removes what init wrote and nothing else: the author's own directory is not init's to delete."""
     paper = tmp_path / "paper"
     paper.mkdir()
-    (paper / "main.tex").write_text(
-        "\\documentclass{article}\n\\newtheorem{thm}{Theorem}\n\\begin{document}\nHello.\n\\end{document}\n",
-        encoding="utf-8",
-    )
+    (paper / "main.tex").write_text(UNANCHORED, encoding="utf-8")
     (paper / "notes.txt").write_text("mine\n", encoding="utf-8")
 
-    monkeypatch.setenv("FAKE_TEX_FAIL", "1")
     refused(
         "init",
         str(paper),
@@ -222,7 +235,7 @@ def test_init_from_inside_a_paper_directory_keeps_the_paper_when_the_import_fail
         "pp",
         "--yes",
         code=1,
-        match="does not compile",
+        match="line-anchoring violation",
     )
     assert sorted(x.name for x in paper.iterdir()) == ["main.tex", "notes.txt"]
 

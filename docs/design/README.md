@@ -56,7 +56,7 @@ Two markers keep the text honest:
 
 ## Decided, not yet built
 
-- **Loom as an application.** Installing with one line; a home page that opens, creates and lists quilts; dropping a paper in; connecting an agent from the viewer and seeing that it is connected; and no step that makes a person type a command. See `docs/plans/0.32-v0.1.md`, which also holds what is recommended and not yet decided.
+- **Loom as an application.** Installing with one line is built: `scripts/install.sh` installs loom with its own TeX of one TeX Live year and its own Ghostscript and poppler, which every program loom starts finds first, and a paper that does not typeset still comes in. Not built: a home page that opens, creates and lists quilts; dropping a paper in; connecting an agent from the viewer and seeing that it is connected; and no step that makes a person type a command. See `docs/plans/0.32-v0.1.md`, which also holds what is recommended and not yet decided.
 - **Annotating PDFs and reviewing changes as plan 0.30 settled them.** Annotating documents is built: the toolbar and its one popup, the Comments and Notes lists, Quote, Settings › Annotations, and an annotation opening the version it was written on. Not built: the same toolbar on a PDF page, a mark found again on a changed PDF and a crop of it for an agent (0.30.2), and changes reviewed in the document (0.30.3). See `model.md` and `docs/plans/0.30-annotations.md`.
 - **Notes beyond annotations.** Claims carrying their evidence, and promotion to durable notes. See `model.md`.
 - **Open problems as nodes,** with the attempts, claims and dead ends about them attached as notes.

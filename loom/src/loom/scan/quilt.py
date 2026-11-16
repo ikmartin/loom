@@ -268,6 +268,11 @@ def _git_user_name(here: Path) -> tuple[str | None, tuple[Path, ...]]:
         watch |= {home / ".gitconfig", Path(os.environ.get("XDG_CONFIG_HOME") or home / ".config") / "git" / "config"}
     if os.environ.get("GIT_CONFIG_SYSTEM"):
         watch.add(top / Path(os.environ["GIT_CONFIG_SYSTEM"]).expanduser())
+    from loom import gitprog
+
+    if not gitprog.usable():
+        # Apple's stub opens an installer dialog: no name, kept like any other answer
+        return None, tuple(sorted(watch))
     try:
         proc = subprocess.run(
             ["git", "config", "--list", "--show-origin", "-z"], capture_output=True, cwd=here, timeout=10, check=False

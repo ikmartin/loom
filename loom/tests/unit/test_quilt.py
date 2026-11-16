@@ -117,3 +117,17 @@ def test_the_git_name_is_asked_of_git_once_until_a_file_it_comes_from_changes(
     changed(globl, "[user]\n\tname = Fourth\n")
     assert [git_user_name(repo) for _ in range(3)] == ["Fourth"] * 3
     assert len(asked) == 4
+
+
+def test_with_apples_git_stub_there_is_no_name_and_git_is_never_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """On a Mac with no developer tools `/usr/bin/git` opens an installer dialog: the name is none, kept as any answer is, and git is not started."""
+    from loom import gitprog
+    from loom.scan.quilt import git_user_name
+
+    monkeypatch.setattr(gitprog, "usable", lambda: False)
+    asked: list[object] = []
+    monkeypatch.setattr(subprocess, "run", lambda argv, *a, **kw: asked.append(argv))
+    assert [git_user_name(tmp_path) for _ in range(3)] == [None] * 3
+    assert asked == []

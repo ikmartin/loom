@@ -648,3 +648,20 @@ def test_atomize_and_linearize_say_what_they_are_doing_on_a_long_run(tmp_path: P
     assert "writing" in said[-1] and "identity test: compiling main/main.tex and main/spine.tex" in said[-1]
     ok("linearize", "main/spine.tex", "--to", "main/back.tex", cwd=q)
     assert "flattening" in said[-1] and "identity test: compiling main/spine.tex" in said[-1]
+
+
+def test_a_figure_named_without_an_extension_comes_in_in_every_form_the_paper_ships(tmp_path: Path) -> None:
+    """pdflatex reads a figure's PDF and the DVI TeX4ht makes HTML from reads its EPS; with only the PDF copied, acgs's figures were empty in the HTML."""
+    from loom.reshape.importer import closure_of
+
+    paper = tmp_path / "paper"
+    paper.mkdir()
+    (paper / "main.tex").write_text(
+        "\\documentclass{article}\n\\begin{document}\n\\input{fig.pspdftex}\n\\end{document}\n", encoding="utf-8"
+    )
+    (paper / "fig.pspdftex").write_text("\\includegraphics{fig_pspdftex}\n", encoding="utf-8")
+    for ext in (".pdf", ".eps"):
+        (paper / f"fig_pspdftex{ext}").write_bytes(b"%")
+    (paper / "other.eps").write_bytes(b"%")
+    found, _ = closure_of(paper, paper / "main.tex")
+    assert {"fig_pspdftex.pdf", "fig_pspdftex.eps"} <= set(found) and "other.eps" not in found
