@@ -234,12 +234,17 @@ test.describe('a change not merged into the text', () => {
 		await expect(at).toHaveClass(/change-at/);
 		expect(await css(at, 'box-shadow')).toContain(TEAL);
 		await expect(pane(page, 0).locator('.fragment span.change')).toHaveCount(0);
-		// its pen in the margin, on the line it starts, which it shares with the annotation on "finite widget": the line's count lists it
-		const top = (await at.boundingBox())!.y;
+		// its pen in the margin, on the line it starts, which it shares with the annotation on "finite widget": the line's count lists it; looked for until it stands there, since the text moves as its formulas are typeset and the margin follows once the layout holds still (Fragment.svelte)
 		const counts = pane(page, 0).getByTestId('margin-count');
 		let line = -1;
-		for (let i = 0; i < (await counts.count()); i++) if (Math.abs((await counts.nth(i).boundingBox())!.y - top) < 24) line = i;
-		expect(line, 'a count beside the marked line').toBeGreaterThanOrEqual(0);
+		await expect
+			.poll(async () => {
+				const top = (await at.boundingBox())!.y;
+				line = -1;
+				for (let i = 0; i < (await counts.count()); i++) if (Math.abs(((await counts.nth(i).boundingBox())?.y ?? -Infinity) - top) < 24) line = i;
+				return line;
+			}, { message: 'a count beside the marked line' })
+			.toBeGreaterThanOrEqual(0);
 		const icon = counts.nth(line);
 		await icon.click();
 		await page.getByTestId('line-chooser').locator(`[data-change="${STRUCT}"]`).click();
