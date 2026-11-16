@@ -15,13 +15,14 @@ function stub(initial: Record<string, string> = {}) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('the display preferences', () => {
-	it("defaults to serif, medium, mid, system, the compiled page, no ids, LaTeX's aux files hidden and the agents' config documents shown", () => {
+	it("defaults to serif, medium, mid, system, the compiled page, no ids, the margin's markers shown, LaTeX's aux files hidden and the agents' config documents shown", () => {
 		expect(DEFAULTS).toEqual({
 			divider: 0.5,
 			outline: 0.55,
 			column: 252,
 			panel: true,
 			ids: false,
+			marginMarks: true,
 			hideAux: true,
 			hideAgentConfig: false,
 			zoom: { pdf: 1.4 },

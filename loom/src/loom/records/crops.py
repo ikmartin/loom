@@ -277,7 +277,7 @@ def _drawn(
     if image is None:
         return None
     rgb = RGB.get(str(look.get("color")), RGB["grey"])
-    alpha = max(0.2, min(1.0, float(look.get("opacity", 65)) / 100))
+    alpha = max(0.2, min(1.0, float(look.get("opacity", 60)) / 100))
     width = max(2, round(float(look.get("weight", 2)) * scale / 2))
 
     def at(x: float, y: float) -> tuple[float, float]:

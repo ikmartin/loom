@@ -11,7 +11,7 @@
    "instructions": "Something that is wrong and must change before the text is right: a wrong step, a gap in an argument, a false or unsupported claim, a citation that does not cover the use made of it, an unclear sentence, a loose definition, a misused term.\n\nSay in the comment how serious it is, by how bad the fault is rather than how strongly you feel about it.",
    "look": {
     "color": "red",
-    "opacity": 65,
+    "opacity": 60,
     "style": "highlight",
     "weight": 2
    },
@@ -99,7 +99,7 @@
    "in_reply_to": null,
    "look": {
     "color": "red",
-    "opacity": 65,
+    "opacity": 60,
     "style": "highlight",
     "weight": 2
    },

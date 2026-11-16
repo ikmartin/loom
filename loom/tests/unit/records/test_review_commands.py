@@ -433,7 +433,7 @@ def test_comment_quote_rules_and_records(tmp_path: Path) -> None:
     assert (a["type"], a["look"], a["drawn"]) == (
         "revision",
         {},
-        {"color": "red", "style": "highlight", "weight": 2, "opacity": 65},
+        {"color": "red", "style": "highlight", "weight": 2, "opacity": 60},
     )
     assert a["event"] == "created" and a["author"] == "Markas Hecht" and a["kind"] == "human"
     assert "session" not in a and not (d / ".loom/sessions").exists()  # writing opens no session

@@ -1354,6 +1354,10 @@ button.mark.annotation.settled { display: none; }
 }
 
 /* The margin beside a text (fragments/gutter.ts): one icon per annotation on the line its first mark stands on, a circle in its colour, a speech bubble where it says something, a count where several start on one line. */
+/* Settings › Annotations › Display can turn the margin's icons off; the marks in the text stay. */
+:root[data-margin-marks='off'] .ann-gutter {
+	display: none;
+}
 .ann-gutter {
 	position: absolute;
 	top: 0;
