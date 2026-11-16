@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Where the list beside a text stands: against the pane's right edge, from under its toolbar to its foot, so it stays put while the text scrolls beside it. The text gives it room (`with-side` on the item).
+	// Where the list beside a text stands: against the pane's right edge, from under its toolbar to its foot, so it stays put while the text scrolls beside it. The text makes room by sliding, not narrowing (`.gutters.beside`, theme.css).
 	import { getPane } from '$lib/workspace/state.svelte';
 	import SideList from './SideList.svelte';
 	import type { Annotating } from './annotating.svelte';

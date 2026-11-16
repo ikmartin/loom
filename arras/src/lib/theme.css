@@ -537,15 +537,24 @@ table.list th {
 .fragment details.env-proof[open] > summary.env-label { margin-bottom: var(--gap-hair); }
 .fragment details.env-proof > :last-child { margin-bottom: 0; }
 
-/* The gutters, with the site generator's algebra so that a corpus page and a note page are laid out alike.
-   The ideal gutter is half the slack around the measure; these are two thirds of that, and the text column absorbs the third they give up. One knob: change the /3 and the column, the margin annotations and the gutter comments all follow, because each is expressed in terms of these. A viewport too narrow for the measure gets no gutters at all rather than negative ones. */
+/* The gutters, with the site generator's algebra so that a corpus page and a note page are laid out alike. The ideal gutter is half the slack around the measure; these are two thirds of that, and the text column absorbs the third they give up. One knob: change the /3 and the column, the margin annotations and the gutter comments all follow, because each is expressed in terms of these. A viewport too narrow for the measure gets no gutters at all rather than negative ones. */
 /* The gutter is a length worked out from the host's width (`--host-width`, which `guttersHost` in workspace/items/gutters.ts keeps as wide as the host) rather than a percentage, because the margin annotations and the gutter comments are positioned against a node and would otherwise resolve their percentage against that node instead of the page. Until the host is measured, before its first paint, there are no gutters. */
+/* The list beside a text (Comments, Notes: SideHost, against the pane's right edge) stands over the right gutter, which grows to clear it and the margin's icons while the left one gives up as much, so the text keeps its width and slides left: a change of the text's width lays out every page of a long document again, which in WebKit is most of a second. Only where both gutters together are narrower than the list does the text narrow, and the left gutter keeps `--gap-wide` of its width. `--side` is not inherited, so setting it restyles nothing inside the text. */
+@property --side {
+	syntax: '<length>';
+	inherits: false;
+	initial-value: 0px;
+}
 .gutters {
 	--slack: max(0px, calc(var(--host-width, var(--measure)) - var(--measure)));
 	--gutter: calc(var(--slack) / 3);
 	display: grid;
-	grid-template-columns: var(--gutter) minmax(0, 1fr) var(--gutter);
+	grid-template-columns: max(min(var(--gutter), var(--gap-wide)), calc(2 * var(--gutter) - max(var(--gutter), var(--side)))) minmax(0, 1fr) max(var(--gutter), var(--side));
 	align-items: start;
+}
+/* the list's width (310px, SideHost), and the margin's icons, which stand up to 30px past the text, with 12px between them and the list */
+.gutters.beside {
+	--side: 352px;
 }
 .gutters > .column {
 	grid-column: 2;

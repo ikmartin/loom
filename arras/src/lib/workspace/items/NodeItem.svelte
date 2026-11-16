@@ -31,7 +31,7 @@
 	});
 </script>
 
-<div class="page item node" class:with-side={!!held.notes.side}>
+<div class="page item node">
 	{#if owner}
 		<p class="muted"><code>{key}</code> has no page of its own. It is part of <a href={keyUrl(m, key)}>{m.nodes[owner].title ?? owner}</a>.</p>
 	{:else if !node && m.masters.some(d => d.closed_keys?.includes(key))}
@@ -47,7 +47,7 @@
 		<pre class="verbatim" data-testid="verbatim" aria-label="the LaTeX behind this block">{held.source}</pre>
 	{:else}
 		<div class="gutters-host" use:guttersHost>
-			<div class="gutters">
+			<div class="gutters" class:beside={!!held.notes.side}>
 				<div class="column">
 					<!-- `margins` so Show ids puts the id and state in the gutter, as in a document -->
 					<FragmentNotes notes={held.notes} fallback={key}>
@@ -73,9 +73,6 @@
 	.item.node {
 		padding-left: 0;
 		padding-right: 0;
-	}
-	.item.node.with-side {
-		padding-right: 310px;
 	}
 	.absent {
 		margin: var(--gap) 0 0;
