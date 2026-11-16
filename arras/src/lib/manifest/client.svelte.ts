@@ -17,7 +17,8 @@ function contentOf(m: Manifest): string {
 }
 
 class ManifestStore {
-	manifest = $state<Manifest | null>(null);
+	/** Replaced whole on every change, never written into: a 10 MB manifest held as deep state gave every object read through it a proxy and a signal, which a republish paid for again in garbage collection. */
+	manifest = $state.raw<Manifest | null>(null);
 	hash = $state<string>('');
 	/** The corpus's macros as text: equal across manifests that did not change them, so what depends on it does not run again on every rebuild. */
 	#macroKey = $derived(JSON.stringify(this.manifest?.macros.default ?? []));
@@ -38,16 +39,22 @@ class ManifestStore {
 		return this.url || dataUrl('manifest.json');
 	}
 
-	/** Apply the server acknowledgement immediately; late polls cannot regress its revision. */
+	/** Apply the server acknowledgement immediately, as a new manifest holding the new choices; late polls cannot regress its revision. */
 	setAdoption(copy: string, fingerprint: string, choices: AdoptionReview['choices']): void {
-		for (const c of this.manifest?.contributions ?? []) {
-			if (c.kind === 'adopt' && c.copy === copy && c.fingerprint === fingerprint && (c.choices?.revision ?? 0) <= (choices.revision ?? 0)) c.choices = choices;
-		}
+		const m = this.manifest;
+		if (!m?.contributions) return;
+		let changed = false;
+		const contributions = m.contributions.map((c) => {
+			if (c.kind !== 'adopt' || c.copy !== copy || c.fingerprint !== fingerprint || (c.choices?.revision ?? 0) > (choices.revision ?? 0)) return c;
+			changed = true;
+			return { ...c, choices };
+		});
+		if (changed) this.manifest = { ...m, contributions };
 	}
 
 	#running: Promise<void> | null = null;
 	#again = false;
-	/** The last manifest as text without its adoption choices (`contentOf`), kept from when it was a plain object: read back through the state's proxies, an 11 MB manifest took a quarter of a second to write out. */
+	/** The last manifest as text without its adoption choices (`contentOf`), kept so the one held is not written out again at the next change. */
 	#content = '';
 
 	/** Fetch the manifest if it changed. One fetch at a time: asked again while one is under way, it fetches once more after it, since what prompted the ask may be newer than the fetch in flight. */
@@ -89,7 +96,7 @@ class ManifestStore {
 						if (next?.kind === 'adopt' && next.fingerprint === old.fingerprint && (old.choices?.revision ?? 0) > (next.choices?.revision ?? 0)) next.choices = old.choices;
 					}
 				}
-				// a manifest that differs only in adoption choices updates them in place, so the comparison it shows is not mounted again
+				// a manifest that differs only in adoption choices keeps the one held, with the new choices, so the comparison it shows is not mounted again
 				const content = contentOf(loaded.manifest);
 				if (this.manifest && content === this.#content) {
 					for (const c of loaded.manifest.contributions ?? []) if (c.kind === 'adopt') this.setAdoption(c.copy, c.fingerprint, c.choices);

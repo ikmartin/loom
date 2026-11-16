@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › Problems: what is wrong in the person's files first, open and counted; an agent's copy's, the cited works' and every remark below, each folded and said to be whose it is. Each problem is titled by what is wrong, opens at its place, and offers its fixes: one a viewer can do as a button, any other as a command to copy. The filters stand in the page; the severity and a code live in the URL, so a link can open it showing one of them.
+	import { barShown } from '$lib/shell/scrollbars';
 	import { page } from '$app/state';
 	import HelpDot from '$lib/components/HelpDot.svelte';
 	import { store } from '$lib/manifest/client.svelte';
@@ -138,7 +139,7 @@
 	</details>
 {/snippet}
 
-<main class="page scrollbar-shown">
+<main class="page" use:barShown>
 	<ReviewHeading title="Problems">{#snippet aside()}<HelpDot label="what the problems page shows" topic="problems" />{/snippet}</ReviewHeading>
 	<p class="lead">What is wrong in your files comes first, and is what Review counts. What is wrong in an agent's copy, or in the digests of the papers you cite, is below it, folded, and so are the remarks.</p>
 	<div class="filters" data-testid="problem-filters">

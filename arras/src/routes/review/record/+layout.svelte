@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › The Record: what has been done, under one heading, as tabs: each document's versions, the sessions, and every act the history recorded. Nothing here waits on the person but a version no document leads to.
+	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import type { Snippet } from 'svelte';
 	import { page } from '$app/state';
@@ -18,7 +19,7 @@
 	);
 </script>
 
-<main class="page review-page scrollbar-shown" data-testid="record">
+<main class="page review-page" use:barShown data-testid="record">
 	<ReviewHeading title="The Record" />
 	<nav class="tabs" aria-label="The record" data-testid="record-tabs">
 		{#each tabs as t (t.id)}

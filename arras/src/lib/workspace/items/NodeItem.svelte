@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A node (plan 0.13.3 N1–N3, phase 4): its statement and its proofs, and nothing else in the flow. The tab names it; Settings ▸ Show ids puts its id and state in the left gutter, as a document's are; its annotations are reached by their marks and the margin's icons, which open their popups, and listed in Comments beside it. What the node is in, what it rests on, where its text came from and its detached annotations are its context, opened beside it.
+	import { guttersHost } from './gutters';
 	import { store } from '$lib/manifest/client.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
@@ -30,7 +31,7 @@
 	});
 </script>
 
-<div class="page item node" class:with-side={!!held.notes.side}>
+<div class="page item node">
 	{#if owner}
 		<p class="muted"><code>{key}</code> has no page of its own. It is part of <a href={keyUrl(m, key)}>{m.nodes[owner].title ?? owner}</a>.</p>
 	{:else if !node && m.masters.some(d => d.closed_keys?.includes(key))}
@@ -45,8 +46,8 @@
 	{:else if held.verbatim && held.source}
 		<pre class="verbatim" data-testid="verbatim" aria-label="the LaTeX behind this block">{held.source}</pre>
 	{:else}
-		<div class="gutters-host">
-			<div class="gutters">
+		<div class="gutters-host" use:guttersHost>
+			<div class="gutters" class:beside={!!held.notes.side}>
 				<div class="column">
 					<!-- `margins` so Show ids puts the id and state in the gutter, as in a document -->
 					<FragmentNotes notes={held.notes} fallback={key}>
@@ -72,9 +73,6 @@
 	.item.node {
 		padding-left: 0;
 		padding-right: 0;
-	}
-	.item.node.with-side {
-		padding-right: 310px;
 	}
 	.absent {
 		margin: var(--gap) 0 0;

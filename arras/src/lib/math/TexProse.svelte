@@ -4,7 +4,7 @@
 	// It is not a LaTeX engine and does not pretend to be one. loom renders documents; this renders the sentence or two an annotation proposes, which arrive as prose with inline math and the occasional `\emph`. Anything it does not know is left exactly as written, so what is on screen is never a silent misreading of what was proposed -- a reader who sees a command still in its braces knows to read the verbatim instead.
 	import { store } from '$lib/manifest/client.svelte';
 	import { delimit } from '$lib/math/delimit';
-	import { typeset } from '$lib/math/mathjax';
+	import { typesetSoon } from '$lib/math/mathjax';
 
 	let { text }: { text: string } = $props();
 
@@ -49,8 +49,8 @@
 		const h = html;
 		if (!node) return;
 		node.innerHTML = h;
-		void typeset(node, store.macros);
+		void typesetSoon(node, store.macros);
 	});
 </script>
 
-<span bind:this={el}></span>
+<span class="tex-prose" bind:this={el}></span>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › Proposed Changes: everything someone proposes that the person decides in a pass of its own, one card each: a copy, a pull or a work's proposed results, which the card opens here at its own address (`?copy=`, `?pull`, `?work=`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
+	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
@@ -81,7 +82,7 @@
 	<p class="why" data-testid="suggestion-on-copy">It is on the agent's copy, and comes in with the copy.</p>
 {/snippet}
 
-<main class="page scrollbar-shown" class:review-page={!opened} data-testid="proposed">
+<main class="page" use:barShown class:review-page={!opened} data-testid="proposed">
 	<ReviewHeading title="Proposed Changes" />
 	{#if opened}<p class="back"><a href={here} data-testid="proposed-back">‹ Everything proposed</a></p>{/if}
 	{#if adoption}

@@ -3,7 +3,7 @@
 	//
 	// The publisher writes mathematics into these bodies as the dialect's `<span class="math inline">\(…\)</span>`, the same markup a node fragment carries, but nothing ran MathJax over them: `{@html body_html}` put the delimiters on the page as literal text, so every `$…$` an author or an agent typed arrived as `\(n \le 2\)`. Fragments go through `Fragment.svelte` and titles through `Tex.svelte`; this is the third place published TeX appears and the one that had no typesetter.
 	import { store } from '$lib/manifest/client.svelte';
-	import { typeset } from '$lib/math/mathjax';
+	import { typesetSoon } from '$lib/math/mathjax';
 	import { linkName } from '$lib/workspace/names';
 	import { elided, linkIds } from './ids';
 
@@ -30,6 +30,8 @@
 		}
 	});
 
+	// The body this element was last typeset for. A list hands its body down from an item that is a new object on every manifest, so this effect runs again on each one while the markup, and what MathJax made of it, stays.
+	let typesetFor = '';
 	$effect(() => {
 		const node = el;
 		const body = html; // re-typeset when the body is superseded by an edit
@@ -37,7 +39,10 @@
 		if (macroSet) {
 			const macros = store.manifest?.macros.sets[macroSet] ?? [];
 			void import('$lib/math/scoped').then(({ typesetScoped }) => typesetScoped(node, macros));
-		} else void typeset(node, store.macros);
+		} else if (body !== typesetFor) {
+			typesetFor = body;
+			void typesetSoon(node, store.macros);
+		}
 	});
 </script>
 

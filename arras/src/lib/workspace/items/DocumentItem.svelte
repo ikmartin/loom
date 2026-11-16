@@ -2,6 +2,7 @@
 	// A document (plan 0.13.3 D1–D4): a master or a landmark rendered as a document in a measured column, with each result's id and state in the left gutter behind Show ids. No chrome of its own: its controls are drawn by the pane, and only while the pane is focused.
 	// The gutters use the site generator's algebra, so a corpus page and a note page are laid out alike; the environment's taxon accent stands on the boundary between the left gutter and the text.
 	import { untrack } from 'svelte';
+	import { guttersHost } from './gutters';
 	import { store } from '$lib/manifest/client.svelte';
 	import DraftActions from '$lib/components/DraftActions.svelte';
 	import ReviewPanel from '$lib/review/ReviewPanel.svelte';
@@ -97,17 +98,17 @@
 	}
 </script>
 
-<div class="page item document" class:with-side={!!notes.side}>
+<div class="page item document">
 	{#if landmark && doc}
-		<div class="gutters-host">
-			<div class="gutters">
+		<div class="gutters-host" use:guttersHost>
+			<div class="gutters" class:beside={!!notes.side}>
 				<div class="column">
 					<Fragment path={doc.fragment} macroSet={doc.macros ?? ''} standalone anchor={item.anchor ?? ''} jump={item.seq} note={item.note} arrival={documentState(item).arrival} />
 				</div>
 			</div>
 		</div>
 	{:else if master?.closed || master?.context_only}
-		<div class="gutters-host"><div class="gutters"><div class="column">
+		<div class="gutters-host" use:guttersHost><div class="gutters" class:beside={!!notes.side}><div class="column">
 		{#if master.closed}<p>Closed agent document · saved {master.closed_at?.slice(0, 10)}. Its text and annotations are preserved.</p><DraftActions {master}/>{:else}<p>Paper context saved when this section draft was created or refreshed.</p>{/if}
 		<Fragment path={master.fragment} macroSet={master.macros ?? ''} standalone anchor={item.anchor ?? ''} jump={item.seq}/>
 		{#each master.closed_annotations ?? [] as a}<section id={a.id}><h3>{a.author.id} · {a.created}</h3><p>{typeName(m, a)} · {a.status}</p>{#if a.quote}<blockquote>{a.quote}</blockquote>{/if}<Prose html={a.body_html} macroSet={master.macros}/></section>{/each}
@@ -121,8 +122,8 @@
 	{:else}
 		{#if master.copy_of}<DraftActions {master}/>{/if}
 		<div class:with-comparison={hasComparison} class="review-layout">
-			<div class="gutters-host">
-				<div class="gutters">
+			<div class="gutters-host" use:guttersHost>
+				<div class="gutters" class:beside={!!notes.side}>
 					<div class="column">
 						<FragmentNotes {notes} fallback={master.path} in={master.path}>
 							{#key hasComparison}<Fragment
@@ -174,10 +175,6 @@
 		padding-top: 0;
 		padding-left: 0;
 		padding-right: 0;
-	}
-	/* the list beside the text stands against the pane's right edge, and the text gives it room */
-	.item.document.with-side {
-		padding-right: 310px;
 	}
 	.review-comparison {
 		position: sticky;

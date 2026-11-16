@@ -45,13 +45,25 @@ export function changeLabel(c: PendingChange): string {
 	return `${kindName(c)}: ${summary(c)}`;
 }
 
+/** The first box of `el` as the page lays it out now. A mark in a block the browser is skipping (`content-visibility: auto`, theme.css) reads as the top of that block: measuring the mark would lay the block out, formulas and all, once per mark, 5 to 17 ms each on a long paper and the whole of a scroll's frames once the margin followed it. Such a block is laid out before it reaches the screen, and the margin is drawn again then (Fragment.svelte), so its icons move to their lines before they are seen. */
+function firstRect(el: HTMLElement): DOMRect | undefined {
+	if (el.checkVisibility?.({ contentVisibilityAuto: true }) === false && el.checkVisibility()) {
+		for (let b = el.parentElement; b; b = b.parentElement) {
+			if (!b.checkVisibility({ contentVisibilityAuto: true })) continue;
+			const r = b.getBoundingClientRect();
+			return new DOMRect(r.left, r.top, r.width, Math.min(r.height, 22));
+		}
+	}
+	return el.getClientRects()[0];
+}
+
 /** The top-level annotations whose marks are drawn in `root`, and the changes drawn there in Markup, each with the top of its first mark, in reading order; several on one mark are each one. */
 export function placed(root: HTMLElement, m: Manifest): (Item & { top: number })[] {
 	const seen = new Set<string>();
 	const out: (Item & { top: number })[] = [];
 	for (const el of root.querySelectorAll<HTMLElement>(`${MARKS}, ${CHANGES}, ${MARKED}`)) {
 		if (el.matches(`${CHANGES}, ${MARKED}`)) {
-			const r = el.getClientRects()[0];
+			const r = firstRect(el);
 			const shown = el.matches(CHANGES) ? !!liveChange(el) : el.classList.contains('change-at') && !el.closest('.changes-off');
 			if (!r || !shown) continue;
 			for (const id of changeIds(el)) {
@@ -66,7 +78,7 @@ export function placed(root: HTMLElement, m: Manifest): (Item & { top: number })
 		if (inert(el)) continue;
 		const ids = idsOf(m, el).filter((id) => !seen.has(id));
 		if (!ids.length) continue;
-		const r = el.getClientRects()[0] ?? el.getBoundingClientRect();
+		const r = firstRect(el) ?? el.getBoundingClientRect();
 		if (!r || (!r.width && !r.height && !el.classList.contains('gone'))) continue;
 		for (const id of ids) {
 			seen.add(id);

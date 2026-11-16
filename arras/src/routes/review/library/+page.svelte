@@ -4,6 +4,7 @@
 	// **The list of works has one home, and it is the Library shelf under Docs** (V2): this page is a working table, not a second list to navigate by, so it registers no panel of its own. Its search and filters are its own, in its header and the address.
 	//
 	// The backlog is this page filtered to `proposed` (DR-206). The filters answer "which of these need me", then what each work still lacks, then what a person has vouched for.
+	import { barShown } from '$lib/shell/scrollbars';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { store } from '$lib/manifest/client.svelte';
@@ -179,7 +180,7 @@
 	}
 </script>
 
-<main class="page scrollbar-shown">
+<main class="page" use:barShown>
 	<ReviewHeading title="Library">{#snippet aside()}
 		<input class="search" type="search" placeholder="Search title, author or key" value={typed ?? q} oninput={(e) => search(e.currentTarget.value)} aria-label="Search the library" data-testid="ledger-search" />
 		{#if caps.runs || canAdd}
