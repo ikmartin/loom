@@ -528,7 +528,7 @@ test.describe('the popup', () => {
 		await expect.poll(() => sent.edit).toMatchObject({ annotation: 'a-2026-09-16-bns3an', type: null, look: { color: 'blue', style: 'highlight' } });
 	});
 
-	test('the comment is edited in place, a reply is one line, and Resolve is offered only where the type stays open', async ({ page }) => {
+	test('the comment is edited in place, a reply posts on Enter, and Resolve is offered only where the type stays open', async ({ page }) => {
 		const sent = await writes(page);
 		await serveKept(page, (m) => (m.annotations['a-2026-09-16-bns3an'].type = 'note'));
 		await page.goto('/master/drafting/main');
@@ -550,6 +550,37 @@ test.describe('the popup', () => {
 		await expect(note.getByTestId('popup-resolve')).toHaveCount(0);
 		await expect(note.getByTestId('popup-status')).toHaveCount(0);
 		await expect(note.getByTestId('popup-delete')).toBeVisible();
+	});
+
+	test('a reply has a control of its own that posts it, which waits for words, and Shift+Enter is a new line in it', async ({ page }) => {
+		const sent = await writes(page);
+		let replies = 0;
+		page.on('request', (r) => void (new URL(r.url()).pathname.endsWith('/_api/reply') && replies++));
+		await page.goto('/master/drafting/main');
+		const p = await openPopup(page, 'a-2026-09-16-ecnav2');
+		const field = p.getByTestId('popup-reply');
+		const post = p.getByTestId('popup-reply-send');
+		await expect(post).toBeVisible();
+		await expect(post).toBeDisabled();
+		await field.fill('   ');
+		await expect(post).toBeDisabled();
+		// Shift+Enter breaks the line and posts nothing; the field grows to show both lines
+		await field.fill('First line.');
+		const oneLine = (await field.boundingBox())?.height ?? 0;
+		await field.press('Shift+Enter');
+		await field.pressSequentially('Second line.');
+		await expect(field).toHaveValue('First line.\nSecond line.');
+		await expect.poll(async () => (await field.boundingBox())?.height ?? 0).toBeGreaterThan(oneLine);
+		// the Enter that ends an input method's composition is the method's, not a post
+		await field.dispatchEvent('keydown', { key: 'Enter', isComposing: true, bubbles: true, cancelable: true });
+		expect(sent.reply).toBeUndefined();
+		await expect(post).toBeEnabled();
+		await post.click();
+		await expect.poll(() => sent.reply).toEqual({ annotation: 'a-2026-09-16-ecnav2', message: 'First line.\nSecond line.' });
+		await expect(field).toHaveValue('');
+		await expect(post).toBeDisabled();
+		// one post in all: neither Shift+Enter nor the composing Enter sent one
+		expect(replies).toBe(1);
 	});
 
 	test('a resolved one offers Reopen, which is the undo of Resolve', async ({ page }) => {

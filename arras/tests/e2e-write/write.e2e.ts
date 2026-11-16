@@ -197,6 +197,17 @@ test('a reply written in the popup leaves it open, showing the reply', async ({ 
 	await expect(popup).toHaveCount(1);
 	expect(served.log().filter((e) => e.body === body)).toHaveLength(1);
 
+	// the reply's own control posts one too, and is idle again once the field is empty
+	const second = 'a reply posted with its control';
+	const post = popup.getByTestId('popup-reply-send');
+	await expect(post).toBeDisabled();
+	await popup.getByTestId('popup-reply').fill(second);
+	await post.click();
+	await expect(popup.getByTestId('popup-reply-row').filter({ hasText: second })).toHaveCount(1);
+	await expect(popup.getByTestId('popup-reply')).toHaveValue('');
+	await expect(post).toBeDisabled();
+	expect(served.log().filter((e) => e.body === second)).toHaveLength(1);
+
 	// and the mark still toggles: one click closes it, the next opens it, and it stays open
 	await mark.click();
 	await expect(popup).toHaveCount(0);
