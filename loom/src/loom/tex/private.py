@@ -574,7 +574,7 @@ def install(source: str | None = None, *, say: Callable[[str], None] = lambda s:
     with tempfile.TemporaryDirectory(prefix=".loom-tex-", dir=dest.parent) as tmp:
         work = Path(tmp)
         if url is None:
-            root = build(work / "build", say=say)
+            root = build(work / "tinytex", say=say)
             origin = "built"
         else:
             if sha is None and "://" not in url and Path(f"{url}.sha256").is_file():

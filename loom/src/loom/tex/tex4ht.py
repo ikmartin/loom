@@ -295,7 +295,7 @@ def configuration(envs: Sequence[str], *, snippets: bool = False, math: str = "m
     if math == "svg":
         return "\\Preamble{xhtml,svg}\n\\begin{document}\n" + marks + "\n\\EndPreamble\n"
     nodes = "".join(f"\\loomnode{{{e}}}" for e in sorted(set(envs)) if _ENV.match(e))
-    return "\\Preamble{xhtml,mathjax}\n\\begin{document}\n" + ROWS + STAMPS + marks + nodes + "\n\\EndPreamble\n"
+    return "\\Preamble{xhtml,mathjax,svg}\n\\begin{document}\n" + ROWS + STAMPS + marks + nodes + "\n\\EndPreamble\n"
 
 
 @dataclass
