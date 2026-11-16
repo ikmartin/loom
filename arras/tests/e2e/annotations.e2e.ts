@@ -380,6 +380,9 @@ test.describe('the toolbar', () => {
 		await draft.getByTestId('popup-type').click();
 		await draft.getByTestId('popup-format').locator('[data-testid="type-row"][data-type="revision"]').click();
 		await expect(draft.getByTestId('popup-type')).toContainText('Revision');
+		// a draft of a type that stays open has no status yet and no foot
+		await expect(draft.getByTestId('popup-status')).toHaveCount(0);
+		await expect(draft.locator('.pfoot')).toHaveCount(0);
 		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand') ?? '{}').type)).toBe('question');
 		await draft.getByTestId('popup-comment-field').fill('Wrong bound.');
 		await page.keyboard.press('Escape');
@@ -543,13 +546,18 @@ test.describe('the popup', () => {
 		await p.getByTestId('popup-reply').press('Enter');
 		await expect.poll(() => sent.reply).toEqual({ annotation: 'a-2026-09-16-ecnav2', message: 'Agreed.' });
 		await expect(p.getByTestId('popup-status')).toHaveText('Open');
+		// the head says what it is: the status straight after the type; the foot holds what can be done to it, Resolve then Delete at its right
+		await expect(p.locator('.phead > [data-testid="popup-type"] + [data-testid="popup-status"]')).toHaveCount(1);
+		await expect(p.locator('.pfoot > *')).toHaveCount(2);
+		await expect(p.locator('.pfoot > [data-testid="popup-resolve"] + [data-testid="popup-delete"]:last-child')).toHaveCount(1);
 		await p.getByTestId('popup-resolve').click();
 		await expect.poll(() => sent.resolve).toEqual({ annotation: 'a-2026-09-16-ecnav2' });
-		// a Note only informs: no Resolve and no status
+		// a Note only informs: no Resolve and no status, and Delete alone in the foot
 		const note = await openPopup(page, 'a-2026-09-16-bns3an');
 		await expect(note.getByTestId('popup-resolve')).toHaveCount(0);
 		await expect(note.getByTestId('popup-status')).toHaveCount(0);
 		await expect(note.getByTestId('popup-delete')).toBeVisible();
+		await expect(note.locator('.pfoot > *')).toHaveCount(1);
 	});
 
 	test('a reply has a control of its own that posts it, which waits for words, and Shift+Enter is a new line in it', async ({ page }) => {

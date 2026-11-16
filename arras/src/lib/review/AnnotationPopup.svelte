@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The one popup, for every annotation wherever it is drawn: its type and look (changeable from the head, with "Changed from" its type, or Plain, when the look differs from that one's), when the words it was written on are gone the words as they were and the version that holds them, its comment (edited in place), the replies and a reply, then Resolve where its type stays open and Delete. Given a `draft` instead of an id, it writes a new one: a comment at a place, or words marked with a type that asks something, which loom takes only with words. A draft starts from the hand and keeps its own type and look, so choosing them here changes this annotation and not what the next one is marked with; leaving a draft with words in it asks first (`leave`).
+	// The one popup, for every annotation wherever it is drawn: its type and look (changeable from the head, with "Changed from" its type, or Plain, when the look differs from that one's) and beside them, where its type stays open, Open or Resolved; when the words it was written on are gone the words as they were and the version that holds them, its comment (edited in place), the replies and a reply, then at the foot's right Resolve (or Reopen) and Delete. Given a `draft` instead of an id, it writes a new one: a comment at a place, or words marked with a type that asks something, which loom takes only with words. A draft starts from the hand and keeps its own type and look, so choosing them here changes this annotation and not what the next one is marked with; leaving a draft with words in it asks first (`leave`).
 	//
 	// It reads the annotation from the manifest by id, so a write that comes back on the next poll is shown without the popup being made again, and an annotation deleted elsewhere closes it. Every write goes through the history (`history.svelte.ts`), so the toolbar's Undo takes it back. Each verb is offered only where the publisher serves its endpoint.
 	import { onMount, tick } from 'svelte';
@@ -258,6 +258,7 @@
 	<div class="ann-popup" data-testid="ann-popup" data-annotation-id={a?.id ?? ''} role="dialog" aria-label={a ? `${current ? typeName : 'annotation'} by ${a.author.label ?? a.author.id}` : 'new annotation'}>
 		<div class="phead">
 			<button type="button" class="ptype" aria-expanded={formatting} disabled={!changeable} title={changeable ? 'Type and look' : undefined} data-testid="popup-type" onclick={() => (formatting = !formatting)}><Sample {look} text={typeName} />{#if changeable}<Icon name="caret" size={12} />{/if}</button>
+			{#if a && asks}<span class="stat" class:done={a.status !== 'open'} title={a.status === 'open' ? 'Open: in To do for everyone but its writer, until someone resolves it' : 'Resolved: in nobody’s To do'} data-testid="popup-status">{a.status === 'open' ? 'Open' : 'Resolved'}</span>{/if}
 			<span class="meta">{#if a}<span title={a.author.id}>{a.author.label ?? a.author.id}</span> · {shortDate(a.created)}{:else}{draft?.name}{/if}</span>
 			<button type="button" class="x" aria-label="Close" title="Close" data-testid="popup-close" onclick={onclose}><Icon name="close" size={14} /></button>
 		</div>
@@ -314,9 +315,8 @@
 				{/if}
 			</div>
 		{/if}
-		{#if a}
+		{#if a && (allowed.resolve || allowed.delete)}
 			<div class="pfoot">
-				{#if asks}<span class="stat" class:done={a.status !== 'open'} title={a.status === 'open' ? 'Open: in To do for everyone but its writer, until someone resolves it' : 'Resolved: in nobody’s To do'} data-testid="popup-status">{a.status === 'open' ? 'Open' : 'Resolved'}</span>{/if}
 				{#if allowed.resolve && a.status === 'open' && asks}<button type="button" class="lnk" disabled={busy} data-testid="popup-resolve" onclick={() => void send(() => resolve(a.id))}>Resolve</button>{/if}
 				{#if allowed.resolve && a.status !== 'open'}<button type="button" class="lnk" disabled={busy} data-testid="popup-reopen" onclick={() => void send(() => resolve(a.id, true))}>Reopen</button>{/if}
 				{#if allowed.delete}<button type="button" class="lnk del" disabled={busy} data-testid="popup-delete" onclick={() => void remove(a.id)}>Delete</button>{/if}
@@ -348,8 +348,9 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 3px;
-		flex: none;
-		max-width: 55%;
+		flex: 0 1 auto;
+		min-width: 0;
+		max-width: 50%;
 		padding: 1px 4px;
 		font: inherit;
 		font-size: 12.5px;
@@ -366,6 +367,13 @@
 	}
 	.ptype:disabled {
 		cursor: default;
+	}
+	/* a long type's name gives way before the status beside it */
+	.ptype :global(.ann-sample) {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.meta {
 		flex: 1;
@@ -495,12 +503,12 @@
 	}
 	.pfoot {
 		display: flex;
+		justify-content: flex-end;
 		align-items: center;
-		gap: 12px;
+		gap: 18px;
 		font-size: 12px;
 	}
 	.pfoot .del {
-		margin-left: auto;
 		color: var(--ink-faint);
 	}
 	.stat {
