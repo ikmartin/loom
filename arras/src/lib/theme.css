@@ -465,11 +465,11 @@ main.page > h2,
 .arras .is-scrolling::-webkit-scrollbar-thumb {
 	background-color: var(--rule-strong);
 }
-/* A long list read by moving through it keeps its bar at rest, so a reader can see where they are and drag to anywhere in it: a page whose main is `scrollbar-shown` (the problems page). */
-.arras:has(main.scrollbar-shown) {
+/* A long list read by moving through it keeps its bar at rest, so a reader can see where they are and drag to anywhere in it: a page whose main is `barShown` ($lib/shell/scrollbars, the problems page) marks the root `scrollbar-shown`. */
+.arras.scrollbar-shown {
 	scrollbar-color: var(--rule-strong) transparent;
 }
-.arras:has(main.scrollbar-shown)::-webkit-scrollbar-thumb {
+.arras.scrollbar-shown::-webkit-scrollbar-thumb {
 	background-color: var(--rule-strong);
 }
 

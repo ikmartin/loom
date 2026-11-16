@@ -140,7 +140,7 @@
 
 <svelte:window bind:innerWidth={windowWidth} />
 
-<div class="shell-c" style:--column-width="{width}px">
+<div class="shell-c" class:folded={!shown} style:--column-width="{width}px">
 	<div class="panel" class:away={!shown} data-testid="column" bind:this={panelBox}>
 		{#if !shown}
 			<!-- folded: what must stay in reach, one above the other -->
@@ -279,7 +279,7 @@
 		outline: none;
 	}
 	/* folded, the column is a narrow rail, not a 252px empty gutter */
-	.shell-c:has(.panel.away) {
+	.shell-c.folded {
 		grid-template-columns: var(--rail-folded) minmax(0, 1fr) auto;
 	}
 	.panel {

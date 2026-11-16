@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last discard is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar.
+	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
@@ -207,7 +208,7 @@
 	</details>
 {/snippet}
 
-<main class="page review-page scrollbar-shown" data-testid="your-changes">
+<main class="page review-page" use:barShown data-testid="your-changes">
 	<ReviewHeading title="Your Changes">{#snippet aside()}<HelpDot label="what the Your Changes page shows" topic="review" />{/snippet}</ReviewHeading>
 	<ActionBar said={said?.at === '*' ? said.text : ''} refused={said?.refused} testid="review-bar">
 		{#snippet lead()}
