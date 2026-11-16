@@ -877,6 +877,31 @@ test.describe('the margin', () => {
 		await expect.poll(async () => Math.abs((await middle(icon)) - (await middle(markOf(page, 'a-2026-09-16-ecnav2')))) < 10).toBe(true);
 	});
 
+	test('a margin drawn again keeps every icon whose line it leaves as it was: the ringed one and the count are the same elements after a popup opens and closes', async ({ page }) => {
+		await page.goto('/master/drafting/main');
+		const icon = page.locator('[data-testid="margin-icon"][data-annotation="a-2026-09-16-ecnav2"]');
+		const count = page.getByTestId('margin-count');
+		await expect(icon).toHaveCount(1);
+		await expect(count).toHaveCount(1);
+		// past the redraw that follows the layout's last move (Fragment.svelte), so what is tagged is what stays
+		await page.waitForTimeout(400);
+		const tag = (at: import('@playwright/test').Locator) => at.evaluate((el) => ((el as HTMLElement & { kept?: true }).kept = true));
+		const kept = (at: import('@playwright/test').Locator) => at.evaluate((el) => (el as HTMLElement & { kept?: true }).kept === true);
+		await tag(icon);
+		await tag(count);
+		await icon.click();
+		await expect(popup(page)).toHaveAttribute('data-annotation-id', 'a-2026-09-16-ecnav2');
+		await expect(icon).toHaveClass(/\bon\b/);
+		expect(await kept(icon), 'the opened icon is ringed in place').toBe(true);
+		expect(await kept(count), 'an icon whose line did not change is not drawn again').toBe(true);
+		await page.keyboard.press('Escape');
+		await expect(popup(page)).toHaveCount(0);
+		await expect(icon).not.toHaveClass(/\bon\b/);
+		await page.waitForTimeout(400);
+		expect(await kept(icon)).toBe(true);
+		expect(await kept(count)).toBe(true);
+	});
+
 	test('where several start on one line, a count opens the line chooser, which opens the one picked', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		// the lemma's label carries the untyped suggestion, and its words the question

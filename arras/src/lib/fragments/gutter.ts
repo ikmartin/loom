@@ -1,6 +1,6 @@
 // The margin beside a text: one icon for every annotation drawn there, on the line its first mark stands on, a circle in its colour, shaped as a speech bubble where it says something; and one for every pending change, a teal pen: beside its words drawn in Markup, or, for one marked on an element rather than drawn in its words, beside that element's first line in either view. Where several start on one line the line has one count instead, which opens the line chooser, a short list of them to pick from. An icon opens its annotation's or change's popup.
 //
-// Drawn as a layer of absolutely placed buttons beside the fragment, measured from the marks, and drawn again whenever the marks or the text's layout change.
+// Drawn as a layer of absolutely placed buttons beside the fragment, measured from the marks, and drawn again whenever the marks or the text's layout change; a drawing keeps each icon whose line shows what it did.
 
 import type { Annotation, Manifest, PendingChange } from '$lib/manifest/types';
 import { colorOf, typeOf } from '$lib/review/annotationTypes';
@@ -148,21 +148,103 @@ function choose(m: Manifest, items: Item[], at: HTMLElement, onpick: (id: string
 	(menu.querySelector('button') as HTMLElement | null)?.focus();
 }
 
+/** What each margin layer's icons act on: the manifest and the pick of its latest draw. An icon kept from an earlier draw reads them here, so it opens what the latest draw would. */
+const current = new WeakMap<HTMLElement, { m: Manifest; onpick: (id: string) => void }>();
+
+/** The key an icon was made for: everything it shows and holds but where it stands and whether it is ringed. */
+const made = new WeakMap<Element, string>();
+
+/** An icon for one line, and the key that says when an icon already drawn shows the same. */
+function lineIcon(layer: HTMLElement, m: Manifest, items: Item[]): { key: string; ids: string[]; build: () => HTMLButtonElement } {
+	const ids = items.map((it) => it.id);
+	const act = (id: string) => current.get(layer)?.onpick(id);
+	if (items.length === 1 && items[0].c) {
+		const c = items[0].c;
+		const label = changeLabel(c);
+		return {
+			key: `c ${c.id} ${label}`,
+			ids,
+			build: () => {
+				const b = document.createElement('button');
+				b.className = 'mi mc';
+				b.innerHTML = PEN;
+				b.title = label;
+				b.setAttribute('aria-label', label);
+				b.dataset.testid = 'margin-change';
+				b.dataset.change = c.id;
+				b.addEventListener('click', () => act(c.id));
+				return b;
+			}
+		};
+	}
+	if (items.length === 1 && items[0].a) {
+		const a = items[0].a;
+		const label = itemLabel(m, a);
+		const cls = 'mi ma' + (says(a) ? ' talk' : '') + (a.status !== 'open' ? ' settled' : '');
+		return {
+			key: `a ${a.id} ${cls} ${dotVars(a)} ${label}`,
+			ids,
+			build: () => {
+				const b = document.createElement('button');
+				b.className = cls;
+				b.setAttribute('style', dotVars(a));
+				b.title = label;
+				b.setAttribute('aria-label', `Annotation. ${label}`);
+				b.dataset.testid = 'margin-icon';
+				b.dataset.annotation = a.id;
+				b.addEventListener('click', () => act(a.id));
+				return b;
+			}
+		};
+	}
+	// the chooser lists each item by what it says, so a count is kept only while every row would read the same
+	const rows = items.map((it) => (it.c ? `${it.id} ${changeLabel(it.c)}` : `${it.id} ${dotVars(it.a)} ${itemLabel(m, it.a)}`));
+	return {
+		key: `g ${rows.join(' | ')}`,
+		ids,
+		build: () => {
+			const b = document.createElement('button');
+			b.className = 'mi mg';
+			b.textContent = String(items.length);
+			b.title = `${items.length} on this line`;
+			b.setAttribute('aria-label', `${items.length} ${items.every((it) => it.a) ? 'annotations' : 'items'} on this line`);
+			b.setAttribute('aria-haspopup', 'menu');
+			b.dataset.testid = 'margin-count';
+			// what it holds, so the line's items are found by id whichever line breaks the reader's fonts make
+			b.dataset.items = ids.join(' ');
+			b.addEventListener('click', (e) => {
+				e.stopPropagation();
+				if (chooser) return closeChooser();
+				const now = current.get(layer);
+				if (now) choose(now.m, items, b, now.onpick);
+			});
+			return b;
+		}
+	};
+}
+
 /**
  * Draw the margin of `root` into `layer`: one icon per annotation and per change drawn in Markup, a count where several share a line.
+ *
+ * An icon already drawn that shows the same as its line would now is kept, moved and ringed in place, so a draw that changes nothing touches nothing and an icon under the pointer is never replaced by its double.
  *
  * Parameters
  * ----------
  * layer : HTMLElement
- *     An absolutely placed column beside the text; emptied and filled.
+ *     An absolutely placed column beside the text; its icons kept, made or removed.
  * root : HTMLElement
  *     The fragment whose marks are measured.
- * m : Manifest
+ * m : Manifest | null
+ *     The manifest the marks are read against; null empties the margin.
  * opts : GutterOptions
  */
 export function drawGutter(layer: HTMLElement, root: HTMLElement, m: Manifest | null, opts: GutterOptions): void {
-	layer.replaceChildren();
-	if (!m) return;
+	if (!m) {
+		current.delete(layer);
+		layer.replaceChildren();
+		return;
+	}
+	current.set(layer, { m, onpick: opts.onpick });
 	const base = layer.getBoundingClientRect().top;
 	const marks = placed(root, m).sort((x, y) => x.top - y.top);
 	const lines: { top: number; items: Item[] }[] = [];
@@ -171,50 +253,33 @@ export function drawGutter(layer: HTMLElement, root: HTMLElement, m: Manifest | 
 		if (last && Math.abs(top - last.top) < LINE) last.items.push(it as Item);
 		else lines.push({ top, items: [it as Item] });
 	}
+	const spare = new Map<string, Element[]>();
+	for (const b of layer.children) {
+		const key = made.get(b);
+		if (key !== undefined) spare.set(key, [...(spare.get(key) ?? []), b]);
+	}
+	const want: Element[] = [];
 	let last = -Infinity;
 	for (const line of lines) {
-		const top = Math.max(line.top - base - ICON / 2, last + STEP);
+		const top = Math.round(Math.max(line.top - base - ICON / 2, last + STEP));
 		last = top;
-		const b = document.createElement('button');
-		b.type = 'button';
-		b.style.top = `${Math.round(top)}px`;
-		if (line.items.length === 1 && line.items[0].c) {
-			const c = line.items[0].c;
-			const label = changeLabel(c);
-			b.className = 'mi mc' + (opts.open === c.id ? ' on' : '');
-			b.innerHTML = PEN;
-			b.title = label;
-			b.setAttribute('aria-label', label);
-			b.dataset.testid = 'margin-change';
-			b.dataset.change = c.id;
-			b.addEventListener('click', () => opts.onpick(c.id));
-		} else if (line.items.length === 1 && line.items[0].a) {
-			const a = line.items[0].a;
-			const label = itemLabel(m, a);
-			b.className = 'mi ma' + (says(a) ? ' talk' : '') + (a.status !== 'open' ? ' settled' : '') + (opts.open === a.id ? ' on' : '');
-			b.setAttribute('style', `top: ${Math.round(top)}px; ${dotVars(a)}`);
-			b.title = label;
-			b.setAttribute('aria-label', `Annotation. ${label}`);
-			b.dataset.testid = 'margin-icon';
-			b.dataset.annotation = a.id;
-			b.addEventListener('click', () => opts.onpick(a.id));
-		} else {
-			b.className = 'mi mg' + (line.items.some((it) => it.id === opts.open) ? ' on' : '');
-			b.textContent = String(line.items.length);
-			b.title = `${line.items.length} on this line`;
-			b.setAttribute('aria-label', `${line.items.length} ${line.items.every((it) => it.a) ? 'annotations' : 'items'} on this line`);
-			b.setAttribute('aria-haspopup', 'menu');
-			b.dataset.testid = 'margin-count';
-			// what it holds, so the line's items are found by id whichever line breaks the reader's fonts make
-			b.dataset.items = line.items.map((it) => it.id).join(' ');
-			b.addEventListener('click', (e) => {
-				e.stopPropagation();
-				if (chooser) return closeChooser();
-				choose(m, line.items, b, opts.onpick);
-			});
+		const icon = lineIcon(layer, m, line.items);
+		let b = spare.get(icon.key)?.shift() as HTMLButtonElement | undefined;
+		if (!b) {
+			b = icon.build();
+			b.type = 'button';
+			made.set(b, icon.key);
 		}
-		layer.append(b);
+		if (b.style.top !== `${top}px`) b.style.top = `${top}px`;
+		b.classList.toggle('on', opts.open !== null && icon.ids.includes(opts.open));
+		want.push(b);
 	}
+	// in place where the order holds, so a kept icon is never taken off the page and put back
+	want.forEach((b, i) => {
+		const at = layer.children[i];
+		if (at !== b) layer.insertBefore(b, at ?? null);
+	});
+	while (layer.children.length > want.length) layer.lastElementChild!.remove();
 }
 
 // the chooser closes on a press anywhere but itself and its count, and on Escape
