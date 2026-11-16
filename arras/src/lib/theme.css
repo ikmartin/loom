@@ -781,6 +781,9 @@ a.heading-link:focus {
 .fragment section > h5,
 .fragment section > h6 { font-size: var(--body-size); }
 .fragment span.number { color: var(--ink-soft); margin-right: var(--gap-hair); }
+/* A comment's formulas, or a quoted passage, waiting for their pass (`typesetSoon`) hold their place without showing their source. */
+[data-typesetting] .math,
+[data-typesetting].tex-prose { visibility: hidden; }
 /* A formula wider than the column scrolls, and says so: the shadow at an edge appears only when there is content past it, so a reader is never left wondering why a block moves. */
 .fragment .math.display {
 	overflow-x: auto;

@@ -105,6 +105,75 @@ function yieldToPage(): Promise<void> {
  * 160 was one long task of 90-100ms on a 1250-formula document, which is a visible stall; 48 costs a few more yields and keeps each pass around 30ms, under the 50ms a frame can absorb. The first screen of a document holds about 25 formulas, so a document still reveals in one pass. */
 const BATCH = 48;
 
+/** Bodies waiting for `typesetSoon`, in the order they asked. */
+let soon: { el: Element; done: () => void }[] = [];
+let soonQueued = false;
+
+/** The task after the next paint. */
+function afterPaint(): Promise<void> {
+	return new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));
+}
+
+/**
+ * Typeset a short body (an annotation, a reply, a message, a quoted passage) after the next paint, together with every other body that asked before then.
+ *
+ * A list of comment cards typeset one card at a time made MathJax measure font metrics once per card, each measurement forcing a style recalc and layout of the whole page while a long document was open: opening the Comments panel on a 150-page paper held the click for half a second. Here the cards are drawn first and typeset in passes of about `BATCH` formulas, each in a task of its own; a body's formulas, or a quoted passage whole, stay hidden (`data-typesetting`, theme.css) until its pass has run.
+ *
+ * Parameters
+ * ----------
+ * el : Element
+ *     The body; its formulas are `.math` spans, or `\(…\)` in its text.
+ * defaults : Macro[]
+ *     The corpus-wide macros, applied when MathJax first loads.
+ *
+ * Returns
+ * -------
+ * Promise<void>
+ *     Resolves once `el` is typeset, or once its turn came and it had left the page.
+ *
+ * See Also
+ * --------
+ * typeset : a fragment, or anything that must be typeset before it is shown.
+ */
+export function typesetSoon(el: Element, defaults: Macro[]): Promise<void> {
+	el.setAttribute('data-typesetting', '');
+	return new Promise((done) => {
+		soon.push({ el, done });
+		if (soonQueued) return;
+		soonQueued = true;
+		void afterPaint().then(() => typesetWaiting(defaults));
+	});
+}
+
+async function typesetWaiting(defaults: Macro[]): Promise<void> {
+	try {
+		const mj = await ensureMathJax(defaults);
+		while (soon.length) {
+			const pass: typeof soon = [];
+			for (let n = 0; soon.length && n < BATCH; ) {
+				const next = soon.shift()!;
+				pass.push(next);
+				n += Math.max(1, next.el.querySelectorAll('.math').length);
+			}
+			const els = pass.map((p) => p.el).filter((el) => el.isConnected);
+			if (els.length) await run(mj, els).catch(() => {});
+			for (const p of pass) {
+				p.el.removeAttribute('data-typesetting');
+				p.done();
+			}
+			if (soon.length) await yieldToPage();
+		}
+	} catch {
+		// MathJax did not load: the bodies show their source rather than nothing
+		for (const p of soon.splice(0)) {
+			p.el.removeAttribute('data-typesetting');
+			p.done();
+		}
+	} finally {
+		soonQueued = false;
+	}
+}
+
 /**
  * Typeset the mathematics inside `el`.
  *
