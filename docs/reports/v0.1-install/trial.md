@@ -11,7 +11,7 @@ Done 2026-11-14 on an Apple M2, macOS 26.5.2, with other sessions loading the ma
 | xy diagrams (man12, acgs) | drawn with **no arrows at all**, and no warning: 598 SVG paths in man12's 51 pictures | every arrow: 1,462 paths in the same 51 pictures |
 | xy diagrams, xy kept off its PostScript driver (no Ghostscript) | complete, drawn with xy's own fonts; see below | not needed |
 | EPS figures in the PDF (pdflatex) | `fig-eps-converted-to.pdf not found`; latexmk exits 12 | converted by `repstopdf` |
-| EPS figures in the HTML (acgs's twelve `pspdftex` figures) | blank pictures | drawn, once `dvipng` is in loom's TeX (below) |
+| EPS figures in the HTML (acgs's twelve `pspdftex` figures) | blank pictures | drawn, once loom's HTML makes its pictures with dvisvgm (below) |
 | PDF figures in the HTML (showcase `quiver.pdf`) | a broken image link, no warning | an SVG by `pdftocairo` |
 | `dvisvgm --pdf` as the fallback for PDF figures | refuses: needs Ghostscript older than 10.01 or `mutool` | not used: `pdftocairo` comes first |
 | page text and word boxes of a dropped PDF | none: "pdftotext is not installed" | `pdftotext -layout` and `-bbox-layout`, the same program records were made with |
@@ -20,7 +20,8 @@ Done 2026-11-14 on an Apple M2, macOS 26.5.2, with other sessions loading the ma
 
 Two gaps found on the way, neither about Homebrew:
 
-- **acgs's figures are missing in every build**, with Homebrew or without: TeX4ht turns a `picture` environment into a PNG with `dvipng`, which loom's TeX lacked, so the page names twelve PNGs that were never made. `dvipng` (a TeX Live package) is now in loom's seed. With it and Ghostscript the figure draws; without Ghostscript `dvipng` leaves the EPS part blank and warns only in make4ht's output.
+- **acgs's figures are missing in every build**, with Homebrew or without. TeX4ht turns a `picture` environment into a PNG with `dvipng`, which loom's TeX lacked, so the page named PNGs that were never made. With `dvipng` installed it is no better: in a paper that loads `pstricks`, `dvipng` hands Ghostscript 10 PostScript it rejects, and every figure comes out blank, on the author's own TeX Live 2024 with Homebrew's Ghostscript as on loom's. Loom's HTML now makes these pictures as SVG through dvisvgm, as its diagram runs already did, and acgs's figures draw (`$T/shots/e89053ee035ade1a.svg.png`). `dvipng` stays in the seed for a configuration that asks for PNG.
+- **The end-to-end run found two more causes of empty figures, both fixed on the branch.** The import copied only the PDF twin of a figure named without an extension, which pdflatex reads, while the DVI that TeX4ht draws from reads the EPS; it now brings in every form the paper ships. And a paper that loads `pstricks` needs `pst-tools.pro`, a PostScript header that `dvipng` names only in make4ht's own output ("Cannot find PostScript file pst-tools.pro"); loom now reads that output after every HTML run and fetches the package.
 - **Nothing tells the person a picture is wrong.** Missing arrows, blank figures and a broken figure link all build with exit 0 and no diagnostic. The diagnostic belongs in `render/fragments.py` and `render/assets.py` (Speed's); the reserved prefix is `loom:tex-`.
 
 ### xy without Ghostscript
@@ -37,7 +38,7 @@ Checked by whether `/usr/bin/X` links `libxcselect` (the stub that offers to ins
 
 | candidate | gives | size (arm64) | licence | relocates | notes |
 |---|---|---|---|---|---|
-| conda-forge `ghostscript` 10.08.0: `bin/gs` and `lib/libgs.10.dylib` | `gs` for `repstopdf` and `dvipng`; `LIBGS` for dvisvgm | 49 MB on disk, 23 MB as `.tar.xz` | AGPL-3.0-only | yes: both are self-contained, init files compiled in; ran from a moved copy with the original hidden; signatures intact | osx-64 package exists for Intel Macs |
+| conda-forge `ghostscript` 10.08.0: `bin/gs` and `lib/libgs.10.dylib` | `gs` for `repstopdf`; `LIBGS` for dvisvgm | 49 MB on disk, 23 MB as `.tar.xz` | AGPL-3.0-only | yes: both are self-contained, init files compiled in; ran from a moved copy with the original hidden; signatures intact | osx-64 package exists for Intel Macs |
 | conda-forge `poppler` 26.11.0: `pdftotext`, `pdfinfo`, `pdftocairo` with their 51 libraries | page text and word boxes, rotation, PDF figures, crops | 74 MB on disk (ICU's data is 34 MB of it), 20 MB as `.tar.xz` | GPL-2.0-or-later; libraries LGPL, MPL, MIT, Unicode | yes, same test; `pdftocairo` warns once that fontconfig has no configuration, harmless for embedded fonts, cured by shipping a two-line `fonts.conf` | osx-64 exists |
 | both together, one archive | all of the above | 117 MB on disk, **43 MB download** | as above | yes | built by micromamba (static, 15 MB, BSD-3) in the release workflow; the person never runs it |
 | `pypdfium2` 5.15.2 wheel | page text with character boxes, rendering to bitmaps; no SVG, no PostScript | 7.4 MB installed | Apache-2.0 / BSD-3 | a wheel | against `pdftotext -bbox-layout` on the showcase's four PDFs: 95% of words the same, 81-84% of word boxes overlapping by more than half. Not a drop-in: records already rest on poppler's geometry, and the change is in `refs/pages.py`, `records/marks.py`, `records/crops.py` and `tex/identity.py` (2-4 days, other workstreams' files) |
