@@ -6,7 +6,7 @@ import hashlib
 import json
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loom.history.ledger import History, load_history
 from loom.paths import BUILD, LOOM, document_dir, under
@@ -17,6 +17,9 @@ from loom.scan.scan import ScanResult
 from loom.scan.sections import SectionUnit, body_range, find_sections
 from loom.scan.source import blank_comments
 from loom.sync import SyncError
+
+if TYPE_CHECKING:
+    from loom.render.marks import MarkEntry
 
 
 def sections(text: str) -> tuple[Expansion, list[SectionUnit]]:
@@ -273,8 +276,16 @@ def preview_in_paper(result: ScanResult, copy: str) -> dict[str, Any]:
     }
 
 
-def attach_context(result: ScanResult, manifest: dict[str, Any], files: dict[str, str | bytes]) -> None:
-    """Render scoped copies and external references from the same pinned input set."""
+def attach_context(
+    result: ScanResult,
+    manifest: dict[str, Any],
+    files: dict[str, str | bytes],
+    marks: dict[str, list[MarkEntry]] | None = None,
+) -> None:
+    """Render scoped copies and external references from the same pinned input set.
+
+    `marks` is the build's own `build._marks_by_node`, so the annotations are resolved and re-anchored once per build and from one read of the log; without it they are worked out here.
+    """
     from loom.render.fragments import FragmentRenderer, RenderPlan
     from loom.render.markup import slug
     from loom.scan.macros import to_mathjax
@@ -307,11 +318,13 @@ def attach_context(result: ScanResult, manifest: dict[str, Any], files: dict[str
             return re.sub(r'data-target="([^"]+)"', ref, fragment)
 
         # Preserve annotation marks placed by the ordinary renderer; only the underlying context differs.
-        from loom.records.store import Records
-        from loom.render.build import _marks_by_node
         from loom.render.marks import place_marks
 
-        marks = _marks_by_node(result, Records(result.quilt.root, result.quilt.history_dir))
+        if marks is None:
+            from loom.records.store import Records
+            from loom.render.build import _marks_by_node
+
+            marks = _marks_by_node(result, Records(result.quilt.root, result.quilt.history_dir))
         files[master["fragment"]] = pin(
             place_marks(
                 renderer.master_fragment(copy),
