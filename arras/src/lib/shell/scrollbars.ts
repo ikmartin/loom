@@ -17,7 +17,8 @@ export function revealWhileScrolling(): () => void {
 		// arras scrolls its panels and panes, never the page; and a host's own elements are the host's to mark, not arras's
 		const el = e.target instanceof Element ? e.target : null;
 		if (!el?.closest('.arras')) return;
-		el.classList.add('is-scrolling');
+		// a class set again restyles the element on every scroll event, and a pane's is laid out again with it
+		if (!el.classList.contains('is-scrolling')) el.classList.add('is-scrolling');
 		clearTimeout(timers.get(el));
 		timers.set(
 			el,
