@@ -123,7 +123,10 @@
 		return false;
 	}
 
+	/** The name of the control that posts a reply. */
+	const SEND_REPLY = 'Reply';
 	let reply = $state('');
+	let replyEl = $state<HTMLTextAreaElement | null>(null);
 	let showVersion = $state(false);
 
 	/** Do one write, one at a time, and say loom's refusal where there is one; the result, or null when refused. */
@@ -207,7 +210,11 @@
 		if (!a || !reply.trim()) return;
 		const at = a;
 		const message = reply.trim();
-		if ((await send(() => replyTo(at.id, message))) !== null) reply = '';
+		if ((await send(() => replyTo(at.id, message))) !== null) {
+			reply = '';
+			await tick();
+			if (replyEl) grow(replyEl);
+		}
 	}
 
 	async function remove(target: string): Promise<void> {
@@ -221,6 +228,14 @@
 		if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
 			e.preventDefault();
 			void save();
+		}
+	}
+
+	/** Enter posts the reply, as the comment's Enter saves; Shift+Enter is a new line, and the Enter that ends an input method's composition is the method's. */
+	function replyKeys(e: KeyboardEvent): void {
+		if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+			e.preventDefault();
+			void answer();
 		}
 	}
 
@@ -291,7 +306,12 @@
 						{#if allowed.delete}<button type="button" class="lnk del" data-testid="reply-delete" disabled={busy} onclick={() => void remove(r.id)}>Delete</button>{/if}
 					</div>
 				{/each}
-				{#if allowed.reply}<input class="reply" placeholder="Reply" aria-label="Reply" data-testid="popup-reply" disabled={busy} bind:value={reply} onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void answer(); } }} />{/if}
+				{#if allowed.reply}
+					<div class="reply-row">
+						<textarea class="reply" rows="1" placeholder="Write a reply" aria-label="Reply" data-testid="popup-reply" disabled={busy} bind:value={reply} bind:this={replyEl} use:grow oninput={(e) => grow(e.currentTarget)} onkeydown={replyKeys}></textarea>
+						<button type="button" class="lnk send" disabled={busy || !reply.trim()} title="Post the reply (Enter; Shift+Enter for a new line)" data-testid="popup-reply-send" onclick={() => void answer()}>{SEND_REPLY}</button>
+					</div>
+				{/if}
 			</div>
 		{/if}
 		{#if a}
@@ -451,15 +471,27 @@
 		margin-left: 6px;
 		font-size: 11.5px;
 	}
+	.reply-row {
+		display: flex;
+		align-items: flex-end;
+		gap: 8px;
+	}
 	.reply {
-		width: 100%;
+		flex: 1;
+		min-width: 0;
 		box-sizing: border-box;
 		padding: 4px 7px;
 		font: inherit;
+		line-height: 1.4;
+		resize: none;
 		color: var(--ink);
 		background: transparent;
 		border: 1px solid var(--rule);
 		border-radius: 6px;
+	}
+	.send {
+		flex: none;
+		padding-bottom: 5px;
 	}
 	.pfoot {
 		display: flex;
