@@ -4,7 +4,7 @@ import type { Annotation, Manifest } from '$lib/manifest/types';
 import { authors, changedFrom, commentSeed, earlier, handPayload, hintFor, keepLook, typesPayload, isTodo, lookOf, notesHere, notesOf, passes, plain, PLAIN, quoted, retype, sequence, takeSeed, withLook, withType } from './annotating.svelte';
 
 const fixture = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
-const RED = { color: 'red', style: 'highlight' as const, weight: 2, opacity: 65 };
+const RED = { color: 'red', style: 'highlight' as const, weight: 2, opacity: 60 };
 
 /** A manifest row made by hand: what a test names, over an open untyped annotation by the reader on sy-0001. */
 function row(over: Partial<Annotation> & { id: string }): Annotation {
@@ -79,8 +79,8 @@ describe('the look in hand', () => {
 	it('writes every type for types-save, one with a new look', () => {
 		const saved = typesPayload(fixture, 'question', { ...RED, color: 'green' });
 		expect(saved.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question', 'note']);
-		expect(saved[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 65, open: true, notes: false });
-		expect(saved[0]).toMatchObject({ color: 'red', opacity: 65 });
+		expect(saved[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 60, open: true, notes: false });
+		expect(saved[0]).toMatchObject({ color: 'red', opacity: 60 });
 	});
 
 	it('hints what the tool in hand does, what a draft still needs, and what can be done to the annotation open', () => {

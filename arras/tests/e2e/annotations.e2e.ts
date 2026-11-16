@@ -64,7 +64,7 @@ test.describe('marks', () => {
 		await expect(revision).toHaveClass(/\bann-highlight\b/);
 		const red = await drawn(revision);
 		expect(red.band).toMatchObject(RED_BAND);
-		expect(red.band.a).toBeCloseTo(0.65, 2);
+		expect(red.band.a).toBeCloseTo(0.6, 2);
 		expect(red.bar).toBe('0px');
 		const question = await drawn(mark(page, 'a-2026-09-16-bns3an'));
 		expect(question.band).toMatchObject(BLUE_BAND);
@@ -100,7 +100,7 @@ test.describe('marks', () => {
 		await page.goto('/master/drafting/main');
 		const revision = await drawn(mark(page, 'a-2026-09-16-ecnav2'));
 		expect(revision.band).toMatchObject(RED_BAND);
-		expect(revision.band.a).toBeCloseTo(0.65, 2);
+		expect(revision.band.a).toBeCloseTo(0.6, 2);
 		expect((await drawn(mark(page, 'a-2026-09-16-bns3an'))).band).toMatchObject(GREY_BAND);
 	});
 
@@ -646,7 +646,7 @@ test.describe('changed from a type', () => {
 		const types = sent['types-save'].types as Record<string, unknown>[];
 		expect(types.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question', 'note']);
 		expect(types[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 60, open: true });
-		expect(types[0]).toMatchObject({ color: 'red', opacity: 65 });
+		expect(types[0]).toMatchObject({ color: 'red', opacity: 60 });
 		// one whose look is its type's says nothing
 		const same = await openPopup(page, 'a-2026-09-16-ecnav2');
 		await same.getByTestId('popup-type').click();
@@ -671,7 +671,7 @@ test.describe('changed from a type', () => {
 		await menu.getByTestId('swatch-blue').click();
 		await menu.getByTestId('modified-update').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
-		expect((sent['types-save'].types as Record<string, unknown>[])[0]).toMatchObject({ id: 'revision', name: 'Revision', color: 'blue', style: 'highlight', opacity: 65 });
+		expect((sent['types-save'].types as Record<string, unknown>[])[0]).toMatchObject({ id: 'revision', name: 'Revision', color: 'blue', style: 'highlight', opacity: 60 });
 		await expect(menu.getByTestId('modified-line')).toHaveCount(0);
 		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand')!))).toEqual({ type: 'revision', over: {}, plain: {} });
 	});
@@ -1116,7 +1116,7 @@ test.describe('Settings › Annotations', () => {
 			['suggestion', 'Idea'],
 			['note', 'Note']
 		]);
-		expect(saved[0]).toEqual({ id: 'revision', name: 'Revision', color: 'red', style: 'highlight', weight: 2, opacity: 65, open: true, notes: false, instructions: expect.stringContaining('wrong') });
+		expect(saved[0]).toEqual({ id: 'revision', name: 'Revision', color: 'red', style: 'highlight', weight: 2, opacity: 60, open: true, notes: false, instructions: expect.stringContaining('wrong') });
 	});
 
 	test('a new type is written with no id, and Restore defaults writes the defaults', async ({ page }) => {
