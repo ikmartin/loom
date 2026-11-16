@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A node (plan 0.13.3 N1–N3, phase 4): its statement and its proofs, and nothing else in the flow. The tab names it; Settings ▸ Show ids puts its id and state in the left gutter, as a document's are; its annotations are reached by their marks and the margin's icons, which open their popups, and listed in Comments beside it. What the node is in, what it rests on, where its text came from and its detached annotations are its context, opened beside it.
+	import { guttersHost } from './gutters';
 	import { store } from '$lib/manifest/client.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
@@ -45,7 +46,7 @@
 	{:else if held.verbatim && held.source}
 		<pre class="verbatim" data-testid="verbatim" aria-label="the LaTeX behind this block">{held.source}</pre>
 	{:else}
-		<div class="gutters-host">
+		<div class="gutters-host" use:guttersHost>
 			<div class="gutters">
 				<div class="column">
 					<!-- `margins` so Show ids puts the id and state in the gutter, as in a document -->

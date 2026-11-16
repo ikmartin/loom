@@ -539,28 +539,17 @@ table.list th {
 
 /* The gutters, with the site generator's algebra so that a corpus page and a note page are laid out alike.
    The ideal gutter is half the slack around the measure; these are two thirds of that, and the text column absorbs the third they give up. One knob: change the /3 and the column, the margin annotations and the gutter comments all follow, because each is expressed in terms of these. A viewport too narrow for the measure gets no gutters at all rather than negative ones. */
-.gutters-host {
-	container-type: inline-size;
-}
+/* The gutter is a length worked out from the host's width (`--host-width`, which `guttersHost` in workspace/items/gutters.ts keeps as wide as the host) rather than a percentage, because the margin annotations and the gutter comments are positioned against a node and would otherwise resolve their percentage against that node instead of the page. Until the host is measured, before its first paint, there are no gutters. */
 .gutters {
-	--gutter: 0px;
+	--slack: max(0px, calc(var(--host-width, var(--measure)) - var(--measure)));
+	--gutter: calc(var(--slack) / 3);
 	display: grid;
-	grid-template-columns: minmax(0, 1fr);
+	grid-template-columns: var(--gutter) minmax(0, 1fr) var(--gutter);
 	align-items: start;
 }
 .gutters > .column {
+	grid-column: 2;
 	min-width: 0;
-}
-/* The gutter is a container-relative length rather than a percentage, because the margin annotations and the gutter comments are positioned against a node and would otherwise resolve their percentage against that node instead of the page. */
-@supports (container-type: inline-size) {
-	.gutters {
-		--slack: max(0px, calc(100cqw - var(--measure)));
-		--gutter: calc(var(--slack) / 3);
-		grid-template-columns: var(--gutter) minmax(0, 1fr) var(--gutter);
-	}
-	.gutters > .column {
-		grid-column: 2;
-	}
 }
 
 /* The read view's margin annotation: the key in mono beside every node and the state word beneath it, set in the left gutter so that the environment's taxon accent is the boundary between the two and the text column keeps its whole measure. */
@@ -596,11 +585,9 @@ table.list th {
 .arras:not([data-ids='yes']) .node-margin {
 	display: none;
 }
-/* Below about this width the gutter cannot hold an id at all, so it holds nothing rather than a column of initials. */
-@container (max-width: 34rem) {
-	.node-margin {
-		display: none;
-	}
+/* Below about 34rem (`narrow`, from `guttersHost`) the gutter cannot hold an id at all, so it holds nothing rather than a column of initials. */
+.gutters-host.narrow .node-margin {
+	display: none;
 }
 .node-margin .mid {
 	font-family: var(--mono);
