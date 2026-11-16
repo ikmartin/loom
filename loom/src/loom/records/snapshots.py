@@ -40,6 +40,10 @@ def write_raw(root: Path, text: str, history_dir: Path) -> str:
 
 
 def read_raw(root: Path, digest: str, history_dir: Path) -> str | None:
-    """The text stored as `digest`, exactly: its own line endings, never read as LF; None when the store holds no UTF-8 text by that name."""
-    p = snapshots_dir(root, history_dir) / f"{digest.split(':', 1)[-1]}.md"
+    """The text stored as `digest`, exactly: its own line endings, never read as LF; None when the store holds no UTF-8 text by that name, or `digest` is not a digest's shape (`writes.DIGEST`)."""
+    from loom.writes import DIGEST
+
+    if not isinstance(digest, str) or not DIGEST.match(digest):
+        return None
+    p = snapshots_dir(root, history_dir) / f"{digest.split(':', 1)[1]}.md"
     return p.read_bytes().decode("utf-8") if p.is_file() else None
