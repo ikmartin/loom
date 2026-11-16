@@ -326,3 +326,49 @@ def test_unselected_preamble_names_its_own_flag(quilt):
     preview = prepare(scan(quilt), a, [], False, preamble=False)
     assert not preview["patch"]
     assert "--preamble-changes" in nothing_to_incorporate(preview)
+
+
+def test_a_gone_annotation_is_re_anchored_once_per_build_and_again_when_its_block_changes(quilt, monkeypatch):
+    """The section draft carries the build's own marks, so a build resolves the annotations and finds a lost one's place once; the place is worked out again only when the texts it is found between change."""
+    import loom.render.build as build_module
+    import loom.render.versions as versions
+    from loom.render.build import build
+    from tests.helpers import ok
+
+    a = copy(quilt)
+    said = ok(
+        "annotate",
+        "zk-0001-ai-01",
+        "Which?",
+        "--quote",
+        "First statement",
+        "--type",
+        "note",
+        "--as",
+        "A. Author",
+        cwd=quilt.root,
+    )
+    ann = said.output.split()[0]
+    gone = f'<mark class="annotation gone" data-annotation="{ann}"></mark>'
+    resolved, placed = [], []
+    monkeypatch.setattr(versions, "_ALIGNED", {})
+    real_gone, real_aligned = build_module.gone_annotations, versions._aligned
+    monkeypatch.setattr(build_module, "gone_annotations", lambda *a: resolved.append(1) or real_gone(*a))
+    monkeypatch.setattr(versions, "_aligned", lambda *a: placed.append(a) or real_aligned(*a))
+
+    def built() -> list[str]:
+        m = build(quilt).manifest
+        master = next(x for x in m["masters"] if x["path"] == a)
+        return [
+            (quilt.root / ".loom/build" / f).read_text()
+            for f in (master["fragment"], m["nodes"]["zk-0001-ai-01"]["fragment"])
+        ]
+
+    edit(quilt, a, "First statement.", "Initial claim.")
+    assert all(gone + "Initial claim." in html for html in built())
+    assert (len(resolved), len(placed)) == (1, 1)
+    assert all(gone + "Initial claim." in html for html in built())
+    assert (len(resolved), len(placed)) == (2, 1)
+    edit(quilt, a, "Initial claim.", "Some initial claim.")
+    assert all(gone + "Some initial claim." in html for html in built())
+    assert (len(resolved), len(placed)) == (3, 2)

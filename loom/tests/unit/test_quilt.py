@@ -84,3 +84,36 @@ def test_the_author_is_the_flag_then_local_config_then_git(home: Path, tmp_path:
 
     cfg.write_text('[quilt]\nprefix = "ab"\n\n[author]\nname = ""\n', encoding="utf-8")
     assert resolve_author(None, repo) == ("Config Person", str(user))
+
+
+def test_the_git_name_is_asked_of_git_once_until_a_file_it_comes_from_changes(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A build asks for the name once per annotation; git is asked again only when its configuration changes, an included file's among it."""
+    import os
+
+    from loom.scan.quilt import git_user_name
+
+    repo = tmp_path / "repo"
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    globl, extra, later = home / ".gitconfig", home / "extra.gitconfig", home / "later.gitconfig"
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(globl))
+    globl.write_text("[include]\n\tpath = extra.gitconfig\n\tpath = ~/later.gitconfig\n", encoding="utf-8")
+    extra.write_text("[user]\n\tname = First\n", encoding="utf-8")
+    asked = []
+    run = subprocess.run
+    monkeypatch.setattr(subprocess, "run", lambda argv, *a, **kw: asked.append(argv) or run(argv, *a, **kw))
+
+    def changed(path: Path, text: str) -> None:
+        path.write_text(text, encoding="utf-8")
+        os.utime(path, ns=(path.stat().st_atime_ns, path.stat().st_mtime_ns + 1_000_000))
+
+    assert [git_user_name(repo) for _ in range(3)] == ["First"] * 3
+    assert len(asked) == 1
+    changed(extra, "[user]\n\tname = Second\n")
+    assert git_user_name(repo) == "Second"
+    changed(later, "[user]\n\tname = Third\n")  # an included file that did not exist
+    assert git_user_name(repo) == "Third"
+    changed(globl, "[user]\n\tname = Fourth\n")
+    assert [git_user_name(repo) for _ in range(3)] == ["Fourth"] * 3
+    assert len(asked) == 4

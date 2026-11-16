@@ -70,6 +70,23 @@ def aligned(old: str, new: str, at: int) -> int | None:
     int or None
         The offset in `new` of the same word where it survives, of what replaced it, or of the word after a cut; past the last word, the end of the new text's last word; None when no word of the two aligns.
     """
+    known = _ALIGNED.get((old, new, at), _MISSING)
+    if known is not _MISSING:
+        return known  # type: ignore[return-value]
+    if len(_ALIGNED) >= _ALIGNED_MAX:
+        _ALIGNED.clear()
+    _ALIGNED[(old, new, at)] = placed = _aligned(old, new, at)
+    return placed
+
+
+#: `aligned`'s answers by its exact inputs: a served quilt re-anchors every gone annotation on every build, and the two texts rarely change between builds.
+_ALIGNED: dict[tuple[str, str, int], int | None] = {}
+_ALIGNED_MAX = 4096
+_MISSING = object()
+
+
+def _aligned(old: str, new: str, at: int) -> int | None:
+    """`aligned` computed: the two texts' words matched by `difflib`, the costly part on a long proof."""
     left, right = _tokens(old), _tokens(new)
     opcodes = difflib.SequenceMatcher(None, [t[0] for t in left], [t[0] for t in right], autojunk=False).get_opcodes()
     if not any(tag == "equal" for tag, *_ in opcodes):

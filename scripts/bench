@@ -4,10 +4,10 @@
 Usage:
     scripts/bench                 the demo quilt, made fresh by `loom init --demo`
     scripts/bench PATH            a copy of the quilt at PATH; the original is never written
-    scripts/bench PATH --skip cold   leave out rows by name (cold, cached, edit, commands, serve)
+    scripts/bench PATH --skip cold   leave out rows by name (cold, cached, edit, commands, serve, compiled)
     scripts/bench PATH --loom EXE    time another build of loom, e.g. a frozen copy of the last commit's, for a baseline
 
-Every command runs as the author would run it, in a shell with the agent markers removed, through the `loom` on PATH. The copy lives in a temporary directory removed at the end unless `--keep` is given. `serve` rows are measured over HTTP against `loom serve --no-compile` on a free port: a write is timed until it answers, an edit until the published manifest changes.
+Every command runs as the author would run it, in a shell with the agent markers removed, through the `loom` on PATH. The copy lives in a temporary directory removed at the end unless `--keep` is given. `serve` rows are measured over HTTP against `loom serve --no-compile` on a free port: a write is timed until it answers, an edit until the published manifest changes. `compiled` is the edit again against `loom serve` as a person runs it, with compiles on, so the edited block is made by TeX before it is published. Each edit writes a word never written before, so no cache holds its text.
 """
 
 from __future__ import annotations
@@ -35,6 +35,7 @@ TARGETS = {
     "cold build": 180.0,
     "cached build": 5.0,
     "edit one result, republished": 3.0,
+    "edit one result, republished, compiles on": 5.0,
     "status": 3.0,
     "lint": 3.0,
     "deps KEY": 3.0,
@@ -43,7 +44,7 @@ TARGETS = {
     "serve: first build, already built": 10.0,
     "serve: session-new": 1.0,
     "serve: annotate": 1.0,
-    "serve: message": 1.0,
+    "serve: reply": 1.0,
 }
 
 
@@ -68,7 +69,7 @@ def copy_of(source: Path | None, home: Path) -> Path:
 
 def a_result(q: Path) -> tuple[str, str]:
     """An environment of the quilt's own, and the file that defines it, from the published manifest."""
-    m = json.loads((q / "build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom" / "build" / "manifest.json").read_text())
     for node in m["nodes"].values():
         key, file = node.get("id"), node.get("file")
         if node.get("kind") != "environment" or node.get("external") or node.get("digest") or not key or not file:
@@ -78,14 +79,18 @@ def a_result(q: Path) -> tuple[str, str]:
     sys.exit("the quilt has no labelled environment of its own to edit")
 
 
-def edit(q: Path, key: str, file: str, n: int) -> None:
-    """Add a word to the statement labelled `key`, so its text, and the published manifest, change."""
+def edit(q: Path, key: str, file: str) -> None:
+    """Add a word never written before to the statement labelled `key`, so its text, and the published manifest, change."""
+    import random
+    import string
+
     p = q / file
     text = p.read_text(encoding="utf-8")
     label = f"\\label{{{key}}}"
     if label not in text:
         sys.exit(f"{file} has no {label}")
-    p.write_text(text.replace(label, f"{label} Bench{n}.", 1), encoding="utf-8")
+    word = "".join(random.choices(string.ascii_lowercase, k=9))
+    p.write_text(text.replace(label, f"{label} Bench {word}.", 1), encoding="utf-8")
 
 
 def free_port() -> int:
@@ -97,13 +102,13 @@ def free_port() -> int:
 class Serve:
     """`loom serve` on the copy, its output read line by line with the time each arrived."""
 
-    def __init__(self, q: Path) -> None:
+    def __init__(self, q: Path, compile: bool = False) -> None:
         self.port = free_port()
         self.base = f"http://127.0.0.1:{self.port}"
         self.lines: list[tuple[float, str]] = []
         self.started = time.perf_counter()
         self.proc = subprocess.Popen(
-            [*LOOM, "serve", "--port", str(self.port), "--no-compile"],
+            [*LOOM, "serve", "--port", str(self.port), *([] if compile else ["--no-compile"])],
             cwd=q,
             env=ENV,
             stdout=subprocess.PIPE,
@@ -174,10 +179,29 @@ class Rows(dict):  # type: ignore[type-arg]
         print(f"{name.ljust(self.WIDTH)}  {took:8.2f}  {target:7.1f}  {'ok' if took <= target else 'OVER'}", flush=True)
 
 
+def republished(s: Serve, q: Path, key: str, file: str) -> float:
+    """Seconds from an edit to `key`'s statement until `s` has published it, by the publication's own log line, so the bench's polling does not compete with the build it times."""
+    time.sleep(3)  # let the watcher settle after what came before
+    before = s.key_hash(key)
+    seen = len(s.lines)
+    edit(q, key, file)
+    started = time.perf_counter()
+    while not any(f"rebuilt after change to {file}" in line for _, line in s.lines[seen:]):
+        if time.perf_counter() - started > 600:
+            sys.exit("the edit was never republished")
+        time.sleep(0.02)
+    at = next(t for t, line in s.lines[seen:] if f"rebuilt after change to {file}" in line)
+    if s.key_hash(key) == before:
+        sys.exit("the edit was published without the edited text")
+    return at - started
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("quilt", nargs="?", type=Path, help="the quilt to copy; default a fresh demo")
-    parser.add_argument("--skip", action="append", default=[], choices=["cold", "cached", "edit", "commands", "serve"])
+    parser.add_argument(
+        "--skip", action="append", default=[], choices=["cold", "cached", "edit", "commands", "serve", "compiled"]
+    )
     parser.add_argument("--keep", action="store_true", help="keep the copy and print where it is")
     parser.add_argument("--loom", default="loom", help="the loom executable to time; default the one on PATH")
     args = parser.parse_args()
@@ -187,9 +211,9 @@ def main() -> None:
     try:
         q = copy_of(args.quilt.resolve() if args.quilt else None, home)
         if "cold" not in args.skip:
-            shutil.rmtree(q / "build", ignore_errors=True)
+            shutil.rmtree(q / ".loom" / "build", ignore_errors=True)
             rows["cold build"] = loom(q, "build")
-        elif not (q / "build" / "manifest.json").is_file():
+        elif not (q / ".loom" / "build" / "manifest.json").is_file():
             loom(q, "build")
         if "cached" not in args.skip:
             rows["cached build"] = loom(q, "build")
@@ -208,25 +232,22 @@ def main() -> None:
                     took, answer = s.post("session-new", {"title": "bench", "author": "Bench"})
                     rows["serve: session-new"] = took
                     session = str(answer["result"]).split()[0]  # "s-…  title  (active)"
-                    rows["serve: annotate"], _ = s.post(
+                    rows["serve: annotate"], answer = s.post(
                         "annotate", {"target": key, "message": "A bench note.", "session": session, "author": "Bench"}
                     )
-                    rows["serve: message"], _ = s.post("message", {"text": "A bench message.", "session": session, "author": "Bench"})
+                    note = str(answer["result"]).split()[0]  # "a-…  KEY  note  (Bench)"
+                    rows["serve: reply"], _ = s.post(
+                        "reply", {"annotation": note, "message": "A bench reply.", "author": "Bench"}
+                    )
                 if "edit" not in args.skip:
-                    time.sleep(3)  # let the watcher settle after the writes above
-                    before = s.key_hash(key)
-                    seen = len(s.lines)
-                    edit(q, key, file, 1)
-                    started = time.perf_counter()
-                    # the publication's own log line, so the bench's polling does not compete with the build it times
-                    while not any(f"rebuilt after change to {file}" in line for _, line in s.lines[seen:]):
-                        if time.perf_counter() - started > 600:
-                            sys.exit("the edit was never republished")
-                        time.sleep(0.02)
-                    at = next(t for t, line in s.lines[seen:] if f"rebuilt after change to {file}" in line)
-                    if s.key_hash(key) == before:
-                        sys.exit("the edit was published without the edited text")
-                    rows["edit one result, republished"] = at - started
+                    rows["edit one result, republished"] = republished(s, q, key, file)
+            finally:
+                s.stop()
+        if "compiled" not in args.skip:
+            s = Serve(q, compile=True)
+            try:
+                s.wait_for(r"loom serve: built ")
+                rows["edit one result, republished, compiles on"] = republished(s, q, key, file)
             finally:
                 s.stop()
     finally:

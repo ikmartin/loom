@@ -212,20 +212,81 @@ def load_user_config() -> dict[str, Any]:
 
 
 def git_user_name(cwd: Path | None = None) -> str | None:
+    """`git config user.name` in `cwd`, asked of git again only when a file it was read from, or one it would be read from, has changed.
+
+    A build asks once per annotation when no loom author name is set, so the answer is kept per directory and git environment beside the files it came from: every file git names as an origin, every `include.path` and `includeIf.*.path` in them, the global configuration and `<cwd>/.git`. Not noticed: a repository made above `cwd`, or an `includeIf` whose condition changes while no file does.
+    """
+    here = (cwd or Path.cwd()).absolute()
+    env = tuple(os.environ.get(k) for k in _GIT_ENV)
+    known = _GIT_NAMES.get((here, env))
+    if known is not None and _stamps(known[0]) == known[1]:
+        return known[2]
+    name, files = _git_user_name(here)
+    _GIT_NAMES[(here, env)] = (files, _stamps(files), name)
+    return name
+
+
+#: What else decides which files `git config` reads; part of `_GIT_NAMES`'s key.
+_GIT_ENV = (
+    "GIT_CONFIG_GLOBAL",
+    "GIT_CONFIG_SYSTEM",
+    "GIT_CONFIG_NOSYSTEM",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_DIR",
+    "HOME",
+    "XDG_CONFIG_HOME",
+)
+_GIT_NAMES: dict[
+    tuple[Path, tuple[str | None, ...]], tuple[tuple[Path, ...], tuple[tuple[int, int] | None, ...], str | None]
+] = {}
+
+
+def _stamps(files: tuple[Path, ...]) -> tuple[tuple[int, int] | None, ...]:
+    out: list[tuple[int, int] | None] = []
+    for f in files:
+        try:
+            st = f.stat()
+        except OSError:
+            out.append(None)
+        else:
+            out.append((st.st_mtime_ns, st.st_size))
+    return tuple(out)
+
+
+def _git_user_name(here: Path) -> tuple[str | None, tuple[Path, ...]]:
+    """The name git gives in `here`, the last `user.name` it reads, and the files to watch for a change to it.
+
+    One `git config --list --show-origin`; a relative origin is the repository's own file, named from the top of its working tree, and an include's path is relative to the file that names it.
+    """
+    home = Path.home()
+    top = next((p for p in (here, *here.parents) if (p / ".git").exists()), here)
+    watch = {here / ".git"}
+    if os.environ.get("GIT_CONFIG_GLOBAL"):
+        watch.add(top / Path(os.environ["GIT_CONFIG_GLOBAL"]).expanduser())
+    else:
+        watch |= {home / ".gitconfig", Path(os.environ.get("XDG_CONFIG_HOME") or home / ".config") / "git" / "config"}
+    if os.environ.get("GIT_CONFIG_SYSTEM"):
+        watch.add(top / Path(os.environ["GIT_CONFIG_SYSTEM"]).expanduser())
     try:
         proc = subprocess.run(
-            ["git", "config", "user.name"],
-            capture_output=True,
-            text=True,
-            errors="replace",
-            cwd=cwd,
-            timeout=10,
-            check=False,
+            ["git", "config", "--list", "--show-origin", "-z"], capture_output=True, cwd=here, timeout=10, check=False
         )
     except (OSError, subprocess.SubprocessError):
-        return None
-    name = proc.stdout.strip()
-    return name or None
+        return None, tuple(sorted(watch))
+    name = None
+    said = proc.stdout.decode("utf-8", errors="replace").split("\0")
+    for origin, entry in zip(said[::2], said[1::2], strict=False):
+        key, _, value = entry.partition("\n")
+        source = top / origin[len("file:") :] if origin.startswith("file:") else None
+        if source is not None:
+            watch.add(source)
+        if key == "user.name":
+            name = value.strip() or None
+        elif key.startswith(("include.", "includeif.")) and key.endswith(".path") and value:
+            path = Path(value).expanduser()
+            watch.add(path if path.is_absolute() or source is None else source.parent / path)
+    return name, tuple(sorted(watch))
 
 
 def resolve_author(explicit: str | None, cwd: Path | None = None) -> tuple[str, str]:
