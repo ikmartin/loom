@@ -325,13 +325,27 @@
 			drawGutter(gutter, at, store.manifest, { open: annotations.open, onpick: (id) => popup?.open(at, id, false) });
 		});
 	}
+	/** How long the text's layout must hold still before the margin follows it. A long document grows on every frame of a scroll as the blocks nearing the screen are laid out, and a margin drawn each time made every one of those frames lay the page out again. */
+	const MARGIN_SETTLE = 150;
+	let settleTimer: ReturnType<typeof setTimeout> | undefined;
+	function marginSettled(): void {
+		clearTimeout(settleTimer);
+		settleTimer = setTimeout(margin, MARGIN_SETTLE);
+	}
 	$effect(() => {
 		const root = el;
 		if (!root || !annotations) return;
-		const watch = new ResizeObserver(margin);
+		const watch = new ResizeObserver(marginSettled);
 		watch.observe(root);
+		// a block holding a mark that the browser stops skipping as it nears the screen: its icons, placed by the block's top while it was skipped (gutter.ts), move to their lines
+		const near = (e: Event) => {
+			if (!(e as Event & { skipped: boolean }).skipped && (e.target as Element).querySelector(`${MARKS}, ${CHANGES}, ${MARKED}`)) marginSettled();
+		};
+		root.addEventListener('contentvisibilityautostatechange', near, true);
 		return () => {
+			root.removeEventListener('contentvisibilityautostatechange', near, true);
 			watch.disconnect();
+			clearTimeout(settleTimer);
 			cancelAnimationFrame(marginFrame);
 			marginFrame = 0;
 		};
