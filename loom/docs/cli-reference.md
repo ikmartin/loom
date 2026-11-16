@@ -79,12 +79,13 @@ SRC is not modified; the history records that the spine superseded it, so it def
 
 Check the TeX toolchain and what loom needs of it, poppler, git, the author name and the arras bundle; inside a quilt, also its engine, its generated files, its .gitignore and its config.
 
-Each item is ok, warn (works, but you will hit it) or fail (a command you need will refuse), with the command that fixes it. Exits 0 when nothing fails and 2 when anything does; under --strict a warning counts as a failure. Writes nothing; a tool is run only to ask its version or test what loom needs of it, and one that has not answered in 10 s is reported as hung.
+Each item is ok, warn (works, but you will hit it) or fail (a command you need will refuse), with the command that fixes it. Exits 0 when nothing fails and 2 when anything does; under --strict a warning counts as a failure. Without --repair it writes nothing; a tool is run only to ask its version or test what loom needs of it, and one that has not answered in 10 s is reported as hung.
 
 | option | description |
 |---|---|
 | `--json` | Machine-readable report on stdout. |
 | `--strict` | Count a warning as a failure: exit 2 when any item warns. |
+| `--repair` | Repair TeX first: install loom's own TeX, or put back what it lacks. Touches nothing outside loom's directory. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Write
