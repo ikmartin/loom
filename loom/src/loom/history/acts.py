@@ -5,19 +5,18 @@ A version is a landmark (`stamp_document`): Keep and Undo in Your Changes keep o
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from loom.history.ledger import Entry, History, append_entry, load_history
+from loom.history.ledger import Entry, History, load_history
 from loom.scan.scan import ScanResult
 
 #: The ledger's line for a file kept in Your Changes, beside `undo`'s.
 KEEP = "keep"
 #: The ledger's line for a version or a set-aside text put back.
 RESTORE = "restore"
-#: The ledger's line for a suggested edit written into its file (`records.edits.apply`).
+#: The ledger's line for a suggested edit written into its file (`pending.keep`).
 APPLY = "apply"
 
 
@@ -85,6 +84,18 @@ def keep_versions(result: ScanResult, paths: list[str] | None, kept_for: str, me
     return out
 
 
+def ledger_line(history_dir: Path, action: str, data: dict[str, Any], actor: str | None) -> tuple[Path, str]:
+    """The ledger and one line for it, as `append_entry` writes it: what an act through the door (`loom.writes`) journals and appends with its files."""
+    import json
+
+    from loom.clock import stamp
+    from loom.history.ledger import LEDGER
+
+    return history_dir / LEDGER, json.dumps(
+        {"when": stamp(), "actor": actor, "action": action, **data}, ensure_ascii=False
+    )
+
+
 class RestoreRefused(Exception):
     """A version that cannot be put back, and why; `code` is the write API's."""
 
@@ -112,54 +123,52 @@ def cannot_restore(result: ScanResult, history: History, entry: Entry) -> str:
     return ""
 
 
-def write_file(path: Path, text: str) -> None:
-    """Write `text` to `path` whole or not at all: through a sibling file moved into place."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + ".loom-tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, path)
-
-
 def restore(result: ScanResult, doc: str, version: str, actor: str | None) -> dict[str, Any]:
     """Put `doc` back as the version `version` (a landmark's path or name) holds it, keeping its text now as a version first (P7), and record it.
 
-    Writes each file the version kept (`files`), or its flat text into a document of one file. Raises RestoreRefused for a version that is not `doc`'s or cannot be put back (`cannot_restore`). Returns the paths written, the version's label, and the label of the version that holds the text it replaced (a new one, or the newest when nothing had changed since).
+    Writes each file the version kept (`files`), byte for byte, or its flat text into a document of one file, through the door (`loom.writes`): one act for every file, so a crash between two files undoes the first, and the bytes of each file it replaces are kept whether or not the document still reaches it. Raises RestoreRefused for a version that is not `doc`'s or cannot be put back (`cannot_restore`), for a path outside the quilt (`outside-quilt`), and for a file that changed at the last moment (`changed`). Returns the paths written, the version's label, and the label of the version that holds the text it replaced (a new one, or the newest when nothing had changed since).
     """
-    from loom.records.snapshots import read_raw
+    from loom import writes
 
-    root = result.quilt.root
-    history = load_history(result.quilt.history_dir)
+    root, hist = result.quilt.root, result.quilt.history_dir
+    history = load_history(hist)
     entry = _version(history, root, version)
     if entry is None or entry not in versions_of(history, doc, result.masters):
         raise RestoreRefused("unknown-version", f"{version} is not a version of {doc}")
     why = cannot_restore(result, history, entry)
     if why:
         raise RestoreRefused("cannot-restore", why)
-    files: dict[str, str] = {}
+    files: dict[str, bytes] = {}
     if entry.get("files"):
         for path, digest in entry.get("files").items():
-            text = read_raw(root, digest, result.quilt.history_dir)
-            if text is None:
+            data = writes.fetch(hist, digest)
+            if data is None:
                 raise RestoreRefused("no-text", f"the text of {path} in this version is missing from the history")
-            files[path] = text
+            files[path] = data
     else:
-        files[doc] = history.landmark_path(entry).read_text(encoding="utf-8")
+        files[doc] = history.landmark_path(entry).read_bytes()
     label = _label(history, entry, doc, result.masters)
-    kept = keep_versions(result, [doc], "restore", f"Before restoring “{label}”", actor)
-    if doc in kept.skipped and kept.skipped[doc]:
-        raise RestoreRefused("cannot-keep", f"its text now cannot be kept first: {kept.skipped[doc]}")
-    written = [
-        p for p, text in files.items() if not (root / p).is_file() or (root / p).read_text(encoding="utf-8") != text
-    ]
-    for p in written:
-        write_file(root / p, files[p])
-    append_entry(
-        result.quilt.history_dir,
-        RESTORE,
-        {"from": {"landmark": entry.get("landmark"), "step": entry.step}, "in": doc, "paths": written},
-        actor,
-    )
-    history = load_history(result.quilt.history_dir)
+    written: list[str] = []
+    try:
+        files = {writes.contained(root, path): data for path, data in files.items()}
+        with writes.act(root, hist, "restore", actor) as w:
+            kept = keep_versions(result, [doc], "restore", f"Before restoring “{label}”", actor)
+            if doc in kept.skipped and kept.skipped[doc]:
+                raise RestoreRefused("cannot-keep", f"its text now cannot be kept first: {kept.skipped[doc]}")
+            written = [path for path, data in files.items() if w.read(path) != data]
+            for path in written:
+                w.replace(path, files[path])
+            w.log(
+                *ledger_line(
+                    hist,
+                    RESTORE,
+                    {"from": {"landmark": entry.get("landmark"), "step": entry.step}, "in": doc, "paths": written},
+                    actor,
+                )
+            )
+    except writes.WriteRefused as exc:
+        raise RestoreRefused(exc.code, exc.message) from exc
+    history = load_history(hist)
     newest = versions_of(history, doc, result.masters)[-1]
     return {"paths": written, "label": label, "before": _label(history, newest, doc, result.masters)}
 
@@ -180,20 +189,26 @@ def _version(history: History, root: Path, ref: str) -> Entry | None:
 
 
 def put_back(root: Path, history_dir: Path, path: str, digest: str, actor: str | None, texts: dict[str, str]) -> str:
-    """Write back into `path` the text an undo set aside (`digest`), keeping the file's text now first; returns the hash it replaced, None for a file that was gone.
+    """Write back into `path` the bytes an undo set aside (`digest`), through the door (`loom.writes`), keeping the file's bytes now first; returns the hash it replaced, '' for a file that was gone.
 
-    `texts` is the open files' texts now (`looks.open_texts`); only a file loom shows may be put back.
+    `texts` is the open files' texts now (`looks.open_texts`); only a file loom shows may be put back. Raises RestoreRefused for a path outside the quilt (`outside-quilt`), a text the history does not hold, and a file that changed at the last moment (`changed`).
     """
-    from loom.records.snapshots import read_raw, write_raw
+    from loom import writes
 
-    text = read_raw(root, digest, history_dir)
-    if text is None:
-        raise RestoreRefused("no-text", f"that text of {path} is missing from the history")
-    p = root / path
-    if p.exists() and path not in texts:
-        raise RestoreRefused("not-text", f"{path} is no longer a text file loom keeps")
-    now = texts.get(path)
-    before = write_raw(root, now, history_dir) if now is not None else None
-    write_file(p, text)
-    append_entry(history_dir, RESTORE, {"path": path, "from": before, "to": digest}, actor)
+    try:
+        rel = writes.contained(root, path)
+    except writes.WriteRefused as exc:
+        raise RestoreRefused(exc.code, exc.message) from exc
+    data = writes.fetch(history_dir, digest)
+    if data is None:
+        raise RestoreRefused("no-text", f"that text of {rel} is missing from the history")
+    if (root / rel).exists() and rel not in texts:
+        raise RestoreRefused("not-text", f"{rel} is no longer a text file loom keeps")
+    try:
+        with writes.act(root, history_dir, "put-back", actor) as w:
+            before = writes.digest(w.read(rel))
+            w.replace(rel, data)
+            w.log(*ledger_line(history_dir, RESTORE, {"path": rel, "from": before, "to": digest}, actor))
+    except writes.WriteRefused as exc:
+        raise RestoreRefused(exc.code, exc.message) from exc
     return before or ""

@@ -18,7 +18,7 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 | `.loom/digests/suggested.jsonl` | the works an agent suggested | the library |
 | `.loom/formal/`, with `evidence.jsonl` and `attest.toml` | formal evidence, and the person's attestations | formalization |
 
-Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `writes.jsonl` and `writes.lock` in the history directory, the journal of the safe write path and its lock. `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the list of recent quilts, the switch that turns formalization on for this machine) are their owner's alone.
+Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the list of recent quilts, the switch that turns formalization on for this machine) are their owner's alone.
 
 ## Write operations
 
@@ -47,10 +47,7 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 
 | name | means | owner |
 |---|---|---|
-| `changed` | the file is not what the act was planned from; look again | the safe write path |
-| `not-utf8` | the file is not UTF-8, and is refused, never rewritten | the safe write path |
 | `changed-since` | an undo refused: the text has changed where it was written | the safe write path |
-| `outside-quilt` | a restore or a put-back that would write outside the quilt | the safe write path |
 | `published`, in every write's answer and in the manifest | the number of the publication that will show the write, which the viewer waits for | designed with the safe write path, built by the speed work |
 
 ## Record fields

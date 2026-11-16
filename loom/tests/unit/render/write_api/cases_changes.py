@@ -148,3 +148,6 @@ def _history_restore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     undone = [e for e in load_history(load_quilt(q).history_dir).entries if e.action == "undo"][-1]
     succeeds(s, "history-restore", {"path": "README.md", "text": undone.get("from")})
     assert (q / "README.md").read_text() == "an edit undone\n"
+    outside = {"path": "../outside.md", "text": undone.get("from")}
+    refuses(s, "history-restore", outside, 409, "outside-quilt", "outside the quilt")
+    assert not (q.parent / "outside.md").exists()

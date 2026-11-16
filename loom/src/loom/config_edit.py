@@ -7,16 +7,16 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import re
-import tempfile
 import tomllib
 from collections.abc import Callable, Collection
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loom.scan.quilt import Quilt, QuiltConfig, load_user_config
+
+#: The quilt's configuration, which Settings writes.
+CONFIG = "config.toml"
 
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
@@ -233,43 +233,42 @@ def set_values(quilt: Quilt, changes: dict[str, Value | None]) -> QuiltConfig:
     ------
     ConfigRefused
         The file is laid out in a way these edits cannot change exactly, or the result would carry a warning the file did not; nothing is written.
+    WriteRefused
+        `config.toml` is not UTF-8 (`not-utf8`), or changed at the last moment (`changed`); nothing is written.
+
+    Notes
+    -----
+    Read, checked and written through the door (`loom.writes`), so the file's text before is kept and its mode stays.
     """
-    path = quilt.root / "config.toml"
-    text = path.read_text(encoding="utf-8")
-    before = tomllib.loads(text)
-    user = load_user_config()
-    for dotted in changes:
-        table, _ = dotted.split(".", 1)
-        if table in before and not isinstance(before[table], dict):
-            raise ConfigRefused({dotted: f"[{table}] is not a table in config.toml; change it there"})
-    new = edit_text(text, changes)
-    try:
-        after = tomllib.loads(new)
-    except tomllib.TOMLDecodeError:
-        after = None
-    if after != _expected(before, changes):
-        raise ConfigRefused(
-            {k: "config.toml is laid out in a way loom cannot edit line by line; change it there" for k in changes}
-        )
-    old = set(QuiltConfig.from_dict(before, user).warnings)
-    config = QuiltConfig.from_dict(after, user)
-    gained = [w for w in config.warnings if w not in old]
-    if gained:
-        raise ConfigRefused({k: gained[0] for k in changes})
-    if new != text:
-        _replace(path, new)
+    from loom import writes
+
+    with writes.act(quilt.root, quilt.history_dir, "settings") as w:
+        text = w.text(CONFIG)
+        if text is None:
+            raise FileNotFoundError(f"{quilt.root / CONFIG} is not there")
+        before = tomllib.loads(text)
+        user = load_user_config()
+        for dotted in changes:
+            table, _ = dotted.split(".", 1)
+            if table in before and not isinstance(before[table], dict):
+                raise ConfigRefused({dotted: f"[{table}] is not a table in config.toml; change it there"})
+        new = edit_text(text, changes)
+        try:
+            after = tomllib.loads(new)
+        except tomllib.TOMLDecodeError:
+            after = None
+        if after != _expected(before, changes):
+            raise ConfigRefused(
+                {k: "config.toml is laid out in a way loom cannot edit line by line; change it there" for k in changes}
+            )
+        old = set(QuiltConfig.from_dict(before, user).warnings)
+        config = QuiltConfig.from_dict(after, user)
+        gained = [w for w in config.warnings if w not in old]
+        if gained:
+            raise ConfigRefused({k: gained[0] for k in changes})
+        if new != text:
+            w.replace(CONFIG, new.encode("utf-8"))
     return config
-
-
-def _replace(path: Path, text: str) -> None:
-    """Write `text` to `path` through a temporary file beside it, so a reader never sees half a config."""
-    fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".config.", suffix=".toml")
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8") as f:
-            f.write(text)
-        os.replace(temporary, path)
-    finally:
-        Path(temporary).unlink(missing_ok=True)
 
 
 def _text(value: Any, *, required: bool = False) -> str:

@@ -68,7 +68,8 @@ Two markers keep the text honest:
 
 | what | where |
 |---|---|
-| this design | `docs/design/`: this file, `principles.md`, `model.md`, `agents.md`, `invariants.md` |
+| this design | `docs/design/`: this file, `principles.md`, `model.md`, `agents.md`, `invariants.md`, `writes.md` |
+| how loom writes a person's file: the lock, the journal, recovery | `docs/design/writes.md` |
 | formats: the loom–arras interface, the source contract, digests, diagnostics | `docs/specs/` |
 | commands and their options | `loom <command> --help`, generated into `loom/docs/cli-reference.md` |
 | what an agent is given | `loom/src/loom/assets/ai/` (orientation, rules, modes) |

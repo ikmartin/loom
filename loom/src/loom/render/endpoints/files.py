@@ -49,6 +49,7 @@ def _file_tick(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     from loom.identity import is_agent
     from loom.scan.quilt import load_quilt, reviewer_identity
     from loom.tasks import TickRefused, tick
+    from loom.writes import WriteRefused
 
     who = reviewer_identity(root)[0]
     if is_agent(_str(body, "author") or who):
@@ -62,6 +63,8 @@ def _file_tick(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         changed = tick(load_quilt(root), who, path, task, done)
     except TickRefused as exc:
         raise ApiError(exc.code, exc.message, status=404 if exc.code == "no-such-file" else 409) from exc
+    except WriteRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
     verb = "ticked" if done else "unticked"
     return {"ok": True, "result": f"{verb} a box in {path}" if changed else f"that box in {path} is already {verb}"}
 
@@ -91,6 +94,7 @@ def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
         }
     from loom.config_edit import ConfigRefused, save
     from loom.files import Shown
+    from loom.writes import WriteRefused
 
     changes = body.get("changes")
     if not isinstance(changes, dict) or not changes:
@@ -103,6 +107,8 @@ def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
         save(quilt, changes, masters=own, shown=lambda rel: (root / rel).is_file() and shown.is_shown(rel))
     except ConfigRefused as exc:
         raise ApiError("bad-value", str(exc), status=409, fields=exc.refused) from exc
+    except WriteRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
     except OSError as exc:
         raise ApiError("settings-refused", str(exc), status=409) from exc
     said = f"saved {', '.join(changes)} to config.toml"

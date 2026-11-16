@@ -248,22 +248,19 @@ def stamp_document(
     actor: str | None,
     kept_for: str | None = None,
 ) -> tuple[Entry, FreezePlan]:
-    """Stamp a live drafting document: the keys it reaches that moved, its flat text kept as the landmark `name`, and each of its files' exact text (`files`).
+    """Stamp a live drafting document: the keys it reaches that moved, its flat text kept as the landmark `name`, and each of its files' bytes (`files`, `kept_bytes`).
 
     Shared by `loom stamp DOCUMENT`, a version recorded from the viewer, and the acts that keep a version first or after (`kept_for`: `adopt`, `sync`, `keep`, `undo`, `restore`; `history.acts`). Raises ValueError when the document reaches a conflicted key, which has no one text to keep; the caller checks the name is free (`free_name`).
     """
-    from loom.records.snapshots import write_raw
-
     plan, text = plan_document_stamp(result, history, doc)
-    root, hist = result.quilt.root, result.quilt.history_dir
     extra: dict[str, Any] = {
         "message": message,
         "in": doc,
         "landmark": f"{name}.tex",
         "to": {"path": f"{name}.tex", "hash": text_hash(text)},
         "reaches": plan.reaches,
-        # each file's exact text, so the version can be put back file by file
-        "files": {f: write_raw(root, result.files[f].text, hist) for f in document_files(result, doc)},
+        # each file's bytes, so the version can be put back file by file exactly as it was
+        "files": {f: kept_bytes(result, f) for f in document_files(result, doc)},
     }
     if kept_for:
         extra["kept_for"] = kept_for
@@ -271,6 +268,24 @@ def stamp_document(
         history, "stamp", name, plan, actor, extra=extra, document_text=text, document_name=f"{name}.tex"
     )
     return entry, plan
+
+
+def kept_bytes(result: ScanResult, rel: str) -> str:
+    """Keep the file `rel` in the history's text store, and return the digest a version names it by: its bytes on disk when they read as the scan read them, its line endings and its encoding with them; else, when it changed since the scan or is open unsaved, the scan's text.
+
+    A version's landmark and key versions are made from the scan, so its files must be the same text; the bytes are what restoring it writes back.
+    """
+    from loom.records.snapshots import write_raw
+    from loom.writes import scan_reading, store
+
+    root, hist = result.quilt.root, result.quilt.history_dir
+    try:
+        data = (root / rel).read_bytes()
+    except OSError:
+        data = None
+    if data is not None and scan_reading(data) == result.files[rel].text:
+        return store(hist, data)
+    return write_raw(root, result.files[rel].text, hist)
 
 
 def file_hash(path: Path) -> str:
