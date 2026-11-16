@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import posixpath
+import re
 import secrets
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -25,6 +26,8 @@ LOCK = "writes.lock"
 INDEX = "writes-index.json"
 #: The suffix of the temporary file an act writes beside the file it replaces.
 TEMP = ".loom-tmp"
+#: A digest as the store names its texts: anything else is never made into a path.
+DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 class WriteRefused(ContentError):
@@ -77,8 +80,10 @@ def store(history: Path, data: bytes) -> str:
 
 
 def fetch(history: Path, d: str) -> bytes | None:
-    """The bytes stored as `d`, or None when the store does not hold them."""
-    hexd = d.split(":", 1)[-1]
+    """The bytes stored as `d`, or None when the store does not hold them or `d` is not a digest's shape (`DIGEST`), which is never made into a path."""
+    if not isinstance(d, str) or not DIGEST.match(d):
+        return None
+    hexd = d.split(":", 1)[1]
     for suffix in (".md", ".bin"):
         p = history / "texts" / f"{hexd}{suffix}"
         if p.is_file():
@@ -391,6 +396,76 @@ def _all_after(root: Path, entry: dict[str, Any]) -> bool:
     return all(_holds(root, rel, ab[1]) for rel, ab in (entry.get("files") or {}).items())
 
 
+def _in_quilt(root: Path, rel: Any) -> bool:
+    """Whether `rel`, as a journal names it, is a path in the quilt in its normal form that stays inside it with every symlink followed: the only kind recovery reads or writes."""
+    if not isinstance(rel, str):
+        return False
+    try:
+        if contained(root, rel) != rel:
+            return False
+    except WriteRefused:
+        return False
+    return Path(os.path.realpath(root / rel)).is_relative_to(os.path.realpath(root))
+
+
+def _logs(root: Path, history: Path) -> dict[str, Path]:
+    """The record logs an act may append to, by the name a journal gives each: the edits', the annotations' and the ledger, nothing else."""
+    from loom.history.ledger import LEDGER
+    from loom.paths import EDIT_LOG
+    from loom.records.log import log_path
+
+    return {_log_name(root, p): p for p in (root / EDIT_LOG, log_path(root), history / LEDGER)}
+
+
+def _log_name(root: Path, log: Path) -> str:
+    rel = os.path.relpath(log, root)
+    return log.as_posix() if rel.startswith("..") else Path(rel).as_posix()
+
+
+def _log_ok(root: Path, history: Path, name: Any) -> bool:
+    """Whether `name` is one of loom's own logs (`_logs`) and still in `.loom/` or the history directory with every symlink followed."""
+    from loom.paths import LOOM
+
+    p = _logs(root, history).get(name) if isinstance(name, str) else None
+    if p is None:
+        return False
+    real = Path(os.path.realpath(p))
+    return any(real.is_relative_to(os.path.realpath(d)) for d in (root / LOOM, history))
+
+
+def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
+    """Why recovery may not act on the journal's `begin` line `entry`, in words; '' when it may.
+
+    A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), and the act must name a file at all, since the door journals no act that writes none.
+    """
+    files = entry.get("files")
+    if not isinstance(files, dict) or not files:
+        return "it names no file"
+    for rel, ab in files.items():
+        if not _in_quilt(root, rel):
+            return f"{rel!r} is not a file in the quilt"
+        if (
+            not isinstance(ab, list)
+            or len(ab) != 2
+            or not all(d is None or (isinstance(d, str) and DIGEST.match(d)) for d in ab)
+        ):
+            return f"what it says of {rel} is not two digests"
+    records = entry.get("records") or []
+    if not isinstance(records, list):
+        return "its records are not a list"
+    for rec in records:
+        if not isinstance(rec, dict) or not _log_ok(root, history, rec.get("log")):
+            return "a record goes somewhere other than loom's own logs"
+        text = rec.get("line")
+        try:
+            line = json.loads(text) if isinstance(text, str) else None
+        except json.JSONDecodeError:
+            line = None
+        if not isinstance(line, dict):
+            return "a record is not one record"
+    return ""
+
+
 def unsettled(root: Path, history: Path) -> list[dict[str, Any]]:
     """Each act begun and neither done nor aborted, as its `begin` line: what recovery has yet to settle, or could not."""
     return [e for _, e in read_journal(history).begun.values()]
@@ -401,7 +476,7 @@ def written(root: Path, history: Path) -> set[str]:
     j = read_journal(history)
     out = set(j.wrote)
     for _, e in j.begun.values():
-        if e.get("edits") and _all_after(root, e):
+        if e.get("edits") and not untrusted(root, history, e) and _all_after(root, e):
             out.update(str(g) for g in e["edits"])
     return out
 
@@ -410,6 +485,7 @@ def written(root: Path, history: Path) -> set[str]:
 
 
 def _log_path(root: Path, log: str) -> Path:
+    """Where the log a record names is: only ever one `_log_ok` allowed, checked before this is called."""
     return Path(log) if os.path.isabs(log) else root / log
 
 
@@ -437,11 +513,15 @@ def _append_records(root: Path, records: list[dict[str, str]], *, unless_there: 
 
 
 def _settle(root: Path, history: Path, j: Journal) -> list[str]:
-    """Settle each act `j` holds begun: finished when every file holds its after bytes, undone when each holds its before or its after, left when someone changed one since. Returns what was done, in words. Call holding the lock."""
+    """Settle each act `j` holds begun: finished when every file holds its after bytes, undone when each holds its before or its after, left when someone changed one since, and left untouched when anything it names fails `untrusted`. Returns what was done, in words. Call holding the lock."""
     from loom.clock import stamp
 
     said: list[str] = []
     for act_id, (_, e) in list(j.begun.items()):
+        why = untrusted(root, history, e)
+        if why:
+            said.append(f"left {act_id}: {why}")
+            continue
         files: dict[str, list[str | None]] = e.get("files") or {}
         for rel in files:
             for tmp in _temps(root, rel):
@@ -550,10 +630,12 @@ class Act:
         self.edits.append(gen)
 
     def log(self, log: Path, line: dict[str, Any] | str) -> None:
-        """A record line written with the act, after its files and before `done`; recovery appends it too when it finishes the act. A dict is written as the edit and annotation logs write theirs; a string is the line exactly."""
+        """A record line written with the act, after its files and before `done`; recovery appends it too when it finishes the act. A dict is written as the edit and annotation logs write theirs; a string is the line exactly. WriteRefused (`outside-quilt`) for a log that is not one of loom's own (`_logs`)."""
         text = line if isinstance(line, str) else json.dumps(line, ensure_ascii=False, sort_keys=True)
-        rel = os.path.relpath(log, self.root)
-        self.records.append({"log": log.as_posix() if rel.startswith("..") else Path(rel).as_posix(), "line": text})
+        name = _log_name(self.root, log)
+        if not _log_ok(self.root, self.history, name):
+            raise WriteRefused("outside-quilt", f"{log} is not one of loom's own logs")
+        self.records.append({"log": name, "line": text})
 
     def then(self, fn: Callable[[], None]) -> None:
         """A step after `done` and still under the lock (a rescan, the look, carrying annotations); recovery never replays it."""

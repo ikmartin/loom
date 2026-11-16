@@ -441,3 +441,126 @@ def test_the_store_keeps_bytes_exactly_under_the_names_versions_and_looks_use(tm
     dl = writes.store(history, latin)
     assert (history / "texts" / f"{dl.split(':')[1]}.bin").read_bytes() == latin
     assert writes.fetch(history, dl) == latin and read_raw(tmp_path, dl, history) is None
+
+
+# ---- a journal is not trusted ----------------------------------------------------------------------------------------
+# A quilt someone hands you can carry a journal of its own. Recovery acts on an entry only when every file it names stays in the quilt, every digest is a digest, and every record goes to one of loom's own logs; anything else is left and reported, and nothing is read or written for it.
+
+
+def plant(history: Path, *entries: dict[str, Any]) -> None:
+    """Write `entries` into the journal as `begin` lines a crash left, the acts named `planted-1`, `planted-2`…"""
+    history.mkdir(parents=True, exist_ok=True)
+    with (history / writes.JOURNAL).open("a") as fh:
+        for n, e in enumerate(entries, 1):
+            fh.write(json.dumps({"event": "begin", "act": f"planted-{n}", "kind": "keep", **e}) + "\n")
+
+
+def test_recovery_never_appends_a_record_to_a_file_outside_the_quilt(q: tuple[Path, Path], tmp_path: Path) -> None:
+    root, history = q
+    profile = tmp_path / "profile"
+    profile.write_text("# the person's shell starts here\n")
+    plant(history, {"files": {}, "records": [{"log": str(profile), "line": json.dumps("$(touch pwned)")}]})
+    said = writes.recover(root, history)
+    assert said and said[0].startswith("left") and "names no file" in said[0]
+    assert profile.read_text() == "# the person's shell starts here\n"
+    assert [e["kind"] for e in writes.unsettled(root, history)] == ["keep"]
+
+
+def test_recovery_never_writes_a_file_outside_the_quilt(q: tuple[Path, Path], tmp_path: Path) -> None:
+    root, history = q
+    stored = writes.store(history, b"echo planted\n")
+    b = (root / "drafting/b.tex").read_bytes()
+    outside = root.parent / "elsewhere" / "created.txt"
+    plant(
+        history,
+        {
+            "files": {
+                "drafting/b.tex": [writes.digest(b), writes.digest(b"other")],
+                "../elsewhere/created.txt": [stored, None],
+            }
+        },
+    )
+    said = writes.recover(root, history)
+    assert said[0].startswith("left") and "not a file in the quilt" in said[0]
+    assert not outside.exists() and (root / "drafting/b.tex").read_bytes() == b
+
+
+def test_recovery_never_follows_a_symlink_out_of_the_quilt(q: tuple[Path, Path], tmp_path: Path) -> None:
+    root, history = q
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "existing.txt").write_bytes(b"")
+    (root / "out").symlink_to(elsewhere)
+    stored = writes.store(history, b"echo planted\n")
+    b = (root / "drafting/b.tex").read_bytes()
+    # the inside file holds its before and the outside one its after: undoing would write the planted bytes out there
+    plant(
+        history,
+        {
+            "files": {
+                "drafting/b.tex": [writes.digest(b), writes.digest(b"x")],
+                "out/existing.txt": [stored, writes.digest(b"")],
+            }
+        },
+        {"files": {"drafting/b.tex": [writes.digest(b), writes.digest(b"x")], "out/created.txt": [stored, None]}},
+    )
+    said = writes.recover(root, history)
+    assert len(said) == 2 and all(s.startswith("left") for s in said)
+    assert (elsewhere / "existing.txt").read_bytes() == b"" and not (elsewhere / "created.txt").exists()
+
+
+def test_recovery_appends_only_records_that_are_records_to_loom_s_own_logs(q: tuple[Path, Path]) -> None:
+    root, history = q
+    b = (root / "drafting/b.tex").read_bytes()
+    one = {
+        "drafting/b.tex": [writes.digest(b"before"), writes.digest(b)]
+    }  # every file holds its after: it would be finished
+    plant(
+        history,
+        {"files": one, "records": [{"log": ".loom/edits/log.jsonl", "line": json.dumps("not a record")}]},
+        {"files": one, "records": [{"log": "drafting/b.tex", "line": json.dumps({"event": "kept"})}]},
+        {"files": one, "records": [{"log": ".loom/history/ledger.jsonl", "line": "{}"}], "extra": 1},
+    )
+    said = writes.recover(root, history)
+    assert [s.split(":")[0] for s in said] == ["left planted-1", "left planted-2", "finished planted-3"], said
+    assert (root / "drafting/b.tex").read_bytes() == b and not (root / ".loom/edits/log.jsonl").exists()
+    assert (history / "ledger.jsonl").read_text() == "{}\n"
+
+
+def test_a_digest_that_is_not_a_digest_is_never_made_into_a_path(q: tuple[Path, Path]) -> None:
+    from loom.records.snapshots import read_raw
+
+    root, history = q
+    (history / "texts").mkdir(parents=True)
+    (root.parent / "secret.md").write_text("not loom's")
+    for bad in ("sha256:../../../secret", "sha256:" + "0" * 63, "../secret", "sha256:" + "A" * 64):
+        assert writes.fetch(history, bad) is None and read_raw(root, bad, history) is None, bad
+
+
+def test_an_act_stages_records_only_for_loom_s_own_logs(q: tuple[Path, Path], tmp_path: Path) -> None:
+    root, history = q
+    for log in (tmp_path / "profile", root / "drafting/b.tex", root / ".loom/edits/../../drafting/b.tex"):
+        with pytest.raises(WriteRefused) as exc, writes.act(root, history, "keep") as w:
+            w.log(log, {"event": "kept"})
+        assert exc.value.code == "outside-quilt", log
+
+
+def test_the_journal_stays_on_this_machine(q: tuple[Path, Path]) -> None:
+    from loom.gitignore import write_loom_ignore
+
+    root, history = q
+    if subprocess.run(["git", "--version"], capture_output=True).returncode:
+        pytest.skip("no git")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    write_loom_ignore(root)
+    with writes.act(root, history, "tick") as w:
+        w.replace("drafting/b.tex", b"changed\n")
+    (history / "texts" / f".x.md.abc{writes.TEMP}").write_text("cut short")
+    names = [writes.JOURNAL, writes.INDEX, writes.LOCK, f"texts/.x.md.abc{writes.TEMP}"]
+    ignored = subprocess.run(
+        ["git", "-C", str(root), "check-ignore", *(f".loom/history/{n}" for n in names)], capture_output=True, text=True
+    ).stdout.split()
+    assert ignored == [f".loom/history/{n}" for n in names]
+    # the store of texts is the history's, and travels with it
+    kept = next(p.relative_to(root).as_posix() for p in (history / "texts").glob("*.md"))
+    assert subprocess.run(["git", "-C", str(root), "check-ignore", "-q", kept]).returncode == 1

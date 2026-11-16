@@ -8,7 +8,8 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.ai.clients import PROJECT_FILES
-from loom.paths import BUILD, LAST_SEEN, LOOM, LOOM_GITIGNORE, SERVE_JSON, SESSIONS, SINCE, STORAGE
+from loom.paths import BUILD, HISTORY, LAST_SEEN, LOOM, LOOM_GITIGNORE, SERVE_JSON, SESSIONS, SINCE, STORAGE
+from loom.writes import INDEX, JOURNAL, LOCK, TEMP
 
 
 def _inside(path: str) -> str:
@@ -27,13 +28,18 @@ LOOM_LINES = (
     f"{_inside(STORAGE)}/**/paper.pdf",
     f"{_inside(STORAGE)}/**/src/",
     f"{_inside(STORAGE)}/cache/",
+    # the journal of loom's writes to this machine's files (docs/design/writes.md), its index and its lock
+    f"{_inside(HISTORY)}/{JOURNAL}",
+    f"{_inside(HISTORY)}/{INDEX}",
+    f"{_inside(HISTORY)}/{LOCK}",
+    f"{_inside(HISTORY)}/**/*{TEMP}",
 )
 
 #: The line after which `.loom/.gitignore` is the person's: a line of their own there, such as `!digests/storage/**/paper.pdf` to commit the store's PDFs, outlives `loom upgrade`.
 OWN = "# your own lines go below this one; loom upgrade keeps them"
 
 LOOM_IGNORE = (
-    "# loom's files that stay on this machine: what it rebuilds, its caches and runtime state, and its copies of other people's documents. "
+    "# loom's files that stay on this machine: what it rebuilds, its caches and runtime state, the journal of its writes to your files, and its copies of other people's documents. "
     "Everything else here is committed: the history, the acceptance ledger, annotations, sessions, digests, and a stored document's page text, "
     "which lets a coauthor who holds no PDF re-check a transcription. `loom upgrade` rewrites the lines above the last.\n"
     + "\n".join(LOOM_LINES)
