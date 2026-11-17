@@ -9,7 +9,7 @@ from pathlib import Path
 from loom.paths import LOOM
 from loom.scan.quilt import Quilt
 from loom.scan.source import blank_comments
-from loom.scan.tokenize import read_args, tokenize
+from loom.scan.tokenize import OUTLINE_CMDS, commands, read_args
 
 GRAPHIC_EXTS = (".pdf", ".png", ".jpg", ".jpeg", ".eps", ".svg")
 
@@ -51,9 +51,7 @@ def closure_of(paper_dir: Path, master: Path) -> tuple[dict[str, Path], list[str
         if p.suffix.lower() in GRAPHIC_EXTS or p.suffix.lower() in (".bst", ".bbl"):
             continue
         text = blank_comments(_read(p))
-        for t in tokenize(text):
-            if t.kind != "cmd":
-                continue
+        for t in commands(text, OUTLINE_CMDS):
             if t.value in ("input", "include", "nest"):
                 (arg,), _, _ = read_args(text, t.end, "m")
                 if arg is None:
@@ -107,9 +105,7 @@ def inline_bbl(paper_dir: Path, master_rel: str, text: str) -> tuple[str, str | 
     if not bbl.is_file():
         return text, None
     clean = blank_comments(text)
-    for t in tokenize(clean):
-        if t.kind != "cmd" or t.value != "bibliography":
-            continue
+    for t in commands(clean, ("bibliography",)):
         (names,), _, end = read_args(clean, t.end, "m")
         if names is None or any(_resolve(paper_dir, n, (".bib",)) for n in names.split(",")):
             continue

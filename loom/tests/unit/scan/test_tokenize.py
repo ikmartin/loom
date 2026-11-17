@@ -1,4 +1,16 @@
-from loom.scan.tokenize import env_tree, match_group, read_args, read_optional, tokenize
+import pytest
+
+from loom.scan.tokenize import (
+    CACHED_FROM,
+    OUTLINE_CMDS,
+    commands,
+    env_tree,
+    match_group,
+    outline,
+    read_args,
+    read_optional,
+    tokenize,
+)
 
 
 def kinds(text: str) -> list[tuple[str, str]]:
@@ -59,3 +71,31 @@ def test_env_tree_nesting_and_problems() -> None:
     assert problems == [("end-without-begin", text.index("\\end{stray}"), "stray")]
     roots2, problems2 = env_tree("\\begin{lemma}\nno end")
     assert problems2 == [("unclosed", 0, "lemma")]
+
+
+def test_an_outline_is_the_boundaries_and_file_commands_tokenize_finds() -> None:
+    text = (
+        "\\documentclass{amsart}\\usepackage{x}\n\\begin{document}\\input{a} \\verb|\\input{b}| \\emph{c}\n"
+        "\\begin{verbatim}\\include{d}\\end{verbatim}\\nest{e} \\includegraphics{f}\\end{document}\n"
+    )
+    assert [(t.kind, t.value) for t in outline(text)] == [
+        ("cmd", "documentclass"),
+        ("cmd", "usepackage"),
+        ("begin", "document"),
+        ("cmd", "input"),
+        ("begin", "verbatim"),
+        ("end", "verbatim"),
+        ("cmd", "nest"),
+        ("cmd", "includegraphics"),
+        ("end", "document"),
+    ]
+    long = text * 100  # long enough to be remembered
+    assert len(long) >= CACHED_FROM
+    kept = [t for t in tokenize(long) if t.kind in ("begin", "end") or t.kind == "cmd" and t.value in OUTLINE_CMDS]
+    assert list(outline(long)) == kept
+    assert [t.value for t in commands(long, ("input", "nest"))] == ["input", "nest"] * 100
+
+
+def test_commands_refuses_a_name_an_outline_does_not_keep() -> None:
+    with pytest.raises(ValueError, match="emph"):
+        commands("\\emph{x}", ("input", "emph"))

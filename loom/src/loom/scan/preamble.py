@@ -13,7 +13,7 @@ from loom.paths import document_dir, under
 from loom.scan.macros import expand, parse_macros
 from loom.scan.model import Diagnostic, Directive, Location, Macro, SourceFile, Taxon
 from loom.scan.source import MACRO_BLOCK, read_source
-from loom.scan.tokenize import read_args, tokenize
+from loom.scan.tokenize import commands, read_args
 
 STANDARD_STYLES = {"plain", "definition", "remark"}
 #: `\\usepackage{loom}` or `\\RequirePackage{loom}`, alone or in a list.
@@ -124,6 +124,10 @@ def build_closure(
     return closure
 
 
+#: What a preamble reads beside itself: the local styles, classes and files `_collect` follows.
+_READS = ("usepackage", "RequirePackage", "documentclass", "LoadClass", "input", "include")
+
+
 def _collect(
     src: SourceFile,
     start: int,
@@ -140,9 +144,7 @@ def _collect(
     seen.add(key)
     closure.fragments.append(Fragment(src.path, start, end, src))
     text = src.clean
-    for t in tokenize(text[start:end]):
-        if t.kind != "cmd":
-            continue
+    for t in commands(text[start:end], _READS):
         pos = start + t.end
         if t.value in ("usepackage", "RequirePackage"):
             (_, names), _, _ = read_args(text, pos, "om")

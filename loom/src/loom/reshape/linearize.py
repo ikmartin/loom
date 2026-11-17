@@ -11,9 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from loom.paths import document_dir
-from loom.scan.expand import _read_include_arg, resolve_inclusion
+from loom.scan.expand import INCLUDE_CMDS, _read_include_arg, resolve_inclusion
 from loom.scan.source import MACRO_BLOCK, MACRO_BLOCK_BEGIN, MACRO_BLOCK_END, blank_comments
-from loom.scan.tokenize import tokenize
+from loom.scan.tokenize import commands
 from loom.tex.assemble import shift_sectioning
 
 _USEPACKAGE_LOOM = re.compile(r"^[ \t]*\\usepackage\s*(\[[^\]]*\])?\s*\{loom\}[ \t]*\n?", re.M)
@@ -67,9 +67,7 @@ def flatten(
             pieces.append(raw[a:b])
 
         pos = 0
-        for t in tokenize(clean):
-            if t.kind != "cmd" or t.value not in ("input", "include", "nest"):
-                continue
+        for t in commands(clean, INCLUDE_CMDS):
             name, arg_end = _read_include_arg(clean, t.end)
             if name is None:
                 continue
