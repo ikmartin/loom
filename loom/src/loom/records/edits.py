@@ -702,7 +702,7 @@ def where_taken(result: ScanResult, edit: Edit) -> list[tuple[int, int]]:
 def taken_how(result: ScanResult, edit: Edit) -> str | None:
     """How the block's text now reads as the edit taken: `as-written` when its new text stands, `edited` when most of it does with the person's words between, None when it is not taken.
 
-    An insertion, and a replacement whose new text holds its quote, are judged at their own place (`_at_place`): their text must stand right where Keep writes it, and the words recorded beside that place when they were suggested must stand beyond it or be gone, so that a phrase already beside the quote is not read as the edit. Any other replacement is looked for in the block's whole text, its children's included, and is taken when its text stands and its quote no longer does in the block's own text outside it, or, edited, when its quote is gone from the own text; a deletion when its quote is gone from the own text. Whitespace is compared normalised, as a quote is.
+    An insertion, and a replacement whose new text holds its quote, are judged at their own place (`_at_place`): their text must stand right where Keep writes it, and the words recorded beside that place when they were suggested must stand beyond it or be gone, so that a phrase already beside the quote is not read as the edit. Any other replacement is taken only once its quote no longer stands whole in the block's own text, as `place` would find it: a replacement that trims its quote leaves the new text standing inside it, and is not in. It is then taken when its new text stands anywhere in the block's whole text, its children's included, or, edited, when most of it does; a deletion when its quote is gone from the own text. Whitespace is compared normalised, as a quote is.
     """
     node = home(result, edit)
     if node is None or node.file not in result.files:
@@ -716,25 +716,12 @@ def taken_how(result: ScanResult, edit: Edit) -> str | None:
         if _at_place(result, node, edit, added) is not None:
             return "as-written"
         return "edited" if _written_since(" ".join(added), text[node.start : node.end]) else None
-    holes = [m.span() for m in _words(edit.with_text).finditer(text, node.start, node.end)]
-    if not holes:
-        if not _written_since(edit.with_text, text[node.start : node.end]):
-            return None
-        if edit.placement == "replace" and quote and quote in _flat(Records.own_pieces(result, node)[0]):
-            return None
-        return "edited"
-    if edit.placement != "replace" or not quote:
+    if edit.selector is not None and find_quote(Records.own_pieces(result, node)[0], edit.selector.exact):
+        # its quote still stands whole where Keep would replace it, whatever else stands in the block
+        return None
+    if _words(edit.with_text).search(text, node.start, node.end):
         return "as-written"
-
-    def blanked(a: int, b: int) -> str:
-        piece = text[a:b]
-        for x, y in holes:
-            lo, hi = max(a, x), min(b, y)
-            if lo < hi:
-                piece = piece[: lo - a] + "\0" * (hi - lo) + piece[hi - a :]
-        return piece
-
-    return "as-written" if quote not in _flat("".join(blanked(a, b) for a, b in node.own)) else None
+    return "edited" if _written_since(edit.with_text, text[node.start : node.end]) else None
 
 
 def is_taken(result: ScanResult, edit: Edit) -> bool:

@@ -514,6 +514,16 @@ def test_a_suggestion_at_the_foot_of_a_file_whose_text_all_belongs_to_its_sectio
     assert appendix.read_text().count("Zebra second") == 1
 
 
+def test_a_replacement_that_trims_its_quote_is_written(q: Path) -> None:
+    """The integrator's review of step 4: a replacement whose new text is a part of its quote read as taken the moment it was suggested, and Keep recorded it kept and wrote nothing. Its quote still stands whole, so it is not in."""
+    node = q / "drafting/nodes/sy-000A.tex"
+    eid = suggest(q, "sy-000A", "the swap.", "--quote", "with the swap.")
+    assert [p.state for p in waiting(q) if p.id == eid] == ["ready"]
+    assert call(q, "change-keep", {"changes": [eid]})["done"] == [eid]
+    text = node.read_text()
+    assert "\\{1,2\\}$ the swap." in text and "with the swap." not in text
+
+
 def test_keep_leaves_line_endings_alone(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))
