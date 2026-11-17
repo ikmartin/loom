@@ -22,6 +22,7 @@ from urllib.parse import unquote
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
 from loom.paths import BUILD, SERVE_JSON, STORE_ADDRESS, document_build
+from loom.presence import Watch
 from loom.refs.pages import storage_root
 from loom.render.build import BuildReport, build
 from loom.render.watch import Watcher, scan_unread, snapshot
@@ -93,13 +94,15 @@ def addressed_here(request: SimpleHTTPRequestHandler) -> bool:
 
 
 class Publications:
-    """Every publication the server makes, counted, and how its compiles stand, so `/_api/stream` can say that either changed."""
+    """Every publication the server makes, counted, how its compiles stand and who is connected, so `/_api/stream` can say that any of them changed."""
 
     def __init__(self) -> None:
         self._cond = threading.Condition()
         self.count = 0
         self.compiles = 0
         self.compile_state = b"{}"
+        self.connected = 0
+        self.connected_state = b"[]"
         self._closed = False
 
     def published(self) -> None:
@@ -114,17 +117,27 @@ class Publications:
             self.compile_state = state
             self._cond.notify_all()
 
+    def told_connected(self, state: bytes) -> None:
+        """Who is connected now, as one line of JSON: the records `loom.presence` lists."""
+        with self._cond:
+            self.connected += 1
+            self.connected_state = state
+            self._cond.notify_all()
+
     def close(self) -> None:
         """End every stream: the server is stopping."""
         with self._cond:
             self._closed = True
             self._cond.notify_all()
 
-    def wait(self, seen: tuple[int, int], timeout: float) -> tuple[int, int] | None:
-        """The publication and compile counts once either is past `seen`, or as they stand after `timeout`; None once closed."""
+    def counts(self) -> tuple[int, int, int]:
+        return (self.count, self.compiles, self.connected)
+
+    def wait(self, seen: tuple[int, int, int], timeout: float) -> tuple[int, int, int] | None:
+        """The publication, compile and connection counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
         with self._cond:
-            self._cond.wait_for(lambda: self._closed or (self.count, self.compiles) != seen, timeout)
-            return None if self._closed else (self.count, self.compiles)
+            self._cond.wait_for(lambda: self._closed or self.counts() != seen, timeout)
+            return None if self._closed else self.counts()
 
 
 def write_serve_json(root: Path, port: int) -> str:
@@ -494,6 +507,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
             self._jobs()
             return
         if self.path.split("?", 1)[0] == "/_api":
+            from loom.presence import live
             from loom.render.api import discovery
 
             if self.quilt_root is None:
@@ -507,9 +521,18 @@ class LoomHandler(SimpleHTTPRequestHandler):
             frames = {"frames": self.frames} if self.frames else {}
             # the viewer this server serves, and whether loom has been updated under it, so a page can say to reload or to restart
             served = {"viewer": self.held.version, "stale": self.held.stale()} if self.held else {}
+            # the agent servers alive now, where the stream that says when they change is served
+            connected = {"connected": live(self.quilt_root)} if self.publications is not None else {}
             self._json(
                 HTTPStatus.OK,
-                {**discovery(), "token": self.token, "stream": self.publications is not None, **frames, **served},
+                {
+                    **discovery(),
+                    "token": self.token,
+                    "stream": self.publications is not None,
+                    **connected,
+                    **frames,
+                    **served,
+                },
             )
             return
         target = self._resolve()
@@ -583,7 +606,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, {"jobs": self.jobs.recent()})
 
     def _stream(self) -> None:
-        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published, and `compiles`, carrying how every compile stands, on opening and each time that changes.
+        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, and `connected`, carrying the agent servers alive, each on opening and each time it changes.
 
         The viewer fetches the manifest as it would on a poll and learns nothing of what changed. Held open on its own thread; a comment every `HEARTBEAT` seconds keeps an idle one alive, and the server's stop ends it.
         """
@@ -595,9 +618,10 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        seen = (pubs.count, pubs.compiles)
+        seen = pubs.counts()
         try:
             self.wfile.write(b": open\n\nevent: compiles\ndata: " + pubs.compile_state + b"\n\n")
+            self.wfile.write(b"event: connected\ndata: " + pubs.connected_state + b"\n\n")
             self.wfile.flush()
             while True:
                 now = pubs.wait(seen, HEARTBEAT)
@@ -609,6 +633,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(b"event: manifest\ndata:\n\n")
                 if now[1] != seen[1]:
                     self.wfile.write(b"event: compiles\ndata: " + pubs.compile_state + b"\n\n")
+                if now[2] != seen[2]:
+                    self.wfile.write(b"event: connected\ndata: " + pubs.connected_state + b"\n\n")
                 seen = now
                 self.wfile.flush()
         except OSError:
@@ -721,6 +747,8 @@ class ServeSession:
         self.frames: ThreadingHTTPServer | None = None
         self.shown = Shown.of(quilt)
         self.watcher: Watcher | None = None
+        #: The look at which agent servers are alive (`loom.presence`), started with the watcher.
+        self.presence: Watch | None = None
         self.held: HeldBundle | LiveBundle | None = None
         self.last_report: BuildReport | None = None
         self.published: dict[Path, float] = {}  # the watched files as the last publication read them
@@ -939,6 +967,8 @@ class ServeSession:
         self.first_build()
         assert self.watcher is not None
         self.watcher.start()
+        self.presence = Watch(self.quilt.root, self.publications.told_connected)
+        self.presence.start()
 
     def first_look(self) -> None:
         """Take the reviewer's first look at the open files when they have none and the quilt tracks edits, so an agent's first edits show in Review's Your Changes; nothing without a reviewer name."""
@@ -983,6 +1013,8 @@ class ServeSession:
         if self.compiles is not None:
             self.compiles.stop()
         (self.quilt.root / BUILD / COMPILES_JSON).unlink(missing_ok=True)
+        if self.presence:
+            self.presence.stop()
         self.publications.close()
         if self.watcher:
             self.watcher.stop()
