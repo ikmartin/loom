@@ -13,22 +13,34 @@ from loom.identity import writer
 
 @click.command(name="since")
 @click.option("--as", "declared", default=None, help="Who is looking. An agent names itself, including Agent or AI.")
+@click.option(
+    "--session",
+    "session",
+    default=None,
+    envvar="LOOM_SESSION",
+    metavar="SESSION",
+    help="Look as this session, one conversation's: its own marker, whose first look starts where your name's stands. An id, a title, or a unique id suffix.",
+)
 @click.option("--dry-run", is_flag=True, help="Report, and leave your marker where it was.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
-def since_command(declared: str | None, dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
+def since_command(
+    declared: str | None, session: str | None, dry_run: bool, as_json: bool, quilt_path: str | None
+) -> None:
     """Report what people did since you last looked, and move your marker past it.
 
-    People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name, and kept on this machine only.
+    People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
     """
+    from loom.cli._common import find_session
     from loom.since import since, write_marker
 
     result = open_scan(quilt_path)
     root = result.quilt.root
     name, _kind = writer(root, declared)
-    got = since(result, name)
+    found = find_session(root, session) if session else None
+    got = since(result, name, found)
     if not dry_run and got.marker is not None:
-        write_marker(root, name, got.marker)
+        write_marker(root, name, got.marker, got.session)
     Report(_verdict(got), lines=_lines(got), dry_run=dry_run, data=got.to_json()).emit(as_json)
 
 
@@ -37,7 +49,9 @@ def _at(when: str | None) -> str:
 
 
 def _verdict(got: Any) -> str:
-    if got.first:
+    if got.first and got.opened == "name":
+        window = f"your first look in {got.session}, since {got.name} last looked ({_at(got.start)})"
+    elif got.first:
         window = f"your first look as {got.name}" + (
             f", since the session opened ({_at(got.start)})" if got.start else ""
         )

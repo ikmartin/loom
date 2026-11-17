@@ -13,7 +13,7 @@ import pytest
 
 from loom.ai.layout import MODES
 from tests.helpers import refused
-from tests.unit._quilts import demo, new_session, showcase
+from tests.unit._quilts import demo, showcase
 
 AGENT = "Test Agent"
 
@@ -157,9 +157,10 @@ def test_each_mode_is_a_prompt_expanding_to_the_quilts_own_copy_and_its_checked_
     q = demo(tmp_path)
     mode = q / ".loom/ai" / "modes" / "audit.md"
     mode.write_text(mode.read_text() + "\nThis quilt's own line.\n")
-    new_session(q)
 
     async def body(client: Any) -> None:
+        # the conversation's first look opens its session, where a prompt's commands are logged
+        await client.call_tool("loom_since", {})
         listed = (await client.list_prompts()).prompts
         assert [p.name for p in listed] == MODES
         assert all([(a.name, a.required) for a in p.arguments] == [("target", False)] for p in listed)

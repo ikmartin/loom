@@ -22,6 +22,7 @@ from loom.mcp.resources import TEMPLATES, NotAResource, reading
 from loom.mcp.resources import listed as resources_listed
 from loom.mcp.tools import CallRefused, ToolSpec, argv, hints, schema, tools
 from loom.paths import BUILD
+from loom.sessions import ID as SESSION_ID
 
 #: A result longer than this many characters goes to a file the agent reads with its own tools: about ten thousand tokens, where Claude Code starts warning, and well under every client's own limit.
 LARGE = 40_000
@@ -31,6 +32,10 @@ WHOLE = frozenset({"ai orient"})
 MAX_IMAGES = 8
 
 
+#: What a command does that makes the server bind its conversation's session first: its first look (`since`, a `write`) or any other write.
+BINDS = frozenset({"write", "replace"})
+#: The commands that write into a session, or look as one, and are given the bound session where a call names none.
+INTO = frozenset({"session say", "library propose", "since"})
 #: The requests that are an agent's use of loom, and what the record's `last` calls each.
 CALLS = {"tools/call": "tool", "prompts/get": "prompt", "resources/read": "resource"}
 #: Where a client that sends no `initialize` puts who it is and the protocol it speaks: every request's `_meta`.
@@ -67,15 +72,35 @@ def serve(root: Path, name: str) -> None:
     async def on_list_tools(ctx: Any, params: Any) -> types.ListToolsResult:
         return types.ListToolsResult(tools=listed)
 
+    def bind() -> str:
+        """The session this conversation writes into: the one bound already while it stands open, else the conversation's own, found or made now."""
+        from loom.clock import now
+        from loom.sessions import for_conversation, sessions
+
+        bound = here.data["session"]
+        found = sessions(root).get(bound) if bound else None
+        if found is None or found.state != "open":
+            title = f"{name} · {now().astimezone():%Y-%m-%d %H:%M}"
+            found = for_conversation(root, here.data["conversation"], name, title)
+            here.bound(found.id)
+        return found.id
+
     async def on_call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
         spec = specs.get(params.name)
         if spec is None:
             raise MCPError(code=types.INVALID_PARAMS, message=f"no tool {params.name}; tools/list names them")
         arguments = dict(params.arguments or {})
+        command = ""
         try:
+            if not arguments.get("session") and ACTS[spec.path] in BINDS and spec.path != "session new":
+                bound = await anyio.to_thread.run_sync(bind)
+                if spec.path in INTO:
+                    arguments["session"] = bound
             words = argv(spec, arguments, as_name=name)
         except CallRefused as exc:
             return _error(str(exc), "")
+        except Exception as exc:  # a session that cannot be made is said, not a protocol error
+            return _error(f"loom could not open this conversation's session: {exc}", "")
         command = "loom " + shlex.join(words)
         try:
             if ACTS[spec.path] == "read":
@@ -83,8 +108,14 @@ def serve(root: Path, name: str) -> None:
             else:
                 async with lock:
                     done = await _run(root, words)
-            _log(root, arguments.get("session"), command)
-            return _result(root, spec, arguments, command, done)
+            if spec.path == "session new" and done.returncode == 0 and not arguments.get("no_use"):
+                # the agent opened a session to work in: its later calls write there
+                made = _made(done.stdout.decode("utf-8", errors="replace"))
+                if made:
+                    here.bound(made)
+            session = arguments.get("session") or here.data["session"]
+            _log(root, session, command)
+            return _result(root, spec, {**arguments, "session": session}, command, done)
         except Exception as exc:  # the SDK turns anything uncaught into a protocol error, which says nothing useful
             return _error(f"loom could not run {command}: {exc}", command)
 
@@ -92,7 +123,7 @@ def serve(root: Path, name: str) -> None:
         """Run a reading command for a prompt or a resource and log it with `why`; (stdout, stderr, exit), or MCPError when it refused or failed."""
         command = "loom " + shlex.join(words)
         done = await _run(root, words)
-        _log(root, None, command, why)
+        _log(root, here.data["session"], command, why)
         out = done.stdout.decode("utf-8", errors="replace")
         err = done.stderr.decode("utf-8", errors="replace").strip()
         if done.returncode == 2 or (done.returncode != 0 and not out.strip()):
@@ -179,7 +210,7 @@ def serve(root: Path, name: str) -> None:
             text = out if not err else out.rstrip("\n") + "\n\n" + err + "\n"
         meta: dict[str, Any] = {"loom/command": command, "loom/exit": code}
         if len(text) > LARGE:
-            path = _keep(root, None, (how.argv or ("state",))[0], text)
+            path = _keep(root, here.data["session"], (how.argv or ("state",))[0], text)
             text = f"The whole text is {len(text):,} characters, so it is in {path}; read or search that file.\n"
             meta["loom/file"] = path
         return types.ReadResourceResult(
@@ -361,12 +392,24 @@ def _error(text: str, command: str, code: int = 2) -> types.CallToolResult:
     )
 
 
+def _made(out: str) -> str | None:
+    """The id of the session `loom session new` reports it opened, as text or as JSON."""
+    try:
+        said = json.loads(out)
+        made = str(said.get("session", "")) if isinstance(said, dict) else ""
+    except json.JSONDecodeError:
+        made = (out.split() or [""])[0]
+    return made if SESSION_ID.match(made) else None
+
+
 def _session(root: Path, given: object) -> str | None:
-    """The session a call names, or the active one; None when neither names one."""
+    """The session a call names, or the conversation's bound one, by id; None with neither. Never the quilt's active session, which another conversation may have chosen."""
     from loom.cli._common import find_session
 
+    if not given:
+        return None
     try:
-        return str(find_session(root, str(given) if given else None).id)
+        return str(find_session(root, str(given)).id)
     except Exception:
         return None
 

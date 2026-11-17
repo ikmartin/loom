@@ -246,3 +246,27 @@ def test_a_mark_on_a_pdf_page_is_reported_with_where_it_stands_and_a_crop(q: Pat
     ok("annotate", "notes/paper.pdf", "And this?", "--page", "1", "--quote", "the median polytope", "--as", WHO, cwd=q)
     text = ok("since", "--as", AGENT, cwd=q).stdout
     assert "notes/paper.pdf p.1" in text and "      crop: .loom/build/crops/" in text
+
+
+def test_a_session_looks_first_from_where_its_name_last_looked_and_then_on_its_own(q: Path) -> None:
+    """Two conversations of one agent each look as their own session: one looking does not move the other's window, and a new one starts where the name last looked."""
+    one = new_session(q, "conversation one", WHO)
+    two = new_session(q, "conversation two", WHO)
+    look(q)
+    ok("annotate", "dm-0003", "First.", "--as", WHO, cwd=q)
+    got = look(q, "--session", one)
+    assert got["first"] is True and got["session"] == one
+    assert got["verdict"].startswith(f"your first look in {one}, since {AGENT} last looked")
+    assert [a["body"] for a in got["annotations"]] == ["First."]
+    assert marker_path(q, AGENT, one).is_file() and marker_path(q, AGENT).is_file()
+    assert look(q, "--session", two)["annotations"] == [], "it starts where the name's marker stands"
+    ok("annotate", "dm-0003", "Second.", "--as", WHO, cwd=q)
+    assert [a["body"] for a in look(q, "--session", one)["annotations"]] == ["Second."]
+    assert [a["body"] for a in look(q, "--session", two)["annotations"]] == ["Second."]
+
+
+def test_a_session_whose_name_never_looked_starts_when_it_opened(q: Path) -> None:
+    ok("annotate", "dm-0003", "Before.", "--as", WHO, cwd=q)
+    sid = new_session(q, "later", WHO)
+    got = look(q, "--session", sid)
+    assert got["first"] is True and got["verdict"].startswith(f"your first look as {AGENT}, since the session opened")
