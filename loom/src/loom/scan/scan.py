@@ -233,7 +233,7 @@ def landmark_documents(quilt: Quilt) -> list[str]:
 def scan(quilt: Quilt, overlay: dict[str, str] | None = None, *, bases: dict[str, str] | None = None) -> ScanResult:
     """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`).
 
-    A scan is a `memo.reading`: what the scanner remembers of a text no scan reads any more is forgotten when it ends.
+    A scan is a `memo.reading`: when it ends, unless a build or another reading that began before it is still open, what the scanner remembers of a text it did not read is forgotten.
     """
     with reading():
         return _scan(quilt, overlay, bases)
