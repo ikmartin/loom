@@ -101,15 +101,42 @@ SIGNAL_WORDS = {
 }
 
 
+#: A line of a journal's masthead or a publisher's furniture, which is never a title: the journal's name, its volume and year, the publisher, a link, the copyright, the dates of receipt.
+_MASTHEAD = re.compile(
+    r"^(?:the\s+)?journal\b|^(?:the\s+)?(?:annals|transactions|proceedings|bulletin)\s+of\b"
+    r"|\b(?:vol\.?|volume|no\.|issue|pp\.)\s*\d|\((?:19|20)\d\d\)"
+    r"|\b(?:elsevier|springer|north[- ]holland|wiley|academic press|university press|mathematical society|birkh[aä]user"
+    r"|sciencedirect|jstor|taylor\s*&\s*francis|world scientific|de gruyter|ems press|kluwer)\b"
+    r"|contents lists available|journal homepage|www\.|https?://|©|copyright|all rights reserved|\b(?:issn|isbn)\b"
+    r"|^(?:received|accepted|revised|published|available online|communicated by)\b",
+    re.I,
+)
+#: A line that carries a masthead on from the line before it: a fragment beginning `of`, `and`, `for` or `&` ("of Financial"), or one word ("Economics").
+_MASTHEAD_TAIL = re.compile(r"^(?:of|and|for|&)\s|^[^\W\d_][\w'’.-]*$", re.I)
+
+
+def masthead(lines: list[str]) -> set[int]:
+    """The indices of `lines` that are a journal's masthead or a publisher's furniture, a run carried on by the fragments under it.
+
+    A masthead set over three lines ("Journal" / "of Financial" / "Economics") once gave a paper the title "of Financial", which then took every later paper of that journal as its own.
+    """
+    out: set[int] = set()
+    for i, line in enumerate(lines):
+        if _MASTHEAD.search(line) or (i - 1 in out and _MASTHEAD_TAIL.match(line.strip())):
+            out.add(i)
+    return out
+
+
 def title_lines(first_page: str) -> list[str]:
-    """Lines near the top of page one that could be a title.
+    """Lines near the top of page one that could be a title: no masthead, no running head, no date or author list.
 
     Every plausible line is returned rather than one guess. Guessing picked the *longest* early line, which on a real paper is a paragraph of the abstract rather than the title, and the signal fired for nothing across a 25-paper corpus.
     """
     out: list[str] = []
-    for line in first_page.splitlines()[:TOP_LINES]:
-        s = " ".join(line.split())
-        if 10 <= len(s) <= 140 and not _NOT_TITLE.match(s) and sum(c.isdigit() for c in s) <= 6:
+    lines = [s for s in (" ".join(x.split()) for x in first_page.splitlines()[:TOP_LINES]) if s]
+    skip = masthead(lines)
+    for i, s in enumerate(lines):
+        if i not in skip and 10 <= len(s) <= 140 and not _NOT_TITLE.match(s) and sum(c.isdigit() for c in s) <= 6:
             out.append(s)
     # a title set over two lines is one title
     return out + [f"{a} {b}" for a, b in zip(out, out[1:], strict=False) if len(a) + len(b) <= 140]

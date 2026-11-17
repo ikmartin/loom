@@ -359,10 +359,10 @@ def test_add_keeps_a_document_naming_an_unknown_identifier_as_a_work_stating_it(
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / "pile" / "new.pdf", "A paper nobody cites\nA. Writer\narXiv:2504.01234v1\n")
     said = " ".join(ok("library", "add", str(pdf.parent), *AS, cwd=q).stdout.split())
-    assert 'new.pdf as the new work Pap, titled "A paper nobody cites"' in said, said
-    entry = parse_bib((q / ".loom/digests/bibliography.bib").read_text())["Pap"]
+    assert 'new.pdf as the new work Pap25, titled "A paper nobody cites"' in said, said
+    entry = parse_bib((q / ".loom/digests/bibliography.bib").read_text())["Pap25"]
     assert entry.fields["eprint"] == "2504.01234v1" and entry.fields["archiveprefix"] == "arXiv"
-    assert (work_home(q, "Pap") / "paper.pdf").is_file()
+    assert (work_home(q, "Pap25") / "paper.pdf").is_file()
 
 
 def test_add_for_a_work_names_the_version_a_document_is(tmp_path: Path) -> None:
