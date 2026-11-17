@@ -284,3 +284,19 @@ def test_a_sessions_first_look_with_no_marker_starts_where_a_look_with_no_sessio
     assert got["first"] is True and [a["body"] for a in got["annotations"]] == ["Please look at this first."]
     assert look(q)["annotations"] == [], "the name's marker moved with the session's"
 
+
+def test_a_deletion_is_said_to_each_open_session_of_the_name_that_has_looked(q: Path) -> None:
+    """One conversation hearing of a deletion does not take it from another that has looked as the same name; once both have, it goes."""
+    from loom.since import deletions
+
+    one = new_session(q, "conversation one", WHO)
+    two = new_session(q, "conversation two", WHO)
+    ok("annotate", "dm-0003", "A gap here.", "--as", AGENT, cwd=q)
+    gap = last_id(q)
+    look(q, "--session", one)
+    look(q, "--session", two)
+    ok("annotate", "--delete", gap, "--as", WHO, cwd=q)
+    assert [a["id"] for a in look(q, "--session", one)["acts"]] == [gap]
+    assert [a["id"] for a in look(q, "--session", two)["acts"]] == [gap]
+    assert [e for e in deletions(q) if e.get("to") == AGENT] == []
+    assert look(q, "--session", one)["acts"] == [] and look(q, "--session", two)["acts"] == []

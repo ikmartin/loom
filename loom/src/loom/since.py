@@ -124,11 +124,31 @@ def write_marker(root: Path, name: str, marker: Marker, session: str | None = No
     for p in [marker_path(root, name), *([marker_path(root, name, session)] if session else [])]:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    # a deletion said to this agent has been said once now, so it goes
-    left = [e for e in deletions(root) if not (e.get("to") == name and str(e.get("when", "")) <= marker.when)]
+    # a deletion goes once every look of this name still to come starts after it: an open session that has looked has a window of its own
+    looks = [marker, *_open_looks(root, name)]
+
+    def told(e: dict[str, Any]) -> bool:
+        return not any(m.new(str(e.get("when", "")), f"deleted:{e.get('id')}") for m in looks)
+
+    left = [e for e in deletions(root) if not (e.get("to") == name and told(e))]
     if left != deletions(root):
         dp = root / DELETED
         dp.write_text("".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in left), encoding="utf-8")
+
+
+def _open_looks(root: Path, name: str) -> list[Marker]:
+    """Each open session's own marker for `name`: the windows a deletion must still reach before it goes."""
+    from loom.sessions import sessions
+
+    stem = slug(name) + "."
+    found = sessions(root)
+    out: list[str] = []
+    for p in (root / MARKERS).glob(f"{stem}*.json"):
+        sid = p.name[len(stem) : -len(".json")]
+        s = found.get(sid)
+        if s is not None and s.state == "open" and (m := read_marker(root, name, sid)) is not None:
+            out.append(m)
+    return out
 
 
 def deletions(root: Path) -> list[dict[str, Any]]:
