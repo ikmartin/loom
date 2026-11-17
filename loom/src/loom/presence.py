@@ -117,13 +117,13 @@ class Presence:
 
 def _held(path: Path) -> int:
     """The record's file, opened and locked for this process: a reader holds its shared lock for an instant, so the wait is no longer."""
-    import fcntl
+    from loom.locks import hold
 
     path.parent.mkdir(parents=True, exist_ok=True)
     while True:
         fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_CLOEXEC, 0o600)
         try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+            hold(fd)
         except OSError:
             os.close(fd)
             raise
@@ -172,7 +172,7 @@ def live(root: Path) -> list[dict[str, Any]]:
 
 def _alive(path: Path, pid: int) -> dict[str, Any] | None:
     """The record at `path` when a process holds it; deleted, and None, when none does."""
-    import fcntl
+    from loom.locks import held
 
     try:
         fd = os.open(path, os.O_RDONLY | os.O_CLOEXEC)
@@ -180,10 +180,12 @@ def _alive(path: Path, pid: int) -> dict[str, Any] | None:
         return None
     try:
         try:
-            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return _parsed(fd, pid)
+            alive = held(fd)
         except OSError:
+            return None
+        if alive:
+            return _parsed(fd, pid)
+        if alive is None:
             return None  # a filesystem without locks: nothing proves the process is loom's
         # nobody holds it: the process is gone, or the record came from elsewhere
         if _still_there(fd, path):
