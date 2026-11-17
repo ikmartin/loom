@@ -630,13 +630,14 @@ def check_mcp(root: Path) -> list[Item]:
 
 
 def check_ai_files(root: Path) -> Item:
-    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above."""
+    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above, and the skills, made whole from the modes at every upgrade, are no file of the author's to fall behind."""
     from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, read_versions, sha, tracked_docs, upgrade_layer
+    from loom.ai.skills import is_skill
 
     if not (root / AI).is_dir():
         return Item("ai files", OK, QUILT, f"no {AI}/ (loom ai init writes it)")
     rep = upgrade_layer(root, write=False)
-    stale = [rel for rel in rep.written if rel not in (CLAUDE_SETTINGS, CODEX_RULES)]
+    stale = [rel for rel in rep.written if rel not in (CLAUDE_SETTINGS, CODEX_RULES) and not is_skill(rel)]
     shipped, recorded = tracked_docs(), read_versions(root)
 
     def unseen(rel: str) -> bool:

@@ -436,6 +436,8 @@ def test_the_engine(box: Box) -> None:
 
 def test_the_permission_files(box: Box) -> None:
     q = quilt(box)
+    # the files as this loom writes them, whatever the committed demo was generated with
+    ok("upgrade", cwd=q)
     edit(q / ".claude" / "settings.json", '"Bash(rm *)"', '"Bash(rm -rf *)"')
     got = item(doctor(box, cwd=q), "permissions")
     assert (got["status"], got["remedy"]) == ("warn", "loom upgrade")
