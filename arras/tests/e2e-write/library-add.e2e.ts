@@ -56,7 +56,7 @@ test('a dropped PDF is added from its metadata, filled in where it can be guesse
 	await expect(page.getByTestId('add-year')).toHaveValue('2021');
 	await expect(page.getByTestId('add-work')).not.toContainText('No work in the library');
 	await page.getByTestId('add-add').click();
-	await expect(page).toHaveURL(/\/library\/Hal21/);
+	await expect(page).toHaveURL(/\/library\/halberdGadgetTowers2021/);
 	await expect(page.getByTestId('status-paper')).toContainText('filed');
 });
 
@@ -69,7 +69,7 @@ test('a PDF that is no published work, with no identifier, is kept and asks for 
 	await page.getByTestId('add-author').fill('Jha, Amit Kumar');
 	await page.getByTestId('add-add').click();
 	await expect(page.getByTestId('network-ask')).toHaveCount(0);
-	await expect(page).toHaveURL(/\/library\/Jha/);
+	await expect(page).toHaveURL(/\/library\/jhaStatisticsQuantsRevision/);
 	await expect(page.getByTestId('status-paper')).toContainText('filed');
 	await expect(page.getByTestId('work-status')).not.toContainText('Fetch it');
 	const bib = readFileSync(join(served.root, '.loom/digests/bibliography.bib'), 'utf8');
@@ -82,8 +82,8 @@ test('a PDF that is no published work, with no identifier, is kept and asks for 
 	// and what a run reads off it arrives behind the filing
 	await expect.poll(() => existsSync(join(served.root, '.loom/digests/storage', home, 'pages/0001.txt'))).toBe(true);
 	await page.goto('/review/library');
-	await expect(page.locator('[data-testid^="ledger-Jha"]')).toBeVisible();
-	await expect(page.locator('[data-testid^="problem-Jha"]')).toHaveCount(0);
+	await expect(page.locator('[data-testid^="ledger-jhaStatisticsQuantsRevision"]')).toBeVisible();
+	await expect(page.locator('[data-testid^="problem-jhaStatisticsQuantsRevision"]')).toHaveCount(0);
 });
 
 test('a PDF the library has as a work is filed there by Add, unless the person says it is another', async ({ page, served }) => {
