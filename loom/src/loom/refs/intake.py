@@ -68,6 +68,8 @@ class Item:
     on_word: bool = False
     #: The person said it is a work of its own (`--new`).
     new: bool = False
+    #: Taken from the command line out of a drop that waited in the viewer, which an undo leaves waiting again.
+    over: bool = False
 
 
 @dataclass
@@ -546,7 +548,13 @@ def _take_file(t: _Take, n: int, item: Item) -> Row:
         )
     if holder := held_under(t.root, t.bib, sha):
         return _here(t, sha, n, name, holder, f"these very bytes are {holder}'s")
-    arrived = _read_json(incoming(t.root) / sha / ARRIVED) or {}
+    d = incoming(t.root) / sha
+    waiting_now = waiting_file(d) if t.write and d.is_dir() else None
+    if waiting_now is not None and item.path != waiting_now:
+        # the same bytes wait in a drop of the viewer's: this take is that drop's, so its record and its file stay one
+        item = Item(path=waiting_now, name=item.name, work=item.work, on_word=item.on_word, new=item.new, over=True)
+        pdf = waiting_now
+    arrived = _read_json(d / ARRIVED) or {}
     excluded = set(arrived.get("not") or [])
     if item.new:
         seen = identify(t.root, t.bib, pdf, online=t.online, http=t.http)
@@ -626,8 +634,12 @@ def _drop_of(t: _Take, item: Item, sha: str) -> tuple[Path, bool]:
 
 
 def _held_before(d: Path, item: Item, waits: bool) -> dict[str, Any]:
-    """What a drop held before an act took its file: the file's name and what it arrived as, which an undo that leaves earlier acts standing puts back. A question it waited on is not kept: taking the file again asks it again."""
-    return {"file": item.path.name if waits and item.path is not None else None, "arrived": _read_json(d / ARRIVED)}
+    """What a drop held before an act took its file: the file's name and what it arrived as, which an undo puts back where earlier acts stand or the file was the viewer's drop taken from the command line (`over`). A question it waited on is not kept: taking the file again asks it again."""
+    return {
+        "file": item.path.name if waits and item.path is not None else None,
+        "arrived": _read_json(d / ARRIVED),
+        "over": item.over,
+    }
 
 
 def _home_names(home: Path) -> list[str] | None:
@@ -1100,7 +1112,7 @@ def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | 
                     409,
                 )
             _check_add(root, act_)
-            _undo_add(root, d, act_, keep=len(acts) > 1)
+            _undo_add(root, d, act_, keep=len(acts) > 1 or bool((act_.get("waiting") or {}).get("over")))
             said = (
                 f"took {act_['citekey']} out again"
                 if act_["entries"]

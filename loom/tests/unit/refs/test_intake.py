@@ -641,3 +641,26 @@ def test_a_survey_listing_identifiers_at_its_foot_states_none_of_them_as_its_own
 
     page = "A survey of quivers\nLena Field\nBody text.\narXiv:2504.01234\narXiv:0805.2065\ndoi:10.4171/x.1\ndoi:10.4171/x.2\n"
     assert own_identifiers(page) == (set(), set(), set())
+
+
+def test_a_command_line_add_of_bytes_a_viewers_drop_holds_takes_that_drop(tmp_path: Path) -> None:
+    """The integrator's review, finding 6: an add from the command line of bytes waiting in a drop wrote its act into that drop and took its question away, and the drop then waited for good as a row with no name."""
+    import shutil
+
+    q = demo(tmp_path)
+    page = "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides of a talk\n"
+    item = dropped(q, "talk.pdf", page, tmp_path)
+    (asked,) = taken(q, item)
+    assert asked.state == "question"
+    library = {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")}
+    copy = tmp_path / "elsewhere" / "talk copy.pdf"
+    copy.parent.mkdir()
+    shutil.copy(next((q / INCOMING / item.drop).glob("*.pdf")), copy)
+    (added,) = taken(q, Item(path=copy, new=True))
+    assert added.state == "added" and added.id == item.drop and waiting(q) == []
+    (again,) = taken(q, Item(drop=item.drop))
+    assert again.state == "here" and waiting(q) == []
+    undo(scan(load_quilt(q)), item.drop, by=WHO)
+    # the viewer's drop waits again as it was received, and the library is as before the add
+    assert [(r["id"], r["state"], r["name"]) for r in waiting(q)] == [(item.drop, "received", "talk.pdf")]
+    assert {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")} == library
