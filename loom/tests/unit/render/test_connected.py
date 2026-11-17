@@ -7,6 +7,8 @@ import urllib.request
 from collections.abc import Callable
 from pathlib import Path
 
+import pytest
+
 from loom.presence import Presence
 from loom.render.serve import ServeSession
 from tests.helpers import PATIENCE
@@ -72,3 +74,19 @@ def test_a_record_written_republishes_nothing(serve: Callable[[Path], ServeSessi
             here.end()
         assert following()[0] == "connected"
     assert s.builds == built
+
+
+def test_api_answers_from_the_last_look(
+    serve: Callable[[Path], ServeSession], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`GET /_api` says who is connected as the server's once-a-second look last found it, so no request waits on `.loom/live/`."""
+    import loom.presence
+
+    q = demo(tmp_path)
+    s = serve(q)
+
+    def looked(root: Path) -> list[object]:
+        raise AssertionError("a request read .loom/live/")
+
+    monkeypatch.setattr(loom.presence, "live", looked)
+    assert json.loads(get(s.url + "_api")[2])["connected"] == []

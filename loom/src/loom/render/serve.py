@@ -507,7 +507,6 @@ class LoomHandler(SimpleHTTPRequestHandler):
             self._jobs()
             return
         if self.path.split("?", 1)[0] == "/_api":
-            from loom.presence import live
             from loom.render.api import discovery
 
             if self.quilt_root is None:
@@ -521,8 +520,10 @@ class LoomHandler(SimpleHTTPRequestHandler):
             frames = {"frames": self.frames} if self.frames else {}
             # the viewer this server serves, and whether loom has been updated under it, so a page can say to reload or to restart
             served = {"viewer": self.held.version, "stale": self.held.stale()} if self.held else {}
-            # the agent servers alive now, where the stream that says when they change is served
-            connected = {"connected": live(self.quilt_root)} if self.publications is not None else {}
+            # the agent servers alive as the server last looked, where the stream that says when they change is served; no request waits on `.loom/live/`
+            connected = (
+                {"connected": json.loads(self.publications.connected_state)} if self.publications is not None else {}
+            )
             self._json(
                 HTTPStatus.OK,
                 {
