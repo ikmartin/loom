@@ -493,3 +493,101 @@ def test_a_new_work_never_takes_a_place_another_works_pdf_holds(tmp_path: Path) 
     entries = bib(q)
     assert entries[again.citekey].fields["loom-file"] == entries[first.citekey].fields["loom-file"] + "-2"
     assert identify(entries[again.citekey])[0] != identify(entries[first.citekey])[0]
+
+
+def test_two_takes_of_one_file_at_once_add_it_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The integrator's review, finding 3: two adds of the same bytes at once each found them not held, outside the lock, and made two works on one home."""
+    import shutil
+    import threading
+
+    import loom.refs.add as add
+
+    q = demo(tmp_path)
+    one = fake_pdf(tmp_path / "a" / "twice.pdf", "Sheaves on exotic manifolds\nZelda Quist\n")
+    two = tmp_path / "b" / "twice-copy.pdf"
+    two.parent.mkdir()
+    shutil.copy(one, two)
+    meet = threading.Barrier(2)
+    real = add.identify
+
+    def slow(*args: object, **kwargs: object) -> add.Seen:
+        seen = real(*args, **kwargs)  # type: ignore[arg-type]
+        try:
+            meet.wait(timeout=2)  # both are past the check together, unless the lock keeps one out
+        except threading.BrokenBarrierError:
+            pass
+        return seen
+
+    monkeypatch.setattr(add, "identify", slow)
+    rows: list[Row] = []
+    threads = [threading.Thread(target=lambda p=p: rows.extend(taken(q, Item(path=p)))) for p in (one, two)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert sorted(r.state for r in rows) == ["added", "here"], rows
+    assert [k for k, e in bib(q).items() if e.fields.get("title") == "Sheaves on exotic manifolds"] == [
+        rows[0].citekey or rows[1].citekey
+    ]
+
+
+def test_two_versions_filed_from_two_old_scans_take_two_keys(tmp_path: Path) -> None:
+    """The integrator's review, finding 3: two adds `--for` one work, each with the bibliography it read before the other wrote, both took `-v2`."""
+    q = demo(tmp_path)
+    first, second = bib(q), bib(q)
+    a = fake_pdf(
+        tmp_path / "a" / "x.pdf", "Fixed loci of involutions on separated spaces\nImogen Calloway\npreprint\n\f2"
+    )
+    b = fake_pdf(
+        tmp_path / "b" / "y.pdf", "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides\n\f2\f3"
+    )
+    (one,) = take(load_quilt(q), first, [Item(path=a, work="Calloway14", on_word=True)], by=WHO)
+    (two,) = take(load_quilt(q), second, [Item(path=b, work="Calloway14", on_word=True)], by=WHO)
+    assert (one.sibling, two.sibling) == ("Calloway14-v2", "Calloway14-v3")
+    assert (q / BIB).read_text().count("@misc{Calloway14-v2,") + (q / BIB).read_text().count(
+        "@article{Calloway14-v2,"
+    ) == 1
+
+
+def test_gathering_while_a_file_is_taken_in_adopts_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The integrator's review, finding 3: gathering in another process, while an add read a long book's pages, adopted the stored PDF as an orphan under another key; after the add's undo that entry named a home that was gone."""
+    import threading
+    import time
+
+    import loom.refs.scan as rs
+    from loom.refs.scan import scan_bibliography
+
+    q = demo(tmp_path)
+    reading = threading.Event()
+    real = rs.write_map
+
+    def slow(*args: object, **kwargs: object) -> object:
+        reading.set()
+        time.sleep(1.5)  # a long book
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(rs, "write_map", slow)
+    scanned = scan(load_quilt(q))  # gathering's own scan, taken before, so that it acts inside the window
+    rows: list[Row] = []
+    adder = threading.Thread(
+        target=lambda: rows.extend(
+            taken(
+                q,
+                Item(path=fake_pdf(tmp_path / "src" / "book.pdf", "Lectures on braided categories\nQuentin Ostrava\n")),
+            )
+        )
+    )
+    adder.start()
+    assert reading.wait(timeout=60)
+    scan_bibliography(load_quilt(q), result=scanned)
+    adder.join()
+    named = [
+        k
+        for k, e in bib(q).items()
+        if "braided" in e.fields.get("title", "").lower() or "book" in e.fields.get("loom-source", "")
+    ]
+    assert named == [rows[0].citekey], named
+    undo(scan(load_quilt(q)), rows[0].id, by=WHO)
+    from loom.refs.fetch import work_dir
+
+    assert all(work_dir(q, e).is_dir() for e in bib(q).values() if e.fields.get("loom-file"))

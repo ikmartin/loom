@@ -231,10 +231,12 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
             raise IntakeRefused("cut-short", f"{Path(name).name} arrived cut short: {got} of {length} bytes", 400)
         sha = h.hexdigest()
         d = base / sha
-        d.mkdir(exist_ok=True)
-        if waiting_file(d) is None and not (d / ACT).is_file():
-            os.replace(tmp, d / safe_name(name))
-            _write_json(d / ARRIVED, {"name": Path(name).name, "size": got, "when": stamp(), "not": []})
+        # placed under the library's lock: two receives of the same bytes at once keep one file
+        with library_lock(root):
+            d.mkdir(exist_ok=True)
+            if waiting_file(d) is None and not (d / ACT).is_file():
+                os.replace(tmp, d / safe_name(name))
+                _write_json(d / ARRIVED, {"name": Path(name).name, "size": got, "when": stamp(), "not": []})
     finally:
         tmp.unlink(missing_ok=True)
     return {"incoming": sha, "name": Path(name).name, "size": got}
@@ -479,13 +481,24 @@ def take(
     t = _Take(quilt, dict(bib), by, online, write, runner, fetch, http)
     rows: list[Row] = []
     for n, item in enumerate(items):
-        if item.drop:
-            rows.append(_take_drop(t, n, item))
-        elif item.path is not None:
-            rows.append(_take_file(t, n, item))
-        else:
-            rows.extend(_take_text(t, n, item.text))
+        # each item is decided and written under the library's lock, against the library as it is then: what another process added since the scan is in it, and the same bytes it filed meanwhile are already here
+        with library_lock(t.root) if write else _nothing():
+            _fresh(t)
+            if item.drop:
+                rows.append(_take_drop(t, n, item))
+            elif item.path is not None:
+                rows.append(_take_file(t, n, item))
+            else:
+                rows.extend(_take_text(t, n, item.text))
     return rows
+
+
+def _fresh(t: _Take) -> None:
+    """Add to what a take knows the entries the bibliography holds now and its scan did not: another process's, written since."""
+    path = t.root / BIBLIOGRAPHY
+    if path.is_file():
+        for key, entry in parse_bib(path.read_text(encoding="utf-8")).items():
+            t.bib.setdefault(key, entry)
 
 
 def _take_drop(t: _Take, n: int, item: Item) -> Row:
@@ -926,6 +939,21 @@ def answer(
     IntakeRefused
         `no-such-question` (404) for a drop that waits on none; `not-a-candidate` (400) for a work the question did not name.
     """
+    with library_lock(quilt.root):
+        return _answer(quilt, bib, question, same, by=by, online=online, runner=runner, http=http)
+
+
+def _answer(
+    quilt: Quilt,
+    bib: dict[str, BibEntry],
+    question: str,
+    same: str | None,
+    *,
+    by: str,
+    online: bool,
+    runner: Callable[[str, bool], dict[str, Any] | None] | None,
+    http: Any,
+) -> Row:
     d = drop_dir(quilt.root, question)
     asked = _read_json(d / QUESTION)
     if not isinstance(asked, dict):
@@ -934,6 +962,9 @@ def answer(
     if same is not None and same not in keys:
         raise IntakeRefused("not-a-candidate", f"{same} is not one of the works asked about: {', '.join(keys)}", 400)
     t = _Take(quilt, dict(bib), by, online, True, runner, False, http)
+    _fresh(t)
+    if same is not None and same not in t.bib:
+        raise IntakeRefused("no-such-work", f"the library has no work {same} now", 404)
     if asked.get("kind") == "text":
         name = str(asked.get("name") or "")
         if same is not None:
@@ -1156,13 +1187,22 @@ def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
     IntakeRefused
         `no-such-work` (404); `no-document` (409) for a work holding no PDF; `has-results` (409) for one whose results were read off it; `own-document` (409) for a work that came in with this very PDF, which an undo or a delete takes out whole.
     """
+    with library_lock(result.quilt.root):
+        return _unfile(result, citekey, by=by)
+
+
+def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
     from loom.refs.fetch import work_dir
     from loom.refs.pages import sha256_of, storage_root
     from loom.refs.proposals import load_results
     from loom.refs.scan import load_ledger
 
     root = result.quilt.root
-    bib = result.bib
+    bib = dict(result.bib)
+    path = root / BIBLIOGRAPHY
+    if path.is_file():
+        for key, entry in parse_bib(path.read_text(encoding="utf-8")).items():
+            bib.setdefault(key, entry)
     if citekey not in bib:
         raise IntakeRefused("no-such-work", f"the library has no work {citekey}", 404)
     home = work_dir(root, bib[citekey])

@@ -391,22 +391,29 @@ def scan_bibliography(quilt: Quilt, *, write: bool = True, result: ScanResult | 
     ScanReport
         What was added, how many entries were already there, conflicts between sources, and `.bib` files a landmark names that do not exist.
     """
+    from contextlib import nullcontext
+
+    from loom.refs.intake import library_lock
+
     report = ScanReport(dry_run=not write)
     path = quilt.root / BIBLIOGRAPHY
-    existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else {}
-    from_canon = [c for key, c in candidates(result or scan(quilt), report).items() if key not in existing]
-    report.present = len(existing)
-    report.added += from_canon
-    if write:
-        _append(path, from_canon)
-        existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else existing
-    else:
-        existing = {**existing, **parse_bib("".join(c.text for c in from_canon))}
-    # last, and against everything the bibliography now knows: a document the store holds and no entry names
-    orphans = [c for c in adopt_orphans(quilt, existing, report) if c.key not in existing]
-    report.added += orphans
-    if write:
-        _append(path, orphans)
+    res = result or scan(quilt)
+    # what is read and what is appended are one act under the library's lock, so an add half done in another process is never adopted as an orphan
+    with library_lock(quilt.root) if write else nullcontext():
+        existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else {}
+        from_canon = [c for key, c in candidates(res, report).items() if key not in existing]
+        report.present = len(existing)
+        report.added += from_canon
+        if write:
+            _append(path, from_canon)
+            existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else existing
+        else:
+            existing = {**existing, **parse_bib("".join(c.text for c in from_canon))}
+        # last, and against everything the bibliography now knows: a document the store holds and no entry names
+        orphans = [c for c in adopt_orphans(quilt, existing, report) if c.key not in existing]
+        report.added += orphans
+        if write:
+            _append(path, orphans)
     report.duplicates = _duplicates(existing, set(declarations(quilt.root, "forget")))
     return report
 
