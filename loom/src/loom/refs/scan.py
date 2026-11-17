@@ -580,7 +580,7 @@ def version_key(key: str, taken: set[str]) -> str:
 
 
 def _own_account(pdf: Path, name: str = "") -> tuple[WorkId | None, dict[str, str]]:
-    """What the document says about itself: the identifier it states as its own (`ingest.own_identifiers`), and a heuristic title and year.
+    """What the document says about itself: the identifier it states as its own (`ingest.own_identifiers`; arXiv's stamp, else the DOI it prints, else a printed arXiv id), and a heuristic title and year.
 
     Only the filename is read for a title, and only when a reference manager wrote it (`Author - 2019 - The Title.pdf`), because that came from a catalogue. A title guessed from page one is not: the longest early line on a real paper is a sentence of the abstract, which is the mistake `title_lines` exists to record.
     """
@@ -597,10 +597,13 @@ def _own_account(pdf: Path, name: str = "") -> tuple[WorkId | None, dict[str, st
     except Exception:  # noqa: BLE001 -- an unreadable PDF is reported, never fatal
         return None, fields
     dois, arxivs, stamped = own_identifiers(pages[0] if pages else "")
-    if stamped or arxivs:
-        return WorkId("arxiv", sorted(stamped or arxivs)[0], "candidate"), fields
+    # arXiv's stamp says the PDF is that preprint; else the DOI it prints names it, and an arXiv id printed beside a DOI names its preprint, another document
+    if stamped:
+        return WorkId("arxiv", sorted(stamped)[0], "candidate"), fields
     if dois:
         return WorkId("doi", sorted(dois)[0], "candidate"), fields
+    if arxivs:
+        return WorkId("arxiv", sorted(arxivs)[0], "candidate"), fields
     return None, fields
 
 

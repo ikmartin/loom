@@ -652,6 +652,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
 
     assert item.path is not None
     name = item.name or item.path.name
+    offer = _not_anothers(offer, t.bib)
     with library_lock(t.root) if t.write else _nothing():
         taken = set(t.bib) | (
             set(parse_bib((t.root / BIBLIOGRAPHY).read_text(encoding="utf-8")))
@@ -693,6 +694,23 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
         _settled(d)
     row.pages, row.job, row.why = _read_pages(t, key, f)
     return row
+
+
+#: The fields of an entry that state an identifier.
+_IDENTIFIERS = ("doi", "eprint", "archiveprefix", "eprinttype", "mrnumber", "zbl", "zblnumber", "url")
+
+
+def _not_anothers(offer: dict[str, str], bib: dict[str, BibEntry]) -> dict[str, str]:
+    """The entry a work of its own is written with: never stating an identifier another work in the library states, since one identifier names one work, and a PDF said not to be that work only cited it."""
+    from loom.refs.identity import arxiv_base, declared
+
+    def norm(w: Any) -> tuple[str, str]:
+        return (w.scheme, arxiv_base(w.value) if w.scheme == "arxiv" else w.value.lower())
+
+    mine = {norm(w) for w in declared(BibEntry("", "misc", dict(offer)))}
+    if not mine & {norm(w) for e in bib.values() for w in declared(e)}:
+        return offer
+    return {k: v for k, v in offer.items() if k not in _IDENTIFIERS}
 
 
 def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = "") -> Row:

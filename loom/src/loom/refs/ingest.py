@@ -27,6 +27,8 @@ _ID_LABEL = re.compile(r"https?://(?:dx\.)?doi\.org/|\bdoi\b\s*:?|\barxiv\b\s*:?
 EDGE_LINES = 10
 #: The most words a line at the head or foot may hold beside an identifier for it to be the document's own: a journal's reference fits, a sentence of an abstract citing another paper does not.
 EDGE_WORDS = 10
+#: A word of prose beside an identifier, which no journal's reference holds: lower case and longer than a short connective ("of", "the", "and"): "a question raised in arXiv:…".
+_PROSE = re.compile(r"^[a-z][a-z'’-]{3,}[.,;:]?$")
 # A title on page one: the longest early line that is not a running head, a date or an author list.
 _NOT_TITLE = re.compile(r"^\s*(abstract|introduction|contents|arxiv|doi|vol\.|\d+\s*$|by\b)", re.I)
 #: How alike two titles must be for either title signal to fire. Two of these agreeing is what attaches a PDF.
@@ -176,7 +178,7 @@ def identifiers_in(text: str) -> tuple[set[str], set[str]]:
 def own_identifiers(first_page: str) -> tuple[set[str], set[str], set[str]]:
     """(DOIs, arXiv ids, arXiv ids stamped in the margin) a document states as its own, lowercased.
 
-    Own means arXiv's stamp anywhere on page one, or an identifier set apart at its head or foot: on one of its first or last `EDGE_LINES` lines, beside at most `EDGE_WORDS` other words. An identifier anywhere else may be one the document cites, or the original an erratum or a reply answers, and a note citing Perelman's arXiv id was once announced as Perelman's paper.
+    Own means arXiv's stamp anywhere on page one, or an identifier set apart at its head or foot: on one of its first or last `EDGE_LINES` lines, beside at most `EDGE_WORDS` other words and no word of prose, and the one identifier of its kind there. An identifier anywhere else may be one the document cites, or the original an erratum or a reply answers: a note citing Perelman's arXiv id was once announced as Perelman's paper, and one whose abstract opened on "a question raised in arXiv:…" took that paper's identity. A survey listing several at its foot states none of them as its own.
     """
     lines = [" ".join(x.split()) for x in first_page.splitlines() if x.strip()]
     stamped = {m.group(1).lower() for x in lines if (m := _ARXIV_STAMP.match(x))}
@@ -186,11 +188,15 @@ def own_identifiers(first_page: str) -> tuple[set[str], set[str], set[str]]:
         if _ARXIV_STAMP.match(x):
             continue
         found = identifiers_in(x)
-        rest = _ID_LABEL.sub(" ", _ARXIV.sub(" ", _DOI.sub(" ", x)))
-        if (found[0] or found[1]) and len(rest.split()) <= EDGE_WORDS:
+        rest = _ID_LABEL.sub(" ", _ARXIV.sub(" ", _DOI.sub(" ", x))).split()
+        if (found[0] or found[1]) and len(rest) <= EDGE_WORDS and not any(_PROSE.match(w) for w in rest):
             dois |= found[0]
             arxivs |= found[1]
-    return dois, arxivs, stamped
+    return (
+        (dois if len(dois) == 1 else set()),
+        (arxivs if len({arxiv_base(a) for a in arxivs}) == 1 else set()),
+        stamped,
+    )
 
 
 def look_at(pdf: Path, bib: dict[str, BibEntry], pages: list[str] | None = None) -> Candidate:

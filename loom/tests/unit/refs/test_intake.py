@@ -591,3 +591,53 @@ def test_gathering_while_a_file_is_taken_in_adopts_nothing(tmp_path: Path, monke
     from loom.refs.fetch import work_dir
 
     assert all(work_dir(q, e).is_dir() for e in bib(q).values() if e.fields.get("loom-file"))
+
+
+def test_an_identifier_a_page_cites_never_becomes_the_pdfs_own(tmp_path: Path) -> None:
+    """The integrator's review, finding 4: a note whose abstract opened on "a question raised in arXiv:…" took that paper's arXiv id, year and home as its own."""
+    from loom.refs.fetch import work_dir
+    from loom.refs.identity import identify
+
+    q = demo(tmp_path)
+    page = (
+        "Acyclic orientations and cycle bases\nTomas Lind\nDepartment of Mathematics, Invented University\nAbstract\n"
+        "We answer a question raised in arXiv:0805.2065 about\nthe cycle space of a quiver.\n"
+    )
+    (row,) = taken(q, dropped(q, "lind.pdf", page, tmp_path))
+    assert row.state == "added", row
+    entry = bib(q)[row.citekey]
+    assert "eprint" not in entry.fields and work_dir(q, entry).parent.name == "file"
+    assert identify(entry) != identify(bib(q)["Man12"])
+
+
+def test_a_work_of_its_own_never_takes_an_identifier_another_work_states(tmp_path: Path) -> None:
+    """A reply sets the id of the paper it answers at its head; said to be a work of its own, it is not given that paper's identity."""
+    from loom.refs.identity import identify
+
+    q = demo(tmp_path)
+    page = "Comment on arXiv:0805.2065\nA remark on virtual pull-backs\nby Hugo Ness\nWe point out a gap.\n"
+    (asked,) = taken(q, dropped(q, "reply.pdf", page, tmp_path))
+    assert asked.state == "question" and [c["citekey"] for c in asked.candidates] == ["Man12"]
+    row = answer(load_quilt(q), bib(q), asked.question, None, by=WHO)
+    entry = bib(q)[row.citekey]
+    assert "eprint" not in entry.fields and identify(entry) != identify(bib(q)["Man12"])
+
+
+def test_the_published_version_dropped_on_its_work_is_filed_and_not_taken_for_a_copy(tmp_path: Path) -> None:
+    """The integrator's review, finding 5: a published version printing its own DOI at its head and its preprint's arXiv id at its foot was judged a copy of the preprint and thrown away."""
+    from tests.unit._quilts import showcase
+
+    q = showcase(tmp_path)
+    page = (
+        "J. Invented Combin. 12 (2024) 1-30\ndoi:10.9999/jic.2024.12\nCycle spaces of finite quivers\nElspeth Arden\n"
+        "Abstract. A published text, revised after review.\nPreprint: arXiv:2504.01234v1\n"
+    )
+    (row,) = taken(q, Item(drop=dropped(q, "published.pdf", page, tmp_path).drop, work="Arden24"))
+    assert row.state == "added" and row.under == "Arden24" and row.sibling, row
+
+
+def test_a_survey_listing_identifiers_at_its_foot_states_none_of_them_as_its_own() -> None:
+    from loom.refs.ingest import own_identifiers
+
+    page = "A survey of quivers\nLena Field\nBody text.\narXiv:2504.01234\narXiv:0805.2065\ndoi:10.4171/x.1\ndoi:10.4171/x.2\n"
+    assert own_identifiers(page) == (set(), set(), set())
