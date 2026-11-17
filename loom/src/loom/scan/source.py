@@ -6,10 +6,10 @@ Every .tex under the root outside `.loom/` and tool directories is a source file
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 from pathlib import Path
 
 from loom.paths import COPIES, DIGESTS, LOOM, STORAGE
+from loom.scan.memo import TextMemo
 from loom.scan.model import SourceFile
 
 #: Directories never read, by name at any depth: loom's own, whose digests alone are read on purpose, and tools'.
@@ -62,14 +62,9 @@ def _protected_ranges(text: str) -> list[tuple[int, int]]:
 def blank_comments(text: str) -> str:
     """Replace every comment (from an unescaped % to end of line) with spaces, leaving verbatim regions untouched.
 
-    A long text's result is remembered, as `tokenize`'s is: a served quilt reads every file again on every change.
+    A long text's result is remembered while it is in use, as `tokenize`'s is: a served quilt reads every file again on every change.
     """
     return _blank_cached(text) if len(text) >= 4096 else _blank_comments(text)
-
-
-@lru_cache(maxsize=256)
-def _blank_cached(text: str) -> str:
-    return _blank_comments(text)
 
 
 def _blank_comments(text: str) -> str:
@@ -93,6 +88,9 @@ def _blank_comments(text: str) -> str:
             continue
         i += 1
     return "".join(out)
+
+
+_blank_cached = TextMemo(_blank_comments)
 
 
 def line_starts(text: str) -> list[int]:

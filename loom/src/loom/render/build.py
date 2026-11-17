@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -28,6 +29,7 @@ from loom.render.manifest import build_manifest
 from loom.render.marks import MarkEntry, place_marks
 from loom.render.publish import publish, write_atomic
 from loom.render.versions import Gone, attach_versions, gone_annotations, gone_marks
+from loom.scan.memo import reading
 from loom.scan.model import Diagnostic
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult, scan
@@ -409,7 +411,24 @@ def build(
     -------
     BuildReport
         The scan, the manifest, and what was rendered and skipped.
+
+    Notes
+    -----
+    A build that scans is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file and forgets nothing.
     """
+    with nullcontext() if reuse is not None else reading():
+        return _build(quilt, keys, records, force, reuse, progress, tex)
+
+
+def _build(
+    quilt: Quilt,
+    keys: list[str] | None,
+    records: Records | None,
+    force: bool,
+    reuse: ScanResult | None,
+    progress: Callable[[str, str, int, int | None], None] | None,
+    tex: bool,
+) -> BuildReport:
     root = quilt.root
     build_dir = root / BUILD
     cache_dir = build_dir / "cache"

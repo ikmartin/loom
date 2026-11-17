@@ -8,7 +8,8 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from functools import lru_cache
+
+from loom.scan.memo import TextMemo
 
 VERBATIM_ENVS = {"verbatim", "verbatim*", "lstlisting", "comment", "filecontents", "filecontents*"}
 MATH_SINGLE = {"(": "\\(", ")": "\\)", "[": "\\[", "]": "\\]"}
@@ -38,15 +39,10 @@ CACHED_FROM = 4096
 
 
 def tokenize(text: str) -> list[Tok]:
-    """The text's tokens, in order. A long text's are remembered (`_cached`), since a served quilt scans every file again on every change and most files have not changed."""
+    """The text's tokens, in order. A long text's are remembered while it is in use (`memo.TextMemo`), since a served quilt scans every file again on every change and most files have not changed."""
     if len(text) < CACHED_FROM:
         return _tokenize(text)
     return list(_cached(text))
-
-
-@lru_cache(maxsize=256)
-def _cached(text: str) -> tuple[Tok, ...]:
-    return tuple(_tokenize(text))
 
 
 def _tokenize(text: str) -> list[Tok]:
@@ -100,6 +96,9 @@ def _tokenize(text: str) -> list[Tok]:
             toks.append(Tok(kind, m.start(), m.end(), ch))
         pos = m.end()
     return toks
+
+
+_cached = TextMemo(lambda text: tuple(_tokenize(text)))
 
 
 def match_group(text: str, pos: int, open_ch: str = "{", close_ch: str = "}") -> int:

@@ -16,6 +16,7 @@ from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib
 from loom.scan.edges import EdgeResult, find_edges
 from loom.scan.expand import Expansion, expand_master
 from loom.scan.graph import Graph
+from loom.scan.memo import reading
 from loom.scan.model import Diagnostic, Fix, Location, SourceFile, Taxon
 from loom.scan.nodes import Assembly, assemble
 from loom.scan.preamble import PreambleClosure, build_closure, taxa_conflicts, taxa_union
@@ -230,7 +231,15 @@ def landmark_documents(quilt: Quilt) -> list[str]:
 
 
 def scan(quilt: Quilt, overlay: dict[str, str] | None = None, *, bases: dict[str, str] | None = None) -> ScanResult:
-    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`)."""
+    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`).
+
+    A scan is a `memo.reading`: what the scanner remembers of a text no scan reads any more is forgotten when it ends.
+    """
+    with reading():
+        return _scan(quilt, overlay, bases)
+
+
+def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | None) -> ScanResult:
     root = quilt.root
     result = ScanResult(quilt=quilt, base_overrides=dict(bases or {}))
     overlay = overlay or {}
