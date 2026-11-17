@@ -729,3 +729,119 @@ def test_an_answer_naming_a_work_since_removed_is_refused(tmp_path: Path) -> Non
     with pytest.raises(IntakeRefused, match="no work Calloway14") as caught:
         answer(load_quilt(q), bib(q), asked.question, "Calloway14", by=WHO)
     assert caught.value.code == "no-such-work" and caught.value.status == 404
+
+
+def _sound(q: Path) -> None:
+    """No damage, whatever order acts and undos came in: every record of a copy points at a PDF holding those bytes, each drop's last act is what the store holds, and no two entries loom wrote name one place."""
+    import json
+
+    from loom.refs.fetch import work_dir
+    from loom.refs.pages import sha256_of, storage_root
+
+    ledger_path = storage_root(q) / "copied.json"
+    ledger = json.loads(ledger_path.read_text()) if ledger_path.is_file() else {}
+    for sha, rec in ledger.items():
+        if not rec.get("duplicate-of") and str(rec.get("from", "")).lower().endswith(".pdf"):
+            paper = storage_root(q) / rec["to"] / "paper.pdf"
+            assert paper.is_file() and sha256_of(paper) == sha, (sha[:12], rec)
+    base = q / INCOMING
+    for d in base.iterdir() if base.is_dir() else []:
+        acts = _acts(d)
+        if not acts or not acts[-1].get("home"):
+            continue
+        last = acts[-1]
+        if last["kind"] == "added":
+            paper = q / last["home"] / "paper.pdf"
+            assert paper.is_file() and sha256_of(paper) == last["sha"], (d.name[:12], last["citekey"])
+        else:
+            assert (d / last["name"]).is_file() and sha256_of(d / last["name"]) == d.name, d.name[:12]
+    homes: dict[Path, str] = {}
+    for key, entry in bib(q).items():
+        if entry.fields.get("loom-file"):
+            home = work_dir(q, entry)
+            assert home not in homes, (key, homes.get(home))
+            homes[home] = key
+
+
+@pytest.mark.parametrize("seed", [20261117, 5, 23])
+def test_drops_unfiles_retakes_undos_in_any_order_and_acts_at_once_never_lose_a_document(
+    tmp_path: Path, seed: int
+) -> None:
+    """The integrator's review asked for the sequences that lost two PDFs, and the races, among the random test's acts: a drop on a work after its PDF was unfiled, a waiting drop taken as a work of its own, undos in any order, and two acts at once. A refused act changes nothing."""
+    import shutil
+    import threading
+
+    from loom.refs.scan import scan_bibliography
+
+    q = demo(tmp_path)
+    rng = random.Random(seed)
+    pool = [
+        "Some scanned pages\nthe first scan\n",
+        "Some scanned pages\na better scan\n",
+        "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides\n",
+        "On the rank of widgets\nW. Smith\n",
+        "Department of Mathematics\nSchedule\n",
+    ]
+    drops: list[str] = []
+    for step in range(30):
+        roll = rng.random()
+        before = tree(q)
+        try:
+            if roll < 0.3:
+                item = dropped(q, f"drop {step}.pdf", rng.choice(pool), tmp_path / str(step))
+                drops.append(item.drop)
+                work = rng.choice([None, None, "Man12", "Har77"])
+                (row,) = taken(q, Item(drop=item.drop, name=item.name, work=work or ""))
+                if row.state == "question":
+                    answer(
+                        load_quilt(q), bib(q), row.question, rng.choice([None, row.candidates[0]["citekey"]]), by=WHO
+                    )
+            elif roll < 0.45:
+                held = [k for k, e in bib(q).items() if (work_home(q, k) / "paper.pdf").is_file()]
+                if held:
+                    unfile(scan(load_quilt(q)), rng.choice(held), by=WHO)
+            elif roll < 0.6:
+                waits = [r for r in waiting(q) if r["state"] == "received"]
+                if waits:
+                    pick = rng.choice(waits)
+                    choice = rng.choice(["new", "Man12", "Har77", ""])
+                    item = Item(drop=pick["id"], new=choice == "new", work=choice if choice not in ("new", "") else "")
+                    (row,) = taken(q, item)
+                    if row.state == "question":
+                        answer(load_quilt(q), bib(q), row.question, None, by=WHO)
+            elif roll < 0.85:
+                standing = [d for d in drops if (q / INCOMING / d).is_dir()]
+                if standing:
+                    undo(scan(load_quilt(q)), rng.choice(standing), by=WHO)
+            elif roll < 0.93:
+                # the same bytes taken from two places at once
+                one = fake_pdf(
+                    tmp_path / f"twin{step}" / f"twin {step}.pdf", f"Twins taken at step {step}\nA. Writer\n"
+                )
+                two = tmp_path / f"twin{step}" / "b" / f"twin {step} copy.pdf"
+                two.parent.mkdir()
+                shutil.copy(one, two)
+                rows: list[Row] = []
+                threads = [
+                    threading.Thread(target=lambda p=p, into=rows: into.extend(taken(q, Item(path=p))))
+                    for p in (one, two)
+                ]
+                for th in threads:
+                    th.start()
+                for th in threads:
+                    th.join()
+                assert sorted(r.state for r in rows) == ["added", "here"], rows
+                drops.append(rows[0].id)
+            else:
+                # gathering while a file is taken in
+                item = dropped(
+                    q, f"gather {step}.pdf", f"Gathered while taken {step}\nB. Writer\n", tmp_path / str(step)
+                )
+                drops.append(item.drop)
+                adder = threading.Thread(target=lambda i=item: taken(q, i))
+                adder.start()
+                scan_bibliography(load_quilt(q))
+                adder.join()
+        except IntakeRefused as refused:
+            assert tree(q) == before, f"step {step}: refused with {refused.code} and still changed the quilt"
+        _sound(q)
