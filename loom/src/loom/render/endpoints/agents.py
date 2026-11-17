@@ -143,6 +143,8 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     foreign = [*clients.foreign, *layer.theirs]
     if clients.foreign:
         said += f"; left {', '.join(clients.foreign)} alone, which holds settings of yours"
+    if layer.merged:
+        said += f"; kept your own settings in {', '.join(layer.merged)} beside loom's rules"
     if layer.theirs:
         said += f"; left {', '.join(layer.theirs)} alone, which loom did not write"
     if layer.removed:
@@ -154,6 +156,7 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "result": said,
         "written": written,
         "removed": layer.removed,
+        "merged": layer.merged,
         "foreign": foreign,
         "tracked": clients.tracked,
         "variant": variant(root) or MCP,

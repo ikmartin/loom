@@ -115,3 +115,63 @@ def test_codex_set_up_beside_a_server_file_of_the_persons_is_over_mcp(tmp_path: 
     assert got["variant"] == MCP and ".codex/config.toml" in got["foreign"]  # type: ignore[operator]
     assert MCP_LINE in (q / "AGENTS.md").read_text().splitlines()
     assert (q / ".codex/config.toml").read_text() == 'model = "gpt-5"\n'
+
+
+def test_setting_up_claude_code_keeps_the_persons_own_settings_beside_loom_s_rules(tmp_path: Path) -> None:
+    """A project often has a `.claude/settings.json` of its own before it is a quilt: its `env`, hooks and rules stay, after loom's rules, and the answer says so."""
+    import json
+
+    q = bare(tmp_path)
+    settings = q / ".claude/settings.json"
+    settings.parent.mkdir()
+    theirs = {
+        "permissions": {"allow": ["Bash(make *)"], "defaultMode": "acceptEdits"},
+        "env": {"MY_VAR": "1"},
+        "hooks": {"Stop": []},
+    }
+    settings.write_text(json.dumps(theirs, indent=1))
+    got = setup(q, "claude-code")
+    assert got["merged"] == [".claude/settings.json"] and got["variant"] == MCP
+    assert "kept your own settings in .claude/settings.json" in str(got["result"])
+    now = json.loads(settings.read_text())
+    assert now["env"] == {"MY_VAR": "1"} and now["hooks"] == {"Stop": []}
+    assert now["permissions"]["defaultMode"] == "acceptEdits"
+    assert now["permissions"]["allow"][-1] == "Bash(make *)" and "mcp__loom__*" in now["permissions"]["allow"]
+    assert any(r.startswith("Bash(loom ") for r in now["permissions"]["deny"])
+    ok("upgrade", cwd=q)
+    assert json.loads(settings.read_text()) == now, "an upgrade keeps them too"
+
+
+def test_a_rule_loom_no_longer_writes_goes_and_the_persons_stay(tmp_path: Path) -> None:
+    """Loom records the rules it wrote, so when `[agents] deny` narrows, its old rule is told from one of the person's."""
+    import json
+
+    from loom.ai.layout import permissions_stale, quilt_config, write_permissions
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    settings = q / ".claude/settings.json"
+    data = json.loads(settings.read_text())
+    data["permissions"]["deny"].append("Edit(/private/**)")
+    settings.write_text(json.dumps(data, indent=2) + "\n")
+    config = q / "config.toml"
+    config.write_text(config.read_text().replace("\ndeny = []\n", '\ndeny = ["paper/"]\n', 1))
+    assert permissions_stale(q, quilt_config(q))
+    write_permissions(q, quilt_config(q), shell=False)
+    deny = json.loads(settings.read_text())["permissions"]["deny"]
+    assert "Edit(/**/paper/**)" in deny and deny[-1] == "Edit(/private/**)"
+    config.write_text(config.read_text().replace('deny = ["paper/"]', "deny = []"))
+    write_permissions(q, quilt_config(q), shell=False)
+    deny = json.loads(settings.read_text())["permissions"]["deny"]
+    assert "Edit(/**/paper/**)" not in deny and deny[-1] == "Edit(/private/**)"
+    assert not permissions_stale(q, quilt_config(q))
+
+
+def test_a_settings_file_that_is_no_json_object_is_left_alone_and_said(tmp_path: Path) -> None:
+    q = bare(tmp_path)
+    settings = q / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_text("{ not json")
+    got = setup(q, "claude-code")
+    assert ".claude/settings.json" in got["foreign"] and ".claude/settings.json" not in got["written"]  # type: ignore[operator]
+    assert settings.read_text() == "{ not json"

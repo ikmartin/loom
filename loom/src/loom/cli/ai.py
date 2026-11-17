@@ -153,7 +153,7 @@ def install_layer(
     Returns
     -------
     LayerReport
-        `written` (quilt-relative paths); `theirs`, a skill of the person's at one of loom's paths, left alone; and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files and `removed`, as `loom upgrade` reports them.
+        `written` (quilt-relative paths); `theirs`, a file of the person's at one of loom's paths, left alone; `merged`, one loom wrote its part into, the person's settings in it kept; and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files and `removed`, as `loom upgrade` reports them.
     ClientReport
         The client files written, current, left alone or, in the shell variant, removed.
 
@@ -164,16 +164,18 @@ def install_layer(
     from loom.ai.clients import chosen, write_clients
     from loom.ai.layout import (
         APPS_FILE,
+        CLAUDE_SETTINGS,
+        RULES_FILE,
         SHELL,
         VERSION_FILE,
         LayerReport,
         ensure_root_line,
         init_layer,
+        permission_files,
         quilt_config,
         tracked_docs,
         upgrade_layer,
         variant,
-        vendor_files,
     )
     from loom.ai.skills import RECORD as SKILLS_RECORD
     from loom.ai.skills import write_skills
@@ -188,13 +190,16 @@ def install_layer(
         else:
             rep = LayerReport(written=[*tracked_docs(root), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
             skills = write_skills(root, apps, write=False)
+            permissions, rep.merged, rep.theirs = permission_files(root, quilt_config(root), shell=shell, apps=apps)
             rep.written += [
-                *vendor_files(quilt_config(root), shell=shell, apps=apps),
+                *permissions,
                 *ensure_root_line(root, False, shell=shell, apps=apps),
                 *skills.written,
                 *([f"{AI}/{SKILLS_RECORD}"] if skills.written or skills.unchanged else []),
             ]
             rep.theirs += skills.theirs
+            if CLAUDE_SETTINGS in permissions:
+                rep.written.append(f"{AI}/{RULES_FILE}")
     else:
         rep = upgrade_layer(root, write=write, shell=shell, apps=apps)
     clients = write_clients(root, write, shell=shell, apps=apps)
@@ -302,6 +307,10 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
         )
     if rep.theirs:
         groups.append(Group("yours, at a path loom writes, so left alone", [Item("", key=rel) for rel in rep.theirs]))
+    if rep.merged:
+        groups.append(
+            Group("yours, loom's rules written in, your own settings kept", [Item("", key=rel) for rel in rep.merged])
+        )
     if rep.removed:
         groups.append(
             Group(
@@ -316,6 +325,7 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
         "kept": sorted(rep.kept),
         "new_beside": sorted(rep.new_beside),
         "theirs": rep.theirs,
+        "merged": rep.merged,
         "removed": rep.removed,
         "refreshed": existed,
         "variant": SHELL if shell else "mcp",
