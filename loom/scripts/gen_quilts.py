@@ -20,7 +20,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from loom.paths import AI, ANNOTATION_LOG, BIBLIOGRAPHY, BUILD, COPIES, SINCE, STORAGE
+from loom.paths import AI, ANNOTATION_LOG, BIBLIOGRAPHY, BUILD, COPIES, INCOMING, SINCE, STORAGE
 
 REPO = Path(__file__).resolve().parents[1]
 SOURCES = REPO / "tests" / "quilts" / "sources"
@@ -1668,10 +1668,11 @@ def _drop_clients(root: Path) -> None:
 
 
 def _sync(src: Path, dest: Path) -> None:
-    """Replace `dest` with `src` as git would check it out: no build output, and no empty directory, which git cannot hold but a test copying the working tree would see."""
+    """Replace `dest` with `src` as git would check it out: no build output, no record of the library's drops, which stays on the machine that dropped them, and no empty directory, which git cannot hold but a test copying the working tree would see."""
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(src, dest, ignore=shutil.ignore_patterns("build", "__pycache__", ".git"))
+    shutil.rmtree(dest / INCOMING, ignore_errors=True)
     for d in sorted((p for p in dest.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
         if not any(d.iterdir()):
             d.rmdir()
@@ -1685,6 +1686,7 @@ def _differences(a: Path, b: Path) -> list[str]:
         # quilt's .gitignore deliberately keeps them out of its committed copy.
         return not (
             rel.startswith(f"{BUILD}/")
+            or rel.startswith(f"{INCOMING}/")
             or rel.startswith(f"{SINCE}/")
             or rel.startswith(f"{STORAGE}/cache/")
             or (rel.startswith(f"{STORAGE}/") and "/src/" in rel)
