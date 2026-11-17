@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -270,3 +271,16 @@ def test_a_session_whose_name_never_looked_starts_when_it_opened(q: Path) -> Non
     sid = new_session(q, "later", WHO)
     got = look(q, "--session", sid)
     assert got["first"] is True and got["verdict"].startswith(f"your first look as {AGENT}, since the session opened")
+
+
+def test_a_sessions_first_look_with_no_marker_starts_where_a_look_with_no_session_does(q: Path) -> None:
+    """Over MCP a conversation's session is made at its first look, so that look opens where the name's first look would, at the active session's opening, and not at its own: a person comments, then asks their agent."""
+    from loom.sessions import for_conversation
+
+    ok("annotate", "dm-0003", "Please look at this first.", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    sid = for_conversation(q, "conv-a", AGENT, f"{AGENT} · now").id
+    got = look(q, "--session", sid)
+    assert got["first"] is True and [a["body"] for a in got["annotations"]] == ["Please look at this first."]
+    assert look(q)["annotations"] == [], "the name's marker moved with the session's"
+

@@ -1,6 +1,6 @@
 """`loom since`: what people did since an agent last looked, read off the records against one marker per agent name, and one per session that names it.
 
-A session's marker (`.loom/since/<slug>.<session>.json`) is one conversation's own, so two conversations of one app each see what came since they last looked; its first look starts where the name's marker stands, the latest look of any. The marker (`.loom/since/<slug>.json`) is the second the agent last looked, the records that carry that second, the keys stale then and the research state as it read then. A record is new when it is later than the marker, or of the marker's second and not among those it carries, so the clock's one-second resolution neither repeats nor drops one. Nothing here is committed or watched: the marker is this machine's note of where an agent got to, and moving it rebuilds nothing.
+A session's marker (`.loom/since/<slug>.<session>.json`) is one conversation's own, so two conversations of one app each see what came since they last looked; its first look starts where the name's marker stands, the latest look of any, and where the name has none, where a look with no session starts, never at the session's own opening, which is the first look itself over MCP. The marker (`.loom/since/<slug>.json`) is the second the agent last looked, the records that carry that second, the keys stale then and the research state as it read then. A record is new when it is later than the marker, or of the marker's second and not among those it carries, so the clock's one-second resolution neither repeats nor drops one. Nothing here is committed or watched: the marker is this machine's note of where an agent got to, and moving it rebuilds nothing.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ class Since:
     first: bool
     #: The session looking, whose marker this is; None for the name's own.
     session: str | None = None
-    #: Where a first look's window opened: `name` (where the name's marker stands), `session` (when the session opened), or '' (the start of the quilt); '' on a later look too.
+    #: Where a first look's window opened: `name` (where the name's marker stands), `session` (when the quilt's active session was last opened), or '' (the start of the quilt); '' on a later look too.
     opened: str = ""
     annotations: list[dict[str, Any]] = field(default_factory=list)
     acts: list[dict[str, Any]] = field(default_factory=list)
@@ -179,7 +179,7 @@ def note_deletion(root: Path, removed: list[dict[str, Any]], by: str) -> None:
 def since(result: ScanResult, name: str, session: Session | None = None) -> Since:
     """What people did since `name` last looked, or `name` in `session`, and the marker that would close the window; nothing is written.
 
-    With no marker the window opens when the active session was last opened, or at the start of the quilt with none. A session with no marker of its own opens where the name's marker stands, else when the session was last opened. "People" are the records whose kind is human, and for a message or a page write the names `is_agent` does not call an agent.
+    With no marker the window opens when the active session was last opened, or at the start of the quilt with none. A session with no marker of its own opens where the name's marker stands, else as with no session: never when the session itself opened, since over MCP a conversation's session is made at its first look and what a person did before it is what that look is for. "People" are the records whose kind is human, and for a message or a page write the names `is_agent` does not call an agent.
 
     Parameters
     ----------
@@ -207,7 +207,7 @@ def since(result: ScanResult, name: str, session: Session | None = None) -> Sinc
         start, window, opened = named.when, named, "name"
     else:
         here = active(root)
-        found = session or (sessions(root).get(here) if here else None)
+        found = sessions(root).get(here) if here else None
         start = found.last_opened if found else ""
         window, opened = Marker(when=start), "session" if found else ""
     out = Since(name=name, start=start, first=kept is None, session=session.id if session else None, opened=opened)

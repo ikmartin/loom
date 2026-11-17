@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from loom.mailbox import read_events
@@ -96,3 +97,14 @@ def test_a_session_the_person_closed_is_not_written_into_again(tmp_path: Path) -
         server.call("loom_session_say", {"text": "after"})
         later = [sid for sid in made_for(q, "conv-a") if sid != first]
         assert said(q, first) == ["before"] and len(later) == 1 and said(q, later[0]) == ["after"]
+
+
+def test_a_conversations_first_look_reports_what_a_person_did_before_it(tmp_path: Path) -> None:
+    """The order the gate is for: a person comments, then asks their agent, whose first look is what makes its session."""
+    q = demo(tmp_path)
+    ok("annotate", "dm-0010", "Please look at this before anything else", "--type", "question", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    with AgentServer(q, "Claude Code Agent", env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        assert "Please look at this before anything else" in server.call("loom_since")["content"][0]["text"]
+        assert len(made_for(q, "conv-a")) == 1
