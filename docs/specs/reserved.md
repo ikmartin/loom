@@ -70,7 +70,7 @@ Loom writes none of these, so `manifest.md`, which says loom writes every top-le
 | `formal`, and `keys[K].formal` | the formal proposals, and each key's formal state | formalization; Review's list of proposals reads it |
 | `diagnostics[*].class` | whose problem a code is, so that a person is shown only problems in their own text | Review; every part that adds a code gives its class |
 
-With one owner and no name fixed: the list of what changed and an AI document's state (Review, which may reshape `changes` and `changes_since`); what agents may read and change (attaching an agent); a work's state word and its page text (the library).
+With one owner and no name fixed: the list of what changed and an AI document's state (Review, which may reshape `changes` and `changes_since`); a work's state word and its page text (the library).
 
 ## Commands and modes
 
