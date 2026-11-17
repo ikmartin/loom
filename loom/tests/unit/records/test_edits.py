@@ -766,6 +766,35 @@ def test_a_heading_is_read_as_the_scan_reads_one() -> None:
     assert body_span("\\section*{T}") == (len("\\section*{T}"), len("\\section*{T}"))
 
 
+def test_a_replacement_typed_in_by_hand_is_taken_though_its_quote_reads_like_a_plain_word_further_on(
+    tmp_path: Path,
+) -> None:
+    """The integrator's review of step 4: read as the page prints it, `\\emph{orbit}` stands wherever the plain word does, so once the person typed the replacement in by hand the quote "still stood" in `orbits` further on, and Keep wrote the replacement over that word. An edit's quote is the source's own words, found again only as written."""
+    q = demo(tmp_path)
+    edit(q / LEMMA, "Every orbit of a widget", "Every \\emph{orbit} of a widget")
+    a = suggest(q, "--quote", "\\emph{orbit}", "--with", "\\emph{cycle}")
+    edit(q / LEMMA, "\\emph{orbit}", "\\emph{cycle}")  # typed in by hand, exactly
+    assert taken_how(*placed(q, a)) == "as-written"
+    text = (q / LEMMA).read_text()
+    ok("changes", "--keep", a, cwd=q)
+    assert (q / LEMMA).read_text() == text and "the one-point orbits." in text
+
+
+def test_a_replacement_whose_quote_was_rewritten_goes_nowhere_though_it_reads_like_a_plain_word_further_on(
+    tmp_path: Path,
+) -> None:
+    """The same, with the person's own words in place of the quote: on `main` as well, `place` followed the reading as printed to the plain word, and Keep wrote the replacement there."""
+    q = demo(tmp_path)
+    edit(q / LEMMA, "Every orbit of a widget", "Every \\emph{orbit} of a widget")
+    a = suggest(q, "--quote", "\\emph{orbit}", "--with", "\\emph{cycle}")
+    edit(q / LEMMA, "\\emph{orbit}", "\\emph{class}")
+    with pytest.raises(Unplaced, match="no longer stands"):
+        place(*placed(q, a))
+    text = (q / LEMMA).read_text()
+    ok("changes", "--keep", a, cwd=q)
+    assert (q / LEMMA).read_text() == text and "the one-point orbits." in text
+
+
 def test_whitespace_moved_beside_an_insertion_leaves_it_placed(tmp_path: Path) -> None:
     q = demo(tmp_path)
     after = suggest(q, "--quote", "one or two points,", "--with", "never more,", "--after")

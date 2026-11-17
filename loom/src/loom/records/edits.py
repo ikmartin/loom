@@ -17,7 +17,7 @@ from typing import Any
 from loom.locks import locked
 from loom.paths import EDIT_LOG
 from loom.records.ids import EDIT, draw
-from loom.records.selectors import CONTEXT, Selector, find_quote
+from loom.records.selectors import CONTEXT, Selector, find_written
 from loom.records.store import Records
 from loom.scan.nodes import NodeRec
 from loom.scan.scan import ScanResult
@@ -363,7 +363,7 @@ def _added(edit: Edit) -> tuple[str, str] | None:
         return new, ""
     if edit.selector is None or _flat(edit.selector.exact) not in _flat(new):
         return None
-    p, s = find_quote(new, edit.selector.exact)[0]
+    p, s = find_written(new, edit.selector.exact)[0]
     return new[:p], new[s:]
 
 
@@ -432,7 +432,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once; when the quoted words are no place for an edit (`misplaced`); and when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again.
+        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); and when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again.
     """
     from loom.scan.owntext import key_hash
 
@@ -466,7 +466,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         else:
             span, text = (a, b), new
     else:
-        found = find_quote(own, edit.selector.exact)
+        found = find_written(own, edit.selector.exact)
         if not found:
             raise Unplaced(f"the text {edit.id} quotes no longer stands in {node.key}")
         if len(found) > 1:
@@ -515,7 +515,7 @@ def _by_place_alone(result: ScanResult, edit: Edit, node: NodeRec) -> bool:
 def _quoted_elsewhere(result: ScanResult, quote: str, node: NodeRec) -> bool:
     """Whether `quote` stands in the own text of another block of `node`'s file."""
     return any(
-        find_quote(Records.own_pieces(result, n)[0], quote)
+        find_written(Records.own_pieces(result, n)[0], quote)
         for n in result.nodes.values()
         if n.file == node.file and n is not node
     )
@@ -640,7 +640,7 @@ def _at_place(result: ScanResult, node: NodeRec, edit: Edit, added: tuple[str, s
     text = result.files[node.file].text
     own, pieces = Records.own_pieces(result, node)
     if edit.selector is not None:
-        found = find_quote(own, edit.selector.exact)
+        found = find_written(own, edit.selector.exact)
         if len(found) != 1:
             return None
         a, b = found[0]
@@ -696,7 +696,7 @@ def where_taken(result: ScanResult, edit: Edit) -> list[tuple[int, int]]:
         at = _at_place(result, node, edit, added)
         return [at] if at is not None else []
     whole = result.files[node.file].text[node.start : node.end]
-    return [(node.start + a, node.start + b) for a, b in find_quote(whole, edit.with_text)]
+    return [(node.start + a, node.start + b) for a, b in find_written(whole, edit.with_text)]
 
 
 def taken_how(result: ScanResult, edit: Edit) -> str | None:
@@ -716,7 +716,7 @@ def taken_how(result: ScanResult, edit: Edit) -> str | None:
         if _at_place(result, node, edit, added) is not None:
             return "as-written"
         return "edited" if _written_since(" ".join(added), text[node.start : node.end]) else None
-    if edit.selector is not None and find_quote(Records.own_pieces(result, node)[0], edit.selector.exact):
+    if edit.selector is not None and find_written(Records.own_pieces(result, node)[0], edit.selector.exact):
         # its quote still stands whole where Keep would replace it, whatever else stands in the block
         return None
     if _words(edit.with_text).search(text, node.start, node.end):
