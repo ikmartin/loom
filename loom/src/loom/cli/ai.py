@@ -175,6 +175,7 @@ def install_layer(
         variant,
         vendor_files,
     )
+    from loom.ai.skills import skill_files
 
     if shell is None:
         shell = variant(root) == SHELL
@@ -188,6 +189,7 @@ def install_layer(
             rep.written += [
                 *vendor_files(quilt_config(root), shell=shell, apps=apps),
                 *ensure_root_line(root, False, shell=shell, apps=apps),
+                *skill_files(root, apps),
             ]
     else:
         rep = upgrade_layer(root, write=write, shell=shell, apps=apps)

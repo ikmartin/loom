@@ -38,6 +38,8 @@ class Client:
         The file at the quilt's root the app reads first, where loom puts its one line (`layout.ensure_root_line`).
     permissions : str or None, default None
         The permission file loom writes whole for the app, in either variant (`layout.vendor_files`).
+    skills : str or None, default None
+        Where the app reads a project's skills, which loom writes one per mode (`ai.skills`).
     listed : bool, default True
         Named in `loom ai init --client`'s help; an app configured outside the quilt, which no pilot uses, is not, and still takes the option.
     """
@@ -51,6 +53,7 @@ class Client:
     walks_up: bool = False
     root_file: str | None = None
     permissions: str | None = None
+    skills: str | None = None
     listed: bool = True
 
     @property
@@ -68,6 +71,7 @@ CLIENTS = (
         walks_up=True,
         root_file="CLAUDE.md",
         permissions=".claude/settings.json",
+        skills=".claude/skills",
     ),
     Client(
         "codex",
@@ -77,6 +81,7 @@ CLIENTS = (
         extra=(("default_tools_approval_mode", "approve"),),
         root_file="AGENTS.md",
         permissions=".codex/rules/loom.rules",
+        skills=".agents/skills",
     ),
     Client(
         "gemini-cli", "Gemini CLI", ".gemini/settings.json", "json", extra=(("trust", True),), root_file="GEMINI.md"
