@@ -1,0 +1,332 @@
+"""The one intake (`refs.intake`): every file or pasted work becomes one row in one of four states, nothing is filed under an existing work without the person's word, and an undo gives the quilt back byte for byte. The study's B3, B4, B10 and B12 (`docs/reports/v0.1-study/raw/library.md` section 10) are tests here."""
+
+from __future__ import annotations
+
+import io
+import random
+from pathlib import Path
+
+import pytest
+
+from loom.paths import INCOMING
+from loom.refs.intake import IntakeRefused, Item, Row, _acts, answer, receive, take, undo, unfile, waiting
+from loom.scan.bib import BibEntry
+from loom.scan.quilt import load_quilt
+from loom.scan.scan import scan
+from tests.unit._quilts import demo, work_home
+from tests.unit.refs._made_pdfs import fake_pdf, real_pdf
+
+WHO = "A. Author"
+BIB = ".loom/digests/bibliography.bib"
+#: A second version of Calloway14, the work the demo cites: its title over its author's byline, with a page more and no identifier, since a PDF stating the work's own DOI is a copy of its document.
+CALLOWAY = "Fixed loci of involutions on separated spaces\nImogen Calloway\nA preprint\n\fA second page"
+#: A page that names no work in the demo's library.
+NOTES = "Notes on balanced quivers\nA. Halloway\nWe record what is known.\n"
+
+
+def tree(q: Path) -> dict[str, bytes]:
+    """Every file of the quilt outside `.loom/build/`, which every rebuild writes again, with its bytes."""
+    return {
+        p.relative_to(q).as_posix(): p.read_bytes()
+        for p in sorted(q.rglob("*"))
+        if p.is_file() and not p.relative_to(q).as_posix().startswith(".loom/build/")
+    }
+
+
+def bib(q: Path) -> dict[str, BibEntry]:
+    return scan(load_quilt(q)).bib
+
+
+def dropped(q: Path, name: str, text: str = NOTES, tmp: Path | None = None) -> Item:
+    """A file received as the viewer streams one, as an item to take."""
+    src = fake_pdf((tmp or q.parent) / "src" / name, text)
+    got = receive(q, name, io.BytesIO(src.read_bytes()), src.stat().st_size)
+    return Item(drop=got["incoming"], name=name)
+
+
+def taken(q: Path, *items: Item, online: bool = False) -> list[Row]:
+    return take(load_quilt(q), bib(q), list(items), by=WHO, online=online)
+
+
+def test_a_new_pdf_is_added_and_its_undo_leaves_the_quilt_byte_for_byte_as_before_the_drop(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    bib(q)
+    before = tree(q)
+    item = dropped(q, "Halloway - 2026 - Notes on balanced quivers.pdf")
+    (row,) = taken(q, item)
+    assert (row.state, row.citekey, row.pages) == ("added", "hallowayNotesBalancedQuivers2026", "read"), row
+    assert row.to_json()["title"] == "Notes on balanced quivers"
+    # B12: the drop has left `.loom/incoming/` for the store, and only the record of the act waits there
+    assert [p.name for p in (q / INCOMING / row.id).iterdir()] == ["act.json"]
+    assert (work_home(q, row.citekey) / "paper.pdf").is_file()
+    said, again = undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert again is None and "took hallowayNotesBalancedQuivers2026 out" in said
+    assert tree(q) == before
+
+
+def test_a_file_dropped_twice_says_it_is_already_here(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    (first,) = taken(q, dropped(q, "notes.pdf"))
+    (second,) = taken(q, dropped(q, "notes again.pdf"))
+    assert (second.state, second.citekey) == ("here", first.citekey) and "these very bytes" in second.why
+    # and twice in one take, from the command line
+    one = fake_pdf(tmp_path / "a" / "x.pdf", "A paper about widgets\nW. Smith\n")
+    two = tmp_path / "b" / "y.pdf"
+    two.parent.mkdir()
+    two.write_bytes(one.read_bytes())
+    rows = taken(q, Item(path=one), Item(path=two))
+    assert [r.state for r in rows] == ["added", "here"] and rows[1].citekey == rows[0].citekey
+
+
+def test_a_pdf_stating_a_works_identifier_is_a_question_and_nothing_is_filed_until_answered(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    bib(q)
+    before = tree(q)
+    item = dropped(q, "calloway-v2.pdf", CALLOWAY, tmp_path)
+    (row,) = taken(q, item)
+    assert row.state == "question" and [c["citekey"] for c in row.candidates] == ["Calloway14"], row
+    assert row.candidates[0]["how"] == "its title is the entry's and Calloway leads its byline"
+    assert row.document == {
+        "title": "Fixed loci of involutions on separated spaces",
+        "byline": "Imogen Calloway",
+        "identifiers": [],
+    }
+    assert waiting(q) == [row.to_json() | {"item": 0}] or waiting(q)[0]["state"] == "question"
+    assert {k for k in tree(q)} - set(before) == {
+        f"{INCOMING}/{row.id}/{n}" for n in ("arrived.json", "question.json", "calloway-v2.pdf")
+    }
+    with pytest.raises(IntakeRefused, match="not one of the works asked about"):
+        answer(load_quilt(q), bib(q), row.question, "Man12", by=WHO)
+    said = answer(load_quilt(q), bib(q), row.question, "Calloway14", by=WHO)
+    assert (said.state, said.under, said.sibling) == ("added", "Calloway14", "Calloway14-v2"), said
+    assert waiting(q) == []
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert tree(q) == before
+
+
+def test_a_different_work_is_kept_as_its_own(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "calloway-v2.pdf", CALLOWAY, tmp_path))
+    said = answer(load_quilt(q), bib(q), row.question, None, by=WHO)
+    assert said.state == "added" and not said.under and said.citekey == "FixedLociInvolutions"
+
+
+def test_the_quant_incident_through_the_intake(tmp_path: Path) -> None:
+    """B1 end to end: the library holds `Of`, made of a masthead; the Cox PDF from the same journal is added as a work of its own, under its own title."""
+    q = demo(tmp_path)
+    with (q / BIB).open("a", encoding="utf-8") as fh:
+        fh.write("\n@misc{Of,\n  title = {of Financial},\n  loom-added = {2026-11-11T21:00:00Z, The author},\n}\n")
+    cox = (
+        "Journal\nof Financial\nEconomics\nOPTION PRICING: A SIMPLIFIED APPROACH*\n7 (1979) 229-263.\n"
+        "John C. COX\nMassachusetts Institute of Technology, Cambridge, MA 02139, USA\n"
+    )
+    (row,) = taken(q, dropped(q, "1-s2.0-0304405X79900151-main.pdf", cox, tmp_path))
+    assert (row.state, row.under, row.title) == ("added", "", "OPTION PRICING: A SIMPLIFIED APPROACH"), row
+
+
+def test_an_entry_naming_no_author_is_asked_about_when_the_pdfs_own_title_is_its_title(tmp_path: Path) -> None:
+    """The author's request of 2026-11-04 holds through the question: a work whose entry is a title alone is still offered."""
+    q = demo(tmp_path)
+    with (q / BIB).open("a", encoding="utf-8") as fh:
+        fh.write("\n@misc{Wor,\n  title = {Stochastic Calculus for Finance II},\n}\n")
+    book = "Stochastic Calculus for Finance II\nContinuous-Time Models\nSteven E. Shreve\nPreface\n"
+    (row,) = taken(q, dropped(q, "Shreve - Stochastic Calculus for Finance II.pdf", book, tmp_path))
+    assert row.state == "question" and [(c["citekey"], c["how"]) for c in row.candidates] == [
+        ("Wor", "its title is Wor's")
+    ]
+
+
+def test_a_drop_on_a_work_is_filed_there_unless_it_shows_another_work_or_another_holds_it(tmp_path: Path) -> None:
+    """B3: the per-work upload filed on drop, though the PDF was another work's, and stored the bytes twice."""
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    (schedule,) = taken(q, dropped(q, "seminar.pdf", "Department of Mathematics\nSeminar schedule, spring\n", tmp_path))
+    assert schedule.state == "added"
+    item = dropped(q, "seminar again.pdf", "Department of Mathematics\nSeminar schedule, spring\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Har77"))
+    assert (row.state, row.citekey) == ("here", schedule.citekey)
+    sha = sha256_of(work_home(q, schedule.citekey) / "paper.pdf")
+    stored = [p for p in (q / ".loom/digests/storage").rglob("paper.pdf") if sha256_of(p) == sha]
+    assert len(stored) == 1 and not (work_home(q, "Har77") / "paper.pdf").exists()
+    stamped = dropped(
+        q,
+        "pullbacks.pdf",
+        "arXiv:0805.2065v2 [math.AG] 13 May 2008\nVirtual pull-backs\nCristina Manolache\n",
+        tmp_path,
+    )
+    (asked,) = taken(q, Item(drop=stamped.drop, name=stamped.name, work="Har77"))
+    assert asked.state == "question" and [c["citekey"] for c in asked.candidates] == ["Har77", "Man12"]
+    plain = dropped(q, "hartshorne.pdf", "Some scanned pages\n", tmp_path)
+    (filed,) = taken(q, Item(drop=plain.drop, name=plain.name, work="Har77"))
+    assert (filed.state, filed.under) == ("added", "Har77") and (work_home(q, "Har77") / "paper.pdf").is_file()
+
+
+def test_a_wrongly_filed_pdf_is_taken_off_its_work_and_undo_files_it_again(tmp_path: Path) -> None:
+    """B4: nothing could take a filed document off a work, and deleting a cited one is refused."""
+    q = demo(tmp_path)
+    item = dropped(q, "schedule.pdf", "Department of Mathematics\nSeminar schedule, spring\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Man12"))
+    assert (row.state, row.under) == ("added", "Man12")
+    filed = tree(q)
+    off = unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    assert off["incoming"] == row.id and off["row"]["state"] == "received"
+    assert not (work_home(q, "Man12") / "paper.pdf").exists()
+    assert [r["id"] for r in waiting(q)] == [row.id]
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert tree(q) == filed
+    # taken off again and taken in again, it is never asked about the work it was taken off
+    unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    (again,) = taken(q, Item(drop=row.id, name="schedule.pdf"))
+    assert again.state == "added" and not again.under
+    with pytest.raises(IntakeRefused, match="has results read off this PDF") as caught:
+        unfile(scan(load_quilt(q)), "Calloway14", by=WHO)
+    assert caught.value.code == "has-results"
+    with pytest.raises(IntakeRefused, match="holds no PDF"):
+        unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    # a work that came in with its PDF is nothing without it: undo or delete takes it out whole
+    with pytest.raises(IntakeRefused, match="came in with this PDF") as caught:
+        unfile(scan(load_quilt(q)), again.citekey, by=WHO)
+    assert caught.value.code == "own-document"
+
+
+def test_an_undo_is_refused_once_the_work_is_cited(tmp_path: Path) -> None:
+    from tests.helpers import edit
+
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "notes.pdf"))
+    edit(q / "drafting" / "main.tex", "\\end{document}", f"\\cite{{{row.citekey}}}\n\\end{{document}}")
+    with pytest.raises(IntakeRefused, match="is cited by your documents") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "not-new"
+
+
+@pytest.mark.poppler
+def test_a_scan_with_no_text_and_a_textbook_with_no_doi_each_come_in(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    book = real_pdf(
+        tmp_path / "src" / "casella.pdf",
+        [[], []],
+        info={"Title": "Statistical Inference", "Author": "George Casella, Roger L. Berger"},
+    )
+    scan_ = real_pdf(tmp_path / "src" / "scanned-surgery.pdf", [[]], info={"Author": "https://imagemagick.org"})
+    rows = taken(q, Item(path=book), Item(path=scan_))
+    assert [(r.state, r.citekey, r.pages) for r in rows] == [
+        ("added", "casellaStatisticalInference", "none"),
+        ("added", "ScannedSurgery", "none"),
+    ], rows
+
+
+def test_many_files_dropped_at_once_are_each_a_row(tmp_path: Path) -> None:
+    """B10: a drop of twelve PDFs added one, silently."""
+    q = demo(tmp_path)
+    items = [
+        dropped(q, f"paper {k}.pdf", f"On the {w} of widgets\nW. Smith\n", tmp_path)
+        for k, w in enumerate(("rank", "genus", "degree", "height"))
+    ]
+    items.append(
+        Item(path=fake_pdf(tmp_path / "src" / "notes.txt", "not a pdf").with_name("notes.txt"), name="notes.txt")
+    )
+    items[-1].path.write_text("plain text")  # type: ignore[union-attr]
+    rows = taken(q, *items)
+    assert [r.state for r in rows] == ["added", "added", "added", "added", "cannot"] and rows[-1].code == "not-a-pdf"
+    assert len({r.citekey for r in rows[:4]}) == 4
+
+
+def test_a_pasted_text_is_a_row_a_line_or_an_entry(tmp_path: Path) -> None:
+    """B8: two BibTeX entries pasted were one; a list of identifiers was not recognised."""
+    q = demo(tmp_path)
+    two = "@article{Ost18, author={Ostrander, D.}, title={Widget categories and their duals}, year={2018}}\n@book{Vale20, author={Vale, E.}, title={Gadgets}, year={2020}}"
+    rows = taken(q, Item(text=two))
+    assert [(r.state, r.citekey) for r in rows] == [("added", "Ost18"), ("added", "Vale20")]
+    again = taken(q, Item(text=two.split("\n")[0].replace("Ost18", "Other")))
+    assert again[0].state == "question" and again[0].candidates[0]["citekey"] == "Ost18"
+    ids = taken(q, Item(text="arXiv:0805.2065\n10.5555/x.1\nISBN 978-0-387-98549-7\nwidgets, somewhere"))
+    assert [(r.state, r.code) for r in ids] == [
+        ("cannot", "offline"),
+        ("cannot", "offline"),
+        ("cannot", "no-service"),
+        ("cannot", "not-recognised"),
+    ]
+    before = tree(q)
+    (last,) = taken(q, Item(text="@misc{Lone, title={A lone entry}}"))
+    undo(scan(load_quilt(q)), last.id, by=WHO)
+    assert tree(q) == before
+
+
+def test_a_dry_run_writes_nothing(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    pdf = fake_pdf(tmp_path / "src" / "x.pdf", NOTES)
+    before = tree(q)
+    (row,) = take(load_quilt(q), bib(q), [Item(path=pdf)], by=WHO, write=False)
+    assert row.state == "added" and tree(q) == before
+
+
+def _whole(q: Path) -> None:
+    """No damage: the bibliography reads, and every work whose entry says where its PDF is holds it there."""
+    from loom.refs.fetch import work_dir
+
+    for key, entry in bib(q).items():
+        if entry.fields.get("loom-file"):
+            assert (work_dir(q, entry) / "paper.pdf").is_file() or entry.fields.get("loom-copy-of") is None, key
+
+
+@pytest.mark.parametrize("seed", [20261117, 7, 31])
+def test_random_drops_answers_unfiles_and_undos_never_damage_and_each_undo_restores_the_exact_bytes(
+    tmp_path: Path, seed: int
+) -> None:
+    """The Safe gate's check for the library, on the demo: a seeded sequence of acts, each undone in turn back to the quilt as it was."""
+    q = demo(tmp_path)
+    bib(q)
+    start = tree(q)
+    rng = random.Random(seed)
+    pool = [
+        NOTES,
+        CALLOWAY,
+        "On the rank of widgets\nW. Smith\n",
+        "Some scanned pages\n",
+        "Department of Mathematics\nSchedule\n",
+    ]
+    done: list[tuple[str, dict[str, bytes]]] = []
+    for step in range(24):
+        roll = rng.random()
+        before = tree(q)
+        if roll < 0.5 or not done:
+            text = rng.choice(pool)
+            (row,) = taken(q, dropped(q, f"drop {step}.pdf", text, tmp_path / str(step)))
+            if row.state == "question":
+                row = answer(
+                    load_quilt(q), bib(q), row.question, rng.choice([None, row.candidates[0]["citekey"]]), by=WHO
+                )
+            if row.state == "added":
+                done.append((row.id, before))
+            elif row.state == "here":
+                outside = {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")}
+                assert outside == {k: v for k, v in before.items() if not k.startswith(f"{INCOMING}/")}
+        elif roll < 0.65:
+            filed = [r for r, _ in done]
+            unfilable = [
+                a["citekey"]
+                for r in filed
+                for a in _acts(q / INCOMING / r)[-1:]
+                if a["kind"] == "added" and a.get("home")
+            ]
+            if not unfilable:
+                continue
+            key = rng.choice(unfilable)
+            try:
+                got = unfile(scan(load_quilt(q)), key, by=WHO)
+            except IntakeRefused as refused:
+                assert refused.code in ("own-document", "has-results", "no-document") and tree(q) == before
+                continue
+            done.append((got["incoming"], before))
+        else:
+            drop, was = done.pop()
+            undo(scan(load_quilt(q)), drop, by=WHO)
+            assert tree(q) == was, f"step {step}: undoing {drop[:12]} left the quilt changed"
+        _whole(q)
+    while done:
+        drop, was = done.pop()
+        undo(scan(load_quilt(q)), drop, by=WHO)
+        assert tree(q) == was
+    assert tree(q) == start

@@ -133,7 +133,7 @@ def test_a_title_corrected_by_hand_keeps_the_pdf(tmp_path: Path) -> None:
 
 
 def test_deleting_a_work_leaves_nothing_of_it_and_it_can_be_given_again(tmp_path: Path) -> None:
-    from loom.paths import BUILD
+    from loom.paths import INCOMING
     from loom.refs.added import delete_work
     from loom.refs.links import add_link, read_links
     from loom.refs.pages import sha256_of
@@ -157,7 +157,7 @@ def test_deleting_a_work_leaves_nothing_of_it_and_it_can_be_given_again(tmp_path
         made(q, "StatisticsQuantsRevision").write_text("%\n", encoding="utf-8")
     add_link(q, "StatisticsQuantsRevision-thm-1", "Other-thm-1", "depends-on", "It says so.", "A. Author")
     add_link(q, "Mine-thm-1", "Other-thm-1", "depends-on", "Nothing to do with it.", "A. Author")
-    upload = q / BUILD / "uploads" / sha / "notes.pdf"
+    upload = q / INCOMING / sha / "notes.pdf"
     upload.parent.mkdir(parents=True)
     upload.write_bytes(pdf.read_bytes())
 

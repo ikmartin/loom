@@ -360,15 +360,18 @@ def candidates(result: ScanResult, report: ScanReport) -> dict[str, Candidate]:
 
 
 def _append(path: Path, entries: list[Candidate]) -> None:
-    """Add entries to the bibliography. Only ever appends, so a correction made by hand outlives every later scan."""
+    """Add entries to the bibliography, under the library's lock and replacing the file whole. Only ever appends, so a correction made by hand outlives every later scan."""
+    from loom.refs.intake import library_lock, write_whole
+
     if not entries:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    prior = path.read_text(encoding="utf-8") if path.is_file() else HEADER
-    chunks = [prior if prior.endswith("\n") else prior + "\n"]
-    for c in entries:
-        chunks.append(f"\n% from {c.source}\n{c.text}")
-    path.write_text("".join(chunks), encoding="utf-8")
+    with library_lock(path.parent.parent.parent):
+        prior = path.read_text(encoding="utf-8") if path.is_file() else HEADER
+        chunks = [prior if prior.endswith("\n") else prior + "\n"]
+        for c in entries:
+            chunks.append(f"\n% from {c.source}\n{c.text}")
+        write_whole(path, "".join(chunks))
 
 
 def scan_bibliography(quilt: Quilt, *, write: bool = True, result: ScanResult | None = None) -> ScanReport:
@@ -534,9 +537,11 @@ def drop_copies(root: Path, key: str, home: Path | None) -> list[str]:
     to = home.relative_to(storage_root(root)).as_posix() if home is not None else None
     gone = [sha for sha, rec in ledger.items() if rec.get("duplicate-of") == key or (to and rec.get("to") == to)]
     if gone:
+        from loom.refs.intake import write_whole
+
         for sha in gone:
             del ledger[sha]
-        (storage_root(root) / LEDGER).write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        write_whole(storage_root(root) / LEDGER, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
     return gone
 
 
@@ -554,7 +559,9 @@ def record_copy(root: Path, sha: str, source: str, home: Path, extra: dict[str, 
         **(extra or {}),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    from loom.refs.intake import write_whole
+
+    write_whole(path, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
 
 
 def version_key(key: str, taken: set[str]) -> str:
@@ -838,8 +845,8 @@ def record_copy_of(quilt: Quilt, bib: dict[str, BibEntry], f: Filing) -> None:
     record_copy(quilt.root, f.sha, f.source, work_dir(quilt.root, bib[f.copy_of]), {"duplicate-of": f.copy_of})
 
 
-def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = True) -> None:
-    """Copy a planned filing into the store, write a PDF's page text, and record it in the copy ledger, with what the document showed against the work a person named and who named it.
+def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = True, move: bool = False) -> None:
+    """Copy a planned filing into the store, or with `move` move it there (a drop waiting in `.loom/incoming/`), write a PDF's page text, and record it in the copy ledger, with what the document showed against the work a person named and who named it.
 
     With `read_pages` false the page text is left to a library run, since a long book takes seconds and the PDF stands without it. A filing that replaces a set-aside document clears what was read off it (its word boxes; its page text is rewritten), keeps it set aside by its hash, and withdraws the work's own claim, since the work now holds a document wanted.
     """
@@ -851,7 +858,10 @@ def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = T
     if f.replaces:
         shutil.rmtree(storage_root(root) / "cache" / "boxes" / f.home.parent.name / f.home.name, ignore_errors=True)
     if f.kind == "pdf":
-        shutil.copy(f.path, f.home / "paper.pdf")
+        if move:
+            shutil.move(str(f.path), str(f.home / "paper.pdf"))
+        else:
+            shutil.copy(f.path, f.home / "paper.pdf")
         try:
             if read_pages and not write_map(f.home, f.home / "paper.pdf").chars:
                 f.unmapped = "it has no text layer"

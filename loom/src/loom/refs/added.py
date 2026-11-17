@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from loom.clock import stamp
-from loom.paths import BUILD
+from loom.paths import INCOMING
 from loom.refs.scan import Candidate, append_entries
 from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib
 from loom.scan.quilt import Quilt
@@ -184,15 +184,19 @@ def delete_work(result: ScanResult, key: str, who: str) -> str:
             )
         if _block(text, k) is None:
             raise NotDeletable("no-such-work", f"the library's entry for {k} could not be found in {BIBLIOGRAPHY}")
+    from loom.refs.intake import library_lock, write_whole
+
     held = False
-    for k in doomed:
-        held = _delete_held(root, k, entries, doomed, who) or held
-    # the entries last: what fails before here leaves a work that can be deleted again
-    for k in doomed:
-        where = _block(text, k)
-        assert where is not None
-        text = text[: where[0]] + text[where[1] :]
-    path.write_text(text, encoding="utf-8")
+    with library_lock(root):
+        for k in doomed:
+            held = _delete_held(root, k, entries, doomed, who) or held
+        # the entries last: what fails before here leaves a work that can be deleted again
+        text = path.read_text(encoding="utf-8")
+        for k in doomed:
+            where = _block(text, k)
+            assert where is not None
+            text = text[: where[0]] + text[where[1] :]
+        write_whole(path, text)
     also = f" and its {'copy' if len(doomed) == 2 else 'copies'} {', '.join(doomed[1:])}" if doomed[1:] else ""
     return f"deleted {key}{also} from the library" + (", with loom's copy of the PDF" if held else "")
 
@@ -237,5 +241,5 @@ def _delete_held(root: Path, key: str, entries: Mapping[str, BibEntry], doomed: 
         shutil.rmtree(home)
     for sha in hashes:
         if re.fullmatch(r"[0-9a-f]{64}", sha):
-            shutil.rmtree(root / BUILD / "uploads" / sha, ignore_errors=True)
+            shutil.rmtree(root / INCOMING / sha, ignore_errors=True)
     return goes

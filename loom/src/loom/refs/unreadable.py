@@ -139,7 +139,9 @@ def declare(
     events = load_events(root)
     events.append(event)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"events": events}, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    from loom.refs.intake import write_whole
+
+    write_whole(p, json.dumps({"events": events}, indent=1, ensure_ascii=False) + "\n")
     return declarations(root, kind).get(key)
 
 
