@@ -222,7 +222,7 @@ def _delimiters(own: str) -> tuple[int, int] | None:
 def misplaced(own: str, pieces: list[tuple[int, int, int]], span: tuple[int, int]) -> str | None:
     """Why the quoted words at `span` of a block's own text are no place for an edit, or None when they are.
 
-    Two places are refused. Words that reach the block's `\\begin{…}` or `\\end{…}`: text put beside them lands outside the block, where nothing afterwards reads it as the edit taken, and Keep would write it again. And words that run across a child cut out of the own text: they are not in one piece of the file, and only the first piece would be replaced.
+    Two places are refused. Words that reach the block's `\\begin{…}` or `\\end{…}`: text put beside them lands outside the block, in the one around it, though the edit names this one. And words that run across a child cut out of the own text: they are not in one piece of the file, and only the first piece would be replaced.
     """
     a, b = span
     edges = _delimiters(own)
@@ -289,36 +289,57 @@ def body_edge(own: str, placement: str) -> str:
     return own[max(a, b - EDGE) : b] if placement == "after" else own[a : min(b, a + EDGE)]
 
 
-def _after(text: str, at: int, words: str) -> int | None:
-    """Where `words` ends when it stands right after `at` in `text`, whitespace compared normalised; `at` for words that are only whitespace, None when they do not stand there."""
+def _after(text: str, at: int, words: str) -> tuple[int, int] | None:
+    """Where `words` stands when it stands right after `at` in `text`, whitespace before it skipped and inside it compared normalised; `(at, at)` for words that are only whitespace, None when they do not stand there."""
     if not words.split():
-        return at
-    m = re.compile(r"\s*" + _words(words).pattern).match(text, at)
-    return m.end() if m else None
+        return at, at
+    m = re.compile(r"\s*(" + _words(words).pattern + ")").match(text, at)
+    return m.span(1) if m else None
 
 
-def _before(text: str, at: int, words: str) -> int | None:
-    """Where `words` starts when it stands right before `at` in `text`, as `_after` reads it."""
+def _before(text: str, at: int, words: str) -> tuple[int, int] | None:
+    """Where `words` stands when it stands right before `at` in `text`, as `_after` reads it."""
     if not words.split():
-        return at
+        return at, at
     start = max(0, at - 4 * len(words) - 256)
-    m = re.compile(_words(words).pattern + r"\s*\Z").search(text[start:at])
-    return start + m.start() if m else None
+    m = re.compile("(" + _words(words).pattern + r")\s*\Z").search(text[start:at])
+    return (start + m.start(1), start + m.end(1)) if m else None
+
+
+def _added(edit: Edit) -> tuple[str, str] | None:
+    """What an edit judged at its own place adds before and after the place it is anchored to, or None for one judged in its block's whole text.
+
+    An insertion adds its new text on its side of its quote, or at the head or foot of its body; a replacement whose new text holds its quote adds the words its new text has either side of the quote. A deletion and any other replacement are judged in the block's whole text (`taken_how`).
+    """
+    new = edit.with_text
+    if not new.strip():
+        return None
+    if edit.placement == "after":
+        return "", new
+    if edit.placement == "before":
+        return new, ""
+    if edit.selector is None or _flat(edit.selector.exact) not in _flat(new):
+        return None
+    p, s = find_quote(new, edit.selector.exact)[0]
+    return new[:p], new[s:]
 
 
 def _beside(edit: Edit, own: str, span: tuple[int, int]) -> str | None:
     """Why the words recorded beside an insertion's place no longer stand there in `own`, or None when they do.
 
-    Beside a quote at `span` these are its selector's `suffix` (`after`) or `prefix` (`before`); at a body's foot or head, `span` the body, its `edge`, and an empty `edge` is a body that was empty. An edit that recorded none is not judged.
+    Beside a quote at `span` these are its selector's `suffix` and `prefix`, on each side the edit adds text to (`_added`): an insertion's, and a replacement's whose new text holds its quote. At a body's foot or head, `span` the body, its `edge`, and an empty `edge` is a body that was empty. An edit that recorded none is not judged.
     """
     a, b = span
     if edit.selector is not None:
-        if edit.placement == "after" and _after(own, b, edit.selector.suffix) is None:
+        added = _added(edit)
+        if added is None:
+            return None
+        if added[1].strip() and _after(own, b, edit.selector.suffix) is None:
             return f"the words right after the text {edit.id} quotes have changed since it was suggested"
-        if edit.placement == "before" and _before(own, a, edit.selector.prefix) is None:
+        if added[0].strip() and _before(own, a, edit.selector.prefix) is None:
             return f"the words right before the text {edit.id} quotes have changed since it was suggested"
         return None
-    if edit.edge is None:
+    if edit.placement == "replace" or edit.edge is None:
         return None
     end = "end" if edit.placement == "after" else "head"
     if not edit.edge.split():
@@ -329,10 +350,10 @@ def _beside(edit: Edit, own: str, span: tuple[int, int]) -> str | None:
         )
     if edit.placement == "after":
         at = _before(own, b, edit.edge)
-        stands = at is not None and at >= a
+        stands = at is not None and at[0] >= a
     else:
         to = _after(own, a, edit.edge)
-        stands = to is not None and to <= b
+        stands = to is not None and to[1] <= b
     return None if stands else f"the {end} of the body {edit.id} goes at has changed since it was suggested"
 
 
@@ -378,7 +399,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     new = edit.with_text
     if edit.selector is None:
         a, b = body_span(own)
-        changed = _beside(edit, own, (a, b)) if edit.placement != "replace" else None
+        changed = _beside(edit, own, (a, b))
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
         if edit.placement == "after":
@@ -399,7 +420,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         why = misplaced(own, pieces, (a, b))
         if why is not None:
             raise Unplaced(f"the words {edit.id} quotes in {node.key} {why}")
-        changed = _beside(edit, own, (a, b)) if new and edit.placement != "replace" else None
+        changed = _beside(edit, own, (a, b))
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
         if edit.placement == "after":
@@ -495,22 +516,102 @@ WRITTEN_SHARE = 0.9
 WRITTEN_WORDS = 20
 
 
-def _written_since(edit: Edit, whole: str) -> bool:
-    """Whether most of the edit's new text stands in `whole`, its words in order with others between: written in, then edited.
+def _written_since(text: str, whole: str) -> bool:
+    """Whether most of an edit's new `text` stands in `whole`, its words in order with others between: written in, then edited.
 
     A text the person took in and then worked inside no longer stands as it was suggested, and writing it again would put in a second copy.
     """
-    new = edit.with_text.split()
+    new = text.split()
     if len(new) < WRITTEN_WORDS:
         return False
     matcher = difflib.SequenceMatcher(None, new, whole.split(), autojunk=False)
     return sum(b.size for b in matcher.get_matching_blocks()) >= WRITTEN_SHARE * len(new)
 
 
+def _standing(text: str, x: int, new: str, beside: str | None, after: bool) -> tuple[int, int] | None:
+    """Where `new` stands as an insertion written at the point `x` of `text`, right after it (`after`) or right before it; None when it does not stand so.
+
+    The words recorded beside the point when the edit was suggested (`beside`; None when none were) must then stand right beyond the new text, or be gone from beside the point: a phrase that stood beside the point already reads with its neighbour where it always was, and is not the edit.
+    """
+    got = _after(text, x, new) if after else _before(text, x, new)
+    if got is None or beside is None:
+        return got
+    beyond = _after(text, got[1], beside) if after else _before(text, got[0], beside)
+    still = _after(text, x, beside) if after else _before(text, x, beside)
+    return got if beyond is not None or still is None else None
+
+
+def _at_place(result: ScanResult, node: NodeRec, edit: Edit, added: tuple[str, str]) -> tuple[int, int] | None:
+    """Where in its file `edit`'s text stands at its own place, written as Keep would have written it (`_standing`); None when it does not.
+
+    Beside its quote, its added words either side of where the quote stands once in the block's own text; at the foot of its body, right before the body's end; at its head, right after the body's start, or right before it when the text reads as the block's head (a `\\uses{…}` taken in). Read in the file's text, so text that opened a section, or landed past an `\\end{…}`, is seen where it stands.
+    """
+    text = result.files[node.file].text
+    own, pieces = Records.own_pieces(result, node)
+    if edit.selector is not None:
+        found = find_quote(own, edit.selector.exact)
+        if len(found) != 1:
+            return None
+        a, b = found[0]
+        fa, fb = _point(pieces, a), _point(pieces, b)
+        if fa is None or fb is None or fb[0] - fa[0] != b - a:
+            return None
+        lead, tail = added
+        left = _standing(text, fa[0], lead, edit.selector.prefix, after=False) if lead.strip() else fa
+        right = _standing(text, fb[0], tail, edit.selector.suffix, after=True) if tail.strip() else fb
+        return (left[0], right[1]) if left is not None and right is not None else None
+    a, b = body_span(own)
+    if edit.placement == "after":
+        foot = _point(pieces, b)
+        return _standing(text, foot[0], edit.with_text, edit.edge, after=False) if foot is not None else None
+    head = _point(pieces, a)
+    if head is None:
+        return None
+    got = _standing(text, head[0], edit.with_text, edit.edge, after=True)
+    if got is None:
+        # taken into the block's head: the body now starts after it, with the words it started with
+        got = _before(text, head[0], edit.with_text)
+        if got is not None and (
+            got[0] < node.start or edit.edge is not None and _after(text, got[1], edit.edge) is None
+        ):
+            got = None
+    return got
+
+
+def where_taken(result: ScanResult, edit: Edit) -> list[tuple[int, int]]:
+    """Where in its file `edit`'s new text stands, read as the edit taken: at its own place for an edit judged there (`_added`), anywhere in its block's whole text for any other; [] when nowhere.
+
+    Parameters
+    ----------
+    result : ScanResult
+        A scan of the quilt now.
+    edit : Edit
+        The suggested edit.
+
+    Returns
+    -------
+    list of (int, int)
+        File offsets in the file of the edit's block.
+
+    See Also
+    --------
+    taken_how : whether the edit reads as taken at all.
+    """
+    node = home(result, edit)
+    if node is None or node.file not in result.files or not edit.with_text.strip():
+        return []
+    added = _added(edit)
+    if added is not None:
+        at = _at_place(result, node, edit, added)
+        return [at] if at is not None else []
+    whole = result.files[node.file].text[node.start : node.end]
+    return [(node.start + a, node.start + b) for a, b in find_quote(whole, edit.with_text)]
+
+
 def taken_how(result: ScanResult, edit: Edit) -> str | None:
     """How the block's text now reads as the edit taken: `as-written` when its new text stands, `edited` when most of it does with the person's words between, None when it is not taken.
 
-    The new text is looked for in the block's whole text, its children's included, since text that opens a section or an environment is read as the block's child once it is in. A replacement is taken when its text stands and its quote no longer does in the block's own text outside it, or, edited, when its quote is gone from the own text; an insertion when its text stands; a deletion when its quote is gone from the own text. Whitespace is compared normalised, as a quote is.
+    An insertion, and a replacement whose new text holds its quote, are judged at their own place (`_at_place`): their text must stand right where Keep writes it, and the words recorded beside that place when they were suggested must stand beyond it or be gone, so that a phrase already beside the quote is not read as the edit. Any other replacement is looked for in the block's whole text, its children's included, and is taken when its text stands and its quote no longer does in the block's own text outside it, or, edited, when its quote is gone from the own text; a deletion when its quote is gone from the own text. Whitespace is compared normalised, as a quote is.
     """
     node = home(result, edit)
     if node is None or node.file not in result.files:
@@ -519,9 +620,14 @@ def taken_how(result: ScanResult, edit: Edit) -> str | None:
     quote = _flat(edit.selector.exact) if edit.selector else ""
     if not edit.with_text.strip():
         return "as-written" if quote and quote not in _flat(Records.own_pieces(result, node)[0]) else None
+    added = _added(edit)
+    if added is not None:
+        if _at_place(result, node, edit, added) is not None:
+            return "as-written"
+        return "edited" if _written_since(" ".join(added), text[node.start : node.end]) else None
     holes = [m.span() for m in _words(edit.with_text).finditer(text, node.start, node.end)]
     if not holes:
-        if not _written_since(edit, text[node.start : node.end]):
+        if not _written_since(edit.with_text, text[node.start : node.end]):
             return None
         if edit.placement == "replace" and quote and quote in _flat(Records.own_pieces(result, node)[0]):
             return None

@@ -8,7 +8,18 @@ from typing import Any
 
 import pytest
 
-from loom.records.edits import Edit, Unplaced, body_span, find, is_taken, patch, place, replay, taken_how
+from loom.records.edits import (
+    Edit,
+    Unplaced,
+    body_span,
+    find,
+    is_taken,
+    patch,
+    place,
+    replay,
+    taken_how,
+    where_taken,
+)
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import copy, edit, exits, flat, json_of, ok, refused, run
@@ -554,7 +565,7 @@ def filed(q: Path, key: str, new: str, quote: str | None = None, placement: str 
 
 
 def test_words_that_reach_a_blocks_begin_or_end_are_no_place_for_an_edit(tmp_path: Path) -> None:
-    """Text put beside a block's `\\end{…}` lands outside the block, where nothing afterwards reads it as the edit taken, and Keep wrote it again each time it was pressed (SAFE-1 of the v0.1 study)."""
+    """Text put beside a block's `\\end{…}` lands in the block around it, though the edit names this one; the v0.1 study found Keep writing it there again each time it was pressed (SAFE-1)."""
     q = demo(tmp_path)
     for quote, where in (
         ("\\end{lemma}", "--after"),
@@ -620,6 +631,44 @@ def test_blocks_that_read_the_same_under_the_same_line_take_no_edit(tmp_path: Pa
     refused("suggest", f"{SHEET}#proof:2", "--with", "An answer.", "--as", "Tom", cwd=q, code=2, match="the same under the same line")  # fmt: skip
     # the remark reads like no other block, and takes one
     assert suggest(q, "--with", "A remark.", "--after", key=f"{SHEET}#remark:1")
+
+
+def test_a_phrase_suggested_beside_the_very_words_that_already_stand_there_is_not_read_as_taken(tmp_path: Path) -> None:
+    """Harness seed 3077 of the door's spike: a phrase suggested where the same phrase already stood read as taken, and Keep wrote nothing (SAFE-8). An insertion is taken only when its text stands at its place with the words recorded beside the place beyond it, or gone."""
+    q = demo(tmp_path)
+    after = suggest(q, "--quote", "Every orbit", "--with", "of a widget", "--after")
+    foot = suggest(q, "--with", "the one-point orbits.", "--after")
+    for a in (after, foot):
+        assert taken_how(*placed(q, a)) is None
+    ok("changes", "--keep", after, cwd=q)
+    ok("changes", "--keep", foot, cwd=q)
+    text = (q / LEMMA).read_text()
+    assert "Every orbit of a widget of a widget has" in text and text.count("the one-point orbits.") == 2
+
+
+def test_a_replacement_whose_new_text_holds_its_quote_is_judged_beside_the_quote(tmp_path: Path) -> None:
+    """Harness seed 3019: a replacement that adds words after its quote, where those very words already followed it, read as taken and was never written."""
+    q = demo(tmp_path)
+    a = suggest(q, "--quote", "$\\Fix(\\sigma)$ is", "--with", "$\\Fix(\\sigma)$ is the union")
+    assert taken_how(*placed(q, a)) is None
+    b = suggest(q, "--quote", "one or two points", "--with", "one or two points (never more)")
+    edit(q / LEMMA, "one or two points", "one or two points (never more)")
+    assert taken_how(*placed(q, b)) == "as-written"
+    # touched once written in, it is placed nowhere, never written beside itself
+    edit(q / LEMMA, "(never more)", "(never more than two)")
+    assert taken_how(*placed(q, b)) is None
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, b))
+
+
+def test_a_uses_written_in_by_hand_at_the_head_of_the_body_reads_as_taken(tmp_path: Path) -> None:
+    """A `\\uses{…}` taken in is read as the block's head, so the body starts after it with the words it started with."""
+    q = demo(tmp_path)
+    a = suggest(q, "--with", "\\uses{dm-0001}", "--before")
+    edit(q / LEMMA, "\\label{lem:orbits}\n", "\\label{lem:orbits}\n\\uses{dm-0001}\n")
+    assert taken_how(*placed(q, a)) == "as-written"
+    (span,) = where_taken(*placed(q, a))
+    assert (q / LEMMA).read_text()[span[0] : span[1]] == "\\uses{dm-0001}"
 
 
 def test_an_insertion_is_placed_only_while_the_words_beside_its_place_stand(tmp_path: Path) -> None:

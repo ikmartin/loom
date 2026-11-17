@@ -331,15 +331,52 @@ def test_text_written_in_and_worked_inside_is_not_written_again(q: Path) -> None
 # Damage the v0.1 safety study found (docs/reports/v0.1-study/raw/safety.md); each test passes once its finding is fixed.
 
 
+def filed(root: Path, key: str, new: str, quote: str, placement: str) -> str:
+    """A suggested edit written into the log directly, as one was before `loom suggest` refused its quote."""
+    from loom.clock import stamp, today
+    from loom.records.edits import append_new
+    from loom.records.selectors import make_selector
+    from loom.records.store import Records
+    from loom.scan.owntext import key_hash
+
+    result = scan(root)
+    own = Records.own_pieces(result, result.nodes[key])[0]
+    event = {
+        "event": "created",
+        "when": stamp(),
+        "author": AGENT,
+        "kind": "agent",
+        "target": key,
+        "against": key_hash(result, key),
+        "anchor": make_selector(own, quote).to_dict(),
+        "with": new,
+        "placement": placement,
+    }
+    return append_new(root, event, today())
+
+
 def test_an_edit_placed_after_its_blocks_end_is_not_written_twice(q: Path) -> None:
+    """`loom suggest` has refused a quote that reaches a block's `\\end{…}` since 72dd301d; an edit filed before that and written in by hand past the `\\end{remark}` is read as taken where it stands, and never written again."""
     node = q / "drafting/nodes/sy-000A.tex"
     new = "A gadget with three points has one fixed point."
-    eid = suggest(q, "sy-000A", new, "--quote", "\\end{remark}", "--after")
+    eid = filed(q, "sy-000A", new, "\\end{remark}", "after")
     node.write_text(
         node.read_text().replace("\\end{remark}", "\\end{remark} " + new), encoding="utf-8"
     )  # written in by hand
+    assert [p.state for p in waiting(q) if p.id == eid] == ["taken"]
     call(q, "change-keep", {"changes": [eid]})
     assert node.read_text().count(new) == 1
+
+
+def test_a_section_suggested_after_a_line_and_typed_in_there_by_hand_is_not_written_again(q: Path) -> None:
+    """The shape of the study's `r_section_in_block`: the new text opens a section, so once it is in it is the block's child, and is read in the file where it stands."""
+    main = q / "drafting/main.tex"
+    new = "\\section*{Preface}\nA word before the setup."
+    eid = suggest(q, "drafting/main.tex", new, "--quote", "\\maketitle", "--after")
+    main.write_text(main.read_text().replace("\\maketitle", "\\maketitle\n" + new, 1), encoding="utf-8")
+    assert [p.state for p in waiting(q) if p.id == eid] == ["taken"]
+    call(q, "change-keep", {"changes": [eid]})
+    assert main.read_text().count("A word before the setup.") == 1
 
 
 def test_a_short_edit_written_in_and_touched_is_not_written_twice(q: Path) -> None:
@@ -464,11 +501,6 @@ def test_discarding_an_agents_edit_in_a_crlf_file_gives_back_its_bytes(q: Path) 
     assert f.read_bytes() == original
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=AssertionError,
-    reason="SAFE-8: an insertion whose words stand elsewhere in its block reads as taken, and Keep writes nothing",
-)
 def test_keeping_an_insertion_writes_it_even_when_its_words_stand_elsewhere_in_the_block(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     eid = suggest(q, "sy-000A", "\\cite[Theorem 2.1]{Kre99}", "--quote", "Gadgets exist:", "--after")

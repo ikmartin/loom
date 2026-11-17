@@ -129,6 +129,18 @@ The door makes sure loom never writes an edit twice by its own hand: the journal
 
 **The words beside its place.** An insertion is written against the words beside its place when it was suggested: a quote's selector records up to 32 characters either side of the quote (`suffix` after it, `prefix` before it), and an insertion at the head or foot of a body records the body's first or last 32 characters (`edge`, written by `loom suggest`; `''` for a body that was empty). An insertion is placed only while those words still stand right beside its place, compared with whitespace normalised (`place`); otherwise it is unplaced, said in the person's words, and Keep writes nothing. Text the person wrote in at the place since, and then touched, cannot be told from the edit by any reading of the text, and refusing is what keeps it from being written beside again. An edit that recorded no `edge` is placed as before.
 
+A replacement whose new text holds its quote adds words either side of the quote, and is judged as an insertion on each side it adds to.
+
+**Taken is judged at the place.** Whether an edit's text is in already (`taken_how`) is asked where Keep would write it, never anywhere in its block. An insertion, and a replacement whose new text holds its quote, read as taken only when the new text stands right at the place, in the file's text so that text which opened a section or landed past an `\end{…}` is seen, and when the words recorded beside the place stand right beyond the new text or are gone from beside the place. A phrase that already stood where an edit goes reads with its neighbour where it always was, and is not the edit. A `\uses{…}` taken in at a body's head is read as the head, the body starting after it with the words it started with. A long text the person took in and worked inside (twenty words or more, nine in ten still in order) reads as taken, `edited`, as before. Any other replacement is taken when its text stands in the block and its quote no longer does, and a deletion when its quote is gone.
+
+`loom suggest` keeps two guards from before these rules, for what they still say:
+
+| guard | what it refuses | why it stays |
+|---|---|---|
+| a quote that reaches the block's `\begin` or `\end`, or runs across a block inside it (`misplaced`) | the edit, at filing and at Keep | text beside a `\begin` or `\end` lands in the block around the one the edit names, and words in two pieces of the file cannot be replaced in one. It is no longer what stops a second write: an edit filed before the guard and written in by hand is read as taken where it stands |
+| a block named by place that reads the same as another under the same line (`alike`) | the edit, at filing | nothing could tell the edit's block from the other afterwards (`filed_on`), so it would be unplaced from the moment it was filed |
+
+
 ## Where it stands
 
 The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.md` (DOOR-18).
