@@ -142,7 +142,7 @@ def _open_looks(root: Path, name: str) -> list[Marker]:
 
     stem = slug(name) + "."
     found = sessions(root)
-    out: list[str] = []
+    out: list[Marker] = []
     for p in (root / MARKERS).glob(f"{stem}*.json"):
         sid = p.name[len(stem) : -len(".json")]
         s = found.get(sid)
