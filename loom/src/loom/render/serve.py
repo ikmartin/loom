@@ -443,7 +443,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
             from loom.refs.intake import _drain
 
             self.close_connection = True
-            _drain(self.rfile, int(self.headers.get("Content-Length") or 0))  # so the sender reads why
+            told = self.headers.get("Content-Length") or "0"
+            _drain(self.rfile, int(told) if told.isdigit() else 0)  # so the sender reads why
             self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": refused}})
             return
         try:
