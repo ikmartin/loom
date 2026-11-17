@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from loom.paths import BUILD
+from loom.paths import INCOMING
 from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain, said
 
 #: The publisher's library runs (`loom.jobs.Jobs`), offered by `offer_jobs`: `loom serve` offers its own, and nothing else runs them.
@@ -102,7 +102,7 @@ def _library_add(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
         )
     quilt = load_quilt(root)
     online = quilt.config.online or asks
-    uploads = root / BUILD / "uploads"
+    uploads = root / INCOMING
 
     def run(citekey: str, *, pages: bool = False) -> dict[str, Any] | None:
         """The run on the work just added or filed: what a `fetch` asks for, carrying the act's allowance of the network; else, with `pages`, reading its text, which needs none."""
@@ -171,6 +171,11 @@ def _library_add(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
                 raise ApiError("no-such-work", f"the library has no work {citekey}", status=404)
             _busy(root, citekey)
             filed = file_under(quilt, result.bib, path, citekey, who, came_from=name, read_pages=not later)
+        # filed, the drop waits no longer; one an act of the intake stands on is the intake's to keep
+        if not (uploads / sha / "act.json").is_file():
+            import shutil
+
+            shutil.rmtree(uploads / sha, ignore_errors=True)
         citekey = filed["citekey"]
         return {
             "ok": True,
@@ -184,6 +189,137 @@ def _library_add(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
         return {"ok": True, "result": delete_work(scan(quilt), citekey, who)}
     except NotDeletable as exc:
         raise ApiError(exc.code, exc.message, status=404 if exc.code == "no-such-work" else 409) from exc
+
+
+def _author(root: Path, body: dict[str, Any]) -> str:
+    """Who acts, refused to a declared agent: what enters the library, and what leaves it, is the author's."""
+    from loom.identity import is_agent
+    from loom.scan.quilt import reviewer_identity
+
+    who = reviewer_identity(root)[0]
+    if is_agent(_str(body, "author") or who):
+        raise ApiError(
+            "author-only",
+            "An agent reads and annotates; only the author takes works into the library or out of it",
+            status=403,
+        )
+    return who
+
+
+def _runner(root: Path, who: str) -> Any:
+    """`(citekey, fetch) -> job`: the run that reads a work's pages, and with `fetch` fetches it, on the publisher's runner; None where it runs none, and pages are read at once."""
+    from loom.refs.build import WORK_STEPS
+
+    jobs = _JOBS.get(root.resolve())
+    if jobs is None:
+        return None
+
+    def run(citekey: str, fetch: bool) -> dict[str, Any]:
+        return jobs.submit([citekey], WORK_STEPS if fetch else ("map",), who=who, online=False).to_json()  # type: ignore[no-any-return]
+
+    return run
+
+
+def _refused(exc: Any) -> ApiError:
+    return ApiError(exc.code, exc.message, status=exc.status)
+
+
+def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The library's intake (specs/write-api.md §6): take in received files and pasted works, answer a question, undo an act on a drop, take a wrongly filed PDF off its work. The author's, each through the one function `loom library add` goes through (`refs.intake`)."""
+    from loom.refs.intake import IntakeRefused, Item, answer, take, undo, unfile
+    from loom.scan.quilt import load_quilt
+
+    who = _author(root, body)
+    quilt = load_quilt(root)
+    try:
+        if endpoint == "library-take":
+            items = body.get("items")
+            if not isinstance(items, list) or not items:
+                raise ApiError("missing-field", "items is required: the files received and the texts pasted")
+            if not quilt.config.online_asked:
+                raise ApiError(
+                    "network-unasked",
+                    "this quilt has not said whether loom may look papers up online: ask once, and save the answer as library.online",
+                    status=409,
+                )
+            result = _scan(root)
+            taken: list[Item] = []
+            for item in items:
+                if not isinstance(item, dict):
+                    raise ApiError("bad-field", "each item is {incoming, for?} or {text}")
+                drop, text, work = item.get("incoming"), item.get("text"), item.get("for")
+                if work is not None and (not isinstance(work, str) or work not in result.bib):
+                    raise ApiError("no-such-work", f"the library has no work {work}", status=404)
+                if isinstance(drop, str) and drop:
+                    taken.append(Item(drop=drop, work=work or ""))
+                elif isinstance(text, str) and text.strip():
+                    taken.append(Item(text=text))
+                else:
+                    raise ApiError("bad-field", "each item is {incoming, for?} or {text}")
+            rows = take(
+                quilt,
+                dict(result.bib),
+                taken,
+                by=who,
+                online=quilt.config.online,
+                fetch=body.get("fetch") is True,
+                runner=_runner(root, who),
+            )
+            counts = {s: sum(1 for r in rows if r.state == s) for s in ("added", "here", "question", "cannot")}
+            said = ", ".join(f"{n} {s}" for s, n in counts.items() if n)
+            return {"ok": True, "result": f"took in {len(rows)}: {said}", "rows": [r.to_json() for r in rows]}
+        if endpoint == "library-answer":
+            question = _str(body, "question", required=True) or ""
+            if "same" not in body:
+                raise ApiError("missing-field", "same is required: the work it is, or null for a work of its own")
+            same = body["same"]
+            if same is not None and not isinstance(same, str):
+                raise ApiError("bad-field", "same must be a citekey or null")
+            if same:
+                _busy(root, same)
+            row = answer(
+                quilt,
+                dict(_scan(root).bib),
+                question,
+                same,
+                by=who,
+                online=quilt.config.online,
+                runner=_runner(root, who),
+            )
+            return {"ok": True, "result": f"{row.name}: {row.state} as {row.citekey}", "row": row.to_json()}
+        if endpoint == "library-undo":
+            drop = _str(body, "id", required=True) or ""
+            from loom.refs.intake import _acts, drop_dir
+
+            acts = _acts(drop_dir(root, drop))
+            if acts:
+                _busy(root, str(acts[-1].get("citekey") or ""))
+            done, again = undo(_scan(root), drop, by=who)
+            return {"ok": True, "result": done, **({"row": again.to_json()} if again is not None else {})}
+        citekey = _str(body, "citekey", required=True) or ""
+        _busy(root, citekey)
+        off = unfile(_scan(root), citekey, by=who)
+        return {"ok": True, "result": f"took the PDF off {citekey}; it waits to be taken in", **off}
+    except IntakeRefused as exc:
+        raise _refused(exc) from exc
+
+
+def _library_receive(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-receive` takes a file's bytes as they stream, which the publisher reads before any JSON (`render.serve`); a JSON body is not a file."""
+    raise ApiError(
+        "bad-request", "send the file's bytes as application/octet-stream, with its name in the query (?name=)"
+    )
+
+
+def receive_stream(root: Path, name: str, stream: Any, length: int) -> dict[str, Any]:
+    """The publisher's way into `library-receive`: keep the streamed bytes as a drop, or raise ApiError."""
+    from loom.refs.intake import IntakeRefused, receive
+
+    try:
+        got = receive(root, name, stream, length)
+    except IntakeRefused as exc:
+        raise _refused(exc) from exc
+    return {"ok": True, "result": f"received {got['name']}", **got}
 
 
 def _library_ignore(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -313,11 +449,16 @@ HANDLERS: dict[str, Handler] = {
     "library-file": _library_add,
     "library-delete": _library_add,
     "library-ignore": plain(_library_ignore),
+    "library-receive": plain(_library_receive),
+    "library-take": _intake,
+    "library-answer": _intake,
+    "library-undo": _intake,
+    "library-unfile": _intake,
     "locate": plain(_locate),
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
 READS: tuple[str, ...] = ("locate", "library-recognise", "library-lookup")
 #: The ones the publisher does not rebuild after: the reads, and the two whose run or filing publishes what it changes.
-NO_REBUILD: tuple[str, ...] = (*READS, "library-update", "library-upload")
+NO_REBUILD: tuple[str, ...] = (*READS, "library-update", "library-upload", "library-receive")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ()

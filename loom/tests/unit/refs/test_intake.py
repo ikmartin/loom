@@ -330,3 +330,62 @@ def test_random_drops_answers_unfiles_and_undos_never_damage_and_each_undo_resto
         undo(scan(load_quilt(q)), drop, by=WHO)
         assert tree(q) == was
     assert tree(q) == start
+
+
+def test_every_route_gives_one_work_one_key(tmp_path: Path) -> None:
+    """The command line, the intake the viewer's drop goes through, gathering's adoption of a stored PDF no entry names, and a pasted DOI against the PDF that states it: each keys one work alike."""
+    import hashlib
+    import json
+
+    from loom.paths import STORAGE
+    from loom.refs.scan import record_copy
+    from tests.helpers import ok
+
+    name = "Halloway - 2026 - Notes on balanced quivers.pdf"
+    pdf = fake_pdf(tmp_path / "src" / name, NOTES)
+    quilts = {}
+    for route in ("cli", "intake", "adopted"):
+        (tmp_path / route).mkdir()
+        quilts[route] = demo(tmp_path / route)
+    ok("library", "add", str(pdf), "--as", WHO, cwd=quilts["cli"])
+    (row,) = taken(quilts["intake"], dropped(quilts["intake"], name, NOTES, tmp_path / "drop"))
+    c = quilts["adopted"]
+    sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    home = c / STORAGE / "file" / sha[:16]
+    home.mkdir(parents=True)
+    (home / "paper.pdf").write_bytes(pdf.read_bytes())
+    record_copy(c, sha, name, home)
+    ok("library", "update", "--only", "gather", cwd=c)
+    keys = {
+        route: {k for k, e in bib(q).items() if e.fields.get("title") == "Notes on balanced quivers"}
+        for route, q in quilts.items()
+    }
+    assert (
+        keys == {route: {"hallowayNotesBalancedQuivers2026"} for route in quilts}
+        and row.citekey == "hallowayNotesBalancedQuivers2026"
+    )
+
+    def doi_org(url: str, headers: dict[str, str]) -> bytes:
+        return json.dumps(
+            {
+                "title": "Median orders on weighted digraphs",
+                "author": [{"family": "Bellamy", "given": "Rosalind"}],
+                "issued": {"date-parts": [[2019]]},
+                "DOI": "10.4171/x.19",
+            }
+        ).encode()
+
+    for route in ("pasted", "dropped"):
+        (tmp_path / route).mkdir()
+    pasted, dropped_ = demo(tmp_path / "pasted"), demo(tmp_path / "dropped")
+    (by_text,) = take(load_quilt(pasted), bib(pasted), [Item(text="10.4171/x.19")], by=WHO, online=True, http=doi_org)
+    page = "Median orders on weighted digraphs\nRosalind Bellamy\ndoi:10.4171/x.19\n"
+    (by_pdf,) = take(
+        load_quilt(dropped_),
+        bib(dropped_),
+        [Item(path=fake_pdf(tmp_path / "src" / "median.pdf", page))],
+        by=WHO,
+        online=True,
+        http=doi_org,
+    )
+    assert by_text.citekey == by_pdf.citekey == "bellamyMedianOrdersWeighted2019"
