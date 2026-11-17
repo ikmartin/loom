@@ -1877,7 +1877,7 @@ def test_library_add_files_a_pdf_or_source_and_never_replaces_one(tmp_path: Path
     said = ok("library", "add", one, "--for", "Man12", cwd=q).stdout
     assert "one.pdf as Man12's PDF, with its page text" in said and (home / "pages").is_dir()  # mapped at once
     said = " ".join(ok("library", "add", two, "--for", "Man12", cwd=q).stdout.split())
-    assert "two.pdf as Man12's PDF, beside its first document as Man12A" in said, said
+    assert "two.pdf as Man12's PDF, beside its first document as Man12-v2" in said, said
     assert b"first copy" in (home / "paper.pdf").read_bytes(), "a second document never replaces the first"
 
     src = tmp_path / "eprint"
@@ -1892,7 +1892,7 @@ def test_library_add_files_a_pdf_or_source_and_never_replaces_one(tmp_path: Path
     other = tmp_path / "other.tex"
     other.write_text("\\documentclass{amsart}")
     said = " ".join(ok("library", "add", other, "--for", "Man12", cwd=q).stdout.split())
-    assert "other.tex as Man12's LaTeX source, beside its first document as Man12B" in said, said
+    assert "other.tex as Man12's LaTeX source, beside its first document as Man12-v3" in said, said
     assert sorted(p.name for p in (home / "src").rglob("*.tex")) == [
         "main.tex",
         "one.tex",
@@ -1922,7 +1922,7 @@ def test_library_add_files_what_a_document_shows_plainly_and_says_why_it_skipped
     assert hart["outcome"] == "filed" and hart["new"] and hart["citekey"] != "Har77"
     assert hart["reason"].startswith("Har77 is the nearest entry, by its first author")
     assert (rows["b.pdf"]["citekey"], rows["b.pdf"]["outcome"]) == ("Har77", "filed")
-    assert (rows["c.pdf"]["outcome"], rows["c.pdf"]["sibling"]) == ("filed", "Calloway14A")
+    assert (rows["c.pdf"]["outcome"], rows["c.pdf"]["sibling"]) == ("filed", "Calloway14-v2")
     assert (rows["d.pdf"]["outcome"], rows["d.pdf"]["reason"]) == ("filed", "nothing in the bibliography matches it")
     assert not (work_home(q, "Man12") / "paper.pdf").exists() and not (work_home(q, "Har77") / "paper.pdf").exists()
 
@@ -1931,8 +1931,11 @@ def test_library_add_files_what_a_document_shows_plainly_and_says_why_it_skipped
     assert (work_home(q, "Har77") / "paper.pdf").read_bytes() == (pile / "b.pdf").read_bytes()
     assert r.stdout.startswith("5 documents: 5 filed, 0 skipped, 0 refused"), r.output
     said = " ".join(r.stdout.split())
-    assert 'd.pdf as the new work Lec, titled "Lecture notes on something unrelated"' in said
-    assert 'Hartshorne - 1977 - Notes on geometry.pdf as the new work Har77A, titled "Notes on geometry"' in said
+    assert 'd.pdf as the new work LectureNotesSomething, titled "Lecture notes on something unrelated"' in said
+    assert (
+        'Hartshorne - 1977 - Notes on geometry.pdf as the new work hartshorneNotesGeometry1977, titled "Notes on geometry"'
+        in said
+    )
     assert b"Imogen" not in (work_home(q, "Calloway14") / "paper.pdf").read_bytes()  # the shipped copy is untouched
 
 

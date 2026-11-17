@@ -65,19 +65,79 @@ def _surnames(author: str) -> list[str]:
     return out
 
 
-def key_for(entry: Mapping[str, str], taken: set[str], wanted: str = "") -> str:
-    """The key a work is filed as: `wanted` when it is free, else the first three letters of the first author's surname, or of its title's first word, and the year's last two (`Man08`); a taken one gets a letter (`Man08A`)."""
-    from loom.refs.scan import _free_key
+#: The words Better BibTeX's `shorttitle` passes over: articles, prepositions and conjunctions, in the languages a mathematical library holds.
+FUNCTION_WORDS = frozenset(
+    "a ab aboard about above across after against al along amid among an and anti around as at before behind below "
+    "beneath beside besides between beyond but by d da das de dei del della delle dello dem den der des despite die do "
+    "down du during ein eine einem einen einer eines el en et except for from gli i il in inside into is l la las le les "
+    "like lo los near nor of off on onto or over past per plus round save since so some sur than the through to toward "
+    "towards un una unas under underneath une unlike uno unos until up upon versus via von while with within without "
+    "yet zu zum".split()
+)
 
-    if wanted and wanted not in taken:
-        return wanted
-    # a work naming no author is known by its title's first word
-    words = [w for w in re.findall(r"[^\W\d_]+", entry.get("title", "")) if w.lower() not in ("a", "an", "the")]
-    surname = (_surnames(entry.get("author", "")) or words or ["Work"])[0]
-    letters = re.sub(r"[^A-Za-z]", "", unicodedata.normalize("NFKD", surname)) or "Work"
-    year = re.sub(r"\D", "", entry.get("year", ""))[-2:]
-    base = wanted or (letters[:1].upper() + letters[1:3].lower() + year)
-    return base if base not in taken else _free_key(base, taken)
+
+def _ascii(text: str) -> str:
+    """`text` as plain ASCII: TeX's commands and braces out, accents folded (`G{\\"o}del` is `Godel`)."""
+    text = re.sub(r"\\[^A-Za-z]|\\[A-Za-z]+\s*", "", text).replace("{", "").replace("}", "")
+    return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+
+
+#: The title a PDF that shows nothing of itself is given, with its hash after it; no key is made of it.
+UNTITLED = "Untitled PDF"
+
+
+def derived_key(entry: Mapping[str, str]) -> str:
+    """Better BibTeX's default key, `auth.lower + shorttitle(3,3) + year`: the first author's surname in lower case, the first three words of the title that are not function words, each capitalised, and the year (`coxOptionPricingSimplified1979`); a part not known is left out, never guessed, and '' when neither the author nor the title gives a letter."""
+    surnames = _surnames(entry.get("author", ""))
+    auth = re.sub(r"[^A-Za-z0-9]", "", _ascii(surnames[0])).lower() if surnames else ""
+    title = entry.get("title", "")
+    title = "" if title.startswith(UNTITLED) else title
+    words = [w for w in re.findall(r"[A-Za-z0-9]+", _ascii(title)) if w.lower() not in FUNCTION_WORDS]
+    short = "".join(w[:1].upper() + w[1:].lower() for w in words[:3])
+    if not re.search(r"[A-Za-z]", auth + short):
+        return ""
+    year = m.group(0) if (m := re.search(r"\b(?:1[5-9]|20)\d\d\b", entry.get("year", ""))) else ""
+    return auth + short + year
+
+
+def key_for(entry: Mapping[str, str], taken: set[str], wanted: str = "", sha: str = "") -> str:
+    """The key a work is filed as, on every route by which one comes in.
+
+    Parameters
+    ----------
+    entry : mapping
+        The work's fields, as good as they will get on this act.
+    taken : set of str
+        The keys the library holds.
+    wanted : str, default ''
+        The person's own key (their `.bib`, a pasted entry), which wins.
+    sha : str, default ''
+        The hash of the work's PDF, which names a work nothing else names: `untitled-` and its first eight digits.
+
+    Returns
+    -------
+    str
+        `wanted`, else `derived_key`, else `untitled-<sha8>`; a key taken already gets `a`, `b`, … as Better BibTeX gives them.
+
+    See Also
+    --------
+    refs.scan.version_key : the key of a second document of one work, which is no collision.
+    """
+    base = wanted or derived_key(entry) or (f"untitled-{sha[:8]}" if sha else "untitled")
+    return base if base not in taken else free_key(base, taken)
+
+
+def free_key(key: str, taken: set[str]) -> str:
+    """`key` with the first of `a`, `b`, …, `z`, then `2`, `3`, … that no work holds: two works whose details make one key."""
+    import string
+
+    for letter in string.ascii_lowercase:
+        if f"{key}{letter}" not in taken:
+            return f"{key}{letter}"
+    n = 2
+    while f"{key}{n}" in taken:
+        n += 1
+    return f"{key}{n}"
 
 
 def duplicates(entry: Mapping[str, str], wid: WorkId | None, bib: Mapping[str, BibEntry]) -> list[str]:

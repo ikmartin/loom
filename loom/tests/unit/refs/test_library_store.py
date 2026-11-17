@@ -125,12 +125,17 @@ def test_a_weak_match_is_not_filed_against_the_entry_and_the_pdf_is_kept_as_a_wo
     r = ok("library", "add", pile, "--as", "A. Author", cwd=q)
     assert r.stdout.startswith("2 documents: 2 filed, 0 skipped, 0 refused"), r.output
     said = " ".join(r.stdout.split())
-    assert 'Handbook of Moduli.pdf as the new work Log, titled "Logarithmic geometry and moduli"' in said
+    assert (
+        'Handbook of Moduli.pdf as the new work LogarithmicGeometryModuli, titled "Logarithmic geometry and moduli"'
+        in said
+    )
     assert "--for olsson03 files it there instead, if that is what it is" in said
     assert "olsson.pdf as olsson03's PDF, with its page text" in said
     home = work_home(q, "olsson03")
     assert (home / "paper.pdf").read_bytes() == (pile / "olsson.pdf").read_bytes()
-    assert (work_home(q, "Log") / "paper.pdf").read_bytes() == (pile / "Handbook of Moduli.pdf").read_bytes()
+    assert (work_home(q, "LogarithmicGeometryModuli") / "paper.pdf").read_bytes() == (
+        pile / "Handbook of Moduli.pdf"
+    ).read_bytes()
     rows = {Path(d["file"]).name: d for d in json_of("library", "add", pile, "--dry-run", "--json", cwd=q)["documents"]}
     assert rows["Handbook of Moduli.pdf"]["outcome"] == "skipped" and rows["olsson.pdf"]["outcome"] == "skipped"
     assert rows["olsson.pdf"]["reason"].startswith("already in loom's store")
@@ -163,12 +168,12 @@ def test_a_second_document_is_filed_beside_the_first_and_keeps_its_pdf(tmp_path:
     two = _fake_pdf(tmp_path / "two.pdf", OLSSON + "second copy\fan appendix the first lacks")
     ok("library", "add", one, cwd=q)
     r = ok("library", "add", two, "--for", "olsson03", cwd=q)
-    assert "two.pdf as olsson03's PDF, beside its first document as olsson03A" in " ".join(r.stdout.split())
+    assert "two.pdf as olsson03's PDF, beside its first document as olsson03-v2" in " ".join(r.stdout.split())
     entries = parse_bib((q / BIB).read_text())
-    sibling = entries["olsson03A"]
+    sibling = entries["olsson03-v2"]
     assert sibling.fields["loom-copy-of"] == "olsson03" and sibling.fields["loom-file"].startswith("file/")
     assert b"first copy" in (work_dir(q, entries["olsson03"]) / "paper.pdf").read_bytes()
     assert b"second copy" in (work_dir(q, sibling) / "paper.pdf").read_bytes()
     again = ok("library", "add", two, "--for", "olsson03", cwd=q)
     assert again.stdout.startswith("1 document: 0 filed, 1 already in loom's store, 0 skipped"), again.output
-    assert "olsson03B" not in (q / BIB).read_text()
+    assert "olsson03-v3" not in (q / BIB).read_text()

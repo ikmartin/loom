@@ -87,7 +87,7 @@ def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path
         "stated.pdf: the same document as olsson03's: it states doi:10.1016/olsson.03, olsson03's own identifier"
         in said
     )
-    assert "olsson03A" not in (q / BIB).read_text()
+    assert "olsson03-v2" not in (q / BIB).read_text()
     ledger = json.loads((q / ".loom/digests" / "storage" / "copied.json").read_text())
     copies = {v["from"]: v for v in ledger.values() if v.get("duplicate-of")}
     assert set(copies) == {"same.pdf", "stated.pdf"} and {v["duplicate-of"] for v in copies.values()} == {"olsson03"}
@@ -97,12 +97,12 @@ def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path
     # another version: the same title and byline over two pages
     other = _fake_pdf(tmp_path / "other.pdf", OLSSON + "preprint\fan appendix the journal dropped")
     r = ok("library", "add", other, "--for", "olsson03", cwd=q)
-    assert "beside its first document as olsson03A" in " ".join(r.stdout.split())
+    assert "beside its first document as olsson03-v2" in " ".join(r.stdout.split())
     # a copy of that version is a duplicate of the work, not a third version
     again = _fake_pdf(tmp_path / "again.pdf", OLSSON + "preprint, downloaded twice\fan appendix the journal dropped")
     r = ok("library", "add", again, "--for", "olsson03", cwd=q)
-    assert "the same document as olsson03A's: same title, authors and 2 pages" in " ".join(r.stdout.split())
-    assert "olsson03B" not in (q / BIB).read_text()
+    assert "the same document as olsson03-v2's: same title, authors and 2 pages" in " ".join(r.stdout.split())
+    assert "olsson03-v3" not in (q / BIB).read_text()
 
 
 def test_a_version_is_not_extracted_unless_cited_or_named(tmp_path: Path) -> None:
@@ -211,14 +211,14 @@ def test_check_reports_existing_duplicates_once_per_work(tmp_path: Path) -> None
         pages = OLSSON + "\f".join(["x"] * (n + 2))
         ok("library", "add", _fake_pdf(tmp_path / name, pages), "--for", "olsson03", cwd=q)
     entries = parse_bib((q / BIB).read_text())
-    assert versions_of(entries)["olsson03"] == ["olsson03A", "olsson03B"]
+    assert versions_of(entries)["olsson03"] == ["olsson03-v2", "olsson03-v3"]
     # what an earlier loom filed: both versions' stored documents become copies of the first
     first = (work_home(q, "olsson03") / "paper.pdf").read_bytes()
-    for v in ("olsson03A", "olsson03B"):
+    for v in ("olsson03-v2", "olsson03-v3"):
         (work_home(q, v) / "paper.pdf").write_bytes(first + f"%{v}\n".encode())
     out = json_of("library", "check", "--json", cwd=q, code=1)
     dups = [p for p in out["problems"] if p["problem"] == "duplicate-document"]
-    assert [(p["work"], p["key"]) for p in dups] == [("olsson03", "olsson03, olsson03A, olsson03B")], dups
+    assert [(p["work"], p["key"]) for p in dups] == [("olsson03", "olsson03, olsson03-v2, olsson03-v3")], dups
 
 
 def test_a_works_versions_are_counted_once_wherever_works_are_counted(tmp_path: Path) -> None:

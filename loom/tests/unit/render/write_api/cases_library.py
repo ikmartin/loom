@@ -238,7 +238,7 @@ def _library_file(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     # a PDF named for a work is filed there on the person's word, and what it shows otherwise is said
     other = succeeds(s, "library-upload", {"name": "other.pdf", "data": _fake_pdf("Nothing like that work")})
     named = succeeds(s, "library-file", {"upload": other["upload"], "citekey": "Calloway14"})
-    assert named["filed"] is True and named["sibling"] == "Calloway14A" and "does not show it is" in named["note"]
+    assert named["filed"] is True and named["sibling"] == "Calloway14-v2" and "does not show it is" in named["note"]
     refuses(s, "library-file", {"upload": other["upload"], "citekey": "Nobody"}, 404, "no-such-work", "no work Nobody")
     refuses(s, "library-file", {"upload": "0" * 64, "citekey": "Man12"}, 404, "no-such-upload", "no PDF was dropped")
 

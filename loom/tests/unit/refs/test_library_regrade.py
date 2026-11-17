@@ -244,7 +244,7 @@ def test_add_files_the_behrend_fantechi_pdf_its_byline_marked_for_affiliations(t
 
 
 def _olsson_with_a_second_version(tmp_path: Path) -> tuple[Path, str]:
-    """The demo with olsson03 filed, and a second document of it added and filed as its version `olsson03A`: the shape of the Manolache entries in the author's quilt."""
+    """The demo with olsson03 filed, and a second document of it added and filed as its version `olsson03-v2`: the shape of the Manolache entries in the author's quilt."""
     q = demo(tmp_path)
     with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB)
@@ -261,8 +261,8 @@ def _olsson_with_a_second_version(tmp_path: Path) -> tuple[Path, str]:
         OLSSON + "a preprint\fwith a page more",
     )
     r = ok("library", "add", str(preprint), "--for", "olsson03", cwd=q)
-    assert "olsson03A" in r.stdout, r.output
-    return q, "olsson03A"
+    assert "olsson03-v2" in r.stdout, r.output
+    return q, "olsson03-v2"
 
 
 def _delete_entry(q: Path, key: str) -> None:
@@ -338,7 +338,7 @@ def test_ignore_then_add_replaces_a_wrong_document(tmp_path: Path) -> None:
     right = _fake_pdf(q / "refs" / "Olsson - 2003 - Logarithmic geometry and algebraic stacks.pdf", OLSSON)
     # without the ignore, the right document goes beside the wrong one, never over it
     dry = " ".join(ok("library", "add", str(right), "--for", "olsson03", "--dry-run", cwd=q).stdout.split())
-    assert "beside its first document as olsson03A" in dry
+    assert "beside its first document as olsson03-v2" in dry
     ok("library", "ignore", "olsson03", "--why", "it is Abramovich et al.'s survey", *AS, cwd=q)
     r = ok("library", "add", str(right), "--for", "olsson03", *AS, cwd=q)
     assert "in place of the document you set aside" in " ".join(r.stdout.split()), r.output
@@ -359,10 +359,10 @@ def test_add_keeps_a_document_naming_an_unknown_identifier_as_a_work_stating_it(
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / "pile" / "new.pdf", "A paper nobody cites\nA. Writer\narXiv:2504.01234v1\n")
     said = " ".join(ok("library", "add", str(pdf.parent), *AS, cwd=q).stdout.split())
-    assert 'new.pdf as the new work Pap25, titled "A paper nobody cites"' in said, said
-    entry = parse_bib((q / ".loom/digests/bibliography.bib").read_text())["Pap25"]
+    assert 'new.pdf as the new work PaperNobodyCites2025, titled "A paper nobody cites"' in said, said
+    entry = parse_bib((q / ".loom/digests/bibliography.bib").read_text())["PaperNobodyCites2025"]
     assert entry.fields["eprint"] == "2504.01234v1" and entry.fields["archiveprefix"] == "arXiv"
-    assert (work_home(q, "Pap25") / "paper.pdf").is_file()
+    assert (work_home(q, "PaperNobodyCites2025") / "paper.pdf").is_file()
 
 
 def test_add_for_a_work_names_the_version_a_document_is(tmp_path: Path) -> None:

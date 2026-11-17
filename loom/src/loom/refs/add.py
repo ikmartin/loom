@@ -141,7 +141,7 @@ def _arxiv_year(value: str) -> str:
     return str(1900 + yy if yy >= 91 else 2000 + yy)
 
 
-def own_entry(pdf: Path) -> dict[str, str]:
+def own_entry(pdf: Path, name: str = "") -> dict[str, str]:
     """The entry a PDF makes of itself, which always has a title.
 
     In order of trust: the identifier it states as its own (`ingest.own_identifiers`), a reference manager's file name, its document information, the title page one sets in its largest type or else its first line that could be a title, a masthead never, and at the least its file name. The title of a heuristic guess is one line a person corrects by hand; a PDF is never turned away for want of a better one.
@@ -149,7 +149,9 @@ def own_entry(pdf: Path) -> dict[str, str]:
     Parameters
     ----------
     pdf : Path
-        The document, under the name it was given.
+        The document.
+    name : str, default ''
+        The name it was given, where that is not `pdf`'s own: a stored copy is always `paper.pdf`.
 
     Returns
     -------
@@ -157,23 +159,25 @@ def own_entry(pdf: Path) -> dict[str, str]:
         BibTeX fields; `title` is never empty.
     """
     from loom.refs.ingest import filename_authors
+    from loom.refs.lookup import UNTITLED
     from loom.refs.pages import pdf_info, sha256_of
     from loom.refs.scan import _own_account
 
-    wid, said = _own_account(pdf)
+    stem = Path(name).stem if name else pdf.stem
+    wid, said = _own_account(pdf, name)
     fields = {k: _text(v) for k, v in said.items()}
     info = pdf_info(pdf)
     if fields.get("title"):
-        if who := _text(filename_authors(pdf.stem)):
+        if who := _text(filename_authors(stem)):
             fields["author"] = who
     elif title := _info_title(info):
         fields["title"] = title
     else:
-        name = _text(_TAIL.sub("", re.sub(r"[_\s]+", " ", pdf.stem)))
+        named = _text(_TAIL.sub("", re.sub(r"[_\s]+", " ", stem)))
         fields["title"] = (
             _first_page_title(pdf)
-            or (name if any(c.isalpha() for c in name) else "")
-            or f"Untitled PDF {sha256_of(pdf)[:8]}"
+            or (named if any(c.isalpha() for c in named) else "")
+            or f"{UNTITLED} {sha256_of(pdf)[:8]}"
         )
     if not fields.get("author") and _info_title(info) == fields["title"] and (who := _info_authors(info)):
         fields["author"] = who
@@ -194,6 +198,7 @@ def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, htt
     """
     from loom.refs.fetch import carries_title
     from loom.refs.lookup import duplicates, key_for, look_up
+    from loom.refs.pages import sha256_of
 
     fields = own_entry(pdf)
     ident = fields.get("eprint") or fields.get("doi") or ""
@@ -210,7 +215,7 @@ def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, htt
         for name in ("eprint", "archiveprefix", "doi"):
             fields.pop(name, None)
     seen.offer = fields
-    seen.key = key_for(fields, set(bib))
+    seen.key = key_for(fields, set(bib), sha=sha256_of(pdf))
     seen.duplicates = duplicates(fields, None, bib)
 
 
@@ -357,7 +362,7 @@ def file_new(
     seen = Seen()
     _offer(seen, bib, pdf, online=online, http=http)
     fields = {**seen.offer, **{k: _text(v) for k, v in (edits or {}).items() if _text(v)}}
-    key = key_for(fields, set(bib))
+    key = key_for(fields, set(bib), sha=sha256_of(pdf))
     f = plan_new_work(root, pdf, key, fields, came_from)
     withdraw_setting_aside(root, f.sha, by)
     file_document(quilt, f, by=by, read_pages=read_pages)

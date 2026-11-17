@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import string
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -558,27 +557,25 @@ def record_copy(root: Path, sha: str, source: str, home: Path, extra: dict[str, 
     path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-def _free_key(key: str, taken: set[str]) -> str:
-    """`Man12`, then `Man12A`, `Man12B`: the sibling entry a second document for one work gets (DR-192)."""
-    for letter in string.ascii_uppercase:
-        if f"{key}{letter}" not in taken:
-            return f"{key}{letter}"
+def version_key(key: str, taken: set[str]) -> str:
+    """`Man12-v2`, then `-v3`: the entry a second document of the work `key` is filed under, beside its first, which is no collision and so takes no collision's letter."""
     n = 2
-    while f"{key}{n}" in taken:
+    while f"{key}-v{n}" in taken:
         n += 1
-    return f"{key}{n}"
+    return f"{key}-v{n}"
 
 
-def _own_account(pdf: Path) -> tuple[WorkId | None, dict[str, str]]:
+def _own_account(pdf: Path, name: str = "") -> tuple[WorkId | None, dict[str, str]]:
     """What the document says about itself: the identifier it states as its own (`ingest.own_identifiers`), and a heuristic title and year.
 
     Only the filename is read for a title, and only when a reference manager wrote it (`Author - 2019 - The Title.pdf`), because that came from a catalogue. A title guessed from page one is not: the longest early line on a real paper is a sentence of the abstract, which is the mistake `title_lines` exists to record.
     """
     fields: dict[str, str] = {}
-    named = filename_title(pdf.stem)
-    if named and named != pdf.stem:
+    stem = Path(name).stem if name else pdf.stem
+    named = filename_title(stem)
+    if named and named != stem:
         fields["title"] = named
-        stem_year = re.search(r"\b((?:19|20)\d\d)\b", pdf.stem)
+        stem_year = re.search(r"\b((?:19|20)\d\d)\b", stem)
         if stem_year:
             fields["year"] = stem_year.group(1)
     try:
@@ -622,13 +619,6 @@ def _sibling(pdf: Path, wid: WorkId | None, entry: BibEntry, key: str, *, source
     return Candidate(key, _entry_for(pdf, wid, fields, key, source=source, filed=home.as_posix()), source, source)
 
 
-def _derived_key(pdf: Path, sha: str, taken: set[str]) -> str:
-    """A citekey for a document nothing in the bibliography claims: its filename, or its hash when the name says nothing."""
-    stem = re.sub(r"[^A-Za-z0-9]", "", pdf.stem)[:24]
-    key = stem or f"pdf{sha[:8]}"
-    return key if key not in taken else _free_key(key, taken)
-
-
 def _spaced(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
@@ -660,6 +650,9 @@ def adopt_orphans(quilt: Quilt, bib: dict[str, BibEntry], report: ScanReport) ->
     --------
     file_document : How `loom library add` files a document the store has not seen.
     """
+    from loom.refs.add import own_entry
+    from loom.refs.lookup import key_for
+
     store = storage_root(quilt.root)
     if not store.is_dir():
         return []
@@ -697,15 +690,10 @@ def adopt_orphans(quilt: Quilt, bib: dict[str, BibEntry], report: ScanReport) ->
         filed_at = str(records.get(sha, {}).get("to", ""))
         if filed_at and filed_at != f"{home.parent.name}/{home.name}" and filed_at in claimed:
             continue  # the same bytes, filed again under the work they are and named there: a stale copy, not an orphan
-        wid, said = _own_account(pdf)  # the real file, for what the document says about itself
-        stem = Path(came).stem
-        named = filename_title(stem)
-        if named and named != stem:
-            said.setdefault("title", named)
-            year = re.search(r"\b((?:19|20)\d\d)\b", stem)
-            if year:
-                said.setdefault("year", year.group(1))
-        key = _derived_key(Path(came), sha, taken)
+        wid = _own_account(pdf)[0]  # the real file, for the identifier it states
+        # what it says of itself under the name it was given, keyed as every route keys a work
+        said = {k: v for k, v in own_entry(pdf, Path(came).name).items() if k not in ("eprint", "archiveprefix", "doi")}
+        key = key_for(said, taken, sha=sha)
         # A tombstone on the citekey, which is what the author types after deleting the entry the last scan offered
         if key in forgotten:
             report.forgotten += 1
@@ -840,7 +828,7 @@ def plan_filing(
     own = store / "file" / f.sha[:16]
     f.home = own
     planned.add(own)
-    f.sibling = _free_key(top, taken)
+    f.sibling = version_key(top, taken)
     taken.add(f.sibling)
     return _sibling(f.path, wid, bib[top], f.sibling, source=f.source, home=own.relative_to(store))
 
