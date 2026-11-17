@@ -554,16 +554,17 @@ def check_engine(quilt: Any) -> Item:
 
 
 def check_permissions(root: Path) -> Item:
-    """`.claude/settings.json` and `.codex/rules/loom.rules` byte for byte what this loom's table renders (`vendor_files`), in the variant the first says."""
-    from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, SHELL, quilt_config, variant, vendor_files
+    """The permission files of the apps the quilt is set up for (`.claude/settings.json`, `.codex/rules/loom.rules`) byte for byte what this loom's table renders (`vendor_files`), in the variant the quilt's files say."""
+    from loom.ai.clients import chosen
+    from loom.ai.layout import SHELL, quilt_config, variant, vendor_files
 
-    wanted = (CLAUDE_SETTINGS, CODEX_RULES)
+    shell = variant(root) == SHELL
+    shipped = vendor_files(quilt_config(root), shell=shell, apps=chosen(root, None))
+    wanted = tuple(shipped)
     present = [rel for rel in wanted if (root / rel).is_file()]
     layer = (root / AI).is_dir()
     if not layer and not present:
         return Item("permissions", OK, QUILT, f"no {AI}/ (loom ai init writes it and them)")
-    shell = variant(root) == SHELL
-    shipped = vendor_files(quilt_config(root), shell=shell)
     stale = [rel for rel in present if (root / rel).read_text(encoding="utf-8") != shipped[rel]]
     absent = [rel for rel in wanted if rel not in present] if layer else []
     if not stale and not absent:
