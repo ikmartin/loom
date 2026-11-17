@@ -8,7 +8,7 @@ A ratchet, not a sweep: only lines added since `--base` (default `$HARDWRAP_BASE
 
 A wrap is two consecutive lines of one paragraph, at least one of them added:
 
-- markdown, outside fences, tables, headings, HTML and indented code: any two non-blank lines where the second is not a new list item, heading, table row, quote or fence;
+- markdown, outside fences, tables, headings, HTML, indented code and a YAML front matter at the head of the file: any two non-blank lines where the second is not a new list item, heading, table row, quote or fence;
 - a Python docstring: two non-blank lines at one indentation where neither is structural (a list item, a NumPy section rule, `name : type`, `key: value`, an example, a heading line ending in a colon);
 - a `#` or `//` comment, or a `*` line of a block comment: two lines at one indentation where the first does not end a sentence and the second begins in lower case, so a list of short comments is not mistaken for a paragraph.
 
@@ -76,7 +76,13 @@ def added_lines(base: str) -> dict[str, set[int]]:
 def markdown_pairs(lines: list[str]) -> list[int]:
     """Indices i where lines i and i+1 are one markdown paragraph."""
     pairs, fence, prev_blank = [], False, True
+    # a front matter (`---`, `key: value` lines, `---`), as a skill's SKILL.md opens, is data and not prose
+    head = 0
+    if lines and lines[0].strip() == "---":
+        head = next((j + 1 for j in range(1, len(lines)) if lines[j].strip() == "---"), 0)
     for i, line in enumerate(lines):
+        if i < head:
+            continue
         s = line.strip()
         if s.startswith(("```", "~~~")):
             fence = not fence
