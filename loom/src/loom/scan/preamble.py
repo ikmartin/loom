@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 
 from loom.paths import document_dir, under
 from loom.scan.macros import expand, parse_macros
+from loom.scan.memo import Memo
 from loom.scan.model import Diagnostic, Directive, Location, Macro, SourceFile, Taxon
 from loom.scan.source import MACRO_BLOCK, read_source
 from loom.scan.tokenize import commands, read_args
@@ -68,18 +69,15 @@ def _local(root: Path, name: str, exts: tuple[str, ...], base: str = "") -> str 
     return None
 
 
-_STYLE_CACHE: dict[tuple[str, str, float], SourceFile] = {}
+#: Each local file a preamble reads that the scan does not, by quilt, path and mtime, kept while a reading asks for it: a version since replaced, or a file under a temporary copy of the quilt that the next build makes afresh (an adoption's shape), is let go by the build that no longer reads it.
+_styles: Memo[tuple[str, str, float], SourceFile] = Memo(lambda key: read_source(Path(key[0]), key[1]))
 
 
 def _load(root: Path, rel: str, files: dict[str, SourceFile]) -> SourceFile:
-    """A scanned .tex file from `files`, or a local .sty/.cls/.tex read on demand and cached by mtime; never added to `files`."""
+    """A scanned .tex file from `files`, or a local .sty/.cls/.tex read on demand and kept while it is in use (`_styles`); never added to `files`."""
     if rel in files:
         return files[rel]
-    mtime = (root / rel).stat().st_mtime
-    key = (str(root), rel, mtime)
-    if key not in _STYLE_CACHE:
-        _STYLE_CACHE[key] = read_source(root, rel)
-    return _STYLE_CACHE[key]
+    return _styles((str(root), rel, (root / rel).stat().st_mtime))
 
 
 def build_closure(

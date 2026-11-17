@@ -9,7 +9,7 @@ import re
 from collections.abc import Collection, Iterator
 from dataclasses import dataclass, field
 
-from loom.scan.memo import TextMemo
+from loom.scan.memo import Memo
 
 VERBATIM_ENVS = {"verbatim", "verbatim*", "lstlisting", "comment", "filecontents", "filecontents*"}
 MATH_SINGLE = {"(": "\\(", ")": "\\)", "[": "\\[", "]": "\\]"}
@@ -63,7 +63,7 @@ def tokenize(text: str) -> list[Tok]:
 def outline(text: str) -> tuple[Tok, ...]:
     """The text's `begin` and `end` tokens and its commands among `OUTLINE_CMDS`, in order, as `tokenize` finds them: about one token in a hundred of a mathematical text.
 
-    A long text's is remembered while it is in use (`memo.TextMemo`), since a served quilt scans every file again on every change and most files have not changed.
+    A long text's is remembered while it is in use (`memo.Memo`), since a served quilt scans every file again on every change and most files have not changed.
     """
     return _outline(text) if len(text) < CACHED_FROM else _outlines(text)
 
@@ -135,7 +135,7 @@ def _outline(text: str) -> tuple[Tok, ...]:
     )
 
 
-_outlines = TextMemo(_outline)
+_outlines: Memo[str, tuple[Tok, ...]] = Memo(_outline)
 
 
 def match_group(text: str, pos: int, open_ch: str = "{", close_ch: str = "}") -> int:

@@ -134,3 +134,23 @@ def test_taxa_conflict_between_masters(tmp_path: Path) -> None:
     cs = [build_closure(srcs[p], tmp_path, dict(srcs), []) for p in ("drafting/main.tex", "drafting/talk.tex")]
     assert taxa_union(cs)["thm"].style == "plain"
     assert [env for env, _ in taxa_conflicts(cs)] == ["thm"]
+
+
+def test_a_file_a_preamble_reads_on_demand_is_let_go_once_no_reading_asks_for_it(tmp_path: Path) -> None:
+    """A version replaced since, or a copy under a temporary root a later build does not make again, is not kept for as long as the process runs."""
+    import os
+
+    from loom.scan import preamble
+    from loom.scan.memo import reading
+
+    copies = [tmp_path / "copy-a", tmp_path / "copy-b"]
+    for root in copies:
+        root.mkdir()
+        sty = root / "mine.sty"
+        for version in range(3):
+            sty.write_text(f"\\newcommand{{\\A}}{{{version}}}\n", encoding="utf-8")
+            os.utime(sty, (1_000 + version, 1_000 + version))
+            with reading():
+                assert preamble._load(root, "mine.sty", {}).text == f"\\newcommand{{\\A}}{{{version}}}\n"
+    held = [k for k in preamble._styles if k[0].startswith(str(tmp_path))]
+    assert held == [(str(copies[1]), "mine.sty", 1_002.0)]

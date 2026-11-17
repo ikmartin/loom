@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from loom.scan.edges import _CMD, LIST_CMDS, REF_CMDS
 from loom.scan.envtree import norm_label
 from loom.scan.hashing import hash_text
-from loom.scan.memo import TextMemo
+from loom.scan.memo import Memo
 from loom.scan.source import blank_comments
 from loom.scan.tokenize import EnvNode, env_tree, read_args
 
@@ -24,7 +24,7 @@ def _environment_tree(text: str) -> list[EnvNode]:
 
 
 #: A file's environment tree, built once per text in use: `display_span` asks once per labelled display, and a file holds hundreds.
-_environments = TextMemo(_environment_tree)
+_environments: Memo[str, list[EnvNode]] = Memo(_environment_tree)
 
 
 def display_span(text: str, offset: int) -> tuple[int, int] | None:

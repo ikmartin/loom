@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 from loom.paths import COPIES, DIGESTS, LOOM, STORAGE
-from loom.scan.memo import TextMemo
+from loom.scan.memo import Memo
 from loom.scan.model import SourceFile
 
 #: Directories never read, by name at any depth: loom's own, whose digests alone are read on purpose, and tools'.
@@ -90,7 +90,7 @@ def _blank_comments(text: str) -> str:
     return "".join(out)
 
 
-_blank_cached = TextMemo(_blank_comments)
+_blank_cached: Memo[str, str] = Memo(_blank_comments)
 
 
 def line_starts(text: str) -> list[int]:

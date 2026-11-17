@@ -9,7 +9,7 @@ import pytest
 
 from loom.render.build import build
 from loom.scan import memo, tokenize
-from loom.scan.memo import TextMemo, reading
+from loom.scan.memo import Memo, reading
 from loom.scan.quilt import load_quilt
 from tests.unit.scan.helpers import PREAMBLE
 
@@ -35,7 +35,7 @@ def a_quilt(tmp_path: Path) -> Path:
     return root
 
 
-def remembered(text: str) -> list[TextMemo]:  # type: ignore[type-arg]
+def remembered(text: str) -> list[Memo]:  # type: ignore[type-arg]
     """Every memo holding an entry for `text`, or for a text derived from it by blanking its comments."""
     from loom.scan.source import _blank_comments
 
@@ -82,7 +82,7 @@ def test_a_rebuild_with_nothing_changed_tokenizes_no_long_text_again(
 
 def test_an_entry_lives_while_a_reading_asks_for_it() -> None:
     made: list[str] = []
-    m = TextMemo(lambda text: made.append(text) or text.upper())
+    m = Memo(lambda text: made.append(text) or text.upper())
     with reading():
         assert m("kept") == "KEPT"
         m("dropped")
@@ -101,7 +101,7 @@ def test_an_entry_lives_while_a_reading_asks_for_it() -> None:
 
 
 def test_a_reading_that_ends_before_an_older_one_forgets_nothing() -> None:
-    m = TextMemo(str.upper)
+    m = Memo(str.upper)
     m("before")
     older = reading()
     older.__enter__()
