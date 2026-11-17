@@ -383,7 +383,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone or, named by place, no longer says which block; when its quote no longer stands in the text exactly once; when the quoted words are no place for an edit (`misplaced`); and when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again.
+        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once; when the quoted words are no place for an edit (`misplaced`); and when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again.
     """
     from loom.scan.owntext import key_hash
 
@@ -420,6 +420,10 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         why = misplaced(own, pieces, (a, b))
         if why is not None:
             raise Unplaced(f"the words {edit.id} quotes in {node.key} {why}")
+        if _by_place_alone(result, edit, node) and _quoted_elsewhere(result, edit.selector.exact, node):
+            raise Unplaced(
+                f"{node.key} has changed since {edit.id} was suggested on it, and the words it quotes stand in another block of {node.file} too, so which block it is on is not known"
+            )
         changed = _beside(edit, own, (a, b))
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
@@ -436,6 +440,27 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     if at is None:
         raise Unplaced(f"the place {edit.id} names in {node.key} is not in one piece of its file")
     return Placed(node.key, node.file, own, span, at, text, edit.target_hash != key_hash(result, node.key))
+
+
+def _by_place_alone(result: ScanResult, edit: Edit, node: NodeRec) -> bool:
+    """Whether `edit`'s block was found by its place and the line above alone: its key is named by place and the block no longer holds the text the edit was written against (`filed_on`'s last answer)."""
+    from loom.records.store import named_by_place
+    from loom.scan.owntext import key_hash
+
+    return (
+        bool(edit.target_hash)
+        and named_by_place(result, edit.target_key, node_of(result, edit.target_key))
+        and key_hash(result, node.key) != edit.target_hash
+    )
+
+
+def _quoted_elsewhere(result: ScanResult, quote: str, node: NodeRec) -> bool:
+    """Whether `quote` stands in the own text of another block of `node`'s file."""
+    return any(
+        find_quote(Records.own_pieces(result, n)[0], quote)
+        for n in result.nodes.values()
+        if n.file == node.file and n is not node
+    )
 
 
 def compose(result: ScanResult, edits: list[Edit]) -> list[tuple[Edit, Placed | Unplaced]]:

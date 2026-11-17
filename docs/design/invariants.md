@@ -291,6 +291,16 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** The study's spike of the door (`docs/reports/v0.1-study/raw/spike-door.md`); plan 0.32, the Safe workstream, steps 1 to 3.
 
+### A suggested edit is judged at its own place
+
+**Rule.** A suggested edit reads as written in only where Keep would write it (`records/edits.py`, `taken_how`). An insertion, and a replacement that adds words beside its quote, is placed only while the words recorded beside its place when it was suggested still stand there (`place`). An edit on a key named by its place in its file goes only to the block that its text, the line above it and its quoted words point to, never to whatever block now holds the place (`store.filed_on`, `place`). Otherwise it is unplaced, and Keep writes nothing (`docs/design/writes.md`, "Where an edit goes").
+
+**Why.** The v0.1 safety study (`docs/reports/v0.1-study/raw/safety.md`): a short suggestion the person typed in and touched was written a second time; one placed past a block's `\end{…}` and typed in was written again on every press; a phrase standing anywhere in its block read as kept with nothing written; and an answer suggested on the third of three empty answers was written into the second once a problem was put in before them.
+
+**Guard.** `loom/tests/unit/test_write_safety.py::test_a_short_edit_written_in_and_touched_is_not_written_twice`, `loom/tests/unit/test_write_safety.py::test_a_short_edit_written_in_at_the_foot_of_a_body_and_touched_is_not_written_twice`, `loom/tests/unit/test_write_safety.py::test_an_edit_placed_after_its_blocks_end_is_not_written_twice`, `loom/tests/unit/test_write_safety.py::test_keeping_an_insertion_writes_it_even_when_its_words_stand_elsewhere_in_the_block`, `loom/tests/unit/test_write_safety.py::test_an_edit_on_a_block_named_by_place_stays_on_that_block`, `loom/tests/unit/test_write_safety.py::test_an_answer_typed_into_a_block_named_by_place_is_not_written_again_once_a_block_is_put_in_before_it`, `loom/tests/unit/records/test_edits.py::test_a_phrase_suggested_beside_the_very_words_that_already_stand_there_is_not_read_as_taken`, `loom/tests/unit/records/test_edits.py::test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_its_quote`
+
+**Record.** The door's spike (`docs/reports/v0.1-study/raw/spike-door.md`, DOOR-5 and DOOR-15) and `raw/check-labels.md`; plan 0.32, the Safe workstream, the door's step 4.
+
 ### Two definitions of one id leave it conflicted
 
 **Rule.** When an id is defined twice, by two files or within one, the id has no text and no winner; `duplicate-id` names every file, and whatever needs the text (accept, annotate, closure, stamp, revert) refuses until one definition goes.

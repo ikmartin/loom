@@ -745,6 +745,18 @@ def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_i
         with pytest.raises(Unplaced, match="named by its place"):
             place(*placed(q, unplaced))
     # a remark put in under the same line takes the key; the quote is not in it, so the edit is unplaced, never written there
-    edit(q / SHEET, "\\begin{remark}", "\\begin{remark}\nAnother remark altogether.\n\\end{remark}\n\\begin{remark}")
+    edit(
+        q / SHEET,
+        "\\begin{remark}",
+        "\\begin{remark}\nAnother remark altogether.\n\\end{remark}\n\\begin{remark}",
+        count=1,
+    )
     with pytest.raises(Unplaced, match="no longer stands"):
         place(*placed(q, quoted))
+    # nor when it does hold the quote: the remark the edit was suggested on holds it too, and the line above no longer says which
+    edit(q / SHEET, "Another remark altogether.", "Another remark, and every orbit is small.")
+    with pytest.raises(Unplaced, match="stand in another block"):
+        place(*placed(q, quoted))
+    text = (q / SHEET).read_text()
+    ok("changes", "--keep", quoted, cwd=q)
+    assert (q / SHEET).read_text() == text

@@ -459,6 +459,31 @@ def test_an_edit_on_a_block_named_by_place_stays_on_that_block(q: Path) -> None:
     assert after.index("ANSWER-TWO") > after.index("\\section*{Two}")
 
 
+def test_an_answer_typed_into_a_block_named_by_place_is_not_written_again_once_a_block_is_put_in_before_it(
+    q: Path,
+) -> None:
+    """SAFE-1, shape 5: the answer an agent suggested, typed in by the person, and a problem put in before it; the key then named another block, which did not read as the answer taken, and Keep wrote the answer a second time."""
+    main = q / "drafting/main.tex"
+    empty = "\\begin{proof}[Answer]\n\\end{proof}\n"
+    main.write_text(
+        main.read_text().replace(
+            "\\end{document}", f"\\section*{{One}}\n{empty}\\section*{{Two}}\n{empty}\\end{{document}}"
+        ),
+        encoding="utf-8",
+    )
+    result = scan(q)
+    last = max((n.start, k) for k, n in result.nodes.items() if k.startswith("drafting/main.tex#proof:"))[1]
+    eid = suggest(q, last, "Four, by ANSWER-TWO.")
+    text = main.read_text()
+    at = text.rindex("\\begin{proof}[Answer]\n") + len("\\begin{proof}[Answer]\n")
+    main.write_text(text[:at] + "Four, by ANSWER-TWO.\n" + text[at:], encoding="utf-8")  # typed in by hand
+    main.write_text(
+        main.read_text().replace("\\section*{One}", f"\\section*{{Zero}}\n{empty}\\section*{{One}}"), encoding="utf-8"
+    )
+    call(q, "change-keep", {"changes": [eid]})
+    assert main.read_text().count("ANSWER-TWO") == 1
+
+
 def test_keep_leaves_line_endings_alone(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))
