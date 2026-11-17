@@ -263,6 +263,8 @@ class LayerReport:
     kept: list[str] = field(default_factory=list)  # edited mode files left alone
     new_beside: list[str] = field(default_factory=list)  # <mode>.md.new written
     unchanged: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)  # loom's own, unedited, of a mode the quilt no longer has
+    theirs: list[str] = field(default_factory=list)  # a file of the person's at a path loom writes, left alone
 
 
 ROOT_FILES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md")
@@ -303,6 +305,7 @@ def ensure_root_line(
 def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None) -> LayerReport:
     """Write `.loom/ai/` into a quilt that has no `.loom/ai/` yet, with the permission files, root lines and skills of `apps` (by key, default every app) in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
     from loom.ai.clients import chosen
+    from loom.ai.skills import RECORD as SKILLS_RECORD
     from loom.ai.skills import write_skills
 
     ai = root / AI
@@ -327,7 +330,11 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
         p.write_text(text, encoding="utf-8")
         rep.written.append(rel)
     rep.written.extend(ensure_root_line(root, shell=shell, apps=apps))
-    rep.written.extend(write_skills(root, chosen(root, apps))[0])
+    skills = write_skills(root, chosen(root, apps))
+    rep.written += skills.written
+    rep.theirs += skills.theirs
+    if (ai / SKILLS_RECORD).is_file():
+        rep.written.append(f"{AI}/{SKILLS_RECORD}")
     return rep
 
 
@@ -336,7 +343,7 @@ def upgrade_layer(
 ) -> LayerReport:
     """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them.
 
-    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
+    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. A skill of the person's at one of loom's paths is left alone (`theirs`), and loom's own of a mode that is gone is taken away (`removed`). With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
     """
     from loom.ai.clients import chosen
     from loom.ai.skills import write_skills
@@ -410,9 +417,11 @@ def upgrade_layer(
     rep.written += written
     rep.unchanged += unchanged
     rep.written.extend(ensure_root_line(root, write, shell=shell, apps=apps))
-    skills_written, skills_unchanged = write_skills(root, apps, write=write)
-    rep.written += skills_written
-    rep.unchanged += skills_unchanged
+    skills = write_skills(root, apps, write=write)
+    rep.written += skills.written
+    rep.unchanged += skills.unchanged
+    rep.removed += skills.removed
+    rep.theirs += skills.theirs
     return rep
 
 

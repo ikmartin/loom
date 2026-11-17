@@ -140,15 +140,21 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     said = (
         f"set up {label}: wrote {counted(len(written), 'file')}" if written else f"{label} was set up; nothing written"
     )
+    foreign = [*clients.foreign, *layer.theirs]
     if clients.foreign:
         said += f"; left {', '.join(clients.foreign)} alone, which holds settings of yours"
+    if layer.theirs:
+        said += f"; left {', '.join(layer.theirs)} alone, which loom did not write"
+    if layer.removed:
+        said += f"; removed {', '.join(layer.removed)}, loom's own for a mode the quilt no longer has"
     if clients.tracked:
         said += f"; did not write {', '.join(clients.tracked)}, which git tracks and which names this machine's paths"
     return {
         "ok": True,
         "result": said,
         "written": written,
-        "foreign": clients.foreign,
+        "removed": layer.removed,
+        "foreign": foreign,
         "tracked": clients.tracked,
         "variant": variant(root) or MCP,
     }

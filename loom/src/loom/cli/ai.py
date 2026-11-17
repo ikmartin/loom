@@ -153,7 +153,7 @@ def install_layer(
     Returns
     -------
     LayerReport
-        `written` (quilt-relative paths), and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files, as `loom upgrade` reports them.
+        `written` (quilt-relative paths); `theirs`, a skill of the person's at one of loom's paths, left alone; and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files and `removed`, as `loom upgrade` reports them.
     ClientReport
         The client files written, current, left alone or, in the shell variant, removed.
 
@@ -175,7 +175,8 @@ def install_layer(
         variant,
         vendor_files,
     )
-    from loom.ai.skills import skill_files
+    from loom.ai.skills import RECORD as SKILLS_RECORD
+    from loom.ai.skills import write_skills
 
     if shell is None:
         shell = variant(root) == SHELL
@@ -186,11 +187,14 @@ def install_layer(
             rep = init_layer(root, shell=shell, apps=apps)
         else:
             rep = LayerReport(written=[*tracked_docs(root), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
+            skills = write_skills(root, apps, write=False)
             rep.written += [
                 *vendor_files(quilt_config(root), shell=shell, apps=apps),
                 *ensure_root_line(root, False, shell=shell, apps=apps),
-                *skill_files(root, apps),
+                *skills.written,
+                *([f"{AI}/{SKILLS_RECORD}"] if skills.written or skills.unchanged else []),
             ]
+            rep.theirs += skills.theirs
     else:
         rep = upgrade_layer(root, write=write, shell=shell, apps=apps)
     clients = write_clients(root, write, shell=shell, apps=apps)
@@ -296,12 +300,23 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
                 limit=None,
             )
         )
+    if rep.theirs:
+        groups.append(Group("yours, at a path loom writes, so left alone", [Item("", key=rel) for rel in rep.theirs]))
+    if rep.removed:
+        groups.append(
+            Group(
+                "would remove" if dry_run else "removed",
+                [Item("loom's own, for a mode the quilt no longer has", key=rel) for rel in rep.removed],
+            )
+        )
     sdk = sdk_groups(shell)
     groups += _client_groups(clients, dry_run) + sdk
     data = {
         "written": written,
         "kept": sorted(rep.kept),
         "new_beside": sorted(rep.new_beside),
+        "theirs": rep.theirs,
+        "removed": rep.removed,
         "refreshed": existed,
         "variant": SHELL if shell else "mcp",
         "clients": clients.to_json(),
