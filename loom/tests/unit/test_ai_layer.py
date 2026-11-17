@@ -187,7 +187,7 @@ def test_upgrade_preserves_edited_modes(tmp_path: Path, monkeypatch: pytest.Monk
 
     shipped = layout.tracked_docs()
     shipped[".loom/ai/modes/referee.md"] = shipped[".loom/ai/modes/referee.md"] + "\n## New shipped section\n"
-    monkeypatch.setattr(layout, "tracked_docs", lambda: shipped)
+    monkeypatch.setattr(layout, "tracked_docs", lambda root=None: shipped)
     r2 = ok("upgrade", cwd=q)
     assert "referee.md.new" in r2.output and r2.output.startswith("upgraded:")
     assert (
@@ -227,7 +227,7 @@ def test_upgrade_refreshes_an_unedited_mode_the_first_time(tmp_path: Path, monke
     shipped = layout.tracked_docs()
     assert layout.read_versions(q) == {Path(rel).name: layout.sha(text) for rel, text in shipped.items()}
     shipped[".loom/ai/modes/audit.md"] += "\n## New shipped section\n"
-    monkeypatch.setattr(layout, "tracked_docs", lambda: shipped)
+    monkeypatch.setattr(layout, "tracked_docs", lambda root=None: shipped)
     r = json_of("upgrade", "--json", cwd=q)
     assert ".loom/ai/modes/audit.md" in r["written"] and r["kept"] == [] and "kept" not in r["verdict"]
     assert (q / ".loom/ai" / "modes" / "audit.md").read_text() == shipped[".loom/ai/modes/audit.md"]

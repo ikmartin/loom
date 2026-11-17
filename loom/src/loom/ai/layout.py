@@ -14,7 +14,7 @@ from pathlib import Path
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
 
-#: The modes loom ships, in the order the index lists them. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/ai/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
+#: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/ai/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
 MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "ingest"]
 RULES = "rules.md"  # `.loom/ai/rules.md`: not a mode, and no longer filed among them
 # The one list: every loom command an agent may run, by its full path in the command tree. Everything else loom offers is the author's, so a command added later is denied until it is named here -- which an enumeration of forbidden commands could never promise, and did not: twelve mutating commands were missing from it (DR-173).
@@ -121,8 +121,16 @@ def help_commands() -> list[str]:
     return sorted(f"{group} {flag}".strip() for group in ("", *groups) for flag in ("--help", "-h"))
 
 
-def tracked_docs() -> dict[str, str]:
-    """Quilt-relative path -> shipped text for every file whose edits `loom upgrade` preserves.
+def modes(root: Path | None = None) -> list[str]:
+    """The modes of the quilt at `root`, in the order its agents are shown them; with no quilt, the ones loom ships.
+
+    Every listing of the modes asks here: the orientation's index, the MCP prompts and the check of a prompt's name, `loom ai mode`, which types each mode names, and the mode files the agent layer writes. Today a quilt's modes are loom's (`MODES`) whatever its `.loom/ai/modes/` holds, so a quilt's own set is a change to this function and not to its callers.
+    """
+    return list(MODES)
+
+
+def tracked_docs(root: Path | None = None) -> dict[str, str]:
+    """Quilt-relative path -> shipped text for every file whose edits `loom upgrade` preserves, the files of the quilt's modes among them (`modes`).
 
     The orientation is here because it is the first thing an author tailors -- a standing rule about this quilt, a mode the agent should not reach for -- and `loom upgrade` overwrote it without a word until it was.
     """
@@ -132,7 +140,7 @@ def tracked_docs() -> dict[str, str]:
         f"{AI}/orientation.md": _asset("orientation.md"),
         f"{AI}/formatting.md": _asset("formatting.md"),
     }
-    out.update({f"{AI}/modes/{m}.md": _asset("modes", f"{m}.md") for m in MODES})
+    out.update({f"{AI}/modes/{m}.md": _asset("modes", f"{m}.md") for m in modes(root)})
     return out
 
 
@@ -278,7 +286,7 @@ def init_layer(root: Path, *, shell: bool = False) -> LayerReport:
         raise FileExistsError(str(ai))
     rep = LayerReport()
     (ai / "modes").mkdir(parents=True)
-    texts = tracked_docs()
+    texts = tracked_docs(root)
     for rel, text in texts.items():
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -310,7 +318,7 @@ def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) 
     if not ai.is_dir():
         return rep
     recorded = read_versions(root)
-    texts = tracked_docs()
+    texts = tracked_docs(root)
     wrote_beside: dict[
         str, str
     ] = {}  # each .new as loom wrote it, so a later upgrade can tell the author's merge from it

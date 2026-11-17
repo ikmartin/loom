@@ -16,7 +16,7 @@ from typing import Any
 
 import mcp.types as types
 
-from loom.ai.layout import ACTS, MODES
+from loom.ai.layout import ACTS, modes
 from loom.mcp.prompts import TARGET, TARGET_SAID, link_argv, message, mode_argv, prompts
 from loom.mcp.resources import TEMPLATES, NotAResource, reading
 from loom.mcp.resources import listed as resources_listed
@@ -141,7 +141,7 @@ def serve(root: Path, name: str) -> None:
         )
 
     async def on_get_prompt(ctx: Any, params: types.GetPromptRequestParams) -> types.GetPromptResult:
-        if params.name not in MODES:
+        if params.name not in modes(root):
             raise MCPError(code=types.INVALID_PARAMS, message=f"no prompt {params.name}; prompts/list names them")
         given = dict(params.arguments or {})
         if set(given) - {TARGET}:

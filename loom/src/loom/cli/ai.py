@@ -177,7 +177,7 @@ def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) 
         if write:
             rep = init_layer(root, shell=shell)
         else:
-            rep = LayerReport(written=[*tracked_docs(), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
+            rep = LayerReport(written=[*tracked_docs(root), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
             rep.written += [*vendor_files(quilt_config(root), shell=shell), *ensure_root_line(root, False, shell=shell)]
     else:
         rep = upgrade_layer(root, write=write, shell=shell)
@@ -413,13 +413,13 @@ def ai_mode(name: str, session: str | None, quilt_path: str | None) -> None:
 
     The quilt's own copy in .loom/ai/modes/ is printed, so an edit the author made there holds; with no .loom/ai/, the shipped one. `loom ai orient` lists every mode with its one line.
     """
-    from loom.ai.layout import MODES
+    from loom.ai.layout import modes
     from loom.ai.orient import mode_text
     from loom.cli.build_cmds import log_run
 
     quilt = open_quilt(quilt_path)
-    if name not in MODES:
-        raise NotFoundError("mode", f"no mode {name!r}; the modes are {', '.join(MODES)}")
+    if name not in modes(quilt.root):
+        raise NotFoundError("mode", f"no mode {name!r}; the modes are {', '.join(modes(quilt.root))}")
     found = find_session(quilt.root, session) if session else None
     click.echo(mode_text(quilt.root, name), nl=False)
     log_run(found.id if found else None, f"loom ai mode {name}", quilt.root)
