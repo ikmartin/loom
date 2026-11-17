@@ -98,4 +98,4 @@ The build itself: that every save scans every file again, rebuilds a 10 MB manif
 
 ## Still open
 
-Nothing in the model. Beside it: whether the build's first cut is agreed (Speed's row in the plan).
+Nothing. The build's first cut, which was open beside the model, the author agreed the same day (Speed's row in the plan).
