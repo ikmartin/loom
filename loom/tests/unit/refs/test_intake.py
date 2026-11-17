@@ -674,3 +674,58 @@ def test_a_dropped_file_is_read_under_the_name_it_came_with(tmp_path: Path) -> N
     entry = bib(q)[row.citekey]
     assert entry.fields["title"] == "Sur quelques points d'algèbre homologique: I", entry.fields
     assert (entry.fields["author"], entry.fields["year"]) == ("Grothendieck", "1957")
+
+
+def test_what_waits_is_listed_while_receives_come_and_go(tmp_path: Path) -> None:
+    """The integrator's review, finding 8: listing what waits looked at every file of the folder, a receive's `.part` among them, which can be gone by the time it is looked at; the manifest's build then failed."""
+    q = demo(tmp_path)
+    item = dropped(q, "notes.pdf")
+    (q / INCOMING / ".gone.part").symlink_to(q / INCOMING / "nothing-there")
+    assert [r["id"] for r in waiting(q)] == [item.drop]
+
+
+def test_an_empty_upload_is_no_pdf_and_a_full_disk_keeps_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+    from collections import namedtuple
+
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    with pytest.raises(IntakeRefused, match="empty, which is no PDF") as caught:
+        receive(q, "empty.pdf", io.BytesIO(b""), 0)
+    assert caught.value.code == "not-a-pdf"
+    usage = namedtuple("usage", "total used free")
+    monkeypatch.setattr(intake.shutil, "disk_usage", lambda _: usage(1, 1, 1000))
+    data = fake_pdf(tmp_path / "src" / "big.pdf", NOTES).read_bytes()
+    with pytest.raises(IntakeRefused, match="has not that much to spare") as caught:
+        receive(q, "big.pdf", io.BytesIO(data), len(data))
+    assert caught.value.code == "no-space" and caught.value.status == 507
+    assert not any(p.is_file() for p in (q / INCOMING).rglob("*"))
+    monkeypatch.setattr(intake.shutil, "disk_usage", shutil.disk_usage)
+
+
+def test_an_unfile_undone_answers_no_row_since_nothing_waits(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    item = dropped(q, "schedule.pdf", "Department of Mathematics\nSeminar schedule\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Man12"))
+    unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    said, again = undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert said == "filed it again under Man12" and again is None and waiting(q) == []
+
+
+def test_an_answer_naming_a_work_since_removed_is_refused(tmp_path: Path) -> None:
+    """The integrator's review, finding 9: answering with a candidate taken out of the bibliography meanwhile was a KeyError, a 500 over the wire."""
+    from loom.refs.added import _block
+
+    q = demo(tmp_path)
+    page = "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides of a talk\n"
+    (asked,) = taken(q, dropped(q, "talk.pdf", page, tmp_path))
+    text = (q / BIB).read_text(encoding="utf-8")
+    where = _block(text, "Calloway14")
+    assert where is not None
+    (q / BIB).write_text(text[: where[0]] + text[where[1] :], encoding="utf-8")
+    with pytest.raises(IntakeRefused, match="no work Calloway14") as caught:
+        answer(load_quilt(q), bib(q), asked.question, "Calloway14", by=WHO)
+    assert caught.value.code == "no-such-work" and caught.value.status == 404

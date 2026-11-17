@@ -28,6 +28,8 @@ from loom.scan.quilt import Quilt
 STATES = ("added", "here", "question", "cannot")
 #: How much of an upload is read at a time.
 CHUNK = 1 << 20
+#: What a receive leaves free on the disk beside the file it keeps.
+SPARE = 256 << 20
 #: The record of what each act on a drop wrote, newest last; the question a drop waits on; what it arrived as.
 ACT, QUESTION, ARRIVED = "act.json", "question.json", "arrived.json"
 #: Where an unfiled document's page text waits, inside its drop, until the unfile is undone.
@@ -210,8 +212,15 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
     if not name.strip():
         _drain(stream, length)
         raise IntakeRefused("missing-field", "name is required: the file's name, in the query", 400)
+    if length <= 0:
+        raise IntakeRefused("not-a-pdf", f"{Path(name).name} is empty, which is no PDF", 400)
     base = incoming(root)
     base.mkdir(parents=True, exist_ok=True)
+    if shutil.disk_usage(base).free < length + SPARE:
+        _drain(stream, length)
+        raise IntakeRefused(
+            "no-space", f"{Path(name).name} needs {length:,} bytes, and the disk has not that much to spare", 507
+        )
     tmp = base / f".{secrets.token_hex(8)}.part"
     h = hashlib.sha256()
     got = 0
@@ -1375,12 +1384,16 @@ def waiting(root: Path) -> list[dict[str, Any]]:
     if not base.is_dir():
         return []
     out = []
-    for d in sorted(base.iterdir(), key=lambda p: p.stat().st_mtime):
-        if (
-            d.is_dir()
-            and re.fullmatch(r"[0-9a-f]{64}|t-[0-9a-f]{16}", d.name)
-            and ((d / QUESTION).is_file() or waiting_file(d) is not None)
-        ):
+    drops: list[tuple[float, Path]] = []
+    # a receive under way writes and renames files here outside the publication's lock, so only drops are looked at, and one gone meanwhile is passed over
+    for d in base.iterdir():
+        if re.fullmatch(r"[0-9a-f]{64}|t-[0-9a-f]{16}", d.name):
+            try:
+                drops.append((d.stat().st_mtime, d))
+            except FileNotFoundError:
+                continue
+    for _, d in sorted(drops):
+        if d.is_dir() and ((d / QUESTION).is_file() or waiting_file(d) is not None):
             row = _waiting_row(d, 0).to_json()
             row.pop("item", None)
             if row["state"] == "received":

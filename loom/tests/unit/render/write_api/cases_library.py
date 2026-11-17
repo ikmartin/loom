@@ -357,6 +357,19 @@ def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     kept = sorted(p.name for p in (q / ".loom" / "incoming").iterdir())
     assert kept == [drop.name], kept
     assert _stream(s, "x.pdf", data, token="")[0] == 403
+    # a length that is no number, on an upload refused for want of a token, is still answered
+    import http.client
+    import urllib.parse
+
+    where = urllib.parse.urlsplit(s.url)
+    conn = http.client.HTTPConnection(where.hostname, where.port, timeout=60)
+    conn.putrequest("POST", "/_api/library-receive?name=x.pdf")
+    conn.putheader("Content-Type", "application/octet-stream")
+    conn.putheader("Content-Length", "many")
+    conn.endheaders()
+    answered = conn.getresponse()
+    assert answered.status == 403 and json.loads(answered.read())["error"]["code"] == "refused"
+    conn.close()
     refuses(s, "library-receive", {"name": "x.pdf"}, 400, "bad-request", "application/octet-stream")
 
 
