@@ -10,7 +10,7 @@ import pytest
 
 from loom.ai import layout
 from loom.ai.layout import modes, upgrade_layer
-from tests.helpers import ok
+from tests.helpers import json_of, ok
 
 
 def bare(tmp_path: Path) -> Path:
@@ -146,3 +146,14 @@ def test_a_mode_whose_line_the_author_changed_is_described_as_they_wrote_it(tmp_
     mode.write_text(mode.read_text().replace(old, "When it fits: smoothing a proof this quilt cares about."))
     ok("upgrade", cwd=q)
     assert "smoothing a proof this quilt cares about." in (q / ".claude/skills/loom-flow/SKILL.md").read_text()
+
+
+def test_loom_upgrade_says_which_skills_it_left_alone(tmp_path: Path) -> None:
+    q = bare(tmp_path)
+    ok("ai", "init", cwd=q)
+    edited = q / ".claude/skills/loom-review/SKILL.md"
+    edited.write_text(edited.read_text() + "\nMine now.\n")
+    got = json_of("upgrade", "--json", cwd=q)
+    assert got["theirs"] == [".claude/skills/loom-review/SKILL.md"] and got["removed"] == []
+    said = ok("upgrade", cwd=q).stdout
+    assert "yours, at a path loom writes, so left alone" in said and ".claude/skills/loom-review/SKILL.md" in said

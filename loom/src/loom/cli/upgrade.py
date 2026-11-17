@@ -26,6 +26,8 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     written: list[str] = []
     kept: list[str] = []
     beside: list[str] = []
+    removed: list[str] = []
+    theirs: list[str] = []
     if write_loom_ignore(root, write=not dry_run):
         written.append(LOOM_GITIGNORE)
     if not (root / ANNOTATION_TYPES).exists():
@@ -48,6 +50,7 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             written.append(".gitignore")
         kept += [str(rel) for rel in rep.kept]
         beside = [rel for rel in kept if f"{rel}.new" in rep.new_beside]
+        removed, theirs = rep.removed, rep.theirs
     groups = [
         Group(
             "would write" if dry_run else "wrote",
@@ -78,10 +81,18 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             limit=None,
             problem=True,
         ),
+        Group(
+            "would remove" if dry_run else "removed",
+            [Item("loom's own, for a mode the quilt no longer has", key=rel) for rel in removed],
+            limit=None,
+        ),
+        Group("yours, at a path loom writes, so left alone", [Item("", key=rel) for rel in theirs], limit=None),
     ]
-    if written or kept:
-        parts = ([f"{'would write' if dry_run else 'wrote'} {counted(len(written), 'file')}"] if written else []) + (
-            [f"{'would keep' if dry_run else 'kept'} {counted(len(kept), 'edited file')}"] if kept else []
+    if written or kept or removed:
+        parts = (
+            ([f"{'would write' if dry_run else 'wrote'} {counted(len(written), 'file')}"] if written else [])
+            + ([f"{'would keep' if dry_run else 'kept'} {counted(len(kept), 'edited file')}"] if kept else [])
+            + ([f"{'would remove' if dry_run else 'removed'} {counted(len(removed), 'file')}"] if removed else [])
         )
         # one file kept with its new version beside it is one file, said once (T5)
         merge = (
@@ -110,6 +121,8 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             "written": written,
             "kept": kept,
             "beside": beside,
+            "removed": removed,
+            "theirs": theirs,
             "gitignore": added,
             "ai": has_ai,
         },
