@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -43,6 +43,10 @@ class BuildReport:
     rendered: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
+
+    def kept(self) -> BuildReport:
+        """This report without its manifest, which is on disk once published: what a server holds between builds, where a large quilt's manifest runs to tens of megabytes as objects."""
+        return replace(self, manifest={})
 
 
 class _PageTable:

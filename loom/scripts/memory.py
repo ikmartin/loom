@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure what a served quilt holds across saves, on a copy of a quilt: the process's memory and the scanner's live tokens after the first build and after each save.
 
-Each build runs in this process as `loom serve` runs it after a change (`build(quilt, tex=...)`, the last report kept and nothing older), so the numbers are this checkout's code. Each save writes a word never written before into one file, so no cache holds its text. Memory is read after a full collection, and on macOS after the allocator has handed back the pages it holds free, so a number is what the process keeps rather than what it has yet to free or give back. The copy is a clone where the file system makes one (APFS), and is removed at the end unless `--keep` is given; HOME and the XDG directories point into it, so nothing of the person running it is read or written but their TeX tree (`TEXMFHOME`, kept for `--tex`).
+Each build runs in this process as `loom serve` runs it after a change (`build(quilt, tex=...)`, the last report kept as the server keeps it and nothing older), so the numbers are this checkout's code. Each save writes a word never written before into one file, so no cache holds its text. Memory is read after a full collection, and on macOS after the allocator has handed back the pages it holds free, so a number is what the process keeps rather than what it has yet to free or give back. The copy is a clone where the file system makes one (APFS), and is removed at the end unless `--keep` is given; HOME and the XDG directories point into it, so nothing of the person running it is read or written but their TeX tree (`TEXMFHOME`, kept for `--tex`).
 
     uv run python scripts/memory.py PATH [--saves N] [--file REL] [--tex] [--keep]
 
@@ -145,8 +145,9 @@ def main() -> None:
             if n:
                 save(q, rel)
             started = time.perf_counter()
-            # the last report is kept during the build and replaced after it, as the server keeps it
+            # the last report is kept during the build and replaced after it, as the server keeps it: without its manifest where the checkout's server drops it
             report = build(quilt, tex=args.tex)
+            report = report.kept() if hasattr(report, "kept") else report
             took = time.perf_counter() - started
             rel = rel or the_largest_reached(report.result)
             footprint, resident = memory()

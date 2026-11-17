@@ -767,7 +767,7 @@ class ServeSession:
                     report = build(self.quilt, reuse=reuse, progress=shown.told, tex=self.compile_masters)
             else:
                 report = build(self.quilt, reuse=reuse, progress=progress, tex=self.compile_masters)
-            self.last_report = report
+            self.last_report = report = report.kept()
             self.builds += 1
             self.published = seen
             if self.watcher is not None:
