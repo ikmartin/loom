@@ -5,6 +5,7 @@ Every call is a `loom` subprocess in the quilt's root, under `AI_AGENT=1`, so th
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
@@ -54,7 +55,8 @@ def serve(root: Path, name: str) -> None:
     from loom.presence import Presence, prune
     from loom.version import __version__
 
-    prune(root)
+    with contextlib.suppress(Exception):  # the records are the viewer's; none of them may stop the server
+        prune(root)
     here = Presence(root, name)
     _end_on_signals(here)
     specs = {s.name: s for s in tools()}

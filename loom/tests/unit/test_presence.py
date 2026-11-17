@@ -9,6 +9,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
 from loom.presence import FORMAT, Presence, live, record_path
@@ -166,3 +167,101 @@ def test_a_record_written_starts_no_rebuild(tmp_path: Path) -> None:
         assert any(p.startswith(".loom/annotations/") for p in seen)
     finally:
         here.end()
+
+
+def _looked(q: Path) -> list[dict[str, object]]:
+    """`live(q)` on a thread of its own, failed when it does not finish in a few seconds: a FIFO opened blocking would wait for ever."""
+    got: list[list[dict[str, object]]] = []
+    look = threading.Thread(target=lambda: got.append(live(q)), daemon=True)
+    look.start()
+    look.join(5)
+    assert got, "live() did not finish: it waited on an entry, or raised"
+    return got[0]
+
+
+def _unblock(fifo: Path) -> None:
+    """Free a reader an older loom left waiting on `fifo`, so a failing test does not hang the run."""
+    try:
+        os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+    except OSError:
+        pass
+
+
+def test_an_entry_that_is_no_record_is_left_alone_and_hides_no_other(tmp_path: Path) -> None:
+    """A copied quilt can carry anything in `.loom/live/`: only a regular file named for a pid in ASCII digits is opened, a FIFO is never waited on, a link never followed, and none of them stops the look at a live record beside it."""
+    q = demo(tmp_path)
+    live_dir = record_path(q, 1).parent
+    live_dir.mkdir(parents=True, exist_ok=True)
+    outside = tmp_path / "outside.json"
+    outside.write_text("{}")
+    (live_dir / "².json").write_text("{}")
+    (live_dir / "0126.json").write_text("{}")
+    fifo = live_dir / "123.json"
+    os.mkfifo(fifo)
+    (live_dir / "124.json").mkdir()
+    (live_dir / "125.json").symlink_to(outside)
+    here = Presence(q, "Test Agent")
+    try:
+        here.begin(None, None)
+        assert [r["pid"] for r in _looked(q)] == [os.getpid()]
+    finally:
+        here.end()
+        _unblock(fifo)
+    assert outside.read_text() == "{}"
+    for name in ("².json", "0126.json", "123.json", "124.json", "125.json"):
+        assert os.path.lexists(live_dir / name), name
+
+
+def test_a_link_in_place_of_the_folder_is_never_followed(tmp_path: Path) -> None:
+    """`.loom/live` a link to a folder outside the quilt: nothing there is listed or deleted, and a server writes no record there."""
+    q = demo(tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    stale = elsewhere / "4242.json"
+    stale.write_text(json.dumps({"format": FORMAT, "pid": 4242}))
+    (q / ".loom" / "live").symlink_to(elsewhere, target_is_directory=True)
+    assert _looked(q) == []
+    assert stale.exists()
+    here = Presence(q, "Test Agent")
+    try:
+        here.begin(None, None)
+        assert not (elsewhere / f"{os.getpid()}.json").exists()
+    finally:
+        here.end()
+
+
+def test_a_server_writes_its_record_over_whatever_stands_at_its_own_name(tmp_path: Path) -> None:
+    """A FIFO, or a link out of the quilt, at this process's own name is no record: it goes, and the record is a file of its own."""
+    q = demo(tmp_path)
+    path = record_path(q, os.getpid())
+    path.parent.mkdir(parents=True, exist_ok=True)
+    outside = tmp_path / "outside.json"
+    outside.write_text("theirs")
+    for planted in ("fifo", "link"):
+        if planted == "fifo":
+            os.mkfifo(path)
+        else:
+            path.symlink_to(outside)
+        here = Presence(q, "Test Agent")
+        try:
+            here.begin(None, None)
+            assert path.is_file() and not path.is_symlink(), planted
+            assert [r["pid"] for r in _looked(q)] == [os.getpid()], planted
+        finally:
+            here.end()
+            _unblock(path)
+    assert outside.read_text() == "theirs"
+
+
+def test_a_server_answers_with_a_fifo_among_the_records(tmp_path: Path) -> None:
+    """A starting server looks at the records; a FIFO among them neither stops it answering nor keeps its own record from the list."""
+    q = demo(tmp_path)
+    fifo = record_path(q, 123)
+    fifo.parent.mkdir(parents=True, exist_ok=True)
+    os.mkfifo(fifo)
+    try:
+        with AgentServer(q) as server:
+            server.discover()
+            assert [r["pid"] for r in _looked(q)] == [server.pid]
+    finally:
+        _unblock(fifo)
