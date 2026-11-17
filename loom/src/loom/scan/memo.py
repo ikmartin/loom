@@ -1,6 +1,6 @@
 """What is derived from what a scan reads, remembered while it is in use.
 
-A served quilt scans every file again on every change, and most files have not changed, so their tokens and comment-blanked text are looked up by the text itself rather than made again, and a style a preamble loads by its path and mtime. A memo keeps what is in use and nothing older: each scan and each build that scans is a `reading`, and when the outermost reading ends every memo forgets the entries not asked for since it began. An edited file's old text is let go by the build that reads the new one, so what a memo holds is bounded by the quilt as it is now, not by how many saves came before.
+A served quilt scans every file again on every change, and most files have not changed, so their tokens and comment-blanked text are looked up by the text itself rather than made again, and a style a preamble loads by its path and mtime. A memo keeps what is in use and nothing older: each scan and each build is a `reading`, and when the outermost reading ends every memo forgets the entries not asked for since it began. An edited file's old text is let go by the build that reads the new one, so what a memo holds is bounded by the quilt as it is now, not by how many saves came before.
 """
 
 from __future__ import annotations
@@ -28,14 +28,18 @@ class Memo(Generic[K, V]):
 
     def __init__(self, make: Callable[[K], V]) -> None:
         self._make = make
-        self._entries: dict[K, tuple[V, int]] = {}
+        # each key's value, the generation it was last asked for in, and the one it was made in
+        self._entries: dict[K, tuple[V, int, int]] = {}
         with _lock:
             _memos.append(self)
 
     def __call__(self, key: K) -> V:
         hit = self._entries.get(key)
-        value = self._make(key) if hit is None else hit[0]
-        self._entries[key] = (value, _generation)
+        if hit is None:
+            value, made = self._make(key), _generation
+        else:
+            value, made = hit[0], hit[2]
+        self._entries[key] = (value, _generation, made)
         return value
 
     def __contains__(self, key: object) -> bool:
@@ -47,17 +51,17 @@ class Memo(Generic[K, V]):
     def __len__(self) -> int:
         return len(self._entries)
 
-    def _forget(self, before: int) -> None:
-        for key, (_, used) in list(self._entries.items()):
-            if used < before:
+    def _forget(self, began: int, keep: bool) -> None:
+        for key, (_, used, made) in list(self._entries.items()):
+            if (made >= began) if keep else (used < began):
                 self._entries.pop(key, None)
 
 
 @contextmanager
-def reading() -> Iterator[None]:
-    """Read the quilt inside this: when it ends with no older reading still open, every memo forgets what was not asked for since it began.
+def reading(keep: bool = False) -> Iterator[None]:
+    """Read the quilt inside this: when it ends with no older reading still open, every memo forgets what was not asked for since it began; with `keep`, only what was made since it began.
 
-    A scan inside a build forgets nothing, so the build's rendering finds what the build before it derived; readings in other threads keep what they have asked for. A caller that builds from a scan it already holds opens none, since it reads no file and would otherwise forget every file's entry.
+    A scan inside a build forgets nothing, so the build's rendering finds what the build before it derived; readings in other threads keep what they have asked for. A build from a scan it already holds reads with `keep`: it reads no file of the quilt's, and the scans it makes of other texts (a pinned version, a temporary copy) must not take the quilt's own entries with them, while what only they made (a temporary copy's styles) is let go.
     """
     global _generation
     with _lock:
@@ -71,4 +75,4 @@ def reading() -> Iterator[None]:
             _open.discard(began)
             if all(other > began for other in _open):
                 for memo in _memos:
-                    memo._forget(began)
+                    memo._forget(began, keep)

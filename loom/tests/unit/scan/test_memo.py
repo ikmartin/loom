@@ -24,14 +24,14 @@ def chapter(word: str) -> str:
     return f"\\section{{Long}}\n{body}"
 
 
-def a_quilt(tmp_path: Path) -> Path:
+def a_quilt(tmp_path: Path, word: str = "widgets") -> Path:
     root = tmp_path / "quilt"
     (root / "drafting").mkdir(parents=True)
     (root / "config.toml").write_text('[quilt]\nmain = "drafting/main.tex"\nprefix = "ab"\n', encoding="utf-8")
     (root / "drafting" / "main.tex").write_text(
         PREAMBLE + "\\begin{document}\n\\input{chapter}\n\\end{document}\n", encoding="utf-8"
     )
-    (root / "drafting" / "chapter.tex").write_text(chapter("widgets"), encoding="utf-8")
+    (root / "drafting" / "chapter.tex").write_text(chapter(word), encoding="utf-8")
     return root
 
 
@@ -78,6 +78,42 @@ def test_a_rebuild_with_nothing_changed_tokenizes_no_long_text_again(
     monkeypatch.setattr(tokenize, "_tokenize", counted)
     build(quilt, tex=False)
     assert made == []
+
+
+def test_a_scan_inside_a_build_from_a_held_scan_leaves_the_next_build_nothing_to_tokenize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A build from `reuse` scans other texts (a pinned version, a temporary copy): those scans must not take the quilt's own entries with them."""
+    from loom.render import build as built
+    from loom.scan.scan import scan
+
+    quilt = load_quilt(a_quilt(tmp_path / "served"))
+    other = load_quilt(a_quilt(tmp_path / "other", "gadgets"))
+    writes = built._write_source
+
+    def and_another_scan(*args: object) -> None:
+        writes(*args)  # type: ignore[arg-type]
+        scan(other)
+
+    monkeypatch.setattr(built, "_write_source", and_another_scan)
+    report = build(quilt, tex=False)
+    build(quilt, tex=False, reuse=report.result)
+    made: list[int] = []
+    tokens = tokenize._tokenize
+    monkeypatch.setattr(tokenize, "_tokenize", lambda text: made.append(len(text)) or tokens(text))
+    build(quilt, tex=False)
+    assert [n for n in made if n >= tokenize.CACHED_FROM] == []
+
+
+def test_a_keeping_reading_lets_go_only_what_it_made() -> None:
+    m = Memo(str.upper)
+    m("before")
+    with reading(keep=True):
+        m("made inside")
+        with reading():
+            pass  # an inner reading forgets nothing
+        assert "before" in m
+    assert "before" in m and "made inside" not in m
 
 
 def test_an_entry_lives_while_a_reading_asks_for_it() -> None:

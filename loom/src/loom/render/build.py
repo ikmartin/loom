@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
-from contextlib import nullcontext
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -417,9 +416,9 @@ def build(
 
     Notes
     -----
-    A build that scans is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file and forgets nothing.
+    A build is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file of the quilt's and keeps what the last build derived, letting go only what it made itself.
     """
-    with nullcontext() if reuse is not None else reading():
+    with reading(keep=reuse is not None):
         return _build(quilt, keys, records, force, reuse, progress, tex)
 
 
