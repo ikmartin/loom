@@ -103,19 +103,24 @@ def serve(root: Path, name: str) -> None:
         except Exception as exc:  # a session that cannot be made is said, not a protocol error
             return _error(f"loom could not open this conversation's session: {exc}", "")
         command = "loom " + shlex.join(words)
+        opening = spec.path == "session new"
         try:
+            if not opening:
+                # logged before it runs: a write the app stops the server during still lands, and so does its line
+                _log(root, arguments.get("session") or here.data["session"], command)
             if ACTS[spec.path] == "read":
                 done = await _run(root, words)
             else:
                 async with lock:
                     done = await _run(root, words)
-            if spec.path == "session new" and done.returncode == 0 and not arguments.get("no_use"):
+            if opening and done.returncode == 0 and not arguments.get("no_use") and not arguments.get("dry_run"):
                 # the agent opened a session to work in: its later calls write there
                 made = _made(done.stdout.decode("utf-8", errors="replace"))
                 if made:
                     here.bound(made)
             session = arguments.get("session") or here.data["session"]
-            _log(root, session, command)
+            if opening:
+                _log(root, session, command)
             return _result(root, spec, {**arguments, "session": session}, command, done)
         except Exception as exc:  # the SDK turns anything uncaught into a protocol error, which says nothing useful
             return _error(f"loom could not run {command}: {exc}", command)
@@ -432,7 +437,7 @@ def _keep(root: Path, session: object, what: str, text: str) -> str:
 
 
 def _log(root: Path, given: object, command: str, why: str = "") -> None:
-    """One line per call in the session's run.log, the command a person would rerun, and `why` when a prompt or a resource read ran it; the commands' own logging steps aside under the server."""
+    """One line per call in the session's run.log, the command a person would rerun, and `why` when a prompt or a resource read ran it; the commands' own logging steps aside under the server. A tool call is logged as it starts, `session new` once it has opened the session it is logged in."""
     from loom.clock import stamp
     from loom.sessions import files_dir
 

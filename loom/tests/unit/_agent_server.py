@@ -50,16 +50,21 @@ class AgentServer:
 
         return record_path(self.q, self.pid)
 
-    def request(self, method: str, params: dict[str, Any] | None = None, *, meta: bool = True) -> dict[str, Any]:
-        """Send one request and wait for its answer; `meta` stamps the envelope a client with no `initialize` sends."""
+    def send(self, method: str, params: dict[str, Any] | None = None, *, meta: bool = True) -> None:
+        """Send one request without waiting for its answer; `meta` stamps the envelope a client with no `initialize` sends."""
         self.next += 1
         body: dict[str, Any] = dict(params or {})
         if meta:
             body["_meta"] = {**META, **body.get("_meta", {})}
         line = json.dumps({"jsonrpc": "2.0", "id": self.next, "method": method, "params": body}) + "\n"
-        assert self.proc.stdin is not None and self.proc.stdout is not None
+        assert self.proc.stdin is not None
         self.proc.stdin.write(line.encode("utf-8"))
         self.proc.stdin.flush()
+
+    def request(self, method: str, params: dict[str, Any] | None = None, *, meta: bool = True) -> dict[str, Any]:
+        """Send one request and wait for its answer."""
+        self.send(method, params, meta=meta)
+        assert self.proc.stdout is not None
         while True:
             ready, _, _ = select.select([self.proc.stdout], [], [], PATIENCE)
             assert ready, f"no answer to {method} in {PATIENCE} s"

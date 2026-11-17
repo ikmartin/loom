@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import signal
+import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 from loom.mailbox import read_events
 from loom.presence import live
 from loom.sessions import sessions
-from tests.helpers import ok
+from tests.helpers import PATIENCE, ok
 from tests.unit._agent_server import AgentServer
 from tests.unit._quilts import demo, new_session
 
@@ -108,3 +112,50 @@ def test_a_conversations_first_look_reports_what_a_person_did_before_it(tmp_path
         server.discover()
         assert "Please look at this before anything else" in server.call("loom_since")["content"][0]["text"]
         assert len(made_for(q, "conv-a")) == 1
+
+
+def test_a_dry_run_of_session_new_binds_nothing(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_new", {"name": "only asking", "dry_run": True})
+        server.call("loom_session_new", {"name": "only asking", "dry_run": True, "json": True})
+        assert live(q)[0]["session"] is None, "the record names no session that does not exist"
+        got = server.call("loom_session_say", {"text": "still mine"})
+        assert not got.get("isError"), got
+    [sid] = made_for(q, "conv-a")
+    assert said(q, sid) == ["still mine"]
+    assert not [s for s in sessions(q).values() if s.title == "only asking"]
+
+
+def test_a_write_the_app_stops_the_server_during_lands_with_its_line_in_the_log(tmp_path: Path) -> None:
+    """The command is a process of its own and finishes after the server has gone; the server logs the call as it starts, so the log says what landed."""
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_since")
+        [sid] = made_for(q, "conv-a")
+        server.send(
+            "tools/call",
+            {
+                "name": "loom_annotate",
+                "arguments": {"target": "dm-0010", "message": "written as it stops", "type": "question"},
+            },
+        )
+        child = _until(
+            lambda: subprocess.run(["pgrep", "-P", str(server.pid)], capture_output=True, text=True).stdout.split()
+        )
+        server.stop(signal.SIGTERM)
+        _until(lambda: subprocess.run(["ps", "-p", child[0]], capture_output=True).returncode != 0)
+    assert "written as it stops" in (q / ".loom/annotations/log.jsonl").read_text()
+    assert "loom annotate" in (q / ".loom/sessions" / sid / "run.log").read_text()
+
+
+def _until(look: Callable[[], Any]) -> Any:
+    """`look()` once it is truthy, failed after `PATIENCE` seconds."""
+    end = time.monotonic() + PATIENCE
+    while time.monotonic() < end:
+        if got := look():
+            return got
+        time.sleep(0.01)
+    raise AssertionError("waited in vain")
