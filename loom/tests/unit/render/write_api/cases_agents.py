@@ -156,4 +156,6 @@ def _agents_setup(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     assert got["variant"] == variant(q) == "mcp" and MCP_LINE in (q / "CLAUDE.md").read_text()
     for rel in ("AGENTS.md", "GEMINI.md", ".codex", ".gemini", ".cursor"):
         assert not (q / rel).exists(), rel
-    refuses(s, "agents-setup", {"app": "codex", "author": "Referee Agent"}, 403, "author-only", "only the author sets up")
+    refuses(
+        s, "agents-setup", {"app": "codex", "author": "Referee Agent"}, 403, "author-only", "only the author sets up"
+    )
