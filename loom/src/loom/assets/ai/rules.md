@@ -53,8 +53,6 @@ The author reads the viewer: what it does not show is never seen. So every outpu
 
 **A page is a reading, never a source.** Write the research state so that someone starting a session tomorrow knows what the work is after and what is settled; keep it short, and replace what no longer holds rather than appending to it. A work's overview says what the paper proves and how, linking each result by its digest id; it is never cited as the paper. A work you read through that has no overview yet gets one from you before you move on, whatever brought you to it; `loom library read WORK` says when it has none. A {type:note} stays the home of what concerns one result.
 
-**Relations between results** go in `loom library relate FROM TO --kind … --why "…"`, where both ends find them, not in prose.
-
 ## Findings
 
 1. A finding about a key is an annotation: `loom annotate KEY "message" --quote "exact text" --type TYPE`. One finding per call. In a shell, `--batch` (JSON lines on stdin) takes many, and a message given as `-` is read from stdin, which spares LaTeX the shell's quoting; over MCP there is no shell to quote for, and each finding is a call.

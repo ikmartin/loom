@@ -245,8 +245,11 @@ def sdk_groups(shell: bool) -> list[Group]:
 @click.option(
     "--client",
     type=click.Choice([c.key for c in CLIENTS]),
+    metavar="APP",
     default=None,
-    help="Print the loom server's entry for this agent app, to add to its settings by hand, and write nothing.",
+    help="Print the loom server's entry for agent app APP, to add to its settings by hand, and write nothing: "
+    + ", ".join(c.key for c in CLIENTS if c.listed)
+    + ".",
 )
 @click.option("--dry-run", is_flag=True, help="Say what would be written and write nothing.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")

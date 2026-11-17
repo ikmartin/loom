@@ -31,7 +31,7 @@ AGENT_COMMANDS = frozenset(
         "session new", "session rename", "session list", "session say",
         # the library's readers and an agent's tools; filing a document (`library add`, `import`) and every decision are the author's
         "library", "library update", "library review", "library read", "library search", "library why",
-        "library propose", "library locate", "library relate", "library check",
+        "library propose", "library locate", "library check",
         # the MCP server an agent's app starts, often from a shell that already marks an agent
         "mcp",
     }
@@ -51,7 +51,7 @@ ACTS: dict[str, str] = {
     **dict.fromkeys(
         (
             "annotate", "suggest", "draft", "new", "since", "ai refresh", "session new", "session rename", "session say",
-            "library propose", "library relate", "library update", "mcp",
+            "library propose", "library update", "mcp",
         ),
         "write",
     ),

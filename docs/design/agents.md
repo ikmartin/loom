@@ -10,7 +10,6 @@ It writes the quilt's files where the quilt lets it (below), and everything else
 
 - **Annotations** on any target, of one of the quilt's types or none, a note among them, and **suggested edits**, proposed text the author can take (`model.md`).
 - **Proposed library results**, each quotation checked against the page before it is stored, waiting for the author to verify.
-- **Relations** between results, each with its reason.
 - **Agent documents** in `.loom/copies/`, copies it makes with `loom draft DOC --ai NAME` and edits there; the author adopts what they want. A copy is how an agent works on a document the quilt protects, or gives the author changes to choose among before any lands.
 - **Pages**, through `loom write`: the quilt's research state, its goals, open problems, conventions and decisions, and each cited work's overview, a reading of the paper, which the first agent to read the work through writes without waiting to be asked. The author edits a page directly; an agent writes one only through the command, which refuses a write from a stale read (`--base`) and records who wrote what in the history. A page says who wrote it and is never a source.
 - **The session's transcript**, with `loom session say` (below).
@@ -46,7 +45,8 @@ Some acts make a claim only a person can make (*I checked this*, *I accept this 
 - starting a library run in the viewer (`library-update`), which may use the network for that run on the person's word, as `--online` does;
 - adding a work to the library, filing a dropped PDF, and deleting a work from it (`library-add`, `library-upload`, `library-file`, `library-delete`), and any lookup that asks for the network (`library-lookup` with `online`);
 - stopping loom asking for a work's paper, or asking again (`library-ignore`, as `loom library ignore`), since whether a work can be had is a claim about the world;
-- removing a relation someone else asserted.
+- removing a relation someone else asserted;
+- setting up an agent's app in the viewer (`agents-setup`), for the same reason as the permission files.
 
 Refusal is enforced, not requested. A declared name that calls itself an agent is refused. Under an agent's shell, recognised by the markers agent tools set (`AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `GEMINI_CLI`, `CURSOR_AGENT` and others), these acts are refused whatever name is declared, because a name cannot be checked and an agent typing the author's name is exactly the case to stop. The author runs them in a terminal of their own.
 
@@ -81,7 +81,7 @@ MCP is the intended way for any agent to attach. The server is `loom mcp --as NA
   - `.gemini/settings.json` for Gemini CLI.
   - `.cursor/mcp.json` for Cursor.
 
-  Each names one server, `loom`: the absolute path of this machine's loom with `mcp --as "<App> Agent" --quilt <root>`. Codex's and Gemini's entries skip the per-tool prompt, as the shell allows do. The files are gitignored and never committed (`invariants.md`). The apps ask the person before they start a project's server, and Codex and Gemini CLI read the file only in a trusted folder. A file that holds settings of the person's is left alone. `loom ai init --client NAME` prints the entry to add to it, or to an app configured outside the quilt: Claude Desktop, LM Studio, Zed or JetBrains.
+  Each names one server, `loom`: the absolute path of this machine's loom with `mcp --as "<App> Agent" --quilt <root>`. Codex's and Gemini's entries skip the per-tool prompt, as the shell allows do. The files are gitignored and never committed (`invariants.md`). The apps ask the person before they start a project's server, and Codex and Gemini CLI read the file only in a trusted folder. A file that holds settings of the person's is left alone. `loom ai init --client APP` prints the entry to add to it. It also prints one for an app configured outside the quilt (Claude Desktop, LM Studio, Zed, JetBrains), though its help names only the four apps with a file in the quilt.
 
   The viewer sets up one app at a time (`agents-setup`, `specs/write-api.md`): the layer where there is none, over MCP, and that app's root line, permission file and server file alone. The apps a quilt is set up for are recorded beside the layer, in `.loom/ai/.loom-apps`, and `loom upgrade` and `loom doctor` keep to them; a layer that records none is set up for every app, and `loom ai init` sets up every app.
 - **`loom doctor` checks the variant.** It reports which one the permission files are in and whether they are current. Over MCP it also warns on a client file that is missing, holds the person's settings or names another loom or path, and on a missing MCP SDK. It fails when git tracks a client file. The SDK installs with loom, so it can be missing only from an environment older than that dependency, such as an editable install, which takes new code but not new dependencies. `loom ai init` and `loom upgrade` over MCP, and `loom init` with an AI chosen, warn on that too, and each warning names the reinstall that fits how this loom was installed.

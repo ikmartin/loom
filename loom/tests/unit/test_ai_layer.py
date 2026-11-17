@@ -598,7 +598,7 @@ def test_every_command_an_agent_writes_with_takes_as() -> None:
     options = dict(walk(main))
     # who acts is `--as` everywhere (K2); `--author` names nothing an agent may pass
     assert not [c for c in AGENT_COMMANDS if "--author" in options.get(c, set())]
-    writers = {"annotate", "session say", "session new", "library relate", "library propose"}
+    writers = {"annotate", "session say", "session new", "library propose"}
     assert writers <= AGENT_COMMANDS
     assert not [c for c in sorted(writers) if "--as" not in options[c] and c != "library propose"]
 

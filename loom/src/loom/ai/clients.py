@@ -38,6 +38,8 @@ class Client:
         The file at the quilt's root the app reads first, where loom puts its one line (`layout.ensure_root_line`).
     permissions : str or None, default None
         The permission file loom writes whole for the app, in either variant (`layout.vendor_files`).
+    listed : bool, default True
+        Named in `loom ai init --client`'s help; an app configured outside the quilt, which no pilot uses, is not, and still takes the option.
     """
 
     key: str
@@ -49,6 +51,7 @@ class Client:
     walks_up: bool = False
     root_file: str | None = None
     permissions: str | None = None
+    listed: bool = True
 
     @property
     def agent(self) -> str:
@@ -85,10 +88,18 @@ CLIENTS = (
         None,
         "json",
         where="~/Library/Application Support/Claude/claude_desktop_config.json on macOS, %APPDATA%\\Claude\\claude_desktop_config.json on Windows",
+        listed=False,
     ),
-    Client("lm-studio", "LM Studio", None, "json", where="~/.lmstudio/mcp.json"),
-    Client("zed", "Zed", None, "zed", where="~/.config/zed/settings.json"),
-    Client("jetbrains", "JetBrains", None, "json", where="Settings > Tools > AI Assistant > Model Context Protocol"),
+    Client("lm-studio", "LM Studio", None, "json", where="~/.lmstudio/mcp.json", listed=False),
+    Client("zed", "Zed", None, "zed", where="~/.config/zed/settings.json", listed=False),
+    Client(
+        "jetbrains",
+        "JetBrains",
+        None,
+        "json",
+        where="Settings > Tools > AI Assistant > Model Context Protocol",
+        listed=False,
+    ),
 )
 #: The apps that read a file in the quilt, which `loom ai init` writes, and the ones the viewer sets up.
 PROJECT = tuple(c for c in CLIENTS if c.file)
