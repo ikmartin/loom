@@ -151,3 +151,18 @@ def test_this_processs_record_is_listed_while_held_and_gone_once_ended(tmp_path:
 def test_the_records_are_kept_out_of_git(tmp_path: Path) -> None:
     q = demo(tmp_path)
     assert "live/" in (q / ".loom" / ".gitignore").read_text(encoding="utf-8").splitlines()
+
+
+def test_a_record_written_starts_no_rebuild(tmp_path: Path) -> None:
+    """A server writes its record at every call; the watcher that rebuilds the page does not look at it, while it still looks at the records beside it."""
+    from loom.render.watch import snapshot
+
+    q = demo(tmp_path)
+    here = Presence(q, "Test Agent")
+    try:
+        here.begin(None, None)
+        seen = {p.relative_to(q).as_posix() for p in snapshot(q)}
+        assert not any(p.startswith(".loom/live/") for p in seen)
+        assert any(p.startswith(".loom/annotations/") for p in seen)
+    finally:
+        here.end()

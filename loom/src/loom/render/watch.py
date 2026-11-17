@@ -23,6 +23,7 @@ from loom.paths import (
     DIGESTS,
     EDIT_LOG,
     EDITS,
+    LIVE,
     LOOM,
     RETIRED,
     REVIEW_DECISIONS,
@@ -99,6 +100,9 @@ def snapshot(root: Path, shown: Shown | None = None) -> dict[Path, float]:
             continue
         # where each agent last looked (`loom since`), which no build reads either
         if rel.as_posix().startswith(f"{SINCE}/"):
+            continue
+        # each agent server's record of itself, written at every call it answers, which `loom serve` reads on its own (`loom.presence`)
+        if rel.as_posix().startswith(f"{LIVE}/"):
             continue
         # loom's records under `.loom/` count whatever their suffix: a write through `loom serve`'s own API to the annotation log or the reference notes must redraw the page it came from (DR-174)
         posix = rel.as_posix()
