@@ -402,6 +402,9 @@ def _library_answer(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
     s, q, _ = on_demo(serve, tmp_path)
     asked = _received(q, "pullbacks.pdf", *PULLBACKS)
     assert succeeds(s, "library-take", {"items": [{"incoming": asked}]})["rows"][0]["question"] == asked
+    # the question waits in the manifest, where a viewer's tray finds it after a reload
+    arriving = json.loads(get(s.url + "build/manifest.json")[2])["arriving"]
+    assert [(r["id"], r["state"], r["candidates"][0]["citekey"]) for r in arriving] == [(asked, "question", "Man12")]
     refuses(s, "library-answer", {"question": asked, "same": "Har77"}, 400, "not-a-candidate", "not one of the works")
     refuses(s, "library-answer", {"question": "0" * 64, "same": None}, 404, "no-such-question", "no question waits")
     refuses(s, "library-answer", {"question": asked}, 400, "missing-field", "same is required")
@@ -415,8 +418,8 @@ def _library_answer(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
     )
     row = succeeds(s, "library-answer", {"question": asked, "same": "Man12"})["row"]
     assert (row["state"], row["under"]) == ("added", "Man12"), row
-    references = json.loads(get(s.url + "build/manifest.json")[2])["references"]
-    assert references["Man12"]["artifacts"]["pdf"] is True
+    manifest = json.loads(get(s.url + "build/manifest.json")[2])
+    assert manifest["references"]["Man12"]["artifacts"]["pdf"] is True and manifest["arriving"] == []
 
 
 @case("library-undo")
