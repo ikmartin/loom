@@ -344,14 +344,15 @@ def _marks_by_node(result: ScanResult, records: Records, gone: list[Gone] | None
     return out
 
 
-def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> None:
-    """Every session's transcript as pages under `transcripts/<id>/<n>.json`, so a viewer with no publisher running still reads the chat.
+def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> set[str]:
+    """Every session's transcript as pages under `transcripts/<id>/<n>.json`, so a viewer with no publisher running still reads the chat; returns the pages of sessions nobody wrote in since this process last published them, which are on disk as they should be, for `publish` to keep.
 
     Out of the manifest, which every viewer polls: a long conversation would make every poll pay for it.
     """
     from loom.mailbox import inbox_path, pages
     from loom.sessions import sessions
 
+    kept: set[str] = set()
     for sid in sessions(root):
         inbox = inbox_path(root, sid)
         try:
@@ -360,19 +361,21 @@ def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> None:
             stamp = None
         known = _TRANSCRIPTS.get(inbox)
         if stamp is not None and known is not None and known[0] == stamp:
-            files.update(known[1])
-            continue
+            if all((root / BUILD / rel).is_file() for rel in known[1]):
+                kept.update(known[1])
+                continue
         made = {
             f"transcripts/{sid}/{n}.json": json.dumps(page, ensure_ascii=False, indent=1, sort_keys=True)
             for n, page in pages(root, sid).items()
         }
         if stamp is not None:
-            _TRANSCRIPTS[inbox] = (stamp, made)
+            _TRANSCRIPTS[inbox] = (stamp, frozenset(made))
         files.update(made)
+    return kept
 
 
-#: Each session's transcript pages as last written, by its inbox's modification time and size: a session nobody wrote in since is not rendered again by a server that rebuilds on every change.
-_TRANSCRIPTS: dict[Path, tuple[tuple[int, int], dict[str, str]]] = {}
+#: Each session's transcript pages as last published, by its inbox's modification time and size: a session nobody wrote in since is neither rendered nor held again by a server that rebuilds on every change.
+_TRANSCRIPTS: dict[Path, tuple[tuple[int, int], frozenset[str]]] = {}
 
 
 #: The fragments' input hashes for the last scan built from, the numbering they were hashed with, and each file's text hash; a build from the same scan (`reuse`) reads them rather than hashing every file again.
@@ -617,7 +620,7 @@ def _build(
 
     manifest["unresolved"] = rows_for(result, manifest)
     _write_source(result, fragments, files)
-    _write_transcripts(result.quilt.root, files)
+    transcripts = _write_transcripts(result.quilt.root, files)
     from loom.files import BODIES, attach_files
     from loom.render.pending import DIFFS
 
@@ -640,9 +643,10 @@ def _build(
         for rel in list(index):
             if rel not in fragments.values():
                 index.pop(rel)
-    # a fragment the cache skipped is already on disk as it should be: kept from the prune, not read back and rewritten
+    # a fragment the cache skipped, or a transcript nobody wrote in since, is already on disk as it should be: kept from the prune, not read back and rewritten
     told("publishing")
-    publish(build_dir, files, manifest, prune, keep={rel for rel in fragments.values() if rel not in files})
+    keep = {rel for rel in fragments.values() if rel not in files} | transcripts
+    publish(build_dir, files, manifest, prune, keep=keep)
     cache_dir.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=0, sort_keys=True), encoding="utf-8")
     return report
