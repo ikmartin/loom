@@ -362,14 +362,17 @@ def test_a_note_on_a_works_page_is_found_again_on_a_changed_copy_of_the_work(tmp
 
 @pytest.mark.poppler
 def test_a_note_on_a_work_filed_by_its_hash_is_read_on_the_copy_it_was_written_on(tmp_path: Path) -> None:
-    """Arden24A's copy is filed by its file's hash, `file/<sha16>/`, as `library add` files a PDF that states no identifier of its own; the directory its identifier names holds another document. A note on its page is read on its own copy (`work_dir`), as the viewer's artifacts and the sidecar are: it keeps its page and is recorded, anchored, not found again elsewhere and not detached."""
+    """Arden24's second version's copy is filed by its file's hash, `file/<sha16>/`, as `library add` files a PDF that states no identifier of its own; the directory its identifier names holds another document. A note on its page is read on its own copy (`work_dir`), as the viewer's artifacts and the sidecar are: it keeps its page and is recorded, anchored, not found again elsewhere and not detached."""
     from loom.refs.pages import sha256_of
+    from loom.scan.bib import parse_bib
 
     q = showcase(tmp_path)
     store = q / ".loom/digests/storage"
     assert (store / "file/e43d5afaac8f10f0/paper.pdf").is_file()
+    entries = parse_bib((q / ".loom/digests/bibliography.bib").read_text(encoding="utf-8"))
+    version = next(k for k, e in entries.items() if e.fields.get("loom-copy-of") == "Arden24")
     quote = "a saturated sublattice of the lattice of weightings"
-    note = annotated(q, "Arden24A", "Why saturated?", "--page", "2", "--quote", quote, who="A. Author")
+    note = annotated(q, version, "Why saturated?", "--page", "2", "--quote", quote, who="A. Author")
     assert note["anchor"]["page"] == 2 and note["anchor"]["basis"] == "text"
     # another document under the identifier's own directory, its words on page 3: read there, the note would look written on a changed file and move
     decoy = store / "arxiv" / "2504.01234v2"
@@ -381,5 +384,5 @@ def test_a_note_on_a_work_filed_by_its_hash_is_read_on_the_copy_it_was_written_o
         (decoy / "pages" / f"{n:04d}.txt").write_text(text + "\n")
     exits(1, "build", cwd=q)
     row = json.loads((q / ".loom/build" / "manifest.json").read_text())["annotations"][note["id"]]
-    assert (row["target"]["work"], row["target"]["page"]) == ("Arden24A", 2)
+    assert (row["target"]["work"], row["target"]["page"]) == (version, 2)
     assert (row["recorded"], row["anchored"], row["refound"], row["detached"]) == (True, True, False, False)
