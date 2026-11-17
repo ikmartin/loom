@@ -22,6 +22,12 @@ META = {
 }
 
 
+def _signals_as_an_app_leaves_them() -> None:
+    """In the child, the signals the server ends on at their defaults, as an app's spawn leaves them (libuv, under Node, resets each): a suite started as a shell's background job has SIGINT ignored, and the server keeps a signal it inherits ignored."""
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, signal.SIG_DFL)
+
+
 class AgentServer:
     """One `loom mcp --as NAME` process in quilt `q`, with `env` over the test's own environment, less the conversation an agent running the tests may be in."""
 
@@ -37,6 +43,7 @@ class AgentServer:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             env={**base, **(env or {})},
+            preexec_fn=_signals_as_an_app_leaves_them,
         )
         self.next = 0
 
