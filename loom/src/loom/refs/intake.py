@@ -143,7 +143,7 @@ def drop_dir(root: Path, drop: str) -> Path:
 
 def safe_name(name: str) -> str:
     """A dropped file's name as loom keeps it: its own, which is what a reference manager writes a title into, with nothing a path could use."""
-    stem = re.sub(r"[^\w .,()+-]", "_", Path(name).stem).strip(" .") or "upload"
+    stem = re.sub(r"[^\w .,()+'’-]", "_", Path(name).stem).strip(" .") or "upload"
     return f"{stem[:180]}.pdf"
 
 
@@ -557,11 +557,11 @@ def _take_file(t: _Take, n: int, item: Item) -> Row:
     arrived = _read_json(d / ARRIVED) or {}
     excluded = set(arrived.get("not") or [])
     if item.new:
-        seen = identify(t.root, t.bib, pdf, online=t.online, http=t.http)
+        seen = identify(t.root, t.bib, pdf, online=t.online, http=t.http, name=item.name)
         return _add_new(t, n, item, sha, seen.offer)
     if item.work:
         return _take_for(t, n, item, sha, excluded)
-    seen = identify(t.root, t.bib, pdf, online=t.online, http=t.http)
+    seen = identify(t.root, t.bib, pdf, online=t.online, http=t.http, name=item.name)
     candidates = [_candidate(t.bib, m["citekey"], str(m["how"])) for m in seen.matches if m["citekey"] not in excluded]
     named = {c["citekey"] for c in candidates}
     for key in seen.duplicates:
@@ -600,7 +600,7 @@ def _take_for(t: _Take, n: int, item: Item, sha: str, excluded: set[str]) -> Row
     assert item.path is not None
     if item.work not in t.bib:
         raise IntakeRefused("no-such-work", f"the library has no work {item.work}", 404)
-    identity = identify_document(item.path, t.bib)
+    identity = identify_document(item.path, t.bib, item.name)
     if item.on_word:
         key, why = named_for(identity, t.bib, item.work)
         return _file_under(t, n, item, sha, key, note=why)
@@ -1018,12 +1018,12 @@ def _answer(
         from loom.refs.add import Seen, _offer
 
         seen = Seen()
-        _offer(seen, t.bib, pdf, online=online, http=http)
+        _offer(seen, t.bib, pdf, online=online, http=http, name=item.name)
         return _add_new(t, 0, item, sha, seen.offer or dict(asked.get("offer") or {}))
     from loom.refs.add import named_for
     from loom.refs.ingest import identify_document
 
-    key, _why = named_for(identify_document(pdf, t.bib), t.bib, same)
+    key, _why = named_for(identify_document(pdf, t.bib, item.name), t.bib, same)
     return _file_under(t, 0, item, sha, key)
 
 

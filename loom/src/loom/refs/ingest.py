@@ -199,7 +199,7 @@ def own_identifiers(first_page: str) -> tuple[set[str], set[str], set[str]]:
     )
 
 
-def look_at(pdf: Path, bib: dict[str, BibEntry], pages: list[str] | None = None) -> Candidate:
+def look_at(pdf: Path, bib: dict[str, BibEntry], pages: list[str] | None = None, name: str = "") -> Candidate:
     """Run every signal over one PDF; reads the file and nothing else, and never writes.
 
     Parameters
@@ -235,8 +235,9 @@ def look_at(pdf: Path, bib: dict[str, BibEntry], pages: list[str] | None = None)
             elif wid.scheme == "arxiv" and arxiv_base(value) in {arxiv_base(a) for a in arxivs}:
                 out.signals.append(Signal("arxiv", ck, 1.0, value))
     lines = title_lines(pages[0] if pages else "")
-    from_name = filename_title(pdf.stem)
-    byline = f"{pdf.stem} {(pages[0] if pages else '')[:BYLINE_CHARS]}".lower()
+    stem = Path(name).stem if name else pdf.stem
+    from_name = filename_title(stem)
+    byline = f"{stem} {(pages[0] if pages else '')[:BYLINE_CHARS]}".lower()
     for ck, entry in bib.items():
         want = str(entry.fields.get("title") or "")
         if not want:
@@ -292,6 +293,8 @@ class Identity:
     title: str = ""
     author: str = ""
     kind: str = "pdf"
+    #: The name the document was given, where it is kept under another: what a reference manager wrote is read from it.
+    name: str = ""
 
     def of(self, citekey: str) -> Strong | None:
         """The strong match naming `citekey`, or None."""
@@ -350,7 +353,7 @@ def _first_surname(entry: BibEntry) -> str:
 
 def _named_in_file(identity: Identity, entry: BibEntry, title: str) -> bool:
     """Whether the document's file name states the entry's whole title and its first author; an entry naming no author is never matched so."""
-    stem = identity.path.stem
+    stem = Path(identity.name).stem if identity.name else identity.path.stem
     surname = _first_surname(entry)
     return bool(surname) and _fold(filename_title(stem)) == title and f" {surname} " in f" {_fold(stem)} "
 
@@ -466,7 +469,7 @@ def _strong(identity: Identity, bib: dict[str, BibEntry]) -> list[Strong]:
     return found
 
 
-def identify_document(pdf: Path, bib: dict[str, BibEntry]) -> Identity:
+def identify_document(pdf: Path, bib: dict[str, BibEntry], name: str = "") -> Identity:
     """What a PDF shows it is, by the rule in the module docstring; reads the file and nothing else.
 
     Parameters
@@ -486,7 +489,7 @@ def identify_document(pdf: Path, bib: dict[str, BibEntry]) -> Identity:
     identify_source : the same for a LaTeX source.
     look_at : the weaker signals a guess is made of.
     """
-    out = Identity(path=pdf)
+    out = Identity(path=pdf, name=name)
     try:
         pages = first_pages(pdf)
     except Exception:  # noqa: BLE001 -- an unreadable PDF is skipped with its reason, never a crash
@@ -496,7 +499,7 @@ def identify_document(pdf: Path, bib: dict[str, BibEntry]) -> Identity:
     out.lines = [" ".join(x.split()) for x in (pages[0] if pages else "").splitlines()[:TOP_LINES] if x.strip()]
     out.strong = _strong(out, bib)
     if not out.strong:
-        guess, _score, sigs = look_at(pdf, bib, pages).best()
+        guess, _score, sigs = look_at(pdf, bib, pages, name).best()
         out.nearest = guess
         named = ", ".join(sorted({*out.dois, *(f"arXiv:{a}" for a in out.arxivs | out.stamped)}))
         out.weak = (

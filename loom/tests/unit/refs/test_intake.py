@@ -664,3 +664,13 @@ def test_a_command_line_add_of_bytes_a_viewers_drop_holds_takes_that_drop(tmp_pa
     # the viewer's drop waits again as it was received, and the library is as before the add
     assert [(r["id"], r["state"], r["name"]) for r in waiting(q)] == [(item.drop, "received", "talk.pdf")]
     assert {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")} == library
+
+
+def test_a_dropped_file_is_read_under_the_name_it_came_with(tmp_path: Path) -> None:
+    """The integrator's review, finding 7: a reference manager's name dropped in the viewer was read under the name loom stored it as, and its title lost its apostrophe; one that holds a colon, which no stored name keeps, lost that too."""
+    q = demo(tmp_path)
+    name = "Grothendieck - 1957 - Sur quelques points d'algèbre homologique: I.pdf"
+    (row,) = taken(q, dropped(q, name, "Some scanned pages\n", tmp_path))
+    entry = bib(q)[row.citekey]
+    assert entry.fields["title"] == "Sur quelques points d'algèbre homologique: I", entry.fields
+    assert (entry.fields["author"], entry.fields["year"]) == ("Grothendieck", "1957")

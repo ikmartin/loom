@@ -191,7 +191,7 @@ def own_entry(pdf: Path, name: str = "") -> dict[str, str]:
     return fields
 
 
-def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, http: Any = None) -> None:
+def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, http: Any = None, name: str = "") -> None:
     """Fill in the entry a PDF makes of itself, and what a lookup of the identifier it states adds.
 
     A found record is kept only when the PDF carries its title: an identifier on the first pages may be one the document cites, and then it is not this work's.
@@ -200,7 +200,7 @@ def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, htt
     from loom.refs.lookup import duplicates, key_for, look_up
     from loom.refs.pages import sha256_of
 
-    fields = own_entry(pdf)
+    fields = own_entry(pdf, name)
     ident = fields.get("eprint") or fields.get("doi") or ""
     try:
         found = look_up(ident, bib, online=online, http=http) if ident else None
@@ -220,7 +220,14 @@ def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, htt
 
 
 def identify(
-    root: Path, bib: dict[str, BibEntry], pdf: Path, *, online: bool = False, http: Any = None, offer: bool = True
+    root: Path,
+    bib: dict[str, BibEntry],
+    pdf: Path,
+    *,
+    online: bool = False,
+    http: Any = None,
+    offer: bool = True,
+    name: str = "",
 ) -> Seen:
     """What `pdf` shows itself to be against the library's entries, and the entry it makes of itself when it is none of them.
 
@@ -238,6 +245,8 @@ def identify(
         The transport `refs.lookup.look_up` asks with; tests inject their own.
     offer : bool, default True
         Whether to make the entry it would be as a work of its own, which a person may want even of a PDF matching a work; a lookup is asked only where no work is best.
+    name : str, default ''
+        The name it was given, where `pdf` is kept under another: what a reference manager wrote into it is read from this.
 
     Returns
     -------
@@ -251,7 +260,7 @@ def identify(
     holder = held_under(root, bib, sha256_of(pdf))
     if holder:
         return Seen(best=holder, held=True)
-    identity = identify_document(pdf, bib)
+    identity = identify_document(pdf, bib, name)
     seen = Seen(
         matches=[{"citekey": m.citekey, "strength": m.strength, "how": m.how} for m in identity.strong],
         nearest=identity.nearest,
@@ -264,7 +273,7 @@ def identify(
     else:
         seen.weak = identity.weak if not best else f"it names {' and '.join(m.citekey for m in best)} equally"
     if offer:
-        _offer(seen, bib, pdf, online=online and not seen.best, http=http)
+        _offer(seen, bib, pdf, online=online and not seen.best, http=http, name=name)
     return seen
 
 
