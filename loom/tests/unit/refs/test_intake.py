@@ -78,7 +78,7 @@ def test_a_file_dropped_twice_says_it_is_already_here(tmp_path: Path) -> None:
     assert [r.state for r in rows] == ["added", "here"] and rows[1].citekey == rows[0].citekey
 
 
-def test_a_pdf_stating_a_works_identifier_is_a_question_and_nothing_is_filed_until_answered(tmp_path: Path) -> None:
+def test_a_pdf_naming_a_work_is_a_question_and_nothing_is_filed_until_answered(tmp_path: Path) -> None:
     q = demo(tmp_path)
     bib(q)
     before = tree(q)

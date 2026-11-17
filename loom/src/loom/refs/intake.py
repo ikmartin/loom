@@ -87,6 +87,11 @@ class Row:
     candidates: list[dict[str, str]] = field(default_factory=list)
     #: The citekey this work's files were written as, beside `citekey` the work it went under: for the command line's report.
     filed_as: str = ""
+    #: For a work of its own, the entry nearest it and why it is not that one: for the command line's report.
+    nearest: str = ""
+    apart: str = ""
+    #: Filed in place of a document the person set aside (`library ignore`), at the work's home.
+    replaced: bool = False
 
     def to_json(self) -> dict[str, Any]:
         """The row as the write API answers it: the fields of its state and no others."""
@@ -526,7 +531,9 @@ def _take_file(t: _Take, n: int, item: Item) -> Row:
             named.add(key)
     if candidates:
         return _ask(t, n, item, sha, candidates, seen.offer)
-    return _add_new(t, n, item, sha, seen.offer)
+    row = _add_new(t, n, item, sha, seen.offer)
+    row.nearest, row.apart = seen.nearest, seen.weak
+    return row
 
 
 def _shown(t: _Take, key: str) -> tuple[str, str, str]:
@@ -675,6 +682,7 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
         row = Row(
             sha, n, name, "added", key, *_shown(t, key), under=key, sibling=f.sibling, why=note, filed_as=filed_as
         )
+        row.replaced = bool(f.replaces)
         t.made[sha] = row
         if not t.write:
             return row

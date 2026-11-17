@@ -233,8 +233,11 @@ def test_add_files_the_behrend_fantechi_pdf_its_byline_marked_for_affiliations(t
     _fake_pdf(pile / "Handbook of Moduli.pdf", HANDBOOK)
     r = run("library", "add", str(pile), "--dry-run", cwd=q)
     said = " ".join(r.stdout.split())
-    assert "2 would be filed" in said, r.output
-    assert "The intrinsic normal cone.pdf as behrend-fantechi_IntrinsicNormalCone1997's PDF" in said
+    assert "1 would be added, 0 already here, 1 to answer" in said, r.output
+    assert (
+        "The intrinsic normal cone.pdf may be behrend-fantechi_IntrinsicNormalCone1997 "
+        "(behrend-fantechi_IntrinsicNormalCone1997: its title is the entry's and Behrend leads its byline)"
+    ) in said
     assert "Handbook of Moduli.pdf as the new work" in said and "--for olsson03 files it there instead" in said
     behrend = pile / "Behrend and Fantechi - 1997 - The intrinsic normal cone.pdf"
     ok("library", "add", str(behrend), "--for", "behrend-fantechi_IntrinsicNormalCone1997", cwd=q)
@@ -377,8 +380,8 @@ def test_add_for_a_work_names_the_version_a_document_is(tmp_path: Path) -> None:
     assert not (work_home(q, "olsson03") / "paper.pdf").exists()
 
 
-def test_add_files_a_scan_under_the_entry_its_reference_manager_named_it_for(tmp_path: Path) -> None:
-    """A scanned book shows nothing on its pages, and a reference manager's file name is what a catalogue says it is."""
+def test_add_asks_about_the_entry_a_scans_reference_manager_named_it_for(tmp_path: Path) -> None:
+    """A scanned book shows nothing on its pages, and a reference manager's file name is what a catalogue says it is: enough to ask whether it is that work."""
     q = demo(tmp_path)
     with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB)
@@ -386,8 +389,9 @@ def test_add_files_a_scan_under_the_entry_its_reference_manager_named_it_for(tmp
         tmp_path / "pile" / "Olsson - 2003 - Logarithmic geometry and algebraic stacks.pdf", "Some scan\nno byline\n"
     )
     row = json_of("library", "add", str(pdf.parent), "--dry-run", "--json", cwd=q)["documents"][0]
-    assert (row["citekey"], row["outcome"]) == ("olsson03", "filed"), row
-    assert row["strong"][0]["how"] == "its file name states the entry's title and first author"
+    assert row["state"] == "question", row
+    assert row["candidates"][0]["citekey"] == "olsson03"
+    assert row["candidates"][0]["how"] == "its file name states the entry's title and first author"
 
 
 def test_add_names_the_nearest_entry_for_a_document_it_keeps_apart(tmp_path: Path) -> None:

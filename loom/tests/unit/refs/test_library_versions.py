@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from loom.paths import STORAGE
 from loom.refs.scan import versions_of
 from loom.scan.bib import parse_bib
 from loom.scan.quilt import load_quilt
@@ -72,7 +71,7 @@ def test_versions_of_reads_loom_copy_of_and_follows_a_chain_to_its_primary() -> 
 
 
 def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path: Path) -> None:
-    """Same title, authors and page count as the stored document, or the work's own identifier: a copy in the ledger, never a sibling; a document with another page is another version, filed beside the first."""
+    """Same title, authors and page count as the stored document, or the work's own identifier: a copy, already here and never a sibling, which writes nothing; a document with another page is another version, filed beside the first."""
     q = demo(tmp_path)
     (q / BIB).open("a", encoding="utf-8").write(OLSSON_BIB)
     one = _fake_pdf(tmp_path / "one.pdf", OLSSON + "first copy")
@@ -81,7 +80,7 @@ def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path
     stated = _fake_pdf(tmp_path / "stated.pdf", OLSSON + "doi:10.1016/olsson.03\fand a page the first lacks")
     r = ok("library", "add", same, stated, "--for", "olsson03", "--as", "A. Author", cwd=q)
     said = " ".join(r.stdout.split())
-    assert said.startswith("2 documents: 0 filed, 2 already in loom's store, 0 skipped"), said
+    assert said.startswith("2 documents: 0 added, 2 already here, 0 to answer, 0 cannot be added"), said
     assert "same.pdf: the same document as olsson03's: same title, authors and 1 page" in said, said
     assert (
         "stated.pdf: the same document as olsson03's: it states doi:10.1016/olsson.03, olsson03's own identifier"
@@ -89,11 +88,7 @@ def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path
     )
     assert "olsson03-v2" not in (q / BIB).read_text()
     ledger = json.loads((q / ".loom/digests" / "storage" / "copied.json").read_text())
-    copies = {v["from"]: v for v in ledger.values() if v.get("duplicate-of")}
-    assert set(copies) == {"same.pdf", "stated.pdf"} and {v["duplicate-of"] for v in copies.values()} == {"olsson03"}
-    # the ledger names where a document is filed relative to the store, so it survives a move of the store
-    home = work_home(q, "olsson03").relative_to(q / STORAGE).as_posix()
-    assert {v["to"] for v in copies.values()} == {home}
+    assert not {v["from"] for v in ledger.values()} & {"same.pdf", "stated.pdf"}
     # another version: the same title and byline over two pages
     other = _fake_pdf(tmp_path / "other.pdf", OLSSON + "preprint\fan appendix the journal dropped")
     r = ok("library", "add", other, "--for", "olsson03", cwd=q)

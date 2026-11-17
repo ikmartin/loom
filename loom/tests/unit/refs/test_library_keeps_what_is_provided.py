@@ -83,7 +83,7 @@ def test_the_entry_a_failed_add_left_behind_takes_the_pdf_when_the_person_names_
         )
     pdf = _fake_pdf(tmp_path / BOOK, BOOK_TEXT)
     row = json_of("library", "add", pdf, "--for", "Wor", *AS, "--json", cwd=q)["documents"][0]
-    assert (row["citekey"], row["outcome"]) == ("Wor", "filed"), row
+    assert (row["citekey"], row["state"], row["under"]) == ("Wor", "added", "Wor"), row
     assert (work_home(q, "Wor") / "paper.pdf").read_bytes() == pdf.read_bytes()
     assert set(_entries(q)) >= {"Wor"} and "shreveStochasticCalculusFinance" not in _entries(q)
 
@@ -101,23 +101,26 @@ def test_naming_the_work_files_a_pdf_that_shows_nothing_of_it(tmp_path: Path) ->
     assert "may not be their work" not in ok("library", "check", "Man12", cwd=q).stdout
 
 
-def test_a_pdf_held_under_one_work_is_filed_under_another_the_person_names(tmp_path: Path) -> None:
+def test_bytes_one_work_holds_are_already_here_and_never_stored_twice(tmp_path: Path) -> None:
+    """B3: a PDF another work held was filed again under the work named for it, and the store held its bytes twice."""
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / NOTES, NOTES_TEXT)
     ok("library", "add", pdf, *AS, cwd=q)
     said = " ".join(ok("library", "add", pdf, "--for", "Man12", *AS, cwd=q).stdout.split())
-    assert "as Man12's PDF" in said, said
-    assert (work_home(q, "Man12") / "paper.pdf").read_bytes() == pdf.read_bytes()
+    assert "1 already here" in said and "these very bytes are StatisticsQuantsRevision's" in said, said
+    assert not (work_home(q, "Man12") / "paper.pdf").exists()
 
 
 def test_the_same_bytes_are_kept_once_and_two_documents_of_one_title_are_both_kept(tmp_path: Path) -> None:
+    """The second edition shares the first's title, so it is asked about; said to be a work of its own, both are kept."""
     q = demo(tmp_path)
     pile = tmp_path / "pile"
     one = _fake_pdf(pile / "a.pdf", "Lecture notes on widgets\nfirst edition\n")
     (pile / "again.pdf").write_bytes(one.read_bytes())
     two = _fake_pdf(pile / "b.pdf", "Lecture notes on widgets\nsecond edition\n")
     data = json_of("library", "add", pile, *AS, "--json", cwd=q)
-    assert data["filed"] == 2, data
+    assert (data["added"], data["here"], data["questions"]) == (1, 1, 1), data
+    assert ok("library", "add", two, "--new", *AS, cwd=q).stdout.startswith("1 document: 1 added")
     made = {k: e for k, e in _entries(q).items() if e.fields.get("title") == "Lecture notes on widgets"}
     assert len(made) == 2
     held = {(work_dir(q, e) / "paper.pdf").read_bytes() for e in made.values()}
@@ -158,7 +161,7 @@ def test_deleting_a_work_leaves_nothing_of_it_and_it_can_be_given_again(tmp_path
     add_link(q, "StatisticsQuantsRevision-thm-1", "Other-thm-1", "depends-on", "It says so.", "A. Author")
     add_link(q, "Mine-thm-1", "Other-thm-1", "depends-on", "Nothing to do with it.", "A. Author")
     upload = q / INCOMING / sha / "notes.pdf"
-    upload.parent.mkdir(parents=True)
+    upload.parent.mkdir(parents=True, exist_ok=True)
     upload.write_bytes(pdf.read_bytes())
 
     said = delete_work(scan(load_quilt(q)), "StatisticsQuantsRevision", "A. Author")
@@ -261,8 +264,8 @@ def test_a_file_that_is_no_pdf_is_refused_by_name_and_the_rest_are_kept(tmp_path
     assert not _is_pdf(pile / "broken.pdf")
     data = json_of("library", "add", pile, *AS, "--json", cwd=q)
     rows = {Path(r["file"]).name: r for r in data["documents"]}
-    assert (rows["broken.pdf"]["outcome"], rows["broken.pdf"]["reason"]) == ("refused", "it is not a PDF")
-    assert rows[NOTES]["outcome"] == "filed"
+    assert (rows["broken.pdf"]["state"], rows["broken.pdf"]["why"]) == ("cannot", "broken.pdf is not a PDF")
+    assert rows[NOTES]["state"] == "added"
 
 
 def _doi_says(title: str):
