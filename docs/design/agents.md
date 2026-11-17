@@ -10,6 +10,7 @@ It writes the quilt's files where the quilt lets it (below), and everything else
 
 - **Annotations** on any target, of one of the quilt's types or none, a note among them, and **suggested edits**, proposed text the author can take (`model.md`).
 - **Proposed library results**, each quotation checked against the page before it is stored, waiting for the author to verify.
+- **Relations** between results, each with its reason, in a shell: no agent was found to record one, so the rules no longer ask for them and no MCP tool offers it.
 - **Agent documents** in `.loom/copies/`, copies it makes with `loom draft DOC --ai NAME` and edits there; the author adopts what they want. A copy is how an agent works on a document the quilt protects, or gives the author changes to choose among before any lands.
 - **Pages**, through `loom write`: the quilt's research state, its goals, open problems, conventions and decisions, and each cited work's overview, a reading of the paper, which the first agent to read the work through writes without waiting to be asked. The author edits a page directly; an agent writes one only through the command, which refuses a write from a stale read (`--base`) and records who wrote what in the history. A page says who wrote it and is never a source.
 - **The session's transcript**, with `loom session say` (below).

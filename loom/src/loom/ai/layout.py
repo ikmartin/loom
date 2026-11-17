@@ -31,7 +31,7 @@ AGENT_COMMANDS = frozenset(
         "session new", "session rename", "session list", "session say",
         # the library's readers and an agent's tools; filing a document (`library add`, `import`) and every decision are the author's
         "library", "library update", "library review", "library read", "library search", "library why",
-        "library propose", "library locate", "library check",
+        "library propose", "library locate", "library relate", "library check",
         # the MCP server an agent's app starts, often from a shell that already marks an agent
         "mcp",
     }
@@ -51,7 +51,7 @@ ACTS: dict[str, str] = {
     **dict.fromkeys(
         (
             "annotate", "suggest", "draft", "new", "since", "ai refresh", "session new", "session rename", "session say",
-            "library propose", "library update", "mcp",
+            "library propose", "library relate", "library update", "mcp",
         ),
         "write",
     ),
@@ -61,8 +61,8 @@ ACTS: dict[str, str] = {
 AUTHOR_OPTIONS: dict[str, frozenset[str]] = {
     "changes": frozenset({"--keep", "--discard", "--keep-all", "--discard-all", "--why"}),
 }
-#: Agent commands that are no MCP tool: the server itself, and `serve`, which runs until stopped.
-NOT_TOOLS = frozenset({"mcp", "serve"})
+#: Agent commands that are no MCP tool: the server itself, `serve`, which runs until stopped, and `library relate`, which no agent was found to use and which the rules no longer ask for; a shell still runs it.
+NOT_TOOLS = frozenset({"mcp", "serve", "library relate"})
 #: The one agent command that may reach the network, when the quilt's config allows it.
 NETWORK = frozenset({"library update"})
 #: The line loom puts in each agent's root file, one per variant: an agent attached over MCP starts from the server's tool, and one working through a shell from the command.

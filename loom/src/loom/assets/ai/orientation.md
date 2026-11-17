@@ -31,7 +31,7 @@ The source contract, briefly:
 - **Boxes in Markdown**, `- [ ]`, are the author's to tick in the viewer, and `loom since` reports each one they set. When you rewrite a file, keep each `[x]` as you found it, and tick a box only when they ask.
 - **An HTML file** you write for a view the author asks for, such as what is still open, can read the project's shown files, list them at `/.loom/files.json`, and open things through `quilt:` links. It cannot write, and its browser storage lasts only until `loom serve` restarts.
 - **Pages**, only through `loom write`: the quilt's research state (its goals, open problems, conventions and decisions, so any session picks up from it) and each cited work's overview, which the first agent to read the work through writes. The author edits them directly; you never do. `loom ai orient` prints the research state and `loom library read WORK` an overview, each with the hash `--base` takes.
-- **Records**, only through loom commands: annotations, suggested edits (`loom suggest`), proposed library results, the transcript.
+- **Records**, only through loom commands: annotations, suggested edits (`loom suggest`), proposed library results, relations, the transcript.
 
 **What is protected** is listed under Live state below: loom's records in `.loom/` outside the three places and the types file above, `config.toml`, the research state, and whatever the quilt's `[agents] deny` names. Claude Code refuses an edit to a protected path itself; Codex, Gemini CLI and Cursor do not, so there the list is yours to keep. Every loom command refuses you a protected path, in any client.
 
@@ -39,7 +39,7 @@ The source contract, briefly:
 
 These make a claim only a person can make — *I checked this*, *I accept this mathematics* — or write the author's files or destroy what cannot be had back. Each refuses you, whatever name you give, and says so:
 
-`loom accept` · `loom adopt` · `loom library verify`, `discard`, `ignore`, `add`, `import`, `drop` · `loom sync incorporate` · `loom sync publish --push` · `loom history restore` · `loom session delete --purge` · `loom ai delete` · `loom changes --keep`, `--discard`, `--keep-all`, `--discard-all`.
+`loom accept` · `loom adopt` · `loom library verify`, `discard`, `ignore`, `add`, `import`, `drop` · `loom sync incorporate` · `loom sync publish --push` · `loom history restore` · `loom session delete --purge` · `loom ai delete` · `loom changes --keep`, `--discard`, `--keep-all`, `--discard-all` · removing a relation someone else asserted.
 
 To ask for one, write a {type:suggestion} on the thing concerned with your reasoning; it surfaces where the author decides anyway.
 
