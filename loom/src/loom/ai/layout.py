@@ -126,7 +126,7 @@ def help_commands() -> list[str]:
 def modes(root: Path | None = None) -> list[str]:
     """The modes of the quilt at `root`, in the order its agents are shown them; with no quilt, the ones loom ships.
 
-    Every listing of the modes asks here: the orientation's index, the MCP prompts and the check of a prompt's name, `loom ai mode`, which types each mode names, and the mode files the agent layer writes. Today a quilt's modes are loom's (`MODES`) whatever its `.loom/ai/modes/` holds, so a quilt's own set is a change to this function and not to its callers.
+    Every listing of the modes asks here: the orientation's index, the MCP prompts and the check of a prompt's name, `loom ai mode`, which types each mode names, the manifest's `agents.modes`, and the mode files the agent layer writes. Today a quilt's modes are loom's (`MODES`) whatever its `.loom/ai/modes/` holds, so a quilt's own set is a change to this function and not to its callers.
     """
     return list(MODES)
 
