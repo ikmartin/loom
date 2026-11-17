@@ -17,7 +17,7 @@ from loom.clock import stamp
 from loom.paths import STORAGE, under
 from loom.refs.fetch import FetchRefused, work_dir
 from loom.refs.identity import WorkId, declared, primary
-from loom.refs.ingest import TOP_LINES, _title_span, filename_title, identifiers_in
+from loom.refs.ingest import TOP_LINES, _title_span, filename_title, own_identifiers
 from loom.refs.pages import first_pages, page_count, page_texts, sha256_of, storage_root, write_map
 from loom.refs.unreadable import declarations, set_aside_documents
 from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib, raw_entries
@@ -570,7 +570,7 @@ def _free_key(key: str, taken: set[str]) -> str:
 
 
 def _own_account(pdf: Path) -> tuple[WorkId | None, dict[str, str]]:
-    """What the document says about itself: the identifier on its first pages, and a heuristic title and year.
+    """What the document says about itself: the identifier it states as its own (`ingest.own_identifiers`), and a heuristic title and year.
 
     Only the filename is read for a title, and only when a reference manager wrote it (`Author - 2019 - The Title.pdf`), because that came from a catalogue. A title guessed from page one is not: the longest early line on a real paper is a sentence of the abstract, which is the mistake `title_lines` exists to record.
     """
@@ -585,10 +585,9 @@ def _own_account(pdf: Path) -> tuple[WorkId | None, dict[str, str]]:
         pages = first_pages(pdf)
     except Exception:  # noqa: BLE001 -- an unreadable PDF is reported, never fatal
         return None, fields
-    head = "\n".join(pages[:2])
-    dois, arxivs = identifiers_in(head)
-    if arxivs:
-        return WorkId("arxiv", sorted(arxivs)[0], "candidate"), fields
+    dois, arxivs, stamped = own_identifiers(pages[0] if pages else "")
+    if stamped or arxivs:
+        return WorkId("arxiv", sorted(stamped or arxivs)[0], "candidate"), fields
     if dois:
         return WorkId("doi", sorted(dois)[0], "candidate"), fields
     return None, fields

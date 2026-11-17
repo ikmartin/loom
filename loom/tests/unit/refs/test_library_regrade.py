@@ -513,22 +513,6 @@ def test_check_names_its_stages_on_stderr(tmp_path: Path, monkeypatch: pytest.Mo
         assert stage in said[-1], said
 
 
-def test_a_document_whose_entry_names_no_author_is_matched_on_its_whole_title(tmp_path: Path) -> None:
-    """Li and Tian's gathered entry has a title and no author: the skip said "its first author is not in its byline", about an author nobody named. The whole title is all there is to match it by, and it is enough."""
-    q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
-        fh.write(
-            "\n@article{LiandTian1998Virtualmodu, title={Virtual moduli cycles and Gromov-Witten invariants of algebraic varieties}}\n"
-        )
-    pdf = _fake_pdf(
-        tmp_path / "pile" / "Li and Tian - 1998.pdf",
-        "VIRTUAL MODULI CYCLES AND GROMOV-WITTEN\nINVARIANTS OF ALGEBRAIC VARIETIES\nJUN LI AND GANG TIAN\nIntroduction\n",
-    )
-    row = json_of("library", "add", str(pdf.parent), "--dry-run", "--json", cwd=q)["documents"][0]
-    assert (row["citekey"], row["outcome"]) == ("LiandTian1998Virtualmodu", "filed"), row
-    assert row["strong"][0]["how"] == "its title is the entry's, which names no author"
-
-
 #: First pages from the author's refs/ and store, as their text layers read, each the work named; every one was refused or reported with a false reason.
 BYLINES = [
     pytest.param(

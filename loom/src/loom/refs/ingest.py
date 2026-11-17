@@ -1,6 +1,6 @@
-"""What a document is, read off the document itself: the signals a pile of PDFs is matched by, and the rule `loom library add` files on.
+"""What a document is, read off the document itself: the signals a pile of PDFs is matched by, and the works a person is asked whether it is.
 
-**A match is strong only when the document says so plainly**: an identifier on its first pages equals the entry's, or its whole title is the entry's and the entry's first author, where it names one, leads its byline; a reference manager's file name stating both counts, since it comes from a catalogue and a scanned book shows nothing else. Anything weaker is a guess and is never filed against that entry, because a wrong PDF filed against the right entry is worse than one kept apart: the corpus this was built against has 25 files for 22 entries, eleven of which match nothing at all, and two weak signals once filed "Logarithmic geometry and moduli" as Olsson's 2003 paper. The PDF itself is kept all the same, as a work of its own (`refs.add`).
+**A match is strong only when the document says so plainly**: the identifier it states as its own is the entry's, or its whole title is the entry's and the entry's first author leads its byline; a reference manager's file name stating both counts, since it comes from a catalogue and a scanned book shows nothing else. An entry that names no author is matched by its identifier alone, since a two-word title made from a journal's masthead ("of Financial") once took every later paper of that journal. A strong match is never filed on by itself: it only names the work a person is asked about (`refs.intake`). Anything weaker is not even asked: the corpus this was built against has 25 files for 22 entries, eleven of which match nothing at all, and two weak signals once named "Logarithmic geometry and moduli" as Olsson's 2003 paper.
 """
 
 from __future__ import annotations
@@ -17,6 +17,16 @@ from loom.scan.bib import BibEntry
 
 _DOI = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Za-z0-9]+\b")
 _ARXIV = re.compile(r"arXiv[:\s]\s*(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?)", re.I)
+#: arXiv's stamp in a preprint's margin, as the text layer prints it: the id, its category in brackets, the date.
+_ARXIV_STAMP = re.compile(
+    r"^arXiv:\s*(\d{4}\.\d{4,5}(?:v\d+)?|[a-z-]+(?:\.[A-Z]{2})?/\d{7}(?:v\d+)?)\s+\[[A-Za-z.-]+\]\s+\d{1,2}\s+[A-Z][a-z]{2}\s+\d{4}$"
+)
+#: The words that label an identifier set on a line of its own: `doi:`, a doi.org link, `arXiv:`.
+_ID_LABEL = re.compile(r"https?://(?:dx\.)?doi\.org/|\bdoi\b\s*:?|\barxiv\b\s*:?", re.I)
+#: How many lines at the head and at the foot of page one a document prints its own identifier among.
+EDGE_LINES = 10
+#: The most words a line at the head or foot may hold beside an identifier for it to be the document's own: a journal's reference fits, a sentence of an abstract citing another paper does not.
+EDGE_WORDS = 10
 # A title on page one: the longest early line that is not a running head, a date or an author list.
 _NOT_TITLE = re.compile(r"^\s*(abstract|introduction|contents|arxiv|doi|vol\.|\d+\s*$|by\b)", re.I)
 #: How alike two titles must be for either title signal to fire. Two of these agreeing is what attaches a PDF.
@@ -136,6 +146,26 @@ def identifiers_in(text: str) -> tuple[set[str], set[str]]:
     return dois, arxivs
 
 
+def own_identifiers(first_page: str) -> tuple[set[str], set[str], set[str]]:
+    """(DOIs, arXiv ids, arXiv ids stamped in the margin) a document states as its own, lowercased.
+
+    Own means arXiv's stamp anywhere on page one, or an identifier set apart at its head or foot: on one of its first or last `EDGE_LINES` lines, beside at most `EDGE_WORDS` other words. An identifier anywhere else may be one the document cites, or the original an erratum or a reply answers, and a note citing Perelman's arXiv id was once announced as Perelman's paper.
+    """
+    lines = [" ".join(x.split()) for x in first_page.splitlines() if x.strip()]
+    stamped = {m.group(1).lower() for x in lines if (m := _ARXIV_STAMP.match(x))}
+    dois: set[str] = set()
+    arxivs: set[str] = set()
+    for x in [*lines[:EDGE_LINES], *lines[EDGE_LINES:][-EDGE_LINES:]]:
+        if _ARXIV_STAMP.match(x):
+            continue
+        found = identifiers_in(x)
+        rest = _ID_LABEL.sub(" ", _ARXIV.sub(" ", _DOI.sub(" ", x)))
+        if (found[0] or found[1]) and len(rest.split()) <= EDGE_WORDS:
+            dois |= found[0]
+            arxivs |= found[1]
+    return dois, arxivs, stamped
+
+
 def look_at(pdf: Path, bib: dict[str, BibEntry], pages: list[str] | None = None) -> Candidate:
     """Run every signal over one PDF; reads the file and nothing else, and never writes.
 
@@ -162,8 +192,8 @@ def look_at(pdf: Path, bib: dict[str, BibEntry], pages: list[str] | None = None)
         pages = first_pages(pdf) if pages is None else pages
     except Exception:  # noqa: BLE001 -- an unreadable PDF is a thing to report, not a thing to crash on
         return out
-    head = "\n".join(pages[:2])
-    dois, arxivs = identifiers_in(head)
+    dois, arxivs, stamped = own_identifiers(pages[0] if pages else "")
+    arxivs |= stamped
     for ck, entry in bib.items():
         for wid in identify(entry):
             value = str(wid).split(":", 1)[-1].lower()
@@ -220,10 +250,11 @@ class Identity:
     weak: str = ""
     #: That nearest entry's citekey, '' when there is none.
     nearest: str = ""
-    #: The evidence read, kept for `shortfall`: page one's lines, folded, and the identifiers on the first pages.
+    #: The evidence read, kept for `shortfall`: page one's lines, and the identifiers it states as its own (`own_identifiers`).
     lines: list[str] = field(default_factory=list)
     dois: set[str] = field(default_factory=set)
     arxivs: set[str] = field(default_factory=set)
+    stamped: set[str] = field(default_factory=set)
     #: For a LaTeX source: its own `\\title` and first `\\author`, '' where it declares none.
     title: str = ""
     author: str = ""
@@ -284,18 +315,18 @@ def _first_surname(entry: BibEntry) -> str:
     return _fold(names[0]) if names else ""
 
 
-def _title_alone(title: str, entry: BibEntry) -> bool:
-    """Whether the entry's whole title is all there is to match it by: it names no author, and the title is more than one word."""
-    return not _first_surname(entry) and len(title.split()) > 1
-
-
 def _named_in_file(identity: Identity, entry: BibEntry, title: str) -> bool:
-    """Whether the document's file name states the entry's whole title and its first author, or the title alone where it names none."""
+    """Whether the document's file name states the entry's whole title and its first author; an entry naming no author is never matched so."""
     stem = identity.path.stem
-    if _fold(filename_title(stem)) != title:
-        return False
     surname = _first_surname(entry)
-    return f" {surname} " in f" {_fold(stem)} " if surname else _title_alone(title, entry)
+    return bool(surname) and _fold(filename_title(stem)) == title and f" {surname} " in f" {_fold(stem)} "
+
+
+def _titled(identity: Identity, entry: BibEntry) -> bool:
+    """Whether page one sets the entry's title, as `fetch.carries_title` asks of a fetched PDF: what an identifier printed at the head or foot needs beside it."""
+    want = str(entry.fields.get("title") or "")
+    lines = title_lines("\n".join(identity.lines))
+    return bool(want) and any(title_ratio(want, line) >= TITLE_MATCH for line in lines)
 
 
 #: A line the text layer sets between a title and its byline that is not a name: arXiv's margin stamp.
@@ -370,12 +401,16 @@ def _strong(identity: Identity, bib: dict[str, BibEntry]) -> list[Strong]:
     folded = [_fold(x) for x in identity.lines]
     for ck, entry in bib.items():
         hit = None
+        stamped = {arxiv_base(a) for a in identity.stamped}
+        printed = {arxiv_base(a) for a in identity.arxivs}
         for wid in declared(entry):
             value = wid.value.lower()
-            if wid.scheme == "doi" and value in identity.dois:
-                hit = Strong(ck, IDENTIFIER, f"doi:{wid.value} is on its first pages")
-            elif wid.scheme == "arxiv" and arxiv_base(value) in {arxiv_base(a) for a in identity.arxivs}:
-                hit = Strong(ck, IDENTIFIER, f"arXiv:{wid.value} is on its first pages")
+            if wid.scheme == "arxiv" and arxiv_base(value) in stamped:
+                hit = Strong(ck, IDENTIFIER, f"arXiv:{wid.value} is stamped in its margin")
+            elif wid.scheme == "doi" and value in identity.dois and _titled(identity, entry):
+                hit = Strong(ck, IDENTIFIER, f"it prints doi:{wid.value} as its own, and the entry's title")
+            elif wid.scheme == "arxiv" and arxiv_base(value) in printed and _titled(identity, entry):
+                hit = Strong(ck, IDENTIFIER, f"it prints arXiv:{wid.value} as its own, and the entry's title")
             if hit:
                 break
         title = _fold(str(entry.fields.get("title") or ""))
@@ -384,9 +419,7 @@ def _strong(identity: Identity, bib: dict[str, BibEntry]) -> list[Strong]:
                 span: tuple[int, int] | None = (0, 0) if _fold(identity.title) == title else None
             else:
                 span = _title_span(folded, title)
-            if span is not None and _title_alone(title, entry):
-                hit = Strong(ck, TITLE_AND_AUTHOR, "its title is the entry's, which names no author")
-            elif span is not None and _leads(identity, entry, span):
+            if span is not None and _leads(identity, entry, span):
                 hit = Strong(
                     ck,
                     TITLE_AND_AUTHOR,
@@ -426,13 +459,13 @@ def identify_document(pdf: Path, bib: dict[str, BibEntry]) -> Identity:
     except Exception:  # noqa: BLE001 -- an unreadable PDF is skipped with its reason, never a crash
         out.weak = "its text cannot be read: no text layer, or no pdftotext"
         return out
-    out.dois, out.arxivs = identifiers_in("\n".join(pages[:2]))
+    out.dois, out.arxivs, out.stamped = own_identifiers(pages[0] if pages else "")
     out.lines = [" ".join(x.split()) for x in (pages[0] if pages else "").splitlines()[:TOP_LINES] if x.strip()]
     out.strong = _strong(out, bib)
     if not out.strong:
         guess, _score, sigs = look_at(pdf, bib, pages).best()
         out.nearest = guess
-        named = ", ".join(sorted({*out.dois, *(f"arXiv:{a}" for a in out.arxivs)}))
+        named = ", ".join(sorted({*out.dois, *(f"arXiv:{a}" for a in out.arxivs | out.stamped)}))
         out.weak = (
             f"{guess} is the nearest entry, by {', '.join(SIGNAL_WORDS.get(s.kind, s.kind) for s in sigs)}, but {shortfall(out, bib[guess])}"
             if guess
@@ -454,7 +487,7 @@ def identify_stored(home: Path, bib: dict[str, BibEntry]) -> Identity | None:
     if first is None:
         return None
     out = Identity(path=home / "paper.pdf")
-    out.dois, out.arxivs = identifiers_in(first + "\n" + (read_page(home, 2) or ""))
+    out.dois, out.arxivs, out.stamped = own_identifiers(first)
     out.lines = [" ".join(x.split()) for x in first.splitlines()[:TOP_LINES] if x.strip()]
     out.strong = _strong(out, bib)
     return out

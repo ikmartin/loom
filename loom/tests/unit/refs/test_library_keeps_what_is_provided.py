@@ -71,15 +71,15 @@ def test_a_book_whose_entry_resolves_keeps_its_pdf_and_gets_its_author_from_the_
     assert (work_dir(q, entry) / "paper.pdf").read_bytes() == pdf.read_bytes()
 
 
-def test_the_entry_a_failed_add_left_behind_takes_the_pdf_when_it_is_given_again(tmp_path: Path) -> None:
-    """The viewer wrote `@misc{Wor, title = {Stochastic Calculus for Finance II}}` and then refused the PDF as not showing it, which is how the author's quilt stands."""
+def test_the_entry_a_failed_add_left_behind_takes_the_pdf_when_the_person_names_it(tmp_path: Path) -> None:
+    """The viewer wrote `@misc{Wor, title = {Stochastic Calculus for Finance II}}` and then refused the PDF as not showing it, which is how the author's quilt stands. The entry names no author, so a file name stating its title does not name it; the person does."""
     q = demo(tmp_path)
     with (q / BIB).open("a", encoding="utf-8") as fh:
         fh.write(
             "\n@misc{Wor,\n  title = {Stochastic Calculus for Finance II},\n  loom-added = {2026-11-04T23:43:32Z, The author},\n}\n"
         )
     pdf = _fake_pdf(tmp_path / BOOK, BOOK_TEXT)
-    row = json_of("library", "add", pdf, *AS, "--json", cwd=q)["documents"][0]
+    row = json_of("library", "add", pdf, "--for", "Wor", *AS, "--json", cwd=q)["documents"][0]
     assert (row["citekey"], row["outcome"]) == ("Wor", "filed"), row
     assert (work_home(q, "Wor") / "paper.pdf").read_bytes() == pdf.read_bytes()
     assert set(_entries(q)) >= {"Wor"} and "Shr" not in _entries(q)

@@ -1917,7 +1917,7 @@ def test_library_add_files_what_a_document_shows_plainly_and_says_why_it_skipped
     rows = {Path(r["file"]).name: r for r in dry["documents"]}
     assert (dry["filed"], dry["skipped"], dry["refused"]) == (5, 0, 0)
     assert (rows["a.pdf"]["citekey"], rows["a.pdf"]["outcome"]) == ("Man12", "filed")
-    assert rows["a.pdf"]["strong"][0]["how"] == "arXiv:0805.2065v2 is on its first pages"
+    assert rows["a.pdf"]["strong"][0]["how"] == "it prints arXiv:0805.2065v2 as its own, and the entry's title"
     hart = rows["Hartshorne - 1977 - Notes on geometry.pdf"]
     assert hart["outcome"] == "filed" and hart["new"] and hart["citekey"] != "Har77"
     assert hart["reason"].startswith("Har77 is the nearest entry, by its first author")
