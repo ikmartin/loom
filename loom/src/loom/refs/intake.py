@@ -17,7 +17,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import IO, Any
+from typing import Any, Protocol
 
 from loom.clock import stamp
 from loom.paths import BIBLIOGRAPHY, INCOMING, LIBRARY_LOCK, STORAGE, UNREADABLE
@@ -35,6 +35,12 @@ HELD = "held"
 #: What reading a document writes into a work's home beside the PDF.
 READ_OFF = ("pages", "sections.json")
 LEDGER = f"{STORAGE}/copied.json"
+
+
+class Reads(Protocol):
+    """What an upload streams from: a request's body."""
+
+    def read(self, size: int = -1, /) -> bytes: ...
 
 
 class IntakeRefused(Exception):
@@ -165,7 +171,13 @@ def waiting_file(d: Path) -> Path | None:
     return next(iter(sorted(d.glob("*.pdf"))), None)
 
 
-def receive(root: Path, name: str, stream: IO[bytes], length: int) -> dict[str, Any]:
+def _drain(stream: Reads, left: int) -> None:
+    """Read and drop what a refused upload still sends, so that its sender reads the refusal and not a broken connection."""
+    while left > 0 and (chunk := stream.read(min(CHUNK, left))):
+        left -= len(chunk)
+
+
+def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]:
     """Keep a dropped file as it streams in, at any size, in `.loom/incoming/<sha256>/`; the same bytes again are the drop already kept.
 
     Parameters
@@ -190,6 +202,7 @@ def receive(root: Path, name: str, stream: IO[bytes], length: int) -> dict[str, 
         `not-a-pdf` (400) for bytes that do not open as a PDF, `cut-short` (400) for a body that ended early; nothing is kept.
     """
     if not name.strip():
+        _drain(stream, length)
         raise IntakeRefused("missing-field", "name is required: the file's name, in the query", 400)
     base = incoming(root)
     base.mkdir(parents=True, exist_ok=True)
@@ -203,6 +216,7 @@ def receive(root: Path, name: str, stream: IO[bytes], length: int) -> dict[str, 
                 if not chunk:
                     break
                 if got == 0 and not chunk.startswith(b"%PDF-"):
+                    _drain(stream, length - len(chunk))
                     raise IntakeRefused("not-a-pdf", f"{Path(name).name} is not a PDF", 400)
                 h.update(chunk)
                 fh.write(chunk)

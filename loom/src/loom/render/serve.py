@@ -376,6 +376,10 @@ class LoomHandler(SimpleHTTPRequestHandler):
         if not path.startswith("/_api/") or self.quilt_root is None:
             self.send_error(HTTPStatus.NOT_FOUND)
             return
+        kind = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if path == "/_api/library-receive" and kind == "application/octet-stream":
+            self._receive()
+            return
         refused = self._csrf()
         if refused:
             self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": refused}})
@@ -417,6 +421,48 @@ class LoomHandler(SimpleHTTPRequestHandler):
             self._json(exc.status, exc.answer())
         except Exception as exc:  # noqa: BLE001
             # A write that failed for a reason nobody anticipated is still the publisher's answer, not a dead socket.
+            self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": {"code": "failed", "message": str(exc)}})
+
+    def _receive(self) -> None:
+        """`library-receive`: a dropped file's bytes, streamed to the library's intake as they arrive (specs/write-api.md §6), the one write whose body is not JSON.
+
+        Checked as every write is but for its type, which keeps out what requiring JSON keeps out: a page of another site may not send `application/octet-stream` without asking first. It writes only the drop, so it takes no lock a publication holds, and nothing is rebuilt after it.
+        """
+        from urllib.parse import parse_qs, urlsplit
+
+        from loom.render.endpoints.base import ApiError
+        from loom.render.endpoints.library import receive_stream
+
+        assert self.quilt_root is not None
+        refused = from_elsewhere(self) or (
+            "this request carries no valid X-Loom-Token"
+            if self.token and self.headers.get("X-Loom-Token") != self.token
+            else ""
+        )
+        if refused:
+            from loom.refs.intake import _drain
+
+            self.close_connection = True
+            _drain(self.rfile, int(self.headers.get("Content-Length") or 0))  # so the sender reads why
+            self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": refused}})
+            return
+        try:
+            length = int(self.headers.get("Content-Length") or "")
+        except ValueError:
+            self.close_connection = True
+            self._json(
+                HTTPStatus.LENGTH_REQUIRED,
+                {"error": {"code": "length-required", "message": "a file is sent with its Content-Length"}},
+            )
+            return
+        name = (parse_qs(urlsplit(self.path).query).get("name") or [""])[0]
+        try:
+            self._json(HTTPStatus.OK, receive_stream(self.quilt_root, name, self.rfile, length))
+        except ApiError as exc:
+            self.close_connection = True
+            self._json(exc.status, exc.answer())
+        except Exception as exc:  # noqa: BLE001 -- a receive that failed for a reason nobody anticipated is still an answer
+            self.close_connection = True
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": {"code": "failed", "message": str(exc)}})
 
     def _events(self) -> None:

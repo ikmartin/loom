@@ -317,9 +317,46 @@ def _runs_done(s: ServeSession) -> None:
 PULLBACKS = ("Virtual pull-backs", "Cristina Manolache", "arXiv:0805.2065v2")
 
 
+def _stream(s: ServeSession, name: str, data: bytes, *, token: str | None = None) -> tuple[int, Any]:
+    """POST a file's bytes to `library-receive` as the viewer streams a drop: `application/octet-stream`, the token, the name in the query."""
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    if token is None:
+        token = json.loads(get(s.url + "_api")[2])["token"]
+    req = urllib.request.Request(
+        s.url + "_api/library-receive?" + urllib.parse.urlencode({"name": name}),
+        data=data,
+        headers={"Content-Type": "application/octet-stream", "X-Loom-Token": token},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read() or b"{}")
+
+
 @case("library-receive")
 def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
+    builds = s.builds
+    data = ("%PDF-1.4\n%FAKE-LOOM\n%%Pages: 1\nGadget towers\nA. Halberd\n" + "padding\n" * 300_000).encode()
+    status, said = _stream(s, "Halberd - 2021 - Gadget towers.pdf", data)
+    assert status == 200 and said["size"] == len(data) and said["name"] == "Halberd - 2021 - Gadget towers.pdf", said
+    drop = q / ".loom" / "incoming" / said["incoming"]
+    assert (drop / "Halberd - 2021 - Gadget towers.pdf").read_bytes() == data
+    # the same bytes again are the drop kept already, and receiving rebuilds nothing
+    assert _stream(s, "again.pdf", data)[1]["incoming"] == said["incoming"]
+    assert s.builds == builds and len(list(drop.glob("*.pdf"))) == 1
+    assert succeeds(s, "library-take", {"items": [{"incoming": said["incoming"]}]})["rows"][0]["state"] == "added"
+    # bytes that are no PDF are kept nowhere
+    status, said = _stream(s, "notes.txt", b"plain text, not a document")
+    assert (status, said["error"]["code"]) == (400, "not-a-pdf")
+    kept = sorted(p.name for p in (q / ".loom" / "incoming").iterdir())
+    assert kept == [drop.name], kept
+    assert _stream(s, "x.pdf", data, token="")[0] == 403
     refuses(s, "library-receive", {"name": "x.pdf"}, 400, "bad-request", "application/octet-stream")
 
 
