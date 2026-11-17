@@ -17,10 +17,11 @@ from typing import Any
 from loom.locks import locked
 from loom.paths import EDIT_LOG
 from loom.records.ids import EDIT, draw
-from loom.records.selectors import Selector, find_quote
+from loom.records.selectors import CONTEXT, Selector, find_quote
 from loom.records.store import Records
 from loom.scan.nodes import NodeRec
 from loom.scan.scan import ScanResult
+from loom.scan.tokenize import read_args
 
 PLACEMENTS = ("replace", "after", "before")
 STATUSES = ("open", "kept", "discarded")
@@ -277,8 +278,8 @@ def _balanced(text: str, at: int, opening: str, closing: str) -> int:
     return at
 
 
-#: A heading that opens a section's own text, which a suggestion on the section's body never replaces.
-HEADING = re.compile(r"\s*\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?")
+#: A heading that opens a section's own text, which a suggestion on the section's body never replaces: read as the scan reads one (`scan/sections.py`), a command followed by its `[` or `{`, so `\\partial` or `\\sectionmark` is no heading.
+HEADING = re.compile(r"\s*\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?\s*(?=[\[{])")
 
 
 def body_span(own: str) -> tuple[int, int]:
@@ -292,10 +293,8 @@ def body_span(own: str) -> tuple[int, int]:
         heading = HEADING.match(own)
         if heading is None:
             return 0, len(own)
-        at = _balanced(own, heading.end(), "[", "]")
-        title = re.match(r"\s*\{", own[at:])
-        at = _balanced(own, at + title.end() - 1, "{", "}") if title else at
-        while label := re.match(r"\s*\\label\{", own[at:]):
+        at = read_args(own, heading.end(), "om")[2]
+        while label := re.match(r"\s*\\label\s*\{", own[at:]):
             at = _balanced(own, at + label.end() - 1, "{", "}")
         start = len(own) - len(own[at:].lstrip())
         stop = len(own.rstrip())
@@ -319,9 +318,18 @@ EDGE = 32
 
 
 def body_edge(own: str, placement: str) -> str:
-    """The body's last (`after`) or first (`before`) `EDGE` characters: what `loom suggest` records beside an insertion at its foot or head."""
+    """The body's last (`after`) or first (`before`) `EDGE` characters in a node's own text `own`."""
     a, b = body_span(own)
     return own[max(a, b - EDGE) : b] if placement == "after" else own[a : min(b, a + EDGE)]
+
+
+def edge_of(result: ScanResult, node: NodeRec, placement: str) -> str:
+    """What `loom suggest` records beside an insertion at the foot (`after`) or head (`before`) of `node`'s body (`edge`): the body's last or first `EDGE` characters (`body_edge`); for a node with no text of its own, the file's own, since Keep writes at the file's end or start."""
+    own, pieces = Records.own_pieces(result, node)
+    if pieces:
+        return body_edge(own, placement)
+    text = result.files[node.file].text[node.start : node.end]
+    return text.rstrip()[-EDGE:] if placement == "after" else text.lstrip()[:EDGE]
 
 
 def _after(text: str, at: int, words: str) -> tuple[int, int] | None:
@@ -359,19 +367,25 @@ def _added(edit: Edit) -> tuple[str, str] | None:
     return new[:p], new[s:]
 
 
+def _ended(side: str) -> bool:
+    """Whether a selector's recorded `prefix` or `suffix` says the own text ended there: only whitespace, and shorter than the context a selector records (`selectors.CONTEXT`)."""
+    return not side.strip() and len(side) < CONTEXT
+
+
 def _beside(edit: Edit, own: str, span: tuple[int, int]) -> str | None:
     """Why the words recorded beside an insertion's place no longer stand there in `own`, or None when they do.
 
-    Beside a quote at `span` these are its selector's `suffix` and `prefix`, on each side the edit adds text to (`_added`): an insertion's, and a replacement's whose new text holds its quote. At a body's foot or head, `span` the body, its `edge`, and an empty `edge` is a body that was empty. An edit that recorded none is not judged.
+    Beside a quote at `span` these are its selector's `suffix` and `prefix`, on each side the edit adds text to (`_added`): an insertion's, and a replacement's whose new text holds its quote; one recorded as only whitespace (`_ended`) says the own text ended there, and holds while nothing but whitespace lies between the quote and that end. At a body's foot or head, `span` the body, its `edge`, and an empty `edge` is a body that was empty. An edit that recorded none is not judged.
     """
     a, b = span
     if edit.selector is not None:
         added = _added(edit)
         if added is None:
             return None
-        if added[1].strip() and _after(own, b, edit.selector.suffix) is None:
+        suffix, prefix = edit.selector.suffix, edit.selector.prefix
+        if added[1].strip() and (_after(own, b, suffix) is None or _ended(suffix) and own[b:].strip()):
             return f"the words right after the text {edit.id} quotes have changed since it was suggested"
-        if added[0].strip() and _before(own, a, edit.selector.prefix) is None:
+        if added[0].strip() and (_before(own, a, prefix) is None or _ended(prefix) and own[:a].strip()):
             return f"the words right before the text {edit.id} quotes have changed since it was suggested"
         return None
     if edit.placement == "replace" or edit.edge is None:
@@ -437,7 +451,12 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         whole = whole_body(result, node) if edit.placement == "replace" else None
         if whole is not None:
             raise Unplaced(f"the body of {node.key} {whole}, so it is not replaced whole")
-        changed = _beside(edit, own, (a, b))
+        # a key with no text of its own is written at the file's end or start, beside the file's own words
+        changed = (
+            _beside(edit, own, (a, b))
+            if pieces
+            else _beside(edit, result.files[node.file].text, (node.start, node.end))
+        )
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
         if edit.placement == "after":
@@ -471,10 +490,11 @@ def place(result: ScanResult, edit: Edit) -> Placed:
             span, text = (a, a), _joined(own, a, new, before=True) if new else ""
         else:
             span, text = (a, b), new
-    at = Records.to_file_span(pieces, span) if span[0] < span[1] else _point(pieces, span[0])
-    if at is None and not pieces:
-        # a key with no text of its own, as an empty file: the text goes where it starts, or where it ends after it
-        at = (node.end, node.end) if edit.placement == "after" else (node.start, node.start)
+    if span[0] < span[1]:
+        at = Records.to_file_span(pieces, span)
+    else:
+        x = _file_point(node, pieces, span[0], end=edit.placement == "after")
+        at = (x, x) if x is not None else None
     if at is None:
         raise Unplaced(f"the place {edit.id} names in {node.key} is not in one piece of its file")
     return Placed(node.key, node.file, own, span, at, text, edit.target_hash != key_hash(result, node.key))
@@ -551,6 +571,14 @@ def _point(pieces: list[tuple[int, int, int]], at: int) -> tuple[int, int] | Non
     return None
 
 
+def _file_point(node: NodeRec, pieces: list[tuple[int, int, int]], at: int, end: bool) -> int | None:
+    """Where the point `at` of a node's own text is in its file (`_point`); for a node with no text of its own, as an empty file or one whose text all belongs to the blocks in it, where it ends (`end`) or starts. `place` writes there and `_at_place` reads there."""
+    got = _point(pieces, at)
+    if got is not None:
+        return got[0]
+    return (node.end if end else node.start) if not pieces else None
+
+
 def taken_file(result: ScanResult, placed: Placed) -> str:
     """The text of the node's file with the edit in place."""
     text = result.files[placed.file].text
@@ -607,7 +635,7 @@ def _standing(text: str, x: int, new: str, beside: str | None, after: bool) -> t
 def _at_place(result: ScanResult, node: NodeRec, edit: Edit, added: tuple[str, str]) -> tuple[int, int] | None:
     """Where in its file `edit`'s text stands at its own place, written as Keep would have written it (`_standing`); None when it does not.
 
-    Beside its quote, its added words either side of where the quote stands once in the block's own text; at the foot of its body, right before the body's end; at its head, right after the body's start, or right before it when the text reads as the block's head (a `\\uses{…}` taken in). Read in the file's text, so text that opened a section, or landed past an `\\end{…}`, is seen where it stands.
+    Beside its quote, its added words either side of where the quote stands once in the block's own text; at the foot of its body, right before the body's end; at its head, right after the body's start, or right before it when the text reads as the block's head (a `\\uses{…}` taken in); each the very point `place` writes at (`_file_point`). Read in the file's text, so text that opened a section, or landed past an `\\end{…}`, is seen where it stands.
     """
     text = result.files[node.file].text
     own, pieces = Records.own_pieces(result, node)
@@ -625,15 +653,15 @@ def _at_place(result: ScanResult, node: NodeRec, edit: Edit, added: tuple[str, s
         return (left[0], right[1]) if left is not None and right is not None else None
     a, b = body_span(own)
     if edit.placement == "after":
-        foot = _point(pieces, b)
-        return _standing(text, foot[0], edit.with_text, edit.edge, after=False) if foot is not None else None
-    head = _point(pieces, a)
+        foot = _file_point(node, pieces, b, end=True)
+        return _standing(text, foot, edit.with_text, edit.edge, after=False) if foot is not None else None
+    head = _file_point(node, pieces, a, end=False)
     if head is None:
         return None
-    got = _standing(text, head[0], edit.with_text, edit.edge, after=True)
+    got = _standing(text, head, edit.with_text, edit.edge, after=True)
     if got is None:
         # taken into the block's head: the body now starts after it, with the words it started with
-        got = _before(text, head[0], edit.with_text)
+        got = _before(text, head, edit.with_text)
         if got is not None and (
             got[0] < node.start or edit.edge is not None and _after(text, got[1], edit.edge) is None
         ):

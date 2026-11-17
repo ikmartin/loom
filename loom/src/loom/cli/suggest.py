@@ -70,7 +70,7 @@ def suggest_command(
     from loom.cli.review import _annotator, _version
     from loom.clock import stamp, today
     from loom.records.annotations import find_annotation, load_records
-    from loom.records.edits import append_new, body_edge, misplaced, whole_body
+    from loom.records.edits import append_new, edge_of, misplaced, whole_body
     from loom.records.selectors import find_quote, make_selector
     from loom.records.store import Records, alike, line_before, named_by_place
     from loom.scan.owntext import key_hash
@@ -147,7 +147,7 @@ def suggest_command(
         event["near"] = near
     if selector is None and placement != "replace":
         # the body's foot or head as it reads now, so that text written there since is never written beside again
-        event["edge"] = body_edge(Records.own_pieces(result, node)[0], placement)
+        event["edge"] = edge_of(result, node, placement)
     if comment:
         event["comment"] = comment
     if answers:

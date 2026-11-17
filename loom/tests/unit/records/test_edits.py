@@ -721,6 +721,51 @@ def test_an_insertion_is_placed_only_while_the_words_beside_its_place_stand(tmp_
     assert (q / LEMMA).read_text() == text and find(q, after).status == "open"  # type: ignore[union-attr]
 
 
+def test_an_insertion_beside_a_quote_that_ends_or_starts_its_blocks_text_holds_to_that_end(tmp_path: Path) -> None:
+    """The integrator's review of step 4: a quote that ends a section's own text records only whitespace after it, which said nothing, so a suggestion typed in after it by hand and reworded was written in ahead of the person's sentence. Only whitespace recorded says the text ended there."""
+    q = sheet(tmp_path)
+    two = f"{SHEET}#section:2"
+    after = suggest(
+        q, "--quote", "What follows the second answer.", "--with", "Zebra remark at the end.", "--after", key=two
+    )
+    assert log(q)[-1]["anchor"]["suffix"].strip() == ""
+    before = suggest(q, "--quote", "\\documentclass{amsart}", "--with", "% Zebra line on top.", "--before", key=SHEET)
+    assert log(q)[-1]["anchor"]["prefix"] == ""
+    for a in (after, before):
+        assert place(*placed(q, a))
+    edit(
+        q / SHEET, "What follows the second answer.", "What follows the second answer. Zebra remark, reworded by hand."
+    )
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, after))
+    edit(q / SHEET, "\\documentclass{amsart}", "\\PassOptionsToPackage{draft}{graphicx}\n\\documentclass{amsart}")
+    with pytest.raises(Unplaced, match="right before the text"):
+        place(*placed(q, before))
+    text = (q / SHEET).read_text()
+    ok("changes", "--keep", after, cwd=q)
+    assert (q / SHEET).read_text() == text
+    # typed in exactly as suggested, it is taken where it stands
+    exact = suggest(q, "--quote", "Zebra remark, reworded by hand.", "--with", "Zebra coda.", "--after", key=two)
+    edit(q / SHEET, "Zebra remark, reworded by hand.", "Zebra remark, reworded by hand. Zebra coda.")
+    assert taken_how(*placed(q, exact)) == "as-written"
+
+
+def test_a_heading_is_read_as_the_scan_reads_one() -> None:
+    """The integrator's review of step 4: `\\part` in `\\partial` was read as a heading, and a heading's titles were read only with no space before them."""
+    for text in (
+        "\\partial_t u = \\Delta u",
+        "\\paragraphmark{x} y",
+        "\\sectionmark{x} y",
+        "\\partname y",
+        "\\chaptername y",
+    ):
+        assert body_span(text) == (0, len(text)), text
+    spaced = "\\subsection [short] {Long title}\\label {x}\nThe text.\n"
+    a, b = body_span(spaced)
+    assert spaced[a:b] == "The text."
+    assert body_span("\\section*{T}") == (len("\\section*{T}"), len("\\section*{T}"))
+
+
 def test_whitespace_moved_beside_an_insertion_leaves_it_placed(tmp_path: Path) -> None:
     q = demo(tmp_path)
     after = suggest(q, "--quote", "one or two points,", "--with", "never more,", "--after")

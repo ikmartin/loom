@@ -495,6 +495,25 @@ def test_a_suggestion_on_a_sections_body_keeps_its_heading_and_label(q: Path) ->
     assert text.count("\\input{nodes/sy-0003}") == 1
 
 
+def test_a_suggestion_at_the_foot_of_a_file_whose_text_all_belongs_to_its_section_is_written_once(q: Path) -> None:
+    """The integrator's review of step 4: such a file has no text of its own, so Keep writes at the file's end, and the taken test looked for the text nowhere; a sentence typed in there by hand read as not taken, and Keep wrote it a second time."""
+    key = "drafting/sections/appendix.tex"
+    appendix = q / key
+    typed = suggest(q, key, "Zebra closing sentence for this file.", "--after")
+    appendix.write_text(
+        appendix.read_text().rstrip("\n") + "\nZebra closing sentence for this file.\n", encoding="utf-8"
+    )
+    assert [p.state for p in waiting(q) if p.id == typed] == ["taken"]
+    call(q, "change-keep", {"changes": [typed]})
+    assert appendix.read_text().count("Zebra closing") == 1
+    # typed in and touched, it is unplaced: the file's own last words were recorded beside where it goes
+    touched = suggest(q, key, "Zebra second sentence.", "--after")
+    appendix.write_text(appendix.read_text() + "Zebra second sentence, reworded.\n", encoding="utf-8")
+    assert [p.state for p in waiting(q) if p.id == touched] == ["unplaced"]
+    call(q, "change-keep", {"changes": [touched]})
+    assert appendix.read_text().count("Zebra second") == 1
+
+
 def test_keep_leaves_line_endings_alone(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))
