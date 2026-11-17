@@ -58,6 +58,7 @@ class QuiltConfig:
     prefix: str = "q"
     engine: str = "pdflatex"
     online: bool = False  # [library] online: whether loom may look identifiers up and fetch documents
+    online_asked: bool = False  # `[library] online` is set at all; unset, the viewer asks before the first paper
     contact: str = ""  # [library] contact: the address the lookup services are given
     author: str = ""  # [author] name: who this quilt's records name
     author_declared: bool = False  # the quilt states an `[author]` table, even with an empty name
@@ -102,6 +103,7 @@ class QuiltConfig:
         cfg.prefix = str(q.get("prefix", cfg.prefix))
         cfg.engine = str(q.get("engine", cfg.engine))
         cfg.online = bool(table("library").get("online", False))
+        cfg.online_asked = "online" in table("library")
         cfg.contact = str(table("library").get("contact", ""))
         cfg.lint_disable = [str(x) for x in table("lint").get("disable", [])]
         cfg.agents_deny = _agents_deny(table("agents").get("deny", []), cfg.warnings)

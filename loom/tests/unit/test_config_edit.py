@@ -49,8 +49,8 @@ def test_a_new_key_goes_after_its_table_s_last_key(tmp_path: Path) -> None:
     root = _quilt(tmp_path)
     set_values(load_quilt(root), {"library.contact": "me@example.org"})
     text = _config(root)
-    assert "online = false" in text
-    assert text.index("online = false") < text.index('contact = "me@example.org"') < text.index("[lint]")
+    assert "# online = true" in text
+    assert text.index("# online = true") < text.index('contact = "me@example.org"') < text.index("[lint]")
     assert tomllib.loads(text)["library"]["contact"] == "me@example.org"
 
 

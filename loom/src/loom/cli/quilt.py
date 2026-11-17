@@ -29,7 +29,7 @@ engine = "pdflatex"         # default engine; % !TEX program in a document overr
 # home = "README.md"        # the file the viewer opens on when it remembers no place; unset, README.md
 
 [library]
-online = false              # may loom library update look identifiers up (zbMATH Open, Crossref) and fetch documents (arXiv); --online allows one run
+# online = true             # may loom look papers up (arXiv, Crossref, zbMATH Open) and fetch them; unset, the viewer asks the first time a paper is added; --online allows one run
 
 [lint]
 disable = []                # diagnostic codes to silence, e.g. ["loom:unmatched-postnote"]
