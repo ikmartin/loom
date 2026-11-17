@@ -1,4 +1,4 @@
-"""Agents and sessions: a session made, named, closed, reopened and deleted, and the place the reader is, which an agent may ask for."""
+"""Agents and sessions: an agent's app set up in the quilt, a session made, named, closed, reopened and deleted, and the place the reader is, which an agent may ask for."""
 
 from __future__ import annotations
 
@@ -109,7 +109,53 @@ def _here(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True}
 
 
+def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """Write what agent app `app` needs to work in the quilt, as `loom ai init` writes it for every app: the agent layer where there is none, over MCP, and that app's own files alone.
+
+    The apps the quilt is set up for already keep theirs, and a quilt whose agents use the shell keeps it. The author's act, refused to a declared agent: an agent never sets up its own boundary.
+    """
+    from loom.ai.clients import BY_KEY, PROJECT, chosen
+    from loom.ai.layout import MCP, variant
+    from loom.cli.ai import install_layer
+    from loom.cli.report import counted
+    from loom.identity import is_agent
+    from loom.paths import AI
+    from loom.scan.quilt import reviewer_identity
+
+    if is_agent(_str(body, "author") or reviewer_identity(root)[0]):
+        raise ApiError(
+            "author-only",
+            "An agent works in the quilt as it is set up; only the author sets up an agent's app",
+            status=403,
+        )
+    app = _str(body, "app", required=True) or ""
+    keys = [c.key for c in PROJECT]
+    if app not in keys:
+        raise ApiError("bad-field", f"app is one of {', '.join(keys)}")
+    # a quilt with no agent layer is set up for no app yet
+    have = chosen(root, None) if (root / AI).is_dir() else []
+    layer, clients = install_layer(root, apps=[k for k in keys if k in have or k == app])
+    written = sorted(dict.fromkeys([*layer.written, *clients.written]))
+    label = BY_KEY[app].label
+    said = (
+        f"set up {label}: wrote {counted(len(written), 'file')}" if written else f"{label} was set up; nothing written"
+    )
+    if clients.foreign:
+        said += f"; left {', '.join(clients.foreign)} alone, which holds settings of yours"
+    if clients.tracked:
+        said += f"; did not write {', '.join(clients.tracked)}, which git tracks and which names this machine's paths"
+    return {
+        "ok": True,
+        "result": said,
+        "written": written,
+        "foreign": clients.foreign,
+        "tracked": clients.tracked,
+        "variant": variant(root) or MCP,
+    }
+
+
 HANDLERS: dict[str, Handler] = {
+    "agents-setup": plain(_setup),
     "session-use": said(_session),
     "session-rename": said(_session),
     "session-delete": said(_session),

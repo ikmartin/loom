@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from loom.ai.clients import BY_KEY, CLIENTS
+from loom.ai.clients import BY_KEY, CLIENTS, PROJECT
 from loom.cli._common import find_session
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
@@ -134,8 +134,10 @@ def delete_command(
     Report(f"deleted {counted(len(hits), 'annotation')}, with their replies", groups=listed, data=data).emit(as_json)
 
 
-def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) -> tuple[LayerReport, ClientReport]:
-    """Write the agent layer into a quilt, or refresh it where `.loom/ai/` exists, with the MCP client files of its variant.
+def install_layer(
+    root: Path, *, write: bool = True, shell: bool | None = None, apps: list[str] | None = None
+) -> tuple[LayerReport, ClientReport]:
+    """Write the agent layer into a quilt, or refresh it where `.loom/ai/` exists, with the files of the agent apps it is for: their root lines, permission files and, in the MCP variant, the files that start the server.
 
     Parameters
     ----------
@@ -145,6 +147,8 @@ def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) 
         False writes nothing and reports what would be written.
     shell : bool, optional
         True for an agent with no MCP, which runs `loom` in a shell; False for one that attaches over MCP, with the shell beside the tools; default the way the quilt already uses, else MCP.
+    apps : list of str, optional
+        The apps (`ai.clients.PROJECT` keys) whose files are written; default the apps the quilt is set up for, or every app where it is set up for none (`ai.clients.chosen`).
 
     Returns
     -------
@@ -157,8 +161,9 @@ def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) 
     --------
     loom.ai.layout.upgrade_layer : the refresh alone, which `loom upgrade` runs.
     """
-    from loom.ai.clients import write_clients
+    from loom.ai.clients import chosen, write_clients
     from loom.ai.layout import (
+        APPS_FILE,
         SHELL,
         VERSION_FILE,
         LayerReport,
@@ -173,15 +178,27 @@ def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) 
 
     if shell is None:
         shell = variant(root) == SHELL
+    # read before anything is written, which would change what the quilt is set up for
+    apps = chosen(root, apps)
     if not (root / AI).exists():
         if write:
-            rep = init_layer(root, shell=shell)
+            rep = init_layer(root, shell=shell, apps=apps)
         else:
             rep = LayerReport(written=[*tracked_docs(root), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
-            rep.written += [*vendor_files(quilt_config(root), shell=shell), *ensure_root_line(root, False, shell=shell)]
+            rep.written += [
+                *vendor_files(quilt_config(root), shell=shell, apps=apps),
+                *ensure_root_line(root, False, shell=shell, apps=apps),
+            ]
     else:
-        rep = upgrade_layer(root, write=write, shell=shell)
-    clients = write_clients(root, write, shell=shell)
+        rep = upgrade_layer(root, write=write, shell=shell, apps=apps)
+    clients = write_clients(root, write, shell=shell, apps=apps)
+    record = root / AI / APPS_FILE
+    said = "".join(f"{key}\n" for key in apps)
+    if not record.is_file() or record.read_text(encoding="utf-8") != said:
+        rep.written.append(f"{AI}/{APPS_FILE}")
+        if write:
+            record.parent.mkdir(parents=True, exist_ok=True)
+            record.write_text(said, encoding="utf-8")
     if write:
         # the client files name this machine's paths, so the root .gitignore keeps them out of the repository
         from loom.gitignore import ensure
@@ -247,7 +264,7 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
 
     existed = (quilt.root / AI).is_dir()
     shell = variant(quilt.root) == SHELL if mcp is None else not mcp
-    rep, clients = install_layer(quilt.root, write=not dry_run, shell=shell)
+    rep, clients = install_layer(quilt.root, write=not dry_run, shell=shell, apps=[c.key for c in PROJECT])
     written = sorted(dict.fromkeys(str(rel) for rel in rep.written))
     by_dir: dict[str, list[str]] = {}
     for rel in written:

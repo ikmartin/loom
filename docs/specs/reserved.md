@@ -34,7 +34,6 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | `formal-enable` | turns formalization on for the quilt, on this machine | formalization |
 | `formal-check` | runs loom's own check of a formal proof again | formalization |
 | `formal-attest` | records the person's attestation that a formal statement is theirs | formalization |
-| `agents-setup` | writes the files an agent's app needs to work in the quilt | attaching an agent |
 | `quilt-import` | brings a dropped paper, folder or archive into the quilt | install and launch; the window's drop target calls it |
 | `sync-pair` | pairs the quilt with an Overleaf project from its link | Overleaf |
 | `sync-fetch` | fetches what changed there | Overleaf |

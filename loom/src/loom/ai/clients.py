@@ -34,6 +34,10 @@ class Client:
         Fields loom's entry carries beside the command: the transport, and the approval the shell allows grant.
     walks_up : bool, default False
         The app starts the server in the project directory, so the entry names no `--quilt`; shown for Claude Code by the client tier, and assumed for no other app.
+    root_file : str or None, default None
+        The file at the quilt's root the app reads first, where loom puts its one line (`layout.ensure_root_line`).
+    permissions : str or None, default None
+        The permission file loom writes whole for the app, in either variant (`layout.vendor_files`).
     """
 
     key: str
@@ -43,6 +47,8 @@ class Client:
     where: str = ""
     extra: tuple[tuple[str, Any], ...] = ()
     walks_up: bool = False
+    root_file: str | None = None
+    permissions: str | None = None
 
     @property
     def agent(self) -> str:
@@ -50,10 +56,29 @@ class Client:
 
 
 CLIENTS = (
-    Client("claude-code", "Claude Code", ".mcp.json", "json", extra=(("type", "stdio"),), walks_up=True),
-    Client("codex", "Codex", ".codex/config.toml", "codex", extra=(("default_tools_approval_mode", "approve"),)),
-    Client("gemini-cli", "Gemini CLI", ".gemini/settings.json", "json", extra=(("trust", True),)),
-    Client("cursor", "Cursor", ".cursor/mcp.json", "json"),
+    Client(
+        "claude-code",
+        "Claude Code",
+        ".mcp.json",
+        "json",
+        extra=(("type", "stdio"),),
+        walks_up=True,
+        root_file="CLAUDE.md",
+        permissions=".claude/settings.json",
+    ),
+    Client(
+        "codex",
+        "Codex",
+        ".codex/config.toml",
+        "codex",
+        extra=(("default_tools_approval_mode", "approve"),),
+        root_file="AGENTS.md",
+        permissions=".codex/rules/loom.rules",
+    ),
+    Client(
+        "gemini-cli", "Gemini CLI", ".gemini/settings.json", "json", extra=(("trust", True),), root_file="GEMINI.md"
+    ),
+    Client("cursor", "Cursor", ".cursor/mcp.json", "json", root_file="AGENTS.md"),
     Client(
         "claude-desktop",
         "Claude Desktop",
@@ -65,10 +90,34 @@ CLIENTS = (
     Client("zed", "Zed", None, "zed", where="~/.config/zed/settings.json"),
     Client("jetbrains", "JetBrains", None, "json", where="Settings > Tools > AI Assistant > Model Context Protocol"),
 )
-#: The apps that read a file in the quilt, which `loom ai init` writes.
+#: The apps that read a file in the quilt, which `loom ai init` writes, and the ones the viewer sets up.
 PROJECT = tuple(c for c in CLIENTS if c.file)
 PROJECT_FILES = tuple(c.file for c in PROJECT if c.file)
 BY_KEY = {c.key: c for c in CLIENTS}
+
+
+def apps_in(root: Path) -> list[str] | None:
+    """The apps the quilt is set up for, by key in `PROJECT`'s order, as its agent layer records them (`layout.APPS_FILE`); None where it records none, which is a quilt set up for every app.
+
+    Recorded rather than read off the files, since a server's file is never committed and Cursor has no other file of its own.
+    """
+    from loom.ai.layout import APPS_FILE
+    from loom.paths import AI
+
+    try:
+        keys = set((root / AI / APPS_FILE).read_text(encoding="utf-8").split())
+    except OSError:
+        return None
+    return [c.key for c in PROJECT if c.key in keys]
+
+
+def chosen(root: Path, apps: list[str] | tuple[str, ...] | None) -> list[str]:
+    """`apps`, in `PROJECT`'s order; with None, the apps the quilt is set up for (`apps_in`), every app where it records none."""
+    if apps is None:
+        apps = apps_in(root)
+    if apps is None:
+        return [c.key for c in PROJECT]
+    return [c.key for c in PROJECT if c.key in apps]
 
 
 @dataclass
@@ -173,14 +222,19 @@ def tracked(root: Path, files: tuple[str, ...]) -> set[str]:
     return {p for p in done.stdout.decode("utf-8", errors="replace").split("\0") if p}
 
 
-def write_clients(root: Path, write: bool = True, *, shell: bool = False) -> ClientReport:
-    """Write each project client file loom owns, or with `write` false say which it would; with `shell`, remove them instead.
+def write_clients(
+    root: Path, write: bool = True, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None
+) -> ClientReport:
+    """Write the project client file loom owns of each of `apps` (`chosen`), or with `write` false say which it would; with `shell`, remove them instead.
 
     A file of the person's, or one git tracks with a loom server in it, is never written or removed: the first is reported `foreign`, the second `tracked`, and `loom doctor` fails on it.
     """
     rep = ClientReport()
     under_git = tracked(root, PROJECT_FILES)
+    keys = chosen(root, apps)
     for c in PROJECT:
+        if c.key not in keys:
+            continue
         assert c.file is not None
         p = root / c.file
         text = p.read_text(encoding="utf-8") if p.is_file() else None

@@ -78,6 +78,8 @@ OLD_LINES = (
 #: The two variants of the agent layer: the MCP server's tools with `loom` in a shell beside them, the default, or the shell alone, for an agent with no MCP.
 MCP, SHELL = "mcp", "shell"
 VERSION_FILE = ".loom-modes-version"
+#: The agent apps the quilt is set up for, one key a line (`clients.apps_in`), written with the layer; a quilt without it is set up for every app.
+APPS_FILE = ".loom-apps"
 
 
 def _asset(*parts: str) -> str:
@@ -224,21 +226,35 @@ def codex_rules() -> str:
     return "\n".join(head + body) + "\n"
 
 
-def vendor_files(config: QuiltConfig, *, shell: bool = False) -> dict[str, str]:
-    """Quilt-relative path -> text for the permission files loom owns whole in a quilt with `config`, in one variant; the agent root files are not among them (see `ensure_root_line`), nor the untracked MCP client files (`ai.clients`)."""
-    return {CLAUDE_SETTINGS: permissions_json(config, shell=shell), CODEX_RULES: codex_rules()}
+def vendor_files(
+    config: QuiltConfig, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None
+) -> dict[str, str]:
+    """Quilt-relative path -> text for the permission files loom owns whole in a quilt with `config`, in one variant, of `apps` (by key, default every app); the agent root files are not among them (see `ensure_root_line`), nor the untracked MCP client files (`ai.clients`)."""
+    from loom.ai.clients import PROJECT
+
+    wanted = {c.permissions for c in PROJECT if c.permissions and (apps is None or c.key in apps)}
+    made = {CLAUDE_SETTINGS: lambda: permissions_json(config, shell=shell), CODEX_RULES: codex_rules}
+    return {rel: make() for rel, make in made.items() if rel in wanted}
 
 
 def variant(root: Path) -> str | None:
-    """Which way the quilt's agents reach loom, read off its permission file: `MCP` when it allows the loom server's tools, else `SHELL` when it allows `loom` commands, None with no file. Never recorded anywhere else, so it cannot disagree with what the file says."""
+    """Which way the quilt's agents reach loom, read off its files: Claude Code's permission file says `MCP` when it allows the loom server's tools, else `SHELL` when it allows `loom` commands; without one, a file that starts the loom server says `MCP` and Codex's permission file alone `SHELL`; None with none of them. Never recorded anywhere else, so it cannot disagree with what the files say."""
+    from loom.ai.clients import PROJECT, names_loom
+
     p = root / CLAUDE_SETTINGS
     try:
         allow = json.loads(p.read_text(encoding="utf-8"))["permissions"]["allow"]
     except (OSError, ValueError, KeyError, TypeError):
-        return None
-    if "mcp__loom__*" in allow:
-        return MCP
-    return SHELL if any(str(r).startswith("Bash(loom ") for r in allow) else None
+        allow = None
+    if allow is not None:
+        if "mcp__loom__*" in allow:
+            return MCP
+        return SHELL if any(str(r).startswith("Bash(loom ") for r in allow) else None
+    for c in PROJECT:
+        server = root / (c.file or "")
+        if c.file and server.is_file() and names_loom(c, server.read_text(encoding="utf-8", errors="replace")):
+            return MCP
+    return SHELL if (root / CODEX_RULES).is_file() else None
 
 
 @dataclass
@@ -252,15 +268,20 @@ class LayerReport:
 ROOT_FILES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md")
 
 
-def ensure_root_line(root: Path, write: bool = True, *, shell: bool = False) -> list[str]:
-    """Put loom's one line, the variant's, into each agent's root file without taking the files over; returns what was written, or with `write` false what would be.
+def ensure_root_line(
+    root: Path, write: bool = True, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None
+) -> list[str]:
+    """Put loom's one line, the variant's, into the root file of each of `apps` (by key, default every app) without taking the files over; returns what was written, or with `write` false what would be.
 
     These are the files an agent reads before anything else, and they are also where an author writes what is true of *their* project — so loom contributes a line and owns nothing else. The other variant's line, and any line an older loom wrote (`OLD_LINES`), is replaced where it stands; everything around it is left exactly as the author left it. Loom writing the whole file is what clobbered hand-written instructions on every upgrade (DR-151).
     """
+    from loom.ai.clients import PROJECT
+
     line, other = (SHELL_LINE, MCP_LINE) if shell else (MCP_LINE, SHELL_LINE)
     replaced = (other, *OLD_LINES)
+    read = {c.root_file for c in PROJECT if apps is None or c.key in apps}
     written: list[str] = []
-    for name in ROOT_FILES:
+    for name in (n for n in ROOT_FILES if n in read):
         p = root / name
         existing = p.read_text(encoding="utf-8") if p.is_file() else ""
         lines = existing.splitlines()
@@ -279,8 +300,8 @@ def ensure_root_line(root: Path, write: bool = True, *, shell: bool = False) -> 
     return written
 
 
-def init_layer(root: Path, *, shell: bool = False) -> LayerReport:
-    """Write `.loom/ai/` and the vendor files into a quilt that has no `.loom/ai/` yet, the permission files for every tool among them in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
+def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None) -> LayerReport:
+    """Write `.loom/ai/` into a quilt that has no `.loom/ai/` yet, with the permission files and root lines of `apps` (by key, default every app) in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
     ai = root / AI
     if ai.exists():
         raise FileExistsError(str(ai))
@@ -297,22 +318,27 @@ def init_layer(root: Path, *, shell: bool = False) -> LayerReport:
         rep.written.append(f"{AI}/{name}")
     write_versions(root, texts)
     rep.written.append(f"{AI}/{VERSION_FILE}")
-    for rel, text in vendor_files(quilt_config(root), shell=shell).items():
+    for rel, text in vendor_files(quilt_config(root), shell=shell, apps=apps).items():
         p = root / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
         rep.written.append(rel)
-    rep.written.extend(ensure_root_line(root, shell=shell))
+    rep.written.extend(ensure_root_line(root, shell=shell, apps=apps))
     return rep
 
 
-def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) -> LayerReport:
+def upgrade_layer(
+    root: Path, write: bool = True, *, shell: bool | None = None, apps: list[str] | tuple[str, ...] | None = None
+) -> LayerReport:
     """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them.
 
-    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
+    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They and the root lines are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
     """
+    from loom.ai.clients import chosen
+
     if shell is None:
         shell = variant(root) == SHELL
+    apps = chosen(root, apps)
     ai = root / AI
     rep = LayerReport()
     if not ai.is_dir():
@@ -375,23 +401,30 @@ def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) 
             rep.written.append(f"{AI}/{name}")
         else:
             rep.unchanged.append(f"{AI}/{name}")
-    written, unchanged = write_permissions(root, quilt_config(root), shell=shell, write=write)
+    written, unchanged = write_permissions(root, quilt_config(root), shell=shell, write=write, apps=apps)
     rep.written += written
     rep.unchanged += unchanged
-    rep.written.extend(ensure_root_line(root, write, shell=shell))
+    rep.written.extend(ensure_root_line(root, write, shell=shell, apps=apps))
     return rep
 
 
 def write_permissions(
-    root: Path, config: QuiltConfig, *, shell: bool, write: bool = True
+    root: Path,
+    config: QuiltConfig,
+    *,
+    shell: bool,
+    write: bool = True,
+    apps: list[str] | tuple[str, ...] | None = None,
 ) -> tuple[list[str], list[str]]:
-    """(written, unchanged): the permission files rewritten to what `config` and this loom make them, in one variant.
+    """(written, unchanged): the permission files of `apps` (by default the apps the quilt is set up for, `clients.chosen`) rewritten to what `config` and this loom make them, in one variant.
 
-    A quilt with `.loom/ai/` has both, so a missing one is written like a stale one; `upgrade_layer` and the viewer's Update Claude Code both come here.
+    A missing one of those apps is written like a stale one; `upgrade_layer` and the viewer's Update Claude Code both come here.
     """
+    from loom.ai.clients import chosen
+
     written: list[str] = []
     unchanged: list[str] = []
-    for rel, text in vendor_files(config, shell=shell).items():
+    for rel, text in vendor_files(config, shell=shell, apps=chosen(root, apps)).items():
         p = root / rel
         if p.is_file() and p.read_text(encoding="utf-8") == text:
             unchanged.append(rel)
