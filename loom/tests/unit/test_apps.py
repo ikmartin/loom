@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from loom.ai.clients import PROJECT, apps_in, chosen
-from loom.ai.layout import MCP, SHELL, variant
+from loom.ai.layout import MCP, MCP_LINE, SHELL, variant
 from loom.render.endpoints.base import ApiError
 from tests.helpers import ok
 from tests.unit._quilts import demo
@@ -93,3 +93,25 @@ def test_ai_init_writes_every_app_and_a_new_quilt_reaches_loom_over_mcp(tmp_path
     (tmp_path / "d").mkdir()
     shipped = demo(tmp_path / "d")
     assert chosen(shipped, None) == EVERY, "a layer that records no apps is set up for every one"
+
+
+def test_a_quilt_set_up_for_codex_alone_stays_on_mcp_in_a_fresh_clone(tmp_path: Path) -> None:
+    """Codex's server file is never committed and its rules are the same in either variant, so the root file's line is what says MCP: an upgrade keeps it, and setting Codex up again writes the server file."""
+    q = bare(tmp_path)
+    setup(q, "codex")
+    (q / ".codex/config.toml").unlink()
+    assert variant(q) == MCP
+    assert ".codex/config.toml" in setup(q, "codex")["written"]  # type: ignore[operator]
+    (q / ".codex/config.toml").unlink()
+    ok("upgrade", cwd=q)
+    assert MCP_LINE in (q / "AGENTS.md").read_text().splitlines() and (q / ".codex/config.toml").is_file()
+
+
+def test_codex_set_up_beside_a_server_file_of_the_persons_is_over_mcp(tmp_path: Path) -> None:
+    q = bare(tmp_path)
+    (q / ".codex").mkdir()
+    (q / ".codex/config.toml").write_text('model = "gpt-5"\n')
+    got = setup(q, "codex")
+    assert got["variant"] == MCP and ".codex/config.toml" in got["foreign"]  # type: ignore[operator]
+    assert MCP_LINE in (q / "AGENTS.md").read_text().splitlines()
+    assert (q / ".codex/config.toml").read_text() == 'model = "gpt-5"\n'

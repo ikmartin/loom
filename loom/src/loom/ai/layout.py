@@ -238,7 +238,7 @@ def vendor_files(
 
 
 def variant(root: Path) -> str | None:
-    """Which way the quilt's agents reach loom, read off its files: Claude Code's permission file says `MCP` when it allows the loom server's tools, else `SHELL` when it allows `loom` commands; without one, a file that starts the loom server says `MCP` and Codex's permission file alone `SHELL`; None with none of them. Never recorded anywhere else, so it cannot disagree with what the files say."""
+    """Which way the quilt's agents reach loom, read off its committed files: Claude Code's permission file says `MCP` when it allows the loom server's tools, else `SHELL` when it allows `loom` commands; without one, the line loom put in an app's root file says which (`MCP_LINE`, `SHELL_LINE`), and failing that a file that starts the loom server says `MCP`; None with none of them. Codex's permission file is the same in either variant, and its server file is never committed, so neither says which. Never recorded anywhere else, so it cannot disagree with what the files say."""
     from loom.ai.clients import PROJECT, names_loom
 
     p = root / CLAUDE_SETTINGS
@@ -249,12 +249,22 @@ def variant(root: Path) -> str | None:
     if allow is not None:
         if "mcp__loom__*" in allow:
             return MCP
-        return SHELL if any(str(r).startswith("Bash(loom ") for r in allow) else None
+        if any(str(r).startswith("Bash(loom ") for r in allow):
+            return SHELL
+    for name in ROOT_FILES:
+        try:
+            lines = (root / name).read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeDecodeError):
+            continue
+        if MCP_LINE in lines:
+            return MCP
+        if SHELL_LINE in lines:
+            return SHELL
     for c in PROJECT:
         server = root / (c.file or "")
         if c.file and server.is_file() and names_loom(c, server.read_text(encoding="utf-8", errors="replace")):
             return MCP
-    return SHELL if (root / CODEX_RULES).is_file() else None
+    return None
 
 
 @dataclass
