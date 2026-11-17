@@ -269,25 +269,40 @@ def identify(
 
 
 def plan_new_work(
-    root: Path, pdf: Path, key: str, fields: dict[str, str], came_from: str, planned: set[Path] | None = None
+    root: Path,
+    pdf: Path,
+    key: str,
+    fields: dict[str, str],
+    came_from: str,
+    planned: set[Path] | None = None,
+    claimed: set[str] | None = None,
 ) -> Filing:
     """Plan `pdf` as a work of its own under `key`, its entry `fields`; reads only.
 
-    A work with no identifier lives under the document's hash, and its entry says so in `loom-file`, since the home its author, title and year would hash to moves when a person corrects its title. One with an identifier lives where that names, unless another document is there already.
+    A work with no identifier lives under the document's hash, and its entry says so in `loom-file`, since the home its author, title and year would hash to moves when a person corrects its title. One with an identifier lives where that names, unless another document is there already. A home is never one that holds anything, or one another entry names (`claimed`, the store-relative homes in `loom-file`): such a document gets `file/<hash>-2`, `-3`, …, so no work is ever written over another's.
     """
     from loom.refs.identity import declared
     from loom.refs.pages import sha256_of, storage_root
 
     planned = set() if planned is None else planned
+    claimed = set() if claimed is None else claimed
     store = storage_root(root)
     sha = sha256_of(pdf)
+
+    def free(home: Path) -> bool:
+        taken = home.is_dir() and any(home.iterdir())
+        return not taken and home not in planned and home.relative_to(store).as_posix() not in claimed
+
     own = store / "file" / sha[:16]
+    n = 2
+    while not free(own):
+        own = store / "file" / f"{sha[:16]}-{n}"
+        n += 1
     home = own
     ids = declared(BibEntry(key, "misc", dict(fields)))
     if ids:
         named = store / ids[0].path
-        stored = named / "paper.pdf"
-        if named not in planned and (not stored.is_file() or sha256_of(stored) == sha):
+        if free(named):
             home = named
     new = {k: v for k, v in fields.items() if not k.startswith("loom-")}
     new["loom-source"] = came_from

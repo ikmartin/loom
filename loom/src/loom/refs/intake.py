@@ -646,7 +646,8 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
             else set()
         )
         key = key_for(offer, taken, sha=sha)
-        f = plan_new_work(t.root, item.path, key, offer, name, t.planned)
+        claimed = {str(e.fields.get("loom-file") or "").strip() for e in t.bib.values()} - {""}
+        f = plan_new_work(t.root, item.path, key, offer, name, t.planned, claimed)
         assert f.home is not None and f.new is not None
         t.bib[key] = BibEntry(key, "misc", dict(f.new))
         row = Row(sha, n, name, "added", key, *_shown(t, key), filed_as=key)
@@ -1174,7 +1175,7 @@ def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
         )
     entry = bib[citekey]
     own = str(entry.fields.get("loom-file") or "").strip() == _rel(storage_root(root), home)
-    if own and entry.fields.get("loom-added") and not entry.fields.get("loom-copy-of"):
+    if own and not entry.fields.get("loom-copy-of"):
         raise IntakeRefused(
             "own-document",
             f"{citekey} came in with this PDF and is nothing without it: undo the drop, or delete the work",

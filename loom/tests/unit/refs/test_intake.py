@@ -449,3 +449,47 @@ def test_a_record_of_an_act_that_names_a_place_outside_the_store_is_not_acted_on
     with pytest.raises(IntakeRefused, match="cannot be trusted") as caught:
         undo(scan(load_quilt(q)), row.id, by=WHO)
     assert caught.value.code == "untrusted" and tree(q) == held
+
+
+def test_a_work_that_came_in_with_its_pdf_is_never_unfiled_even_when_gathering_adopted_it(tmp_path: Path) -> None:
+    """The integrator's review, finding 2, its first step: a work adopted from a PDF in the store was unfiled, and another PDF dropped on it then sat in the first one's place."""
+    import hashlib
+
+    from loom.paths import STORAGE
+    from loom.refs.scan import record_copy
+    from tests.helpers import ok
+
+    q = demo(tmp_path)
+    pdf = fake_pdf(tmp_path / "src" / "Holm - 2020 - Knots in lens spaces.pdf", "Knots in lens spaces\nGreta Holm\n")
+    sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    home = q / STORAGE / "file" / sha[:16]
+    home.mkdir(parents=True)
+    (home / "paper.pdf").write_bytes(pdf.read_bytes())
+    record_copy(q, sha, pdf.name, home)
+    ok("library", "update", "--only", "gather", cwd=q)
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="came in with this PDF") as caught:
+        unfile(scan(load_quilt(q)), "holmKnotsLensSpaces2020", by=WHO)
+    assert caught.value.code == "own-document" and tree(q) == held
+
+
+def test_a_new_work_never_takes_a_place_another_works_pdf_holds(tmp_path: Path) -> None:
+    """The integrator's review, finding 2: A's own place in the store held B, filed there for the work A came in with, and taking A as a work of its own wrote A over B. Now A gets a place, and an identity, of its own."""
+    from loom.refs.identity import identify
+    from loom.refs.pages import sha256_of
+    from tests.helpers import ok
+
+    q = demo(tmp_path)
+    a = fake_pdf(tmp_path / "a" / "lens.pdf", "Knots in lens spaces\nGreta Holm\nthe first scan\n")
+    b = fake_pdf(tmp_path / "b" / "lens.pdf", "Knots in lens spaces\nGreta Holm\na better scan\n")
+    (first,) = taken(q, Item(path=a))
+    ok("library", "ignore", first.citekey, "--why", "a poor scan", "--as", WHO, cwd=q)
+    (better,) = taken(q, Item(path=b, work=first.citekey, on_word=True))
+    assert better.replaced and sha256_of(work_home(q, first.citekey) / "paper.pdf") == sha256_of(b)
+    (again,) = taken(q, Item(path=a, new=True))
+    assert again.state == "added" and again.citekey != first.citekey
+    assert sha256_of(work_home(q, first.citekey) / "paper.pdf") == sha256_of(b)
+    assert sha256_of(work_home(q, again.citekey) / "paper.pdf") == sha256_of(a)
+    entries = bib(q)
+    assert entries[again.citekey].fields["loom-file"] == entries[first.citekey].fields["loom-file"] + "-2"
+    assert identify(entries[again.citekey])[0] != identify(entries[first.citekey])[0]

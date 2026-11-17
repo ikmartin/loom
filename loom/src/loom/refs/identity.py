@@ -147,8 +147,8 @@ def synthetic(entry: BibEntry) -> WorkId:
     return WorkId("work", digest, "declared")
 
 
-#: Where a work with no identifier keeps the PDF it came in with, as its entry's `loom-file` says: the first 16 hex digits of that PDF's hash.
-_FILED = re.compile(r"^file/([0-9a-f]{16})$")
+#: Where a work with no identifier keeps the PDF it came in with, as its entry's `loom-file` says: the first 16 hex digits of that PDF's hash, and a number after them where that place was another work's.
+_FILED = re.compile(r"^file/([0-9a-f]{16})(-[0-9]+)?$")
 
 
 def filed(entry: BibEntry) -> WorkId | None:
@@ -157,7 +157,7 @@ def filed(entry: BibEntry) -> WorkId | None:
     Its title, authors and year are a guess a person corrects, and a correction must not move it: links to it and annotations on it name this identity.
     """
     m = _FILED.match(str(entry.fields.get("loom-file") or "").strip())
-    return WorkId("work", m.group(1)[:8], "declared") if m else None
+    return WorkId("work", m.group(1)[:8] + (m.group(2) or ""), "declared") if m else None
 
 
 def identify(entry: BibEntry | None) -> list[WorkId]:

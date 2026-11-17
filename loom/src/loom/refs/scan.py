@@ -858,6 +858,8 @@ def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = T
     if f.replaces:
         shutil.rmtree(storage_root(root) / "cache" / "boxes" / f.home.parent.name / f.home.name, ignore_errors=True)
     if f.kind == "pdf":
+        if (f.home / "paper.pdf").exists() and not f.replaces:
+            raise FileExistsError(f"{f.home} holds a document already, and loom never writes over one")
         if move:
             shutil.move(str(f.path), str(f.home / "paper.pdf"))
         else:
