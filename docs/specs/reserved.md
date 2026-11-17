@@ -54,7 +54,6 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 
 | field | on | owner |
 |---|---|---|
-| `edge` | a created edit at the head or foot of a body: the body's first or last 32 characters | the safe write path |
 | `context` | annotations and edits: the neighbours either side, `twin`, and the quote's count in the quilt | the safe write path |
 | the annotation types `dead-end` and `claim` | a quilt's `annotation-types.toml` | the learner's work |
 

@@ -622,6 +622,66 @@ def test_blocks_that_read_the_same_under_the_same_line_take_no_edit(tmp_path: Pa
     assert suggest(q, "--with", "A remark.", "--after", key=f"{SHEET}#remark:1")
 
 
+def test_an_insertion_is_placed_only_while_the_words_beside_its_place_stand(tmp_path: Path) -> None:
+    """Text the person wrote beside an insertion's place since it was suggested is not something Keep can tell from the edit touched (SAFE-1 of the v0.1 study), so the edit is unplaced rather than written beside it."""
+    q = demo(tmp_path)
+    after = suggest(q, "--quote", "one or two points", "--with", "(and never more)", "--after")
+    before = suggest(q, "--quote", "Every orbit", "--with", "Plainly,", "--before")
+    foot = suggest(q, "--with", "Hence orbits are small.", "--after")
+    head = suggest(q, "--with", "\\uses{dm-0001}", "--before")
+    assert find(q, foot).edge.endswith("the one-point orbits.") and find(q, head).edge.startswith("Every orbit")  # type: ignore[union-attr]
+    old = filed(q, "dm-0002", "Hence.", None, "after")  # one filed before the body's foot was recorded
+    # words changed away from every place leave each where it was
+    edit(q / LEMMA, "[Orbits]", "[Orbits of a widget]")
+    for a in (after, before, foot, head):
+        assert place(*placed(q, a)).moved
+    edit(q / LEMMA, "the one-point orbits.", "the orbits of one point.")
+    with pytest.raises(Unplaced, match="end of the body"):
+        place(*placed(q, foot))
+    assert "Hence." in place(*placed(q, old)).taken
+    edit(q / LEMMA, "one or two points, and", "one or two points (at most), and")
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, after))
+    edit(q / LEMMA, "\\label{lem:orbits}\nEvery orbit", "\\label{lem:orbits}\nSo Every orbit")
+    with pytest.raises(Unplaced, match="right before the text"):
+        place(*placed(q, before))
+    with pytest.raises(Unplaced, match="head of the body"):
+        place(*placed(q, head))
+    # Keep writes nothing for one unplaced
+    text = (q / LEMMA).read_text()
+    ok("changes", "--keep", after, cwd=q)
+    assert (q / LEMMA).read_text() == text and find(q, after).status == "open"  # type: ignore[union-attr]
+
+
+def test_whitespace_moved_beside_an_insertion_leaves_it_placed(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    after = suggest(q, "--quote", "one or two points,", "--with", "never more,", "--after")
+    edit(q / LEMMA, "one or two points, and $\\Fix(\\sigma)$ is", "one or two points,\n  and $\\Fix(\\sigma)$\nis")
+    assert "one or two points, never more,\n  and" in place(*placed(q, after)).taken
+
+
+def test_an_insertion_in_an_empty_body_is_unplaced_once_the_body_has_words(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    body = "Every orbit of a widget has one or two points, and $\\Fix(\\sigma)$ is the union of the one-point orbits.\n"
+    edit(q / LEMMA, body, "")
+    a = suggest(q, "--with", "Two points.", "--after")
+    assert log(q)[-1]["edge"] == "" and "Two points." in place(*placed(q, a)).taken
+    edit(q / LEMMA, "\\label{lem:orbits}\n", "\\label{lem:orbits}\nMine.\n")
+    with pytest.raises(Unplaced, match="was empty when it was suggested"):
+        place(*placed(q, a))
+
+
+def test_the_second_of_two_insertions_after_one_quote_is_unplaced_once_the_first_is_kept(tmp_path: Path) -> None:
+    """The first, kept, stands where the second's recorded neighbour stood: the second is not put in ahead of it, out of the order they were suggested in."""
+    q = demo(tmp_path)
+    first = suggest(q, "--quote", "one or two points", "--with", "(never more)", "--after")
+    second = suggest(q, "--quote", "one or two points", "--with", "(as counted)", "--after")
+    ok("changes", "--keep", first, cwd=q)
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, second))
+    assert "(as counted)" not in (q / LEMMA).read_text()
+
+
 def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_its_quote(tmp_path: Path) -> None:
     """Once the block's text has changed, no block holds what the edit was filed on. An edit that quotes words still goes on the block at its place while the line above stands, where `place` needs its quote; one on the body has nothing to say the block is the one, and is unplaced."""
     q = sheet(tmp_path)

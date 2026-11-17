@@ -15,7 +15,7 @@ Each of those acts used to read the file, decide and write by itself. The v0.1 s
 
 Each of these is the same fault: no lock across processes, no record before the write, and no exact copy of what was replaced. The door is the one place those three things are done (P4), so that every act gets them and none can forget one.
 
-The door does not make loom read text better. Faults in which loom misjudges what someone else wrote (whether text the person typed is already the suggested edit, which block a key named by place means) are placement's, not the door's, and are handled where edits are placed (`records/edits.py`).
+The door does not make loom read text better. Faults in which loom misjudges what someone else wrote (whether text the person typed is already the suggested edit, which block a key named by place means) are placement's, not the door's, and are handled where edits are placed (`records/edits.py`, "Where an edit goes" below).
 
 ## What counts as a person's file
 
@@ -123,6 +123,12 @@ Writes from the viewer are to answer before the rebuild that publishes them (not
 
 The write API answers each with status 409 (`docs/specs/write-api.md`).
 
+## Where an edit goes
+
+The door makes sure loom never writes an edit twice by its own hand: the journal says what it wrote. It cannot say what someone else wrote. Text the person typed in, or an agent wrote in place, while an edit was open leaves no record, and the only evidence is the text. So where a suggested edit goes is decided by rules about the text at its place, in `records/edits.py`, which the door then writes.
+
+**The words beside its place.** An insertion is written against the words beside its place when it was suggested: a quote's selector records up to 32 characters either side of the quote (`suffix` after it, `prefix` before it), and an insertion at the head or foot of a body records the body's first or last 32 characters (`edge`, written by `loom suggest`; `''` for a body that was empty). An insertion is placed only while those words still stand right beside its place, compared with whitespace normalised (`place`); otherwise it is unplaced, said in the person's words, and Keep writes nothing. Text the person wrote in at the place since, and then touched, cannot be told from the edit by any reading of the text, and refusing is what keeps it from being written beside again. An edit that recorded no `edge` is placed as before.
+
 ## Where it stands
 
 The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.md` (DOOR-18).
@@ -135,6 +141,6 @@ The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.
 | undo of a Keep in one step, and a restore or put-back that reopens what it takes out | 5 | not built yet |
 | taking in an agent's copy, a pull, `loom mv`, atomize, import, `init --from`, the agent layer, pages, new files; then a test that nothing else writes a person's file | 6 | not built yet |
 
-Step 4 is placement, not the door: an insertion judged taken only at its own place, an edit refused when the words beside its place changed since it was filed, and a key named by place carrying the line above its block.
+Step 4 is placement, not the door ("Where an edit goes").
 
 **Open.** The follow-ups run under the lock, so Keep holds it through two scans. Moving them out (making what they compute part of the plan) would shorten the hold for the rebuild; it waits until the rebuild's lock is measured.

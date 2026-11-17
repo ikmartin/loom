@@ -1,6 +1,6 @@
 """Suggested edits (plan 0.30, decision 10): old words replaced with new on a key, kept or discarded by the person, in their own log.
 
-An edit names its key, the words it replaces as a selector (`anchor`; None means the key's body), the new text (`with`; empty deletes the quoted words), where the new text goes (`placement`: `replace` takes exactly the quoted words' place, `after` and `before` go right beside them), an optional `comment`, and the annotation it `answers`. It records the key's hash when it was written (`against`) and, on a key named by its place in its file, the line above the block (`near`).
+An edit names its key, the words it replaces as a selector (`anchor`; None means the key's body), the new text (`with`; empty deletes the quoted words), where the new text goes (`placement`: `replace` takes exactly the quoted words' place, `after` and `before` go right beside them), an optional `comment`, and the annotation it `answers`. It records the key's hash when it was written (`against`); on a key named by its place in its file, the line above the block (`near`); and at the head or foot of a body, the body's first or last `EDGE` characters (`edge`, '' for an empty body), as a quote's selector records the words either side of it. An insertion is placed only while those words still stand beside its place (`place`).
 
 `.loom/edits/log.jsonl` holds its events, appended under the log's lock: `created`; `kept`, with the key's hash once the edit is in; `discarded`, with an optional `why`; and `reopened`, the viewer's undo of either. Replay gives each edit's status; whether its key already reads as it taken is computed, never stored. Keeping an edit that answers an open annotation resolves that annotation, with the edit as its reason. Keeping writes an edit into its file on the author's act, through the door (`pending.keep`, `loom.writes`), which journals its `kept` event with the write.
 """
@@ -43,6 +43,7 @@ class Edit:
     with_text: str  # the new text; empty deletes the quoted words
     placement: str
     near: str = ""  # on a key named by place: the line above its block when it was written; '' when none was recorded
+    edge: str | None = None  # a body's head or foot when written (`body_edge`); '' an empty body; None: unrecorded
     comment: str = ""
     answers: str | None = None  # the annotation it answers
     status: str = "open"
@@ -126,6 +127,7 @@ def replay(root: Path) -> tuple[list[Edit], list[str]]:
                 target_key=str(e["target"]),
                 target_hash=str(e.get("against") or ""),
                 near=str(e.get("near") or ""),
+                edge=e["edge"] if isinstance(e.get("edge"), str) else None,
                 selector=Selector.from_dict(anchor) if isinstance(anchor, dict) else None,
                 with_text=e["with"],
                 placement=placement,
@@ -277,6 +279,63 @@ def body_span(own: str) -> tuple[int, int]:
     return start, stop
 
 
+#: How many characters of a body's head or foot an insertion at it records (`edge`), as a quote's selector records its neighbours (`selectors.CONTEXT`).
+EDGE = 32
+
+
+def body_edge(own: str, placement: str) -> str:
+    """The body's last (`after`) or first (`before`) `EDGE` characters: what `loom suggest` records beside an insertion at its foot or head."""
+    a, b = body_span(own)
+    return own[max(a, b - EDGE) : b] if placement == "after" else own[a : min(b, a + EDGE)]
+
+
+def _after(text: str, at: int, words: str) -> int | None:
+    """Where `words` ends when it stands right after `at` in `text`, whitespace compared normalised; `at` for words that are only whitespace, None when they do not stand there."""
+    if not words.split():
+        return at
+    m = re.compile(r"\s*" + _words(words).pattern).match(text, at)
+    return m.end() if m else None
+
+
+def _before(text: str, at: int, words: str) -> int | None:
+    """Where `words` starts when it stands right before `at` in `text`, as `_after` reads it."""
+    if not words.split():
+        return at
+    start = max(0, at - 4 * len(words) - 256)
+    m = re.compile(_words(words).pattern + r"\s*\Z").search(text[start:at])
+    return start + m.start() if m else None
+
+
+def _beside(edit: Edit, own: str, span: tuple[int, int]) -> str | None:
+    """Why the words recorded beside an insertion's place no longer stand there in `own`, or None when they do.
+
+    Beside a quote at `span` these are its selector's `suffix` (`after`) or `prefix` (`before`); at a body's foot or head, `span` the body, its `edge`, and an empty `edge` is a body that was empty. An edit that recorded none is not judged.
+    """
+    a, b = span
+    if edit.selector is not None:
+        if edit.placement == "after" and _after(own, b, edit.selector.suffix) is None:
+            return f"the words right after the text {edit.id} quotes have changed since it was suggested"
+        if edit.placement == "before" and _before(own, a, edit.selector.prefix) is None:
+            return f"the words right before the text {edit.id} quotes have changed since it was suggested"
+        return None
+    if edit.edge is None:
+        return None
+    end = "end" if edit.placement == "after" else "head"
+    if not edit.edge.split():
+        return (
+            None
+            if not own[a:b].strip()
+            else f"the body {edit.id} goes in was empty when it was suggested, and is not now"
+        )
+    if edit.placement == "after":
+        at = _before(own, b, edit.edge)
+        stands = at is not None and at >= a
+    else:
+        to = _after(own, a, edit.edge)
+        stands = to is not None and to <= b
+    return None if stands else f"the {end} of the body {edit.id} goes at has changed since it was suggested"
+
+
 def _joined(own: str, point: int, text: str, before: bool) -> str:
     """The text with a space to join it to the word it lands against, when neither side carries whitespace."""
     left = own[point - 1 : point] if point > 0 else " "
@@ -303,7 +362,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone or, named by place, no longer says which block; when its quote no longer stands in the text exactly once; and when the quoted words are no place for an edit (`misplaced`).
+        When its key is gone or, named by place, no longer says which block; when its quote no longer stands in the text exactly once; when the quoted words are no place for an edit (`misplaced`); and when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again.
     """
     from loom.scan.owntext import key_hash
 
@@ -319,6 +378,9 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     new = edit.with_text
     if edit.selector is None:
         a, b = body_span(own)
+        changed = _beside(edit, own, (a, b)) if edit.placement != "replace" else None
+        if changed is not None:
+            raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
         if edit.placement == "after":
             span, text = (b, b), ("\n" if a < b else "") + new
         elif edit.placement == "before":
@@ -337,6 +399,9 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         why = misplaced(own, pieces, (a, b))
         if why is not None:
             raise Unplaced(f"the words {edit.id} quotes in {node.key} {why}")
+        changed = _beside(edit, own, (a, b)) if new and edit.placement != "replace" else None
+        if changed is not None:
+            raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
         if edit.placement == "after":
             span, text = (b, b), _joined(own, b, new, before=False) if new else ""
         elif edit.placement == "before":

@@ -342,9 +342,6 @@ def test_an_edit_placed_after_its_blocks_end_is_not_written_twice(q: Path) -> No
     assert node.read_text().count(new) == 1
 
 
-@pytest.mark.xfail(
-    strict=True, raises=AssertionError, reason="SAFE-1: a short text written in and touched is not read as taken"
-)
 def test_a_short_edit_written_in_and_touched_is_not_written_twice(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     eid = suggest(q, "sy-000A", "Each swap fixes nothing.", "--quote", "with the swap.", "--after")
@@ -353,6 +350,16 @@ def test_a_short_edit_written_in_and_touched_is_not_written_twice(q: Path) -> No
     )
     call(q, "change-keep", {"changes": [eid]})
     assert node.read_text().count("Each swap fixes") == 1
+
+
+def test_a_short_edit_written_in_at_the_foot_of_a_body_and_touched_is_not_written_twice(q: Path) -> None:
+    """Showcase seed 3031 of the door's spike: a few words suggested at the foot of a body, typed in and worked inside, then written a second time by Keep."""
+    node = q / "drafting/nodes/sy-000A.tex"
+    eid = suggest(q, "sy-000A", "Each swap fixes nothing.", "--after")
+    node.write_text(node.read_text().replace("{Kre99}.", "{Kre99}.\nEach swap fixes no point."), encoding="utf-8")
+    call(q, "change-keep", {"changes": [eid]})
+    assert node.read_text().count("Each swap fixes") == 1
+    assert [p.state for p in waiting(q) if p.id == eid] == ["unplaced"]
 
 
 def test_a_save_made_while_keep_runs_is_not_lost(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
