@@ -389,3 +389,63 @@ def test_every_route_gives_one_work_one_key(tmp_path: Path) -> None:
         http=doi_org,
     )
     assert by_text.citekey == by_pdf.citekey == "bellamyMedianOrdersWeighted2019"
+
+
+def test_an_undo_never_writes_over_or_removes_a_document_it_did_not_put_there(tmp_path: Path) -> None:
+    """The integrator's review, finding 1: P1 dropped on a work and unfiled, P2 dropped on it, then P1's undo wrote P1 over P2, and P2's undo removed P1 in turn; both PDFs were gone. Now the first undo is refused with nothing touched, and in the other order both come back."""
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    first = dropped(q, "first.pdf", "Some scanned pages\nthe first scan\n", tmp_path / "1")
+    (one,) = taken(q, Item(drop=first.drop, name=first.name, work="Man12"))
+    unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    second = dropped(q, "second.pdf", "Some scanned pages\na better scan\n", tmp_path / "2")
+    (two,) = taken(q, Item(drop=second.drop, name=second.name, work="Man12"))
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="holds another document now") as caught:
+        undo(scan(load_quilt(q)), one.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == held
+    undo(scan(load_quilt(q)), two.id, by=WHO)
+    undo(scan(load_quilt(q)), one.id, by=WHO)
+    paper = work_home(q, "Man12") / "paper.pdf"
+    assert sha256_of(paper) == one.id
+
+
+def test_an_undo_refuses_when_the_document_it_added_is_no_longer_there(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "notes.pdf"))
+    paper = work_home(q, row.citekey) / "paper.pdf"
+    paper.write_bytes(fake_pdf(tmp_path / "other.pdf", "Another document\n").read_bytes())
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="no longer holds the document this drop added") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == held
+
+
+def test_an_undo_names_its_act_so_a_second_click_undoes_nothing_more(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    item = dropped(q, "schedule.pdf", "Department of Mathematics\nSeminar schedule\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Man12"))
+    off = unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    assert row.act and off["act"] and off["act"] != row.act
+    undo(scan(load_quilt(q)), row.id, by=WHO, act=off["act"])
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="undone already") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO, act=off["act"])
+    assert caught.value.code == "not-last" and tree(q) == held
+
+
+def test_a_record_of_an_act_that_names_a_place_outside_the_store_is_not_acted_on(tmp_path: Path) -> None:
+    """A drop travels with a quilt copied as a folder, so its record is checked before an undo reads or writes anything for it."""
+    import json
+
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "notes.pdf"))
+    record = q / INCOMING / row.id / "act.json"
+    acts = json.loads(record.read_text())
+    acts["acts"][-1]["home"] = ".loom/digests/storage/../../../drafting"
+    record.write_text(json.dumps(acts))
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="cannot be trusted") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "untrusted" and tree(q) == held

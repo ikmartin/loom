@@ -294,7 +294,7 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
             acts = _acts(drop_dir(root, drop))
             if acts:
                 _busy(root, str(acts[-1].get("citekey") or ""))
-            done, again = undo(_scan(root), drop, by=who)
+            done, again = undo(_scan(root), drop, by=who, act=_str(body, "act") or "")
             return {"ok": True, "result": done, **({"row": again.to_json()} if again is not None else {})}
         citekey = _str(body, "citekey", required=True) or ""
         _busy(root, citekey)

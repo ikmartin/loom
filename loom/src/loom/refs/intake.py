@@ -98,6 +98,8 @@ class Row:
     apart: str = ""
     #: Filed in place of a document the person set aside (`library ignore`), at the work's home.
     replaced: bool = False
+    #: The act that added it, which `library-undo` names so that it undoes this act and no later one.
+    act: str = ""
 
     def to_json(self) -> dict[str, Any]:
         """The row as the write API answers it: the fields of its state and no others."""
@@ -106,6 +108,8 @@ class Row:
             out.update(citekey=self.citekey, title=self.title, authors=self.authors, year=self.year)
         if self.state == "added":
             out["pages"] = self.pages
+            if self.act:
+                out["act"] = self.act
             for k in ("under", "sibling"):
                 if getattr(self, k):
                     out[k] = getattr(self, k)
@@ -656,7 +660,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
         withdraw_setting_aside(t.root, sha, t.by)
         file_document(t.quilt, f, by=t.by, read_pages=t.runner is None, move=waits)
         append_entries(t.quilt, [added_entry(key, f.new, t.by, source=f"{name}, added by hand")])
-        _push(
+        row.act = _push(
             d,
             {
                 "kind": "added",
@@ -665,6 +669,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
                 "home": _rel(t.root, f.home),
                 "names": names,
                 "name": name,
+                "sha": sha,
                 "waiting": held,
                 "records": _records(t.root, before),
                 "when": stamp(),
@@ -707,7 +712,7 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
         withdraw_setting_aside(t.root, sha, t.by)
         file_document(t.quilt, f, by=t.by, read_pages=t.runner is None, move=waits)
         append_entries(t.quilt, [sibling] if sibling is not None else [])
-        _push(
+        row.act = _push(
             d,
             {
                 "kind": "added",
@@ -716,6 +721,7 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
                 "home": _rel(t.root, f.home),
                 "names": names,
                 "name": name,
+                "sha": sha,
                 "waiting": held,
                 "records": _records(t.root, before),
                 "when": stamp(),
@@ -845,7 +851,7 @@ def _add_entry(t: _Take, n: int, rid: str, name: str, fields: dict[str, str], wa
         before = _before(t.root, [])
         append_entries(t.quilt, [added_entry(key, fields, t.by, etype)])
         (d / QUESTION).unlink(missing_ok=True)
-        _push(
+        row.act = _push(
             d,
             {
                 "kind": "added",
@@ -878,8 +884,11 @@ def _acts(d: Path) -> list[dict[str, Any]]:
     return list(data.get("acts") or []) if isinstance(data, dict) else []
 
 
-def _push(d: Path, act: dict[str, Any]) -> None:
+def _push(d: Path, act: dict[str, Any]) -> str:
+    """Record an act on a drop, newest last, under an id of its own, which an undo may name so that it undoes that act and no other; the id."""
+    act = {"act": secrets.token_hex(4), **act}
     _write_json(d / ACT, {"acts": [*_acts(d), act]})
+    return str(act["act"])
 
 
 def _settled(d: Path) -> None:
@@ -987,7 +996,7 @@ def _read_off(root: Path, key: str) -> str:
     return f"{key} has results read off it" if load_results(root, key) else ""
 
 
-def undo(result: Any, drop: str, *, by: str) -> tuple[str, Row | None]:
+def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | None]:
     """Reverse the last act on a drop: an add (the work, or the document filed under one, and every record it wrote), an unfile (the document goes back under its work), or a drop still waiting (it is discarded).
 
     Parameters
@@ -998,6 +1007,8 @@ def undo(result: Any, drop: str, *, by: str) -> tuple[str, Row | None]:
         The drop's id, a row's `id`.
     by : str
         Who undoes it.
+    act : str, default ''
+        The act the person means, a row's `act`: refused (`not-last`) when another act is the last, so that a second click undoes nothing more.
 
     Returns
     -------
@@ -1007,7 +1018,7 @@ def undo(result: Any, drop: str, *, by: str) -> tuple[str, Row | None]:
     Raises
     ------
     IntakeRefused
-        `no-such-intake` (404); `not-new` (409) once the work has results, citations or annotations.
+        `no-such-intake` (404); `not-last` (409); `not-new` (409) once the work has results, citations or annotations; `changed` (409) when the store holds something the act did not leave there, which an undo never writes over or removes; `untrusted` (409) for a record of an act loom could not have written.
     """
     root = result.quilt.root
     d = drop_dir(root, drop)
@@ -1019,35 +1030,94 @@ def undo(result: Any, drop: str, *, by: str) -> tuple[str, Row | None]:
             shutil.rmtree(d)
             _tidy(incoming(root))
             return "discarded the drop, which was never taken in", None
-        act = acts[-1]
-        if act["kind"] == "unfiled":
-            _undo_unfile(root, d, act)
-            said = f"filed it again under {act['citekey']}"
+        last = acts[-1]
+        if act and last.get("act") != act:
+            raise IntakeRefused("not-last", "that act is undone already, or another came after it", 409)
+        if why := _untrusted(root, d, last):
+            raise IntakeRefused("untrusted", f"the record of this drop cannot be trusted: {why}", 409)
+        act_ = last
+        if act_["kind"] == "unfiled":
+            _check_unfile(root, d, act_)
+            _undo_unfile(root, d, act_)
+            said = f"filed it again under {act_['citekey']}"
         else:
             # a work the act made, or the version entry it made, is the act's alone while new; a document filed under a work the person had is the act's while nothing was read off it
-            why = _not_new(result, list(act["entries"])) if act["entries"] else _read_off(root, act["citekey"])
+            why = _not_new(result, list(act_["entries"])) if act_["entries"] else _read_off(root, act_["citekey"])
             if why:
                 raise IntakeRefused(
                     "not-new",
                     f"{why}, so it is no longer only what the intake added; take it off with unfile or delete it",
                     409,
                 )
-            _undo_add(root, d, act, keep=len(acts) > 1)
+            _check_add(root, act_)
+            _undo_add(root, d, act_, keep=len(acts) > 1)
             said = (
-                f"took {act['citekey']} out again"
-                if act["entries"]
-                else f"took the document off {act['citekey']} again"
+                f"took {act_['citekey']} out again"
+                if act_["entries"]
+                else f"took the document off {act_['citekey']} again"
             )
         rest = acts[:-1]
         if rest:
             _write_json(d / ACT, {"acts": rest})
-            return said, _waiting_row(d, 0)
+            waits = waiting_file(d) is not None or (d / QUESTION).is_file()
+            return said, _waiting_row(d, 0) if waits else None
         (d / ACT).unlink(missing_ok=True)
         if waiting_file(d) is None:
             shutil.rmtree(d)
             _tidy(incoming(root))
             return said, None
         return said, _waiting_row(d, 0)
+
+
+def _untrusted(root: Path, d: Path, act: dict[str, Any]) -> str:
+    """Why the record of an act cannot be acted on, in words, or '': a drop travels with a quilt copied as a folder, so every path it names must be one loom writes, inside the store or the drop, before an undo reads or writes anything for it."""
+    from loom.refs.pages import storage_root
+
+    store = os.path.realpath(storage_root(root))
+    home = act.get("home")
+    if not isinstance(home, str) or (home and not (home.startswith(f"{STORAGE}/") and ".." not in home.split("/"))):
+        return "its home is not a place in loom's store"
+    if home and not os.path.realpath(root / home).startswith(store + os.sep):
+        return "its home leads out of loom's store"
+    names = ([act.get("name")] if home else []) + list(act.get("names") or []) + list(act.get("moved") or [])
+    if not all(isinstance(n, str) and n and "/" not in n and n not in (".", "..") for n in names):
+        return "a file it names is no plain name"
+    if not set(act.get("moved") or []) <= set(READ_OFF):
+        return "it names what reading a document never writes"
+    held = act.get("held", f"{HELD}/0")
+    if not (isinstance(held, str) and re.fullmatch(rf"{HELD}/\d+", held)):
+        return "where it held page text is no place in the drop"
+    if act.get("sha") is not None and not re.fullmatch(r"[0-9a-f]{64}", str(act["sha"])):
+        return "its document's hash is no hash"
+    return ""
+
+
+def _check_add(root: Path, act: dict[str, Any]) -> None:
+    """Refuse to undo an add whose document is no longer what stands at its home: an undo never removes a document it did not put there."""
+    from loom.refs.pages import sha256_of
+
+    if not act["home"] or act.get("sha") is None:
+        return
+    paper = root / act["home"] / "paper.pdf"
+    if not paper.is_file() or sha256_of(paper) != act["sha"]:
+        raise IntakeRefused(
+            "changed",
+            f"{act['citekey']}'s place in the store no longer holds the document this drop added; undoing it would remove what is there now",
+            409,
+        )
+
+
+def _check_unfile(root: Path, d: Path, act: dict[str, Any]) -> None:
+    """Refuse to undo an unfile when the document it took off no longer waits, or when its work holds a document again: an undo never writes over one."""
+    home = root / act["home"]
+    if not (d / act["name"]).is_file():
+        raise IntakeRefused("changed", "the document this unfile took off no longer waits in its drop", 409)
+    if (home / "paper.pdf").exists() or any((home / n).exists() for n in act["moved"]):
+        raise IntakeRefused(
+            "changed",
+            f"{act['citekey']} holds another document now: take that one off first, and this one can go back",
+            409,
+        )
 
 
 def _undo_add(root: Path, d: Path, act: dict[str, Any], *, keep: bool) -> None:
@@ -1150,7 +1220,7 @@ def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
                 "not": refused,
             },
         )
-        _push(
+        act_id = _push(
             d,
             {
                 "kind": "unfiled",
@@ -1167,7 +1237,7 @@ def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
                 "by": by,
             },
         )
-    return {"incoming": sha, "row": _waiting_row(d, 0).to_json()}
+    return {"incoming": sha, "act": act_id, "row": _waiting_row(d, 0).to_json()}
 
 
 def _remove_entry(root: Path, key: str) -> dict[str, str]:
