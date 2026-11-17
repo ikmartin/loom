@@ -48,13 +48,15 @@ ANNOTATION_LOG = f"{ANNOTATIONS}/log.jsonl"
 #: Suggested edits, and what the person did with each: their own log (`records/edits.py`).
 EDITS = f"{LOOM}/edits"
 EDIT_LOG = f"{EDITS}/log.jsonl"
+#: What a person adds to the library, one directory a drop, while it waits and while its intake can be undone (`refs/intake.py`); it stays on this machine.
+INCOMING = f"{LOOM}/incoming"
+#: The lock every writer of the library's bibliography and store holds, across processes; with what loom can rebuild, since it holds nothing.
+LIBRARY_LOCK = f"{BUILD}/library.lock"
 #: Reserved for work not built yet (docs/specs/reserved.md): nothing writes these, and an agent is already kept from them.
 #: The quilt's format number, which a loom older than the quilt reads to say so.
 FORMAT = f"{LOOM}/format"
 #: A record for each agent server process attached to the quilt.
 LIVE = f"{LOOM}/live"
-#: Files dropped on the viewer and not yet filed.
-INCOMING = f"{LOOM}/incoming"
 #: Formal evidence, and the person's attestations.
 FORMAL = f"{LOOM}/formal"
 FORMAL_EVIDENCE = f"{FORMAL}/evidence.jsonl"

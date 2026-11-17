@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.ai.clients import PROJECT_FILES
-from loom.paths import BUILD, HISTORY, LAST_SEEN, LOOM, LOOM_GITIGNORE, SERVE_JSON, SESSIONS, SINCE, STORAGE
+from loom.paths import BUILD, HISTORY, INCOMING, LAST_SEEN, LOOM, LOOM_GITIGNORE, SERVE_JSON, SESSIONS, SINCE, STORAGE
 from loom.writes import INDEX, JOURNAL, LOCK, TEMP
 
 
@@ -28,6 +28,8 @@ LOOM_LINES = (
     f"{_inside(STORAGE)}/**/paper.pdf",
     f"{_inside(STORAGE)}/**/src/",
     f"{_inside(STORAGE)}/cache/",
+    # what a person dropped into the library, waiting or kept for its undo: other people's documents, as in the store
+    f"{_inside(INCOMING)}/",
     # the journal of loom's writes to this machine's files (docs/design/writes.md), its index and its lock
     f"{_inside(HISTORY)}/{JOURNAL}",
     f"{_inside(HISTORY)}/{INDEX}",
