@@ -396,16 +396,16 @@ readOnly('the preview lands on its mark, and a scroll inside it does not dismiss
 });
 
 readOnly('a citation opens its paper at the result, past the first page, and a \\ref to a result goes where its citation goes', async ({ page }) => {
-	// `Theorem 5.1` is read off Arden24's revision, Arden24A, on its third page: the introduction's citation of it opens that document there, with the result in view
+	// `Theorem 5.1` is read off Arden24's revision, Arden24-v2, on its third page: the introduction's citation of it opens that document there, with the result in view
 	await page.goto('/node/sh-0100');
-	const cite = page.locator('[data-pane="0"] span.cite[data-target="Arden24A-thm-5.1"] a').first();
-	await expect(cite).toHaveAttribute('href', '/library/Arden24A?page=3&result=Arden24A-thm-5.1');
+	const cite = page.locator('[data-pane="0"] span.cite[data-target="Arden24v2-thm-5.1"] a').first();
+	await expect(cite).toHaveAttribute('href', '/library/Arden24-v2?page=3&result=Arden24v2-thm-5.1');
 	await cite.click();
-	await expect(page.locator('[data-pane="1"] [data-mark="Arden24A-thm-5.1"]').first()).toBeInViewport();
+	await expect(page.locator('[data-pane="1"] [data-mark="Arden24v2-thm-5.1"]').first()).toBeInViewport();
 	await expect(page.getByTestId('pane-1').getByTestId('page-at')).toHaveValue('3');
 	// a remark of the revision refers to its Corollary 5.2 by `\ref`, which opens the paper at that result too
-	await page.goto('/node/Arden24A-rem-5.3');
-	await expect(page.locator('[data-pane="0"] a.ref[data-target="Arden24A-cor-5.2"]').first()).toHaveAttribute('href', '/library/Arden24A?page=3&result=Arden24A-cor-5.2');
+	await page.goto('/node/Arden24v2-rem-5.3');
+	await expect(page.locator('[data-pane="0"] a.ref[data-target="Arden24v2-cor-5.2"]').first()).toHaveAttribute('href', '/library/Arden24-v2?page=3&result=Arden24v2-cor-5.2');
 	// and the work and its revision are one row of the column's Library
 	await page.getByTestId('library-toggle').click();
 	await expect(page.getByTestId('library-list').locator('a[data-testid^="library-work-Arden24"]')).toHaveCount(1);
@@ -565,7 +565,7 @@ readOnly("a paper's page in view is what loom here reports, at the address loom 
 
 // Where a work opens: where the reader last was, unless a link names a place. These write nothing to the quilt, only to this browser, so each runs on its worker's copy in a browser of its own.
 const BELLAMY = '/library/Bellamy19';
-const SECOND = '/library/Arden24A';
+const SECOND = '/library/Arden24-v2';
 const QUOTE = 'The median orders of a weighted digraph are in bijection with the vertices';
 
 /** A work's file in a copy of the quilt, by what its manifest says. */
@@ -725,16 +725,16 @@ readOnly('a link that names a place wins over where the reader last was, and is 
 	// a result, by its address and by a citation of it
 	await page.goto(SECOND);
 	await readTo(page, { page: 1, share: 0.5 });
-	await page.goto(`${SECOND}?page=3&result=Arden24A-thm-5.1`);
-	const mark = page.locator('[data-mark="Arden24A-thm-5.1"]').first();
+	await page.goto(`${SECOND}?page=3&result=Arden24v2-thm-5.1`);
+	const mark = page.locator('[data-mark="Arden24v2-thm-5.1"]').first();
 	await expect(mark).toBeInViewport();
 	await page.waitForTimeout(800);
 	await expect(mark).toBeInViewport();
 	await expect(page.getByTestId('page-at')).toHaveValue('3');
 	await readTo(page, { page: 1, share: 0.5 });
 	await page.goto('/node/sh-0100');
-	await page.locator('[data-pane="0"] span.cite[data-target="Arden24A-thm-5.1"] a').first().click();
-	await expect(page.locator('[data-pane="1"] [data-mark="Arden24A-thm-5.1"]').first()).toBeInViewport();
+	await page.locator('[data-pane="0"] span.cite[data-target="Arden24v2-thm-5.1"] a').first().click();
+	await expect(page.locator('[data-pane="1"] [data-mark="Arden24v2-thm-5.1"]').first()).toBeInViewport();
 	await expect(page.getByTestId('pane-1').getByTestId('page-at')).toHaveValue('3');
 });
 
@@ -757,7 +757,7 @@ readOnly('two works keep a place each', async ({ page }) => {
 	await staysAt(page, second);
 	await fromShelf(page, 'Bellamy19');
 	await staysAt(page, first);
-	await page.getByRole('tab', { name: 'Arden24A' }).click();
+	await page.getByRole('tab', { name: 'Arden24-v2' }).click();
 	await staysAt(page, second);
 });
 
@@ -901,7 +901,7 @@ readOnly('a place in another file behind the work is not carried over, and a pag
 	await readTo(page, left);
 	await kept(page, left);
 	// another file of the same length: its page 2 is not the page they were on
-	const another = fileOf(served.root, 'Arden24A');
+	const another = fileOf(served.root, 'Arden24-v2');
 	await page.route('**/paper.pdf', (r) => r.fulfill({ body: another, contentType: 'application/pdf' }));
 	await page.reload();
 	await staysAt(page, { page: 1, share: 0 });
