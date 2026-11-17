@@ -31,16 +31,27 @@ WHOLE = frozenset({"ai orient"})
 MAX_IMAGES = 8
 
 
+#: The requests that are an agent's use of loom, and what the record's `last` calls each.
+CALLS = {"tools/call": "tool", "prompts/get": "prompt", "resources/read": "resource"}
+#: Where a client that sends no `initialize` puts who it is and the protocol it speaks: every request's `_meta`.
+CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
+PROTOCOL = "io.modelcontextprotocol/protocolVersion"
+
+
 def serve(root: Path, name: str) -> None:
-    """Serve the quilt at `root` to the agent `name` until the client closes stdin."""
+    """Serve the quilt at `root` to the agent `name` until the client closes stdin or stops the server with a signal, keeping this process's presence record (`loom.presence`) meanwhile."""
     import anyio
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
     from mcp.shared.exceptions import MCPError
 
     from loom.ai.orient import instructions
+    from loom.presence import Presence, prune
     from loom.version import __version__
 
+    prune(root)
+    here = Presence(root, name)
+    _end_on_signals(here)
     specs = {s.name: s for s in tools()}
     listed = [
         types.Tool(
@@ -188,11 +199,56 @@ def serve(root: Path, name: str) -> None:
         on_read_resource=on_read_resource,
     )
 
+    async def noted(ctx: Any, call_next: Any) -> Any:
+        """Write the presence record at the first request of either kind, and note each call."""
+        if ctx.request_id is not None:
+            if not here.begun:
+                here.begin(*_client(ctx))
+            kind = CALLS.get(ctx.method)
+            if kind is not None:
+                params = ctx.params or {}
+                here.called(kind, str(params.get("uri" if kind == "resource" else "name") or ""))
+        return await call_next(ctx)
+
+    server.middleware.append(noted)
+
     async def main() -> None:
         async with stdio_server() as (read, write):
             await server.run(read, write, server.create_initialization_options())
 
-    anyio.run(main)
+    try:
+        anyio.run(main)
+    finally:
+        here.end()
+
+
+def _client(ctx: Any) -> tuple[dict[str, str] | None, str | None]:
+    """Who the client says it is and the protocol it speaks, from `initialize`'s own fields or, for a client that sends none, any request's `_meta`."""
+    params = ctx.params or {}
+    if ctx.method == "initialize":
+        info, protocol = params.get("clientInfo"), params.get("protocolVersion")
+    else:
+        meta = ctx.meta or {}
+        info, protocol = meta.get(CLIENT_INFO), meta.get(PROTOCOL) or ctx.protocol_version
+    said = {k: str(info[k]) for k in ("name", "title", "version") if isinstance(info, dict) and info.get(k)}
+    return said or None, str(protocol) if protocol else None
+
+
+def _end_on_signals(here: Any) -> None:
+    """Remove the presence record when the app stops the server, then end as the signal's default does: Claude Code sends SIGINT, then SIGTERM, and never closes stdin, so nothing else would remove it.
+
+    SIGINT ends the process too, where Python's own handler would leave it waiting on standard input's reader thread. A `loom` command running for a call is a process of its own and finishes its write. A signal already ignored stays ignored.
+    """
+    import signal
+
+    def handler(signum: int, frame: Any) -> None:
+        here.end()
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        if signal.getsignal(sig) != signal.SIG_IGN:
+            signal.signal(sig, handler)
 
 
 async def _run(root: Path, words: list[str]) -> subprocess.CompletedProcess[bytes]:
