@@ -175,3 +175,16 @@ def test_a_settings_file_that_is_no_json_object_is_left_alone_and_said(tmp_path:
     got = setup(q, "claude-code")
     assert ".claude/settings.json" in got["foreign"] and ".claude/settings.json" not in got["written"]  # type: ignore[operator]
     assert settings.read_text() == "{ not json"
+
+
+def test_doctor_reads_a_settings_file_that_keeps_the_persons_own_as_current(tmp_path: Path) -> None:
+    import json
+
+    from loom.doctor import check_permissions
+
+    q = bare(tmp_path)
+    settings = q / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_text(json.dumps({"env": {"MY_VAR": "1"}}))
+    setup(q, "claude-code")
+    assert check_permissions(q).status == "ok"

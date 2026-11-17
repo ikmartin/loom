@@ -554,12 +554,12 @@ def check_engine(quilt: Any) -> Item:
 
 
 def check_permissions(root: Path) -> Item:
-    """The permission files of the apps the quilt is set up for (`.claude/settings.json`, `.codex/rules/loom.rules`) byte for byte what this loom's table renders (`vendor_files`), in the variant the quilt's files say."""
+    """The permission files of the apps the quilt is set up for (`.claude/settings.json`, `.codex/rules/loom.rules`) byte for byte what this loom's table renders into the quilt (`vendor_files`, the person's own settings in Claude Code's kept), in the variant the quilt's files say."""
     from loom.ai.clients import chosen
     from loom.ai.layout import SHELL, quilt_config, variant, vendor_files
 
     shell = variant(root) == SHELL
-    shipped = vendor_files(quilt_config(root), shell=shell, apps=chosen(root, None))
+    shipped = vendor_files(quilt_config(root), shell=shell, apps=chosen(root, None), root=root)
     wanted = tuple(shipped)
     present = [rel for rel in wanted if (root / rel).is_file()]
     layer = (root / AI).is_dir()
