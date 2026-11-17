@@ -22,6 +22,7 @@ The register predates the last round. Eight later reports are not in it and win 
 | Trials on a running loom | `review.md`, `library.md`, `quant-findings.md` (the author's month of use, checked item by item), `walk.md` and `walk-small.md` (two first-time users), `live.md` (install and a real agent client), `small-model.md`, `safety.md`, `lean-trial.md`, `tinytex.md`, `explore.md`, `security.md` |
 | Checks of the claims most work rested on | `cuts.md` (each proposed cut attacked), `check-changed.md`, `check-labels.md`, `spike-door.md`, `spike-speed.md`, `claude-code-docs.md` |
 | The plan attacked | `redteam-execution.md` (its appendix B, which workstream owns which file, is part of the plan), `redteam-coverage.md`, `redteam-facts.md` |
+| After the study, for a decision the plan took later | `modes.md` (what a set of modes a person can change would need, and what it costs; decision 17), `storage.md` (what a quilt's `.loom` holds on disk and in memory, measured on relloc, and a model of five kinds for it; decision 18, a draft), `storage-inventory.md` (what the code writes, reads and deletes under `.loom`, entry by entry) |
 
 ## What can be run again
 
