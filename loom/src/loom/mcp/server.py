@@ -90,7 +90,6 @@ def serve(root: Path, name: str) -> None:
         if spec is None:
             raise MCPError(code=types.INVALID_PARAMS, message=f"no tool {params.name}; tools/list names them")
         arguments = dict(params.arguments or {})
-        command = ""
         try:
             if not arguments.get("session") and ACTS[spec.path] in BINDS and spec.path != "session new":
                 bound = await anyio.to_thread.run_sync(bind)
@@ -403,7 +402,7 @@ def _made(out: str) -> str | None:
 
 
 def _session(root: Path, given: object) -> str | None:
-    """The session a call names, or the conversation's bound one, by id; None with neither. Never the quilt's active session, which another conversation may have chosen."""
+    """The id of the session `given` names, the call's own or the conversation's bound one; None when it names none. Never the quilt's active session, which another conversation or the person may have chosen."""
     from loom.cli._common import find_session
 
     if not given:
