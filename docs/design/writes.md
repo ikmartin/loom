@@ -142,6 +142,10 @@ A replacement whose new text holds its quote adds words either side of the quote
 | a quote that reaches the block's `\begin` or `\end`, or runs across a block inside it (`misplaced`) | the edit, at filing and at Keep | text beside a `\begin` or `\end` lands in the block around the one the edit names, and words in two pieces of the file cannot be replaced in one. It is no longer what stops a second write: an edit filed before the guard and written in by hand is read as taken where it stands |
 | a block named by place that reads the same as another under the same line (`alike`) | the edit, at filing | nothing could tell the edit's block from the other afterwards (`filed_on`), so it would be unplaced from the moment it was filed |
 
+A body is what lies inside an environment's head and before its `\end`, or below a section's heading and its labels (`body_span`), so a suggestion on a section's body never replaces its heading; a body replacement whose body runs across a block inside it, or holds a line that brings in another file (`\input`), is refused at filing and at Keep (`whole_body`), since those would go with it.
+
+**Open.** Two insertions beside the same quote or body edge: once the first is kept, the second's recorded neighbour is gone and it is unplaced, rather than put in ahead of the first, out of the order they were suggested in; the agent suggests it again. A replacement of a whole body is still written over a body changed since it was suggested: Keep shows the words it replaces, and no second copy can come of it. Once its text has changed, a key named by place has only the line above its block and its quote to go by; the neighbours on both sides and the quote's count across the quilt are the context record of `docs/reports/v0.1-study/raw/check-labels.md` (KEY-13), not built yet.
+
 
 ## Where it stands
 

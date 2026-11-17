@@ -601,6 +601,25 @@ def test_words_that_run_across_a_block_inside_are_no_place_for_an_edit(tmp_path:
         place(*placed(q, old))
 
 
+def test_a_sections_body_is_below_its_heading_and_one_across_a_block_inside_is_not_replaced(tmp_path: Path) -> None:
+    """CUT-14 of the v0.1 study: a section's own text is its heading and the words under it, and a suggestion on its body replaced the heading and its label with them. With its proofs cut out, its body is several pieces of the file, and only the first would be replaced."""
+    q = sheet(tmp_path)
+    two = f"{SHEET}#section:2"
+    refused("suggest", two, "--with", "Asked.", "--as", "Tom", cwd=q, code=2, match="runs across a block inside")
+    head = suggest(q, "--with", "Read this first.", "--before", key=two)
+    assert place(*placed(q, head)).taken.startswith("\\section*{Two}\nRead this first.\nWhat is asked second.")
+    old = filed(q, two, "Asked.")
+    with pytest.raises(Unplaced, match="runs across a block inside"):
+        place(*placed(q, old))
+    one = suggest(q, "--with", "What is asked at first.", key=f"{SHEET}#section:1")
+    ok("changes", "--keep", one, cwd=q)
+    assert "\\section*{One}\nWhat is asked at first.\n\\begin{proof}[Answer]" in (q / SHEET).read_text()
+    assert body_span("\\section{Results}\\label{r}\\label{s}\n\nThe results.\n") == (
+        len("\\section{Results}\\label{r}\\label{s}\n\n"),
+        len("\\section{Results}\\label{r}\\label{s}\n\nThe results."),
+    )
+
+
 def test_blocks_that_read_the_same_are_told_apart_by_the_line_above(tmp_path: Path) -> None:
     """An answer suggested on the second of two empty answers stays on it when a third is put in above and every key after it is renumbered (SAFE-4): the line above the block was recorded with the edit."""
     q = sheet(tmp_path)

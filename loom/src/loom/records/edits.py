@@ -233,6 +233,27 @@ def misplaced(own: str, pieces: list[tuple[int, int, int]], span: tuple[int, int
     return None
 
 
+def whole_body(result: ScanResult, node: NodeRec) -> str | None:
+    """Why `node`'s body cannot be replaced whole, or None when it can: replacing a body that runs across a block inside it, or holds a line that brings in another file, would take those with it.
+
+    `place` refuses such a replacement, and `loom suggest` refuses to file one.
+    """
+    own, pieces = Records.own_pieces(result, node)
+    a, b = body_span(own)
+    if a == b:
+        return None
+    if misplaced(own, pieces, (a, b)) is not None:
+        return "runs across a block inside it"
+    at = Records.to_file_span(pieces, (a, b))
+    if at is not None and any(
+        inc.parent == node.file and at[0] <= inc.site_start and inc.site_end <= at[1]
+        for expansion in result.expansions.values()
+        for inc in expansion.inclusions
+    ):
+        return "holds a line that brings in another file"
+    return None
+
+
 def _balanced(text: str, at: int, opening: str, closing: str) -> int:
     """The index after the group `opening`…`closing` that opens at `at`, braces inside it kept whole; `at` itself when none opens there."""
     if at >= len(text) or text[at] != opening:
@@ -256,15 +277,29 @@ def _balanced(text: str, at: int, opening: str, closing: str) -> int:
     return at
 
 
-def body_span(own: str) -> tuple[int, int]:
-    """The key's body in its own text: after `\\begin{…}`, its optional title, `\\label{…}` and leading `\\uses{…}`, and before `\\end{…}`.
+#: A heading that opens a section's own text, which a suggestion on the section's body never replaces.
+HEADING = re.compile(r"\s*\\(?:part|chapter|section|subsection|subsubsection|paragraph|subparagraph)\*?")
 
-    A text that is no environment is all body.
+
+def body_span(own: str) -> tuple[int, int]:
+    """The key's body in its own text: after `\\begin{…}`, its optional title, `\\label{…}` and leading `\\uses{…}`, and before `\\end{…}`; in a section's, below its heading and the labels after it.
+
+    Any other text is all body.
     """
     m = re.match(r"\s*\\begin\{[^}]*\}", own)
     end = own.rfind("\\end{")
     if not m or end < m.end():
-        return 0, len(own)
+        heading = HEADING.match(own)
+        if heading is None:
+            return 0, len(own)
+        at = _balanced(own, heading.end(), "[", "]")
+        title = re.match(r"\s*\{", own[at:])
+        at = _balanced(own, at + title.end() - 1, "{", "}") if title else at
+        while label := re.match(r"\s*\\label\{", own[at:]):
+            at = _balanced(own, at + label.end() - 1, "{", "}")
+        start = len(own) - len(own[at:].lstrip())
+        stop = len(own.rstrip())
+        return start, max(start, stop)
     at = _balanced(own, m.end(), "[", "]")
     while True:
         head = re.match(r"\s*\\(label|uses)\{", own[at:])
@@ -399,6 +434,9 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     new = edit.with_text
     if edit.selector is None:
         a, b = body_span(own)
+        whole = whole_body(result, node) if edit.placement == "replace" else None
+        if whole is not None:
+            raise Unplaced(f"the body of {node.key} {whole}, so it is not replaced whole")
         changed = _beside(edit, own, (a, b))
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")

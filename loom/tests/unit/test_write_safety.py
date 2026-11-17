@@ -484,6 +484,17 @@ def test_an_answer_typed_into_a_block_named_by_place_is_not_written_again_once_a
     assert main.read_text().count("ANSWER-TWO") == 1
 
 
+def test_a_suggestion_on_a_sections_body_keeps_its_heading_and_label(q: Path) -> None:
+    """CUT-14 of the v0.1 study: Keep replaced `\\section{…}\\label{…}` with the suggested text. This body holds a line bringing in another file, which would go with it, so it is not replaced at all; text at its head goes below the heading."""
+    results = q / "drafting/sections/results.tex"
+    assert suggest(q, "sy-0200", "The results.") is None
+    head = suggest(q, "sy-0200", "Read this first.", "--before")
+    assert call(q, "change-keep", {"changes": [head]})["done"] == [head]
+    text = results.read_text()
+    assert "\\section{Results}\\label{sy-0200}\n\nRead this first.\nThe main results" in text
+    assert text.count("\\input{nodes/sy-0003}") == 1
+
+
 def test_keep_leaves_line_endings_alone(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))
