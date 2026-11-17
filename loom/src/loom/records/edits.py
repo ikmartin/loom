@@ -255,6 +255,26 @@ def whole_body(result: ScanResult, node: NodeRec) -> str | None:
     return None
 
 
+def _same_body(result: ScanResult, node: NodeRec, edit: Edit) -> bool:
+    """Whether `node`'s body reads as it did when `edit` was suggested on it: the body's words, whitespace compared normalised, against the body of the text the edit was written against (`against`, which `loom suggest` keeps in the history's texts).
+
+    Only the body counts, so a title or a label changed since does not refuse a replacement of the body. When that text is not kept, the block's whole text must be unchanged.
+    """
+    from loom.records.snapshots import read_snapshot
+    from loom.scan.hashing import normalize
+    from loom.scan.owntext import key_hash, own_text
+
+    if not edit.target_hash or key_hash(result, node.key) == edit.target_hash:
+        return True
+    then = read_snapshot(result.quilt.root, edit.target_hash, result.quilt.history_dir)
+    if then is None:
+        return False
+    now = normalize(own_text(result, node))
+    a, b = body_span(then)
+    c, d = body_span(now)
+    return _flat(then[a:b]) == _flat(now[c:d])
+
+
 def _balanced(text: str, at: int, opening: str, closing: str) -> int:
     """The index after the group `opening`…`closing` that opens at `at`, braces inside it kept whole; `at` itself when none opens there."""
     if at >= len(text) or text[at] != opening:
@@ -432,7 +452,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); and when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again.
+        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again; and when the body a whole-body replacement would replace has changed since it was suggested (`_same_body`).
     """
     from loom.scan.owntext import key_hash
 
@@ -451,6 +471,10 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         whole = whole_body(result, node) if edit.placement == "replace" else None
         if whole is not None:
             raise Unplaced(f"the body of {node.key} {whole}, so it is not replaced whole")
+        if edit.placement == "replace" and not _same_body(result, node, edit):
+            raise Unplaced(
+                f"the body of {node.key} has changed since {edit.id} was suggested on it, so it is not replaced blind"
+            )
         # a key with no text of its own is written at the file's end or start, beside the file's own words
         changed = (
             _beside(edit, own, (a, b))

@@ -524,6 +524,31 @@ def test_a_replacement_that_trims_its_quote_is_written(q: Path) -> None:
     assert "\\{1,2\\}$ the swap." in text and "with the swap." not in text
 
 
+def test_a_whole_body_replacement_is_written_only_over_the_body_it_was_suggested_on(q: Path) -> None:
+    """The author's decision (2026-11-17): a replacement of a block's whole body is refused once the body has changed since it was suggested, as an insertion is; typed in exactly, it reads as taken."""
+    node = q / "drafting/nodes/sy-000A.tex"
+    body = "Gadgets exist: take $X = \\{1,2\\}$ with the swap. Compare \\cite[Theorem 2.1]{Kre99}."
+    untouched = suggest(q, "sy-000A", "Gadgets exist, by the swap on two points.")
+    assert call(q, "change-keep", {"changes": [untouched]})["done"] == [untouched]
+    assert "Gadgets exist, by the swap on two points." in node.read_text() and body not in node.read_text()
+    # the suggestion typed in by hand, then touched: unplaced, and Keep leaves the touch
+    new = "Gadgets exist: the swap on two points is one."
+    touched = suggest(q, "sy-000A", new)
+    node.write_text(
+        node.read_text().replace("Gadgets exist, by the swap on two points.", new.replace("one.", "one, Pat."))
+    )
+    assert [p.state for p in waiting(q) if p.id == touched] == ["unplaced"]
+    text = node.read_text()
+    call(q, "change-keep", {"changes": [touched]})
+    assert node.read_text() == text
+    # typed in exactly as suggested, it is taken
+    exact = suggest(q, "sy-000A", "Gadgets exist: two points and the swap.")
+    node.write_text(
+        node.read_text().replace(new.replace("one.", "one, Pat."), "Gadgets exist: two points and the swap.")
+    )
+    assert [p.state for p in waiting(q) if p.id == exact] == ["taken"]
+
+
 def test_keep_leaves_line_endings_alone(q: Path) -> None:
     node = q / "drafting/nodes/sy-000A.tex"
     node.write_bytes(node.read_bytes().replace(b"\n", b"\r\n"))

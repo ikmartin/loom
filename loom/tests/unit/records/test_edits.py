@@ -795,6 +795,23 @@ def test_a_replacement_whose_quote_was_rewritten_goes_nowhere_though_it_reads_li
     assert (q / LEMMA).read_text() == text and "the one-point orbits." in text
 
 
+def test_a_whole_body_replacement_is_judged_by_the_body_alone(tmp_path: Path) -> None:
+    """The body's own words are compared with those the replacement was suggested on: a title changed since leaves it placed, a word of the body changed refuses it."""
+    q = demo(tmp_path)
+    a = suggest(q, "--with", "Each orbit has one or two points.")
+    edit(q / LEMMA, "[Orbits]", "[Orbits of a widget]")
+    assert place(*placed(q, a)).moved
+    edit(q / LEMMA, "the union of", "the set of")
+    with pytest.raises(Unplaced, match="has changed since"):
+        place(*placed(q, a))
+    # one whose text was not kept goes by the whole block's text
+    old = filed(q, "dm-0002", "Each orbit is small.")
+    assert place(*placed(q, old))
+    edit(q / LEMMA, "[Orbits of a widget]", "[Orbits]")
+    with pytest.raises(Unplaced, match="has changed since"):
+        place(*placed(q, old))
+
+
 def test_whitespace_moved_beside_an_insertion_leaves_it_placed(tmp_path: Path) -> None:
     q = demo(tmp_path)
     after = suggest(q, "--quote", "one or two points,", "--with", "never more,", "--after")
