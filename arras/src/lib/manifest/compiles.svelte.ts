@@ -42,6 +42,11 @@ export function compileWord(c: Compile | undefined): string {
 	return '';
 }
 
+/** What a document's PDF control says beside `PDF`: how its compile stands (`compileWord`), or `not compiled yet` where there is no PDF and nothing under way; '' when the PDF is there and there is nothing to say. */
+export function pdfWord(pdf: boolean, c: Compile | undefined): string {
+	return compileWord(c) || (pdf ? '' : 'not compiled yet');
+}
+
 /** The last run's error and where TeX stopped, for a title or a line under the paper. */
 export function compileError(c: Compile | undefined): string {
 	const l = c?.last;

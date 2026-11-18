@@ -66,6 +66,16 @@ export function pdfName(masters: readonly { path: string }[], path: string): str
 	return `${documentLabel(masters, path)} · PDF`;
 }
 
+/** The file name a saved copy of a document's compiled PDF takes: its label with `.pdf` for `.tex`, a label's directories joined by `-` and their leading dots dropped, so `paper/main.tex` saves as `paper-main.pdf` and never as a hidden file. */
+export function pdfFileName(masters: readonly { path: string }[], path: string): string {
+	const parts = documentLabel(masters, path)
+		.replace(/\.tex$/i, '')
+		.split('/')
+		.map((p) => p.replace(/^\.+/, ''))
+		.filter(Boolean);
+	return `${parts.join('-') || 'document'}.pdf`;
+}
+
 /**
  * Any key a session or a context names, as a reader would: a document by its file, a result by `nodeName`, an unlabelled proof as the proof of its result, an equation by its number in its result, a cited work's identifier by its citekey; anything else as itself.
  *
