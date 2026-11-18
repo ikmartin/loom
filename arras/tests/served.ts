@@ -75,6 +75,12 @@ function freePort(): Promise<number> {
 	});
 }
 
+/** Where the server on `root` keeps its write token: outside the quilt, in the machine's place, by the quilt's resolved path (`loom.machine.token_file`). */
+function tokenFile(root: string): string {
+	const data = process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support') : process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+	return join(data, 'loom', 'tokens', `${createHash('sha256').update(realpathSync(root)).digest('hex').slice(0, 24)}.json`);
+}
+
 /** The write token this attempt's server recorded on taking `port`; '' until it has.
  *
  * The record is written only once the port is held, whereas an answer on the port proves nothing: when two workers are given one port, the server that took it answers the other's probe before the loser has exited, and a test left on it writes to the other test's quilt.
@@ -83,11 +89,8 @@ function tokenFrom(root: string, port: number): string {
 	try {
 		const record = JSON.parse(readFileSync(join(root, '.loom/local/serve.json'), 'utf8')) as { port: number };
 		if (record.port !== port) return '';
-		// the token is kept outside the quilt, in the machine's place, by the quilt's resolved path (`loom.machine`)
-		const data = process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support') : process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
-		const at = realpathSync(root);
-		const kept = JSON.parse(readFileSync(join(data, 'loom', 'tokens', `${createHash('sha256').update(at).digest('hex').slice(0, 24)}.json`), 'utf8')) as { root: string; token: string };
-		return kept.root === at ? kept.token : '';
+		const kept = JSON.parse(readFileSync(tokenFile(root), 'utf8')) as { root: string; token: string };
+		return kept.root === realpathSync(root) ? kept.token : '';
 	} catch {
 		return '';
 	}
@@ -150,7 +153,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 		proc.stderr!.pipe(out);
 		let exited = false;
 		const gone = new Promise<void>((r) => proc.once('exit', () => ((exited = true), r())));
-		// killed outright: a graceful stop waits out the watcher's poll, over a second per test, and the copy is thrown away after
+		// killed outright: a graceful stop waits out the watcher's poll, over a second per test, and the copy is thrown away after; so the token a graceful stop would remove from the machine's place is removed here
 		const stop = async () => {
 			if (!exited) {
 				try {
@@ -159,6 +162,11 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 					/* already gone */
 				}
 				await gone;
+			}
+			try {
+				rmSync(tokenFile(root), { force: true });
+			} catch {
+				/* the copy is gone already */
 			}
 			out.end();
 		};
