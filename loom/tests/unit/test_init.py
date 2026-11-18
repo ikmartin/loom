@@ -77,7 +77,7 @@ def test_init_writes_loom_s_ignore_file_always_and_a_repository_only_when_asked(
     ignored = [
         ln for ln in (tmp_path / "n" / ".loom" / ".gitignore").read_text().splitlines() if ln and not ln.startswith("#")
     ]
-    assert ignored == ["local/", "cache/", "agents/scratch/"]
+    assert ignored == ["/local/", "/cache/", "/agents/scratch/"]
     assert (tmp_path / "n" / ".loom" / "format").read_text() == "1\n"
 
 

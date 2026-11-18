@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from loom.history.ledger import append_entry, load_history
 from loom.history.steps import slug, step_dirname
 from loom.history.versions import parse_address, version_filename
@@ -210,3 +212,28 @@ def test_a_move_into_a_path_makes_it_that_document_s_own(tmp_path: Path) -> None
     assert h.successors() == {"drafting/b.tex": "drafting/a.tex"}
     assert h.current_document("drafting/b.tex", {"drafting/a.tex"}) == "drafting/a.tex"
     assert h.current_document("drafting/a.tex", {"drafting/a.tex"}) == "drafting/a.tex"
+
+
+@pytest.mark.parametrize("history", [None, "hist"])
+def test_a_missing_version_is_named_by_its_path_in_the_quilt(tmp_path: Path, history: str | None) -> None:
+    """A version whose file was moved aside is named by where it should be, relative to the quilt, wherever `[quilt] history` puts the history."""
+    from loom.history.ledger import load_history
+    from loom.history.versions import read_version, version_at, version_path
+    from loom.scan.quilt import load_quilt
+    from tests.unit._quilts import demo
+
+    q = demo(tmp_path)
+    if history is not None:
+        config = q / "config.toml"
+        config.write_text(config.read_text().replace("[quilt]\n", f'[quilt]\nhistory = "{history}"\n', 1))
+        (q / ".loom" / "records" / "history").rename(q / history)
+    hist = load_history(load_quilt(q).history_dir)
+    key = next(k for e in hist.entries for k in (e.data.get("froze") or {}) if version_at(hist, k, str(e.step)))
+    v = version_at(hist, key, "1") or next(version_at(hist, key, str(e.step)) for e in hist.entries)
+    assert v is not None
+    p = version_path(hist, v)
+    p.unlink()
+    with pytest.raises(LookupError) as exc:
+        read_version(hist, key, str(v.step))
+    where = p.relative_to(q).as_posix()
+    assert str(exc.value).endswith(f"is missing: {where}") and where.startswith(history or ".loom/records/history/")

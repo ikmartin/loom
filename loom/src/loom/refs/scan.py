@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loom.clock import stamp
-from loom.paths import STORAGE, under
+from loom.paths import STORAGE, STORE_LEDGER, under
 from loom.refs.fetch import FetchRefused, work_dir
 from loom.refs.identity import WorkId, primary
 from loom.refs.ingest import filename_title, own_identifiers
@@ -486,12 +486,12 @@ def _duplicates(bib: dict[str, BibEntry], aside: set[str]) -> list[tuple[str, li
 
 
 #: Every document ever copied into the store, by content hash, so a file is copied once and never again -- not when it is renamed, deleted or given a second time.
-LEDGER = "copied.json"
+LEDGER = STORE_LEDGER
 
 
 def load_ledger(root: Path) -> dict[str, dict[str, str]]:
     """The copy ledger, by sha256; an unreadable or absent ledger reads as empty, which costs a re-copy and never a loss."""
-    path = storage_root(root) / LEDGER
+    path = root / LEDGER
     if not path.is_file():
         return {}
     try:
@@ -514,7 +514,7 @@ def drop_copies(root: Path, home: Path | None) -> list[str]:
 
         for sha in gone:
             del ledger[sha]
-        write_whole(storage_root(root) / LEDGER, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
+        write_whole(root / LEDGER, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
     return gone
 
 
@@ -523,7 +523,7 @@ def record_copy(root: Path, sha: str, source: str, home: Path, extra: dict[str, 
 
     `home` is recorded relative to the store (`doi/10.1090_…`), so the ledger survives a move of the store.
     """
-    path = storage_root(root) / LEDGER
+    path = root / LEDGER
     ledger = load_ledger(root)
     ledger[sha] = {
         "from": source,

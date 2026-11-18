@@ -9,7 +9,7 @@ from functools import partial
 from typing import Any
 
 from loom.cli.review import _acceptance_master, _owned
-from loom.paths import BLOCKS, INCORPORATION_PREVIEWS, SITE
+from loom.paths import BLOCKS, INCORPORATION_PREVIEWS, SITE, SITE_SVG
 from loom.records.store import Records
 from loom.render.publish import write_atomic
 from loom.review_queue import fingerprint
@@ -67,7 +67,7 @@ def preview(before: ScanResult, overlay: dict[str, str], binding: dict[str, str]
                 numbers={m: read_numbers(root, m) for m in r.masters},
                 cite_labels={m: read_cite_labels(root, m) for m in r.masters},
                 cache=root / BLOCKS,
-                svg_out=root / SITE / "svg",
+                svg_out=root / SITE_SVG,
             )
         )
         for r in (before, after)

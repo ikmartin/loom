@@ -16,7 +16,7 @@ from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.clock import stamp
 from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
-from loom.paths import CLOSURES, document_build
+from loom.paths import CLOSURES, document_build, document_page
 from loom.reshape.linearize import flatten
 from loom.scan.model import Diagnostic
 from loom.scan.scan import ScanResult
@@ -203,10 +203,11 @@ def html_report(result: ScanResult, master: str, engine: str) -> dict[str, Any]:
 
     root = result.quilt.root
     build = root / document_build(master)
+    page = root / document_page(master)
     closure = result.closures.get(master)
     envs = [*(closure.taxa if closure else ()), "proof"]
-    res = compile_html(root, result.base_of(master), master, build / "html", envs=envs, engine=engine, seed=build)
-    where = (build / "html").relative_to(root).as_posix() + "/"
+    res = compile_html(root, result.base_of(master), master, page, envs=envs, engine=engine, seed=build)
+    where = page.relative_to(root).as_posix() + "/"
     out: dict[str, Any] = {
         "outdir": where,
         "made": res.html is not None,
@@ -219,7 +220,7 @@ def html_report(result: ScanResult, master: str, engine: str) -> dict[str, Any]:
         return out
     displays = {str(i): r.tex for i, r in enumerate(res.repaired)}
     n = normalise(res.html.read_text(encoding="utf-8", errors="replace"), displays)
-    (build / "html" / "fragment.html").write_text(n.html, encoding="utf-8")
+    (page / "fragment.html").write_text(n.html, encoding="utf-8")
     files = result.files
     from loom.tex.align import rendered_words
     from loom.tex.tex4ht import definitions

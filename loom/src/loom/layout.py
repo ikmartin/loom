@@ -1,10 +1,13 @@
 """The layout's number: which arrangement of `.loom/` a quilt is in, read before anything else there.
 
-`loom init` writes it, and so does the first load of a quilt that has no `.loom/` yet. A quilt whose `.loom/` has no number, or one this loom does not know, is refused by every command (`refusal`) and reported by `loom doctor`: read with another layout's names, its records would look absent and a second tree would be written beside them.
+`loom init` writes it, and so does the first load of a quilt that has no `.loom/` yet, which makes `.loom/` with its number already in it. A quilt whose `.loom/` has no number, or one this loom does not know, is refused by every command (`refusal`) and reported by `loom doctor`: read with another layout's names, its records would look absent and a second tree would be written beside them.
 """
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from loom.paths import FORMAT, LOOM
@@ -38,7 +41,27 @@ def refusal(root: Path) -> str | None:
 
 
 def stamp(root: Path) -> None:
-    """Write this loom's number to `.loom/format`, making `.loom/` if needed."""
-    p = root / FORMAT
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f"{NUMBER}\n", encoding="utf-8")
+    """Write this loom's number to `.loom/format`, so that no other process ever reads `.loom/` without it or with part of it.
+
+    A `.loom/` that is not there yet is made beside it with its number in it and renamed into place; when another process made one first, what it made stands. A `.loom/` that is there gets the number written whole, by rename.
+    """
+    folder = root / LOOM
+    text = f"{NUMBER}\n"
+    if not folder.exists():
+        made = Path(tempfile.mkdtemp(prefix=f"{LOOM}-", dir=root))
+        try:
+            (made / Path(FORMAT).name).write_text(text, encoding="utf-8")
+            try:
+                os.rename(made, folder)
+                return
+            except OSError:
+                return  # another process's `.loom/` is in place, and the caller reads what it holds
+        finally:
+            shutil.rmtree(made, ignore_errors=True)
+    fd, tmp = tempfile.mkstemp(prefix=".format-", dir=folder)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+        os.replace(tmp, root / FORMAT)
+    finally:
+        Path(tmp).unlink(missing_ok=True)

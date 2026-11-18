@@ -16,8 +16,8 @@ def _inside(path: str) -> str:
     return path.removeprefix(f"{LOOM}/")
 
 
-#: What stays on one machine under `.loom/`, as `.loom/.gitignore` names it: this machine's state, what loom derives, and the agents' scratch, a folder each.
-LOOM_LINES = (f"{_inside(LOCAL)}/", f"{_inside(CACHE)}/", f"{_inside(SCRATCH)}/")
+#: What stays on one machine under `.loom/`, as `.loom/.gitignore` names it: this machine's state, what loom derives, and the agents' scratch, a folder each, anchored to `.loom/` so that a folder of the same name deeper down (a session's `cache/`, a stored source's `local/`) travels.
+LOOM_LINES = (f"/{_inside(LOCAL)}/", f"/{_inside(CACHE)}/", f"/{_inside(SCRATCH)}/")
 
 #: The line after which `.loom/.gitignore` is the person's: a line of their own there, such as `library/storage/**/paper.pdf` to keep the store's PDFs out of git, outlives `loom upgrade`.
 OWN = "# your own lines go below this one; loom upgrade keeps them"

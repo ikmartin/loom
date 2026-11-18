@@ -95,7 +95,7 @@ def quilt_relative(quilt: Quilt, path: Path) -> str:
     "to",
     default=None,
     metavar="FILE",
-    help="Write the patched copy here instead of printing a diff; never among the quilt's sources.",
+    help=f"Write the patched copy here instead of printing a diff: outside the quilt's sources and {LOOM}/, but for an agent's scratch, {SCRATCH}/SESSION/.",
 )
 @click.option("--sections/--no-sections", default=True, help="Also label sections through subsubsection (default on).")
 @click.option("--all-levels", is_flag=True, help="Also label paragraphs and subparagraphs.")
@@ -800,7 +800,7 @@ def _identity_for(result: ScanResult, root: Path, src_rel: str, dest_rel: str) -
     "to",
     required=True,
     metavar="FILE",
-    help=f"The file to write: one flat document, never among the quilt's sources (outside the quilt, or an agent's {SCRATCH}/SESSION/).",
+    help=f"The file to write: one flat document, outside the quilt's sources and {LOOM}/.",
 )
 @click.option(
     "--keep-referenced-ids",

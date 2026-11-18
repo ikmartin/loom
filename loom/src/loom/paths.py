@@ -1,6 +1,8 @@
 """Every path loom uses inside a quilt, relative to the quilt root, named once.
 
-Quilt-relative POSIX strings, so each works both as `root / X` and in a string comparison. Everything loom keeps lies under `.loom/`, in the folder of its kind (`KINDS`): what stays on one machine is said by the folder it is in, and `.loom/.gitignore` names the folders and nothing else. A path set in `config.toml` (`[quilt] history`, `research_state`) is read from the config; `HISTORY` here is only that setting's default. `loom/tests/unit/test_paths.py` refuses a quilt path spelled out anywhere else, and one under `.loom/` outside a kind's folder.
+Quilt-relative POSIX strings, so each works both as `root / X` and in a string comparison. Everything loom keeps lies under `.loom/`, in the folder of its kind (`KINDS`): what stays on one machine is said by the folder it is in, and `.loom/.gitignore` names the folders and nothing else. A path set in `config.toml` (`[quilt] history`, `research_state`) is read from the config; `HISTORY` here is only that setting's default.
+
+`loom/tests/unit/test_paths.py` pins the kind of every constant here, refuses one under `.loom/` outside a kind's folder, and refuses, in any other module, a quilt path spelled as a string, a string joined to `LOOM` or to a kind's folder, and an f-string that builds a path from them.
 """
 
 from __future__ import annotations
@@ -69,6 +71,8 @@ LINKS_REMOVED = f"{LIBRARY}/links-removed.jsonl"
 SUGGESTED_WORKS = f"{LIBRARY}/suggested.jsonl"
 #: Loom's store of other people's documents, keyed by the work's identifier.
 STORAGE = f"{LIBRARY}/storage"
+#: What the store holds and what each copy in it was taken from (`refs/intake.py`, `refs/scan.py`).
+STORE_LEDGER = f"{STORAGE}/copied.json"
 #: The address the viewer reaches the store at, under its root, fixed wherever `STORAGE` sits: the server answers it and the manifest's `artifacts.dir` is written in it.
 STORE_ADDRESS = "digests/storage"
 
@@ -79,6 +83,8 @@ AI = f"{AGENTS}/instructions"
 SESSIONS = f"{AGENTS}/sessions"
 #: The session index, a record inside an agent's place that only loom writes.
 SESSION_INDEX = f"{SESSIONS}/index.jsonl"
+#: The id of the session commands write in when none is named.
+ACTIVE_SESSION = f"{SESSIONS}/active"
 #: Agent copies of documents, made by `loom draft DOC --ai NAME` and read by the scan on purpose.
 COPIES = f"{AGENTS}/copies"
 #: Each session's scratch on this machine: an agent's intermediates and the results loom hands it in a file; nothing in it is kept for the person.
@@ -110,32 +116,49 @@ ID_LOCK = f"{LOCAL}/ids.lock"
 LIBRARY_LOCK = f"{LOCAL}/library.lock"
 #: The annotation log as it stood before the last delete.
 BEFORE_DELETE = f"{LOCAL}/annotations-before-delete.jsonl"
+#: An adoption's and an incorporation's saved preview, by token, from the preview until it is applied: a step in progress on this machine, which no build makes again.
+ADOPTION_PREVIEWS = f"{LOCAL}/adoption"
+INCORPORATION_PREVIEWS = f"{LOCAL}/incorporation-review"
 
 # ---- derived ----------------------------------------------------------------------------------------------------------
 
 #: What the viewer is served, at `/build/`: the manifest, the fragments and everything they name.
 SITE = f"{CACHE}/site"
 MANIFEST = f"{SITE}/manifest.json"
+#: The figures and pictures fragments name, by their content.
+SITE_SVG = f"{SITE}/svg"
+#: A section draft compiled in its paper, which the viewer opens; made when asked for, and named by what it was made from.
+DRAFT_PREVIEWS = f"{SITE}/draft-previews"
 #: One compile folder for each document (`document_build`).
 TEX = f"{CACHE}/tex"
 #: The address the viewer reaches `TEX` at, under the site's: a manifest's `pdf` is written in it.
 TEX_ADDRESS = "tex"
-#: Rendered blocks, by key: the fragment index, the snippets, the previews and the spans.
+#: Rendered blocks, by key: the fragment index, the snippets, the previews and the spans; a render plan may be given another folder (`render.fragments.RenderPlan.cache`), which holds the same names.
 BLOCKS = f"{CACHE}/blocks"
-#: What the library draws from its stored documents: word boxes, and the answers of identifier lookups.
+FRAGMENT_INDEX = f"{BLOCKS}/fragments.json"
+SNIPPETS = f"{BLOCKS}/snippets"
+BLOCK_PREVIEWS = f"{BLOCKS}/previews"
+BLOCK_SPANS = f"{BLOCKS}/spans"
+#: What the library draws from its stored documents: word boxes, by the work's place in the store, and the answers of identifier lookups.
 LIBRARY_CACHE = f"{CACHE}/library"
-#: What marks on a PDF are found by: word boxes of a PDF outside the store, and where each mark was found again.
+STORE_BOXES = f"{LIBRARY_CACHE}/boxes"
+RESOLVED = f"{LIBRARY_CACHE}/resolve"
+#: What marks on a PDF are found by: word boxes of a PDF outside the store, by its hash, and where each mark was found again.
 MARKS = f"{CACHE}/marks"
+MARK_BOXES = f"{MARKS}/boxes"
+REFOUND = f"{MARKS}/refound"
 #: Page crops around a mark, made when first asked for.
 CROPS = f"{CACHE}/crops"
 #: A key's closure document and its compile.
 CLOSURES = f"{CACHE}/closures"
-#: An adoption's and an incorporation's saved preview, by token, until it is applied.
-ADOPTION_PREVIEWS = f"{CACHE}/adoption"
-INCORPORATION_PREVIEWS = f"{CACHE}/incorporation-review"
 
 #: Where `loom new`, atomize and fork write node files, relative to the document they serve.
 NODES = "nodes"
+
+
+def within(folder: str, path: str) -> str:
+    """`path` relative to `folder`, one of the constants here inside another: what a caller joins to a folder it was handed in `folder`'s place (a render plan's cache)."""
+    return PurePosixPath(path).relative_to(folder).as_posix()
 
 
 def scratch(session: str) -> str:
@@ -181,6 +204,11 @@ def _compile_folder(path: str) -> str:
 def document_build(path: str) -> str:
     """Where a document compiles to, `.loom/cache/tex/<stem>-<hash>`; latexmk names what it writes there by the file's own stem."""
     return f"{TEX}/{_compile_folder(path)}"
+
+
+def document_page(path: str) -> str:
+    """The folder of a document's page as TeX4ht made it, `html/` in its compile folder."""
+    return f"{document_build(path)}/html"
 
 
 def document_pdf_address(path: str) -> str:

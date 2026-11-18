@@ -23,7 +23,7 @@ from urllib.parse import unquote
 
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
-from loom.paths import COMPILES, SERVE_JSON, SITE, STORE_ADDRESS, TEX, TEX_ADDRESS, document_build
+from loom.paths import COMPILES, SERVE_JSON, SITE, STORE_ADDRESS, TEX, TEX_ADDRESS, document_build, document_page
 from loom.presence import Watch
 from loom.refs.pages import storage_root
 from loom.render.build import BuildReport, build
@@ -59,7 +59,7 @@ TEX_URL = f"{BUILD_URL}{TEX_ADDRESS}/"
 STORE_URL = f"/{STORE_ADDRESS}/"
 #: How often an idle stream says it is still open, so a proxy or a sleeping laptop does not drop it unseen.
 HEARTBEAT = 15.0
-#: The headers everything but the viewer's bundle is served with -- `/build/`, `/digests/storage/`, `/_files/` and every JSON answer -- so a page there runs no script and has an opaque origin, never the viewer's: an agent writes the build output and the project's files, and a page that ran as the viewer could read the token and post the author's acts.
+#: The headers everything but the viewer's bundle is served with -- `/build/`, `/digests/storage/`, `/_files/` and every JSON answer -- so a page there runs no script and has an opaque origin, never the viewer's: an agent running as the person can write what loom derives and the project's files, and a page that ran as the viewer could read the token and post the author's acts.
 CONFINED = {"Content-Security-Policy": "sandbox", "X-Content-Type-Options": "nosniff"}
 #: The headers every answer from the frames origin carries. A page there runs its scripts as a page of that origin, so the policy is not `sandbox`; it keeps what those scripts connect to (`fetch`, `XMLHttpRequest`, a WebSocket, an event stream, a beacon) to that origin, which is the project's shown files. It limits nothing else: a frame, an image, a video, a stylesheet or a script from another host still loads, since an embedded player is one, and such an address can carry what the page read, so the policy closes the plainest way out and not every one.
 FRAMED = {"Content-Security-Policy": "connect-src 'self' data: blob:", "X-Content-Type-Options": "nosniff"}
@@ -329,14 +329,14 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 else (self.build_dir, path[len(BUILD_URL) :])
             )
             target = (base / rel).resolve()
-            return target if str(target).startswith(str(base.resolve())) and target.is_file() else None
+            return target if target.is_relative_to(base.resolve()) and target.is_file() else None
         if path.startswith(STORE_URL):
             # the first thing the server offers that it did not generate: a work's fetched PDF or source, so the
             # viewer can open a reference at the place a comment points to. Localhost only, read only, and still
             # confined to one directory by the same prefix check the build tree gets (DR-110).
             rel = unquote(path[len(STORE_URL) :])
             target = (self.refs_dir / rel).resolve()
-            return target if str(target).startswith(str(self.refs_dir.resolve())) and target.is_file() else None
+            return target if target.is_relative_to(self.refs_dir.resolve()) and target.is_file() else None
         if path.startswith(FILES_URL):
             # a project file the viewer shows, sandboxed like the build output: an image, a PDF, text, or an HTML page drawn with no script where no frames origin runs
             rel = unquote(path[len(FILES_URL) :])
@@ -349,7 +349,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
             return None  # answered by do_GET and do_POST, never from the file tree
         rel = path.lstrip("/")
         target = (self.bundle_dir / rel).resolve() if rel else self.bundle_dir / "index.html"
-        if str(target).startswith(str(self.bundle_dir.resolve())):
+        if target.is_relative_to(self.bundle_dir.resolve()):
             if target.is_file():
                 return target
             if target.is_dir() and (target / "index.html").is_file():
@@ -990,7 +990,7 @@ class ServeSession:
                 self.quilt.root,
                 result.base_of(doc),
                 doc,
-                build / "html",
+                self.quilt.root / document_page(doc),
                 envs=envs,
                 engine=engine,
                 seed=build,

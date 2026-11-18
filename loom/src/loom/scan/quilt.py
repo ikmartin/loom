@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.paths import HISTORY
+from loom.paths import HISTORY, LOOM
 
 NO_AUTHOR_MESSAGE = (
     'no author name: add name = "Your Name" under [author] in ~/.config/loom/config.toml, or pass --as NAME'
@@ -208,14 +208,14 @@ def load_quilt(root: Path) -> Quilt:
     from loom import layout
 
     data = tomllib.loads((root / "config.toml").read_text(encoding="utf-8"))
-    why = layout.refusal(root)
-    if why is not None:
-        raise LayoutError(why)
-    if layout.found(root) is None:
+    if not (root / LOOM).exists():
         try:
             layout.stamp(root)
         except OSError:
             pass  # a quilt loom cannot write into is read as it is
+    why = layout.refusal(root)
+    if why is not None:
+        raise LayoutError(why)
     return Quilt(root=root, config=QuiltConfig.from_dict(data, load_user_config()))
 
 

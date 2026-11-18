@@ -15,6 +15,7 @@ from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted
 from loom.errors import ContentError, EnvError
+from loom.paths import LOOM
 from loom.scan.quilt import Quilt
 from loom.scan.scan import scan
 from loom.sync import (
@@ -181,7 +182,7 @@ def fetch_sync(as_json: bool, quilt_path: str | None) -> None:
     type=click.Path(path_type=Path),
     default=None,
     metavar="FILE",
-    help="With --patch, write the patch to FILE, a new file outside the quilt's sources.",
+    help=f"With --patch, write the patch to FILE, a new file outside the quilt's sources and {LOOM}/.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option

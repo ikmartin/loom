@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from loom.clock import stamp
-from loom.paths import BIBLIOGRAPHY, INCOMING, LIBRARY_LOCK, STORAGE, UNREADABLE
+from loom.paths import BIBLIOGRAPHY, INCOMING, LIBRARY_LOCK, STORAGE, STORE_LEDGER, UNREADABLE
 from loom.scan.bib import BibEntry, parse_bib
 from loom.scan.quilt import Quilt
 
@@ -38,7 +38,7 @@ FILE = "document.pdf"
 HELD = "held"
 #: What reading a document writes into a work's home beside the PDF.
 READ_OFF = ("pages", "sections.json")
-LEDGER = f"{STORAGE}/copied.json"
+LEDGER = STORE_LEDGER
 
 
 class Reads(Protocol):

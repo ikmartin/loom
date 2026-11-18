@@ -16,7 +16,17 @@ from typing import Any
 from urllib.parse import quote
 
 from loom.history.ledger import load_history
-from loom.paths import BLOCKS, SITE, document_build, document_name
+from loom.paths import (
+    BLOCK_PREVIEWS,
+    BLOCK_SPANS,
+    BLOCKS,
+    FRAGMENT_INDEX,
+    SITE,
+    SITE_SVG,
+    SNIPPETS,
+    document_build,
+    document_name,
+)
 from loom.records.lastseen import freeze_moved
 from loom.records.store import Records
 from loom.refs.pages import storage_root, store_home
@@ -141,7 +151,7 @@ def _attach_spans(root: Path, manifest: dict[str, Any], files: dict[str, Any]) -
                 ]
             ).encode()
         ).hexdigest()[:32]
-        kept = root / BLOCKS / "spans" / f"{key}.json"
+        kept = root / BLOCK_SPANS / f"{key}.json"
         if kept.is_file():
             body = kept.read_text(encoding="utf-8")
             if body:
@@ -471,16 +481,16 @@ def _build(
         numbers=numbers,
         cite_labels=cite_labels,
         cache=cache_dir,
-        svg_out=build_dir / "svg",
+        svg_out=root / SITE_SVG,
         pages=pages,
         tex=tex,
     )
     if force:
         # a text TeX refused may have been refused for the machine's sake, a package since installed; --force tries each once more
-        for failed in [*(cache_dir / "snippets").glob("*.failed"), *(cache_dir / "previews").glob("*.html")]:
+        for failed in [*(root / SNIPPETS).glob("*.failed"), *(root / BLOCK_PREVIEWS).glob("*.html")]:
             failed.unlink()
     renderer = FragmentRenderer(plan)
-    index_path = cache_dir / "fragments.json"
+    index_path = root / FRAGMENT_INDEX
     index: dict[str, str] = {}
     if index_path.exists() and not force:
         try:

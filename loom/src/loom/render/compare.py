@@ -13,7 +13,7 @@ from typing import Any
 
 from loom.history.ledger import History, load_history
 from loom.history.versions import read_version
-from loom.paths import BLOCKS, SITE
+from loom.paths import BLOCKS, SITE, SITE_SVG
 from loom.render.canon import CanonDoc, _preamble_for, load_canon
 from loom.render.fragments import FragmentRenderer, RenderPlan
 from loom.render.publish import write_atomic
@@ -178,7 +178,7 @@ def compare(result: ScanResult, left: str, right: str) -> dict[str, Any]:
         numbers={m: read_numbers(root, m) for m in result.masters},
         cite_labels={m: read_cite_labels(root, m) for m in result.masters},
         cache=root / BLOCKS,
-        svg_out=root / SITE / "svg",
+        svg_out=root / SITE_SVG,
     )
     renderer = FragmentRenderer(plan)
     pairs: list[dict[str, Any]] = []
