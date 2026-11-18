@@ -10,10 +10,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from loom.paths import DIGESTS
+from loom.paths import LIBRARY, LIBRARY_CACHE
 from loom.refs.fetch import Fetched, fetch_work, identifier_for, work_dir
 from loom.refs.identity import declared
-from loom.refs.pages import read_map, storage_root
+from loom.refs.pages import read_map
 from loom.refs.resolve import Resolver, ResolveRefused, load, query_for, save
 from loom.scan.bib import BibEntry
 from loom.scan.scan import ScanResult
@@ -56,7 +56,7 @@ class WorkState:
     restored: list[str] = field(default_factory=list)
     #: Of those, the ones the fresh extraction now states differently, for the author to look at again.
     contradicted: list[str] = field(default_factory=list)
-    #: The author's standing claim that this work has no document to hold, or '' -- `.loom/digests/unreadable.json`.
+    #: The author's standing claim that this work has no document to hold, or '' -- `.loom/library/unreadable.json`.
     unreadable: str = ""
     #: The candidates this run's lookup found, best first; None when it asked nothing.
     lookup: list[Candidate] | None = None
@@ -594,7 +594,7 @@ def survey(result: ScanResult) -> list[WorkState]:
                 candidate=ident or "" if via == "candidate" else "",
                 source=_has_source(root, entry),
                 pdf=(home / "paper.pdf").is_file(),
-                digest=(root / DIGESTS / f"{ck}.tex").is_file(),
+                digest=(root / LIBRARY / f"{ck}.tex").is_file(),
                 unreadable=(d.why if (d := declared_unreadable.get(ck)) else ""),
             )
         )
@@ -620,7 +620,7 @@ def _resolve_step(
         report.resolve_off = True
         return
     root = result.quilt.root
-    resolver = Resolver(cache=storage_root(root) / "cache" / "resolve", contact=cfg.contact, refresh=refresh)
+    resolver = Resolver(cache=root / LIBRARY_CACHE / "resolve", contact=cfg.contact, refresh=refresh)
     for w in _each(progress, "resolve", works):
         entry = result.bib[w.citekey]
         # A PDF on disk is not a reason to stop looking. A source is strictly better -- verbatim statements, real
@@ -700,7 +700,7 @@ def _extract_step(
         except Exception as exc:  # noqa: BLE001 -- one paper that will not build must not stop the other twenty
             w.extract_error = f"{type(exc).__name__}: {exc}"
             continue
-        target = root / DIGESTS / f"{w.citekey}.tex"
+        target = root / LIBRARY / f"{w.citekey}.tex"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
         w.restored, w.contradicted = _restore_verified(result, w.citekey, text)
@@ -785,7 +785,7 @@ def _record_step(result: ScanResult, works: list[WorkState], written: list[str])
     rescan = scan(load_quilt(root))
     for w in works:
         if w.citekey in written:
-            rel = f"{DIGESTS}/{w.citekey}.tex"
+            rel = f"{LIBRARY}/{w.citekey}.tex"
             hits = [d for d in rescan.lint if any(loc.file == rel for loc in d.locations) or w.citekey in d.message]
             w.lint = tally(hits, None).replace(" in your documents", "") if hits else ""
     return sum(record_extracted(rescan, ck) for ck in dict.fromkeys([*written, *want]))

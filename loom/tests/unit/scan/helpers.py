@@ -24,8 +24,11 @@ PREAMBLE = r"""\documentclass{amsart}
 
 
 def make_quilt(tmp_path: Path, files: dict[str, str], config: str = DEFAULT_CONFIG) -> ScanResult:
+    from loom.layout import stamp
+
     root = tmp_path / "quilt"
     root.mkdir(exist_ok=True)
+    stamp(root)
     (root / "config.toml").write_text(config, encoding="utf-8")
     for rel, text in files.items():
         p = root / rel

@@ -19,9 +19,11 @@ def test_init_writes_a_config_a_readme_and_loom_s_directory_and_nothing_else(tmp
     assert sorted(p.name for p in q.iterdir()) == [".loom", "README.md", "config.toml"]
     assert sorted(p.relative_to(q).as_posix() for p in (q / ".loom").rglob("*")) == [
         ".loom/.gitignore",
-        ".loom/annotation-types.toml",
-        ".loom/history",
-        ".loom/history/ledger.jsonl",
+        ".loom/format",
+        ".loom/records",
+        ".loom/records/annotation-types.toml",
+        ".loom/records/history",
+        ".loom/records/history/ledger.jsonl",
     ]
     config = (q / "config.toml").read_text()
     assert 'prefix = "zz"' in config and "drafting" not in config and "\nmain =" not in config
@@ -71,14 +73,12 @@ def test_init_writes_loom_s_ignore_file_always_and_a_repository_only_when_asked(
         ".cursor/mcp.json",
     ]
 
-    # nothing a node is made of is ignored: only what loom rebuilds, its runtime state and its copies of other people's documents
+    # nothing a node is made of is ignored: only this machine's state, what loom derives and the agents' scratch, a folder each
     ignored = [
         ln for ln in (tmp_path / "n" / ".loom" / ".gitignore").read_text().splitlines() if ln and not ln.startswith("#")
     ]
-    assert "build/" in ignored and "serve.json" in ignored and "last-seen.json" in ignored
-    # the artifacts are ignored and the page text is not: an anchor stays re-checkable by a coauthor with no PDF
-    assert "digests/storage/**/paper.pdf" in ignored and "digests/storage/**/src/" in ignored
-    assert not any(ln.endswith(".tex") or ln in ("digests/", "annotations/", "history/", "sessions/") for ln in ignored)
+    assert ignored == ["local/", "cache/", "agents/scratch/"]
+    assert (tmp_path / "n" / ".loom" / "format").read_text() == "1\n"
 
 
 def test_the_starter_preamble_declares_candidate_taxa() -> None:
@@ -139,7 +139,10 @@ def test_init_asks_which_ai_and_writes_the_agent_layer_for_any(tmp_path: Path) -
     """Any AI gets the agent layer, Claude, Codex or another; none gets nothing. Loom starts no agent, so nothing names a command to start one (plan 0.20.1)."""
     r = ok("init", str(tmp_path / "c"), "--ai", "claude", cwd=tmp_path)
     c = tmp_path / "c"
-    assert not (c / ".loom/ai" / "ai-config.toml").exists() and "[ai]" not in (c / "config.toml").read_text()
+    assert (
+        not (c / ".loom/agents/instructions" / "ai-config.toml").exists()
+        and "[ai]" not in (c / "config.toml").read_text()
+    )
     perms = json.loads((c / ".claude" / "settings.json").read_text())["permissions"]
     assert (
         "mcp__loom__*" in perms["allow"]
@@ -149,11 +152,13 @@ def test_init_asks_which_ai_and_writes_the_agent_layer_for_any(tmp_path: Path) -
     assert (c / ".mcp.json").is_file() and "approve the loom server" in r.output
     assert "AI: Claude (Claude Code). Run it in this quilt" in r.output and "launch" not in r.output
     o = ok("init", str(tmp_path / "o"), "--ai", "other", cwd=tmp_path)
-    assert (tmp_path / "o" / ".loom/ai" / "orientation.md").is_file() and "AI: another agent" in o.output
+    assert (
+        tmp_path / "o" / ".loom/agents/instructions" / "orientation.md"
+    ).is_file() and "AI: another agent" in o.output
     # no terminal, no flag: no AI, and no layer
     n = ok("init", str(tmp_path / "n"), cwd=tmp_path)
     assert "AI: none" in n.output
-    assert not (tmp_path / "n" / ".claude").exists() and not (tmp_path / "n" / ".loom/ai").exists()
+    assert not (tmp_path / "n" / ".claude").exists() and not (tmp_path / "n" / ".loom/agents/instructions").exists()
 
 
 def test_init_from_leaves_the_authors_preamble_alone(tmp_path: Path) -> None:
@@ -165,7 +170,7 @@ def test_init_from_leaves_the_authors_preamble_alone(tmp_path: Path) -> None:
     )
     r = ok("init", str(tmp_path / "q"), "--from", str(src), "--yes")
     q = tmp_path / "q"
-    landmark = q / ".loom" / "history" / "0001-paper" / "paper.tex"
+    landmark = q / ".loom" / "records" / "history" / "0001-paper" / "paper.tex"
     assert landmark.read_text() == src.read_text()  # verbatim: the paper has nothing to inline
     drafted = (q / "paper" / "paper.tex").read_text()  # a directory of its own, named for the paper
     assert "% !LOOM begin loom-macros" in drafted and "conjecture" not in drafted
@@ -261,11 +266,11 @@ def test_upgrade_rewrites_loom_s_ignore_lines_and_keeps_the_person_s(tmp_path: P
     ok("init", tmp_path / "q", "--prefix", "zz", "--ai", "claude", "--yes")
     q = tmp_path / "q"
     assert missing(q) == [] and (q / ".loom" / ".gitignore").read_text() == LOOM_IGNORE
-    (q / ".loom" / ".gitignore").write_text(f"build/\n{OWN}\n!digests/storage/**/paper.pdf\n")
+    (q / ".loom" / ".gitignore").write_text(f"build/\n{OWN}\nlibrary/storage/**/paper.pdf\n")
     (q / ".gitignore").write_text("# mine\nscratch/\n")
     said = ok("upgrade", cwd=q).output
     assert ".loom/.gitignore" in said
-    assert (q / ".loom" / ".gitignore").read_text() == LOOM_IGNORE + "!digests/storage/**/paper.pdf\n"
+    assert (q / ".loom" / ".gitignore").read_text() == LOOM_IGNORE + "library/storage/**/paper.pdf\n"
     lines = (q / ".gitignore").read_text().splitlines()
     assert lines[:2] == ["# mine", "scratch/"] and missing(q) == [] and all(line in lines for line in CLIENT_LINES)
 

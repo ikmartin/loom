@@ -598,7 +598,7 @@ def check_permissions(root: Path) -> Item:
         f"{rel}: loom leaves it alone, since {why}, so what {label.get(rel, 'the app')} reads there is not loom's table; make it a file of the quilt's own, and loom upgrade writes it"
         for rel, why in held.items()
     ]
-    # beside an .loom/ai/, `loom upgrade` writes both; without one, `loom ai init` does
+    # beside an .loom/agents/instructions/, `loom upgrade` writes both; without one, `loom ai init` does
     return Item("permissions", WARN, QUILT, "; ".join(said), "loom upgrade" if layer else "loom ai init")
 
 
@@ -654,7 +654,7 @@ def check_mcp(root: Path) -> list[Item]:
 
 
 def check_ai_files(root: Path) -> Item:
-    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above, and the skills, made whole from the modes at every upgrade, are no file of the author's to fall behind. A `.loom/ai` that is not a directory of the quilt's own (`blocker`) warns, since loom writes nothing there."""
+    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above, and the skills, made whole from the modes at every upgrade, are no file of the author's to fall behind. A `.loom/agents/instructions` that is not a directory of the quilt's own (`blocker`) warns, since loom writes nothing there."""
     from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, blocker, read_versions, sha, tracked_docs, upgrade_layer
     from loom.ai.skills import is_skill
 
@@ -773,12 +773,14 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
     Report
         Every item in order, machine first; `exit_code` is what `loom doctor` exits with.
     """
-    from loom.scan.quilt import NoQuiltError, find_quilt
+    from loom.scan.quilt import LayoutError, NoQuiltError, find_quilt
 
     report = Report(sys.version.split()[0], __version__, strict=strict)
-    quilt, bad_quilt = None, None
+    quilt, bad_quilt, bad_layout = None, None, None
     try:
         quilt = find_quilt(Path(quilt_path).expanduser() if quilt_path else None)
+    except LayoutError as exc:
+        bad_layout = str(exc)
     except NoQuiltError as exc:
         # not being in a quilt is normal here; a quilt that cannot be read is not
         if quilt_path or not str(exc).startswith("not inside a quilt"):
@@ -797,6 +799,16 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
                 f"loom init {quilt_path} makes a quilt there, or give --quilt a quilt's root"
                 if none_there
                 else "fix config.toml: every command but init and doctor refuses until it reads",
+            )
+        )
+    if bad_layout is not None:
+        report.items.append(
+            Item(
+                "format",
+                FAIL,
+                QUILT,
+                bad_layout,
+                "open it with the loom that made it; every command but doctor refuses",
             )
         )
     if quilt is not None:

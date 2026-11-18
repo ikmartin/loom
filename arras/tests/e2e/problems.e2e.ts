@@ -11,7 +11,7 @@ const inDigest = {
 	severity: 'error',
 	code: 'dangling-link',
 	message: '\\ref{nowhere} names no node or region',
-	locations: [{ file: '.loom/digests/Kre99.tex', line: 12 }],
+	locations: [{ file: '.loom/library/Kre99.tex', line: 12 }],
 	keys: [],
 	owner: 'work',
 	fixes: [{ label: 'digest Kre99 again', command: 'loom library update Kre99 --only extract --redo', act: { endpoint: 'library-update', body: { works: ['Kre99'], redo: true, steps: ['extract'] } } }]

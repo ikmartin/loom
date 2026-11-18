@@ -50,7 +50,7 @@ def read_version(history: History, key: str, ref: str) -> tuple[Version, str]:
         raise LookupError(f"{key} has no version at step {ref}")
     p = version_path(history, v)
     if not p.is_file():
-        raise LookupError(f"the record for {key}@{v.step} is missing: {p.relative_to(history.dir.parent.parent)}")
+        raise LookupError(f"the record for {key}@{v.step} is missing: {p.relative_to(history.dir.parent)}")
     return v, p.read_text(encoding="utf-8")
 
 

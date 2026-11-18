@@ -22,13 +22,15 @@ def bare(tmp_path: Path, *flags: str) -> Path:
     from loom.ai.layout import ROOT_FILES
 
     q = demo(tmp_path)
-    shutil.rmtree(q / ".loom/ai")
+    shutil.rmtree(q / ".loom/agents/instructions")
     for rel in (*ROOT_FILES, *PROJECT_FILES):
         (q / rel).unlink(missing_ok=True)
     shutil.rmtree(q / ".claude", ignore_errors=True)
     shutil.rmtree(q / ".codex", ignore_errors=True)
-    shutil.rmtree(q / ".loom/annotations", ignore_errors=True)  # the log lives at the quilt root, not under .loom/ai/
-    shutil.rmtree(q / ".loom" / "sessions", ignore_errors=True)
+    shutil.rmtree(
+        q / ".loom/records/annotations", ignore_errors=True
+    )  # the log lives at the quilt root, not under .loom/agents/instructions/
+    shutil.rmtree(q / ".loom" / "agents" / "sessions", ignore_errors=True)
     ok("ai", "init", *flags, cwd=q)
     return q
 
@@ -36,30 +38,30 @@ def bare(tmp_path: Path, *flags: str) -> Path:
 def test_ai_init_layout_and_vendor_files(tmp_path: Path) -> None:
     q = bare(tmp_path)
     for rel in (
-        ".loom/ai/README.md",
-        ".loom/ai/orientation.md",
-        ".loom/ai/.loom-modes-version",
+        ".loom/agents/instructions/README.md",
+        ".loom/agents/instructions/orientation.md",
+        ".loom/agents/instructions/.loom-modes-version",
         "CLAUDE.md",
         "AGENTS.md",
         "GEMINI.md",
     ):
         assert (q / rel).is_file(), rel
-    assert {p.stem for p in (q / ".loom/ai" / "modes").glob("*.md")} == set(MODES)
+    assert {p.stem for p in (q / ".loom/agents/instructions" / "modes").glob("*.md")} == set(MODES)
     root_text = (q / "CLAUDE.md").read_text()
     assert root_text == (q / "AGENTS.md").read_text() == (q / "GEMINI.md").read_text()
     assert "`loom_ai_orient`" in root_text and "names as protected" in root_text and "loom doctor" in root_text
-    assert "# Orientation: working in a quilt" in (q / ".loom/ai" / "orientation.md").read_text()
+    assert "# Orientation: working in a quilt" in (q / ".loom/agents/instructions" / "orientation.md").read_text()
     # what agents may run is written for every tool, whichever the person uses (DR-283)
     assert (q / ".claude" / "settings.json").is_file() and (q / ".codex" / "rules" / "loom.rules").is_file()
     # loom starts no agent, so nothing names a command to start one (plan 0.20.1)
-    assert not (q / ".loom/ai" / "ai-config.toml").exists()
+    assert not (q / ".loom/agents/instructions" / "ai-config.toml").exists()
 
 
 def test_ai_init_refreshes_an_existing_layer_as_upgrade_would(tmp_path: Path) -> None:
-    """`ai init` where `.loom/ai/` exists writes what is missing or stale, and keeps an edited mode file with the new one beside it."""
+    """`ai init` where `.loom/agents/instructions/` exists writes what is missing or stale, and keeps an edited mode file with the new one beside it."""
     q = bare(tmp_path)
-    (q / ".loom/ai" / "orientation.md").unlink()
-    mode = q / ".loom/ai" / "modes" / "audit.md"
+    (q / ".loom/agents/instructions" / "orientation.md").unlink()
+    mode = q / ".loom/agents/instructions" / "modes" / "audit.md"
     mode.write_text(mode.read_text() + "\nMy own rule.\n")
     before = {p: p.read_bytes() for p in q.rglob("*") if p.is_file()}
     dry = ok("ai", "init", "--dry-run", cwd=q)
@@ -68,8 +70,14 @@ def test_ai_init_refreshes_an_existing_layer_as_upgrade_would(tmp_path: Path) ->
         and {p: p.read_bytes() for p in q.rglob("*") if p.is_file()} == before
     )
     r = ok("ai", "init", cwd=q)
-    assert r.stdout.startswith("refreshed the agent layer") and (q / ".loom/ai" / "orientation.md").is_file()
-    assert mode.read_text().endswith("My own rule.\n") and (q / ".loom/ai" / "modes" / "audit.md.new").is_file()
+    assert (
+        r.stdout.startswith("refreshed the agent layer")
+        and (q / ".loom/agents/instructions" / "orientation.md").is_file()
+    )
+    assert (
+        mode.read_text().endswith("My own rule.\n")
+        and (q / ".loom/agents/instructions" / "modes" / "audit.md.new").is_file()
+    )
     assert ok("ai", "init", cwd=q).stdout.startswith("refreshed the agent layer: 0 files written, 1 edited file kept")
 
 
@@ -104,13 +112,17 @@ def test_root_files_carry_one_line_and_keep_the_authors(tmp_path: Path) -> None:
 
 
 def test_ai_init_permissions_generated(tmp_path: Path) -> None:
-    """The generated settings let the agent edit its session, `.loom/build/` and its copies, in `Edit` rules only; what it is denied is test_the_allow_list_and_the_permission_file_cannot_disagree."""
+    """The generated settings let the agent edit the sessions, its copies and its scratch, in `Edit` rules only; what it is denied is test_the_allow_list_and_the_permission_file_cannot_disagree."""
     q = bare(tmp_path)
     data = json.loads((q / ".claude" / "settings.json").read_text())
     deny = data["permissions"]["deny"]
     allow = data["permissions"]["allow"]
     # `.loom` is not denied wholesale: the session an agent writes in lives under it (plan 0.13 §5)
-    assert allow[:3] == ["Edit(.loom/sessions/**)", "Edit(.loom/build/**)", "Edit(.loom/copies/**)"]
+    assert allow[:3] == [
+        "Edit(.loom/agents/sessions/**)",
+        "Edit(.loom/agents/copies/**)",
+        "Edit(.loom/agents/scratch/**)",
+    ]
     # over MCP the server's tools are allowed, with the agent's own commands in a shell beside them, and the author's turned away
     assert "mcp__loom__*" in allow and "Bash(loom status*)" in allow and "Bash(loom *)" not in deny
     assert "Bash(loom accept*)" in deny and "Bash(rm *)" in deny and "Edit(/config.toml)" in deny
@@ -128,7 +140,7 @@ def test_ai_init_permissions_generated(tmp_path: Path) -> None:
 
 
 def test_an_agent_is_never_allowed_to_delete(tmp_path: Path) -> None:
-    """Nothing is deleted from a session's directory, since an annotation or a note may point at a file there; a shell permission cannot be confined to one directory, so `rm` is denied outright and intermediates go under `.loom/build/SESSION/` (DR-315-ikmartin)."""
+    """Nothing is deleted from a session's directory, since an annotation or a note may point at a file there; a shell permission cannot be confined to one directory, so `rm` is denied outright and intermediates go under `.loom/agents/scratch/SESSION/` (DR-315-ikmartin)."""
     q = bare(tmp_path)
     data = json.loads((q / ".claude" / "settings.json").read_text())
     assert "Bash(rm *)" in data["permissions"]["deny"]
@@ -139,8 +151,8 @@ def test_modes_templates_present_and_contracts_listed(tmp_path: Path) -> None:
     """Every mode says in one line when it fits, names its report's blocks from the catalogue, and carries none of the ceremony the contract cut removed (plan 0.21.1)."""
     q = bare(tmp_path)
     assert len(MODES) == 9 and "flow" in MODES and "brainstorm" not in MODES  # rules.md is not a mode
-    assert not (q / ".loom/ai" / "modes" / "blocks.md").exists()
-    rules = (q / ".loom/ai" / "rules.md").read_text()
+    assert not (q / ".loom/agents/instructions" / "modes" / "blocks.md").exists()
+    rules = (q / ".loom/agents/instructions" / "rules.md").read_text()
     assert rules.startswith("# Standing rules, contracts, and blocks") and "## Never" in rules
     catalogue = set(re.findall(r"^- \[([a-z-]+)\]", rules, re.M))
     assert {
@@ -154,7 +166,7 @@ def test_modes_templates_present_and_contracts_listed(tmp_path: Path) -> None:
     } <= catalogue
     assert not {"candidates", "dead-ends"} & catalogue  # brainstorm's, gone with it; a dead end is a note
     for mode in MODES:
-        text = (q / ".loom/ai" / "modes" / f"{mode}.md").read_text()
+        text = (q / ".loom/agents/instructions" / "modes" / f"{mode}.md").read_text()
         assert text.startswith(f"# Mode: {mode}\n\nWhen it fits: "), mode
         assert "## Report" in text, mode
         report = text.split("## Report", 1)[1].split("\n## ", 1)[0]
@@ -166,47 +178,49 @@ def test_modes_templates_present_and_contracts_listed(tmp_path: Path) -> None:
 
 def test_upgrade_preserves_edited_modes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     q = bare(tmp_path)
-    referee = q / ".loom/ai" / "modes" / "referee.md"
+    referee = q / ".loom/agents/instructions" / "modes" / "referee.md"
     referee.write_text(referee.read_text() + "\n## House rule\nAlways check the dimension count.\n")
-    audit = q / ".loom/ai" / "modes" / "audit.md"
+    audit = q / ".loom/agents/instructions" / "modes" / "audit.md"
     original_audit = audit.read_text()
-    orientation = q / ".loom/ai" / "orientation.md"
+    orientation = q / ".loom/agents/instructions" / "orientation.md"
     orientation.write_text("stale orientation\n")
     r = json_of("upgrade", "--json", cwd=q)
-    assert ".loom/ai/modes/referee.md" in r["kept"]
+    assert ".loom/agents/instructions/modes/referee.md" in r["kept"]
     assert "House rule" in referee.read_text()  # untouched
     assert audit.read_text() == original_audit
     # the orientation is the first file an author tailors, so an edited one is kept like a mode file (DR-170)
-    assert ".loom/ai/orientation.md" in r["kept"]
+    assert ".loom/agents/instructions/orientation.md" in r["kept"]
     assert orientation.read_text() == "stale orientation\n"
-    assert "# Orientation: working in a quilt" in (q / ".loom/ai" / "orientation.md.new").read_text()
-    versions = (q / ".loom/ai" / ".loom-modes-version").read_text()
+    assert "# Orientation: working in a quilt" in (q / ".loom/agents/instructions" / "orientation.md.new").read_text()
+    versions = (q / ".loom/agents/instructions" / ".loom-modes-version").read_text()
     assert "referee.md" in versions and "audit.md" in versions
     # the shipped text has not changed in this test, so no .new is written; simulate a changed shipped version
     import loom.ai.layout as layout
 
     shipped = layout.tracked_docs()
-    shipped[".loom/ai/modes/referee.md"] = shipped[".loom/ai/modes/referee.md"] + "\n## New shipped section\n"
+    shipped[".loom/agents/instructions/modes/referee.md"] = (
+        shipped[".loom/agents/instructions/modes/referee.md"] + "\n## New shipped section\n"
+    )
     monkeypatch.setattr(layout, "tracked_docs", lambda root=None: shipped)
     r2 = ok("upgrade", cwd=q)
     assert "referee.md.new" in r2.output and r2.output.startswith("upgraded:")
     assert (
         "House rule" in referee.read_text()
-        and "New shipped section" in (q / ".loom/ai" / "modes" / "referee.md.new").read_text()
+        and "New shipped section" in (q / ".loom/agents/instructions" / "modes" / "referee.md.new").read_text()
     )
     assert (
-        "merge .loom/ai/modes/referee.md.new into .loom/ai/modes/referee.md, then delete .loom/ai/modes/referee.md.new"
+        "merge .loom/agents/instructions/modes/referee.md.new into .loom/agents/instructions/modes/referee.md, then delete .loom/agents/instructions/modes/referee.md.new"
         in flat(r2.output)
     )
     # a merge in progress in the .new is the author's, never written over
-    new = q / ".loom/ai" / "modes" / "referee.md.new"
+    new = q / ".loom/agents/instructions" / "modes" / "referee.md.new"
     new.write_text(new.read_text() + "half merged\n")
     ok("upgrade", cwd=q)
     assert new.read_text().endswith("half merged\n")
     # merged and deleted, it is not written again until loom ships another version (the re-grade: "on every run")
     new.unlink()
     assert not ok("upgrade", cwd=q).output.count("referee.md.new") and not new.exists()
-    shipped[".loom/ai/modes/referee.md"] += "\n## Another shipped section\n"
+    shipped[".loom/agents/instructions/modes/referee.md"] += "\n## Another shipped section\n"
     ok("upgrade", cwd=q)
     assert "Another shipped section" in new.read_text()
 
@@ -214,7 +228,7 @@ def test_upgrade_preserves_edited_modes(tmp_path: Path, monkeypatch: pytest.Monk
 def test_upgrade_counts_one_kept_file_once(tmp_path: Path) -> None:
     """T5: "kept 1 edited file, 1 with a new version beside it to merge" was one file."""
     q = bare(tmp_path)
-    (q / ".loom/ai" / "orientation.md").write_text("stale orientation\n")
+    (q / ".loom/agents/instructions" / "orientation.md").write_text("stale orientation\n")
     r = ok("upgrade", cwd=q).stdout.splitlines()[0]
     assert r == "upgraded: kept 1 edited file, its new version beside it to merge", r
 
@@ -226,18 +240,20 @@ def test_upgrade_refreshes_an_unedited_mode_the_first_time(tmp_path: Path, monke
     q = bare(tmp_path)
     shipped = layout.tracked_docs()
     assert layout.read_versions(q) == {Path(rel).name: layout.sha(text) for rel, text in shipped.items()}
-    shipped[".loom/ai/modes/audit.md"] += "\n## New shipped section\n"
+    shipped[".loom/agents/instructions/modes/audit.md"] += "\n## New shipped section\n"
     monkeypatch.setattr(layout, "tracked_docs", lambda root=None: shipped)
     r = json_of("upgrade", "--json", cwd=q)
-    assert ".loom/ai/modes/audit.md" in r["written"] and r["kept"] == [] and "kept" not in r["verdict"]
-    assert (q / ".loom/ai" / "modes" / "audit.md").read_text() == shipped[".loom/ai/modes/audit.md"]
-    assert not (q / ".loom/ai" / "modes" / "audit.md.new").exists()
+    assert ".loom/agents/instructions/modes/audit.md" in r["written"] and r["kept"] == [] and "kept" not in r["verdict"]
+    assert (q / ".loom/agents/instructions" / "modes" / "audit.md").read_text() == shipped[
+        ".loom/agents/instructions/modes/audit.md"
+    ]
+    assert not (q / ".loom/agents/instructions" / "modes" / "audit.md.new").exists()
 
 
 def test_review_mode_grades_every_finding_and_writes_no_pdf(tmp_path: Path) -> None:
     """Mode 7 of the author's own rules: it supersedes the compiled red-marked pair rather than producing one."""
     q = bare(tmp_path)
-    text = (q / ".loom/ai" / "modes" / "review.md").read_text()
+    text = (q / ".loom/agents/instructions" / "modes" / "review.md").read_text()
     for wanted in (
         "new citations",
         "bad citations",
@@ -254,7 +270,7 @@ def test_review_mode_grades_every_finding_and_writes_no_pdf(tmp_path: Path) -> N
     assert "[referee-review]" in text  # reused, not a new block: blocks are structures, modes are procedures
     assert "There is no compiled LaTeX or PDF pair" in text
 
-    blocks = (q / ".loom/ai" / "rules.md").read_text()
+    blocks = (q / ".loom/agents/instructions" / "rules.md").read_text()
     assert "a reply is for talking to the author" in blocks  # the edit-not-reply rule
     assert "a work worth citing is a {type:suggestion} naming it" in blocks
 
@@ -266,24 +282,26 @@ def test_ai_mode_prints_the_quilts_copy_and_refuses_what_loom_does_not_ship(tmp_
     from loom.records.types import load_types
 
     # printed with each type placeholder filled with the type's name in this quilt
-    referee = q / ".loom/ai" / "modes" / "referee.md"
+    referee = q / ".loom/agents/instructions" / "modes" / "referee.md"
     assert "{type:revision}" in referee.read_text()
     assert ok("ai", "mode", "referee", cwd=q).stdout == expand_types(referee.read_text(), load_types(q))
-    flow = q / ".loom/ai" / "modes" / "flow.md"
+    flow = q / ".loom/agents/instructions" / "modes" / "flow.md"
     flow.write_text(flow.read_text().replace("When it fits: ", "When it fits: (house) ", 1))
     assert "(house)" in ok("ai", "mode", "flow", cwd=q).stdout
-    (q / ".loom/ai" / "modes" / "brainstorm.md").write_text("# Mode: brainstorm\n\nWhen it fits: never.\n")
+    (q / ".loom/agents/instructions" / "modes" / "brainstorm.md").write_text(
+        "# Mode: brainstorm\n\nWhen it fits: never.\n"
+    )
     refused("ai", "mode", "brainstorm", cwd=q, code=2, match="no mode 'brainstorm'")
-    shutil.rmtree(q / ".loom/ai")
+    shutil.rmtree(q / ".loom/agents/instructions")
     assert ok("ai", "mode", "flow", cwd=q).stdout.startswith("# Mode: flow\n\nWhen it fits: reading order")
 
 
 def test_renaming_a_type_renames_it_in_every_mode_that_names_it_and_in_the_orientation(tmp_path: Path) -> None:
     """Plan 0.30's acceptance: a mode names a type by its id, so renaming the type in the quilt's file changes the name every mode prints, and the rules' too."""
     q = bare(tmp_path)
-    types = q / ".loom" / "annotation-types.toml"
+    types = q / ".loom" / "records" / "annotation-types.toml"
     types.write_text(types.read_text().replace('name = "Revision"', 'name = "Correction"', 1))
-    modes = q / ".loom" / "ai" / "modes"
+    modes = q / ".loom" / "agents" / "instructions" / "modes"
     naming = [m for m in MODES if "{type:revision}" in (modes / f"{m}.md").read_text()]
     assert {"referee", "review"} <= set(naming)
     for m in naming:
@@ -296,9 +314,11 @@ def test_renaming_a_type_renames_it_in_every_mode_that_names_it_and_in_the_orien
 def test_orient_ends_with_the_index_of_the_modes(tmp_path: Path) -> None:
     """Each mode's `When it fits:` line is its entry, read from the quilt's copy; a file loom does not ship is not offered."""
     q = bare(tmp_path)
-    quick = q / ".loom/ai" / "modes" / "quick.md"
+    quick = q / ".loom/agents/instructions" / "modes" / "quick.md"
     quick.write_text(quick.read_text().replace("When it fits: ", "When it fits: (house) ", 1))
-    (q / ".loom/ai" / "modes" / "brainstorm.md").write_text("# Mode: brainstorm\n\nWhen it fits: never.\n")
+    (q / ".loom/agents/instructions" / "modes" / "brainstorm.md").write_text(
+        "# Mode: brainstorm\n\nWhen it fits: never.\n"
+    )
     out = ok("ai", "orient", cwd=q).stdout
     index = out.split("# Modes", 1)[1].split("# Live state", 1)[0]
     assert [ln.split("**")[1] for ln in index.splitlines() if ln.startswith("- **")] == MODES
@@ -330,9 +350,9 @@ def test_session_new_opens_a_session_and_orient_prints_its_chat(tmp_path: Path) 
     r = ok("session", "new", "--name", "Referee of dm-0003", cwd=q, env=FIXED)
     sid = r.stdout.split()[0]
     assert sid == "s-2026-09-16-p9z37z"  # the id is minted, never slugified from the title
-    index = (q / ".loom" / "sessions" / "index.jsonl").read_text()
+    index = (q / ".loom" / "agents" / "sessions" / "index.jsonl").read_text()
     assert '"title": "Referee of dm-0003"' in index and '"event": "created"' in index
-    rel = f".loom/sessions/{sid}"
+    rel = f".loom/agents/sessions/{sid}"
     ok(
         "session",
         "say",
@@ -403,7 +423,7 @@ def test_sessions_listed_by_title_and_addressed_by_part_of_one(tmp_path: Path) -
 def test_run_log_appended_by_run_flag(tmp_path: Path) -> None:
     q = bare(tmp_path)
     sid = ok("session", "new", cwd=q, env=FIXED).stdout.split()[0]
-    rel = f".loom/sessions/{sid}"
+    rel = f".loom/agents/sessions/{sid}"
     for code, args in (
         (0, ("search", "orbit")),
         (0, ("deps", "dm-0003")),
@@ -429,7 +449,7 @@ def test_run_log_appended_by_run_flag(tmp_path: Path) -> None:
 def test_threads_from_sessions_in_manifest_and_sessions_not_scanned(tmp_path: Path) -> None:
     q = bare(tmp_path)
     sid = ok("session", "new", "--name", "referee dm-0003", cwd=q, env=FIXED).stdout.split()[0]
-    rel = f".loom/sessions/{sid}"
+    rel = f".loom/agents/sessions/{sid}"
     ok("source", "dm-0003", "--closure", "--session", sid, cwd=q)
     ok(
         "annotate",
@@ -447,14 +467,14 @@ def test_threads_from_sessions_in_manifest_and_sessions_not_scanned(tmp_path: Pa
     ok("session", "say", "Refereed dm-0003; one objection.", "--session", sid, "--as", "Referee Agent", cwd=q)
     (q / rel / "orbit-counts.py").write_text("print(2)\n# 2\n")  # a script a report cites, kept in the session
     ok("build", cwd=q)
-    m = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     t = m["threads"][sid]
     assert t["kind"] == "session" and t["created"] == "2026-09-16T14:02:00Z"
     # an annotation is no session's, so the thread neither counts it nor takes who or what from it
     assert (t["targets"], t["participants"], t["discarded"]) == ([], [], False)
     # the conversation is not in the manifest, which every viewer polls; the build pages it beside it
     assert "messages" not in t
-    page = json.loads((q / ".loom/build" / "transcripts" / sid / "1.json").read_text())
+    page = json.loads((q / ".loom/cache/site" / "transcripts" / sid / "1.json").read_text())
     assert [(e["who"], e["body_html"]) for e in page["events"]] == [
         ("Referee Agent", "<p>Refereed dm-0003; one objection.</p>")
     ]
@@ -472,7 +492,7 @@ def test_threads_from_sessions_in_manifest_and_sessions_not_scanned(tmp_path: Pa
 def test_the_session_flag_works_from_a_subdirectory(tmp_path: Path) -> None:
     q = bare(tmp_path)
     sid = ok("session", "new", "--name", "sub", cwd=q, env=FIXED).stdout.split()[0]
-    rel = f".loom/sessions/{sid}"
+    rel = f".loom/agents/sessions/{sid}"
     ok("search", "gadget", "--session", sid, cwd=q / "drafting" / "nodes")  # from a subdirectory
     ok("source", "dm-0003", "--session", sid, cwd=q / "drafting" / "nodes")
     ok(
@@ -488,8 +508,10 @@ def test_the_session_flag_works_from_a_subdirectory(tmp_path: Path) -> None:
     )
     log = (q / rel / "run.log").read_text()
     assert "loom search gadget" in log and "loom source dm-0003" in log and "loom annotate" not in log
-    assert (q / ".loom/annotations" / "log.jsonl").is_file()  # the record lands in the quilt's one log
-    assert not (q / "drafting" / "nodes" / ".loom/ai").exists()  # nothing landed relative to the shell's directory
+    assert (q / ".loom/records/annotations" / "log.jsonl").is_file()  # the record lands in the quilt's one log
+    assert not (
+        q / "drafting" / "nodes" / ".loom/agents/instructions"
+    ).exists()  # nothing landed relative to the shell's directory
 
 
 def test_the_allow_list_and_the_permission_file_cannot_disagree(tmp_path: Path) -> None:
@@ -519,7 +541,7 @@ def test_the_allow_list_and_the_permission_file_cannot_disagree(tmp_path: Path) 
     over_mcp = json.loads(permissions_json(QuiltConfig()))["permissions"]
     assert over_mcp["deny"] == shell["deny"] and set(over_mcp["allow"]) - set(shell["allow"]) == {"mcp__loom__*"}
 
-    # what the table must not admit: every command that writes into the quilt outside the session and .loom/build/, the history's restore among them, so `loom canonise` cannot walk past a deny on `loom canonize`
+    # what the table must not admit: every command that writes into the quilt outside the session and the agent's scratch, the history's restore among them, so `loom canonise` cannot walk past a deny on `loom canonize`
     writes_outside_a_session = {
         "accept", "atomize", "import", "stamp", "fork",
         "revert", "live", "mv", "linearize", "upgrade", "ai init",
@@ -528,12 +550,20 @@ def test_the_allow_list_and_the_permission_file_cannot_disagree(tmp_path: Path) 
     missing = sorted(writes_outside_a_session - denied)
     assert not missing, f"agent-writable commands missing from the deny list: {missing}"
     # and the files those commands own, which a direct edit would otherwise reach
-    for d in (".loom/digests", ".loom/annotations", ".loom/history", ".loom/ai", ".loom/retired", ".loom/since"):
+    for d in (
+        ".loom/library",
+        ".loom/records/annotations",
+        ".loom/records/history",
+        ".loom/agents/instructions",
+        ".loom/records/retired",
+        ".loom/local",
+        ".loom/cache",
+    ):
         assert f"Edit(/{d}/**)" in denied_paths, d
 
     q = bare(tmp_path)
     assert (q / ".claude" / "settings.json").read_text() == permissions_json(QuiltConfig())
-    rules = (q / ".loom/ai" / "rules.md").read_text()
+    rules = (q / ".loom/agents/instructions" / "rules.md").read_text()
     for c in sorted(AGENT_COMMANDS):
         assert f"`loom {c}`" in rules, c  # the prose is the same table
     assert "{allowed_commands}" not in rules
@@ -669,12 +699,12 @@ def test_a_stale_or_conflicted_agent_document_names_a_command_that_runs_as_print
     save_author("Tester")
     q = demo(tmp_path)
     ok("draft", "drafting/main.tex", "--ai", "Referee Agent.tex", cwd=q)
-    copy = q / ".loom" / "copies" / "Referee Agent.tex"
+    copy = q / ".loom" / "agents" / "copies" / "Referee Agent.tex"
     copy.write_text(copy.read_text().replace("restricts to a map", "restricts, by the agent, to a map"))
     main = q / "drafting" / "main.tex"
     main.write_text(main.read_text().replace("restricts to a map", "restricts, by the author, to a map"))
     fixes = [f for c in json_of("ai", "drafts", "--json", cwd=q)["groups"][0]["items"] for f in c.get("fixes", [])]
-    assert fixes and all(shlex.split(f)[3:] == [".loom/copies/Referee Agent.tex"] for f in fixes), fixes
+    assert fixes and all(shlex.split(f)[3:] == [".loom/agents/copies/Referee Agent.tex"] for f in fixes), fixes
     refreshed = run("ai", "refresh", "Referee Agent.tex", cwd=q)
     assert refreshed.exit_code == 1, refreshed.output
     line = next(ln for ln in refreshed.stdout.splitlines() if "loom ai refresh" in ln)
@@ -686,7 +716,7 @@ def test_a_stale_or_conflicted_agent_document_names_a_command_that_runs_as_print
 def test_a_deletion_run_twice_deletes_once(tmp_path: Path) -> None:
     """T7: run again, a bulk delete finds nothing left and says so, and writes nothing."""
     q = demo(tmp_path)
-    log = q / ".loom/annotations" / "log.jsonl"
+    log = q / ".loom/records/annotations" / "log.jsonl"
     first = json_of("ai", "delete", "--by", "The loom demo", "--yes", "--as", "The loom demo", "--json", cwd=q)
     assert len(first["deleted"]) == 3
     lines = log.read_text()
@@ -724,7 +754,7 @@ def test_the_deny_list_is_rendered_into_the_permission_file_beside_what_is_alway
         "Edit(/notes/plan.md/**)",
     ):
         assert rule in deny, rule
-    assert "Edit(/.loom/annotations/**)" in deny and "Edit(/config.toml)" in deny
+    assert "Edit(/.loom/records/annotations/**)" in deny and "Edit(/config.toml)" in deny
     assert not any("paper/x.tex" in r for r in deny)
 
 

@@ -82,7 +82,7 @@ def test_the_manifest_carries_each_entry_as_bibtex_with_its_bibliographic_fields
         load_quilt(q), {**FIELDS, "file": "/Users/someone/Zotero/x.pdf", "abstract": "long"}, "Ost18", "A. Author"
     )
     run("build", cwd=q)
-    bibtex = json.loads((q / ".loom/build/manifest.json").read_text())["references"]["Ost18"]["bibtex"]
+    bibtex = json.loads((q / ".loom/cache/site/manifest.json").read_text())["references"]["Ost18"]["bibtex"]
     assert bibtex.startswith("@article{Ost18,") and "  journal = {J. Widget Theory}," in bibtex
     assert "doi = {10.5555/widget.2018.031}" in bibtex
     assert "loom-" not in bibtex and "file" not in bibtex and "abstract" not in bibtex

@@ -151,7 +151,12 @@ def test_this_processs_record_is_listed_while_held_and_gone_once_ended(tmp_path:
 
 def test_the_records_are_kept_out_of_git(tmp_path: Path) -> None:
     q = demo(tmp_path)
-    assert "live/" in (q / ".loom" / ".gitignore").read_text(encoding="utf-8").splitlines()
+    from loom.paths import LIVE, LOCAL
+
+    assert (
+        LIVE.startswith(f"{LOCAL}/")
+        and "local/" in (q / ".loom" / ".gitignore").read_text(encoding="utf-8").splitlines()
+    )
 
 
 def test_a_record_written_starts_no_rebuild(tmp_path: Path) -> None:
@@ -163,8 +168,8 @@ def test_a_record_written_starts_no_rebuild(tmp_path: Path) -> None:
     try:
         here.begin(None, None)
         seen = {p.relative_to(q).as_posix() for p in snapshot(q)}
-        assert not any(p.startswith(".loom/live/") for p in seen)
-        assert any(p.startswith(".loom/annotations/") for p in seen)
+        assert not any(p.startswith(".loom/local/live/") for p in seen)
+        assert any(p.startswith(".loom/records/annotations/") for p in seen)
     finally:
         here.end()
 
@@ -188,7 +193,7 @@ def _unblock(fifo: Path) -> None:
 
 
 def test_an_entry_that_is_no_record_is_left_alone_and_hides_no_other(tmp_path: Path) -> None:
-    """A copied quilt can carry anything in `.loom/live/`: only a regular file named for a pid in ASCII digits is opened, a FIFO is never waited on, a link never followed, and none of them stops the look at a live record beside it."""
+    """A copied quilt can carry anything in `.loom/local/live/`: only a regular file named for a pid in ASCII digits is opened, a FIFO is never waited on, a link never followed, and none of them stops the look at a live record beside it."""
     q = demo(tmp_path)
     live_dir = record_path(q, 1).parent
     live_dir.mkdir(parents=True, exist_ok=True)
@@ -213,13 +218,14 @@ def test_an_entry_that_is_no_record_is_left_alone_and_hides_no_other(tmp_path: P
 
 
 def test_a_link_in_place_of_the_folder_is_never_followed(tmp_path: Path) -> None:
-    """`.loom/live` a link to a folder outside the quilt: nothing there is listed or deleted, and a server writes no record there."""
+    """`.loom/local/live` a link to a folder outside the quilt: nothing there is listed or deleted, and a server writes no record there."""
     q = demo(tmp_path)
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     stale = elsewhere / "4242.json"
     stale.write_text(json.dumps({"format": FORMAT, "pid": 4242}))
-    (q / ".loom" / "live").symlink_to(elsewhere, target_is_directory=True)
+    (q / ".loom" / "local").mkdir(parents=True, exist_ok=True)
+    (q / ".loom" / "local" / "live").symlink_to(elsewhere, target_is_directory=True)
     assert _looked(q) == []
     assert stale.exists()
     here = Presence(q, "Test Agent")

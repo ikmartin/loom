@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from loom.paths import document_build
 from tests.helpers import ok, refused
 
 
@@ -22,7 +23,7 @@ def test_demo_master_compiles_and_numbers(tmp_path: Path) -> None:
     ok("init", str(tmp_path / "demo"), "--demo", cwd=tmp_path)
     d = tmp_path / "demo"
     ok("compile", cwd=d)
-    aux = (d / ".loom/build" / "drafting" / "main" / "main.aux").read_text()
+    aux = (d / document_build("drafting/main.tex") / "main.aux").read_text()
     assert "\\newlabel{dm-0003}{{2.1}" in aux
 
 

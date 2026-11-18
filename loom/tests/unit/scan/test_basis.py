@@ -39,7 +39,7 @@ Terminology only.\end{remark}
 This is quoted later in the block from \cite[Theorem 3]{Paper}.\end{theorem}
 \end{document}
 """,
-            ".loom/digests/bibliography.bib": "@article{Paper, title={A paper}}\n",
+            ".loom/library/bibliography.bib": "@article{Paper, title={A paper}}\n",
         },
     )
     assert {k: result.nodes[k].basis for k in [f"ab-000{i}" for i in range(1, 10)]} == {
@@ -68,7 +68,7 @@ This is quoted later in the block from \cite[Theorem 3]{Paper}.\end{theorem}
         code=1,
         match="live unclassified keys",
     )
-    assert not (result.quilt.root / ".loom" / "state.toml").exists()
+    assert not (result.quilt.root / ".loom" / "records" / "state.toml").exists()
     # an open claim is content the author can change; someone else's result is the wrong command for it (use library verify)
     for key, phrase, code in (("ab-0004", "open claim", 1), ("ab-0005", "quotes someone else's result", 2)):
         refused(
@@ -177,7 +177,7 @@ def test_accept_all_live_refuses_to_establish_an_open_claim(tmp_path: Path) -> N
         code=1,
         match="open claims cannot be accepted",
     )
-    assert not (result.quilt.root / ".loom" / "state.toml").exists()
+    assert not (result.quilt.root / ".loom" / "records" / "state.toml").exists()
 
 
 def test_zk_proof_after_explanatory_remark_belongs_to_proposition(tmp_path: Path) -> None:

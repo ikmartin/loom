@@ -26,12 +26,12 @@ def _unset_main(q: Path) -> None:
 
 
 def _unreadable_log_line(q: Path) -> None:
-    with (q / ".loom/annotations" / "log.jsonl").open("a", encoding="utf-8") as fh:
+    with (q / ".loom/records/annotations" / "log.jsonl").open("a", encoding="utf-8") as fh:
         fh.write("{not json\n")
 
 
 def _log_line_kept_twice(q: Path) -> None:
-    log = q / ".loom/annotations" / "log.jsonl"
+    log = q / ".loom/records/annotations" / "log.jsonl"
     lines = log.read_text(encoding="utf-8").splitlines()
     created = next(ln for ln in lines if '"event": "created"' in ln)
     with log.open("a", encoding="utf-8") as fh:
@@ -55,8 +55,8 @@ def _mac_roman_node(q: Path) -> None:
 
 #: code -> (what provokes it on the demo, what its line must name)
 WARNINGS: dict[str, tuple[Callable[[Path], None], str]] = {
-    "loom:foreign-annotations": (_unreadable_log_line, ".loom/annotations/log.jsonl"),
-    "loom:repeated-id": (_log_line_kept_twice, ".loom/annotations/log.jsonl"),
+    "loom:foreign-annotations": (_unreadable_log_line, ".loom/records/annotations/log.jsonl"),
+    "loom:repeated-id": (_log_line_kept_twice, ".loom/records/annotations/log.jsonl"),
     "loom:main-not-found": (_missing_main, "drafting/missing.tex"),
     "loom:main-unset": (_unset_main, "[quilt] main is unset"),
     "loom:unknown-config-key": (_unknown_table, "[colour]"),
@@ -102,7 +102,7 @@ _DANGLING = "\\ref{nowhere-at-all}"
 
 def _uncited_digest(q: Path) -> None:
     """A digest of `Har77`, which the demo's bibliography holds and nothing cites, with one dangling reference (an error)."""
-    (q / ".loom/digests" / "Har77.tex").write_text(
+    (q / ".loom/library" / "Har77.tex").write_text(
         "% !LOOM digest: Har77\n% !LOOM prefix: Har77\n\n"
         "\\begin{theorem}[{\\cite[Theorem 1.1]{Har77}}]\\label{Har77-thm-1.1}\n"
         f"Every scheme is a scheme, as in {_DANGLING}.\n\\end{{theorem}}\n",
@@ -112,7 +112,7 @@ def _uncited_digest(q: Path) -> None:
 
 def _dangle_in(q: Path, label: str) -> None:
     """A dangling reference inside the Calloway14 result labelled `label`."""
-    path = q / ".loom/digests" / "Calloway14.tex"
+    path = q / ".loom/library" / "Calloway14.tex"
     text = path.read_text(encoding="utf-8")
     start = text.index(f"\\label{{{label}}}")
     end = text.index("\\end{", start)
@@ -283,7 +283,7 @@ def test_every_diagnostic_says_whose_it_is_to_fix(tmp_path: Path) -> None:
     edit(q / "drafting" / "nodes" / "dm-0002.tex", "the one-point orbits", f"the one-point orbits {_DANGLING}")
     _dangle_in(q, "Calloway14-prop-3.2")  # reached from the person's dm-0003, and still the work's
     ok("draft", "drafting/main.tex", "--ai", "aidoc.tex", cwd=q)
-    copy = q / ".loom" / "copies" / "aidoc.tex"
+    copy = q / ".loom" / "agents" / "copies" / "aidoc.tex"
     copy.write_text(
         copy.read_text(encoding="utf-8").replace("\\end{document}", "See \\ref{nowhere-in-the-copy}.\n\\end{document}"),
         encoding="utf-8",
@@ -292,8 +292,8 @@ def test_every_diagnostic_says_whose_it_is_to_fix(tmp_path: Path) -> None:
     whose = {d["locations"][0]["file"]: d["owner"] for d in rows}
     assert whose == {
         "drafting/nodes/dm-0002.tex": "person",
-        ".loom/copies/aidoc.tex": "copy",
-        ".loom/digests/Calloway14.tex": "work",
+        ".loom/agents/copies/aidoc.tex": "copy",
+        ".loom/library/Calloway14.tex": "work",
     }, rows
     work = next(d for d in rows if d["owner"] == "work")
     assert work["fixes"][-1]["act"] == {
@@ -331,7 +331,9 @@ def test_the_manifest_and_lint_agree_whose_each_diagnostic_is(tmp_path: Path) ->
     q = demo(tmp_path)
     _dangle_in(q, "Calloway14-prop-3.3")
     run("build", cwd=q)
-    published = json.loads((q / ".loom" / "build" / "manifest.json").read_text(encoding="utf-8"))["diagnostics"]
+    published = json.loads((q / ".loom" / "cache" / "site" / "manifest.json").read_text(encoding="utf-8"))[
+        "diagnostics"
+    ]
     assert published and all(d.get("owner") in ("person", "copy", "work") for d in published), published
     linted = json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"]
     key = lambda d: (d["code"], d["message"])  # noqa: E731

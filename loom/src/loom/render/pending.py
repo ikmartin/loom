@@ -97,7 +97,7 @@ _BLOCK_CLASSES = frozenset({"env", "env-proof", "include", "included"})
 
 def _elements(result: ScanResult, manifest: dict[str, Any], files: dict[str, str | bytes], path: str) -> list[_Element]:
     """Every element of the fragments that draw `path` (its statements' and proofs' own, and each document's holding it) whose `data-src` is in it."""
-    from loom.paths import BUILD
+    from loom.paths import SITE
 
     rels = [
         str(entry.get("fragment") or "")
@@ -109,7 +109,7 @@ def _elements(result: ScanResult, manifest: dict[str, Any], files: dict[str, str
     for rel in dict.fromkeys(filter(None, rels)):
         html = files.get(rel)
         if not isinstance(html, str) or not html:
-            disk = result.quilt.root / BUILD / rel
+            disk = result.quilt.root / SITE / rel
             html = disk.read_text(encoding="utf-8") if disk.is_file() else ""
         if f'data-src="{path}:' not in html:
             continue

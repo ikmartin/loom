@@ -15,7 +15,7 @@ const QUESTION = 'a-2026-09-16-bns3an';
 type Row = { id: string; kind: string; path: string; documents: string[]; state: string; old: string; new: string; answers?: string | null };
 
 /** The manifest as the publisher last built it. */
-const built = (served: Served) => JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8'));
+const built = (served: Served) => JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
 const pending = (served: Served): Row[] => built(served).changes ?? [];
 const text = (served: Served, path = NODE) => readFileSync(join(served.root, path), 'utf8');
 

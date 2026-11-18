@@ -9,7 +9,7 @@ from functools import partial
 from typing import Any
 
 from loom.cli.review import _acceptance_master, _owned
-from loom.paths import BUILD
+from loom.paths import BLOCKS, INCORPORATION_PREVIEWS, SITE
 from loom.records.store import Records
 from loom.render.publish import write_atomic
 from loom.review_queue import fingerprint
@@ -59,15 +59,15 @@ def preview(before: ScanResult, overlay: dict[str, str], binding: dict[str, str]
         "fingerprints": {k: fingerprint(after, k) for k in keys},
     }
     token = _digest(saved)
-    write_atomic(root / BUILD / "incorporation-review" / (token + ".json"), json.dumps(saved))
+    write_atomic(root / INCORPORATION_PREVIEWS / (token + ".json"), json.dumps(saved))
     renderers = [
         FragmentRenderer(
             RenderPlan(
                 result=r,
                 numbers={m: read_numbers(root, m) for m in r.masters},
                 cite_labels={m: read_cite_labels(root, m) for m in r.masters},
-                cache=root / BUILD / "cache",
-                svg_out=root / BUILD / "svg",
+                cache=root / BLOCKS,
+                svg_out=root / SITE / "svg",
             )
         )
         for r in (before, after)
@@ -90,7 +90,7 @@ def preview(before: ScanResult, overlay: dict[str, str], binding: dict[str, str]
             pre = result.closures[master].raw_text() if master in result.closures else ""
             path = f"incorporation-review/{token}-{len(items)}-{i}.html"
             later = _render(renderers[i], result, key, text, pre, spans[i])
-            renderers[i].previews.on_made(later, partial(write_atomic, root / BUILD / path))
+            renderers[i].previews.on_made(later, partial(write_atomic, root / SITE / path))
             sides.append({"path": path, "macros": to_mathjax(parse_macros(blank_comments(pre)))})
         dependencies = sorted(
             d
@@ -130,7 +130,7 @@ def validate(
     """Refuse stale previews and invalid acceptance selections before incorporation."""
     if not re.fullmatch(r"[0-9a-f]{64}", token):
         raise SyncError("Inspect the mathematical preview before submitting decisions")
-    path = before.quilt.root / BUILD / "incorporation-review" / (token + ".json")
+    path = before.quilt.root / INCORPORATION_PREVIEWS / (token + ".json")
     if not path.is_file():
         raise SyncError("Mathematical preview unavailable; inspect it again")
     saved: dict[str, Any] = json.loads(path.read_text())

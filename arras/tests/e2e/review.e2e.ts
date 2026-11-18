@@ -91,7 +91,7 @@ test('Read opens the block in its document, with why it waits and the way back b
 test('a block taken in is grouped by where it came from', async ({ page }) => {
 	await serve(page, (m) => {
 		const r = m.unresolved.find((x: Row) => x.key === 'sy-0004');
-		Object.assign(r, { cause: 'adopted', contribution: '.loom/copies/aidoc.tex', source_label: 'Taken in from the copy “aidoc”' });
+		Object.assign(r, { cause: 'adopted', contribution: '.loom/agents/copies/aidoc.tex', source_label: 'Taken in from the copy “aidoc”' });
 	});
 	await page.goto('/review');
 	const taken = page.locator('[data-testid="review-group"][data-group="taken"]');

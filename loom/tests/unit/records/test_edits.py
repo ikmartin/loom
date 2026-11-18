@@ -49,7 +49,7 @@ def placed(q: Path, edit_id: str) -> tuple[Any, Edit]:
 
 
 def log(q: Path) -> list[dict[str, Any]]:
-    return [json.loads(x) for x in (q / ".loom/edits" / "log.jsonl").read_text().splitlines() if x.strip()]
+    return [json.loads(x) for x in (q / ".loom/records/edits" / "log.jsonl").read_text().splitlines() if x.strip()]
 
 
 def test_filing_records_the_key_the_words_the_new_text_and_where_it_goes(tmp_path: Path) -> None:
@@ -293,8 +293,8 @@ def test_two_clones_merge_their_edits_each_with_an_id_of_its_own_and_a_bad_line_
     mine = suggest(one, "--quote", "Every orbit", "--with", "Each orbit")
     theirs = suggest(two, "--quote", "Every orbit", "--with", "Each orbit")
     assert mine != theirs
-    with (one / ".loom/edits" / "log.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write((two / ".loom/edits" / "log.jsonl").read_text().splitlines()[-1] + "\n")
+    with (one / ".loom/records/edits" / "log.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write((two / ".loom/records/edits" / "log.jsonl").read_text().splitlines()[-1] + "\n")
         fh.write("{not json\n")
         fh.write(json.dumps({"event": "kept", "id": "e-1999-01-01-ekn992"}) + "\n")
     edits, problems = replay(one)
@@ -305,11 +305,11 @@ def test_two_clones_merge_their_edits_each_with_an_id_of_its_own_and_a_bad_line_
     assert any("not a valid suggested edit" in d["message"] for d in diags)
     assert not [d for d in diags if d["code"] == "loom:repeated-id"]
     # one id given twice is the merge conflict a reply or a link could not tell apart
-    with (one / ".loom/edits" / "log.jsonl").open("a", encoding="utf-8") as fh:
-        first = json.loads((one / ".loom/edits" / "log.jsonl").read_text().splitlines()[0])
+    with (one / ".loom/records/edits" / "log.jsonl").open("a", encoding="utf-8") as fh:
+        first = json.loads((one / ".loom/records/edits" / "log.jsonl").read_text().splitlines()[0])
         fh.write(json.dumps({**first, "with": "a second text"}) + "\n")
     diags = json.loads(run("lint", "--json", cwd=one).stdout)["diagnostics"]
-    assert any(d["code"] == "loom:repeated-id" and ".loom/edits/log.jsonl" in d["message"] for d in diags)
+    assert any(d["code"] == "loom:repeated-id" and ".loom/records/edits/log.jsonl" in d["message"] for d in diags)
 
 
 def test_the_manifest_publishes_each_edit_as_its_record_and_an_open_one_as_a_change(tmp_path: Path) -> None:
@@ -318,7 +318,7 @@ def test_the_manifest_publishes_each_edit_as_its_record_and_an_open_one_as_a_cha
     lost = suggest(q, "--quote", "the one-point orbits", "--with", "the fixed points")
     edit(q / LEMMA, "the one-point orbits", "the orbits of size one")
     ok("build", cwd=q)
-    m = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     row = m["suggested_edits"][ready]
     assert (row["target"]["key"], row["quote"], row["with"], row["placement"], row["status"]) == (
         "dm-0002",
@@ -331,17 +331,17 @@ def test_the_manifest_publishes_each_edit_as_its_record_and_an_open_one_as_a_cha
     assert "<em>here</em>" in row["comment_html"] and "change" not in row
     change = {c["id"]: c for c in m["changes"]}
     assert change[ready]["state"] == "ready" and change[ready]["block"]["fragment"].startswith("fragments/changes/")
-    assert (q / ".loom/build" / change[ready]["diff"]).read_text().startswith(f"--- a/{LEMMA}")
+    assert (q / ".loom/cache/site" / change[ready]["diff"]).read_text().startswith(f"--- a/{LEMMA}")
     assert change[lost]["state"] == "unplaced" and change[lost]["block"] is None
     assert all("payload" not in a and "placement" not in a for a in m["annotations"].values())
     edit(q / LEMMA, "one or two points", "at most two points")
     ok("build", cwd=q)
-    assert {c["id"]: c for c in json.loads((q / ".loom/build" / "manifest.json").read_text())["changes"]}[ready][
+    assert {c["id"]: c for c in json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["changes"]}[ready][
         "state"
     ] == "taken"
     ok("changes", "--keep", ready, cwd=q)
     ok("build", cwd=q)
-    m = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     assert m["suggested_edits"][ready]["status"] == "kept" and ready not in {c["id"] for c in m["changes"]}
 
 

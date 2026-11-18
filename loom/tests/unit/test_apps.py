@@ -35,7 +35,7 @@ def bare(tmp_path: Path) -> Path:
     """A new quilt with no agent layer, as the home page makes one."""
     ok("init", str(tmp_path / "q"), "--yes", cwd=tmp_path)
     q = tmp_path / "q"
-    assert not (q / ".loom" / "ai").exists()
+    assert not (q / ".loom" / "agents" / "instructions").exists()
     return q
 
 
@@ -86,7 +86,7 @@ def test_an_app_it_does_not_set_up_is_refused(tmp_path: Path) -> None:
     q = bare(tmp_path)
     with pytest.raises(ApiError, match="app is one of claude-code, codex, gemini-cli, cursor"):
         setup(q, "claude-desktop")
-    assert not (q / ".loom" / "ai").exists()
+    assert not (q / ".loom" / "agents" / "instructions").exists()
 
 
 def test_ai_init_writes_every_app_and_a_new_quilt_reaches_loom_over_mcp(tmp_path: Path) -> None:
@@ -225,7 +225,7 @@ def test_a_persons_rules_are_kept_whatever_they_name_where_loom_records_its_own(
 def test_without_the_record_only_an_allow_naming_loom_is_taken_for_an_older_looms(tmp_path: Path) -> None:
     q = bare(tmp_path)
     setup(q, "claude-code")
-    (q / ".loom/ai/.loom-rules").unlink()
+    (q / ".loom/agents/instructions/.loom-rules").unlink()
     data = _settings(q)
     data["permissions"]["allow"].append("Bash(loom accept*)")
     data["permissions"]["deny"].append("mcp__loom__loom_write")
@@ -234,7 +234,7 @@ def test_without_the_record_only_an_allow_naming_loom_is_taken_for_an_older_loom
     after = _settings(q)["permissions"]
     assert "Bash(loom accept*)" not in after["allow"] and after["deny"][-1] == "mcp__loom__loom_write"
     assert got["dropped"] == [".claude/settings.json: allow Bash(loom accept*)"]
-    assert (q / ".loom/ai/.loom-rules").is_file()
+    assert (q / ".loom/agents/instructions/.loom-rules").is_file()
 
 
 def test_loom_names_each_of_its_own_rules_it_takes_out(tmp_path: Path) -> None:
@@ -281,7 +281,7 @@ def test_the_record_is_written_after_the_settings_and_a_failed_write_is_refused(
     try:
         refused = exits(1, "upgrade", cwd=q)
         assert "loom could not write .claude/settings.json" in refused.output and "Traceback" not in refused.output
-        assert "private" in (q / ".loom/ai/.loom-rules").read_text()
+        assert "private" in (q / ".loom/agents/instructions/.loom-rules").read_text()
     finally:
         settings.chmod(0o644)
     ok("upgrade", cwd=q)
@@ -425,7 +425,7 @@ def test_a_record_that_is_a_fifo_is_no_record_and_nothing_waits_on_it(tmp_path: 
 
     q = bare(tmp_path)
     setup(q, "claude-code")
-    record = q / ".loom/ai" / name
+    record = q / ".loom/agents/instructions" / name
     record.unlink()
     os.mkfifo(record)
     try:
@@ -452,33 +452,36 @@ def test_a_record_that_is_not_utf8_is_no_record(tmp_path: Path, name: str) -> No
 
     q = bare(tmp_path)
     setup(q, "claude-code")
-    (q / ".loom/ai" / name).write_bytes(b"\xff\xfe\x00")
+    (q / ".loom/agents/instructions" / name).write_bytes(b"\xff\xfe\x00")
     json_of("upgrade", "--json", cwd=q)
     check_permissions(q), check_ai_files(q)
 
 
 def test_a_loom_ai_that_is_a_link_gets_nothing_written_through_it_and_is_said(tmp_path: Path) -> None:
-    """`.loom/ai` leading out of the quilt: upgrade leaves the agent layer alone and says why, `ai init` and the viewer's set-up refuse in a sentence, and doctor warns."""
+    """`.loom/agents/instructions` leading out of the quilt: upgrade leaves the agent layer alone and says why, `ai init` and the viewer's set-up refuse in a sentence, and doctor warns."""
     from loom.doctor import check_ai_files
 
     q = bare(tmp_path)
     setup(q, "claude-code")
     outside = tmp_path / "outside"
-    shutil.copytree(q / ".loom/ai", outside)
-    shutil.rmtree(q / ".loom/ai")
-    (q / ".loom/ai").symlink_to(outside, target_is_directory=True)
+    shutil.copytree(q / ".loom/agents/instructions", outside)
+    shutil.rmtree(q / ".loom/agents/instructions")
+    (q / ".loom/agents/instructions").symlink_to(outside, target_is_directory=True)
     (outside / "README.md").unlink()
     _deny(q, '["private/**"]')
     before = {p.name: p.read_bytes() for p in outside.iterdir() if p.is_file()}
     said = ok("upgrade", cwd=q).stdout
-    assert "left .loom/ai/ alone, since `.loom/ai` is a link" in said
+    assert "left .loom/agents/instructions/ alone, since `.loom/agents/instructions` is a link" in said
     refused = exits(1, "ai", "init", cwd=q)
-    assert "loom writes nothing into .loom/ai/, since `.loom/ai` is a link" in refused.output
+    assert (
+        "loom writes nothing into .loom/agents/instructions/, since `.loom/agents/instructions` is a link"
+        in " ".join(refused.output.split())
+    )
     with pytest.raises(ApiError) as answer:
         setup(q, "codex")
     assert (answer.value.status, answer.value.code) == (409, "not-writable")
     item = check_ai_files(q)
-    assert item.status == "warn" and "`.loom/ai` is a link" in item.detail
+    assert item.status == "warn" and "`.loom/agents/instructions` is a link" in item.detail
     assert {p.name: p.read_bytes() for p in outside.iterdir() if p.is_file()} == before
 
 

@@ -86,7 +86,7 @@ def set_box(q: Path, task: str, done: bool, *, who: str = WHO, path: str = "note
 
 
 def ledger(q: Path) -> list[dict]:  # type: ignore[type-arg]
-    lines = (q / ".loom" / "history" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()
+    lines = (q / ".loom" / "records" / "history" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()
     return [row for row in map(json.loads, lines) if row["action"] == "tick"]
 
 
@@ -99,7 +99,7 @@ def test_a_tick_changes_one_character_and_keeps_the_text_it_replaced(q: Path) ->
     assert (q / "notes/a.md").read_text(encoding="utf-8") == before.replace("- [ ] two", "- [x] two")
     [row] = ledger(q)
     assert (row["actor"], row["path"], row["line"], row["done"], row["words"]) == (WHO, "notes/a.md", 4, True, "two")
-    assert read_raw(q, row["from"], q / ".loom" / "history") == before
+    assert read_raw(q, row["from"], q / ".loom" / "records" / "history") == before
     assert set_box(q, box(q, 1).id, False) is True
     assert (q / "notes/a.md").read_text(encoding="utf-8") == before
 

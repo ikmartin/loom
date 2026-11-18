@@ -15,7 +15,7 @@ from typing import Any
 
 from loom.history.ledger import History, append_entry, load_history
 from loom.history.steps import free_name, plan_freeze, slug, stamp_document, text_hash, write_step
-from loom.paths import ADOPTION_DECISIONS, BUILD, REVIEW_ORIGINS, documents_named, under
+from loom.paths import ADOPTION_DECISIONS, ADOPTION_PREVIEWS, REVIEW_ORIGINS, documents_named, under
 from loom.reshape.linearize import flatten
 from loom.scan.hashing import pair_hash
 from loom.scan.labels import next_local, plain_key, rename_labels
@@ -183,7 +183,7 @@ def _resolve(result: ScanResult, copy: str) -> tuple[str, str]:
     history = _history(result)
     source = history.copy_of(copy, result.masters)
     if not source:
-        # a document written straight into `.loom/copies/` has no step, so no source and no bases (loom:agent-document-unrecorded)
+        # a document written straight into `.loom/agents/copies/` has no step, so no source and no bases (loom:agent-document-unrecorded)
         raise SyncError(
             f"{copy} is not a copy: no copy step made it, so it has no working document to be incorporated into or updated from; an agent document drafted from one starts as `loom draft DOC --ai NAME`"
         )
@@ -645,7 +645,7 @@ def prepare(
     }
     prepared["decision"] = decisions(result, copy, who, data=data)
     prepared["token"] = _digest(prepared)
-    home = root / BUILD / "adoption"
+    home = root / ADOPTION_PREVIEWS
     home.mkdir(parents=True, exist_ok=True)
     (home / (prepared["token"] + ".json")).write_text(json.dumps(prepared, indent=2) + "\n")
     return prepared
@@ -693,7 +693,7 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
     if not re.fullmatch("[0-9a-f]{64}", token):
         raise SyncError("Invalid preview token")
     root = result.quilt.root
-    path = root / BUILD / "adoption" / (token + ".json")
+    path = root / ADOPTION_PREVIEWS / (token + ".json")
     if not path.is_file():
         raise SyncError("Preview unavailable; inspect the contribution again")
     saved = json.loads(path.read_text())

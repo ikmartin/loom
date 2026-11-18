@@ -20,18 +20,18 @@ run() { env -i PATH="$TEXBIN:$POPPLER:/usr/bin:/bin:$LOOM/.venv/bin" HOME="$EMPT
 run "$LOOM/.venv/bin/loom" compile drafting/main.tex --html --quilt "$Q"
 run "$LOOM/.venv/bin/loom" compile drafting/talk.tex --html --quilt "$Q"
 # the agent's copy is a document like any other, and `loom serve` compiles it too
-run "$LOOM/.venv/bin/loom" compile .loom/copies/aidoc.tex --html --quilt "$Q"
+run "$LOOM/.venv/bin/loom" compile .loom/agents/copies/aidoc.tex --html --quilt "$Q"
 run "$LOOM/.venv/bin/loom" build --quilt "$Q" || true   # exit 1 is expected: the synthetic quilt carries four intentional errors
 rm -rf "$OUT"
 mkdir -p "$OUT"
-cp "$Q/.loom/build/manifest.json" "$OUT/"
-cp -R "$Q/.loom/build/fragments" "$OUT/fragments"
-[ -d "$Q/.loom/build/svg" ] && cp -R "$Q/.loom/build/svg" "$OUT/svg"
-[ -d "$Q/.loom/build/diffs" ] && cp -R "$Q/.loom/build/diffs" "$OUT/diffs"
-[ -d "$Q/.loom/build/source" ] && cp -R "$Q/.loom/build/source" "$OUT/source"
-[ -d "$Q/.loom/build/transcripts" ] && cp -R "$Q/.loom/build/transcripts" "$OUT/transcripts"
-[ -d "$Q/.loom/build/files" ] && cp -R "$Q/.loom/build/files" "$OUT/files"
-[ -d "$Q/.loom/build/changes" ] && cp -R "$Q/.loom/build/changes" "$OUT/changes"
+cp "$Q/.loom/cache/site/manifest.json" "$OUT/"
+cp -R "$Q/.loom/cache/site/fragments" "$OUT/fragments"
+[ -d "$Q/.loom/cache/site/svg" ] && cp -R "$Q/.loom/cache/site/svg" "$OUT/svg"
+[ -d "$Q/.loom/cache/site/diffs" ] && cp -R "$Q/.loom/cache/site/diffs" "$OUT/diffs"
+[ -d "$Q/.loom/cache/site/source" ] && cp -R "$Q/.loom/cache/site/source" "$OUT/source"
+[ -d "$Q/.loom/cache/site/transcripts" ] && cp -R "$Q/.loom/cache/site/transcripts" "$OUT/transcripts"
+[ -d "$Q/.loom/cache/site/files" ] && cp -R "$Q/.loom/cache/site/files" "$OUT/files"
+[ -d "$Q/.loom/cache/site/changes" ] && cp -R "$Q/.loom/cache/site/changes" "$OUT/changes"
 VERSION=$(cd "$LOOM" && .venv/bin/loom --version | awk '{print $2}')
 printf 'loom %s\ngenerated %s\n' "$VERSION" "$LOOM_FIXED_TIME" > "$OUT/VERSION"
 for dest in "$LOOM/tests/fixture" "$WS/arras/tests/fixture"; do

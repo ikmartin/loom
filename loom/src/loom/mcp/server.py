@@ -22,7 +22,7 @@ from loom.mcp.prompts import TARGET, TARGET_SAID, link_argv, message, mode_argv,
 from loom.mcp.resources import TEMPLATES, NotAResource, reading
 from loom.mcp.resources import listed as resources_listed
 from loom.mcp.tools import CallRefused, ToolSpec, argv, hints, schema, tools
-from loom.paths import BUILD
+from loom.paths import scratch
 from loom.sessions import ID as SESSION_ID
 
 #: A result longer than this many characters goes to a file the agent reads with its own tools: about ten thousand tokens, where Claude Code starts warning, and well under every client's own limit.
@@ -341,14 +341,14 @@ def _result(
 
 
 def _crops(root: Path, out: str) -> tuple[list[types.ImageContent], int]:
-    """The crops a result names, as images an agent sees: each `crop` value in its JSON and each `crop:` line of its text, in order and once, kept only when it is a file under `.loom/build/crops/`; at most `MAX_IMAGES`, and how many more there were.
+    """The crops a result names, as images an agent sees: each `crop` value in its JSON and each `crop:` line of its text, in order and once, kept only when it is a file under `.loom/cache/crops/`; at most `MAX_IMAGES`, and how many more there were.
 
     A crop is a picture of a page round a mark (`records.crops`), made by loom; what an agent reads off it is its own reading.
     """
     import base64
     import re
 
-    from loom.records.crops import CROPS
+    from loom.paths import CROPS
 
     named: list[str] = []
     try:
@@ -421,8 +421,8 @@ def _session(root: Path, given: object) -> str | None:
 
 
 def _keep(root: Path, session: object, what: str, text: str) -> str:
-    """Write a large result under `.loom/build/agent/<session>/`, which an agent may read and write and nothing commits, named for `what` produced it; its quilt-relative path."""
-    where = root / BUILD / "agent" / (_session(root, session) or "none")
+    """Write a large result into the session's scratch, `.loom/agents/scratch/<session>/`, which an agent may read and write and nothing commits, named for `what` produced it; its quilt-relative path."""
+    where = root / scratch(_session(root, session) or "none")
     where.mkdir(parents=True, exist_ok=True)
     stem = datetime.now().strftime("%Y-%m-%dT%H-%M-%S") + "-" + what
     path, n = where / f"{stem}.txt", 2

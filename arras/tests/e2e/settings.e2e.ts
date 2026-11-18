@@ -31,7 +31,7 @@ test('each section opens its own page, saying where it is saved, and the window 
 		['appearance', 'Appearance', 'this browser'],
 		['profile', 'Profile', 'for every quilt'],
 		['agents', 'Agents', "this quilt's config.toml"],
-		['overleaf', 'Overleaf', '.loom/source-sync.json, committed with the quilt']
+		['overleaf', 'Overleaf', '.loom/records/source-sync.json, committed with the quilt']
 	]) {
 		await settings(page, section);
 		await expect(page.getByTestId('settings-title')).toHaveText(title);

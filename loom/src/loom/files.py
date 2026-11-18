@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 
 #: Where `loom serve` answers a shown file on the viewer's own origin, sandboxed.
 FILES_URL = "/_files/"
-#: Where a Markdown file's or notebook's rendered body is published, under the build output.
+#: Where a Markdown file's or notebook's rendered body is published, under the site (`paths.SITE`).
 BODIES = "files"
 #: Tools' directories, hidden by name at any depth like a dot-directory.
 TOOL_DIRS = frozenset({"node_modules", "__pycache__"})

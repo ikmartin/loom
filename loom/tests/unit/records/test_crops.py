@@ -1,4 +1,4 @@
-"""A crop of a PDF page around a mark, for an agent: made once by pdftocairo under `.loom/build/crops/`, named by the copy, the page and the mark, a PNG with the mark drawn over it in its colour; none without pdftocairo."""
+"""A crop of a PDF page around a mark, for an agent: made once by pdftocairo under `.loom/cache/crops/`, named by the copy, the page and the mark, a PNG with the mark drawn over it in its colour; none without pdftocairo."""
 
 from __future__ import annotations
 
@@ -81,7 +81,7 @@ def test_a_crop_is_made_once_named_for_its_copy_and_place_with_the_mark_drawn(ma
 
     result, ra = resolved(marked)
     path = crops.crop_of(result, ra)
-    assert path is not None and path.parent == marked / ".loom/build/crops"
+    assert path is not None and path.parent == marked / ".loom/cache/crops"
     sha = artifact_of(marked / "notes" / "paper.pdf")
     assert re.fullmatch(rf"{sha[:16]}-p1-[0-9a-f]{{16}}\.png", path.name)
     width, height, rows = pixels(path.read_bytes())
@@ -118,7 +118,7 @@ def test_no_crop_without_pdftocairo(marked: Path) -> None:
 
     result, ra = resolved(marked)
     assert crops.crop_of(result, ra) is None
-    assert not (marked / ".loom/build/crops").exists() or not any((marked / ".loom/build/crops").iterdir())
+    assert not (marked / ".loom/cache/crops").exists() or not any((marked / ".loom/cache/crops").iterdir())
 
 
 @pytest.mark.poppler

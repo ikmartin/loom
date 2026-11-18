@@ -24,23 +24,25 @@ Text \cite{GP99} and \cite{Kre99}.
 
 def landmark(n: int, name: str) -> str:
     """The quilt-relative path of the landmark `name` kept by step `n`, as `loom stamp DOCUMENT -m NAME` writes it."""
-    return f".loom/history/{n:04d}-{name}/{name}.tex"
+    return f".loom/records/history/{n:04d}-{name}/{name}.tex"
 
 
 def _quilt(tmp_path: Path, files: dict[str, str]):  # type: ignore[no-untyped-def]
-    """A quilt holding `files`; each under `.loom/history/` is a landmark, recorded by a step line as a stamp records one."""
+    """A quilt holding `files`; each under `.loom/records/history/` is a landmark, recorded by a step line as a stamp records one."""
     from loom.history.ledger import append_entry
+    from loom.layout import stamp
 
     root = tmp_path / "q"
     root.mkdir()
+    stamp(root)
     (root / "config.toml").write_text('[quilt]\nmain = "drafting/main.tex"\nprefix = "ab"\n', encoding="utf-8")
     for rel, text in files.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_text(text, encoding="utf-8")
-        if rel.startswith(".loom/history/"):
-            step_dir, name = rel.split("/")[2], rel.split("/")[3]
+        if rel.startswith(".loom/records/history/"):
+            step_dir, name = rel.split("/")[3], rel.split("/")[4]
             data = {"step": int(step_dir[:4]), "dir": step_dir, "landmark": name, "froze": {}}
-            append_entry(root / ".loom" / "history", "stamp", data, "A. Author")
+            append_entry(root / ".loom" / "records" / "history", "stamp", data, "A. Author")
     return load_quilt(root)
 
 
@@ -128,7 +130,7 @@ def _pdf(path: Path, text: str = "A paper about widgets") -> None:
 def test_entries_naming_one_stored_document_are_reported_once_with_the_fix(tmp_path: Path) -> None:
     """Earlier scans left the author's quilt with several entries naming one document; the scan names them and the edit, and removes nothing, since the file is the author's to change."""
     quilt = _quilt(tmp_path, {landmark(1, "paper"): PAPER})
-    (quilt.root / ".loom/digests").mkdir()
+    (quilt.root / ".loom/library").mkdir()
     twice = "".join(
         f"@misc{{Siebert{suffix},\n  title = {{Punctured}},\n  loom-file = {{file/0972338306d22915}},\n  loom-source = {{refs/Siebert.pdf}},\n}}\n"
         for suffix in ("", "A", "B")
@@ -179,7 +181,7 @@ def test_a_document_the_store_holds_and_no_entry_names_is_adopted_once(tmp_path:
     report = scan_bibliography(quilt)
     assert len(report.adopted) == 1, report.lines()
     key, where = report.adopted[0]
-    assert where.startswith(".loom/digests/storage/")
+    assert where.startswith(".loom/library/storage/")
     entry = parse_bib(path.read_text())[key]
     # what the entry says comes from the document and from the ledger's record of where it came from, never a lookup
     assert entry.fields["title"] == "Virtual pull-backs"

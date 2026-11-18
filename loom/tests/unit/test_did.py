@@ -44,7 +44,7 @@ def test_annotating_writes_nothing_into_the_active_session(q: Path) -> None:
     )
     ok("annotate", "--batch", *who, cwd=q, stdin=batch)
     assert lines(q, sid) == ["loom source dm-0003"]
-    logged = [json.loads(x) for x in (q / ".loom/annotations" / "log.jsonl").read_text().splitlines()]
+    logged = [json.loads(x) for x in (q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines()]
     assert logged and not [e for e in logged if "session" in e]
 
 
@@ -81,7 +81,7 @@ def test_each_line_says_what_it_names_and_the_session_when_it_was_last_active(q:
     log = build_threads(q, result=scan(load_quilt(q)))[sid]["log"]
     assert [e.get("names") for e in log] == [[{"key": "dm-0003"}], [{"path": "drafting/main.tex"}], None]
     ok("build", cwd=q)
-    m = json.loads((q / ".loom/build/manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site/manifest.json").read_text())
     row = next(s for s in m["sessions"] if s["id"] == sid)
     # the newest of what was done in it, which opening it never moves
     assert row["last"] == "2099-09-03T00:00:00Z" and row["opened"] != row["last"]

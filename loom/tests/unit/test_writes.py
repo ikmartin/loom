@@ -17,6 +17,7 @@ from typing import Any
 import pytest
 
 from loom import writes
+from loom.paths import JOURNAL, JOURNAL_INDEX, WRITES_LOCK
 from loom.writes import WriteRefused
 
 
@@ -30,11 +31,16 @@ def q(tmp_path: Path) -> tuple[Path, Path]:
     (root / "drafting").mkdir(parents=True)
     (root / "drafting" / "a.tex").write_bytes(b"one\r\ntwo\r\nthree\r\n")
     (root / "drafting" / "b.tex").write_bytes(b"alpha\nbeta\n")
-    return root, root / ".loom" / "history"
+    return root, root / ".loom" / "records" / "history"
+
+
+def _root(history: Path) -> Path:
+    """The quilt whose history `history` is, at the default place every test here keeps it: the journal is the quilt's, in `.loom/local/`."""
+    return history.parents[2]
 
 
 def journal(history: Path) -> list[dict[str, Any]]:
-    p = history / writes.JOURNAL
+    p = _root(history) / JOURNAL
     return [json.loads(line) for line in p.read_text(encoding="utf-8").splitlines()] if p.is_file() else []
 
 
@@ -118,7 +124,7 @@ def test_a_plan_holds_while_the_file_reads_as_the_scan_read_it(q: tuple[Path, Pa
 
 def test_an_act_that_changes_no_file_writes_no_journal_but_keeps_its_records(q: tuple[Path, Path]) -> None:
     root, history = q
-    log = root / ".loom/edits/log.jsonl"
+    log = root / ".loom/records/edits/log.jsonl"
     with writes.act(root, history, "keep") as w:
         w.replace("drafting/b.tex", (root / "drafting/b.tex").read_bytes())
         w.log(log, {"event": "kept", "id": "e-1"})
@@ -162,7 +168,7 @@ def test_a_record_line_that_cannot_be_written_leaves_the_act_for_recovery(
     q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root, history = q
-    log = root / ".loom/edits/log.jsonl"
+    log = root / ".loom/records/edits/log.jsonl"
     real = writes._append_records
 
     def broken(*args: Any, **kw: Any) -> None:
@@ -302,7 +308,7 @@ def test_a_real_process_killed_after_the_journal_is_settled_by_the_next(q: tuple
         from loom import writes
         writes._rename = lambda tmp, target: os._exit(9)
         root = Path({str(root)!r})
-        with writes.act(root, root / ".loom" / "history", "tick") as w:
+        with writes.act(root, root / ".loom" / "records" / "history", "tick") as w:
             w.replace("drafting/b.tex", b"never\\n")
         """
     )
@@ -322,7 +328,7 @@ def test_an_act_in_another_process_holds_the_door_until_it_is_done(q: tuple[Path
         from pathlib import Path
         from loom import writes
         root = Path({str(root)!r})
-        with writes.act(root, root / ".loom" / "history", "tick") as w:
+        with writes.act(root, root / ".loom" / "records" / "history", "tick") as w:
             Path({str(marker)!r}).write_text("x")
             time.sleep(1.0)
             w.replace("drafting/b.tex", b"from the other process\\n")
@@ -352,22 +358,22 @@ def test_the_index_reads_only_what_is_new_and_is_rebuilt_when_lost(q: tuple[Path
         with writes.act(root, history, "keep") as w:
             w.replace("drafting/b.tex", f"version {n}\n".encode())
             w.wrote(f"e-{n}:0")
-    index = json.loads((history / writes.INDEX).read_text())
-    assert index["offset"] == (history / writes.JOURNAL).stat().st_size
+    index = json.loads((root / JOURNAL_INDEX).read_text())
+    assert index["offset"] == (root / JOURNAL).stat().st_size
     assert set(index["wrote"]) == {"e-0:0", "e-1:0", "e-2:0"}
     assert writes.written(root, history) == {"e-0:0", "e-1:0", "e-2:0"}
-    begin = writes.entry_at(history, index["wrote"]["e-1:0"])
+    begin = writes.entry_at(root, index["wrote"]["e-1:0"])
     assert begin is not None and begin["edits"] == ["e-1:0"]
-    (history / writes.INDEX).unlink()
+    (root / JOURNAL_INDEX).unlink()
     assert writes.written(root, history) == {"e-0:0", "e-1:0", "e-2:0"}
-    (history / writes.INDEX).write_text("{not json")
+    (root / JOURNAL_INDEX).write_text("{not json")
     assert writes.written(root, history) == {"e-0:0", "e-1:0", "e-2:0"}
 
 
 def test_a_line_a_crash_cut_short_is_passed_over(q: tuple[Path, Path]) -> None:
     root, history = q
-    history.mkdir(parents=True)
-    (history / writes.JOURNAL).write_bytes(b'{"event": "begin", "act": "x", "fi')
+    (root / JOURNAL).parent.mkdir(parents=True)
+    (root / JOURNAL).write_bytes(b'{"event": "begin", "act": "x", "fi')
     with writes.act(root, history, "keep") as w:
         w.replace("drafting/b.tex", b"after the cut\n")
         w.wrote("e-9:0")
@@ -449,8 +455,8 @@ def test_the_store_keeps_bytes_exactly_under_the_names_versions_and_looks_use(tm
 
 def plant(history: Path, *entries: dict[str, Any]) -> None:
     """Write `entries` into the journal as `begin` lines a crash left, the acts named `planted-1`, `planted-2`…"""
-    history.mkdir(parents=True, exist_ok=True)
-    with (history / writes.JOURNAL).open("a") as fh:
+    (_root(history) / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
+    with (_root(history) / JOURNAL).open("a") as fh:
         for n, e in enumerate(entries, 1):
             fh.write(json.dumps({"event": "begin", "act": f"planted-{n}", "kind": "keep", **e}) + "\n")
 
@@ -517,13 +523,13 @@ def test_recovery_appends_only_records_that_are_records_to_loom_s_own_logs(q: tu
     }  # every file holds its after: it would be finished
     plant(
         history,
-        {"files": one, "records": [{"log": ".loom/edits/log.jsonl", "line": json.dumps("not a record")}]},
+        {"files": one, "records": [{"log": ".loom/records/edits/log.jsonl", "line": json.dumps("not a record")}]},
         {"files": one, "records": [{"log": "drafting/b.tex", "line": json.dumps({"event": "kept"})}]},
-        {"files": one, "records": [{"log": ".loom/history/ledger.jsonl", "line": "{}"}], "extra": 1},
+        {"files": one, "records": [{"log": ".loom/records/history/ledger.jsonl", "line": "{}"}], "extra": 1},
     )
     said = writes.recover(root, history)
     assert [s.split(":")[0] for s in said] == ["left planted-1", "left planted-2", "finished planted-3"], said
-    assert (root / "drafting/b.tex").read_bytes() == b and not (root / ".loom/edits/log.jsonl").exists()
+    assert (root / "drafting/b.tex").read_bytes() == b and not (root / ".loom/records/edits/log.jsonl").exists()
     assert (history / "ledger.jsonl").read_text() == "{}\n"
 
 
@@ -539,7 +545,7 @@ def test_a_digest_that_is_not_a_digest_is_never_made_into_a_path(q: tuple[Path, 
 
 def test_an_act_stages_records_only_for_loom_s_own_logs(q: tuple[Path, Path], tmp_path: Path) -> None:
     root, history = q
-    for log in (tmp_path / "profile", root / "drafting/b.tex", root / ".loom/edits/../../drafting/b.tex"):
+    for log in (tmp_path / "profile", root / "drafting/b.tex", root / ".loom/records/edits/../../drafting/b.tex"):
         with pytest.raises(WriteRefused) as exc, writes.act(root, history, "keep") as w:
             w.log(log, {"event": "kept"})
         assert exc.value.code == "outside-quilt", log
@@ -555,12 +561,12 @@ def test_the_journal_stays_on_this_machine(q: tuple[Path, Path]) -> None:
     write_loom_ignore(root)
     with writes.act(root, history, "tick") as w:
         w.replace("drafting/b.tex", b"changed\n")
-    (history / "texts" / f".x.md.abc{writes.TEMP}").write_text("cut short")
-    names = [writes.JOURNAL, writes.INDEX, writes.LOCK, f"texts/.x.md.abc{writes.TEMP}"]
+    names = [JOURNAL, JOURNAL_INDEX, WRITES_LOCK]
+    assert all((root / n).is_file() for n in names)
     ignored = subprocess.run(
-        ["git", "-C", str(root), "check-ignore", *(f".loom/history/{n}" for n in names)], capture_output=True, text=True
+        ["git", "-C", str(root), "check-ignore", *names], capture_output=True, text=True
     ).stdout.split()
-    assert ignored == [f".loom/history/{n}" for n in names]
+    assert ignored == names
     # the store of texts is the history's, and travels with it
     kept = next(p.relative_to(root).as_posix() for p in (history / "texts").glob("*.md"))
     assert subprocess.run(["git", "-C", str(root), "check-ignore", "-q", kept]).returncode == 1

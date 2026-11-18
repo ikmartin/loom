@@ -272,15 +272,15 @@ test('each row says whether agents edit it too, and the mark says why under the 
 	await expect(page.getByTestId('access-README.md')).toHaveAttribute('data-agents', 'yes');
 	await expect(page.getByTestId('access-drafting')).toHaveAttribute('data-agents', 'yes');
 	// an agent's copy is one agents edit, whatever the folder of the document it copies
-	await expect(page.getByTestId('access-.loom/copies/aidoc.tex')).toHaveAttribute('data-agents', 'yes');
+	await expect(page.getByTestId('access-.loom/agents/copies/aidoc.tex')).toHaveAttribute('data-agents', 'yes');
 	await page.getByTestId('access-config.toml').hover();
 	await expect(page.getByTestId('access-config.toml-says')).toContainText("Only you edit this");
 	await expect(page.getByTestId('access-config.toml-says')).toContainText("No agent writes the quilt's configuration.");
 	await page.mouse.move(800, 400);
 	await expect(page.getByTestId('access-config.toml-says')).toHaveCount(0);
 	// a copy's mark names the document its changes go back to
-	await page.getByTestId('access-.loom/copies/aidoc.tex').hover();
-	await expect(page.getByTestId('access-.loom/copies/aidoc.tex-says')).toContainText('back to main.tex through Review › Proposed Changes');
+	await page.getByTestId('access-.loom/agents/copies/aidoc.tex').hover();
+	await expect(page.getByTestId('access-.loom/agents/copies/aidoc.tex-says')).toContainText('back to main.tex through Review › Proposed Changes');
 	// and the copy hangs from that document by a hooked line pointing up into it
 	const hook = await page.getByTestId('docs-copies').locator('li').first().evaluate((li) => [getComputedStyle(li, '::before').borderLeftStyle, getComputedStyle(li, '::after').clipPath]);
 	expect(hook[0]).toBe('solid');

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.paths import INCOMING
+from loom.paths import INCOMING, LIBRARY_LOCK
 from loom.refs.intake import IntakeRefused, Item, Row, _acts, answer, receive, take, undo, unfile, waiting
 from loom.scan.bib import BibEntry
 from loom.scan.quilt import load_quilt
@@ -17,7 +17,7 @@ from tests.unit._quilts import demo, work_home
 from tests.unit.refs._made_pdfs import fake_pdf, real_pdf
 
 WHO = "A. Author"
-BIB = ".loom/digests/bibliography.bib"
+BIB = ".loom/library/bibliography.bib"
 #: A second version of Calloway14, the work the demo cites: its title over its author's byline, with a page more and no identifier, since a PDF stating the work's own DOI is a copy of its document.
 CALLOWAY = "Fixed loci of involutions on separated spaces\nImogen Calloway\nA preprint\n\fA second page"
 #: A page that names no work in the demo's library.
@@ -25,11 +25,11 @@ NOTES = "Notes on balanced quivers\nA. Halloway\nWe record what is known.\n"
 
 
 def tree(q: Path) -> dict[str, bytes]:
-    """Every file of the quilt outside `.loom/build/`, which every rebuild writes again, with its bytes."""
+    """Every file of the quilt with its bytes, but what every rebuild writes again (`.loom/cache/`) and the library's lock, which holds nothing."""
     return {
         p.relative_to(q).as_posix(): p.read_bytes()
         for p in sorted(q.rglob("*"))
-        if p.is_file() and not p.relative_to(q).as_posix().startswith(".loom/build/")
+        if p.is_file() and not p.relative_to(q).as_posix().startswith((".loom/cache/", LIBRARY_LOCK))
     }
 
 
@@ -56,7 +56,7 @@ def test_a_new_pdf_is_added_and_its_undo_leaves_the_quilt_byte_for_byte_as_befor
     (row,) = taken(q, item)
     assert (row.state, row.citekey, row.pages) == ("added", "hallowayNotesBalancedQuivers2026", "read"), row
     assert row.to_json()["title"] == "Notes on balanced quivers"
-    # B12: the drop has left `.loom/incoming/` for the store, and only the record of the act waits there
+    # B12: the drop has left `.loom/local/incoming/` for the store, and only the record of the act waits there
     assert [p.name for p in (q / INCOMING / row.id).iterdir()] == ["act.json"]
     assert (work_home(q, row.citekey) / "paper.pdf").is_file()
     said, again = undo(scan(load_quilt(q)), row.id, by=WHO)
@@ -147,7 +147,7 @@ def test_a_drop_on_a_work_is_filed_there_unless_it_shows_another_work_or_another
     (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Har77"))
     assert (row.state, row.citekey) == ("here", schedule.citekey)
     sha = sha256_of(work_home(q, schedule.citekey) / "paper.pdf")
-    stored = [p for p in (q / ".loom/digests/storage").rglob("paper.pdf") if sha256_of(p) == sha]
+    stored = [p for p in (q / ".loom/library/storage").rglob("paper.pdf") if sha256_of(p) == sha]
     assert len(stored) == 1 and not (work_home(q, "Har77") / "paper.pdf").exists()
     stamped = dropped(
         q,
@@ -443,7 +443,7 @@ def test_a_record_of_an_act_that_names_a_place_outside_the_store_is_not_acted_on
     (row,) = taken(q, dropped(q, "notes.pdf"))
     record = q / INCOMING / row.id / "act.json"
     acts = json.loads(record.read_text())
-    acts["acts"][-1]["home"] = ".loom/digests/storage/../../../drafting"
+    acts["acts"][-1]["home"] = ".loom/library/storage/../../../drafting"
     record.write_text(json.dumps(acts))
     held = tree(q)
     with pytest.raises(IntakeRefused, match="cannot be trusted") as caught:
@@ -1011,7 +1011,7 @@ def test_a_version_is_never_filed_where_another_entry_names(tmp_path: Path, clon
     from tests.unit._quilts import showcase
 
     q = showcase(tmp_path)
-    place = q / ".loom/digests/storage/file/e43d5afaac8f10f0"
+    place = q / ".loom/library/storage/file/e43d5afaac8f10f0"
     naming = sorted(k for k, e in bib(q).items() if e.fields.get("loom-file") == "file/e43d5afaac8f10f0")
     assert len(naming) == 1, naming
     pdf = tmp_path / "second version.pdf"
@@ -1140,7 +1140,7 @@ def test_an_add_that_crashed_is_taken_again_into_the_place_it_left(
     (row,) = taken(q, again)
     entry = bib(q)[row.citekey]
     assert entry.fields["loom-file"] == f"file/{sha[:16]}" and str(identify(entry)[0]) == f"work:{sha[:8]}"
-    stored = [p for p in (q / ".loom/digests/storage").rglob("paper.pdf") if sha256_of(p) == sha]
+    stored = [p for p in (q / ".loom/library/storage").rglob("paper.pdf") if sha256_of(p) == sha]
     assert len(stored) == 1, stored
 
 
@@ -1437,7 +1437,7 @@ def test_a_drop_let_go_as_held_is_given_back_only_while_its_bytes_stand(tmp_path
     (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
     unfile(scan(load_quilt(q)), "Har77", by=WHO)
     # the same bytes found in the store, and adopted by gathering as a work of their own
-    place = q / ".loom/digests/storage/file" / first.id[:16]
+    place = q / ".loom/library/storage/file" / first.id[:16]
     place.mkdir(parents=True)
     shutil.copy(q / INCOMING / first.id / "document.pdf", place / "paper.pdf")
     scan_bibliography(load_quilt(q))
@@ -1484,5 +1484,5 @@ def test_bytes_received_again_while_an_add_stands_wait_again_when_it_is_undone(t
     again = dropped(q, "har 0.pdf", HARTSHORNE[0], tmp_path / "again")
     assert again.drop == first.id and waiting(q) == []
     undo(scan(load_quilt(q)), first.id, by=WHO)
-    assert [p for p in _copies(q, first.id) if p.startswith(".loom/incoming/")], _copies(q, first.id)
+    assert [p for p in _copies(q, first.id) if p.startswith(".loom/local/incoming/")], _copies(q, first.id)
     assert [r["id"] for r in waiting(q)] == [first.id]

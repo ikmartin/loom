@@ -83,11 +83,11 @@ def test_keeping_one_change_leaves_the_other_and_discarding_writes_it_back_with_
     each, union = (c["id"] for c in listed(q))
     ok("changes", "--keep", each, cwd=q)
     assert [c["id"] for c in listed(q)] == [union]
-    versions = len(load_history(q / ".loom/history").entries)
+    versions = len(load_history(q / ".loom/records/history").entries)
     ok("changes", "--discard", union, "--why", "not this", cwd=q)
     text = (q / LEMMA).read_text()
     assert "Each orbit" in text and "the union of" in text and listed(q) == []
-    entries = load_history(q / ".loom/history").entries
+    entries = load_history(q / ".loom/records/history").entries
     assert len(entries) > versions and entries[-1].action == "undo" and entries[-1].get("changes") == [union]
     # a path names every change in its file
     edit(q / LEMMA, "one or two points", "at most two points")
@@ -113,7 +113,7 @@ def test_suggested_edits_on_one_key_combine_and_one_on_the_same_words_waits(q: P
     # kept on the person's word: neither edit, nor an in-place change for its words, waits any more; the third stands on the kept words now
     left = [x for x in listed(q, "suggested") if x["id"] in (a, b, c)]
     assert [x["id"] for x in left] == [c] and left[0]["state"] == "ready" and listed(q) == []
-    log = [json.loads(x) for x in (q / ".loom/edits/log.jsonl").read_text().splitlines()]
+    log = [json.loads(x) for x in (q / ".loom/records/edits/log.jsonl").read_text().splitlines()]
     assert {e["id"] for e in log if e["event"] == "kept"} == {a, b}
 
 

@@ -55,7 +55,7 @@ def test_dot_paths_tools_and_what_the_gitignore_files_ignore_are_hidden(q: Path)
         ".hidden/x.md",
         "node_modules/m.js",
         ".gitignore",
-        ".loom/state.toml",
+        ".loom/records/state.toml",
         "../outside.md",
         "/etc/passwd",
     ):
@@ -155,9 +155,9 @@ def test_a_notebook_is_drawn_read_only_from_its_saved_cells() -> None:
 def test_the_manifest_lists_the_shown_files_and_the_front_door(q: Path) -> None:
     """Each shown file with its kind and size, a drawn body published beside the fragments, and `corpus.home`: `[quilt] home` when it names a shown file, else the root README.md; a setting naming nothing is a warning."""
     put(q, "notes/a.md", "# A\n")
-    put(q, ".loom/copies/hidden.md", "# no\n")
+    put(q, ".loom/agents/copies/hidden.md", "# no\n")
     ok("build", cwd=q)
-    built = q / ".loom/build"
+    built = q / ".loom/cache/site"
     m = json.loads((built / "manifest.json").read_text())
     by = {f["path"]: f for f in m["files"]}
     assert by["notes/a.md"]["kind"] == "markdown" and by["notes/a.md"]["bytes"] == 4
@@ -189,7 +189,7 @@ def test_a_file_no_agent_may_write_says_what_keeps_agents_out(q: Path) -> None:
         else text + '\n[agents]\ndeny = ["drafting/"]\n'
     )
     ok("build", cwd=q)
-    by = {f["path"]: f for f in json.loads((q / ".loom/build/manifest.json").read_text())["files"]}
+    by = {f["path"]: f for f in json.loads((q / ".loom/cache/site/manifest.json").read_text())["files"]}
     assert by["drafting/main.tex"]["denied"] == {"by": "drafting/", "always": False}
     assert by["config.toml"]["denied"] == {"by": "config.toml", "always": True}
     assert by["notes/a.md"]["denied"] is None and by["README.md"]["denied"] is None

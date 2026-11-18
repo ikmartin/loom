@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from loom.paths import BUILD, MANIFEST
+from loom.paths import MANIFEST, SITE
 from loom.render.endpoints.base import ApiError, Handler, _str
 
 
@@ -157,7 +157,7 @@ def _adopt(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
                             and contribution.get("fingerprint") == data["fingerprint"]
                         ):
                             contribution["choices"] = answer
-                    publish(root / BUILD, {}, manifest)
+                    publish(root / SITE, {}, manifest)
         else:
             data = comparison(result, copy)
             chosen = decisions(result, copy, reviewer, data=data)

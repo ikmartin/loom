@@ -1,4 +1,4 @@
-"""`.loom/annotations/log.jsonl`: every review event, appended, and rewritten only to delete an annotation.
+"""`.loom/records/annotations/log.jsonl`: every review event, appended, and rewritten only to delete an annotation.
 
 One line per event, current state by replay. It replaced a tree of `annotations.json` files, one per run and one per author per day, each rewritten whole whenever anything in it changed — which is why an annotation could only ever be *replied* to. An agent re-checking a finding that still stands now `edited`s it: the history stays in the log, one current body is shown, and a finding stops accumulating restatements of itself.
 
@@ -14,7 +14,7 @@ from typing import Any
 
 from loom.anchors import Anchor, is_page_anchor
 from loom.locks import locked
-from loom.paths import ANNOTATION_LOG, BUILD
+from loom.paths import ANNOTATION_LOG, BEFORE_DELETE
 from loom.records.annotations import Annotation, Record, next_id
 from loom.records.ids import ANNOTATION
 from loom.records.selectors import Selector
@@ -38,7 +38,7 @@ def append(root: Path, event: dict[str, Any]) -> None:
 def delete(root: Path, ann_ids: list[str]) -> list[dict[str, Any]]:
     """Delete annotations from the log: each one's every event, and its replies', all the way down.
 
-    The log is rewritten in place under its lock, so its lock keeps holding and no append lands between the read and the write; a copy of the log as it was goes to the build directory first, in case the write is cut short.
+    The log is rewritten in place under its lock, so its lock keeps holding and no append lands between the read and the write; a copy of the log as it was goes to `.loom/local/` first, in case the write is cut short.
 
     Parameters
     ----------
@@ -78,7 +78,7 @@ def delete(root: Path, ann_ids: list[str]) -> list[dict[str, Any]]:
         kept = [line for line, e in parsed if not (e and str(e.get("id")) in gone)]
         removed = [e for _line, e in parsed if e and str(e.get("id")) in gone]
         if removed:
-            backup = root / BUILD / "annotations-before-delete.jsonl"
+            backup = root / BEFORE_DELETE
             backup.parent.mkdir(parents=True, exist_ok=True)
             backup.write_text("\n".join(lines) + "\n", encoding="utf-8")
             with p.open("r+", encoding="utf-8") as fh:

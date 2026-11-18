@@ -129,7 +129,7 @@ class ScanResult:
 
     @cached_property
     def agent_documents(self) -> frozenset[str]:
-        """The live documents an agent and the person both edit: every copy the history records, where its moves have taken it, and any document in `.loom/copies/`, which a file put there by hand keeps an agent's (`loom:agent-document-unrecorded`)."""
+        """The live documents an agent and the person both edit: every copy the history records, where its moves have taken it, and any document in `.loom/agents/copies/`, which a file put there by hand keeps an agent's (`loom:agent-document-unrecorded`)."""
         history = self.history if self.history is not None else load_history(self.quilt.history_dir)
         here = {m for m in self.masters if m.startswith(f"{COPIES}/")}
         return frozenset({*history.copies(set(self.masters)), *here})

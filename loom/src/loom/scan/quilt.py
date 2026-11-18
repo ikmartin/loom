@@ -40,6 +40,10 @@ class NoQuiltError(Exception):
     """Raised when no config.toml with a [quilt] table is found walking up from the start directory."""
 
 
+class LayoutError(NoQuiltError):
+    """Raised for a quilt whose `.loom/` is not in this loom's layout (`loom.layout`); str(exc) says what was found and what this loom reads."""
+
+
 class NoAuthorError(Exception):
     """Raised when no author name can be resolved; str(exc) is NO_AUTHOR_MESSAGE."""
 
@@ -194,7 +198,24 @@ def find_quilt(start: Path | None = None) -> Quilt:
 
 
 def load_quilt(root: Path) -> Quilt:
+    """The quilt at `root`, its `.loom/` stamped with this loom's layout when it has none yet.
+
+    Raises
+    ------
+    LayoutError
+        When `.loom/` holds no layout number or one this loom does not read.
+    """
+    from loom import layout
+
     data = tomllib.loads((root / "config.toml").read_text(encoding="utf-8"))
+    why = layout.refusal(root)
+    if why is not None:
+        raise LayoutError(why)
+    if layout.found(root) is None:
+        try:
+            layout.stamp(root)
+        except OSError:
+            pass  # a quilt loom cannot write into is read as it is
     return Quilt(root=root, config=QuiltConfig.from_dict(data, load_user_config()))
 
 

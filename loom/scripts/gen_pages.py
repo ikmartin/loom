@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Write the pages TeX makes of a committed quilt's documents, for the viewer's served suites, which run with no TeX.
 
-Each document of `tests/quilts/<name>/` is compiled with `loom compile --html` on a copy, in an environment that reads nothing outside the copy and TeX Live, and the copy is built with TeX; under `arras/tests/pages/<name>/`, which `arras/tests/served-setup.ts` lays into each served copy's build, are kept each document's page directory (`<document>/html/`), its aux and bibliography, which number it, and the snippets the build made (`cache/snippets/`: digests, landmarks, comparisons), which a build with `--no-compile` reads and makes no more of. A page names the sources it was made from, so one left behind by a change to the quilt is read as edited since; a snippet is keyed by the code that makes it, so one left behind by a change to that code is never read, and its text shows as source.
+Each document of `tests/quilts/<name>/` is compiled with `loom compile --html` on a copy, in an environment that reads nothing outside the copy and TeX Live, and the copy is built with TeX; under `arras/tests/pages/<name>/`, which `arras/tests/served-setup.ts` lays into each served copy's `.loom/cache/`, are kept each document's page directory in its compile folder (`tex/<stem>-<hash>/html/`), its aux and bibliography, which number it, and the snippets the build made (`blocks/snippets/`: digests, landmarks, comparisons), which a build with `--no-compile` reads and makes no more of. A page names the sources it was made from, so one left behind by a change to the quilt is read as edited since; a snippet is keyed by the code that makes it, so one left behind by a change to that code is never read, and its text shows as source.
 
     python scripts/gen_pages.py [synthetic|showcase|all] [--check]
 """
@@ -42,13 +42,13 @@ def _env(home: Path) -> dict[str, str]:
 
 def pages(name: str, out: Path) -> list[str]:
     """Compile every document of quilt `name` with its HTML into `out`, one directory per document; return the documents."""
-    from loom.paths import document_build
+    from loom.paths import BLOCKS, CACHE, document_build
     from loom.scan.quilt import load_quilt
     from loom.scan.scan import scan
 
     with tempfile.TemporaryDirectory(prefix="loom-pages-") as tmp:
         q = Path(tmp) / name
-        shutil.copytree(QUILTS / name, q, ignore=shutil.ignore_patterns("build"))
+        shutil.copytree(QUILTS / name, q)
         home = Path(tmp) / "home"
         (home / ".config" / "loom").mkdir(parents=True)
         # the author the served suites run as (arras/tests/served.ts), whose perspective decides which comparisons a build asks for
@@ -64,7 +64,7 @@ def pages(name: str, out: Path) -> list[str]:
             if not (made / f"{Path(master).stem}.html").is_file():
                 print(f"{name}: {master} made no page", file=sys.stderr)
                 continue
-            dest = out / Path(document_build(master)).relative_to(".loom/build") / "html"
+            dest = out / Path(document_build(master)).relative_to(CACHE) / "html"
             dest.mkdir(parents=True, exist_ok=True)
             for f in sorted(made.iterdir()):
                 if f.is_file() and f.suffix.lower() in KEPT and f.name != "fragment.html":
@@ -75,10 +75,10 @@ def pages(name: str, out: Path) -> list[str]:
                     shutil.copy2(kept, dest.parent / kept.name)
         # the build makes, as snippets, what no compile does; what TeX refused is left for the served build to refuse again
         subprocess.run([loom, "build", "--quilt", str(q)], env=_env(home), capture_output=True, check=False)
-        made = q / ".loom/build/cache/snippets"
+        made = q / BLOCKS / "snippets"
         for f in sorted(made.rglob("*")) if made.is_dir() else ():
             if f.is_file() and f.suffix.lower() != ".failed":
-                dest = out / "cache" / "snippets" / f.relative_to(made)
+                dest = out / Path(BLOCKS).relative_to(CACHE) / "snippets" / f.relative_to(made)
                 dest.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(f, dest)
         return masters

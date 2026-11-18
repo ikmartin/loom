@@ -33,7 +33,9 @@ By Lemma~\ref{lem:a} and Section~\ref{sec:setup}.
 """
 
 FIXED = {"LOOM_FIXED_TIME": "2026-09-16T00:00:00Z"}
-LANDMARK = ".loom/history/0001-main/main.tex"  # the paper as received, which the import keeps as landmark `main`
+LANDMARK = (
+    ".loom/records/history/0001-main/main.tex"  # the paper as received, which the import keeps as landmark `main`
+)
 
 
 def quilt(tmp_path: Path) -> Path:
@@ -50,14 +52,14 @@ def quilt(tmp_path: Path) -> Path:
 
 
 def manifest(q: Path) -> dict:
-    return json.loads((q / ".loom/build" / "manifest.json").read_text())
+    return json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
 
 
 @pytest.mark.tex
 def test_a_landmark_is_a_fragment_without_identity(tmp_path: Path) -> None:
     q = quilt(tmp_path)
     ok("build", cwd=q, env=FIXED)
-    frag = (q / ".loom/build" / "fragments" / "canon" / "main.html").read_text()
+    frag = (q / ".loom/cache/site" / "fragments" / "canon" / "main.html").read_text()
     assert 'data-fragment="canon"' in frag and 'data-macros="canon:main"' in frag
     assert "<h1" in frag and "Widgets" in frag
     assert 'class="env env-lemma"' in frag
@@ -93,7 +95,7 @@ def test_a_landmark_fragment_is_cached_and_pruned(tmp_path: Path) -> None:
     assert f"canon:{LANDMARK}" in warm.skipped and warm.rendered == []  # unchanged: skipped
     (q / LANDMARK).unlink()
     ok("build", cwd=q, env=FIXED)
-    assert not (q / ".loom/build" / "fragments" / "canon" / "main.html").exists()
+    assert not (q / ".loom/cache/site" / "fragments" / "canon" / "main.html").exists()
     assert manifest(q)["canon"] == []
 
 
@@ -115,7 +117,7 @@ def test_a_conflicted_key_is_published_with_no_text(tmp_path: Path) -> None:
     assert m["states"]["labels"]["conflicted"] == {"label": "conflicted", "color": "negative"}
     d = the(m["diagnostics"], lambda x: x["code"] == "duplicate-id", "duplicate-id diagnostic")
     assert [f["command"] for f in d["fixes"]][0].startswith("loom fork pp-0002 --in")
-    assert not (q / ".loom/build" / "fragments" / "nodes" / "pp-0002.html").exists()
+    assert not (q / ".loom/cache/site" / "fragments" / "nodes" / "pp-0002.html").exists()
 
 
 def test_a_key_whose_text_a_landmark_recorded_carries_its_version(tmp_path: Path) -> None:
@@ -147,11 +149,11 @@ def test_the_history_publishes_every_step_and_each_landmark_its_live_draft(tmp_p
     assert [s["step"] for s in steps] == sorted(s["step"] for s in steps)
     stamped = next(s for s in steps if s["name"] == "widgets-v3")
     assert stamped["action"] == "stamp" and stamped["in"] == "drafting/main.tex"
-    assert stamped["landmark"] == ".loom/history/0005-widgets-v3/widgets-v3.tex"
+    assert stamped["landmark"] == ".loom/records/history/0005-widgets-v3/widgets-v3.tex"
     whole = next(s for s in steps if s["name"] == "stamp-referee-points")
     assert "document" not in whole and "landmark" not in whole  # a stamp of the whole quilt concerns no one document
     assert {c["path"]: c.get("in") for c in m["canon"]}[
-        ".loom/history/0005-widgets-v3/widgets-v3.tex"
+        ".loom/records/history/0005-widgets-v3/widgets-v3.tex"
     ] == "drafting/main.tex"
     # every landmark here is one the author stamped: none says loom kept it
     assert all("kept_for" not in c for c in m["canon"])
@@ -173,5 +175,5 @@ def test_a_landmark_never_compiled_reads_its_live_documents_numbers(tmp_path: Pa
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{Path(draft).stem}.aux").write_text("\\newlabel{lem:a}{{7}{1}}\n\\newlabel{sec:setup}{{4}{1}}\n")
     build(load_quilt(q))
-    frag = (q / ".loom/build" / "fragments" / "canon" / "main.html").read_text()
+    frag = (q / ".loom/cache/site" / "fragments" / "canon" / "main.html").read_text()
     assert ">7<" in frag and ">4<" in frag

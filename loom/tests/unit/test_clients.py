@@ -100,7 +100,9 @@ def test_the_file_written_for_claude_code_starts_the_server_from_inside_the_quil
             assert not r.is_error, r.content[0].text
 
     anyio.run(main)
-    assert '"author": "Claude Code Agent"' in (q / ".loom/annotations" / "log.jsonl").read_text().splitlines()[-1]
+    assert (
+        '"author": "Claude Code Agent"' in (q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines()[-1]
+    )
 
 
 def test_a_file_of_the_persons_is_left_alone_and_the_entry_printed(tmp_path: Path) -> None:

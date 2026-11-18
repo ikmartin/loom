@@ -237,7 +237,7 @@ def test_never_modifies_author_files(quilt: Path, tmp_path: Path) -> None:
     assert [ln for ln in was if not ln.startswith("main")] == [ln for ln in now if not ln.startswith("main")], (
         "config.toml changed in something other than [quilt] main"
     )
-    ledger = ".loom/history/ledger.jsonl"
+    ledger = ".loom/records/history/ledger.jsonl"
     if ledger in before:
         old = (quilt / ledger).read_text(encoding="utf-8")
         assert (q / ledger).read_text(encoding="utf-8").startswith(old), "the history ledger is append-only"

@@ -39,7 +39,7 @@ def test_an_untyped_annotation_is_drawn_in_the_files_plain_look(tmp_path: Path) 
     """One plain look, the file's `[plain]`, for every annotation with no type that sets none; loom's where the file has none, and a bad one costs only itself."""
     assert parse_plain(default_text()) == (Look(**PLAIN), None)
     assert load_types(tmp_path).plain == Look(**PLAIN)
-    (tmp_path / ".loom").mkdir()
+    (tmp_path / ANNOTATION_TYPES).parent.mkdir(parents=True)
     (tmp_path / ANNOTATION_TYPES).write_text(
         FOUR + '\n[plain]\ncolor = "green"\nstyle = "underline"\n', encoding="utf-8"
     )
@@ -67,7 +67,7 @@ def test_a_quilt_without_the_file_has_the_defaults_and_is_told_the_command_that_
 
 
 def test_a_file_that_is_not_toml_loads_the_defaults_and_says_so(tmp_path: Path) -> None:
-    (tmp_path / ".loom").mkdir()
+    (tmp_path / ANNOTATION_TYPES).parent.mkdir(parents=True)
     (tmp_path / ANNOTATION_TYPES).write_text("[[type]\nid = ", encoding="utf-8")
     got = load_types(tmp_path)
     assert [t.id for t in got.types] == ["revision", "suggestion", "question", "note"]
@@ -75,7 +75,7 @@ def test_a_file_that_is_not_toml_loads_the_defaults_and_says_so(tmp_path: Path) 
 
 
 def test_a_type_that_cannot_be_read_costs_only_itself(tmp_path: Path) -> None:
-    (tmp_path / ".loom").mkdir()
+    (tmp_path / ANNOTATION_TYPES).parent.mkdir(parents=True)
     bad = '\n[[type]]\nid = "loud"\nname = "Loud"\ncolor = "teal"\nstyle = "highlight"\nweight = 2\nopacity = 60\n'
     (tmp_path / ANNOTATION_TYPES).write_text(FOUR + bad, encoding="utf-8")
     got = load_types(tmp_path)
@@ -100,7 +100,7 @@ def test_init_writes_the_defaults_listed_and_upgrade_keeps_an_edited_file(tmp_pa
 def test_an_agent_may_edit_the_types_but_nothing_else_of_loom_s(tmp_path: Path) -> None:
     config = QuiltConfig()
     assert denied_by(config, ANNOTATION_TYPES) is None
-    assert denied_by(config, ".loom/annotations/log.jsonl") == ".loom/"
+    assert denied_by(config, ".loom/records/annotations/log.jsonl") == ".loom/"
 
 
 def test_the_manifest_carries_the_types_and_a_bad_file_is_a_diagnostic(tmp_path: Path) -> None:
@@ -110,7 +110,7 @@ def test_the_manifest_carries_the_types_and_a_bad_file_is_a_diagnostic(tmp_path:
     ok("build", cwd=q)
     import json
 
-    manifest = json.loads((q / ".loom" / "build" / "manifest.json").read_text(encoding="utf-8"))
+    manifest = json.loads((q / ".loom" / "cache" / "site" / "manifest.json").read_text(encoding="utf-8"))
     assert [t["id"] for t in manifest["annotation_types"]] == ["hint"]
     assert manifest["annotation_types"][0]["look"] == {
         "color": "green",

@@ -17,7 +17,7 @@ from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted, table
 from loom.cli.review import STATUSES
 from loom.errors import EXIT_CONTENT, EnvError, NotFoundError
-from loom.paths import AI, COPIES, DIGESTS
+from loom.paths import AI, COPIES, LIBRARY
 
 if TYPE_CHECKING:
     from loom.ai.clients import Client, ClientReport
@@ -137,7 +137,7 @@ def delete_command(
 def install_layer(
     root: Path, *, write: bool = True, shell: bool | None = None, apps: list[str] | None = None
 ) -> tuple[LayerReport, ClientReport]:
-    """Write the agent layer into a quilt, or refresh it where `.loom/ai/` exists, with the files of the agent apps it is for: their root lines, permission files and, in the MCP variant, the files that start the server.
+    """Write the agent layer into a quilt, or refresh it where `.loom/agents/instructions/` exists, with the files of the agent apps it is for: their root lines, permission files and, in the MCP variant, the files that start the server.
 
     Parameters
     ----------
@@ -153,14 +153,14 @@ def install_layer(
     Returns
     -------
     LayerReport
-        `written` (quilt-relative paths); `theirs`, a file of the person's at one of loom's paths, left alone; `merged`, one loom wrote its part into, the person's settings in it kept; and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files and `removed`, as `loom upgrade` reports them.
+        `written` (quilt-relative paths); `theirs`, a file of the person's at one of loom's paths, left alone; `merged`, one loom wrote its part into, the person's settings in it kept; and where `.loom/agents/instructions/` existed, `kept` and `new_beside` for edited mode files and `removed`, as `loom upgrade` reports them.
     ClientReport
         The client files written, current, left alone or, in the shell variant, removed.
 
     Raises
     ------
     WriteRefused
-        Where `.loom/ai/` is not a directory of the quilt's own (`refuse_layer`), and nothing is written; or where a file cannot be written.
+        Where `.loom/agents/instructions/` is not a directory of the quilt's own (`refuse_layer`), and nothing is written; or where a file cannot be written.
 
     See Also
     --------
@@ -275,9 +275,9 @@ def sdk_groups(shell: bool) -> list[Group]:
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
 def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
-    """Write the agent layer: .loom/ai/ (orientation, rules, modes), CLAUDE.md, AGENTS.md and GEMINI.md, the permission files, and what starts the loom MCP server for each agent's app.
+    """Write the agent layer: .loom/agents/instructions/ (orientation, rules, modes), CLAUDE.md, AGENTS.md and GEMINI.md, the permission files, and what starts the loom MCP server for each agent's app.
 
-    The permission files say what agents may run, for Claude Code (.claude/settings.json) and Codex (.codex/rules/loom.rules). Over MCP, the default, the server's files are .mcp.json (Claude Code, VS Code), .codex/config.toml, .gemini/settings.json and .cursor/mcp.json, gitignored because they name this machine's paths; one that holds settings of your own is left alone, and --client prints the entry to add to it, or to an app configured outside the quilt. Where .loom/ai/ exists this refreshes what `loom upgrade` would, keeping an edited mode file and writing the new version beside it.
+    The permission files say what agents may run, for Claude Code (.claude/settings.json) and Codex (.codex/rules/loom.rules). Over MCP, the default, the server's files are .mcp.json (Claude Code, VS Code), .codex/config.toml, .gemini/settings.json and .cursor/mcp.json, gitignored because they name this machine's paths; one that holds settings of your own is left alone, and --client prints the entry to add to it, or to an app configured outside the quilt. Where .loom/agents/instructions/ exists this refreshes what `loom upgrade` would, keeping an edited mode file and writing the new version beside it.
     """
     quilt = open_quilt(quilt_path)
     if client is not None:
@@ -475,7 +475,7 @@ def ai_orient(session: str | None, quilt_path: str | None) -> None:
 def ai_mode(name: str, session: str | None, quilt_path: str | None) -> None:
     """Print mode NAME in full: when it fits, what it is for, and what its report shows.
 
-    The quilt's own copy in .loom/ai/modes/ is printed, so an edit the author made there holds; with no .loom/ai/, the shipped one. `loom ai orient` lists every mode with its one line.
+    The quilt's own copy in .loom/agents/instructions/modes/ is printed, so an edit the author made there holds; with no .loom/agents/instructions/, the shipped one. `loom ai orient` lists every mode with its one line.
     """
     from loom.ai.layout import modes
     from loom.ai.orient import mode_text
@@ -572,7 +572,7 @@ def proposals_by(root: Path, name: str) -> list[dict[str, Any]]:
     from loom.refs.proposals import DISCARDED, VERIFIED, edit_diff, load_results, read_events, state_of
 
     out: list[dict[str, Any]] = []
-    for path in sorted((root / DIGESTS).glob("*.results.json")):
+    for path in sorted((root / LIBRARY).glob("*.results.json")):
         ck = path.name[: -len(".results.json")]
         reasons = {e.get("id"): e.get("reason", "") for e in read_events(root, ck) if e.get("event") == "discarded"}
         for rid, r in sorted(load_results(root, ck).items()):

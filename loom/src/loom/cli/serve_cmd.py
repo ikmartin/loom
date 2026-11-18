@@ -33,7 +33,7 @@ from loom.render.serve import BUILD_URL, DEFAULT_PORT, ServeSession, locate_bund
 def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, quilt_path: str | None) -> None:
     """Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
-    The viewer is at /, and the build directory it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
+    The viewer is at /, and what it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
     """
     from loom.arras_bundle import BundleEnvError
 
@@ -64,7 +64,7 @@ def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, q
     note(f"loom serve: {session.url}  (build directory at {session.url.rstrip('/')}{BUILD_URL}; Ctrl-C to stop)")
     if open_browser:
         webbrowser.open(session.url)
-    # A terminal closed or a `kill` stops a server with SIGTERM, not Ctrl-C; either way it stops cleanly, so `.loom/serve.json` never tells a command that something is still listening.
+    # A terminal closed or a `kill` stops a server with SIGTERM, not Ctrl-C; either way it stops cleanly, so `.loom/local/serve.json` never tells a command that something is still listening.
     import signal
 
     def _term(*_: object) -> None:

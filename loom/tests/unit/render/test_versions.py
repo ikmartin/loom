@@ -24,13 +24,13 @@ def annotate(q: Path, quote: str, body: str = "Which points?") -> str:
 
 def built(q: Path) -> dict[str, Any]:
     ok("build", cwd=q)
-    return json.loads((q / ".loom/build/manifest.json").read_text())  # type: ignore[no-any-return]
+    return json.loads((q / ".loom/cache/site/manifest.json").read_text())  # type: ignore[no-any-return]
 
 
 def fragment(q: Path, m: dict[str, Any], key: str) -> str:
     """A node's fragment, or a document's by its path."""
     entry = m["nodes"].get(key) or next(d for d in m["masters"] if d["path"] == key)
-    return (q / ".loom/build" / entry["fragment"]).read_text()
+    return (q / ".loom/cache/site" / entry["fragment"]).read_text()
 
 
 def gone(ann: str) -> str:
@@ -51,7 +51,7 @@ def test_an_annotation_whose_words_were_edited_carries_its_version(tmp_path: Pat
         "fragment": f"fragments/versions/{digest.split(':')[-1][:16]}.html",
         "at": True,
     }
-    old = (q / ".loom/build" / version["fragment"]).read_text()
+    old = (q / ".loom/cache/site" / version["fragment"]).read_text()
     assert f'<mark class="annotation" data-annotation="{ann}">one or two points</mark>' in old
     assert "at most two elements" not in old
     # where its words were, in the node's fragment and in the document's
@@ -77,8 +77,8 @@ def test_two_annotations_on_one_version_share_its_fragment(tmp_path: Path) -> No
     m = built(q)
     one, two = m["annotations"][first]["version"], m["annotations"][second]["version"]
     assert one == two
-    assert [p.name for p in (q / ".loom/build/fragments/versions").iterdir()] == [Path(one["fragment"]).name]
-    old = (q / ".loom/build" / one["fragment"]).read_text()
+    assert [p.name for p in (q / ".loom/cache/site/fragments/versions").iterdir()] == [Path(one["fragment"]).name]
+    old = (q / ".loom/cache/site" / one["fragment"]).read_text()
     assert f'data-annotation="{first}"' in old and f'data-annotation="{second}"' in old
     html = flat(fragment(q, m, "dm-0002"))
     assert gone(first) + "at most two elements" in html
@@ -144,7 +144,7 @@ def test_a_version_is_made_by_tex_and_its_place_kept_in_the_page_tex_made(tmp_pa
     ok("compile", "--html", cwd=q)
     m = built(q)
     version = m["annotations"][ann]["version"]
-    old = (q / ".loom/build" / version["fragment"]).read_text()
+    old = (q / ".loom/cache/site" / version["fragment"]).read_text()
     assert '<pre class="source"' not in old and "env-lemma" in old
     assert f'<mark class="annotation" data-annotation="{ann}">one or two points</mark>' in old
     for key in ("dm-0002", "drafting/main.tex"):

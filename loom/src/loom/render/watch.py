@@ -1,6 +1,6 @@
 """Poll file mtimes, the tree every second and loom's own records five times a second, and rebuild when something the build depends on changed, the skeleton of the site generator's watcher with the roots parameterised.
 
-Watched: every .tex, .sty, .cls, .bib under the quilt root outside loom's build output and store, config.toml, loom's records under `.loom/` (the ledger and snapshots, the annotation log, the reference notes, the agents' files, session files other than the inbox), every file the viewer shows, and the `.gitignore` files that decide which those are. Build-written observation caches are excluded to avoid an extra rebuild. The callback runs in the watcher thread; a blanket except keeps the thread alive and reports.
+Watched: every .tex, .sty, .cls, .bib under the quilt root outside what loom derives, the agents' scratch and the store, config.toml, loom's records under `.loom/` (the ledger and snapshots, the annotation log, the reference notes, the agents' files, session files other than the inbox), every file the viewer shows, and the `.gitignore` files that decide which those are. Build-written observation caches are excluded to avoid an extra rebuild. The callback runs in the watcher thread; a blanket except keeps the thread alive and reports.
 """
 
 from __future__ import annotations
@@ -18,32 +18,34 @@ from loom.paths import (
     ADOPTION_DECISIONS,
     ANNOTATION_LOG,
     ANNOTATIONS,
-    BUILD,
+    CACHE,
+    COMPILES,
     COPIES,
-    DIGESTS,
     EDIT_LOG,
     EDITS,
+    LAST_SEEN,
+    LIBRARY,
     LIVE,
     LOOM,
     RETIRED,
     REVIEW_DECISIONS,
     REVIEW_OBSERVATIONS,
     REVIEW_ORIGINS,
+    SCRATCH,
     SERVE_JSON,
     SESSIONS,
     SINCE,
     STORAGE,
 )
-from loom.records.lastseen import CACHE
 
 if TYPE_CHECKING:
     from loom.files import Shown
 
 SKIP = {".git", "node_modules", ".svelte-kit"}
-#: Pruned by quilt-relative path: the build output, which a build writes and which holds thousands of files, and loom's store of other people's documents, which no build reads as source.
-PRUNED = (BUILD, STORAGE)
+#: Pruned by quilt-relative path: what loom derives, which a build writes and which holds thousands of files, the agents' scratch, which no build reads, and loom's store of other people's documents, which no build reads as source.
+PRUNED = (CACHE, SCRATCH, STORAGE)
 #: The directories under `.loom/` watched for their sources alone, as any of the quilt's directories is; everything else there is a record.
-SOURCES_ONLY = (f"{DIGESTS}/", f"{RETIRED}/", f"{COPIES}/")
+SOURCES_ONLY = (f"{LIBRARY}/", f"{RETIRED}/", f"{COPIES}/")
 SUFFIXES = {".tex", ".sty", ".cls", ".bib", ".toml", ".json", ".jsonl", ".md", ".log"}
 #: What a change to records alone touches; see `scan_unread`.
 RECORDS = (f"{ANNOTATIONS}/", f"{EDITS}/", f"{SESSIONS}/")
@@ -92,11 +94,11 @@ def snapshot(root: Path, shown: Shown | None = None) -> dict[Path, float]:
                 pass
             continue
         # A session's inbox is read live through `/_api/events`; rebuilding the manifest per message would re-render what the reader has open.
-        if p.suffix not in SUFFIXES or p.name in (Path(CACHE).name, Path(REVIEW_OBSERVATIONS).name, INBOX):
+        if p.suffix not in SUFFIXES or p.name in (Path(LAST_SEEN).name, Path(REVIEW_OBSERVATIONS).name, INBOX):
             continue
         rel = p.relative_to(root)
-        # Review decisions are written only by a write that rebuilds after it (`review-accept`, taking changes in), and `serve.json` is the server's own note of where it listens, which no build reads
-        if rel.as_posix() in (REVIEW_DECISIONS, ADOPTION_DECISIONS, SERVE_JSON):
+        # Review decisions are written only by a write that rebuilds after it (`review-accept`, taking changes in), and `serve.json` and `compiles.json` are the server's own notes of where it listens and how its compiles stand, which no build reads
+        if rel.as_posix() in (REVIEW_DECISIONS, ADOPTION_DECISIONS, SERVE_JSON, COMPILES):
             continue
         # where each agent last looked (`loom since`), which no build reads either
         if rel.as_posix().startswith(f"{SINCE}/"):

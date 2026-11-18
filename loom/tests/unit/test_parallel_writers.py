@@ -196,12 +196,15 @@ def test_parallel_steps_each_draw_a_number_of_their_own(tmp_path: Path) -> None:
     calls = [["draft", doc, "--ai", f"copy{key}", "--section", key, "--as", AGENT] for key in ("dm-0010", "dm-0011")]
     calls += [["stamp", doc, "-m", f"landmark {i}"] for i in range(2)]
     all_ok(racing(q, calls))
-    history = load_history(q / ".loom" / "history")
+    history = load_history(q / ".loom" / "records" / "history")
     steps = [e.step for e in history.steps()]
     assert steps == list(range(1, len(steps) + 1)), steps
     assert len(steps) >= 4 and not history.unrecorded_dirs()
     copies = [e for e in history.entries if e.action == "copy"]
-    assert sorted(str(e.get("to")) for e in copies) == [".loom/copies/copydm-0010.tex", ".loom/copies/copydm-0011.tex"]
+    assert sorted(str(e.get("to")) for e in copies) == [
+        ".loom/agents/copies/copydm-0010.tex",
+        ".loom/agents/copies/copydm-0011.tex",
+    ]
     assert len({e.get("suffix") for e in copies}) == 2
     ok("history", "verify", cwd=q)
 
@@ -213,7 +216,7 @@ def test_parallel_drafts_of_one_scope_leave_one_copy_and_clean_refusals(tmp_path
     won = [r for r in results if r.returncode == 0]
     lost = [r for r in results if r.returncode != 0]
     assert len(won) == 1 and all(r.returncode == 2 and "overlaps" in r.stderr for r in lost), results
-    assert len(list((q / ".loom" / "copies").glob("copy*.tex"))) == 1
+    assert len(list((q / ".loom" / "agents" / "copies").glob("copy*.tex"))) == 1
 
 
 def test_parallel_new_and_fork_draw_from_one_counter(tmp_path: Path) -> None:
@@ -231,7 +234,7 @@ def test_parallel_new_and_fork_draw_from_one_counter(tmp_path: Path) -> None:
 def test_a_step_planned_from_a_history_that_has_moved_on_is_refused_and_writes_nothing(tmp_path: Path) -> None:
     """The viewer's acts plan from a history read before any lock; its number is already in what they would record."""
     q = demo(tmp_path)
-    hist = q / ".loom" / "history"
+    hist = q / ".loom" / "records" / "history"
     planned = load_history(hist)
     write_step(load_history(hist), "stamp", "first", FreezePlan(), "someone")
     ledger = (hist / "ledger.jsonl").read_bytes()
@@ -244,7 +247,7 @@ def test_a_step_planned_from_a_history_that_has_moved_on_is_refused_and_writes_n
 def test_a_step_being_written_is_not_taken_for_an_interrupted_one(tmp_path: Path) -> None:
     """Its directory exists before its line, and the refusal says to remove that directory: said of a live step, that would destroy it."""
     q = demo(tmp_path)
-    hist = q / ".loom" / "history"
+    hist = q / ".loom" / "records" / "history"
     stale = load_history(hist)
     n = stale.next_step()
     started = threading.Event()

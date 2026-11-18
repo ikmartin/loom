@@ -29,7 +29,7 @@ export default function setup(config: FullConfig): void {
 	}
 	// the pages TeX made of the quilt's documents (loom/scripts/gen_pages.py), since the suites run no TeX: without them every document shows as its source
 	const pages = join(ARRAS, 'tests', 'pages', suite.quilt);
-	if (existsSync(pages)) cpSync(pages, join(dir, 'template', '.loom', 'build'), { recursive: true });
+	if (existsSync(pages)) cpSync(pages, join(dir, 'template', '.loom', 'cache'), { recursive: true });
 	// built once here, so each served copy starts from a warm cache; the quilt's own errors make loom exit 1, which is not a failure to build
 	try {
 		execFileSync(LOOM, ['build', '--no-compile', '--quilt', join(dir, 'template')], { cwd: ARRAS, stdio: 'pipe', env: reviewerEnv(suite, join(dir, 'config')) });

@@ -85,7 +85,7 @@ def test_the_place_is_held_in_memory_and_served_only_with_the_token(tmp_path: Pa
     q = demo(tmp_path)
     s = serve(q)
     before = {
-        p.relative_to(q).as_posix(): p.read_bytes() for p in q.rglob("*") if p.is_file() and "build" not in p.parts
+        p.relative_to(q).as_posix(): p.read_bytes() for p in q.rglob("*") if p.is_file() and "cache" not in p.parts
     }
     told(
         s,
@@ -96,10 +96,10 @@ def test_the_place_is_held_in_memory_and_served_only_with_the_token(tmp_path: Pa
         },
     )
     after = {
-        p.relative_to(q).as_posix(): p.read_bytes() for p in q.rglob("*") if p.is_file() and "build" not in p.parts
+        p.relative_to(q).as_posix(): p.read_bytes() for p in q.rglob("*") if p.is_file() and "cache" not in p.parts
     }
     assert after == before and not any(b"private words" in b for b in after.values())
-    assert not any(b"private words" in p.read_bytes() for p in (q / ".loom/build").rglob("*") if p.is_file())
+    assert not any(b"private words" in p.read_bytes() for p in (q / ".loom/cache").rglob("*") if p.is_file())
     token = json.loads(get(s.url + "_api")[2])["token"]
     assert get(s.url + "_api/here")[0] == 403
     assert get(s.url + "_api/here", {"X-Loom-Token": token, "Origin": "http://evil.example"})[0] == 403
@@ -126,7 +126,7 @@ def test_the_annotation_whose_popup_is_open_and_a_region_come_with_crops(session
         "A. Author",
         cwd=q,
     )
-    ann = json.loads((q / ".loom/annotations" / "log.jsonl").read_text().splitlines()[-1])["id"]
+    ann = json.loads((q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines()[-1])["id"]
     told(
         s,
         {
@@ -143,13 +143,13 @@ def test_the_annotation_whose_popup_is_open_and_a_region_come_with_crops(session
         1,
         "notes/paper.pdf",
     )
-    assert got["annotation"]["crop"].startswith(".loom/build/crops/")
+    assert got["annotation"]["crop"].startswith(".loom/cache/crops/")
     assert (
-        got["selection"]["crop"].startswith(".loom/build/crops/")
+        got["selection"]["crop"].startswith(".loom/cache/crops/")
         and got["selection"]["crop"] != got["annotation"]["crop"]
     )
     text = ok("here", cwd=q).stdout
-    assert f"annotation {ann}" in text and text.count("crop: .loom/build/crops/") == 2
+    assert f"annotation {ann}" in text and text.count("crop: .loom/cache/crops/") == 2
     told(
         s, {"route": "reading", "item": {"kind": "file", "id": "notes/paper.pdf"}, "annotation": "a-2026-01-01-gone00"}
     )

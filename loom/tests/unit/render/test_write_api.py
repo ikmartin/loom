@@ -156,17 +156,17 @@ def test_the_write_api_refuses_a_post_from_another_page() -> None:
 
 
 def test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers(session) -> None:  # type: ignore[no-untyped-def]
-    """`/build/` and `/digests/storage/` are served in the viewer's origin, and an agent writes the build output. An HTML or SVG page there that ran as the viewer could read the token from `/_api` and post the author's acts naming no author, which is the author's own click (K5). Each is served sandboxed: it runs no script and has an opaque origin. The viewer's own bundle is not."""
-    from loom.paths import BUILD, STORAGE, STORE_ADDRESS
+    """`/build/` and `/digests/storage/` are served in the viewer's origin, and an agent running as the person can write what they serve. An HTML or SVG page there that ran as the viewer could read the token from `/_api` and post the author's acts naming no author, which is the author's own click (K5). Each is served sandboxed: it runs no script and has an opaque origin. The viewer's own bundle is not."""
+    from loom.paths import SITE, STORAGE, STORE_ADDRESS
 
     s, d = session
     planted = {  # address: (file, text)
-        "build/agent/x.html": (f"{BUILD}/agent/x.html", "<!doctype html><script>fetch('/_api')</script>"),
+        "build/agent/x.html": (f"{SITE}/agent/x.html", "<!doctype html><script>fetch('/_api')</script>"),
         f"{STORE_ADDRESS}/arxiv/0805.2065v2/src/f.svg": (
             f"{STORAGE}/arxiv/0805.2065v2/src/f.svg",
             '<svg xmlns="http://www.w3.org/2000/svg"><script>fetch("/_api")</script></svg>',
         ),
-        "build/agent/x.txt": (f"{BUILD}/agent/x.txt", "<!doctype html><script>fetch('/_api')</script>"),
+        "build/agent/x.txt": (f"{SITE}/agent/x.txt", "<!doctype html><script>fetch('/_api')</script>"),
     }
     for rel, (file, text) in planted.items():
         (d / file).parent.mkdir(parents=True, exist_ok=True)
@@ -185,7 +185,7 @@ def test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers(session)
 
 def test_the_token_is_served_only_to_the_viewers_own_origin(session) -> None:  # type: ignore[no-untyped-def]
     """`GET /_api` hands out the token, so a request a browser says came from another origin, a sandboxed page's `null` included, is refused; a request with no browser's headers, and the person typing the address, are answered."""
-    from loom.render.serve import read_serve_json
+    from loom.machine import read_token
 
     s, d = session
     here = s.url.rstrip("/")
@@ -199,7 +199,7 @@ def test_the_token_is_served_only_to_the_viewers_own_origin(session) -> None:  #
         assert status == 403, headers
     for headers in ({}, {"Origin": here}, {"Sec-Fetch-Site": "same-origin"}, {"Sec-Fetch-Site": "none"}):
         status, _, raw = get(s.url + "_api", headers)
-        assert status == 200 and json.loads(raw)["token"] == read_serve_json(d)["token"], headers
+        assert status == 200 and json.loads(raw)["token"] == read_token(d), headers
 
 
 def test_a_request_that_names_another_host_is_answered_nothing(session) -> None:  # type: ignore[no-untyped-def]
@@ -207,11 +207,11 @@ def test_a_request_that_names_another_host_is_answered_nothing(session) -> None:
     import urllib.error
     import urllib.request
 
-    from loom.render.serve import read_serve_json
+    from loom.machine import read_token
     from tests.helpers import PATIENCE
 
     s, d = session
-    token = str(read_serve_json(d)["token"])
+    token = read_token(d)
     for host in (f"rebound.example:{s.port}", "rebound.example", f"127.0.0.1:{s.port + 1}", "127.0.0.1"):
         for path in ("_api", "", "node/dm-0003", "build/manifest.json", "_app/x.js", "_api/stream", "_api/jobs"):
             status, _, _ = get(s.url + path, {"Host": host, "X-Loom-Token": token})

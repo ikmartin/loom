@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from loom.paths import document_build
 from tests.helpers import json_of, ok, refused
 
 
@@ -18,7 +19,7 @@ def q(tmp_path: Path) -> Path:
         ("main", {"dm-0001": "1.1", "eq:fix": "1", "dm-0002": "1.2", "dm-0003": "1.3"}),
         ("outline", {"dm-0001": "1", "dm-0002": "1.3"}),
     ):
-        out = q / ".loom/build" / "drafting" / stem
+        out = q / document_build(f"drafting/{stem}.tex")
         out.mkdir(parents=True, exist_ok=True)
         aux = "".join(f"\\newlabel{{{k}}}{{{{{n}}}{{1}}}}\n" for k, n in labels.items())
         (out / f"{stem}.aux").write_text(aux, encoding="utf-8")

@@ -29,7 +29,7 @@ Several triggers below are numbers loom already prints. That is the property to 
 | [WQ-22](WQ-22-extraction-node-model.md) | digest extraction shares the node model | loom | extraction and atomize disagree about what a node is |
 | [WQ-28](WQ-28-annotated-export.md) | an annotated view exported as LaTeX and PDF | loom, arras | a review has to reach someone who cannot run arras |
 | [WQ-29](WQ-29-node-manager.md) | the node manager: fork from history, retire, merge, rename | loom, arras | ten or more forks, or a fork or rename by hand goes wrong once |
-| [WQ-30](WQ-30-history-gc.md) | `loom history gc` | loom | `.loom/history/texts/` exceeds a few thousand files or fifty megabytes |
+| [WQ-30](WQ-30-history-gc.md) | `loom history gc` | loom | `.loom/records/history/texts/` exceeds a few thousand files or fifty megabytes |
 | [WQ-36](WQ-36-annotation-bodies-beside-the-manifest.md) | annotation bodies and PDF geometry beside the manifest rather than inside it | loom, arras | a manifest crosses a few megabytes because of annotation prose, or one megabyte because of the rectangles and strokes of annotations on PDF pages |
 | [WQ-39](WQ-39-mechanical-version-check.md) | a mechanical version check for extracted digests | loom | the author cites, with a locator, a result in a flagged digest that the cited version numbers differently |
 | [WQ-42](WQ-42-the-gradient-with-orientation-held.md) | measure the gradient with orientation held fixed | — | before the layer is claimed to make later questions cheaper outside the project |

@@ -23,7 +23,7 @@ Second prose.
   writeFileSync(join(root,sourcePath),text);
   loom(['draft',sourcePath,'--ai','first-scope','--section','sy-0A00']);
   loom(['draft',sourcePath,'--ai','second-scope','--section','sy-0B00']);
-  const draft = join(root,'.loom/copies/first-scope.tex');
+  const draft = join(root,'.loom/agents/copies/first-scope.tex');
   writeFileSync(draft,readFileSync(draft,'utf8').replace('Original','Proposed').replace('First prose.','New prose.').replace('\\begin{document}','\\newcommand{\\extra}{E}\n\\begin{document}'));
   });
  }
@@ -33,7 +33,7 @@ for (const width of [736, 1100, 1440]) {
  test(`section source, preamble and close/reopen at ${width}px`, async ({page, served}) => {
   // preview, incorporate, a close that builds the quilt first and a reopen: past the default 30 s on a CI runner
   await page.setViewportSize({width, height:1000});
-  await page.goto('/review/proposed?copy=' + encodeURIComponent('.loom/copies/first-scope.tex'));
+  await page.goto('/review/proposed?copy=' + encodeURIComponent('.loom/agents/copies/first-scope.tex'));
   const row = page.locator('[data-testid="change-row"][data-key="sy-0A01"]');
   const preamble = page.locator('[data-testid="change-row"][data-key="preamble"]');
   const shown = page.getByTestId('change-shown');
@@ -77,7 +77,7 @@ for (const width of [736, 1100, 1440]) {
   expect(applied).toContain('First prose.');
   expect(applied).toContain('Second prose.');
   expect(applied).toContain('\\newcommand{\\extra}');
-  await page.goto('/master/.loom/copies/first-scope');
+  await page.goto('/master/.loom/agents/copies/first-scope');
   await page.getByRole('button',{name:'Close draft',exact:true}).click();
   await expect(page.getByRole('button',{name:'Close and keep saved copy'})).toBeVisible();
   await page.getByRole('button',{name:'Close and keep saved copy'}).click();

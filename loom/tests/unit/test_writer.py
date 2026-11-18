@@ -28,7 +28,7 @@ def test_an_agent_that_has_not_said_who_it_is_is_refused_rather_than_guessed_at(
 def test_a_write_that_names_nobody_under_a_marker_is_refused_by_every_command(tmp_path: Path) -> None:
     """`loom annotate` recorded such a write as `agent` while `loom new` and `loom session say` refused it; now all of them ask, and the refusal names what the app goes by."""
     q = demo(tmp_path)
-    log = q / ".loom/annotations" / "log.jsonl"
+    log = q / ".loom/records/annotations" / "log.jsonl"
     before = log.read_text()
     for act in (
         ["annotate", "dm-0002", "A finding.", "--type", "note"],
@@ -57,7 +57,7 @@ def test_a_write_that_names_nobody_under_a_marker_is_refused_by_every_command(tm
 def test_under_a_marker_a_name_that_does_not_say_it_is_an_agent_is_refused(tmp_path: Path) -> None:
     """Two of five agents signed `Claude` and `Claude Haiku 5.5`, and those notes were recorded as a person's, so `loom since` handed them back as what the person did. A name cannot be checked (DR-325-ikmartin), so under a marker it must say what the marker says: every command that records a declared name refuses, says how to sign, and writes nothing. With no marker the same name is taken at its word."""
     q = demo(tmp_path)
-    log = q / ".loom/annotations" / "log.jsonl"
+    log = q / ".loom/records/annotations" / "log.jsonl"
     before = log.read_text()
     marked = {"CLAUDECODE": "1"}
     for name in ("Claude", "Claude Haiku 5.5", "A. Author"):
@@ -154,7 +154,7 @@ def test_every_act_that_is_the_authors_or_destroys_refuses_under_an_agent_marker
         ["library", "ignore", "Bellamy19", "--why", "no", "--as", "A. Author"],
         ["library", "drop", "--work", "Bellamy19", "--yes"],
         ["library", "verify", "a-0000-00-00-m2qyj6", "--as", "A. Author"],
-        ["library", "import", str(q / ".loom/digests" / "Bellamy19.tex"), "--name", "Other20"],
+        ["library", "import", str(q / ".loom/library" / "Bellamy19.tex"), "--name", "Other20"],
         ["ai", "delete", "--before", "2100-01-01", "--yes"],
         ["changes", "--keep", "e-0000-00-00-m2qyj6"],
         ["changes", "--discard-all"],
@@ -184,5 +184,5 @@ def test_an_agent_may_remove_only_a_link_a_session_asserted(tmp_path: Path) -> N
     refused(*undo, theirs.id, "--as", "Referee (Agent)", code=2, match="asserted by A. Author")
     ok(*undo, mine.id, env=marked)
     assert [x.id for x in read_links(q)].count(theirs.id) == 1
-    removed = [json.loads(ln) for ln in (q / ".loom/digests" / "links-removed.jsonl").read_text().splitlines()]
+    removed = [json.loads(ln) for ln in (q / ".loom/library" / "links-removed.jsonl").read_text().splitlines()]
     assert removed[-1]["link"]["id"] == mine.id and removed[-1]["removed_by"] and removed[-1]["why"] == "a misreading"

@@ -13,7 +13,7 @@ from tests.unit._quilts import demo
 
 def built(q: Path) -> dict[str, Any]:
     run("build", cwd=q)
-    return json.loads((q / ".loom/build/manifest.json").read_text())["agents"]  # type: ignore[no-any-return]
+    return json.loads((q / ".loom/cache/site/manifest.json").read_text())["agents"]  # type: ignore[no-any-return]
 
 
 def test_a_quilt_with_no_agent_layer_is_set_up_for_no_app(tmp_path: Path) -> None:
@@ -43,10 +43,10 @@ def test_a_quilt_set_up_for_claude_code_says_so_and_what_its_agent_is_told(tmp_p
 def test_a_mode_the_author_edited_is_marked_and_its_line_is_the_quilts(tmp_path: Path) -> None:
     q = demo(tmp_path)
     ok("upgrade", cwd=q)
-    mode = q / ".loom/ai/modes/referee.md"
+    mode = q / ".loom/agents/instructions/modes/referee.md"
     text = mode.read_text()
     fits = next(ln for ln in text.splitlines() if ln.startswith("When it fits:"))
     mode.write_text(text.replace(fits, "When it fits: refereeing, as this quilt does it."))
     got = {m["name"]: m for m in built(q)["modes"]}
     assert got["referee"]["edited"] is True and got["referee"]["fits"] == "refereeing, as this quilt does it."
-    assert got["referee"]["path"] == ".loom/ai/modes/referee.md" and got["quick"]["edited"] is False
+    assert got["referee"]["path"] == ".loom/agents/instructions/modes/referee.md" and got["quick"]["edited"] is False

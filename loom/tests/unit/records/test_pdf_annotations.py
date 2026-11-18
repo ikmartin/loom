@@ -33,7 +33,9 @@ def paper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def log(q: Path) -> list[dict[str, Any]]:
-    return [json.loads(x) for x in (q / ".loom/annotations" / "log.jsonl").read_text().splitlines() if x.strip()]
+    return [
+        json.loads(x) for x in (q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines() if x.strip()
+    ]
 
 
 def annotated(q: Path, *args: str, who: str = "Tester") -> dict[str, Any]:
@@ -231,7 +233,7 @@ def test_an_older_drawing_with_no_gap_stays_detached_and_older_words_are_found(p
     on = ("notes/paper.pdf", "--page", "1")
     words = annotated(paper, *on, "--quote", "the median polytope is integral")
     box = annotated(paper, *on, "--box", "300,110,360,150", "--mark", "box")
-    path = paper / ".loom/annotations" / "log.jsonl"
+    path = paper / ".loom/records/annotations" / "log.jsonl"
     lines = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
     for e in lines:
         if e.get("id") == words["id"]:
@@ -342,7 +344,7 @@ def test_a_note_on_a_works_page_is_found_again_on_a_changed_copy_of_the_work(tmp
     words = annotated(q, "Bellamy19", "Why?", "--page", "2", "--quote", "totally unimodular")["id"]
     box = annotated(q, "Bellamy19", "This one.", "--page", "2", "--box", "82,85,157,97")
     assert box["anchor"]["basis"] == "box" and box["anchor"]["exact"] == "Theorem 2.3." and box["gap"]
-    home = q / ".loom/digests/storage/doi/10.4171_showcase_19-2"
+    home = q / ".loom/library/storage/doi/10.4171_showcase_19-2"
     # the copy is filed again: its bytes differ, so its map names another hash, and its words moved to page 3
     pdf = home / "paper.pdf"
     pdf.write_bytes(pdf.read_bytes() + b"\n% filed again\n")
@@ -367,9 +369,9 @@ def test_a_note_on_a_work_filed_by_its_hash_is_read_on_the_copy_it_was_written_o
     from loom.scan.bib import parse_bib
 
     q = showcase(tmp_path)
-    store = q / ".loom/digests/storage"
+    store = q / ".loom/library/storage"
     assert (store / "file/e43d5afaac8f10f0/paper.pdf").is_file()
-    entries = parse_bib((q / ".loom/digests/bibliography.bib").read_text(encoding="utf-8"))
+    entries = parse_bib((q / ".loom/library/bibliography.bib").read_text(encoding="utf-8"))
     version = next(k for k, e in entries.items() if e.fields.get("loom-copy-of") == "Arden24")
     quote = "a saturated sublattice of the lattice of weightings"
     note = annotated(q, version, "Why saturated?", "--page", "2", "--quote", quote, who="A. Author")
@@ -383,6 +385,6 @@ def test_a_note_on_a_work_filed_by_its_hash_is_read_on_the_copy_it_was_written_o
     for n, text in ((1, "Nothing here."), (2, "Nor here."), (3, f"Here: {quote}.")):
         (decoy / "pages" / f"{n:04d}.txt").write_text(text + "\n")
     exits(1, "build", cwd=q)
-    row = json.loads((q / ".loom/build" / "manifest.json").read_text())["annotations"][note["id"]]
+    row = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["annotations"][note["id"]]
     assert (row["target"]["work"], row["target"]["page"]) == (version, 2)
     assert (row["recorded"], row["anchored"], row["refound"], row["detached"]) == (True, True, False, False)

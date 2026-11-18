@@ -1164,7 +1164,7 @@ test.describe('Settings › Annotations', () => {
 	test('without a publisher that saves types it is shown as published', async ({ page }) => {
 		await page.goto('/master/drafting/main');
 		await settings(page, 'annotations');
-		await expect(page.getByTestId('settings-read-only')).toContainText('.loom/annotation-types.toml');
+		await expect(page.getByTestId('settings-read-only')).toContainText('.loom/records/annotation-types.toml');
 		await expect(page.getByTestId('type-name')).toBeDisabled();
 		await expect(page.getByTestId('types-add')).toHaveCount(0);
 	});

@@ -17,9 +17,9 @@ def test_blank_comments_preserves_offsets() -> None:
 @pytest.mark.parametrize(
     "excluded",
     [
-        pytest.param(".loom/build/x.tex", id="build-output"),
-        pytest.param(".loom/retired/old.tex", id="a-retired-source"),
-        pytest.param(".loom/digests/storage/arxiv/1/src/paper.tex", id="the-store-of-fetched-works"),
+        pytest.param(".loom/cache/x.tex", id="derived"),
+        pytest.param(".loom/records/retired/old.tex", id="a-retired-source"),
+        pytest.param(".loom/library/storage/arxiv/1/src/paper.tex", id="the-store-of-fetched-works"),
         pytest.param("notes.txt", id="not-tex"),
     ],
 )
@@ -27,11 +27,11 @@ def test_the_quilts_text_is_every_tex_file_outside_loom_s_directory_but_its_dige
     tmp_path: Path, excluded: str
 ) -> None:
     """Nothing under `.loom/` is the quilt's text but the digests, read there on purpose: a fetched e-print in the store is a whole paper carrying its own labels (DR-108)."""
-    for rel in ["drafting/main.tex", "drafting/nodes/a.tex", ".loom/digests/Kre99.tex", excluded]:
+    for rel in ["drafting/main.tex", "drafting/nodes/a.tex", ".loom/library/Kre99.tex", excluded]:
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("x", encoding="utf-8")
-    assert discover_files(tmp_path) == [".loom/digests/Kre99.tex", "drafting/main.tex", "drafting/nodes/a.tex"]
+    assert discover_files(tmp_path) == [".loom/library/Kre99.tex", "drafting/main.tex", "drafting/nodes/a.tex"]
 
 
 def test_non_utf8_source_decoded(tmp_path: Path) -> None:

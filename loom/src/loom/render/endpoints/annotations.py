@@ -151,7 +151,7 @@ def _look(body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _types_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`types-save` writes `.loom/annotation-types.toml` whole from Settings › Annotations, the plain look with the types when `plain` is sent, or with `defaults` the defaults; the author's act, refused to a declared agent, which edits the file itself."""
+    """`types-save` writes `.loom/records/annotation-types.toml` whole from Settings › Annotations, the plain look with the types when `plain` is sent, or with `defaults` the defaults; the author's act, refused to a declared agent, which edits the file itself."""
     from loom.identity import is_agent
     from loom.records.types import TypesRefused, save_types
     from loom.scan.quilt import reviewer_identity

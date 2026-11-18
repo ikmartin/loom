@@ -41,7 +41,7 @@ test('a pasted BibTeX entry is read at once, added to loom\'s bibliography, and 
 	await page.getByTestId('add-add').click();
 	await expect(page).toHaveURL(/\/library\/Ost18/);
 	await expect(page.getByTestId('work-added')).toHaveText('added by hand, not cited yet');
-	expect(readFileSync(join(served.root, '.loom/digests/bibliography.bib'), 'utf8')).toContain('loom-added');
+	expect(readFileSync(join(served.root, '.loom/library/bibliography.bib'), 'utf8')).toContain('loom-added');
 });
 
 test('a dropped PDF is added from its metadata, filled in where it can be guessed, with the Add button', async ({ page }) => {
@@ -72,15 +72,15 @@ test('a PDF that is no published work, with no identifier, is kept and asks for 
 	await expect(page).toHaveURL(/\/library\/jhaStatisticsQuantsRevision/);
 	await expect(page.getByTestId('status-paper')).toContainText('filed');
 	await expect(page.getByTestId('work-status')).not.toContainText('Fetch it');
-	const bib = readFileSync(join(served.root, '.loom/digests/bibliography.bib'), 'utf8');
+	const bib = readFileSync(join(served.root, '.loom/library/bibliography.bib'), 'utf8');
 	expect(bib).toContain('Statistics for Quants: Revision Notes');
 	const home = /loom-file = \{(file\/[0-9a-f]+)\}/.exec(bib)![1];
-	expect(existsSync(join(served.root, '.loom/digests/storage', home, 'paper.pdf'))).toBe(true);
+	expect(existsSync(join(served.root, '.loom/library/storage', home, 'paper.pdf'))).toBe(true);
 	// it reads as a work: its text opens, and it is nothing the library's page asks about
 	await page.goto(page.url().replace(/\?.*$/, ''));
 	await expect(page.getByTestId('pdf-page-1').locator('canvas')).toBeAttached();
 	// and what a run reads off it arrives behind the filing
-	await expect.poll(() => existsSync(join(served.root, '.loom/digests/storage', home, 'pages/0001.txt'))).toBe(true);
+	await expect.poll(() => existsSync(join(served.root, '.loom/library/storage', home, 'pages/0001.txt'))).toBe(true);
 	await page.goto('/review/library');
 	await expect(page.locator('[data-testid^="ledger-jhaStatisticsQuantsRevision"]')).toBeVisible();
 	await expect(page.locator('[data-testid^="problem-jhaStatisticsQuantsRevision"]')).toHaveCount(0);
@@ -109,7 +109,7 @@ test('a PDF the library has as a work is filed there by Add, unless the person s
 	await page.getByTestId('add-add').click();
 	await expect(page).not.toHaveURL(/\/library\/Ost20/);
 	await expect(page).toHaveURL(/\/library\/[A-Z]/);
-	expect(readFileSync(join(served.root, '.loom/digests/bibliography.bib'), 'utf8')).toContain('Notes on widget categories');
+	expect(readFileSync(join(served.root, '.loom/library/bibliography.bib'), 'utf8')).toContain('Notes on widget categories');
 
 	await page.goto('/review/library');
 	await page.getByTestId('review-add').click();
@@ -134,7 +134,7 @@ test("a work's Info takes the person's own PDF, whatever its pages show", async 
 	await page.getByTestId('add-done').click();
 	await expect(page.getByTestId('status-paper')).toContainText('filed');
 	await expect(page.getByTestId('status-upload')).toHaveCount(0);
-	expect(readFileSync(join(served.root, '.loom/digests/storage/copied.json'), 'utf8')).toContain('cover scan.pdf');
+	expect(readFileSync(join(served.root, '.loom/library/storage/copied.json'), 'utf8')).toContain('cover scan.pdf');
 });
 
 test('reading a filed text says how far it has got, and a clean read leaves nothing behind', async ({ page, served }) => {
@@ -146,8 +146,8 @@ test('reading a filed text says how far it has got, and a clean read leaves noth
 	await expect(page.getByTestId('add-title')).toHaveValue('A long set of notes, page 1');
 	await page.getByTestId('add-add').click();
 	await expect(page).toHaveURL(/\/library\/Lon/);
-	const home = /loom-file = \{(file\/[0-9a-f]+)\}/.exec(readFileSync(join(served.root, '.loom/digests/bibliography.bib'), 'utf8'))![1];
-	await expect.poll(() => existsSync(join(served.root, '.loom/digests/storage', home, 'pages/0040.txt'))).toBe(true);
+	const home = /loom-file = \{(file\/[0-9a-f]+)\}/.exec(readFileSync(join(served.root, '.loom/library/bibliography.bib'), 'utf8'))![1];
+	await expect.poll(() => existsSync(join(served.root, '.loom/library/storage', home, 'pages/0040.txt'))).toBe(true);
 	await expect(page.getByTestId('status-paper')).toContainText('filed');
 	await expect(page.getByTestId('job-progress')).toHaveCount(0);
 });

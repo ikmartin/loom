@@ -4,7 +4,7 @@
 
 ## Trigger
 
-On a real quilt, after the two cheaper steps below are built, `loom lint` or `loom status` still takes above about 1 s with most of it spent on digest nodes no document reaches, or a cached `loom build` takes above a few seconds for the same reason. Measured as [the study](../reports/lazy-digests-study.md) does: a copy with the unreached results cut out of `.loom/digests/*.tex`, three runs each, the median.
+On a real quilt, after the two cheaper steps below are built, `loom lint` or `loom status` still takes above about 1 s with most of it spent on digest nodes no document reaches, or a cached `loom build` takes above a few seconds for the same reason. Measured as [the study](../reports/lazy-digests-study.md) does: a copy with the unreached results cut out of `.loom/library/*.tex`, three runs each, the median.
 
 ## Why deferred
 

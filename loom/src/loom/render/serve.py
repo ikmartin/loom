@@ -1,6 +1,6 @@
 """`loom serve`: one loop with three jobs, watch, serve, compile.
 
-Serves the arras bundle at / (with index.html as the fallback for any path that is not a file of the bundle or an asset, so the viewer's routes work, dots in keys included) and .loom/build/ at /build/. The manifest carries an ETag so the viewer's poll costs nothing while unchanged, and `/_api/stream` says each time a new one is published, so a viewer that listens fetches it at once rather than on its next poll.
+Serves the arras bundle at / (with index.html as the fallback for any path that is not a file of the bundle or an asset, so the viewer's routes work, dots in keys included) and .loom/cache/site/ at /build/, the compile folders of .loom/cache/tex/ under it at /build/tex/. The manifest carries an ETag so the viewer's poll costs nothing while unchanged, and `/_api/stream` says each time a new one is published, so a viewer that listens fetches it at once rather than on its next poll.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from urllib.parse import unquote
 
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
-from loom.paths import BUILD, SERVE_JSON, STORE_ADDRESS, document_build
+from loom.paths import COMPILES, SERVE_JSON, SITE, STORE_ADDRESS, TEX, TEX_ADDRESS, document_build
 from loom.presence import Watch
 from loom.refs.pages import storage_root
 from loom.render.build import BuildReport, build
@@ -53,8 +53,9 @@ ASSET_SUFFIXES = {
 }
 
 
-#: The addresses the server answers loom's files at, fixed wherever the directories behind them sit.
+#: The addresses the server answers loom's files at, fixed wherever the directories behind them sit: `/build/` the site (`paths.SITE`), and under it `tex/` the compile folders (`paths.TEX`).
 BUILD_URL = "/build/"
+TEX_URL = f"{BUILD_URL}{TEX_ADDRESS}/"
 STORE_URL = f"/{STORE_ADDRESS}/"
 #: How often an idle stream says it is still open, so a proxy or a sleeping laptop does not drop it unseen.
 HEARTBEAT = 15.0
@@ -143,34 +144,33 @@ class Publications:
 
 
 def write_serve_json(root: Path, port: int) -> str:
-    """Record where this server is listening, and the token a write must carry; return the token.
+    """Record where this server is listening, and keep the token a write must carry; return the token.
 
-    Two jobs in one file. A command that wants to print an openable link reads the port and the pid to know whether anything is listening. The **token** is what makes the write API safe to leave running: a browser blocks a cross-origin *response* and never the *request*, so any page the author happens to be reading could otherwise POST into their quilt. A cross-site form post cannot set a custom header, so requiring one closes it. This is CSRF protection and not a login -- it keeps other *pages* out, not other people.
+    A command that wants to print an openable link reads the port and the pid in `serve.json` to know whether anything is listening. The **token** is what makes the write API safe to leave running: a browser blocks a cross-origin *response* and never the *request*, so any page the author happens to be reading could otherwise POST into their quilt. A cross-site form post cannot set a custom header, so requiring one closes it. This is CSRF protection and not a login -- it keeps other *pages* out, not other people. It is kept outside the quilt, in the machine's place (`loom.machine`), so a quilt committed or copied whole carries none.
     """
     import os
     import secrets
 
+    from loom.machine import write_token
+
     token = secrets.token_urlsafe(24)
+    write_token(root, token)
     p = root / SERVE_JSON
     p.parent.mkdir(parents=True, exist_ok=True)
-    # the token is for this person's programs alone, so nobody else on the machine may read the file; one an earlier server left keeps the mode it was made with, so it is emptied and closed to others before the token goes in
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(
-            json.dumps(
-                {
-                    "port": port,
-                    "pid": os.getpid(),
-                    "token": token,
-                    "url": f"http://127.0.0.1:{port}/",
-                    # a copied quilt carries the file, and a link it printed would open the other quilt's viewer
-                    "root": str(Path(root).resolve()),
-                },
-                indent=1,
-            )
-            + "\n"
+    p.write_text(
+        json.dumps(
+            {
+                "port": port,
+                "pid": os.getpid(),
+                "url": f"http://127.0.0.1:{port}/",
+                # a copied quilt carries the file, and a link it printed would open the other quilt's viewer
+                "root": str(Path(root).resolve()),
+            },
+            indent=1,
         )
+        + "\n",
+        encoding="utf-8",
+    )
     return token
 
 
@@ -204,7 +204,7 @@ def open_url(root: Path, path: str = "") -> str:
 
     See Also
     --------
-    write_serve_json : What puts the port, the pid and the token there.
+    write_serve_json : What puts the port and the pid there.
     """
     import os
 
@@ -286,6 +286,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
     #: The viewer copied aside at start, which `/_api` reports on; None where the bundle is served from where it lies.
     held: HeldBundle | LiveBundle | None = None
     build_dir: Path = Path(".")
+    #: The compile folders, which `/build/tex/` answers from.
+    tex_dir: Path = Path(".")
     refs_dir: Path = Path(".")
     #: The quilt to write into. `None` serves the corpus read-only and answers `/_api` with 404, which is the
     #: discovery mechanism working: a viewer that gets 404 shows no editing affordances.
@@ -321,9 +323,13 @@ class LoomHandler(SimpleHTTPRequestHandler):
     def _resolve(self) -> Path | None:
         path = self.path.split("?", 1)[0].split("#", 1)[0]
         if path.startswith(BUILD_URL):
-            rel = path[len(BUILD_URL) :]
-            target = (self.build_dir / rel).resolve()
-            return target if str(target).startswith(str(self.build_dir.resolve())) and target.is_file() else None
+            base, rel = (
+                (self.tex_dir, path[len(TEX_URL) :])
+                if path.startswith(TEX_URL)
+                else (self.build_dir, path[len(BUILD_URL) :])
+            )
+            target = (base / rel).resolve()
+            return target if str(target).startswith(str(base.resolve())) and target.is_file() else None
         if path.startswith(STORE_URL):
             # the first thing the server offers that it did not generate: a work's fetched PDF or source, so the
             # viewer can open a reference at the place a comment points to. Localhost only, read only, and still
@@ -573,7 +579,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
             frames = {"frames": self.frames} if self.frames else {}
             # the viewer this server serves, and whether loom has been updated under it, so a page can say to reload or to restart
             served = {"viewer": self.held.version, "stale": self.held.stale()} if self.held else {}
-            # the agent servers alive as the server last looked, where the stream that says when they change is served; no request waits on `.loom/live/`
+            # the agent servers alive as the server last looked, where the stream that says when they change is served; no request waits on `.loom/local/live/`
             connected = (
                 {"connected": json.loads(self.publications.connected_state)} if self.publications is not None else {}
             )
@@ -621,7 +627,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 self.send_header(name, value)
 
     def _here(self) -> None:
-        """`GET /_api/here`: the last place a viewer tab reported, for `loom here`, which reads the token from `.loom/serve.json`.
+        """`GET /_api/here`: the last place a viewer tab reported, for `loom here`, which reads the token from the machine's place (`loom.machine`).
 
         Where a person is reading, and the words they selected, are theirs: the token is required, and so is this server's own origin when a browser sends one.
         """
@@ -1002,15 +1008,14 @@ class ServeSession:
         return item.get("id") if item.get("kind") in ("document", "pdf") else None
 
     def _compiles_told(self) -> None:
-        """Say how the compiles stand, on the stream and in the build output for `loom status`."""
-        from loom.render.compiles import COMPILES_JSON
+        """Say how the compiles stand, on the stream and in `.loom/local/compiles.json` for `loom status`."""
         from loom.render.publish import write_atomic
 
         if self.compiles is None:
             return
         state = json.dumps(self.compiles.state(), separators=(",", ":"))
         try:
-            write_atomic(self.quilt.root / BUILD / COMPILES_JSON, state)
+            write_atomic(self.quilt.root / COMPILES, state)
         except OSError:
             pass  # the stream still says it
         self.publications.compiled(state.encode("utf-8"))
@@ -1024,7 +1029,8 @@ class ServeSession:
             {
                 "bundle_dir": self.held.path,
                 "held": self.held,
-                "build_dir": self.quilt.root / BUILD,
+                "build_dir": self.quilt.root / SITE,
+                "tex_dir": self.quilt.root / TEX,
                 "refs_dir": storage_root(self.quilt.root),
                 # The write API is served for the quilt being served, and only ever over this loopback socket.
                 "quilt_root": self.quilt.root,
@@ -1104,14 +1110,12 @@ class ServeSession:
         )
 
     def stop(self) -> None:
-        from loom.render.compiles import COMPILES_JSON
-
         if self._settling is not None:
             self._settling.cancel()
 
         if self.compiles is not None:
             self.compiles.stop()
-        (self.quilt.root / BUILD / COMPILES_JSON).unlink(missing_ok=True)
+        (self.quilt.root / COMPILES).unlink(missing_ok=True)
         if self.presence:
             self.presence.stop()
         self.publications.close()
@@ -1121,8 +1125,11 @@ class ServeSession:
             if server:
                 server.shutdown()
                 server.server_close()
-        # nothing is listening any more, so nothing should tell a command that something is
+        # nothing is listening any more, so nothing should tell a command that something is, and no write may carry its token
         (self.quilt.root / SERVE_JSON).unlink(missing_ok=True)
+        from loom.machine import forget_token
+
+        forget_token(self.quilt.root)
         if self.held:
             self.held.close()
         from loom.render.api import forget_place

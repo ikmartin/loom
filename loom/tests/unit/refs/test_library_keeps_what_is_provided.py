@@ -17,7 +17,7 @@ from loom.scan.scan import scan
 from tests.helpers import edit, json_of, ok
 from tests.unit._quilts import demo, work_home
 
-BIB = ".loom/digests/bibliography.bib"
+BIB = ".loom/library/bibliography.bib"
 AS = ("--as", "A. Author")
 #: The author's report: revision notes that no catalogue knows, under the name a site gave the download.
 NOTES = "Stats_for_Quants__1753634802.pdf"
@@ -95,7 +95,7 @@ def test_naming_the_work_files_a_pdf_that_shows_nothing_of_it(tmp_path: Path) ->
     said = " ".join(ok("library", "add", pdf, "--for", "Man12", *AS, cwd=q).stdout.split())
     assert "scan.pdf as Man12's PDF" in said and "on your word, though it does not show it is Man12" in said, said
     assert (work_home(q, "Man12") / "paper.pdf").read_bytes() == pdf.read_bytes()
-    ledger = json.loads((q / ".loom/digests/storage/copied.json").read_text())
+    ledger = json.loads((q / ".loom/library/storage/copied.json").read_text())
     row = next(v for v in ledger.values() if v["from"] == "scan.pdf")
     assert row["forced"].startswith("it does not show it is Man12") and row["by"] == "A. Author"
     assert "may not be their work" not in ok("library", "check", "Man12", cwd=q).stdout
@@ -173,7 +173,7 @@ def test_deleting_a_work_leaves_nothing_of_it_and_it_can_be_given_again(tmp_path
         made(q, "StatisticsQuantsRevision").exists() for made in (digest_path, proposed_path, results_path, log_path)
     )
     assert [x.frm for x in read_links(q)] == ["Mine-thm-1"]
-    assert "StatisticsQuantsRevision" in (q / ".loom/digests/links-removed.jsonl").read_text(encoding="utf-8")
+    assert "StatisticsQuantsRevision" in (q / ".loom/library/links-removed.jsonl").read_text(encoding="utf-8")
     # gathering brings nothing back, and nothing says it is set aside
     assert "StatisticsQuantsRevision" not in declarations(q, "forget")
     assert "StatisticsQuantsRevision" not in {

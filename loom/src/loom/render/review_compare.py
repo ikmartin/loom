@@ -63,7 +63,7 @@ def _render(
 ) -> Later:
     """One preview, asked for now and made with the build's others at `FragmentRenderer.previews.make`, one batch per preamble: `text` read under `preamble` as the node `key` belongs to, its `spans` marked as changed.
 
-    Cached under `.loom/build/cache/previews/`, keyed on all it is made from and the renderer's `salt`: a served quilt rebuilds on every change and a quilt with thousands of results has a preview for each.
+    Cached under `.loom/cache/blocks/previews/`, keyed on all it is made from and the renderer's `salt`: a served quilt rebuilds on every change and a quilt with thousands of results has a preview for each.
     """
     return renderer.previews.ask(key, text, preamble, spans)
 

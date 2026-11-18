@@ -22,7 +22,7 @@ from tests.helpers import ok
 def quilt(tmp_path: Path):
     root = tmp_path / "quilt"
     shutil.copytree(Path(__file__).resolve().parents[1] / "quilts/synthetic", root)
-    (root / ".loom/state.toml").unlink()
+    (root / ".loom/records/state.toml").unlink()
     return load_quilt(root)
 
 
@@ -38,12 +38,12 @@ def test_other_acceptance_never_replaces_personal_snapshot_or_clears_queue(quilt
     before = Records(quilt.root).latest["sy-0001"]
     edit(quilt)
     stale = build(quilt).manifest
-    observations = (quilt.root / ".loom/review-observations.json").read_bytes()
+    observations = (quilt.root / ".loom/records/review-observations.json").read_bytes()
     write_acceptance(scan(quilt), ["sy-0001", "sy-0002"], "Alice")
     after = build(quilt).manifest
     assert after["keys"]["sy-0001"]["acceptance"] == stale["keys"]["sy-0001"]["acceptance"]
     assert Records(quilt.root).latest["sy-0001"] == before
-    assert (quilt.root / ".loom/review-observations.json").read_bytes() == observations
+    assert (quilt.root / ".loom/records/review-observations.json").read_bytes() == observations
     assert {a["author"]: a["fresh"] for a in after["keys"]["sy-0001"]["acceptances"]} == {"Alice": True, "Bob": False}
     assert any(c.get("via") == "sy-0002" for c in after["keys"]["sy-0002/proof"]["acceptance"]["causes"])
     assert not after["nodes"]["sy-0002"]["derived"]["settled"]
@@ -99,7 +99,7 @@ def test_review_caches_are_partitioned_by_reviewer(quilt):
     write_acceptance(scan(quilt), ["sy-0001"], "Alice")
     edit(quilt)
     build(quilt)
-    cache = quilt.root / ".loom/review-observations.json"
+    cache = quilt.root / ".loom/records/review-observations.json"
     first = json.loads(cache.read_text())["reviewers"]["Bob"]
     save_author("Alice")
     build(quilt)

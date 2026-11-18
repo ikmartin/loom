@@ -42,8 +42,8 @@ if TYPE_CHECKING:
 class RenderPlan:
     result: ScanResult
     numbers: dict[str, dict[str, AuxNumber]]  # per master
-    cache: Path  # the build's cache directory, `.loom/build/cache`
-    svg_out: Path  # where pictures and graphics are published, `.loom/build/svg`
+    cache: Path  # the build's cache directory, `.loom/cache/blocks`
+    svg_out: Path  # where pictures and graphics are published, `.loom/cache/site/svg`
     cite_labels: dict[str, dict[str, str]] = field(default_factory=dict)  # per master: citekey -> printed label
     diagnostics: list[Diagnostic] = field(default_factory=list)
     pages: dict[str, Any] = field(

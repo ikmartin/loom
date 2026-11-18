@@ -128,7 +128,7 @@ def _adoption(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> 
     root = demo(tmp_path)
     save_author(WHO)
     ok("draft", "drafting/main.tex", "--ai", "contribution.tex", cwd=root)
-    copy = root / ".loom/copies/contribution.tex"
+    copy = root / ".loom/agents/copies/contribution.tex"
     text = copy.read_text()
     # An ordinary source change to an existing inline statement.
     text = text.replace("Closedness is where", "The revised closedness is where")
@@ -162,10 +162,10 @@ def _section_lifecycle(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyP
     source.write_text(TEXT)
     save_author(WHO)
     ok("draft", "drafting/main.tex", "--ai", "first.tex", "--section", "zk-0100", cwd=root)
-    draft = root / ".loom/copies/first.tex"
+    draft = root / ".loom/agents/copies/first.tex"
     draft.write_text(draft.read_text().replace("First statement.", "Proposal."))
     s = serve(root)
-    body = {"copy": ".loom/copies/first.tex", "reviewer": WHO}
+    body = {"copy": ".loom/agents/copies/first.tex", "reviewer": WHO}
     for endpoint in ("adopt-close", "adopt-reopen", "adopt-refresh", "adopt-paper"):
         refuses(s, endpoint, {**body, "reviewer": "different"}, 409, "reviewer-changed", "reload Review")
     builds = s.builds

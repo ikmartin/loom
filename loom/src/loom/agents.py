@@ -15,16 +15,14 @@ from loom.paths import (
     AI,
     ANNOTATION_TYPES,
     ANNOTATIONS,
-    BUILD,
+    CACHE,
     COPIES,
-    DIGESTS,
     EDITS,
     FORMAL,
     FORMAT,
-    INCOMING,
-    LAST_SEEN,
     LEDGER,
-    LIVE,
+    LIBRARY,
+    LOCAL,
     LOOKED,
     LOOM,
     LOOM_GITIGNORE,
@@ -32,9 +30,9 @@ from loom.paths import (
     REVIEW_DECISIONS,
     REVIEW_OBSERVATIONS,
     REVIEW_ORIGINS,
-    SERVE_JSON,
+    SCRATCH,
+    SESSION_INDEX,
     SESSIONS,
-    SINCE,
     SOURCE_SYNC,
 )
 
@@ -42,26 +40,22 @@ if TYPE_CHECKING:
     from loom.scan.quilt import QuiltConfig
 
 CONFIG = "config.toml"
-#: Where an agent always writes, whatever the list says: its session's directory, the build output and its copies.
-AGENT_PLACES = (SESSIONS, BUILD, COPIES)
+#: Where an agent always writes, whatever the list says: the sessions, its copies and its scratch.
+AGENT_PLACES = (SESSIONS, COPIES, SCRATCH)
 #: Files inside `.loom/` an agent may edit: the annotation types, which a quilt grows with its agents.
 AGENT_FILES = (ANNOTATION_TYPES,)
-#: The session index, a record inside an agent's place that only loom writes.
-SESSION_INDEX = f"{SESSIONS}/index.jsonl"
-#: Loom's record directories under `.loom/`, each named, since a Claude Code deny of `.loom/` would beat the places' allows; the history is the quilt's `[quilt] history` beside them.
-LOOM_DIRS = (DIGESTS, ANNOTATIONS, EDITS, AI, RETIRED, SINCE, LOOKED, LIVE, INCOMING, FORMAL)
-#: Loom's record files under `.loom/`, each named for the same reason.
+#: Loom's directories under `.loom/`, each named, since a Claude Code deny of `.loom/` or of `.loom/records/` would beat the places' and the annotation types' allows; the history is the quilt's `[quilt] history` beside them.
+LOOM_DIRS = (ANNOTATIONS, EDITS, RETIRED, LOOKED, FORMAL, LIBRARY, AI, LOCAL, CACHE)
+#: Loom's files under `.loom/`, each named for the same reason.
 LOOM_FILES = (
-    LEDGER,
     FORMAT,
-    SERVE_JSON,
+    LOOM_GITIGNORE,
+    LEDGER,
     REVIEW_DECISIONS,
     REVIEW_ORIGINS,
     REVIEW_OBSERVATIONS,
     ADOPTION_DECISIONS,
     SOURCE_SYNC,
-    LAST_SEEN,
-    LOOM_GITIGNORE,
     SESSION_INDEX,
 )
 

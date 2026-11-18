@@ -48,4 +48,4 @@ def test_a_message_carries_a_mark_on_a_pdf_page_with_its_crop(tmp_path: Path) ->
         None,
         "the median polytope",
     )
-    assert carried["crop"].startswith(".loom/build/crops/") and carried["rects"]
+    assert carried["crop"].startswith(".loom/cache/crops/") and carried["rects"]

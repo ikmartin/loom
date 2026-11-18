@@ -24,6 +24,8 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from loom.machine import data_dir
+
 #: The TeX Live year loom's TeX is; a new year is a release of loom with a new archive.
 YEAR = 2026
 
@@ -89,14 +91,6 @@ PROBE_TIMEOUT = 10
 KNOWN = ("/Library/TeX/texbin", "/opt/homebrew/bin", "/usr/local/bin")
 
 LOOM, MINE, NONE = "loom", "mine", "none"
-
-
-def data_dir() -> Path:
-    """Loom's directory of machine-wide data: `~/Library/Application Support/loom` on a Mac, `$XDG_DATA_HOME/loom` elsewhere."""
-    if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "loom"
-    base = os.environ.get("XDG_DATA_HOME")
-    return (Path(base) if base else Path.home() / ".local" / "share") / "loom"
 
 
 def tex_dir() -> Path:

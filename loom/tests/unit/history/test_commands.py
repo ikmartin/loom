@@ -57,7 +57,7 @@ def said(r: Result) -> str:
 
 
 def ledger(q: Path) -> list[dict]:
-    return [json.loads(x) for x in (q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()]
+    return [json.loads(x) for x in (q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()]
 
 
 def test_stamp_given_a_document_keeps_its_text_as_a_landmark(tmp_path: Path) -> None:
@@ -78,7 +78,7 @@ def test_stamp_given_a_document_keeps_its_text_as_a_landmark(tmp_path: Path) -> 
     assert step["of"]["pp-0002/proof"] == "pp-0002@2"  # a proof version records the statement version it stood against
     assert sorted(step["reaches"]) == sorted(step["froze"])
 
-    d = q / ".loom" / "history" / "0002-first-landmark"
+    d = q / ".loom" / "records" / "history" / "0002-first-landmark"
     text = (d / "first-landmark.tex").read_text()
     assert step["to"]["hash"] == text_hash(text)
     assert "% !LOOM begin loom-macros" in text  # the document as it stands, its macro block included
@@ -89,7 +89,7 @@ def test_stamp_given_a_document_keeps_its_text_as_a_landmark(tmp_path: Path) -> 
 
     r = ok("stamp", "main/main.tex", "-m", "Unchanged", cwd=q)  # a landmark needs no key to have moved
     assert "step 0003 records no changed result; landmark unchanged" in said(r)
-    assert (q / ".loom" / "history" / "0003-unchanged" / "unchanged.tex").read_text() == text
+    assert (q / ".loom" / "records" / "history" / "0003-unchanged" / "unchanged.tex").read_text() == text
     refused(
         "stamp",
         "main/main.tex",
@@ -113,7 +113,7 @@ def test_a_landmark_stamp_requires_a_message_and_refuses_a_conflicted_key(tmp_pa
     main.write_text(main.read_text().replace("\\end{document}", "\\input{nodes/pp-0002}\n\\end{document}"))
     r = refused("stamp", "main/main.tex", "-m", "x", cwd=q, code=1, match="reaches two definitions of")
     assert "pp-0002" in r.output
-    assert len(ledger(q)) == 1 and not (q / ".loom" / "history" / "0002-x").exists()
+    assert len(ledger(q)) == 1 and not (q / ".loom" / "records" / "history" / "0002-x").exists()
 
 
 def test_a_duplicate_the_document_reaches_once_does_not_refuse_its_landmark(tmp_path: Path) -> None:
@@ -139,7 +139,7 @@ def test_stamp_records_only_what_moved(tmp_path: Path) -> None:
     step = ledger(q)[-1]
     assert step["action"] == "stamp" and step["dir"] == "0003-stamp-referee-points"
     assert list(step["froze"]) == ["pp-0002"] and step["preamble"] is None
-    d = q / ".loom" / "history" / "0003-stamp-referee-points"
+    d = q / ".loom" / "records" / "history" / "0003-stamp-referee-points"
     assert [p.name for p in sorted(d.iterdir())] == ["pp-0002.tex"]
     assert "Alpha, revised." in (d / "pp-0002.tex").read_text()
 
@@ -239,7 +239,7 @@ def test_a_retired_id_is_never_allocated_again_and_written_again_is_reuse_or_rec
 def test_history_verify_reports_an_edited_record(tmp_path: Path) -> None:
     q = quilt(tmp_path)
     ok("stamp", "-m", "one", cwd=q)
-    v = q / ".loom" / "history" / "0002-stamp-one" / "pp-0002.tex"
+    v = q / ".loom" / "records" / "history" / "0002-stamp-one" / "pp-0002.tex"
     v.write_text(v.read_text() + "% edited by hand\n")
     r = exits(1, "history", "verify", cwd=q)
     assert "loom:history-edited" in r.output and "pp-0002" in r.output
@@ -250,7 +250,7 @@ def test_history_verify_reports_an_edited_record(tmp_path: Path) -> None:
 
 def plant(q: Path, *lines: dict[str, object] | str) -> None:
     """Append raw lines to the ledger, as a hand edit or a bad merge would."""
-    with (q / ".loom" / "history" / "ledger.jsonl").open("a", encoding="utf-8") as fh:
+    with (q / ".loom" / "records" / "history" / "ledger.jsonl").open("a", encoding="utf-8") as fh:
         for line in lines:
             fh.write((line if isinstance(line, str) else json.dumps({"when": "x", "actor": None, **line})) + "\n")
 
@@ -274,7 +274,7 @@ def test_verify_names_each_part_of_a_step_that_is_missing_or_edited(tmp_path: Pa
     """The preamble and a landmark's text are checked like the version files; a step whose directory is gone is one error, not one per file."""
     q = quilt(tmp_path)
     ok("stamp", "main/main.tex", "-m", "v1", cwd=q)
-    d = q / ".loom" / "history" / "0002-v1"
+    d = q / ".loom" / "records" / "history" / "0002-v1"
     pre, copy = d / "preamble.tex", d / "v1.tex"
     pre.write_text(pre.read_text() + "\\usepackage{xy}\n")
     copy.write_text(copy.read_text() + "% edited\n")
@@ -291,7 +291,7 @@ def test_verify_names_each_part_of_a_step_that_is_missing_or_edited(tmp_path: Pa
     pre.unlink()
     copy.unlink()
     r = exits(1, "history", "verify", cwd=q)
-    assert "loom:history-missing: the … of step 0002 is missing from .loom/history" in said(r), r.output
+    assert "loom:history-missing: the … of step 0002 is missing from .loom/records/history" in said(r), r.output
     lines = [ln.strip() for ln in r.output.splitlines()]
     assert "preamble" in lines and "copy of v1.tex" in lines, r.output
     for p in d.iterdir():
@@ -299,7 +299,7 @@ def test_verify_names_each_part_of_a_step_that_is_missing_or_edited(tmp_path: Pa
     d.rmdir()
     js = json_of("history", "verify", "--json", cwd=q, code=1)["diagnostics"]
     missing = the(js, lambda x: x["code"] == "loom:history-missing", "loom:history-missing diagnostic")
-    assert missing["message"] == "the directory 0002-v1 of step 0002 is missing from .loom/history"
+    assert missing["message"] == "the directory 0002-v1 of step 0002 is missing from .loom/records/history"
 
 
 def tree(d: Path) -> dict[str, bytes]:
@@ -316,10 +316,10 @@ def test_a_step_is_written_whole_before_the_ledger_line_that_names_it(
     """
     done, cut = quilt(tmp_path / "done"), quilt(tmp_path / "cut")
     ok("stamp", "main/main.tex", "-m", "v1", cwd=done)
-    finished = tree(done / ".loom" / "history" / "0002-v1")
+    finished = tree(done / ".loom" / "records" / "history" / "0002-v1")
     step = ledger(done)[-1]
     assert set(finished) == {version_filename(k) for k in step["froze"]} | {"preamble.tex", "v1.tex"}
-    before = (cut / ".loom" / "history" / "ledger.jsonl").read_bytes()
+    before = (cut / ".loom" / "records" / "history" / "ledger.jsonl").read_bytes()
 
     def interrupted(*args: object, **kwargs: object) -> None:
         raise RuntimeError("interrupted before the ledger line")
@@ -328,13 +328,13 @@ def test_a_step_is_written_whole_before_the_ledger_line_that_names_it(
     with monkeypatch.context() as m, pytest.raises(RuntimeError, match="interrupted before the ledger line"):
         m.setattr(steps, "append_entry", interrupted)
         run("stamp", "main/main.tex", "-m", "v1", cwd=cut)
-    assert tree(cut / ".loom" / "history" / "0002-v1") == finished
-    assert (cut / ".loom" / "history" / "ledger.jsonl").read_bytes() == before
+    assert tree(cut / ".loom" / "records" / "history" / "0002-v1") == finished
+    assert (cut / ".loom" / "records" / "history" / "ledger.jsonl").read_bytes() == before
     assert [e["dir"] for e in ledger(cut) if "dir" in e] == ["0001-main"]
     # and the directory nothing names is reported, which is what makes writing the line last safe
     r = ok("history", "verify", cwd=cut)
-    assert "warning loom:history-interrupted" in r.output and ".loom/history/0002-v1" in r.output, r.output
-    assert "rm -r .loom/history/0002-v1" in r.output
+    assert "warning loom:history-interrupted" in r.output and ".loom/records/history/0002-v1" in r.output, r.output
+    assert "rm -r .loom/records/history/0002-v1" in r.output
 
 
 def test_a_step_is_never_recorded_beside_an_interrupted_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -343,17 +343,17 @@ def test_a_step_is_never_recorded_beside_an_interrupted_one(tmp_path: Path, monk
     with monkeypatch.context() as m, pytest.raises(RuntimeError):
         m.setattr(steps, "append_entry", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("interrupted")))
         run("stamp", "main/main.tex", "-m", "v1", cwd=q)
-    hist = q / ".loom" / "history"
+    hist = q / ".loom" / "records" / "history"
     before = sorted(p.name for p in hist.iterdir())
     for args in (
         ("stamp", "main/main.tex", "-m", "v1"),
         ("stamp", "main/main.tex", "-m", "v2"),
         ("stamp", "-m", "points"),
     ):
-        refused(*args, code=2, match="rm -r .loom/history/0002-v1", cwd=q)
+        refused(*args, code=2, match="rm -r .loom/records/history/0002-v1", cwd=q)
     refused("draft", "main/main.tex", "--ai", "copy", code=2, match="interrupted", cwd=q)
     assert sorted(p.name for p in hist.iterdir()) == before, "a refusal writes nothing"
-    assert not (q / ".loom" / "copies" / "copy.tex").exists(), "draft refuses before it writes the copy"
+    assert not (q / ".loom" / "agents" / "copies" / "copy.tex").exists(), "draft refuses before it writes the copy"
     shutil.rmtree(hist / "0002-v1")
     ok("stamp", "main/main.tex", "-m", "v1", cwd=q)
     assert [e["dir"] for e in ledger(q) if "dir" in e] == ["0001-main", "0002-v1"]
@@ -397,7 +397,7 @@ def test_stamp_given_a_document_records_only_the_keys_it_reaches(tmp_path: Path)
     step = ledger(q)[-1]
     assert list(step["froze"]) == ["pp-0002"] and step["in"] == "main/talk.tex"
     assert "pp-0003" not in step["reaches"] and "pp-0002" in step["reaches"]
-    landmark = (q / ".loom" / "history" / "0003-talk" / "talk.tex").read_text()
+    landmark = (q / ".loom" / "records" / "history" / "0003-talk" / "talk.tex").read_text()
     assert "Alpha, revised." in landmark and "\\input{nodes/" not in landmark  # flat: the node inlined
     refused("stamp", "main/main.tex", "-m", "x", cwd=q, code=2, match="main/main.tex is not a live document")
     refused(
@@ -436,7 +436,7 @@ def test_revert_expands_child_markers_from_the_head_and_refuses_when_a_child_is_
     q = tmp_path / "q"
     ok("init", str(q), "--from", str(paper / "main.tex"), "--prefix", "pp", "--yes", cwd=tmp_path)
     ok("stamp", "-m", "one", cwd=q)
-    proof = (q / ".loom" / "history" / "0002-stamp-one" / "pp-0003.proof.tex").read_text()
+    proof = (q / ".loom" / "records" / "history" / "0002-stamp-one" / "pp-0003.proof.tex").read_text()
     child = re.search(r"% !LOOM child: (pp-\d+)", proof)
     assert child is not None, proof
     main = q / "main" / "main.tex"
@@ -529,7 +529,7 @@ def test_history_restore_drafts_a_landmark_as_a_new_document_and_records_it(tmp_
         code=2,
         match="exists; loom does not overwrite it",
     )
-    refused("history", "restore", "v1", "--to", ".loom/retired/v1.tex", cwd=q, code=2, match="is inside .loom/")
+    refused("history", "restore", "v1", "--to", ".loom/records/retired/v1.tex", cwd=q, code=2, match="is inside .loom/")
     refused("history", "restore", "v1", cwd=q, code=2, match="needs --to FILE")
     refused("history", "restore", "nope", "--to", "main/x.tex", cwd=q, code=2, match="no landmark answers to nope")
     refused(

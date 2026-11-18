@@ -42,7 +42,7 @@ def test_a_look_holds_every_open_text_file_and_nothing_else(q: Path) -> None:
     assert "notes/a.md" in look.files and "drafting/main.tex" in look.files
     assert not [p for p in look.files if p.startswith(".") or p.endswith(".png")]
     assert read_raw(q, look.files["notes/a.md"], load_quilt(q).history_dir) == "# A\n\nfirst\n"
-    assert (q / ".loom/looked/tester.json").is_file()
+    assert (q / ".loom/records/looked/tester.json").is_file()
     assert changes(q) == {}
 
 
@@ -53,11 +53,11 @@ def test_changes_since_the_look_are_in_changed_new_and_gone_files_each_with_its_
     (q / "README.md").unlink()
     assert changes(q) == {"notes/a.md": "second", "notes/b.md": "new", "README.md": ""}
     run("build", cwd=q)
-    m = json.loads((q / ".loom/build/manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site/manifest.json").read_text())
     assert m["changes_since"]["who"] == "Tester"
     row = next(c for c in m["changes"] if c["path"] == "notes/a.md")
     assert (row["old"], row["new"], row["documents"]) == ("first", "second", [])
-    patch = (q / ".loom/build" / row["diff"]).read_text()
+    patch = (q / ".loom/cache/site" / row["diff"]).read_text()
     assert patch.startswith("--- a/notes/a.md") and "-first" in patch and "+second" in patch
 
 
@@ -142,7 +142,7 @@ def test_without_tracking_no_edit_in_place_waits_and_no_look_is_taken(q: Path) -
     assert changes(q) == {} and listed["look"] is None
     assert "not tracked" in ok("changes", cwd=q).stdout
     run("build", cwd=q)
-    m = json.loads((q / ".loom/build/manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site/manifest.json").read_text())
     assert "changes_since" not in m and m["config"]["review"] == {"track_edits": False}
     assert not [c for c in m["changes"] if c["kind"] == "edit"]
 

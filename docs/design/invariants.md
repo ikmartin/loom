@@ -58,7 +58,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### One table says what an agent may run, and everything else refuses
 
-**Rule.** `AGENT_COMMANDS` in `loom/src/loom/ai/layout.py` is the only list of what an agent may run. The MCP server's tools, the Claude and Codex permission files in both variants, and the list in `ai/rules.md` are generated from it. The server's prompts and resources run only commands from it that read. Under an agent marker every other command refuses before reading anything, so a new command is the author's until admitted.
+**Rule.** `AGENT_COMMANDS` in `loom/src/loom/ai/layout.py` is the only list of what an agent may run. The MCP server's tools, the Claude and Codex permission files in both variants, and the list in `.loom/agents/instructions/rules.md` are generated from it. The server's prompts and resources run only commands from it that read. Under an agent marker every other command refuses before reading anything, so a new command is the author's until admitted.
 
 **Why.** The rules' Never section and the permission file were two hand-kept deny lists, and they drifted: `loom upgrade` was in neither, and the alias `loom canonise` walked past the deny on `loom canonize`.
 
@@ -105,7 +105,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### Where an agent may write is one table, which loom's own commands enforce in every client
 
-**Rule.** `loom/src/loom/agents.py` holds the boundary: the agent's own places (its session, `.loom/build/`, `.loom/copies/`), what is always protected (loom's records under `.loom/`, the history, `config.toml`, the research state), and the person's `[agents] deny`. Every loom command that writes a path an agent chose refuses an agent a protected one by its one predicate, and Claude Code's permission file is rendered from its tables. Every `.loom/` path loom names is an agent's place or protected.
+**Rule.** `loom/src/loom/agents.py` holds the boundary: the agent's own places (the sessions, its copies and its scratch, under `.loom/agents/`), what is always protected (loom's records under `.loom/`, the history, `config.toml`, the research state), and the person's `[agents] deny`. Every loom command that writes a path an agent chose refuses an agent a protected one by its one predicate, and Claude Code's permission file is rendered from its tables. Every `.loom/` path loom names is an agent's place or protected.
 
 **Why.** Only Claude Code's file can refuse an edit by path, so a boundary kept only there held for one client of four. And a record added under `.loom/` without a deny of its own would be open to an agent's edits, since the agent's places sit beside the records there and a deny on `.loom/` would beat their allows.
 
@@ -115,7 +115,9 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **2026-11-02.** The viewer's Settings edits `[agents] deny` and rewrites Claude Code's permission file to it, each only on the author's act: `settings-save` and `agents-update` refuse a declared agent like every other author act over the API (plan 0.23).
 
-**2026-11-11.** `.loom/annotation-types.toml` is the one file of loom's under `.loom/` that an agent may edit (`AGENT_FILES`): a type's instructions are written for agents, and an agent asked to write one should not need the person to paste it in (plan 0.30, decision 4). Guarded by `loom/tests/unit/records/test_types.py::test_an_agent_may_edit_the_types_but_nothing_else_of_loom_s`.
+**2026-11-11.** `.loom/records/annotation-types.toml` is the one file of loom's under `.loom/` that an agent may edit (`AGENT_FILES`): a type's instructions are written for agents, and an agent asked to write one should not need the person to paste it in (plan 0.30, decision 4). Guarded by `loom/tests/unit/records/test_types.py::test_an_agent_may_edit_the_types_but_nothing_else_of_loom_s`.
+
+**2026-11-17.** The agent's places are `.loom/agents/sessions/`, `.loom/agents/copies/` and `.loom/agents/scratch/`, and no longer what loom derives, which loom may delete at any moment and which the viewer is served from; `.loom/` holds a folder for each kind (plan 0.32, decision 18). Guarded by `loom/tests/unit/test_paths.py::test_every_path_lies_in_the_folder_of_one_kind` beside the guard above.
 
 ### Agent instructions name only commands the agent may run
 
@@ -129,7 +131,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### An agent deletes nothing from a session's directory
 
-**Rule.** An agent never deletes a file in a session's directory, since an annotation or a message may point at it. Its scripts, backups and staging files go under `.loom/build/SESSION/`, and the permission file denies `Bash(rm *)`.
+**Rule.** An agent never deletes a file in a session's directory, since an annotation or a message may point at it. Its scripts, backups and staging files go in its scratch, `.loom/agents/scratch/<session>/`, and the permission file denies `Bash(rm *)`.
 
 **Why.** An agent tidying a session cluttered with its own intermediates tried to `rm` a file one of its own annotations pointed at. A shell permission cannot be confined to one directory, so the fix was a separate place for intermediates.
 
@@ -137,9 +139,11 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** DR-315-ikmartin
 
+**2026-11-17.** The scratch moved out of `.loom/build/`, which loom may delete, to `.loom/agents/scratch/<session>/`, which stays on one machine (plan 0.32, decision 18).
+
 ### Upgrade never destroys an author's edit
 
-**Rule.** `loom upgrade` and `loom ai init` keep one line of loom's in `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`, replacing the other variant's line where it stands, and touch nothing else there. An edited mode file or orientation is kept, with the shipped text written beside it as `.new`; an edited `loom.sty` is kept as `loom.sty.old` before it is replaced. `.loom/annotation-types.toml` is written only where there is none.
+**Rule.** `loom upgrade` and `loom ai init` keep one line of loom's in `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`, replacing the other variant's line where it stands, and touch nothing else there. An edited mode file or orientation is kept, with the shipped text written beside it as `.new`; an edited `loom.sty` is kept as `loom.sty.old` before it is replaced. `.loom/records/annotation-types.toml` is written only where there is none.
 
 **Why.** Upgrade wrote `CLAUDE.md` and `AGENTS.md` whole whenever they differed from the shipped copy, so an author who had added instructions lost them, and an edited orientation was overwritten with no warning and no backup.
 
@@ -173,7 +177,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### Drawing an id takes a lock
 
-**Rule.** Whatever draws an id from what it can see holds an exclusive lock from the read to the write, in the command itself, so the lock holds across shells, servers and the viewer alike (`loom/src/loom/locks.py`). What is drawn against a log is drawn under a lock on that log: an annotation's, a session's and a link's id, a step's number, a message's sequence number. A node id has no one file to draw from, so `loom new`, `loom fork` and `loom history restore` hold `.loom/build/ids.lock` from before their scan until their file is written, as `loom draft` and `loom stamp` do for the step they plan. A step planned from a history the ledger has since moved past is refused before anything is written. `loom new` also creates its file exclusively, so it never overwrites what no lock could stop: a person saving at that moment, or a filesystem with no locks, on which loom says so and goes on (P13).
+**Rule.** Whatever draws an id from what it can see holds an exclusive lock from the read to the write, in the command itself, so the lock holds across shells, servers and the viewer alike (`loom/src/loom/locks.py`). What is drawn against a log is drawn under a lock on that log: an annotation's, a session's and a link's id, a step's number, a message's sequence number. A node id has no one file to draw from, so `loom new`, `loom fork` and `loom history restore` hold `.loom/local/ids.lock` from before their scan until their file is written, as `loom draft` and `loom stamp` do for the step they plan. A step planned from a history the ledger has since moved past is refused before anything is written. `loom new` also creates its file exclusively, so it never overwrites what no lock could stop: a person saving at that moment, or a filesystem with no locks, on which loom says so and goes on (P13).
 
 `loom import`, `loom linearize` and incorporating an agent document hold no lock while they draw node ids, since a compile, a prompt or a preview stands between the draw and the write. They write those ids into a document, never into a file the id names, so a collision is two definitions of one id, which is reported and overwrites nothing (P13). `loom id` says ids and reserves none: `--next` prints one, and a patch or a labelled copy holds them only once the author puts it in a document.
 
@@ -217,7 +221,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### Review records are appended, never rewritten
 
-**Rule.** Every review event is one line appended to `.loom/annotations/log.jsonl`, and an annotation's state is the replay of its events. The one rewrite is a deletion, which removes an annotation's events and its replies' under the log's lock, in place, so no append lands between its read and its write. The history ledger and a session's inbox are appended the same way (P2).
+**Rule.** Every review event is one line appended to `.loom/records/annotations/log.jsonl`, and an annotation's state is the replay of its events. The one rewrite is a deletion, which removes an annotation's events and its replies' under the log's lock, in place, so no append lands between its read and its write. The history ledger and a session's inbox are appended the same way (P2).
 
 **Why.** Records were files rewritten whole. When an agent resolved its own finding, the parent and the writer were two copies of one file and the second write clobbered the resolution, which is the case an agent hits on every re-check.
 
@@ -401,13 +405,15 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 ### Every write to the viewer's server carries a token
 
-**Rule.** `loom serve` refuses a POST unless it is `application/json`, carries the `X-Loom-Token` written to `.loom/serve.json` and served to the viewer, and names no Origin but this server. This is CSRF protection, not a login.
+**Rule.** `loom serve` refuses a POST unless it is `application/json`, carries the `X-Loom-Token` the server keeps outside the quilt and serves to the viewer, and names no Origin but this server. This is CSRF protection, not a login.
 
 **Why.** No incident is recorded. A browser blocks a cross-origin response but never the request, so without the token any page the author had open could POST into the quilt and create, resolve or discard annotations.
 
 **Guard.** `loom/tests/unit/render/test_write_api.py::test_a_write_without_the_token_is_refused_over_the_wire`, `loom/tests/unit/render/test_write_api.py::test_the_write_api_refuses_a_post_from_another_page`
 
 **Record.** DR-203
+
+**2026-11-17.** The token is kept in the machine's place, outside the quilt and keyed by its path (`loom/src/loom/machine.py`), no longer in `.loom/serve.json`, so a quilt committed or copied whole carries none (plan 0.32, decision 18). The rule is unchanged.
 
 ### A page the quilt holds never runs as the viewer
 
@@ -425,7 +431,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **2026-11-04.** A Markdown file may hold HTML, which the viewer draws in its own page rather than a frame so that links, mathematics and quoting keep working there. So the publisher writes that HTML back out through an allowlist with everything escaped, and a frame in it loads only an `https:` address, sandboxed, which is never the viewer's origin. A click on a `javascript:` address written with a space or a control character, which a formula's `\href` can carry, is now refused too.
 
-**Open.** The rule above holds for what loom renders, not for what an agent edits after it. An agent may write `.loom/build/`, and the viewer inserts a body or a manifest's `body_html` as it reads them, so one edited there directly runs as the viewer and can read the token (reproduced 2026-11-04 against a real `loom serve`, with a handler in a file's body under `.loom/build/files/`). A `Content-Security-Policy` on the viewer's own page that refuses inline script, or a viewer that filters what it inserts, would close it; document fragments reach the page the same way.
+**Open.** The rule above holds for what loom renders, not for what an agent edits after it. What loom derives, `.loom/cache/`, is not among an agent's places, so loom's commands and Claude Code refuse an agent an edit there; but the other apps leave that list to the agent, and the boundary is not a security boundary (`agents.md`). The viewer inserts a body or a manifest's `body_html` as it reads them, so one edited there directly runs as the viewer and can read the token (reproduced 2026-11-04 against a real `loom serve`, with a handler in a file's body under `.loom/cache/site/files/`). A `Content-Security-Policy` on the viewer's own page that refuses inline script, or a viewer that filters what it inserts, would close it; document fragments reach the page the same way.
 
 ### Loom opens only documents in their application
 

@@ -12,7 +12,7 @@ def test_source_prints_a_key_and_its_closure(tmp_path: Path) -> None:
     """`loom source` replaced `loom bundle` as the way to read a result: it prints, so there is no file to go stale."""
     d = demo(tmp_path)
     sid = ok("session", "new", "--name", "Reading dm-0002", cwd=d).stdout.split()[0]
-    run_dir = d / ".loom" / "sessions" / sid
+    run_dir = d / ".loom" / "agents" / "sessions" / sid
     r = ok("source", "dm-0002", "--session", sid, cwd=d)
     assert r.output.startswith("\\begin{lemma}[Orbits]\\label{dm-0002}")
     assert "% id:" not in r.output  # the key alone, not the closure document
@@ -29,7 +29,7 @@ def test_source_prints_a_whole_document_flattened(tmp_path: Path) -> None:
     """An agent asked about a paper rather than a result needs the document; `loom linearize` would do it by superseding the master, and is denied to agents, so `loom source` takes a path (DR-155)."""
     d = demo(tmp_path)
     sid = ok("session", "new", "--name", "Reading the paper", cwd=d).stdout.split()[0]
-    run_dir = d / ".loom" / "sessions" / sid
+    run_dir = d / ".loom" / "agents" / "sessions" / sid
     r = ok("source", "drafting/main.tex", "--session", sid, cwd=d)
     assert "\\documentclass" in r.output  # the document, preamble and all
     assert "\\input{nodes/" not in r.output  # every inclusion expanded in place
@@ -44,7 +44,13 @@ def test_source_prints_a_whole_document_flattened(tmp_path: Path) -> None:
     refused("source", "drafting/main.tex", "--closure", cwd=d, code=2, match="already carries what it includes")
 
     # a path loom does not scan is not a document
-    refused("source", ".loom/ai/runs/t/nope.tex", cwd=d, code=2, match="no such key: .loom/ai/runs/t/nope.tex")
+    refused(
+        "source",
+        ".loom/agents/instructions/runs/t/nope.tex",
+        cwd=d,
+        code=2,
+        match="no such key: .loom/agents/instructions/runs/t/nope.tex",
+    )
 
 
 def test_a_statements_closure_covers_the_proof_it_prints(tmp_path: Path) -> None:
@@ -59,7 +65,7 @@ def test_a_statements_closure_covers_the_proof_it_prints(tmp_path: Path) -> None
 def test_source_on_an_equation_label_prints_what_holds_it(tmp_path: Path) -> None:
     """An equation's label names a region, not a node, so `source` prints the node the equation sits inside."""
     d = demo(tmp_path)
-    digest = d / ".loom/digests" / "Calloway14.tex"
+    digest = d / ".loom/library" / "Calloway14.tex"
     digest.write_text(
         digest.read_text()
         + "\n\\section*{Overview}\nWe prove\n\\begin{equation}\\label{Calloway14-eqx}x=y\\end{equation}\n"

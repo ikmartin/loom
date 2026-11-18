@@ -2,8 +2,10 @@
 
 import { test as base, expect, type TestInfo } from '@playwright/test';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
-import { cpSync, createWriteStream, existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, createWriteStream, existsSync, readFileSync, realpathSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { patient } from './sites';
@@ -47,6 +49,17 @@ export function suiteOf(info: { config: { metadata: Record<string, unknown> } })
 	return { quilt, scratch };
 }
 
+/** A document's compile folder in a copy of the quilt, as loom names it (`loom.paths.document_build`): its file name without `.tex`, then eight hex digits of the SHA-256 of its path without `.tex`. */
+export function compileFolder(root: string, doc: string): string {
+	const name = doc.replace(/\.tex$/, '');
+	return join(root, '.loom/cache/tex', `${name.split('/').pop()}-${createHash('sha256').update(name).digest('hex').slice(0, 8)}`);
+}
+
+/** A work's folder in a copy of the quilt's store, from the address the manifest's `artifacts.dir` gives it (`loom.paths.STORE_ADDRESS`). */
+export function storeDir(root: string, address: string): string {
+	return join(root, '.loom/library/storage', address.replace(/^\/?digests\/storage\/?/, ''));
+}
+
 export function scratchDir(suite: Suite): string {
 	return join(ARRAS, suite.scratch);
 }
@@ -62,14 +75,22 @@ function freePort(): Promise<number> {
 	});
 }
 
+/** Where the server on `root` keeps its write token: outside the quilt, in the machine's place, by the quilt's resolved path (`loom.machine.token_file`). */
+function tokenFile(root: string): string {
+	const data = process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support') : process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+	return join(data, 'loom', 'tokens', `${createHash('sha256').update(realpathSync(root)).digest('hex').slice(0, 24)}.json`);
+}
+
 /** The write token this attempt's server recorded on taking `port`; '' until it has.
  *
  * The record is written only once the port is held, whereas an answer on the port proves nothing: when two workers are given one port, the server that took it answers the other's probe before the loser has exited, and a test left on it writes to the other test's quilt.
  */
 function tokenFrom(root: string, port: number): string {
 	try {
-		const record = JSON.parse(readFileSync(join(root, '.loom/serve.json'), 'utf8')) as { port: number; token: string };
-		return record.port === port ? record.token : '';
+		const record = JSON.parse(readFileSync(join(root, '.loom/local/serve.json'), 'utf8')) as { port: number };
+		if (record.port !== port) return '';
+		const kept = JSON.parse(readFileSync(tokenFile(root), 'utf8')) as { root: string; token: string };
+		return kept.root === realpathSync(root) ? kept.token : '';
 	} catch {
 		return '';
 	}
@@ -132,7 +153,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 		proc.stderr!.pipe(out);
 		let exited = false;
 		const gone = new Promise<void>((r) => proc.once('exit', () => ((exited = true), r())));
-		// killed outright: a graceful stop waits out the watcher's poll, over a second per test, and the copy is thrown away after
+		// killed outright: a graceful stop waits out the watcher's poll, over a second per test, and the copy is thrown away after; so the token a graceful stop would remove from the machine's place is removed here
 		const stop = async () => {
 			if (!exited) {
 				try {
@@ -141,6 +162,11 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 					/* already gone */
 				}
 				await gone;
+			}
+			try {
+				rmSync(tokenFile(root), { force: true });
+			} catch {
+				/* the copy is gone already */
 			}
 			out.end();
 		};
@@ -170,7 +196,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 		const served: Served = {
 			root,
 			url,
-			log: () => parseLines(join(root, '.loom/annotations/log.jsonl')),
+			log: () => parseLines(join(root, '.loom/records/annotations/log.jsonl')),
 			written(body) {
 				const mine = served.log().filter((e) => e.event === 'created' && e.body === body);
 				expect(mine, `the log's created entries with the body ${JSON.stringify(body)}`).toHaveLength(1);
@@ -178,7 +204,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 			},
 			openSessions() {
 				const open = new Map<string, boolean>();
-				for (const e of parseLines(join(root, '.loom/sessions/index.jsonl'))) {
+				for (const e of parseLines(join(root, '.loom/agents/sessions/index.jsonl'))) {
 					const id = String(e.id);
 					if (e.event === 'created') open.set(id, true);
 					else if (e.event === 'closed' || e.event === 'deleted') open.set(id, false);

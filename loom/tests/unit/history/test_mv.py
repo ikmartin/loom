@@ -29,12 +29,12 @@ def demo(tmp_path: Path) -> Path:
     ok("init", str(tmp_path / "demo"), "--demo", cwd=tmp_path)
     d = tmp_path / "demo"
     shutil.rmtree(d / ".loom", ignore_errors=True)
-    shutil.rmtree(d / ".loom/annotations", ignore_errors=True)
+    shutil.rmtree(d / ".loom/records/annotations", ignore_errors=True)
     return d
 
 
 def ledger(d: Path) -> list[dict]:
-    p = d / ".loom" / "history" / "ledger.jsonl"
+    p = d / ".loom" / "records" / "history" / "ledger.jsonl"
     return [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.is_file() else []
 
 
@@ -104,7 +104,7 @@ def test_mv_records_a_rename_made_by_hand_and_the_document_is_no_longer_gone(tmp
     assert gone(d) == []
     assert fresh(d)
     ok("build", cwd=d)
-    m = json.loads((d / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((d / ".loom/cache/site" / "manifest.json").read_text())
     assert [a["in"] for a in m["annotations"].values() if a["body_html"].startswith("<p>Read here.")] == [
         "drafting/paper.tex"
     ]
@@ -159,10 +159,10 @@ REFUSALS: dict[str, tuple[Callable[[Path], None], str, str, str]] = {
     "both exist": (_nothing, "drafting/main.tex", "drafting/outline.tex", "both exist; loom mv never overwrites"),
     "neither exists": (_nothing, "drafting/a.tex", "drafting/b.tex", "neither drafting/a.tex nor drafting/b.tex exists"),
     "the same path": (_nothing, "drafting/main.tex", "drafting/main.tex", "are the same path"),
-    "NEW among agents'": (_nothing, "drafting/main.tex", ".loom/copies/main.tex", "is inside .loom/, which loom never reads as a document"),
+    "NEW among agents'": (_nothing, "drafting/main.tex", ".loom/agents/copies/main.tex", "is inside .loom/, which loom never reads as a document"),
     "NEW not .tex": (_nothing, "drafting/main.tex", "drafting/main.txt", "is not a .tex file"),
-    "NEW in retired": (_nothing, "drafting/main.tex", ".loom/retired/main.tex", "is inside .loom/, which loom never reads as a document"),
-    "NEW in the history": (_nothing, "drafting/main.tex", ".loom/history/x.tex", "is inside .loom/"),
+    "NEW in retired": (_nothing, "drafting/main.tex", ".loom/records/retired/main.tex", "is inside .loom/, which loom never reads as a document"),
+    "NEW in the history": (_nothing, "drafting/main.tex", ".loom/records/history/x.tex", "is inside .loom/"),
     "OLD outside the quilt": (_nothing, "/nonexistent/a.tex", "drafting/x.tex", "is outside the quilt"),
     "OLD a node file": (_part, "drafting/part.tex", "drafting/part2.tex", "is not a live document"),
     "OLD superseded": (_flat, "drafting/main.tex", "drafting/other.tex", "is superseded (linearize)"),

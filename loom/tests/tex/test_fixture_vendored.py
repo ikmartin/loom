@@ -87,9 +87,9 @@ def test_fixture_matches_vendored(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     # as refresh-fixture.sh compiles them: each with its HTML, which the build reads its documents from, the agent's copy too
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     ok("compile", "drafting/talk.tex", "--html", cwd=q)
-    ok("compile", ".loom/copies/aidoc.tex", "--html", cwd=q)
+    ok("compile", ".loom/agents/copies/aidoc.tex", "--html", cwd=q)
     exits(1, "build", cwd=q)  # the synthetic quilt carries intentional errors
-    ours = _norm_manifest(json.loads((q / ".loom/build" / "manifest.json").read_text()))
+    ours = _norm_manifest(json.loads((q / ".loom/cache/site" / "manifest.json").read_text()))
     theirs = _norm_manifest(json.loads((FIXTURE / "manifest.json").read_text()))
     assert sorted(ours) == sorted(theirs), f"the manifest's top-level sections differ; {REFRESH}"
     differ = [k for k in theirs if ours[k] != theirs[k]]
@@ -98,7 +98,7 @@ def test_fixture_matches_vendored(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
             f"manifest section {key!r} differs from the fixture (all that differ: {differ}); {REFRESH}"
         )
     same_tree(
-        published(q / ".loom/build"),
+        published(q / ".loom/cache/site"),
         published(FIXTURE),
         "the build of the synthetic quilt against tests/fixture",
         "docs/specs/tools/refresh-fixture.sh",

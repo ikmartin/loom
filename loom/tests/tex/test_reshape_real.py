@@ -88,7 +88,7 @@ def atomized(once: Once) -> tuple[Path, str]:
 @pytest.mark.tex
 def test_import_keeps_the_paper_flat_and_drafts_it_labelled(once: Once) -> None:
     q, said = imported(once)
-    received = (q / ".loom" / "history" / "0001-main" / "main.tex").read_text()
+    received = (q / ".loom" / "records" / "history" / "0001-main" / "main.tex").read_text()
     assert "\\input{sections/results}" not in received and "Beta uses Lemma" in received
     assert "\\label{pp-" not in received and not (q / "main" / "sections").exists()
     assert "typesets to the same text as the original" in rejoined(said), said
@@ -135,13 +135,13 @@ def test_a_landmark_shown_plain_compiles_alone(once: Once, tmp_path: Path) -> No
 def test_deloom_gives_back_the_paper_as_received(once: Once, tmp_path: Path) -> None:
     """Import put ids in, atomize moved results into node files; deloom flattens and takes loom out, and what is left typesets as the loom document did and reads as the paper the author brought."""
     q = copy(atomized(once)[0], tmp_path / "q")
-    r = ok("deloom", "main/spine.tex", "--to", ".loom/build/plain.tex", cwd=q)
-    assert r.output.startswith("wrote .loom/build/plain.tex") and "kept" not in r.output
-    plain = (q / ".loom/build" / "plain.tex").read_text()
+    r = ok("deloom", "main/spine.tex", "--to", ".loom/agents/scratch/s/plain.tex", cwd=q)
+    assert r.output.startswith("wrote .loom/agents/scratch/s/plain.tex") and "kept" not in r.output
+    plain = (q / ".loom/agents/scratch/s" / "plain.tex").read_text()
     assert "pp-" not in plain and "\\input{nodes/" not in plain and "{loom}" not in plain
-    res = identity_test(q, "main/spine.tex", q, ".loom/build/plain.tex", tmp_path / "scratch", base="main")
+    res = identity_test(q, "main/spine.tex", q, ".loom/agents/scratch/s/plain.tex", tmp_path / "scratch", base="main")
     assert res.passed, res.summary()
-    received = (q / ".loom" / "history" / "0001-main" / "main.tex").read_text()
+    received = (q / ".loom" / "records" / "history" / "0001-main" / "main.tex").read_text()
     assert [ln for ln in plain.splitlines() if ln.strip()] == [ln for ln in received.splitlines() if ln.strip()]
 
 

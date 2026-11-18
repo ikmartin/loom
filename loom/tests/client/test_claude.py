@@ -31,8 +31,8 @@ MODEL = "haiku"
 BUDGET = "1.00"
 
 #: Where the boundary test writes: an open file of the person's, the agent's copies, a directory `[agents] deny` names, and one of loom's records.
-WRITTEN = (("notes", "client-check.txt"), (".loom/copies", "client-check.txt"))
-REFUSED = (("drafting", "client-check.txt"), (".loom/annotations", "client-check.txt"))
+WRITTEN = (("notes", "client-check.txt"), (".loom/agents/copies", "client-check.txt"))
+REFUSED = (("drafting", "client-check.txt"), (".loom/records/annotations", "client-check.txt"))
 WRITES = (
     "This turn checks this folder's permission settings and nothing else; run no command. With the Write tool, create "
     + ", then ".join(f"{d}/{f}" for d, f in WRITTEN + REFUSED)
@@ -146,7 +146,9 @@ def test_a_claude_attached_over_mcp_writes_as_its_agent_and_runs_no_authors_comm
     gate(CLAUDE, "claude")
     q = quilt(tmp_path)
     result, ran = turn(q, OVER_MCP)
-    mine = [ln for ln in (q / ".loom/annotations" / "log.jsonl").read_text().splitlines() if "client check" in ln]
+    mine = [
+        ln for ln in (q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines() if "client check" in ln
+    ]
     assert mine and '"author": "Claude Code Agent"' in mine[-1], (
         f"no annotation over MCP as Claude Code Agent: {result}"
     )
@@ -167,7 +169,7 @@ def test_a_claude_attached_over_mcp_reads_a_resource_and_expands_a_modes_prompt(
     assert not result["permission_denials"], f"something was refused: {result}"
     prompted, _ = turn(q, A_PROMPT)
     assert not prompted["permission_denials"], f"something was refused: {prompted}"
-    log = "\n".join(p.read_text() for p in (q / ".loom" / "sessions").glob("*/run.log"))
+    log = "\n".join(p.read_text() for p in (q / ".loom" / "agents" / "sessions").glob("*/run.log"))
     assert "loom source dm-0002  (over MCP, reading quilt:dm-0002)" in log, f"no resource read was logged: {log}"
     assert "loom ai mode quick  (over MCP, for the quick prompt)" in log, (
         f"the prompt did not expand: {log}, {prompted}"
@@ -183,6 +185,6 @@ def test_a_claude_attached_over_mcp_hears_what_the_person_did_since_it_last_look
     result, _ = turn(q, HEAR_SINCE)
     assert LEFT in str(result.get("result", "")), f"the reply does not quote the person's annotation: {result}"
     assert not result["permission_denials"], f"something was refused: {result}"
-    log = "\n".join(p.read_text() for p in (q / ".loom" / "sessions").glob("*/run.log"))
+    log = "\n".join(p.read_text() for p in (q / ".loom" / "agents" / "sessions").glob("*/run.log"))
     assert "loom since --as 'Claude Code Agent'  (over MCP)" in log, f"no loom since was logged: {log}"
-    assert (q / ".loom" / "since" / "claude-code-agent.json").is_file(), "the agent's marker did not move"
+    assert (q / ".loom" / "local" / "since" / "claude-code-agent.json").is_file(), "the agent's marker did not move"

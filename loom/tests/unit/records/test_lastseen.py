@@ -18,13 +18,13 @@ from tests.helpers import edit, ok
 def demo(tmp_path: Path) -> Path:
     ok("init", str(tmp_path / "q"), "--demo", cwd=tmp_path)
     q = tmp_path / "q"
-    shutil.rmtree(q / ".loom/annotations", ignore_errors=True)
+    shutil.rmtree(q / ".loom/records/annotations", ignore_errors=True)
     shutil.rmtree(q / ".loom", ignore_errors=True)
     return q
 
 
 def texts(q: Path, history: Path | None = None) -> list[Path]:
-    d = (history or q / ".loom" / "history") / "texts"
+    d = (history or q / ".loom" / "records" / "history") / "texts"
     return sorted(d.iterdir()) if d.is_dir() else []
 
 
@@ -40,12 +40,12 @@ def test_an_edit_under_an_annotation_freezes_the_text_it_was_written_against(
     q = demo(tmp_path)
     if history:
         edit(q / "config.toml", "[library]", f'history = "{history}"\n\n[library]')
-    hist = q / (history or ".loom/history")
+    hist = q / (history or ".loom/records/history")
     ok("annotate", "dm-0002", "Which orbits?", "--quote", ORIGINAL, "--as", "Tom", cwd=q)
     ok("build", cwd=q)
     # the comment froze the version it was written against, before anything moved
     assert len(texts(q, hist)) == 1 and ORIGINAL in texts(q, hist)[0].read_text()
-    assert (q / ".loom" / "last-seen.json").is_file()
+    assert (q / ".loom" / "local" / "last-seen.json").is_file()
     cache = read_last_seen(q, hist)
     assert "dm-0002" in cache and ORIGINAL in cache["dm-0002"]
 
@@ -60,7 +60,7 @@ def test_a_moved_key_is_frozen_from_the_cache_when_an_annotation_names_its_old_t
     """The cache is where a version no writer froze is kept from: when a key's text moves and an annotation names the text loom last saw, that text is frozen and the cache moves on. A key that moved and that nothing names freezes nothing."""
     q = demo(tmp_path)
     before = current_texts(open_scan(str(q)))
-    write_last_seen(q, before, q / ".loom" / "history")
+    write_last_seen(q, before, q / ".loom" / "records" / "history")
     edit(q / LEMMA, ORIGINAL, "Orbits have at most two points")
     edit(
         q / "drafting" / "nodes" / "dm-0001.tex",
@@ -72,7 +72,7 @@ def test_a_moved_key_is_frozen_from_the_cache_when_an_annotation_names_its_old_t
     assert freeze_moved(open_scan(str(q)), named) == ["dm-0002"]  # type: ignore[arg-type]
     frozen = texts(q)
     assert len(frozen) == 1 and ORIGINAL in frozen[0].read_text()
-    assert ORIGINAL not in read_last_seen(q, q / ".loom" / "history")["dm-0002"]
+    assert ORIGINAL not in read_last_seen(q, q / ".loom" / "records" / "history")["dm-0002"]
     assert freeze_moved(open_scan(str(q)), named) == []  # type: ignore[arg-type]  # nothing has moved since
 
 
@@ -97,6 +97,6 @@ def test_a_version_written_against_between_scans_is_kept(tmp_path: Path) -> None
     ok("build", cwd=q)
 
     assert any("as we now check" in p.read_text() for p in texts(q))
-    m = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     (a,) = m["annotations"].values()
     assert (a["detached"], a["recorded"], a["anchored"]) == (False, True, True)

@@ -96,7 +96,7 @@ def waiting(root: Path, result: Any = None) -> list[Any]:
 
 def kept_in_history(root: Path, data: bytes) -> bool:
     text = data.decode("utf-8")
-    p = root / ".loom/history/texts" / f"{hashlib.sha256(text.encode()).hexdigest()}.md"
+    p = root / ".loom/records/history/texts" / f"{hashlib.sha256(text.encode()).hexdigest()}.md"
     return p.is_file() and p.read_bytes() == data
 
 
@@ -134,7 +134,7 @@ class Run:
         blob = b"\n".join(after.values()).decode("utf-8", "replace")
         for mk in sorted(self.typed):
             if mk not in blob and not any(
-                mk.encode() in p.read_bytes() for p in (self.root / ".loom/history").rglob("*.md")
+                mk.encode() in p.read_bytes() for p in (self.root / ".loom/records/history").rglob("*.md")
             ):
                 self.problems.append(f"{act}: the person's {mk} is gone and kept nowhere")
         states = {p.id: p.state for p in waiting(self.root) if p.kind == "suggested"}
@@ -624,7 +624,7 @@ def dying_before_the_rename(monkeypatch: pytest.MonkeyPatch, after: int = 0) -> 
 
 def door(root: Path) -> list[str]:
     """The journal's events, in order."""
-    p = root / ".loom/history/writes.jsonl"
+    p = root / ".loom/local/writes.jsonl"
     return [json.loads(line)["event"] for line in p.read_text().splitlines()] if p.is_file() else []
 
 
@@ -748,7 +748,7 @@ def test_a_put_back_cut_short_before_its_write_leaves_the_file_and_puts_back_onc
 
 
 def test_putting_back_a_text_never_writes_outside_the_quilt(q: Path) -> None:
-    stored = next((q / ".loom/history/texts").glob("*.md"))
+    stored = next((q / ".loom/records/history/texts").glob("*.md"))
     for path in ("../outside-the-quilt.txt", "/tmp/outside-the-quilt.txt", "drafting/../../outside-the-quilt.txt"):
         said = call(q, "history-restore", {"path": path, "text": "sha256:" + stored.stem})
         assert said == {"error": "outside-quilt"}, path
@@ -779,12 +779,12 @@ def test_a_restore_cut_short_is_undone_whole(q: Path, monkeypatch: pytest.Monkey
     with pytest.raises(Died):
         call(q, "history-restore", {"document": "drafting/main.tex", "version": "widgets-v1"})
     revive()
-    assert recover(q, q / ".loom/history")[0].startswith("undid")
+    assert recover(q, q / ".loom/records/history")[0].startswith("undid")
     assert {f: f.read_bytes() for f in mine} == mine and no_temps(q)
 
 
 def kept_lines(root: Path, eid: str) -> int:
-    log = root / ".loom/edits/log.jsonl"
+    log = root / ".loom/records/edits/log.jsonl"
     return sum(
         1
         for line in log.read_text().splitlines()

@@ -4,7 +4,7 @@
 
 ## Trigger
 
-A quilt other than the synthetic fixture has two macro sets in its manifest that define one macro name differently (`macros.sets` and `macros.default`; a two-minute script over `build/manifest.json` finds them). Checked 2026-09-26: none of acgs, hostile, kpsv, man12, mmp or showcase has one.
+A quilt other than the synthetic fixture has two macro sets in its manifest that define one macro name differently (`macros.sets` and `macros.default`; a two-minute script over `.loom/cache/site/manifest.json` finds them). Checked 2026-09-26: none of acgs, hostile, kpsv, man12, mmp or showcase has one.
 
 ## Why deferred
 

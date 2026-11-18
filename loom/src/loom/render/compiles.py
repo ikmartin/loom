@@ -16,9 +16,6 @@ from typing import Any
 
 from loom.tex.runner import CompileResult, stop_run
 
-#: Where a server keeps how its compiles stand, under the build output, for `loom status` to read; it goes when the server stops.
-COMPILES_JSON = "compiles.json"
-
 #: The line of the log that says where TeX was when it stopped: `l.12 \hlind{...}`.
 _AT = re.compile(r"^l\.\d+ .*$", re.M)
 
@@ -200,12 +197,12 @@ def served(root: Path) -> dict[str, Any] | None:
     """How the compiles of the server running on `root` stand, as the stream says it; None when no server runs or its record cannot be read."""
     import json
 
-    from loom.paths import BUILD, SERVE_JSON
+    from loom.paths import COMPILES, SERVE_JSON
 
     if not (root / SERVE_JSON).exists():
         return None
     try:
-        state = json.loads((root / BUILD / COMPILES_JSON).read_text(encoding="utf-8"))
+        state = json.loads((root / COMPILES).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     return state if isinstance(state, dict) else None

@@ -8,7 +8,7 @@ import re
 from typing import Any
 
 from loom.history.ledger import History, append_entry, load_history
-from loom.paths import BUILD, MANIFEST, documents_named
+from loom.paths import MANIFEST, SITE, documents_named
 from loom.scan.scan import ScanResult
 from loom.section_drafts import check_overlap, metadata
 from loom.sync import SyncError
@@ -105,15 +105,15 @@ def close_draft(
     digest = hashlib.sha256(before + json.dumps(frozen, sort_keys=True).encode()).hexdigest()
     home = result.quilt.history_dir / "closed-drafts" / digest
     write_atomic(home / "source.tex", before)
-    write_atomic(home / "fragment.html", (root / BUILD / master["fragment"]).read_bytes())
-    fragments = [(root / BUILD / master["fragment"]).read_text()]
+    write_atomic(home / "fragment.html", (root / SITE / master["fragment"]).read_bytes())
+    fragments = [(root / SITE / master["fragment"]).read_text()]
     if context:
-        context_html = (root / BUILD / context["fragment"]).read_text()
+        context_html = (root / SITE / context["fragment"]).read_text()
         write_atomic(home / "context.html", context_html)
         fragments.append(context_html)
     for fragment in fragments:
         for asset in re.findall(r'(?:src|href)="((?:svg|graphics)/[^"?#]+)"', fragment):
-            path = root / BUILD / asset
+            path = root / SITE / asset
             if path.is_file():
                 write_atomic(home / "assets" / asset, path.read_bytes())
     write_atomic(home / "view.json", json.dumps(frozen))

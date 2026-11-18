@@ -13,7 +13,7 @@ Link to the thing, not to a description of where it is. A reader clicks a link a
 - **An application is opened by `[Open Anki](app:Anki)`**, on the person's click in the viewer; never send one where it would surprise them.
 - **Text the author will paste elsewhere** — an issue for a list, a paragraph for an email — gets links with words of their own, or none: an empty link is named only by the viewer.
 - **Link the annotations you write.** When you tell the author what you found, a link to each annotation takes them to it with its box open.
-- **Working in a copy, link the copy.** A plain key opens the author's version of a node, in their document; while you and the author are editing a copy in `.loom/copies/`, link what is in it: `loom link .loom/copies/NAME.tex --at KEY-ai` for the place in the copy, which is usually what the author wants to see, or `loom link KEY-ai` for the copy's node alone. Link a plain key only when you mean the author's text rather than the copy's.
+- **Working in a copy, link the copy.** A plain key opens the author's version of a node, in their document; while you and the author are editing a copy in `.loom/agents/copies/`, link what is in it: `loom link .loom/agents/copies/NAME.tex --at KEY-ai` for the place in the copy, which is usually what the author wants to see, or `loom link KEY-ai` for the copy's node alone. Link a plain key only when you mean the author's text rather than the copy's.
 
 ## Mathematics
 
