@@ -286,6 +286,31 @@ def test_the_record_is_written_after_the_settings_and_a_failed_write_is_refused(
     assert not any("private" in r for r in _settings(q)["permissions"]["deny"])
 
 
+@pytest.mark.parametrize("what", ["empty", "link", "not json"])
+def test_a_settings_file_loom_leaves_alone_is_said_by_doctor_every_time(tmp_path: Path, what: str) -> None:
+    """None of loom's rules is in force there, which doctor says at every run, not only on the run that left it."""
+    from loom.doctor import check_permissions
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    settings = q / ".claude/settings.json"
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"env": {}}\n')
+    settings.unlink()
+    if what == "empty":
+        settings.write_text("")
+    elif what == "link":
+        settings.symlink_to(outside)
+    else:
+        settings.write_text("{ not json")
+    for _ in range(2):
+        got = json_of("upgrade", "--json", cwd=q)
+        assert ".claude/settings.json" in got["theirs"] and ".claude/settings.json" not in got["written"]
+        item = check_permissions(q)
+        assert item.status == "warn" and "none of loom's rules is in force for Claude Code" in item.detail
+    assert outside.read_text() == '{"env": {}}\n'
+
+
 def test_variant_and_upgrade_never_wait_on_a_root_file_that_is_a_fifo(tmp_path: Path) -> None:
     """A FIFO named `CLAUDE.md` in a copied quilt: the variant is read without it, and the root line is not written into it."""
     from loom.ai.layout import upgrade_layer

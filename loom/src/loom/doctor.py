@@ -556,24 +556,32 @@ def check_engine(quilt: Any) -> Item:
 def check_permissions(root: Path) -> Item:
     """The permission files of the apps the quilt is set up for (`.claude/settings.json`, `.codex/rules/loom.rules`) byte for byte what this loom's table renders into the quilt (`vendor_files`, the person's own settings in Claude Code's kept), in the variant the quilt's files say."""
     from loom.ai.clients import chosen
-    from loom.ai.layout import SHELL, quilt_config, variant, vendor_files
+    from loom.ai.layout import CLAUDE_SETTINGS, SHELL, quilt_config, read_plain, settings_left, variant, vendor_files
 
     shell = variant(root) == SHELL
-    shipped = vendor_files(quilt_config(root), shell=shell, apps=chosen(root, None), root=root)
+    config = quilt_config(root)
+    apps = chosen(root, None)
+    shipped = vendor_files(config, shell=shell, apps=apps, root=root)
     wanted = tuple(shipped)
     present = [rel for rel in wanted if (root / rel).is_file()]
     layer = (root / AI).is_dir()
-    if not layer and not present:
+    # a file of the person's that loom leaves alone holds none of its rules, which is said at every run
+    left = settings_left(root, config) if CLAUDE_SETTINGS in vendor_files(config, shell=shell, apps=apps) else ""
+    if not layer and not present and not left:
         return Item("permissions", OK, QUILT, f"no {AI}/ (loom ai init writes it and them)")
-    stale = [rel for rel in present if (root / rel).read_text(encoding="utf-8") != shipped[rel]]
+    stale = [rel for rel in present if read_plain(root, rel) != shipped[rel]]
     absent = [rel for rel in wanted if rel not in present] if layer else []
-    if not stale and not absent:
+    if not stale and not absent and not left:
         how = "agents here run loom in a shell" if shell else "agents here attach over MCP"
         return Item(
             "permissions", OK, QUILT, f"{', '.join(present)}: {how}", extra={"variant": SHELL if shell else "mcp"}
         )
     said = [f"{rel} missing: an agent here runs without loom's table" for rel in absent]
     said += [f"{rel}: not what this loom lets agents run" for rel in stale]
+    if left:
+        said.append(
+            f"{CLAUDE_SETTINGS}: none of loom's rules is in force for Claude Code, since {left}; make it a JSON object in a file of the quilt's own, and loom upgrade writes them in"
+        )
     # beside an .loom/ai/, `loom upgrade` writes both; without one, `loom ai init` does
     return Item("permissions", WARN, QUILT, "; ".join(said), "loom upgrade" if layer else "loom ai init")
 
