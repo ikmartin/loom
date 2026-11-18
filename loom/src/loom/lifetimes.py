@@ -207,41 +207,19 @@ def in_cache(root: Path, notes: Iterable[str]) -> list[str]:
 
 
 class Named:
-    """What the build's index names, held as a Bloom filter: membership only, a few hundred kilobytes whatever the index holds, made without a Python object for each name, and wrong only by naming what it does not, which keeps a file a sweep would have removed.
+    """What the build's index names: `names`, every string the index holds, exactly; a file of the site is named by its path in the site, as the publish names it, or by its path in the cache.
 
-    Each sweep salts it afresh, so a file wrongly kept once is not kept by the same mistake again.
+    Every string is taken as a name: the paths are what the index holds, a group is written only while a fragment names it, and the hashes and group names besides name no file. A caller that lists what the cache holds and is not named takes each path relative to `.loom/cache/` and asks `in`.
     """
 
-    #: Bits for each name and probes for each lookup: about one false naming in 1,500.
-    BITS, PROBES = 16, 10
-
-    def __init__(self, count: int) -> None:
-        self.size = max(1 << 13, count * self.BITS)
-        self.bits = bytearray((self.size + 7) // 8)
-        self.salt = int.from_bytes(os.urandom(8), "little")
-
-    def _probes(self, word: bytes) -> list[int]:
-        a, b = hash((self.salt, word)), hash((word, self.salt)) | 1
-        return [(a + i * b) % self.size for i in range(self.PROBES)]
-
-    def add(self, word: bytes) -> None:
-        bits = self.bits
-        for at in self._probes(word):
-            bits[at >> 3] |= 1 << (at & 7)
-
-    def has(self, word: bytes) -> bool:
-        bits = self.bits
-        for at in self._probes(word):
-            if not bits[at >> 3] >> (at & 7) & 1:
-                return False
-        return True
+    def __init__(self, names: set[str]) -> None:
+        self.names = names
 
     def __contains__(self, rel: object) -> bool:
-        """Whether `rel`, a path relative to `.loom/cache/`, is named: by itself, or for a file of the site by its path in the site, as the publish names it."""
+        """Whether `rel`, a path relative to `.loom/cache/`, is named: by itself, or for a file of the site by its path in the site."""
         if not isinstance(rel, str):
             return False
-        word = rel.encode("utf-8")
-        return self.has(word) or (rel.startswith("site/") and self.has(word[5:]))
+        return rel in self.names or (rel.startswith("site/") and rel[5:] in self.names)
 
 
 #: A string of the index as JSON writes it.
@@ -266,7 +244,7 @@ def built(root: Path) -> Named:
     The one reader of the build's index for what it names (`_read_named`): an index that changes its shape changes it, and nothing else in the sweep.
     """
     found = _read_named(root)
-    return found[0] if found is not None else _read_named_from([], 0)[0]
+    return found[0] if found is not None else _read_named_from([])[0]
 
 
 def _read_named(root: Path) -> tuple[Named, str, bool] | None:
@@ -274,31 +252,26 @@ def _read_named(root: Path) -> tuple[Named, str, bool] | None:
 
     Every string in it is taken as a name: the paths are what the index holds, a group is written only while a fragment names it, and the hashes and group names besides name no file. JSON written with an indent puts each string of a list or a key on a line of its own, so no line is long.
     """
-    path = root / BUILD_INDEX
     try:
-        size = path.stat().st_size
-        f = path.open("rb")
+        f = (root / BUILD_INDEX).open("rb")
     except OSError:
         return None
     with f:
-        return _read_named_from(f, size)
+        return _read_named_from(f)
 
 
-def _read_named_from(lines: Iterable[bytes], size: int) -> tuple[Named, str, bool]:
-    named = Named(size // 16 + 2)
+def _read_named_from(lines: Iterable[bytes]) -> tuple[Named, str, bool]:
+    names = {BUILD_INDEX.removeprefix(f"{CACHE}/"), "site/manifest.json"}
     digest = hashlib.sha256()
     ours = False
-    for word in (BUILD_INDEX.removeprefix(f"{CACHE}/").encode(), b"site/manifest.json"):
-        named.add(word)
     for line in lines:
         digest.update(line)
         ours = ours or b'"fragments":' in line
         for m in _STRING.finditer(line):
             word = m.group(1)
-            if b"\\" in word:
-                word = json.loads(b'"' + word + b'"').encode("utf-8")
-            named.add(word.removeprefix(b"@"))
-    return named, digest.hexdigest(), ours
+            said = json.loads(b'"' + word + b'"') if b"\\" in word else word.decode("utf-8", errors="replace")
+            names.add(said.removeprefix("@"))
+    return Named(names), digest.hexdigest(), ours
 
 
 # ---- removing ----------------------------------------------------------------------------------------------------------

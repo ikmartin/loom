@@ -602,6 +602,9 @@ def test_what_the_index_names_is_read_off_its_strings_whatever_their_letters(tmp
     assert digest == on_disk(tmp_path)
     assert "blocks/snippets/é-1.html" in named and "site/fragments/a.html" in named and "index.json" in named
     assert "blocks/snippets/e-1.html" not in named and "site/fragments/b.html" not in named
+    # exact, and listed: every string the index holds and nothing else
+    assert {"blocks/snippets/é-1.html", "fragments/a.html", "index.json", "site/manifest.json"} <= named.names
+    assert not {n for n in named.names if n.startswith("blocks/")} - {"blocks/snippets/é-1.html"}
 
 
 def test_doctor_reports_the_machines_unpacked_copies_and_removes_none(tmp_path: Path) -> None:
