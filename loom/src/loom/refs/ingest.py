@@ -29,10 +29,10 @@ EDGE_LINES = 10
 EDGE_WORDS = 10
 #: A word of prose beside an identifier, which no journal's reference holds: lower case and longer than a short connective ("of", "the", "and"): "a question raised in arXiv:…".
 _PROSE = re.compile(r"^[a-z][a-z'’-]{3,}[.,;:]?$")
-#: A line naming the work a document answers: an identifier after "Erratum to", "Comment on", "Reply to", "Review of" and the like is that work's, which the document cites.
+#: A line that begins by naming the work a document answers: an identifier after "Erratum to", "Comment on", "Reply to" and the like is that work's, which the document cites. Only at the line's start, and never "Review of" or "Supplement to", which begin journals' names ("Review of Economic Studies", "Supplement to the Annals of Statistics") and a journal's line carries the paper's own DOI.
 _ANSWERS = re.compile(
-    r"\b(?:errat(?:um|a)|corrigend(?:um|a)|addend(?:um|a)|comments?|commentary|repl(?:y|ies)|response|rejoinder|review"
-    r"|retraction|correction|discussion|supplement)\s+(?:to|on|of|for)\b",
+    r"^\W*(?:errat(?:um|a)|corrigend(?:um|a)|addend(?:um|a)|comments?|commentary|repl(?:y|ies)|response|rejoinder"
+    r"|retraction|correction|discussion)\s+(?:to|on|of|for)\b",
     re.I,
 )
 # A title on page one: the longest early line that is not a running head, a date or an author list.
