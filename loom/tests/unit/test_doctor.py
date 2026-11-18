@@ -394,6 +394,9 @@ def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
     data = doctor(box, cwd=q / "drafting", code=0)
     assert data["quilt"] == str(q.resolve())
     got = {i["name"]: (i["status"], i["detail"]) for i in data["items"] if i["severity"] == "quilt"}
+    # what .loom/ holds, which the demo's own files decide
+    size = got.pop("size")
+    assert size[0] == "ok" and size[1].startswith("records ") and "cache " in size[1]
     assert got == {
         "engine": ("ok", "pdflatex"),
         "permissions": ("ok", ".claude/settings.json, .codex/rules/loom.rules: agents here attach over MCP"),
