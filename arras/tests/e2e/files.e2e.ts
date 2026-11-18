@@ -78,6 +78,45 @@ test('the research state keeps the same line, the line saying who wrote it stand
 	expect(meta.x).toBeCloseTo(at.x, 0);
 });
 
+/** A Markdown body with four levels of heading and a code block, as the publisher draws one. */
+const LEVELS = `<h1 id="options">Options, a first lesson</h1>
+<p>A trader pays $5 for one share and sells it for $7 the next day.</p>
+<h2 id="payoff">The payoff</h2>
+<p>At expiry a call pays the larger of the gain and nothing.</p>
+<h3 id="one-step">One step of the binomial model</h3>
+<p>The share moves up or down, and shares and cash copy the option in both states.</p>
+<h4 id="in-code">In code</h4>
+<pre><code>def call(s, k, u, d, r):
+    q = (1 + r - d) / (u - d)
+    return (q * max(u * s - k, 0) + (1 - q) * max(d * s - k, 0)) / (1 + r)
+</code></pre>`;
+
+test("a Markdown file's heading levels step down, none smaller than its text, and a code block's first line stands with the rest", async ({ page }) => {
+	await page.route(/\/files\/notes\/intro\.md\.html/, (route) => route.fulfill({ contentType: 'text/html', body: LEVELS }));
+	await page.goto('/file/notes/intro.md');
+	const body = pane(page, 0).getByTestId('file-item').locator('.file-body');
+	await expect(body.locator('h4')).toHaveText('In code');
+	const size = (tag: string) => body.locator(tag).first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+	const [h1, h2, h3, h4, text] = [await size('h1'), await size('h2'), await size('h3'), await size('h4'), await size('p')];
+	// each level visibly smaller than the one above, and the last no smaller than the text
+	expect(h1).toBeGreaterThan(h2 * 1.1);
+	expect(h2).toBeGreaterThan(h3 * 1.1);
+	expect(h3).toBeGreaterThan(h4 * 1.1);
+	expect(h4).toBeGreaterThanOrEqual(text);
+	// the first line of the code starts where the second does
+	const indent = await body.locator('pre code').evaluate((code) => {
+		const words = code.firstChild as Text;
+		const at = (i: number) => {
+			const range = document.createRange();
+			range.setStart(words, i);
+			range.setEnd(words, i + 1);
+			return range.getBoundingClientRect().left;
+		};
+		return at(0) - at(words.data.indexOf('\n') + 1);
+	});
+	expect(Math.abs(indent)).toBeLessThan(0.5);
+});
+
 test('a Markdown file draws the HTML it holds, with Markdown and mathematics working inside it', async ({ page }) => {
 	await page.goto('/file/notes/embeds.md');
 	const body = pane(page, 0).getByTestId('file-item').locator('.file-body');

@@ -1,17 +1,20 @@
 """`loom since`: what people did since an agent last looked, read off the records against one marker per agent name, and one per session that names it.
 
 A session's marker (`.loom/local/since/<slug>.<session>.json`) is one conversation's own, so two conversations of one app each see what came since they last looked; its first look starts where the name's marker stands, the latest look of any, and where the name has none, where a look with no session starts, never at the session's own opening, which is the first look itself over MCP. The marker (`.loom/local/since/<slug>.json`) is the second the agent last looked, the records that carry that second, the keys stale then and the research state as it read then. A record is new when it is later than the marker, or of the marker's second and not among those it carries, so the clock's one-second resolution neither repeats nor drops one. Nothing here is committed or watched: the marker is this machine's note of where an agent got to, and moving it rebuilds nothing.
+
+The files the viewer shows have no record of their own, so a look keeps one for the quilt (`SHOWN_SEEN`): each file's modification time as the last look by any agent found it, and what each look since found added, changed or removed, stamped with that look's second. Every window reads the same changes, so it grows with what the person changes, never with the number of agents or sessions; a change goes once every look still to come has passed it, as a deletion does.
 """
 
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loom.clock import stamp
-from loom.paths import DELETED, SINCE
+from loom.paths import DELETED, SHOWN_SEEN, SINCE
 from loom.scan.scan import ScanResult
 
 if TYPE_CHECKING:
@@ -56,7 +59,11 @@ class Since:
     state: list[dict[str, Any]] = field(default_factory=list)
     said: list[dict[str, Any]] = field(default_factory=list)
     ticks: list[dict[str, Any]] = field(default_factory=list)
+    #: Each file the viewer shows that was added, changed or removed in the window, by path.
+    files: list[dict[str, Any]] = field(default_factory=list)
     marker: Marker | None = None
+    #: The files as this look found them and the changes still kept, which `write_shown` stores; None leaves the record as it is.
+    shown: tuple[dict[str, int], list[dict[str, Any]]] | None = None
 
     @property
     def empty(self) -> bool:
@@ -69,6 +76,7 @@ class Since:
             or self.state
             or self.said
             or self.ticks
+            or self.files
         )
 
     def to_json(self) -> dict[str, Any]:
@@ -86,6 +94,7 @@ class Since:
             "state": self.state,
             "said": self.said,
             "ticks": self.ticks,
+            "files": self.files,
         }
 
 
@@ -101,8 +110,12 @@ def marker_path(root: Path, name: str, session: str | None = None) -> Path:
 
 def read_marker(root: Path, name: str, session: str | None = None) -> Marker | None:
     """The agent's marker, or its marker in `session`; None before its first look (or when the file does not parse, which is the same thing)."""
+    return _read_marker(marker_path(root, name, session))
+
+
+def _read_marker(path: Path) -> Marker | None:
     try:
-        d = json.loads(marker_path(root, name, session).read_text(encoding="utf-8"))
+        d = json.loads(path.read_text(encoding="utf-8"))
         stale = d.get("stale")
         return Marker(
             when=str(d["when"]),
@@ -261,6 +274,7 @@ def since(result: ScanResult, name: str, session: Session | None = None) -> Sinc
     current = _state(result, window, new, out)
     _said(root, new, out)
     _ticks(result, new, out)
+    _files(result, new, now, out, kept is not None or opened == "name")
     out.marker = Marker(when=now, seen=marks, stale=stale, state=current)
     return out
 
@@ -453,6 +467,100 @@ def _ticks(result: ScanResult, new: Any, out: Since) -> None:
         out.ticks.append(
             {"path": path, "line": line, "done": e.get("done"), "words": e.get("words"), "by": e.actor, "when": e.when}
         )
+
+
+def _shown_now(result: ScanResult) -> dict[str, int]:
+    """Each file the viewer shows that `_files` reports, by its modification time in nanoseconds: every one but a `.tex` file, whose changes the scan reports by key, LaTeX's auxiliary files, and the research state's page, which `_state` reports as a diff."""
+    from loom.files import Shown, is_latex_aux
+    from loom.pages import state_page
+
+    root = result.quilt.root
+    page = state_page(result.quilt.config).path
+    out: dict[str, int] = {}
+    for rel in Shown.of(result.quilt).walk():
+        if rel.endswith(".tex") or is_latex_aux(rel) or rel == page:
+            continue
+        try:
+            out[rel] = (root / rel).stat().st_mtime_ns
+        except OSError:
+            continue
+    return out
+
+
+def read_shown(root: Path) -> tuple[dict[str, int], list[dict[str, Any]]] | None:
+    """The files as the last look found them and the changes kept since (`SHOWN_SEEN`); None before any look kept them, or when the record does not parse."""
+    try:
+        d = json.loads((root / SHOWN_SEEN).read_text(encoding="utf-8"))
+        return {str(k): int(v) for k, v in d["files"].items()}, [e for e in d["changes"] if isinstance(e, dict)]
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def _file_mark(e: dict[str, Any]) -> str:
+    """What a marker's `seen` holds for a change to a file: its act, its path and the file's modification time."""
+    return f"file:{e.get('act')}:{e.get('path')}:{e.get('mtime')}"
+
+
+def _files(result: ScanResult, new: Any, now: str, out: Since, looked: bool) -> None:
+    """Each file the viewer shows added, changed or removed in the window, by path, as it stands at the window's two ends; `looked` False for a look with no earlier look behind it, which has seen no files and reports none.
+
+    What this look finds changed since the last look by any agent joins the changes kept, stamped `now`. Loom cannot tell who changed a file, so an agent's own edits are listed too.
+    """
+    held = read_shown(result.quilt.root)
+    current = _shown_now(result)
+    if held is None:
+        out.shown = (current, [])
+        return
+    before, changes = held
+    for path in sorted(before.keys() | current.keys()):
+        then, mtime = before.get(path), current.get(path)
+        if then != mtime:
+            act = "added" if then is None else "removed" if mtime is None else "changed"
+            changes.append({"path": path, "act": act, "mtime": then if mtime is None else mtime, "when": now})
+    out.shown = (current, changes)
+    acts: dict[str, list[str]] = {}
+    for e in changes:
+        if new(str(e.get("when", "")), _file_mark(e)) and looked:
+            acts.setdefault(str(e.get("path")), []).append(str(e.get("act")))
+    for path, done in sorted(acts.items()):
+        was, now_there = done[0] != "added", done[-1] != "removed"
+        if was or now_there:
+            out.files.append({"path": path, "act": "changed" if was and now_there else "removed" if was else "added"})
+
+
+def write_shown(root: Path, shown: tuple[dict[str, int], list[dict[str, Any]]] | None) -> None:
+    """Keep the files as this look found them, and each change some look still to come has not passed: every name's marker, and each open session's own set within `HOLD_DAYS`. Run after `write_marker`, whose marker it reads."""
+    if shown is None:
+        return
+    files, changes = shown
+    looks = _all_looks(root)
+    kept = [e for e in changes if any(m.new(str(e.get("when", "")), _file_mark(e)) for m in looks)]
+    p = root / SHOWN_SEEN
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".loom-tmp")
+    tmp.write_text(
+        json.dumps({"files": dict(sorted(files.items())), "changes": kept}, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
+    os.replace(tmp, p)
+
+
+def _all_looks(root: Path) -> list[Marker]:
+    """Every name's marker, and each open session's own set within `HOLD_DAYS`: the windows a change to a file must still reach before it goes."""
+    from datetime import timedelta
+
+    from loom.clock import now
+    from loom.sessions import sessions
+
+    found = sessions(root)
+    held = (now() - timedelta(days=HOLD_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out: list[Marker] = []
+    for p in (root / MARKERS).glob("*.json"):
+        sid = p.stem.partition(".")[2]
+        m = _read_marker(p)
+        s = found.get(sid) if sid else None
+        if m is not None and (not sid or (s is not None and s.state == "open" and m.when >= held)):
+            out.append(m)
+    return out
 
 
 def _name(result: ScanResult, key: str) -> str:

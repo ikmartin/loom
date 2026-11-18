@@ -350,21 +350,25 @@
 		color: var(--ink-soft);
 		z-index: 1;
 	}
-	/* a file's own headings, which annotations and messages rarely have, sized as a page's are */
-	.file :global(.file-body :is(h1, h2, h3, h4)) {
+	/* a file's own headings, which annotations and messages rarely have, on the scale a document of LaTeX's standard classes is set in: each level a step smaller than the one above, and the fourth and below at the text's own size, set apart by weight */
+	.file :global(.file-body :is(h1, h2, h3, h4, h5, h6)) {
 		font-family: var(--sans);
 		font-weight: 500;
 		line-height: 1.25;
 		margin: 1.1em 0 0.45em;
 	}
 	.file :global(.file-body h1) {
-		font-size: 1.55em;
+		font-size: 1.73em;
 		margin-top: 0;
 	}
 	.file :global(.file-body h2) {
-		font-size: 1.25em;
+		font-size: 1.44em;
 	}
 	.file :global(.file-body h3) {
-		font-size: 1.08em;
+		font-size: 1.2em;
+	}
+	.file :global(.file-body :is(h4, h5, h6)) {
+		font-size: 1em;
+		font-weight: 600;
 	}
 </style>

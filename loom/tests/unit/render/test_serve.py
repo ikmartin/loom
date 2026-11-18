@@ -210,6 +210,40 @@ def test_the_watcher_watches_what_the_write_api_writes(tmp_path: Path) -> None:
     assert {"config.toml", "drafting/nodes/n.tex"} <= watched
 
 
+def test_a_change_under_a_lake_project_s_build_wakes_no_rebuild(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Lake project's `.lake` (its build, and every package it depends on: Mathlib's alone is tens of thousands of files) is pruned from the watcher's walk, so the one-second poll never lists it, and a file there that has a watched suffix, a `.tex` or a `.sty` among them, wakes nothing."""
+    from loom.files import Shown
+    from loom.render import watch
+    from loom.render.watch import snapshot
+
+    q = tmp_path / "q"
+    lake = q / "lean" / ".lake" / "packages" / "mathlib"
+    lake.mkdir(parents=True)
+    (q / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
+    (q / "lean" / "lakefile.toml").write_text('name = "proof"\n', encoding="utf-8")
+    (q / "main.tex").write_text("x", encoding="utf-8")
+    (lake / "notes.tex").write_text("x", encoding="utf-8")
+    listed: list[str] = []
+    walk = os.walk
+
+    def recorded(top: Path):  # type: ignore[no-untyped-def]
+        for here, dirs, files in walk(top):
+            listed.append(Path(here).relative_to(q).as_posix())
+            yield here, dirs, files
+
+    monkeypatch.setattr(watch.os, "walk", recorded)
+    shown = Shown(q)
+    before = snapshot(q, shown)
+    assert q / "main.tex" in before and "lean" in listed
+    assert not [d for d in listed if ".lake" in d.split("/")], listed
+    time.sleep(0.05)
+    (lake / "notes.tex").write_text("changed", encoding="utf-8")
+    (lake / "lean.sty").write_text("new", encoding="utf-8")
+    assert snapshot(q, shown) == before
+
+
 def test_a_delete_changes_records_alone_and_a_saved_preview_changes_nothing_the_watcher_sees(tmp_path: Path) -> None:
     """A delete keeps the log as it was in `.loom/local/`, and an adoption or incorporation keeps its preview there until it is applied; no build reads either, so a delete rebuilds from the last scan and a preview rebuilds nothing."""
     from loom.paths import ADOPTION_PREVIEWS, BEFORE_DELETE, INCORPORATION_PREVIEWS
