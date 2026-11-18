@@ -1202,3 +1202,69 @@ def test_two_discards_and_an_undo_racing_a_delete_each_end_in_an_answer(tmp_path
         both(lambda res, d=row.id: undo(res, d, by=WHO), lambda res, k=row.citekey: delete_work(res, k, WHO))
         assert row.citekey not in bib(q)
     assert not [s for s in said if isinstance(s, str) and s.startswith("FAILED")], said
+
+
+def test_a_library_runs_fetch_never_writes_over_a_pdf_the_person_filed_meanwhile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The third review's finding 2: a run fetching a work's PDF checked the place before its download and wrote over whatever was there after, a PDF the person had dropped on that work meanwhile among it."""
+    import threading
+
+    import loom.refs.fetch as fetch
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    config = q / "config.toml"
+    config.write_text(config.read_text().replace("online = false", "online = true"))
+    with (q / BIB).open("a", encoding="utf-8") as fh:
+        fh.write(
+            "\n@article{Zed25,\n  author = {Zed, Ana},\n  title = {Zeta functions of quivers},\n  year = {2025},\n  eprint = {2501.00001},\n  archiveprefix = {arXiv},\n}\n"
+        )
+    downloading, done = threading.Event(), threading.Event()
+    arxivs = fake_pdf(tmp_path / "arxiv.pdf", "Zeta functions of quivers\nAna Zed\narXiv's copy\n").read_bytes()
+
+    def get(url: str, attempts: int = 3) -> bytes:
+        if "/e-print/" in url:
+            raise fetch.FetchRefused("no source")
+        downloading.set()
+        done.wait(30)
+        return arxivs
+
+    monkeypatch.setattr(fetch, "_get", get)
+    got: list[fetch.Fetched] = []
+    run = threading.Thread(
+        target=lambda: got.append(fetch.fetch_work(load_quilt(q), "Zed25", bib(q)["Zed25"], pdf=True))
+    )
+    run.start()
+    try:
+        assert downloading.wait(30)
+        item = dropped(q, "zed.pdf", "Zeta functions of quivers\nAna Zed\nmy annotated copy\n", tmp_path)
+        (row,) = taken(q, Item(drop=item.drop, work="Zed25"))
+        assert row.state == "added", row
+    finally:
+        done.set()
+        run.join(30)
+    assert sha256_of(work_home(q, "Zed25") / "paper.pdf") == item.drop
+    assert got and not got[0].pdf and "kept" in got[0].refused, got
+
+
+def test_a_take_for_a_work_a_run_acts_on_is_refused(tmp_path: Path) -> None:
+    """The third review's finding 2: a take for a work skipped the check every other library write on that work makes."""
+    from loom.render.api import ApiError, handle, offer_jobs
+    from loom.render.endpoints.library import _JOBS
+
+    q = demo(tmp_path)
+    item = dropped(q, "talk.pdf", "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides\n", tmp_path)
+
+    class Running:
+        def touching(self, citekey: str) -> bool:
+            return citekey == "Calloway14"
+
+    offer_jobs(q, Running())
+    try:
+        with pytest.raises(ApiError) as caught:
+            handle(q, "library-take", {"items": [{"incoming": item.drop, "for": "Calloway14"}]})
+        assert caught.value.code == "library-busy" and caught.value.status == 409
+    finally:
+        _JOBS.pop(q.resolve(), None)
+    assert [r["id"] for r in waiting(q)] == [item.drop]

@@ -250,6 +250,8 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
                 drop, text, work = item.get("incoming"), item.get("text"), item.get("for")
                 if work is not None and (not isinstance(work, str) or work not in result.bib):
                     raise ApiError("no-such-work", f"the library has no work {work}", status=404)
+                if work:
+                    _busy(root, work)  # a run fetching or reading this work writes its place too
                 if isinstance(drop, str) and drop:
                     taken.append(Item(drop=drop, work=work or ""))
                 elif isinstance(text, str) and text.strip():
