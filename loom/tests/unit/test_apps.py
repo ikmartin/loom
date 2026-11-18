@@ -6,6 +6,7 @@ import errno
 import json
 import os
 import re
+import shutil
 import threading
 from pathlib import Path
 from typing import Any
@@ -454,3 +455,53 @@ def test_a_record_that_is_not_utf8_is_no_record(tmp_path: Path, name: str) -> No
     (q / ".loom/ai" / name).write_bytes(b"\xff\xfe\x00")
     json_of("upgrade", "--json", cwd=q)
     check_permissions(q), check_ai_files(q)
+
+
+def test_a_loom_ai_that_is_a_link_gets_nothing_written_through_it_and_is_said(tmp_path: Path) -> None:
+    """`.loom/ai` leading out of the quilt: upgrade leaves the agent layer alone and says why, `ai init` and the viewer's set-up refuse in a sentence, and doctor warns."""
+    from loom.doctor import check_ai_files
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    outside = tmp_path / "outside"
+    shutil.copytree(q / ".loom/ai", outside)
+    shutil.rmtree(q / ".loom/ai")
+    (q / ".loom/ai").symlink_to(outside, target_is_directory=True)
+    (outside / "README.md").unlink()
+    _deny(q, '["private/**"]')
+    before = {p.name: p.read_bytes() for p in outside.iterdir() if p.is_file()}
+    said = ok("upgrade", cwd=q).stdout
+    assert "left .loom/ai/ alone, since `.loom/ai` is a link" in said
+    refused = exits(1, "ai", "init", cwd=q)
+    assert "loom writes nothing into .loom/ai/, since `.loom/ai` is a link" in refused.output
+    with pytest.raises(ApiError) as answer:
+        setup(q, "codex")
+    assert (answer.value.status, answer.value.code) == (409, "not-writable")
+    item = check_ai_files(q)
+    assert item.status == "warn" and "`.loom/ai` is a link" in item.detail
+    assert {p.name: p.read_bytes() for p in outside.iterdir() if p.is_file()} == before
+
+
+@pytest.mark.parametrize("what", ["file", "folder"])
+def test_doctor_says_why_loom_leaves_codex_s_rules_alone_every_time(tmp_path: Path, what: str) -> None:
+    """A Codex rules file loom leaves alone, a link or behind one: doctor says why at every run, since `loom upgrade` would leave it as it is."""
+    from loom.doctor import check_permissions
+
+    q = bare(tmp_path)
+    setup(q, "codex")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    if what == "file":
+        rules = q / ".codex/rules/loom.rules"
+        (outside / "loom.rules").write_text("# mine\n")
+        rules.unlink()
+        rules.symlink_to(outside / "loom.rules")
+    else:
+        shutil.copytree(q / ".codex", outside / "codex")
+        shutil.rmtree(q / ".codex")
+        (q / ".codex").symlink_to(outside / "codex", target_is_directory=True)
+    for _ in range(2):
+        ok("upgrade", cwd=q)
+        item = check_permissions(q)
+        assert item.status == "warn" and ".codex/rules/loom.rules: loom leaves it alone, since `.codex" in item.detail
+        assert "what Codex reads there is not loom's table" in item.detail and "not what this loom" not in item.detail
