@@ -1134,6 +1134,8 @@ Build the site and the PDFs, serve them, and exchange sources with a workspace.
 
 Scan, derive, render, and publish .loom/cache/site/, what the viewer is served. Exit 1 if any error-severity diagnostic exists outside the works nothing cites (the build is still published).
 
+A whole build then removes what loom keeps for no purpose any more: from .loom/cache/ what this build does not name and nothing has written in the last hour, an agent's scratch fourteen days after its session last wrote, and a saved preview fourteen days after it was written; a build of --keys removes nothing.
+
 A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a digest, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
 
 | option | description |
@@ -1150,7 +1152,7 @@ A document is read from the HTML its compile made, and shows as its source until
 
 Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
-The viewer is at /, and what it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
+The viewer is at /, and what it reads at /build/. One server runs per quilt. At rest after a build, at most once an hour, it removes what loom keeps for no purpose any more, as a whole loom build does: from .loom/cache/ what its last build does not name and nothing has written in the last hour, expired scratch and old saved previews. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
 
 | option | description |
 |---|---|
