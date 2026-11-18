@@ -23,6 +23,7 @@ from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
 from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
+from loom.render.uses import used
 from loom.scan.hashing import hash_text, mathematical_hash, normalize
 from loom.scan.model import Diagnostic, Fix
 from loom.scan.nodes import NodeRec
@@ -1063,6 +1064,8 @@ class Records:
                             name = f"{_slug(key)}-{c.kind}{'-' + _slug(c.id) if c.id else ''}.diff"
                             diffs_dir.mkdir(parents=True, exist_ok=True)
                             (diffs_dir / name).write_text(text, encoding="utf-8")
+                            # written beside the publish, so named to the build's index here (`lifetimes.built`)
+                            used(diffs_dir / name)
                             d["diff"] = f"diffs/{name}"
                         causes.append(d)
                     acc["causes"] = causes

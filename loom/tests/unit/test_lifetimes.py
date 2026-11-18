@@ -386,3 +386,24 @@ def test_a_file_that_cannot_be_removed_stops_nothing(tmp_path: Path) -> None:
         stuck.parent.chmod(0o755)
     assert stuck.is_file() and not loose.exists()
     assert swept.failed >= 1 and swept.files >= 1
+
+
+def test_a_diff_the_manifest_names_is_kept_by_its_name_and_one_it_does_not_goes(tmp_path: Path) -> None:
+    """The records write each stale acceptance's diff into the site beside the publish; the build names it, so it is kept for that and not for having just been written."""
+    from loom.scan.quilt import save_author
+
+    q = demo(tmp_path)
+    save_author("The loom demo")  # the reviewer whose acceptance the demo ships stale
+    ok("build", cwd=q)
+    manifest = json.loads((q / CACHE / "site/manifest.json").read_text(encoding="utf-8"))
+    named = [
+        c["diff"]
+        for k in manifest["keys"].values()
+        for c in (k.get("acceptance") or {}).get("causes", [])
+        if c.get("diff")
+    ]
+    assert named, "the demo has a stale acceptance whose cause carries a diff"
+    stale = _plant(q / CACHE / "site/diffs/gone-key-dependency-changed.diff")
+    sweep(q, scan(load_quilt(q)), now=time.time() + FRESH + 60)
+    assert all((q / CACHE / "site" / rel).is_file() for rel in named)
+    assert not stale.exists()
