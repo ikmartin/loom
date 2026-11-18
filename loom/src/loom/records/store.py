@@ -1169,7 +1169,11 @@ def _slug(s: str | None) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", s or "")
 
 
-_MATH = re.compile(r"\$\$(.+?)\$\$|(?<!\\)\$((?:[^$\\]|\\.)+?)\$", re.S)
+#: Mathematics in Markdown as Pandoc reads it (`tex_math_dollars`), so "pays $5 and sells for $7" stays text: `$$…$$` is display; `$…$` is inline when the opening `$` has a non-space character to its right and the closing one a non-space character to its left and no digit right after it. Neither holds a blank line, a `$` inside an inline span is written `\$`, and `\$` outside one is a dollar sign.
+_MATH = re.compile(
+    r"(?<!\\)\$\$((?:[^$\n]|\n(?![ \t]*\n)|\$(?!\$))+?)\$\$"
+    r"|(?<![\\$])\$(?![\s$])((?:[^$\\\n]|\\(?![ \t]*\n)[\s\S]|\n(?![ \t]*\n))+?)(?<!\s)\$(?![0-9])"
+)
 _HOLE = "loommathx{}x"
 _HOLES = re.compile(_HOLE.format(r"(\d+)"))
 

@@ -91,6 +91,8 @@ The label is the proof's optional argument, as `amsthm` prints it: `\begin{proof
 
 **[decided]** Inline: `<span class="math inline">\(...\)</span>`, its TeX as the source writes it, which is what a quote copies; a fragment made from TeX takes it from the source where it reads as TeX4ht's does but for spacing. Display: `<div class="math display" id="LABEL-ID" data-label="eq:main" data-number="3.2">\[...\]</div>`, the id being the qualified key slug. TeX is passed through inside, save for what the viewer's typesetter cannot read: `\label` is removed, `\ref` is replaced by its number or label, and a macro of the author's used inside a `\text{…}` is written between dollars (DR-130). The viewer renders it with the macro set from the manifest (plus a per-fragment set if the fragment's first element carries `data-macros="NAME"` naming a set in the manifest).
 
+**[decided]** In a body a publisher draws from Markdown (a file's, an annotation's, a message's, a page's), mathematics is written between dollars and read as Pandoc reads it: `$$…$$` is display, and `$…$` is inline when the opening `$` has a non-space character to its right and the closing one has a non-space character to its left and no digit right after it, so the prices in "pays $5 and sells for $7" stay text. Neither holds a blank line, `\$` is a dollar sign, and code in backticks, inline or fenced, is quoted as written. The page, its headings' ids and the lines its task items name read `$` by this one rule (`loom/src/loom/records/store.py`).
+
 ### 2.8 References and citations
 
 **[decided]**
