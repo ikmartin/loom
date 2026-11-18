@@ -198,6 +198,32 @@ def http_get(url: str, headers: dict[str, str]) -> bytes:
         raise ResolveRefused(f"{url.split('?')[0]}: {exc or type(exc).__name__}") from exc
 
 
+def zbmath_url(q: Query) -> str:
+    """The zbMATH Open request for `q`."""
+    terms = [f"ti:{q.title}"] + ([f"au:{q.surnames[0]}"] if q.surnames else [])
+    params = {"search_string": " & ".join(terms), "page": "0", "results_per_page": "5"}
+    return ZBMATH + "?" + urllib.parse.urlencode(params)
+
+
+def crossref_url(q: Query, contact: str = "") -> str:
+    """The Crossref request for `q`, sent with `contact` as `mailto` when it is set."""
+    params = {"query.bibliographic": q.bibliographic, "rows": "5", "select": "DOI,title,author,issued"}
+    if contact:
+        params["mailto"] = contact
+    return CROSSREF + "?" + urllib.parse.urlencode(params)
+
+
+def answer_name(url: str) -> str:
+    """The file a request's answer is kept in, in the resolver's cache."""
+    return hashlib.sha256(url.encode("utf-8")).hexdigest()[:24] + ".json"
+
+
+def answer_names(entry: BibEntry, contact: str = "") -> set[str]:
+    """The files the answers of an entry's lookups are kept in, whether or not either was asked: what `lifetimes` keeps while the entry is in the library."""
+    q = query_for(entry)
+    return {answer_name(zbmath_url(q)), answer_name(crossref_url(q, contact))}
+
+
 class Resolver:
     """Asks zbMATH Open, then Crossref, spacing requests to each and caching every answer.
 
@@ -224,7 +250,7 @@ class Resolver:
         self._last: dict[str, float] = {}
 
     def _get_json(self, service: str, url: str, headers: dict[str, str]) -> dict[str, Any]:
-        path = self.cache / (hashlib.sha256(url.encode("utf-8")).hexdigest()[:24] + ".json") if self.cache else None
+        path = self.cache / answer_name(url) if self.cache else None
         if path is not None and path.is_file() and not self.refresh:
             return dict(json.loads(path.read_text(encoding="utf-8")))
         wait = self._last.get(service, 0.0) + SPACING - time.monotonic()
@@ -239,15 +265,10 @@ class Resolver:
         return dict(data)
 
     def zbmath(self, q: Query) -> list[Candidate]:
-        terms = [f"ti:{q.title}"] + ([f"au:{q.surnames[0]}"] if q.surnames else [])
-        params = {"search_string": " & ".join(terms), "page": "0", "results_per_page": "5"}
-        return _zbmath_candidates(q, self._get_json("zbmath", ZBMATH + "?" + urllib.parse.urlencode(params), {}))
+        return _zbmath_candidates(q, self._get_json("zbmath", zbmath_url(q), {}))
 
     def crossref(self, q: Query) -> list[Candidate]:
-        params = {"query.bibliographic": q.bibliographic, "rows": "5", "select": "DOI,title,author,issued"}
-        if self.contact:
-            params["mailto"] = self.contact
-        return _crossref_candidates(q, self._get_json("crossref", CROSSREF + "?" + urllib.parse.urlencode(params), {}))
+        return _crossref_candidates(q, self._get_json("crossref", crossref_url(q, self.contact), {}))
 
     def candidates(self, q: Query) -> list[Candidate]:
         """Every candidate for a query, best first, one per identifier.

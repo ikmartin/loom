@@ -163,9 +163,12 @@ def _dependencies(result: ScanResult, keys: list[str], reviewer: str) -> None:
 
 
 def finish(result: ScanResult, saved: dict[str, Any], accept: list[str], reviewer: str) -> dict[str, Any]:
-    """Record only explicit choices; an acceptance failure leaves incorporated mathematics pending."""
+    """Record only explicit choices; an acceptance failure leaves incorporated mathematics pending. The source is incorporated by now, so the saved preview is spent and removed."""
     from loom.cli.review import _master_compiles, write_acceptance
+    from loom.lifetimes import drop_preview
     from loom.review_queue import clear_accepted, keep_pending
+
+    drop_preview(result.quilt.root, INCORPORATION_PREVIEWS, _digest(saved))
 
     keys = [k for k in saved["fingerprints"] if k in result.nodes]
     keep_pending(result, keys, reviewer)

@@ -12,6 +12,7 @@ import stat
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
@@ -199,7 +200,25 @@ def permissions_json(config: QuiltConfig, *, shell: bool = False) -> str:
     deny = [f"Edit({d})" for d in claude_denies(config)]
     deny += [f"Bash(loom {c}*)" for c in author_commands()]
     deny.append("Bash(rm *)")
-    return json.dumps({"permissions": {"allow": allow, "deny": deny}}, indent=2, ensure_ascii=False) + "\n"
+    from loom.machine import UNPACKED_HOMES
+
+    # a sandboxed shell writes the machine's folder `biber` unpacks into, which `biber` skips when it cannot write it
+    sandbox = {"filesystem": {"allowWrite": list(UNPACKED_HOMES)}}
+    return (
+        json.dumps({"permissions": {"allow": allow, "deny": deny}, "sandbox": sandbox}, indent=2, ensure_ascii=False)
+        + "\n"
+    )
+
+
+#: What loom's rules in Claude Code's permission file are, by the word `RULES_FILE` records them under: `allow` and `deny` in `permissions`, `write` in `sandbox.filesystem.allowWrite`.
+RULE_KINDS = ("allow", "deny", "write")
+
+
+def _rules_of(settings: dict[str, Any]) -> dict[str, list[Any]]:
+    """The rules a permission file holds, by `RULE_KINDS`: each list as it stands, empty where it is missing."""
+    perms = settings.get("permissions", {})
+    fs = settings.get("sandbox", {}).get("filesystem", {})
+    return {"allow": perms.get("allow", []), "deny": perms.get("deny", []), "write": fs.get("allowWrite", [])}
 
 
 #: Where each agent tool reads the quilt's rules for its agents: one policy, loom's own, rendered per tool (DR-283-ikmartin).
@@ -267,7 +286,7 @@ def _rules_wrote(root: Path) -> dict[str, set[str]] | None:
     text = read_plain(root, f"{AI}/{RULES_FILE}")
     if text is None:
         return None
-    out: dict[str, set[str]] = {"allow": set(), "deny": set()}
+    out: dict[str, set[str]] = {kind: set() for kind in RULE_KINDS}
     for line in text.splitlines():
         kind, _, rule = line.partition("\t")
         if kind in out and rule:
@@ -280,16 +299,16 @@ def record_rules(root: Path, generated: str, *, before: list[str] | None = None)
 
     With `before`, called ahead of writing that file: the record keeps every rule it held, and each of `before` (`Settings.dropped`, loom's rules in the file as it stands), beside what `generated` renders, so a write that fails at any point leaves a record naming every rule of loom's in the file.
     """
-    ours = json.loads(generated)["permissions"]
-    rules = {kind: list(ours[kind]) for kind in ("allow", "deny")}
+    ours = _rules_of(json.loads(generated))
+    rules = {kind: list(ours[kind]) for kind in RULE_KINDS}
     if before is not None:
-        held = _rules_wrote(root) or {"allow": set(), "deny": set()}
+        held = _rules_wrote(root) or {kind: set() for kind in RULE_KINDS}
         for d in before:
             kind, _, rule = d.partition(" ")
             held[kind].add(rule)
         for kind in rules:
             rules[kind] += sorted(held[kind] - set(rules[kind]))
-    said = "".join(f"{kind}\t{rule}\n" for kind in ("allow", "deny") for rule in rules[kind])
+    said = "".join(f"{kind}\t{rule}\n" for kind in RULE_KINDS for rule in rules[kind])
     if (root / AI).is_dir() and read_plain(root, f"{AI}/{RULES_FILE}") != said:
         _write(root, f"{AI}/{RULES_FILE}", said)
 
@@ -368,7 +387,14 @@ def settings_for(root: Path, generated: str) -> Settings:
         return Settings(
             None, f"`{CLAUDE_SETTINGS}` is not a JSON object whose `permissions` holds `allow` and `deny` lists"
         )
-    ours = json.loads(generated)["permissions"]
+    sandbox = there.get("sandbox", {})
+    fs = sandbox.get("filesystem", {}) if isinstance(sandbox, dict) else None
+    if not isinstance(fs, dict) or not isinstance(fs.get("allowWrite", []), list):
+        return Settings(
+            None, f"`{CLAUDE_SETTINGS}` has a `sandbox` whose `filesystem` does not hold an `allowWrite` list"
+        )
+    ours = _rules_of(json.loads(generated))
+    theirs = _rules_of(there)
     wrote = _rules_wrote(root)
 
     def loom_s(kind: str, rule: object) -> bool:
@@ -380,18 +406,14 @@ def settings_for(root: Path, generated: str) -> Settings:
             return rule in wrote[kind]
         return kind == "allow" and rule.startswith(("Bash(loom ", "mcp__loom__"))
 
-    lists = {kind: ours[kind] + [r for r in perms.get(kind, []) if not loom_s(kind, r)] for kind in ("allow", "deny")}
-    dropped = [
-        f"{kind} {r}"
-        for kind in ("allow", "deny")
-        for r in perms.get(kind, [])
-        if loom_s(kind, r) and r not in ours[kind]
-    ]
+    lists = {kind: ours[kind] + [r for r in theirs[kind] if not loom_s(kind, r)] for kind in RULE_KINDS}
+    dropped = [f"{kind} {r}" for kind in RULE_KINDS for r in theirs[kind] if loom_s(kind, r) and r not in ours[kind]]
     merged = {k: lists.get(k, v) for k, v in perms.items()}
     for kind in ("allow", "deny"):
         merged.setdefault(kind, lists[kind])
     out = dict(there)
     out["permissions"] = merged
+    out["sandbox"] = {**sandbox, "filesystem": {**fs, "allowWrite": lists["write"]}}
     return Settings(bom + json.dumps(out, indent=2, ensure_ascii=False) + "\n", dropped=dropped)
 
 

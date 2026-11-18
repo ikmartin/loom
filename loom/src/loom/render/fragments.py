@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Any
 from loom.paths import BLOCKS, SNIPPETS, document_build, within
 from loom.render.assets import publish_picture
 from loom.render.mathset import EQUATION_ENVS
+from loom.render.uses import noting, used
 from loom.scan.hashing import pair_hash
 from loom.scan.labels import plain_key
 from loom.scan.model import Diagnostic, Env, Macro, SourceFile
@@ -104,6 +105,9 @@ class FragmentRenderer:
         self._made: dict[str, str] = {}
         self._made_digests: dict[str, str] = {}
         self._made_masters: dict[str, str] = {}
+        #: what the work several fragments share noted, by group (`uses`): `page:<master>`, `loose`, `digest:<file>`; and each node made by that work, by the group it was made in
+        self.groups: dict[str, set[str]] = {}
+        self._made_in: dict[str, str] = {}
         self.previews = _Previews(self)
 
     @cached_property
@@ -300,9 +304,9 @@ class FragmentRenderer:
         return DocumentHtml(self, owner, page, only=only, files=files, pairs=pairs, labels=labels)
 
     def prepare(self, keys: list[str] | None = None) -> None:
-        """Make by TeX, before fragments are cut, what no compile makes among `keys` (default all): the nodes no document reaches, each in one batch under the default document's preamble, and each digest under its own.
+        """Make by TeX, before fragments are cut, what no compile makes among `keys` (default all): the nodes no document reaches, all of them in one batch under the default document's preamble when any is among `keys`, and each digest under its own.
 
-        Done once per build, ahead of the fragments that read it, so each preamble is paid for once rather than once per node.
+        Done once per build, ahead of the fragments that read it, so each preamble is paid for once rather than once per node. The nodes no document reaches are made together, from the cache where unchanged, so that what the batch noted (`groups['loose']`) is what every one of them was made from.
         """
         result = self.result
         wanted = set(keys) if keys is not None else None
@@ -314,14 +318,16 @@ class FragmentRenderer:
             and not n.reached_by
             and n.file in result.files
             and n.file not in digests
-            and (wanted is None or k in wanted)
         ]
-        if loose:
+        if loose and (wanted is None or not wanted.isdisjoint(loose)):
             owner = self.owner(result.default_master)
             loose.sort(key=lambda k: (result.nodes[k].file, result.nodes[k].start))
             regions = _outermost([(result.nodes[k].file, result.nodes[k].start, result.nodes[k].end) for k in loose])
-            doc = self.snippet_page(owner, regions, _within(result, regions))
+            with noting(apart=True) as noted:
+                doc = self.snippet_page(owner, regions, _within(result, regions))
+            self.groups["loose"] = noted
             self._made.update({k: _from_tex(_stamp_first(v, "node")) for k, v in doc.nodes.items()})
+            self._made_in.update({k: "loose" for k in doc.nodes})
         todo = []
         for file in sorted(digests):
             held = [k for k, n in result.nodes.items() if n.file == file and n.kind != "file"]
@@ -351,9 +357,14 @@ class FragmentRenderer:
         )
         regions = body_regions(result, file, start, len(src.text))
         # its own preamble for its diagrams too, which draw with its macros
-        doc = self.snippet_page(dataclasses.replace(owner, preamble=preamble), regions, nodes)
+        with noting(apart=True) as noted:
+            doc = self.snippet_page(dataclasses.replace(owner, preamble=preamble), regions, nodes)
+            made = doc.master_html()
+        group = f"digest:{file}"
+        self.groups[group] = noted
         self._made.update({k: _from_tex(_stamp_first(v, "node")) for k, v in doc.nodes.items()})
-        self._made_digests[file] = doc.master_html()
+        self._made_in.update({k: group for k in doc.nodes})
+        self._made_digests[file] = made
 
     def prepare_document(self, master: str) -> None:
         """A document no compile has made, made by TeX as snippets of its body: a section draft, read in its saved context."""
@@ -387,7 +398,9 @@ class FragmentRenderer:
             return None
         with self._shaping:
             if master not in self._shaped:
-                doc = DocumentHtml(self, self.owner(master), page)
+                with noting(apart=True) as noted:
+                    doc = DocumentHtml(self, self.owner(master), page)
+                self.groups[f"page:{master}"] = noted
                 self._shaped[master] = doc if doc.complete else None
             return self._shaped[master]
 
@@ -399,8 +412,11 @@ class FragmentRenderer:
         for m in sorted(n.reached_by, key=lambda m: m != self.result.default_master):
             doc = self._document_html(m)
             if doc is not None and key in doc.nodes:
+                used(f"@page:{m}")
                 return _from_tex(_stamp_first(doc.nodes[key], "node"))
         if key in self._made:
+            if key in self._made_in:
+                used(f"@{self._made_in[key]}")
             return self._made[key]
         return _stamp_first(source_node(self, key), "node")
 
@@ -413,6 +429,7 @@ class FragmentRenderer:
         head = f'<h1 data-src="{master}:0:0">{esc(title)}</h1>'
         doc = self._document_html(master)
         if doc is not None:
+            used(f"@page:{master}")
             cls = _DOCUMENTCLASS.search(self.result.files[master].clean) if master in self.result.files else None
             if cls is not None:
                 head = head.replace("<h1 ", f'<h1 data-documentclass="{esc(cls.group(1).strip())}" ', 1)
@@ -434,6 +451,7 @@ class FragmentRenderer:
             self._prepare_digest(file)
         made = self._made_digests.get(file)
         if made is not None:
+            used(f"@digest:{file}")
             return _from_tex(_stamp_first(made, "digest"))
         text = self.result.files[file].text
         m = re.search(r"^\s*%\s*!LOOM\s+end\s+macros\s*$", text, re.M)

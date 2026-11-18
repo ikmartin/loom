@@ -835,6 +835,9 @@ class ServeSession:
         self.builds = 0
         self._settling: threading.Timer | None = None
         self._settling_lock = threading.Lock()
+        #: Whether the last build succeeded and nothing has been swept since (`lifetimes`), which the server does once at rest; and how many builds have begun, so a sweep can tell that one began while it looked.
+        self._sweep_due = False
+        self._begun = 0
         self.httpd: ThreadingHTTPServer | None = None
         self.frames: ThreadingHTTPServer | None = None
         self.shown = Shown.of(quilt)
@@ -880,6 +883,9 @@ class ServeSession:
                     return
                 records = scan_unread(root, changed)
             reuse = self.last_report.result if records and self.last_report is not None else None
+            # a build that fails sweeps nothing, until one succeeds
+            self._sweep_due = False
+            self._begun += 1
             if progress is None and changed is not None:
                 from loom.cli.report import Progress
 
@@ -887,6 +893,7 @@ class ServeSession:
                     report = build(self.quilt, reuse=reuse, progress=shown.told, tex=self.compile_masters)
             else:
                 report = build(self.quilt, reuse=reuse, progress=progress, tex=self.compile_masters)
+            self._sweep_due = True
             self.last_report = report = report.kept()
             self.builds += 1
             self.published = seen
@@ -911,13 +918,42 @@ class ServeSession:
         self._settle()
 
     def _settle(self) -> None:
-        """Give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it."""
+        """Sweep what the last build no longer names (`sweep`) and give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it."""
         with self._settling_lock:
             if self._settling is not None:
                 self._settling.cancel()
-            self._settling = threading.Timer(self.SETTLE_AFTER, give_back)
+            self._settling = threading.Timer(self.SETTLE_AFTER, self._at_rest)
             self._settling.daemon = True
             self._settling.start()
+
+    def _at_rest(self) -> None:
+        self.sweep()
+        give_back()
+
+    def sweep(self) -> None:
+        """Sweep the quilt once after the last build that succeeded (`lifetimes`): what goes is found outside the publication lock, which a save waits on, and removed under it only when no build ran in between, so none is in flight; a build that failed since sweeps nothing."""
+        from loom.lifetimes import Swept, condemn
+
+        with self.lock:
+            if not self._sweep_due or self.last_report is None:
+                return
+            self._sweep_due = False
+            begun, result = self._begun, self.last_report.result
+        swept = Swept()
+        try:
+            doomed = condemn(self.quilt.root, result)
+            # a part at a time, so a save waits for one part at most
+            for part in doomed.parts():
+                with self.lock:
+                    if self._begun != begun:
+                        # a build began since: one that succeeds names what it names and sweeps once it settles, one that failed sweeps nothing
+                        break
+                    part.remove(swept)
+        except Exception as exc:  # noqa: BLE001 -- a sweep is housekeeping; the server keeps serving
+            print(f"loom serve: the sweep stopped: {type(exc).__name__}: {exc}", file=sys.stderr)
+            return
+        if swept.said():
+            print(f"loom serve: swept .loom/: {swept.said()}", file=sys.stderr)
 
     def _run_job(self, job: Any, progress: Callable[[str, str, int, int], None]) -> dict[str, Any]:
         """One library run the viewer started: `refs.update.update` on the quilt as it is now, outside the publication lock, then a rebuild, so the manifest shows what it made. Its report is what `loom library update` prints."""
@@ -1065,6 +1101,11 @@ class ServeSession:
         """Listen, then run the first build and begin watching. A cold first build can take a while, so callers that want the URL early call `listen` first."""
         if self.httpd is None:
             self.listen()
+        from loom.writes import recover
+
+        # what a crash left is settled before anything is built or written
+        for said in recover(self.quilt.root, self.quilt.history_dir):
+            print(f"loom serve: {said}", file=sys.stderr)
         self.first_look()
         self.first_build()
         assert self.watcher is not None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 import shutil
 from pathlib import Path
@@ -55,7 +56,7 @@ def test_a_display_name_changed_alone_is_no_difference(quilt: Path) -> None:
 
 
 def test_the_hashes_are_the_fragments_and_a_rendering_is_made_once(quilt: Path) -> None:
-    """A pair's hashes are the `data-hash` the build wrote on the same nodes, so a viewer with nothing serving marks what loom would; a second request renders nothing."""
+    """A pair's hashes are the `data-hash` the build wrote on the same nodes, so a viewer with nothing serving marks what loom would; a second request renders nothing, and only touches each page it names again, which keeps it from the sweep as long again."""
     build(load_quilt(quilt))
     master = (
         quilt / ".loom/cache/site" / "fragments" / "masters" / ".loom" / "agents" / "copies" / "aidoc.html"
@@ -64,11 +65,15 @@ def test_the_hashes_are_the_fragments_and_a_rendering_is_made_once(quilt: Path) 
     got = pairs(quilt, "drafting/main.tex", ".loom/agents/copies/aidoc.tex")
     assert got["sy-0002"]["right"]["hash"] == written["sy-0002"]
     rendered = sorted((quilt / ".loom/cache/site" / "compare").iterdir())
-    times = [p.stat().st_mtime_ns for p in rendered]
+    made = [(p.stat().st_ino, p.read_bytes()) for p in rendered]
     assert b"review-changed" in rendered[0].read_bytes()
+    for p in rendered:
+        os.utime(p, (0, 0))
     pairs(quilt, "drafting/main.tex", ".loom/agents/copies/aidoc.tex")
     assert sorted((quilt / ".loom/cache/site" / "compare").iterdir()) == rendered
-    assert [p.stat().st_mtime_ns for p in rendered] == times
+    # written once: the same file, holding the same bytes, and named again since
+    assert [(p.stat().st_ino, p.read_bytes()) for p in rendered] == made
+    assert all(p.stat().st_mtime > 0 for p in rendered)
 
 
 def test_a_landmark_fragment_carries_pairs_and_no_live_wiring(quilt: Path) -> None:

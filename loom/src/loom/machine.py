@@ -1,6 +1,6 @@
 """The machine's own place: what loom keeps for this machine and this person outside any quilt.
 
-Loom's TeX and tools are there (`tex/private.py`), and the token each running server's writes must carry, one file a quilt, so that a quilt committed or copied whole carries no token and grants nothing.
+Loom's TeX and tools are there (`tex/private.py`), the one copy of a tool TeX unpacks on its first run (`unpacked`), and the token each running server's writes must carry, one file a quilt, so that a quilt committed or copied whole carries no token and grants nothing.
 """
 
 from __future__ import annotations
@@ -13,6 +13,10 @@ from pathlib import Path
 
 #: The folder of `data_dir` that holds each served quilt's write token.
 TOKENS = "tokens"
+#: The folder of `data_dir` a tool that unpacks itself on its first run unpacks into, once for the machine: TeX Live's `biber`, about 200 MB.
+UNPACKED = "unpacked"
+#: That folder from the home folder, where `data_dir` is on a Mac and by default elsewhere: what an agent's sandbox is let write (`ai.layout.permissions_json`), the same in every quilt on every machine.
+UNPACKED_HOMES = ("~/Library/Application Support/loom/unpacked", "~/.local/share/loom/unpacked")
 
 
 def data_dir() -> Path:
@@ -21,6 +25,16 @@ def data_dir() -> Path:
         return Path.home() / "Library" / "Application Support" / "loom"
     base = os.environ.get("XDG_DATA_HOME")
     return (Path(base) if base else Path.home() / ".local" / "share") / "loom"
+
+
+def unpacked() -> Path:
+    """Where a self-unpacking tool a TeX run starts unpacks, `UNPACKED` in `data_dir`, made if it is not there: a tool given a folder it cannot write unpacks again elsewhere."""
+    p = data_dir() / UNPACKED
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass  # the run still goes, and the tool unpacks where it can
+    return p
 
 
 def token_file(root: Path) -> Path:

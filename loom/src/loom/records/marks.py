@@ -312,6 +312,9 @@ def words_of(result: Any, pdf: Path) -> DocumentWords:
         cache = store_boxes(pdf.parent)
     except ValueError:
         cache = root / MARK_BOXES / artifact_of(pdf)[:16]
+    from loom.render.uses import used
+
+    used(cache)
     return DocumentWords(document_boxes(pdf, cache))
 
 
@@ -468,6 +471,9 @@ def refound(result: Any, pdf: Path, a: Any, artifact: str) -> Refound | None:
     anchor = a.anchor.to_dict() if getattr(a, "anchor", None) else None
     given = [REFIND, artifact, a.page, a.rects, a.strokes, a.mark, a.gap, sel, anchor]
     path = result.quilt.root / REFOUND / (hashlib.sha256(json.dumps(given).encode()).hexdigest()[:32] + ".json")
+    from loom.render.uses import used
+
+    used(path)
     try:
         got = json.loads(path.read_text(encoding="utf-8"))
         return Refound(**got) if isinstance(got, dict) else None

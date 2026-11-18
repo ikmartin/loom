@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -271,6 +273,10 @@ def preview_in_paper(result: ScanResult, copy: str) -> dict[str, Any]:
                     "Preview could not compile: " + (compiled.errors[0] if compiled.errors else compiled.first_error)
                 )
             write_atomic(pdf, compiled.pdf.read_bytes())
+    else:
+        # asked for again: kept for as long again (`lifetimes.ON_REQUEST`)
+        with contextlib.suppress(OSError):
+            os.utime(pdf)
     return {
         "pdf": str(pdf.relative_to(result.quilt.root / SITE)),
         "message": "Preview uses the saved paper context and this draft's preamble and section.",

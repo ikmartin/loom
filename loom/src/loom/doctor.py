@@ -58,6 +58,8 @@ class Item:
     detail: str = ""
     remedy: str = ""
     extra: dict[str, Any] = field(default_factory=dict)
+    #: An item that reports rather than checks, whose detail is printed even when it is ok.
+    shown: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -186,9 +188,9 @@ class Report:
             if not items:
                 continue
             # what is fine is counted and named on one line; what is not is listed, each remedy said once under the first item it fixes (T2)
-            fine = [i for i in items if i.status == OK]
+            fine = [i for i in items if i.status == OK and not i.shown]
             lines = [Line(f"ok    {counted(len(fine), 'check')}: {', '.join(i.name for i in fine)}")] if fine else []
-            rest = [i for i in items if i.status != OK]
+            rest = [i for i in items if i.status != OK or i.shown]
             for n, i in enumerate(rest):
                 earlier = any(j.remedy == i.remedy for j in rest[:n])
                 fixes = [_home(i.remedy)] if i.remedy and not earlier else []
@@ -262,6 +264,8 @@ class Probe:
     """
 
     def __init__(self, argv: list[str]) -> None:
+        from loom.machine import unpacked
+
         self.error = ""
         try:
             self.proc: subprocess.Popen[str] | None = subprocess.Popen(
@@ -272,6 +276,8 @@ class Probe:
                 text=True,
                 errors="replace",
                 start_new_session=True,
+                # `biber` unpacks into the machine's one folder for it, as in every TeX run loom starts (`tex.runner.tex_env`)
+                env={**os.environ, "PAR_GLOBAL_TMPDIR": str(unpacked())},
             )
         except OSError as exc:
             self.proc, self.error = None, str(exc)
@@ -758,6 +764,42 @@ def check_config(quilt: Any) -> Item:
     return Item("config", WARN, QUILT, f"{w[0]}{more}", "loom lint")
 
 
+def check_sizes(root: Path) -> list[Item]:
+    """What `.loom/` holds, by kind, in the units a person reads, the scratch and the write journal on their own; and each session whose scratch is over `lifetimes.LARGE_SCRATCH`, with the day it is removed, which is the whole of that limit."""
+    import datetime
+
+    from loom.lifetimes import KEEP_DAYS, LARGE_SCRATCH, readable, scratches, size_of, sizes
+    from loom.paths import AGENTS, JOURNAL, KINDS, LOCAL, SCRATCH
+
+    held = sizes(root)
+    said = []
+    for kind in KINDS:
+        line = f"{Path(kind).name} {readable(held[kind])}"
+        if kind == AGENTS:
+            line += f" (scratch {readable(held[SCRATCH])})"
+        elif kind == LOCAL:
+            line += f" (the write journal {readable(size_of(root / JOURNAL))})"
+        said.append(line)
+    items = [Item("size", OK, QUILT, ", ".join(said), "", {"sizes": held}, shown=True)]
+    large = [s for s in scratches(root) if s.size > LARGE_SCRATCH]
+    if large:
+
+        def day(t: float) -> str:
+            return datetime.datetime.fromtimestamp(t).date().isoformat()
+
+        items.append(
+            Item(
+                "scratch",
+                WARN,
+                QUILT,
+                "; ".join(f"{s.session} holds {readable(s.size)}, removed on {day(s.expires)}" for s in large),
+                f"each scratch is removed {KEEP_DAYS} days after its session last wrote; delete what you no longer need from {SCRATCH}/ before then",
+                {"large": [{"session": s.session, "bytes": s.size, "expires": day(s.expires)} for s in large]},
+            )
+        )
+    return items
+
+
 def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
     """Check the machine, and the quilt when there is one.
 
@@ -822,5 +864,6 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
             check_macro_blocks(quilt),
             check_gitignore(root),
             check_config(quilt),
+            *check_sizes(root),
         ]
     return report

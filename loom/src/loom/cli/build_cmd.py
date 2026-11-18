@@ -9,6 +9,7 @@ from loom.cli.diagnostics import groups as diagnostic_groups
 from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Progress, Report, counted
 from loom.errors import EXIT_CONTENT
+from loom.lifetimes import sweep
 from loom.paths import SITE
 from loom.render.build import build
 from loom.scan.scan import scan
@@ -44,9 +45,13 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
         result = scan(quilt) if keys else None
         wanted = [resolve_key(result, k) for k in keys] if result is not None else None
         report = build(quilt, wanted, force=force, reuse=result, progress=progress.told, tex=not no_compile)
+    # a whole build names everything the quilt holds now, so what it does not name goes; one limited to keys sweeps nothing
+    swept = sweep(quilt.root, report.result) if not keys else None
     errors = [d for d in report.diagnostics if d.severity == "error"]
     bad = has_errors(errors, report.result)
     done = f"published {SITE}/: {counted(len(report.rendered), 'block')} rendered, {len(report.skipped)} unchanged"
+    if swept is not None and swept.said():
+        done += f"; swept .loom/: {swept.said()}"
     Report(
         done + (f"; {tally(errors, report.result)}" if bad else ""),
         ok=not bad,
@@ -58,5 +63,6 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
             "nodes": len(report.manifest["nodes"]),
             "keys": len(report.manifest["keys"]),
             "diagnostics": [d.to_dict() for d in report.diagnostics],
+            "swept": {"files": swept.files, "bytes": swept.freed, "failed": swept.failed} if swept else None,
         },
     ).emit(as_json)

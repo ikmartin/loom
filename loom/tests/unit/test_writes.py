@@ -570,3 +570,21 @@ def test_the_journal_stays_on_this_machine(q: tuple[Path, Path]) -> None:
     # the store of texts is the history's, and travels with it
     kept = next(p.relative_to(root).as_posix() for p in (history / "texts").glob("*.md"))
     assert subprocess.run(["git", "-C", str(root), "check-ignore", "-q", kept]).returncode == 1
+
+
+def test_recovery_removes_a_temporary_text_a_crash_left_and_not_one_being_written(q: tuple[Path, Path]) -> None:
+    """A crash between writing a text's temporary file and its rename leaves the file in the history's `texts/`, in no ignored folder; recovery removes it once it is older than a store takes, and leaves a young one, which another process may be writing."""
+    root, history = q
+    writes.store(history, b"kept text\n")
+    texts = history / "texts"
+    left = texts / f".{'a' * 64}.md.{'0' * 12}{writes.TEMP}"
+    young = texts / f".{'b' * 64}.bin.{'1' * 12}{writes.TEMP}"
+    other = texts / "notes.loom-tmp"
+    for p in (left, young, other):
+        p.write_bytes(b"half")
+    then = time.time() - 2 * writes.LEFT
+    os.utime(left, (then, then))
+    os.utime(other, (then, then))
+    assert writes.recover(root, history) == ["removed 1 temporary file a crash left in the history's texts/"]
+    assert not left.exists() and young.is_file() and other.is_file()
+    assert len([p for p in texts.iterdir() if p.suffix == ".md"]) == 1

@@ -876,7 +876,7 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
             target = root / rel
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(text)
-        return finish()
+        done = finish()
     except Exception as exc:
         import shutil
 
@@ -890,6 +890,11 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
         if isinstance(exc, ValueError):
             raise SyncError(str(exc)) from exc
         raise
+    # applied: the preview is spent, and a second apply is refused for want of it
+    from loom.lifetimes import drop_preview
+
+    drop_preview(root, ADOPTION_PREVIEWS, token)
+    return done
 
 
 def refresh(result: ScanResult, copy: str, *, write: bool = True) -> dict[str, Any]:
