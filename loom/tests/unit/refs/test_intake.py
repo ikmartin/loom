@@ -611,16 +611,33 @@ def test_an_identifier_a_page_cites_never_becomes_the_pdfs_own(tmp_path: Path) -
 
 
 def test_a_work_of_its_own_never_takes_an_identifier_another_work_states(tmp_path: Path) -> None:
-    """A reply sets the id of the paper it answers at its head; said to be a work of its own, it is not given that paper's identity."""
+    """A PDF said to be a work of its own is not given the identity of a work it shows, which it can only have cited."""
     from loom.refs.identity import identify
 
     q = demo(tmp_path)
-    page = "Comment on arXiv:0805.2065\nA remark on virtual pull-backs\nby Hugo Ness\nWe point out a gap.\n"
+    page = "A remark on virtual pull-backs\nby Hugo Ness\narXiv:0805.2065\nWe point out a gap.\n"
     (asked,) = taken(q, dropped(q, "reply.pdf", page, tmp_path))
     assert asked.state == "question" and [c["citekey"] for c in asked.candidates] == ["Man12"]
     row = answer(load_quilt(q), bib(q), asked.question, None, by=WHO)
     entry = bib(q)[row.citekey]
     assert "eprint" not in entry.fields and identify(entry) != identify(bib(q)["Man12"])
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "Erratum to doi:10.4171/showcase/19-2",
+        "Comment on arXiv:0805.2065",
+        "Reply to the comment on arXiv:0805.2065",
+        "Review of doi:10.4171/showcase/19-2",
+        "Corrigendum to arXiv:0805.2065",
+    ],
+)
+def test_an_identifier_after_erratum_to_or_comment_on_is_the_answered_works(head: str) -> None:
+    from loom.refs.ingest import own_identifiers
+
+    page = f"{head}\nErratum: Median orders on weighted digraphs\nRosalind Bellamy\nWe correct Lemma 3.\n"
+    assert own_identifiers(page)[:2] == (set(), set())
 
 
 def test_the_published_version_dropped_on_its_work_is_filed_and_not_taken_for_a_copy(tmp_path: Path) -> None:
