@@ -513,3 +513,44 @@ def test_the_watcher_still_scans_the_tree_on_its_interval(tmp_path: Path) -> Non
         assert seen and seen[0] == [source]
     finally:
         w.stop()
+
+
+def test_a_server_at_rest_gives_back_what_its_builds_left_once_after_a_burst(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each rebuild restarts the wait, so a burst of saves gives back once, after the last; neither a save nor a write waits for it."""
+    from loom.render import serve as served
+    from loom.scan.quilt import load_quilt
+    from tests.unit.render._serve import fake_bundle
+
+    given: list[float] = []
+    monkeypatch.setattr(served, "give_back", lambda: given.append(time.monotonic()))
+    timers: list[threading.Timer] = []
+
+    class Counted(threading.Timer):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            super().__init__(*args, **kwargs)
+            timers.append(self)
+
+    monkeypatch.setattr(threading, "Timer", Counted)
+    s = served.ServeSession(load_quilt(demo(tmp_path)), fake_bundle(tmp_path), port=0, compile_masters=False)
+    try:
+        s.SETTLE_AFTER = 3600
+        for _ in range(3):
+            s.rebuild()
+        assert [t.finished.is_set() for t in timers] == [True, True, False] and given == []
+        s.SETTLE_AFTER = 0
+        s.rebuild()
+        deadline = time.monotonic() + PATIENCE
+        while not given and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert len(given) == 1
+    finally:
+        s.stop()
+
+
+def test_giving_back_runs_where_there_is_nothing_to_give() -> None:
+    from loom.render.serve import give_back
+
+    give_back()
+    give_back()

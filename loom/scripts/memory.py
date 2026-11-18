@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure what a served quilt holds across saves, on a copy of a quilt: the process's memory and the scanner's live tokens after the first build and after each save.
 
-Each build runs in this process as `loom serve` runs it after a change (`build(quilt, tex=...)`, the last report kept as the server keeps it and nothing older), so the numbers are this checkout's code. Each save writes a word never written before into one file, so no cache holds its text. Memory is read after a full collection, and on macOS after the allocator has handed back the pages it holds free, so a number is what the process keeps rather than what it has yet to free or give back. The copy is a clone where the file system makes one (APFS), and is removed at the end unless `--keep` is given; HOME and the XDG directories point into it, so nothing of the person running it is read or written but their TeX tree (`TEXMFHOME`, kept for `--tex`).
+Each build runs in this process as `loom serve` runs it after a change (`build(quilt, tex=...)`, the last report kept as the server keeps it and nothing older), so the numbers are this checkout's code. Each save writes a word never written before into one file, so no cache holds its text. Memory is read as Activity Monitor would show a server at rest: after each build the script does what the server does once it is at rest (`render.serve.give_back`, where the checkout has it) and nothing more, so a checkout whose server does not give back is read as it would be seen. The copy is a clone where the file system makes one (APFS), and is removed at the end unless `--keep` is given; HOME and the XDG directories point into it, so nothing of the person running it is read or written but their TeX tree (`TEXMFHOME`, kept for `--tex`).
 
     uv run python scripts/memory.py PATH [--saves N] [--file REL] [--tex] [--keep]
 
@@ -67,16 +67,20 @@ class _RusageInfoV0(ctypes.Structure):
     ]
 
 
-def memory() -> tuple[float, float]:
-    """(footprint, resident) in MB, after a full collection: the footprint is what macOS's Activity Monitor shows as the process's memory, compressed pages included; elsewhere both are the resident size.
+def at_rest() -> None:
+    """What the checkout's server does once it is at rest, if anything."""
+    from loom.render import serve
 
-    On macOS the allocator is first asked to hand back the pages it holds free, which otherwise stay resident until the system needs them and make the resident size climb with what was freed.
-    """
-    gc.collect()
+    give_back = getattr(serve, "give_back", None)
+    if give_back is not None:
+        give_back()
+
+
+def memory() -> tuple[float, float]:
+    """(footprint, resident) in MB: the footprint is what macOS's Activity Monitor shows as the process's memory, compressed pages included; elsewhere both are the resident size."""
     if sys.platform == "darwin":
         info = _RusageInfoV0()
         libc = ctypes.CDLL("/usr/lib/libSystem.B.dylib")
-        libc.malloc_zone_pressure_relief(None, ctypes.c_size_t(0))
         if libc.proc_pid_rusage(os.getpid(), 0, ctypes.byref(info)) == 0:
             return info.phys_footprint / MB, info.resident_size / MB
     status = Path("/proc/self/status")
@@ -150,6 +154,7 @@ def main() -> None:
             report = report.kept() if hasattr(report, "kept") else report
             took = time.perf_counter() - started
             rel = rel or the_largest_reached(report.result)
+            at_rest()
             footprint, resident = memory()
             if not n:
                 first = (footprint, resident)

@@ -5,6 +5,7 @@ Serves the arras bundle at / (with index.html as the fallback for any path that 
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import json
 import mimetypes
@@ -698,7 +699,36 @@ class FramesHandler(SimpleHTTPRequestHandler):
         self._answer(False)
 
 
+def give_back() -> None:
+    """Collect the cycles the builds left and, on macOS, hand back the pages the allocator holds free.
+
+    A server at rest allocates nothing, so neither happens on its own, and the process would show its last build's leavings for as long as it rests: on a large quilt, tens of megabytes. Costs a few tens of milliseconds, which is why a server does it once it is at rest (`ServeSession.SETTLE_AFTER`).
+    """
+    import gc
+
+    gc.collect()
+    if sys.platform == "darwin":
+        relieve = _relief()
+        if relieve is not None:
+            relieve(None, 0)
+
+
+@functools.cache
+def _relief() -> Any:
+    import ctypes
+
+    try:
+        fn = ctypes.CDLL("/usr/lib/libSystem.B.dylib").malloc_zone_pressure_relief
+    except (OSError, AttributeError):
+        return None
+    fn.argtypes, fn.restype = [ctypes.c_void_p, ctypes.c_size_t], ctypes.c_size_t
+    return fn
+
+
 class ServeSession:
+    #: Seconds after the last rebuild before the server, at rest, gives back what its builds left (`give_back`); a burst of saves settles once.
+    SETTLE_AFTER = 1.0
+
     def __init__(
         self,
         quilt: Quilt,
@@ -717,6 +747,8 @@ class ServeSession:
         self.interval = interval
         self.lock = threading.Lock()
         self.builds = 0
+        self._settling: threading.Timer | None = None
+        self._settling_lock = threading.Lock()
         self.httpd: ThreadingHTTPServer | None = None
         self.frames: ThreadingHTTPServer | None = None
         self.shown = Shown.of(quilt)
@@ -788,6 +820,16 @@ class ServeSession:
             due = needs_compiling(report.result, moved, self._built)
             if due:
                 self.compiles.want(due)
+        self._settle()
+
+    def _settle(self) -> None:
+        """Give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it."""
+        with self._settling_lock:
+            if self._settling is not None:
+                self._settling.cancel()
+            self._settling = threading.Timer(self.SETTLE_AFTER, give_back)
+            self._settling.daemon = True
+            self._settling.start()
 
     def _run_job(self, job: Any, progress: Callable[[str, str, int, int], None]) -> dict[str, Any]:
         """One library run the viewer started: `refs.update.update` on the quilt as it is now, outside the publication lock, then a rebuild, so the manifest shows what it made. Its report is what `loom library update` prints."""
@@ -979,6 +1021,9 @@ class ServeSession:
 
     def stop(self) -> None:
         from loom.render.compiles import COMPILES_JSON
+
+        if self._settling is not None:
+            self._settling.cancel()
 
         if self.compiles is not None:
             self.compiles.stop()
