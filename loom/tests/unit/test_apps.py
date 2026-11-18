@@ -2,14 +2,19 @@
 
 from __future__ import annotations
 
+import json
+import os
+import re
+import threading
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from loom.ai.clients import PROJECT, apps_in, chosen
 from loom.ai.layout import MCP, MCP_LINE, SHELL, variant
 from loom.render.endpoints.base import ApiError
-from tests.helpers import ok
+from tests.helpers import exits, ok
 from tests.unit._quilts import demo
 
 EVERY = [c.key for c in PROJECT]
@@ -188,3 +193,105 @@ def test_doctor_reads_a_settings_file_that_keeps_the_persons_own_as_current(tmp_
     settings.write_text(json.dumps({"env": {"MY_VAR": "1"}}))
     setup(q, "claude-code")
     assert check_permissions(q).status == "ok"
+
+
+def _settings(q: Path) -> dict[str, Any]:
+    return json.loads((q / ".claude/settings.json").read_text(encoding="utf-8").removeprefix("﻿"))  # type: ignore[no-any-return]
+
+
+def _deny(q: Path, entries: str) -> None:
+    config = q / "config.toml"
+    text = config.read_text()
+    config.write_text(re.sub(r"(?m)^deny = \[.*\]$", f"deny = {entries}", text, count=1))
+
+
+def test_a_persons_rules_are_kept_whatever_they_name_where_loom_records_its_own(tmp_path: Path) -> None:
+    """With the record, a rule is loom's only where loom renders it or wrote it: a person's deny of a loom tool narrows what an agent may do, and stays."""
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    data = _settings(q)
+    theirs = ["mcp__loom__loom_write", "Bash(loom annotate --delete*)", "Read(./secrets/**)"]
+    data["permissions"]["deny"] += theirs
+    data["permissions"]["allow"].append("mcp__loom__loom_session_say")
+    (q / ".claude/settings.json").write_text(json.dumps(data, indent=2) + "\n")
+    ok("upgrade", cwd=q)
+    after = _settings(q)["permissions"]
+    assert after["deny"][-3:] == theirs and after["allow"][-1] == "mcp__loom__loom_session_say"
+
+
+def test_without_the_record_only_an_allow_naming_loom_is_taken_for_an_older_looms(tmp_path: Path) -> None:
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    (q / ".loom/ai/.loom-rules").unlink()
+    data = _settings(q)
+    data["permissions"]["allow"].append("Bash(loom accept*)")
+    data["permissions"]["deny"].append("mcp__loom__loom_write")
+    (q / ".claude/settings.json").write_text(json.dumps(data, indent=2) + "\n")
+    ok("upgrade", cwd=q)
+    after = _settings(q)["permissions"]
+    assert "Bash(loom accept*)" not in after["allow"] and after["deny"][-1] == "mcp__loom__loom_write"
+    assert (q / ".loom/ai/.loom-rules").is_file()
+
+
+def test_the_merge_keeps_the_persons_text_as_written(tmp_path: Path) -> None:
+    """Non-ASCII stays as typed, keys stay where the person put them, and a byte-order mark stays at the head."""
+    q = bare(tmp_path)
+    settings = q / ".claude/settings.json"
+    settings.parent.mkdir()
+    theirs = {
+        "$schema": "https://json.schemastore.org/claude-code-settings.json",
+        "permissions": {"defaultMode": "acceptEdits", "deny": ["Read(./secrets/**)"], "allow": ["Bash(make *)"]},
+        "env": {"AUTHOR": "Zoë Ñ"},
+    }
+    settings.write_text("﻿" + json.dumps(theirs, indent=2, ensure_ascii=False), encoding="utf-8")
+    assert setup(q, "claude-code")["merged"] == [".claude/settings.json"]
+    text = settings.read_text(encoding="utf-8")
+    assert text.startswith("﻿{") and '"AUTHOR": "Zoë Ñ"' in text
+    now = _settings(q)
+    assert list(now) == ["$schema", "permissions", "env"]
+    assert list(now["permissions"]) == ["defaultMode", "deny", "allow"]
+    assert "mcp__loom__*" in now["permissions"]["allow"] and now["permissions"]["deny"][-1] == "Read(./secrets/**)"
+
+
+def test_the_record_is_written_after_the_settings_and_a_failed_write_is_refused(tmp_path: Path) -> None:
+    """A settings file loom cannot write leaves the record saying what is there, so loom's old rule is still told from the person's once it can."""
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    _deny(q, '["private/**"]')
+    ok("upgrade", cwd=q)
+    assert any("private" in r for r in _settings(q)["permissions"]["deny"])
+    _deny(q, "[]")
+    settings = q / ".claude/settings.json"
+    settings.chmod(0o444)
+    try:
+        refused = exits(1, "upgrade", cwd=q)
+        assert "loom could not write .claude/settings.json" in refused.output and "Traceback" not in refused.output
+        assert "private" in (q / ".loom/ai/.loom-rules").read_text()
+    finally:
+        settings.chmod(0o644)
+    ok("upgrade", cwd=q)
+    assert not any("private" in r for r in _settings(q)["permissions"]["deny"])
+
+
+def test_variant_and_upgrade_never_wait_on_a_root_file_that_is_a_fifo(tmp_path: Path) -> None:
+    """A FIFO named `CLAUDE.md` in a copied quilt: the variant is read without it, and the root line is not written into it."""
+    from loom.ai.layout import upgrade_layer
+
+    q = bare(tmp_path)
+    setup(q, "codex")
+    fifo = q / "CLAUDE.md"
+    os.mkfifo(fifo)
+    try:
+        got: list[object] = []
+        look = threading.Thread(
+            target=lambda: got.append((variant(q), upgrade_layer(q, apps=["claude-code", "codex"]).theirs)), daemon=True
+        )
+        look.start()
+        look.join(10)
+        assert got, "variant() or the upgrade waited on the FIFO"
+        assert got[0] == (MCP, ["CLAUDE.md"])
+    finally:
+        try:
+            os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass

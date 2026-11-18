@@ -190,10 +190,12 @@ def install_layer(
         else:
             rep = LayerReport(written=[*tracked_docs(root), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
             skills = write_skills(root, apps, write=False)
-            permissions, rep.merged, rep.theirs = permission_files(root, quilt_config(root), shell=shell, apps=apps)
+            made = permission_files(root, quilt_config(root), shell=shell, apps=apps)
+            rep.merged, rep.theirs, rep.dropped = made.merged, made.theirs, made.dropped
+            permissions = made.texts
             rep.written += [
                 *permissions,
-                *ensure_root_line(root, False, shell=shell, apps=apps),
+                *ensure_root_line(root, False, shell=shell, apps=apps, report=rep),
                 *skills.written,
                 *([f"{AI}/{SKILLS_RECORD}"] if skills.written or skills.unchanged else []),
             ]
@@ -318,6 +320,13 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
                 [Item("loom's own, for a mode the quilt no longer has", key=rel) for rel in rep.removed],
             )
         )
+    if rep.dropped:
+        groups.append(
+            Group(
+                "would take out" if dry_run else "took out",
+                [Item("loom's own rule, which it no longer writes", key=rule) for rule in rep.dropped],
+            )
+        )
     sdk = sdk_groups(shell)
     groups += _client_groups(clients, dry_run) + sdk
     data = {
@@ -327,6 +336,7 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
         "theirs": rep.theirs,
         "merged": rep.merged,
         "removed": rep.removed,
+        "dropped": rep.dropped,
         "refreshed": existed,
         "variant": SHELL if shell else "mcp",
         "clients": clients.to_json(),

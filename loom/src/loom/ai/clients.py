@@ -6,6 +6,7 @@ Each holds one server, `loom`, started as `<loom> mcp --as "<App> Agent" --quilt
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tomllib
@@ -243,8 +244,10 @@ def write_clients(
 ) -> ClientReport:
     """Write the project client file loom owns of each of `apps` (`chosen`), or with `write` false say which it would; with `shell`, remove them instead.
 
-    A file of the person's, or one git tracks with a loom server in it, is never written or removed: the first is reported `foreign`, the second `tracked`, and `loom doctor` fails on it.
+    A file of the person's, or one git tracks with a loom server in it, is never written or removed: the first is reported `foreign`, the second `tracked`, and `loom doctor` fails on it. So is one that is a link, not a regular file or not UTF-8 (`layout.read_plain`), reported `foreign`.
     """
+    from loom.ai.layout import blocker, read_plain
+
     rep = ClientReport()
     under_git = tracked(root, PROJECT_FILES)
     keys = chosen(root, apps)
@@ -253,7 +256,10 @@ def write_clients(
             continue
         assert c.file is not None
         p = root / c.file
-        text = p.read_text(encoding="utf-8") if p.is_file() else None
+        text = read_plain(root, c.file)
+        if blocker(root, c.file) or (text is None and os.path.lexists(p)):
+            rep.foreign.append(c.file)
+            continue
         if text is not None and c.file in under_git and names_loom(c, text):
             rep.tracked.append(c.file)
             continue

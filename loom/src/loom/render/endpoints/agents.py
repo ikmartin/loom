@@ -134,7 +134,12 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("bad-field", f"app is one of {', '.join(keys)}")
     # a quilt with no agent layer is set up for no app yet
     have = chosen(root, None) if (root / AI).is_dir() else []
-    layer, clients = install_layer(root, apps=[k for k in keys if k in have or k == app])
+    from loom.writes import WriteRefused
+
+    try:
+        layer, clients = install_layer(root, apps=[k for k in keys if k in have or k == app])
+    except WriteRefused as exc:
+        raise ApiError(exc.code, str(exc), status=exc.status) from exc
     written = sorted(dict.fromkeys([*layer.written, *clients.written]))
     label = BY_KEY[app].label
     said = (
@@ -147,6 +152,8 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         said += f"; kept your own settings in {', '.join(layer.merged)} beside loom's rules"
     if layer.theirs:
         said += f"; left {', '.join(layer.theirs)} alone, which loom did not write"
+    if layer.dropped:
+        said += f"; took out loom's own rules it no longer writes: {', '.join(layer.dropped)}"
     if layer.removed:
         said += f"; removed {', '.join(layer.removed)}, loom's own for a mode the quilt no longer has"
     if clients.tracked:
@@ -157,6 +164,7 @@ def _setup(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "written": written,
         "removed": layer.removed,
         "merged": layer.merged,
+        "dropped": layer.dropped,
         "foreign": foreign,
         "tracked": clients.tracked,
         "variant": variant(root) or MCP,
