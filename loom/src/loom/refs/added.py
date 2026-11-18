@@ -1,6 +1,6 @@
 """Works a person adds to the library by hand (plan 0.24.2), written into loom's own bibliography marked `loom-added`, and deleting a work from the library.
 
-The bibliography is loom's file, `.loom/digests/bibliography.bib`, never a document's `.bib`: gathering appends what the documents cite, and an added work is appended beside them. An entry a person corrected by hand is never removed; one loom wrote for a work added here may be, since nothing of the person's is in it.
+The bibliography is loom's file, `.loom/library/bibliography.bib`, never a document's `.bib`: gathering appends what the documents cite, and an added work is appended beside them. An entry a person corrected by hand is never removed; one loom wrote for a work added here may be, since nothing of the person's is in it.
 """
 
 from __future__ import annotations

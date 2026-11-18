@@ -46,7 +46,7 @@ def quilt(tmp_path: Path):
 def copy(q, key="zk-0100", name="first"):
     result = scan(q)
     h = load_history(q.history_dir)
-    target = f".loom/copies/{name}.tex"
+    target = f".loom/agents/copies/{name}.tex"
     p = plan_copy(result, h, DOC, target, key)
     check_overlap(result, DOC, p.scope)
     context = capture_context(result, DOC)
@@ -165,7 +165,7 @@ def test_close_keeps_snapshot_frees_scope_and_reopen_checks_overlap(quilt):
     manifest = build(quilt).manifest
     closed = next(m for m in manifest["masters"] if m["path"] == a)
     assert closed["closed"] and "zk-0001-ai-01" in closed["closed_keys"]
-    assert "Proposal." in (quilt.root / ".loom/build" / closed["fragment"]).read_text()
+    assert "Proposal." in (quilt.root / ".loom/cache/site" / closed["fragment"]).read_text()
     assert (quilt.root / a).read_bytes() == before
     b = copy(quilt, name="replacement")
     with pytest.raises(SyncError, match="overlaps"):
@@ -191,10 +191,10 @@ def test_saved_context_stays_readable_until_refresh(quilt):
     manifest = build(quilt).manifest
     master = next(m for m in manifest["masters"] if m["path"] == a)
     assert master["context_changed"]
-    html = (quilt.root / ".loom/build" / master["fragment"]).read_text()
+    html = (quilt.root / ".loom/cache/site" / master["fragment"]).read_text()
     assert "data-context-document=" in html
     context = next(m for m in manifest["masters"] if m["path"] == master["context_document"])
-    assert "First statement." in (quilt.root / ".loom/build" / context["fragment"]).read_text()
+    assert "First statement." in (quilt.root / ".loom/cache/site" / context["fragment"]).read_text()
     refresh(scan(quilt), a)
     assert "Changed outside scope." in pinned_scan(scan(quilt), a).files[DOC].text
 
@@ -276,7 +276,7 @@ def test_section_preview_compiles_in_saved_paper_context(quilt):
 
     a = copy(quilt, "zk-0200", "second")
     preview = preview_in_paper(scan(quilt), a)
-    assert (quilt.root / ".loom/build" / preview["pdf"]).read_bytes().startswith(b"%PDF")
+    assert (quilt.root / ".loom/cache/site" / preview["pdf"]).read_bytes().startswith(b"%PDF")
     assert (quilt.root / DOC).read_text() == TEXT
 
 
@@ -360,7 +360,7 @@ def test_a_gone_annotation_is_re_anchored_once_per_build_and_again_when_its_bloc
         m = build(quilt).manifest
         master = next(x for x in m["masters"] if x["path"] == a)
         return [
-            (quilt.root / ".loom/build" / f).read_text()
+            (quilt.root / ".loom/cache/site" / f).read_text()
             for f in (master["fragment"], m["nodes"]["zk-0001-ai-01"]["fragment"])
         ]
 

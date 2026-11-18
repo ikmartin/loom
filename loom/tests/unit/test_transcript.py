@@ -132,15 +132,15 @@ def test_the_build_pages_the_transcript_beside_the_manifest(tmp_path: Path) -> N
     assert [e["seq"] for e in got[2]["events"]] == list(range(PAGE + 1, PAGE + 51))
     assert got[1]["events"][0]["body_html"] == "<p>message <strong>0</strong></p>"
     ok("build", cwd=q)
-    page: dict[str, Any] = json.loads((q / ".loom/build" / "transcripts" / sid / "2.json").read_text())
+    page: dict[str, Any] = json.loads((q / ".loom/cache/site" / "transcripts" / sid / "2.json").read_text())
     assert page["session"] == sid and page["page"] == 2 and len(page["events"]) == 50
-    manifest = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    manifest = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     assert "messages" not in manifest["threads"][sid]
     assert the(manifest["sessions"], lambda s: s["id"] == sid, f"session {sid} in the manifest")["seq"] == PAGE + 50
     # a deleted session's pages go with it
     ok("session", "delete", sid, "--as", "A. Author", "--yes", cwd=q)
     ok("build", cwd=q)
-    assert not list((q / ".loom/build" / "transcripts").glob(f"{sid}/*.json"))
+    assert not list((q / ".loom/cache/site" / "transcripts").glob(f"{sid}/*.json"))
 
 
 def test_the_events_endpoint_reads_by_index_and_holds_the_id_to_its_shape(tmp_path: Path) -> None:
@@ -164,7 +164,7 @@ def test_the_events_endpoint_reads_by_index_and_holds_the_id_to_its_shape(tmp_pa
 def test_no_agent_document_asks_for_a_journal() -> None:
     """The chat is the transcript; a template still asking for `thread.md` would have the agent keep a second record nobody reads."""
     assets = Path(__file__).resolve().parents[2] / "src" / "loom" / "assets"
-    for base in (assets / "ai", assets / "demo" / ".loom/ai"):
+    for base in (assets / "ai", assets / "demo" / ".loom/agents/instructions"):
         for p in base.rglob("*.md"):
             assert "thread.md" not in p.read_text(encoding="utf-8"), p
 
@@ -209,14 +209,14 @@ def test_a_reports_blocks_are_marked_for_the_viewer_and_a_plain_message_is_not()
 def test_a_rebuild_keeps_an_unchanged_transcript_on_disk_without_holding_it(tmp_path: Path) -> None:
     """A session nobody wrote in since is kept as published rather than held in memory and handed over again; a page gone from disk is put back, and a message written since is published."""
     from loom.mailbox import post
-    from loom.paths import BUILD
+    from loom.paths import SITE
     from loom.render import build as built
     from loom.scan.quilt import load_quilt
 
     q, sid = quilt(tmp_path)
     post(q, sid, "the first message", "Seed Agent")
     built.build(load_quilt(q), tex=False)
-    pages = sorted((q / BUILD / "transcripts" / sid).glob("*.json"))
+    pages = sorted((q / SITE / "transcripts" / sid).glob("*.json"))
     assert pages
     built.build(load_quilt(q), tex=False)
     assert all(p.is_file() for p in pages), "kept, not pruned"

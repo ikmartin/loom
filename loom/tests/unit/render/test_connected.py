@@ -79,14 +79,14 @@ def test_a_record_written_republishes_nothing(serve: Callable[[Path], ServeSessi
 def test_api_answers_from_the_last_look(
     serve: Callable[[Path], ServeSession], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`GET /_api` says who is connected as the server's once-a-second look last found it, so no request waits on `.loom/live/`."""
+    """`GET /_api` says who is connected as the server's once-a-second look last found it, so no request waits on `.loom/local/live/`."""
     import loom.presence
 
     q = demo(tmp_path)
     s = serve(q)
 
     def looked(root: Path) -> list[object]:
-        raise AssertionError("a request read .loom/live/")
+        raise AssertionError("a request read .loom/local/live/")
 
     monkeypatch.setattr(loom.presence, "live", looked)
     assert json.loads(get(s.url + "_api")[2])["connected"] == []

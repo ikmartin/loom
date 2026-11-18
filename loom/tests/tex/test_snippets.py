@@ -24,7 +24,7 @@ GOOD = [
 
 
 def _run(q: Path, texts: list[str]):  # type: ignore[no-untyped-def]
-    return render_snippets(q, "", PREAMBLE, texts, q / ".loom/build/cache/snippets", envs=["lemma", "proof"])
+    return render_snippets(q, "", PREAMBLE, texts, q / ".loom/cache/blocks/snippets", envs=["lemma", "proof"])
 
 
 @pytest.mark.tex
@@ -102,7 +102,7 @@ def test_a_page_break_that_moves_remakes_only_a_text_that_prints_a_page(tmp_path
     texts = ["See Lemma~\\ref{q1} again.", "See the lemma on page~\\pageref{q1}."]
 
     def made():  # type: ignore[no-untyped-def]
-        return render_snippets(q, "", PREAMBLE, texts, q / ".loom/build/cache/snippets", aux=aux)
+        return render_snippets(q, "", PREAMBLE, texts, q / ".loom/cache/blocks/snippets", aux=aux)
 
     pages_from(7)
     first = made()
@@ -149,11 +149,11 @@ def test_a_diagram_is_a_picture_tex_drew_numbered_as_the_document_numbers_it(tmp
     q = _quilt(tmp_path)
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     ok("build", cwd=q)
-    frag = (q / ".loom/build/fragments/masters/drafting/main.html").read_text(encoding="utf-8")
+    frag = (q / ".loom/cache/site/fragments/masters/drafting/main.html").read_text(encoding="utf-8")
     figure = re.search(r'<figure class="diagram"([^>]*)><img src="(svg/[^"]+)"', frag)
     assert figure is not None, frag
     assert 'data-label="eq:sq"' in figure.group(1) and 'data-number="1"' in figure.group(1)
-    assert (q / ".loom/build" / figure.group(2)).is_file()
+    assert (q / ".loom/cache/site" / figure.group(2)).is_file()
 
 
 @pytest.mark.tex
@@ -163,7 +163,7 @@ def test_a_node_no_document_reaches_is_made_by_tex_in_the_default_documents_term
     q = _quilt(tmp_path)
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     ok("build", cwd=q)
-    frag = (q / ".loom/build/fragments/nodes/pp-0002.html").read_text(encoding="utf-8")
+    frag = (q / ".loom/cache/site/fragments/nodes/pp-0002.html").read_text(encoding="utf-8")
     assert frag.startswith('<div data-from="tex" data-fragment="node" class="env env-lemma" id="pp-0002"'), frag[:200]
     assert '<span class="title">(Loose)</span>' in frag and "<strong>fine" in frag
     # its reference prints the number the default document's aux gives

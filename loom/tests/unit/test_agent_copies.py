@@ -1,4 +1,4 @@
-"""The documents an agent edits (plan 0.17.1, 0.22.6): its copies in `.loom/copies/`, derived ids, and the border an agent's permission file draws."""
+"""The documents an agent edits (plan 0.17.1, 0.22.6): its copies in `.loom/agents/copies/`, derived ids, and the border an agent's permission file draws."""
 
 from __future__ import annotations
 
@@ -45,10 +45,10 @@ def local_reviewer() -> None:
 
 
 def with_copy(tmp_path: Path, name: str = "aidoc.tex", text: str = AIDOC) -> Path:
-    """The demo quilt with an agent's copy of `drafting/main.tex` in `.loom/copies/`, made by `loom draft` and then rewritten to `text`, as an agent edits one."""
+    """The demo quilt with an agent's copy of `drafting/main.tex` in `.loom/agents/copies/`, made by `loom draft` and then rewritten to `text`, as an agent edits one."""
     q = demo(tmp_path)
     ok("draft", "drafting/main.tex", "--ai", name, cwd=q)
-    (q / ".loom" / "copies" / name).write_text(text, encoding="utf-8")
+    (q / ".loom" / "agents" / "copies" / name).write_text(text, encoding="utf-8")
     return q
 
 
@@ -70,8 +70,8 @@ def test_a_derived_id_names_its_counterpart_and_never_takes_a_citekey_prefix() -
 def test_an_agents_document_is_live_and_its_nodes_are_derived(tmp_path: Path) -> None:
     q = with_copy(tmp_path)
     result = scan(load_quilt(q))
-    assert ".loom/copies/aidoc.tex" in result.masters
-    assert result.document_role(".loom/copies/aidoc.tex") == "agent"
+    assert ".loom/agents/copies/aidoc.tex" in result.masters
+    assert result.document_role(".loom/agents/copies/aidoc.tex") == "agent"
     assert result.document_role("drafting/main.tex") == "person"
     assert result.default_master == "drafting/main.tex"
     assert result.nodes["dm-0004-ai"].derived_of == "dm-0004"
@@ -85,12 +85,12 @@ def test_status_and_the_manifest_count_the_persons_nodes_once(tmp_path: Path) ->
     keys = json_of("status", "--json", cwd=q)["keys"]
     assert "dm-0004" in keys and "dm-0004-ai" not in keys
     ok("build", cwd=q)
-    m = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     # an agent's document is the one the history made: `copy_of` says whose copy it is, and no master carries a directory
     assert {x["path"]: x.get("copy_of") for x in m["masters"]} == {
         "drafting/main.tex": None,
         "drafting/outline.tex": None,
-        ".loom/copies/aidoc.tex": "drafting/main.tex",
+        ".loom/agents/copies/aidoc.tex": "drafting/main.tex",
     }
     assert not [x for x in m["masters"] if "directory" in x]
     assert m["nodes"]["dm-0004-ai"]["derived_of"] == "dm-0004" and "derived_of" not in m["nodes"]["dm-0004"]
@@ -99,7 +99,7 @@ def test_status_and_the_manifest_count_the_persons_nodes_once(tmp_path: Path) ->
 
 def test_two_definitions_of_a_derived_id_are_a_duplicate_id(tmp_path: Path) -> None:
     q = with_copy(tmp_path)
-    (q / ".loom" / "copies" / "second.tex").write_text(AIDOC, encoding="utf-8")
+    (q / ".loom" / "agents" / "copies" / "second.tex").write_text(AIDOC, encoding="utf-8")
     dup = [d for d in codes(q, 1) if d["code"] == "duplicate-id"]
     assert {k for d in dup for k in d.get("keys", [])} >= {"dm-0004-ai"} or any(
         "dm-0004-ai" in d["message"] for d in dup
@@ -124,9 +124,9 @@ def test_a_persons_document_neither_defines_nor_cites_a_derived_id(tmp_path: Pat
 def test_an_agent_copy_flattened_elsewhere_stays_an_agents(tmp_path: Path) -> None:
     """Whose a document is comes from the history, not its directory: a copy linearized out of the agent's directory is still the agent's, and still a copy of the same document."""
     q = with_copy(tmp_path)
-    ok("linearize", ".loom/copies/aidoc.tex", "--to", "flat.tex", "--no-check", cwd=q)
+    ok("linearize", ".loom/agents/copies/aidoc.tex", "--to", "flat.tex", "--no-check", cwd=q)
     result = scan(load_quilt(q))
-    assert "flat.tex" in result.masters and ".loom/copies/aidoc.tex" not in result.masters
+    assert "flat.tex" in result.masters and ".loom/agents/copies/aidoc.tex" not in result.masters
     assert result.document_role("flat.tex") == "agent"
     assert result.default_master == "drafting/main.tex"
 
@@ -145,7 +145,7 @@ def test_nothing_in_an_agents_document_is_accepted(tmp_path: Path) -> None:
     refused(
         "accept",
         "--master",
-        ".loom/copies/aidoc.tex",
+        ".loom/agents/copies/aidoc.tex",
         "--yes",
         "--force",
         *AS,
@@ -156,39 +156,41 @@ def test_nothing_in_an_agents_document_is_accepted(tmp_path: Path) -> None:
     ok("accept", "dm-0001", "dm-0002", "--force", *AS, cwd=q)
     from loom.records.ledger import read_ledger
 
-    assert not [row for row in read_ledger(q) if row.key.endswith("-ai") or row.master.startswith(".loom/copies/")]
+    assert not [
+        row for row in read_ledger(q) if row.key.endswith("-ai") or row.master.startswith(".loom/agents/copies/")
+    ]
 
 
 def test_the_allocator_skips_a_number_a_derived_id_holds(tmp_path: Path) -> None:
     q = with_copy(tmp_path, text=AIDOC.replace("dm-0005-ai", "dm-00Z0-ai"))
     assert ok("id", "--next", cwd=q).stdout.strip() == "dm-00Z1"
     # and `loom id` gives a derived node no second label
-    assert "dm-00Z" not in ok("id", ".loom/copies/aidoc.tex", cwd=q).stdout.replace("dm-00Z0-ai", "")
+    assert "dm-00Z" not in ok("id", ".loom/agents/copies/aidoc.tex", cwd=q).stdout.replace("dm-00Z0-ai", "")
 
 
 def test_an_agent_works_in_a_copy_of_a_document_the_quilt_protects(tmp_path: Path) -> None:
-    """With the person's directory protected, an agent is denied it in Claude Code's file and by loom's own commands, and still copies a document from it into `.loom/copies/`, which is always its own."""
+    """With the person's directory protected, an agent is denied it in Claude Code's file and by loom's own commands, and still copies a document from it into `.loom/agents/copies/`, which is always its own."""
     q = demo(tmp_path)
     cfg = q / "config.toml"
     cfg.write_text(cfg.read_text() + '\n[agents]\ndeny = ["drafting/"]\n')
-    shutil.rmtree(q / ".loom/ai")
+    shutil.rmtree(q / ".loom/agents/instructions")
     shutil.rmtree(q / ".claude", ignore_errors=True)
     ok("ai", "init", cwd=q)
     perms = json.loads((q / ".claude" / "settings.json").read_text())["permissions"]
-    assert "Edit(.loom/copies/**)" in perms["allow"] and "Edit(/**/drafting/**)" in perms["deny"]
+    assert "Edit(.loom/agents/copies/**)" in perms["allow"] and "Edit(/**/drafting/**)" in perms["deny"]
     doctor = {i["name"]: i["status"] for i in json.loads(run("doctor", "--json", cwd=q).stdout)["items"]}
     assert doctor["permissions"] == "ok"
     agent = {"AI_AGENT": "1"}
     refused("new", "lemma", "Mine", "--as", "Copy Agent", cwd=q, env=agent, code=2, match="deny names drafting/")
     ok("draft", "drafting/main.tex", "--ai", "aidoc.tex", "--as", "Copy Agent", cwd=q, env=agent)
-    assert (q / ".loom" / "copies" / "aidoc.tex").is_file()
+    assert (q / ".loom" / "agents" / "copies" / "aidoc.tex").is_file()
 
 
 def test_init_makes_no_copies_directory_and_protects_nothing_of_the_persons(tmp_path: Path) -> None:
     ok("init", str(tmp_path / "q"), cwd=tmp_path)
     q = tmp_path / "q"
     text = (q / "config.toml").read_text()
-    assert not (q / ".loom" / "copies").exists() and "drafting" not in text
+    assert not (q / ".loom" / "agents" / "copies").exists() and "drafting" not in text
     assert "[agents]\n" in text and "\ndeny = []\n" in text and load_quilt(q).config.agents_deny == []
 
 
@@ -205,7 +207,7 @@ def test_the_document_workspace_never_selects_an_agents_document(tmp_path: Path)
         integrated="",
     )
     with pytest.raises(SyncError, match="an agent's document, which is never published"):
-        update_documents(load_quilt(q), state, "add", ".loom/copies/aidoc.tex")
+        update_documents(load_quilt(q), state, "add", ".loom/agents/copies/aidoc.tex")
 
 
 # ---- the copy (phase 2) ---------------------------------------------------------------------------------------
@@ -222,7 +224,7 @@ def test_the_copy_is_flat_and_every_label_it_defines_is_derived(tmp_path: Path) 
     import re
 
     q = copy_of_main(tmp_path)
-    text = (q / ".loom" / "copies" / "aidoc.tex").read_text()
+    text = (q / ".loom" / "agents" / "copies" / "aidoc.tex").read_text()
     assert "\\input{nodes" not in text, "every inclusion expanded"
     labels = re.findall(r"\\label\{([^}]*)\}", text)
     assert labels and all(lab.endswith("-ai") for lab in labels)
@@ -242,15 +244,17 @@ def test_the_copy_step_records_a_readable_base_for_every_node(tmp_path: Path) ->
     history = load_history(result.quilt.history_dir)
     line = history.entries[-1]
     assert (
-        line.action == "copy" and line.get("from") == "drafting/main.tex" and line.get("to") == ".loom/copies/aidoc.tex"
+        line.action == "copy"
+        and line.get("from") == "drafting/main.tex"
+        and line.get("to") == ".loom/agents/copies/aidoc.tex"
     )
-    bases = history.bases(".loom/copies/aidoc.tex", result.masters)
+    bases = history.bases(".loom/agents/copies/aidoc.tex", result.masters)
     assert bases == line.get("bases")
     assert {"dm-0001-ai", "dm-0002-ai", "dm-0003-ai", "dm-0005-ai"} <= set(bases)
     for derived, base in bases.items():
         assert base["key"] == plain_key(derived)
         read_version(history, base["key"], str(base["step"]))  # the base is a version loom can read back
-    assert history.copy_of(".loom/copies/aidoc.tex", result.masters) == "drafting/main.tex"
+    assert history.copy_of(".loom/agents/copies/aidoc.tex", result.masters) == "drafting/main.tex"
     # the step keeps the source's flat text, which staleness compares the prose and preamble against
     assert (history.dir / (line.dir or "") / "main.tex").read_text().startswith("\\documentclass")
     assert re.search(r"^0002  copy  ", ok("history", cwd=q).stdout, re.M)
@@ -266,13 +270,13 @@ def test_one_copy_per_document_never_over_a_file(tmp_path: Path) -> None:
         "again.tex",
         cwd=q,
         code=2,
-        match="overlaps .loom/copies/aidoc.tex",
+        match="overlaps .loom/agents/copies/aidoc.tex",
     )
     refused("draft", "drafting/outline.tex", "--ai", "aidoc.tex", cwd=q, code=2, match="exists; draft never overwrites")
     # a document is named by its path, so an agent's document may share a stem with one of the person's
     ok("draft", "drafting/outline.tex", "--ai", "main.tex", cwd=q)
-    assert {"drafting/main.tex", ".loom/copies/main.tex"} <= set(scan(load_quilt(q)).masters)
-    refused("draft", ".loom/copies/aidoc.tex", "--ai", "copy2.tex", cwd=q, code=2, match="is an agent document")
+    assert {"drafting/main.tex", ".loom/agents/copies/main.tex"} <= set(scan(load_quilt(q)).masters)
+    refused("draft", ".loom/agents/copies/aidoc.tex", "--ai", "copy2.tex", cwd=q, code=2, match="is an agent document")
     refused("draft", "drafting/missing.tex", "--ai", "x.tex", cwd=q, code=2, match="is not a live document")
 
 
@@ -280,7 +284,7 @@ def test_a_copy_is_stale_when_the_persons_side_moves_mathematically(tmp_path: Pa
     q = copy_of_main(tmp_path)
     assert json_of("ai", "drafts", "--json", cwd=q)["copies"] == [
         {
-            "copy": ".loom/copies/aidoc.tex",
+            "copy": ".loom/agents/copies/aidoc.tex",
             "source": "drafting/main.tex",
             "scope": {"kind": "document"},
             "suffix": "-ai",
@@ -314,31 +318,33 @@ def test_a_copy_is_stale_when_the_persons_side_moves_mathematically(tmp_path: Pa
 
 
 def test_an_agent_may_make_a_copy_and_never_adopt_one(tmp_path: Path) -> None:
-    """A copy writes only into `.loom/copies/` and records its bases; the person's documents are untouched, so an agent may make one. Taking it back is the author's."""
+    """A copy writes only into `.loom/agents/copies/` and records its bases; the person's documents are untouched, so an agent may make one. Taking it back is the author's."""
     from loom.ai.layout import AGENT_COMMANDS
 
     assert {"draft", "ai drafts", "ai refresh"} <= AGENT_COMMANDS and "adopt" not in AGENT_COMMANDS
     q = demo(tmp_path)
     before = {p: p.read_bytes() for p in (q / "drafting").rglob("*") if p.is_file()}
     ok("draft", "drafting/main.tex", "--ai", "aidoc.tex", "--as", "Copy Agent", cwd=q, env={"CLAUDECODE": "1"})
-    assert (q / ".loom" / "copies" / "aidoc.tex").is_file()
+    assert (q / ".loom" / "agents" / "copies" / "aidoc.tex").is_file()
     assert {p: p.read_bytes() for p in (q / "drafting").rglob("*") if p.is_file()} == before
     assert "aidoc.tex" in ok("ai", "drafts", cwd=q, env={"CLAUDECODE": "1"}).stdout
 
 
 def test_the_copies_directory_holds_documents_a_step_made_that_define_derived_ids(tmp_path: Path) -> None:
-    """A document written straight into `.loom/copies/` has no step, so nothing can be adopted or refreshed from it, and a plain id defined there writes into the person's id space; lint refuses both, and adoption says why."""
+    """A document written straight into `.loom/agents/copies/` has no step, so nothing can be adopted or refreshed from it, and a plain id defined there writes into the person's id space; lint refuses both, and adoption says why."""
     q = demo(tmp_path)
-    (q / ".loom" / "copies").mkdir(parents=True, exist_ok=True)
-    (q / ".loom" / "copies" / "scratch.tex").write_text(
+    (q / ".loom" / "agents" / "copies").mkdir(parents=True, exist_ok=True)
+    (q / ".loom" / "agents" / "copies" / "scratch.tex").write_text(
         AIDOC.replace("dm-0005-ai", "dm-0901").replace("dm-0004-ai", "dm-0900-ai"), encoding="utf-8"
     )
     found = {d["code"]: d for d in codes(q, code=1)}
     assert [f["command"] for f in found["loom:agent-document-unrecorded"]["fixes"]] == [
         "loom draft drafting/main.tex --ai NAME.tex"
     ]
-    assert "dm-0901 is defined in .loom/copies/scratch.tex" in found["loom:plain-id-in-agent-document"]["message"]
-    refused("adopt", ".loom/copies/scratch.tex", "--json", cwd=q, code=2, match="is not a copy")
+    assert (
+        "dm-0901 is defined in .loom/agents/copies/scratch.tex" in found["loom:plain-id-in-agent-document"]["message"]
+    )
+    refused("adopt", ".loom/agents/copies/scratch.tex", "--json", cwd=q, code=2, match="is not a copy")
 
 
 # ---- the interface other plans build on (phase 3) -------------------------------------------------------------
@@ -347,10 +353,12 @@ def test_the_copies_directory_holds_documents_a_step_made_that_define_derived_id
 def test_the_fixtures_agent_copy_carries_every_field_the_interface_names() -> None:
     fixture = json.loads((Path(__file__).parents[1] / "fixture" / "manifest.json").read_text())
     masters = {m["path"]: m for m in fixture["masters"]}
-    assert masters[".loom/copies/aidoc.tex"]["copy_of"] == "drafting/main.tex"  # which says it is an agent's
-    assert masters[".loom/copies/aidoc.tex"]["fragment"] == "fragments/masters/.loom/copies/aidoc.html"
+    assert masters[".loom/agents/copies/aidoc.tex"]["copy_of"] == "drafting/main.tex"  # which says it is an agent's
+    assert masters[".loom/agents/copies/aidoc.tex"]["fragment"] == "fragments/masters/.loom/agents/copies/aidoc.html"
     assert not [m for m in fixture["masters"] if "directory" in m]
-    assert [m["path"] for m in fixture["masters"]][-1] == ".loom/copies/aidoc.tex"  # the person's documents first
+    assert [m["path"] for m in fixture["masters"]][
+        -1
+    ] == ".loom/agents/copies/aidoc.tex"  # the person's documents first
     nodes = fixture["nodes"]
     assert nodes["sy-0002-ai"]["derived_of"] == "sy-0002" and nodes["sy-0002-ai"]["base"]["key"] == "sy-0002"
     # one of each kind a copy differs from its source by
@@ -362,7 +370,7 @@ def test_the_fixtures_agent_copy_carries_every_field_the_interface_names() -> No
 def test_the_fixtures_copy_is_stale_where_the_author_changed_a_node_after_it() -> None:
     q = Path(__file__).parents[1] / "quilts" / "synthetic"
     state = json_of("ai", "drafts", "--json", cwd=q)["copies"][0]
-    assert state["copy"] == ".loom/copies/aidoc.tex" and state["changed"] == ["sy-0001"] and not state["gone"]
+    assert state["copy"] == ".loom/agents/copies/aidoc.tex" and state["changed"] == ["sy-0001"] and not state["gone"]
 
 
 def test_bases_follow_adopt_and_refresh_lines_and_a_move_of_the_copy(tmp_path: Path) -> None:
@@ -374,29 +382,32 @@ def test_bases_follow_adopt_and_refresh_lines_and_a_move_of_the_copy(tmp_path: P
     append_entry(
         history_dir,
         "adopt",
-        {"copy": ".loom/copies/aidoc.tex", "taken": ["dm-0002-ai"], "kept": [], "bases": {"dm-0002-ai": moved}},
+        {"copy": ".loom/agents/copies/aidoc.tex", "taken": ["dm-0002-ai"], "kept": [], "bases": {"dm-0002-ai": moved}},
         "Markas Hecht",
     )
     refreshed = {"key": "dm-0003", "step": 1, "hash": "sha256:refreshed"}
     append_entry(
-        history_dir, "refresh", {"copy": ".loom/copies/aidoc.tex", "bases": {"dm-0003-ai": refreshed}}, "An Agent"
+        history_dir,
+        "refresh",
+        {"copy": ".loom/agents/copies/aidoc.tex", "bases": {"dm-0003-ai": refreshed}},
+        "An Agent",
     )
-    (q / ".loom" / "copies" / "aidoc.tex").rename(q / ".loom" / "copies" / "agentdoc.tex")
+    (q / ".loom" / "agents" / "copies" / "aidoc.tex").rename(q / ".loom" / "agents" / "copies" / "agentdoc.tex")
     append_entry(
         history_dir,
         "move",
-        {"from": ".loom/copies/aidoc.tex", "to": ".loom/copies/agentdoc.tex", "moved": False},
+        {"from": ".loom/agents/copies/aidoc.tex", "to": ".loom/agents/copies/agentdoc.tex", "moved": False},
         "Markas Hecht",
     )
     result = scan(load_quilt(q))
     history = load_history(history_dir)
-    bases = history.bases(".loom/copies/agentdoc.tex", result.masters)
+    bases = history.bases(".loom/agents/copies/agentdoc.tex", result.masters)
     assert bases["dm-0002-ai"] == moved and bases["dm-0003-ai"] == refreshed
     assert bases["dm-0001-ai"]["key"] == "dm-0001"
     assert (
-        history.bases(".loom/copies/aidoc.tex", result.masters) == bases
+        history.bases(".loom/agents/copies/aidoc.tex", result.masters) == bases
     )  # the path a record wrote leads to the same copy
-    assert history.copy_of(".loom/copies/agentdoc.tex", result.masters) == "drafting/main.tex"
+    assert history.copy_of(".loom/agents/copies/agentdoc.tex", result.masters) == "drafting/main.tex"
 
 
 def test_an_agent_drafting_a_document_is_the_actor_the_history_records(tmp_path: Path) -> None:
@@ -404,8 +415,8 @@ def test_an_agent_drafting_a_document_is_the_actor_the_history_records(tmp_path:
     q = demo(tmp_path)
     agent = {"AI_AGENT": "1"}
     refused("draft", "drafting/main.tex", "--ai", "review", cwd=q, env=agent, code=2, match="has not said who it is")
-    assert not (q / ".loom" / "copies" / "review.tex").exists()
+    assert not (q / ".loom" / "agents" / "copies" / "review.tex").exists()
     ok("draft", "drafting/main.tex", "--ai", "review", "--as", "Referee Agent", cwd=q, env=agent)
-    lines = (q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()
+    lines = (q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()
     copy = json.loads(lines[-1])
     assert copy["action"] == "copy" and copy["actor"] == "Referee Agent"

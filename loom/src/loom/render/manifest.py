@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from loom.paths import BUILD, document_name
+from loom.paths import document_build, document_pdf_address
 from loom.refs.identity import declared, identify, primary
 from loom.refs.pages import store_address
 from loom.refs.resolve import load as load_candidates
@@ -267,12 +267,11 @@ def build_manifest(
             "fragment": fragments.get(f"master:{m}", ""),
             "engine": (closure.engine if closure and closure.engine else result.quilt.config.engine),
         }
-        pdf_rel = f"{document_name(m)}/{Path(m).stem}.pdf"  # under the build output, as `document_build` compiles it
-        pdf = result.quilt.root / BUILD / pdf_rel
+        pdf = result.quilt.root / document_build(m) / f"{Path(m).stem}.pdf"
         aux_known = bool(numbers.get(m))
         if pdf.exists():
             entry["compiled"] = _iso(pdf.stat().st_mtime)
-            entry["pdf"] = pdf_rel
+            entry["pdf"] = document_pdf_address(m)
         entry["numbering_known"] = aux_known
         if m in copies:
             entry["copy_of"] = copies[m]

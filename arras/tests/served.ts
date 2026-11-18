@@ -2,8 +2,10 @@
 
 import { test as base, expect, type TestInfo } from '@playwright/test';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
-import { cpSync, createWriteStream, existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { cpSync, createWriteStream, existsSync, readFileSync, realpathSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { patient } from './sites';
@@ -45,6 +47,17 @@ export function suiteOf(info: { config: { metadata: Record<string, unknown> } })
 	const { quilt, scratch } = info.config.metadata as Partial<Suite>;
 	if (!quilt || !scratch) throw new Error('the config names no metadata.quilt and metadata.scratch');
 	return { quilt, scratch };
+}
+
+/** A document's compile folder in a copy of the quilt, as loom names it (`loom.paths.document_build`): its file name without `.tex`, then eight hex digits of the SHA-256 of its path without `.tex`. */
+export function compileFolder(root: string, doc: string): string {
+	const name = doc.replace(/\.tex$/, '');
+	return join(root, '.loom/cache/tex', `${name.split('/').pop()}-${createHash('sha256').update(name).digest('hex').slice(0, 8)}`);
+}
+
+/** A work's folder in a copy of the quilt's store, from the address the manifest's `artifacts.dir` gives it (`loom.paths.STORE_ADDRESS`). */
+export function storeDir(root: string, address: string): string {
+	return join(root, '.loom/library/storage', address.replace(/^\/?digests\/storage\/?/, ''));
 }
 
 export function scratchDir(suite: Suite): string {
@@ -170,7 +183,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 		const served: Served = {
 			root,
 			url,
-			log: () => parseLines(join(root, '.loom/annotations/log.jsonl')),
+			log: () => parseLines(join(root, '.loom/records/annotations/log.jsonl')),
 			written(body) {
 				const mine = served.log().filter((e) => e.event === 'created' && e.body === body);
 				expect(mine, `the log's created entries with the body ${JSON.stringify(body)}`).toHaveLength(1);
@@ -178,7 +191,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 			},
 			openSessions() {
 				const open = new Map<string, boolean>();
-				for (const e of parseLines(join(root, '.loom/sessions/index.jsonl'))) {
+				for (const e of parseLines(join(root, '.loom/agents/sessions/index.jsonl'))) {
 					const id = String(e.id);
 					if (e.event === 'created') open.set(id, true);
 					else if (e.event === 'closed' || e.event === 'deleted') open.set(id, false);

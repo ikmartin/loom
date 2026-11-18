@@ -1,6 +1,6 @@
 """The last text loom saw for every key, so an annotation's anchor can be frozen when the author edits under it.
 
-An annotation records `against`: the hash of the text it was written about. When that text changes, the words the annotation quotes are gone from the quilt, and with them any chance of showing a reader what was being objected to. Freezing means copying the old text into `.loom/history/texts/` at the moment loom notices it moved.
+An annotation records `against`: the hash of the text it was written about. When that text changes, the words the annotation quotes are gone from the quilt, and with them any chance of showing a reader what was being objected to. Freezing means copying the old text into `.loom/records/history/texts/` at the moment loom notices it moved.
 
 Noticing requires having the old text, not merely its hash, which is why this keeps a copy of the quilt rather than a table of digests: once the author saves, the previous text exists nowhere else. The copy is bounded -- one text per key, rewritten in place -- and only texts an annotation actually points at are ever frozen, so a quilt nobody has reviewed pays nothing but the cache itself.
 

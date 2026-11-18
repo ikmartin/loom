@@ -1,6 +1,6 @@
 """The one way a work comes into the library, for `loom library add` and the viewer alike (`docs/specs/write-api.md` §6).
 
-Each thing taken in, a file or a pasted identifier or entry, becomes one row in one of four states: `added`, `here`, `question` or `cannot`. Nothing is filed under an existing work unless the person says it is that work. A drop waits in `.loom/incoming/<id>/`, and once taken its `act.json` holds what each act wrote, which is what makes an undo give back the records' exact bytes.
+Each thing taken in, a file or a pasted identifier or entry, becomes one row in one of four states: `added`, `here`, `question` or `cannot`. Nothing is filed under an existing work unless the person says it is that work. A drop waits in `.loom/local/incoming/<id>/`, and once taken its `act.json` holds what each act wrote, which is what makes an undo give back the records' exact bytes.
 
 The library's writes are loom's own records, not a person's files, so they do not go through the door (`docs/design/writes.md`): every act holds the library's lock, writes the store before the entry that names it, and replaces each record file whole. No lock is held while the network is asked, and a receive waits on none, so no slow act of another's can cost a drop its bytes. An undo takes out only what its act left, found by its content, and otherwise refuses and names what is in the way.
 """
@@ -59,12 +59,12 @@ class IntakeRefused(Exception):
 
 @dataclass
 class Item:
-    """One thing to take in: a file, from `.loom/incoming/` or anywhere on disk, or a pasted text."""
+    """One thing to take in: a file, from `.loom/local/incoming/` or anywhere on disk, or a pasted text."""
 
     path: Path | None = None
     name: str = ""
     text: str = ""
-    #: A file received into `.loom/incoming/`, by its drop's id: what the viewer takes.
+    #: A file received into `.loom/local/incoming/`, by its drop's id: what the viewer takes.
     drop: str = ""
     #: The work it was dropped on (`for`), or the one the person named (`--for`).
     work: str = ""
@@ -212,7 +212,7 @@ def _drain(stream: Reads, left: int) -> None:
 
 
 def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]:
-    """Keep a dropped file as it streams in, at any size, in `.loom/incoming/<sha256>/`; the same bytes again are the drop already kept.
+    """Keep a dropped file as it streams in, at any size, in `.loom/local/incoming/<sha256>/`; the same bytes again are the drop already kept.
 
     Parameters
     ----------
@@ -861,7 +861,7 @@ def _take_for(t: _Take, n: int, item: Item, sha: str, excluded: set[str]) -> Row
 
 
 def _ask(t: _Take, n: int, item: Item, sha: str, candidates: list[dict[str, str]], offer: dict[str, str]) -> Row:
-    """One question: is this one of these works? Nothing is written but the question beside the drop, and only for a drop that waits in `.loom/incoming/`."""
+    """One question: is this one of these works? Nothing is written but the question beside the drop, and only for a drop that waits in `.loom/local/incoming/`."""
     assert item.path is not None
     document = _document(item.path, offer)
     row = Row(sha, n, item.name or item.path.name, "question", question=sha, document=document, candidates=candidates)
@@ -1542,7 +1542,7 @@ def _undo_add(root: Path, d: Path, act: dict[str, Any], plan: _Bib, *, keep: boo
 
     The records go before the store, so an entry never names a place emptied under it, whenever this stops.
     """
-    from loom.refs.pages import storage_root
+    from loom.refs.pages import store_boxes
 
     held = act.get("waiting") or {}
     home = root / act["home"] if act["home"] else None
@@ -1563,7 +1563,7 @@ def _undo_add(root: Path, d: Path, act: dict[str, Any], plan: _Bib, *, keep: boo
             for extra in set(os.listdir(home)) - set(names) if home.is_dir() else set():
                 p = home / extra
                 shutil.rmtree(p) if p.is_dir() else p.unlink()
-        boxes = storage_root(root) / "cache" / "boxes" / home.parent.name / home.name
+        boxes = store_boxes(home)
         shutil.rmtree(boxes, ignore_errors=True)
         _tidy(boxes.parent)
         _tidy(home.parent)
@@ -1593,7 +1593,7 @@ def _clear_unrecorded(d: Path) -> None:
 
 
 def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
-    """Take a work's stored PDF off it: the PDF waits again in `.loom/incoming/<sha>/` with that work in `not`, its page text beside it until the unfile is undone; a version entry made for it goes too, and the work stays.
+    """Take a work's stored PDF off it: the PDF waits again in `.loom/local/incoming/<sha>/` with that work in `not`, its page text beside it until the unfile is undone; a version entry made for it goes too, and the work stays.
 
     Raises
     ------
@@ -1606,7 +1606,7 @@ def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
 
 def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
     from loom.refs.fetch import work_dir
-    from loom.refs.pages import sha256_of, storage_root
+    from loom.refs.pages import sha256_of, storage_root, store_boxes
     from loom.refs.proposals import load_results
     from loom.refs.scan import load_ledger
 
@@ -1656,7 +1656,7 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
         moved = [n for n in READ_OFF if (home / n).exists()]
         for n in moved:
             _link_tree(home / n, held / n)
-        boxes = storage_root(root) / "cache" / "boxes" / home.parent.name / home.name
+        boxes = store_boxes(home)
         if boxes.is_dir():
             _link_tree(boxes, held / "boxes")
         removed: dict[str, str] = {}
@@ -1718,7 +1718,7 @@ def _remove_entry(root: Path, key: str) -> dict[str, str]:
 
 def _undo_unfile(root: Path, d: Path, act: dict[str, Any], plan: _Bib) -> None:
     """Put a document an unfile took off back under its work, with what was read off it: linked into its place before its entry is put back, and let go of in the drop (`undo`, through `_let_go`) only once the act is undone."""
-    from loom.refs.pages import storage_root
+    from loom.refs.pages import store_boxes
 
     home = root / act["home"]
     home.mkdir(parents=True, exist_ok=True)
@@ -1728,7 +1728,7 @@ def _undo_unfile(root: Path, d: Path, act: dict[str, Any], plan: _Bib) -> None:
         if (held / n).exists():
             shutil.move(str(held / n), str(home / n))
     if (held / "boxes").is_dir():
-        boxes = storage_root(root) / "cache" / "boxes" / home.parent.name / home.name
+        boxes = store_boxes(home)
         boxes.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(held / "boxes"), str(boxes))
     _restore_records(root, act["records"], plan)

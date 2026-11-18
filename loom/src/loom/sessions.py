@@ -1,4 +1,4 @@
-"""`.loom/sessions/`: stretches of work, each with its transcript and command log (plan 0.13 §5).
+"""`.loom/agents/sessions/`: stretches of work, each with its transcript and command log (plan 0.13 §5).
 
 A **session** is a stretch of work on the quilt -- a sitting, a review, a thread with an agent -- and it holds what was said and run in it. An annotation belongs to no session: it carries its **author**, who wrote it, its time and the version of the text it was written on.
 
@@ -329,5 +329,5 @@ def resolve(root: Path, needle: str, *, deleted: bool = False) -> Session:
 
 
 def files_dir(root: Path, s: Session) -> Path:
-    """Where a session's own files are -- its notes, its command log, its inbox: `.loom/sessions/<id>/`."""
+    """Where a session's own files are -- its notes, its command log, its inbox: `.loom/agents/sessions/<id>/`."""
     return s.directory(root)

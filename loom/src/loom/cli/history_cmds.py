@@ -39,7 +39,7 @@ from loom.history.steps import (
 from loom.history.versions import matching_version, materialize, parse_address, read_version, version_at
 from loom.identity import writer
 from loom.locks import locked
-from loom.paths import BUILD, COPIES
+from loom.paths import CACHE, COPIES, SCRATCH
 from loom.reshape.atomize import _single_node_file
 from loom.reshape.canon import plan_draft
 from loom.reshape.fork import _relabel, _rewrite_refs, inner_labels, plan_fork, unapplied_fork
@@ -101,7 +101,7 @@ def draft(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """Draft an agent document NAME from a live working document: flat, in `.loom/copies/`, with every label it defines derived.
+    """Draft an agent document NAME from a live working document: flat, in `.loom/agents/copies/`, with every label it defines derived.
 
     A copy step records what each of its nodes began from, and who drafted it: `--as`, else the configured author; an agent that has not named itself is refused. A document of an agent's own needs no command: it is a file the agent writes where the quilt lets it. Starting a document from an old version of one is `loom history restore`.
     """
@@ -115,7 +115,7 @@ def draft(
 
 
 def _ai_destination(result: ScanResult, name: str) -> str:
-    """The agent document `--ai NAME` names: directly under `.loom/copies/`, never an existing file."""
+    """The agent document `--ai NAME` names: directly under `.loom/agents/copies/`, never an existing file."""
     quilt = result.quilt
     dest_rel = name if "/" in name else f"{COPIES}/{name}"
     if not dest_rel.endswith(".tex"):
@@ -498,7 +498,7 @@ def _scan_after(result: ScanResult, action: str, data: dict[str, Any]) -> ScanRe
     root = result.quilt.root
     with tempfile.TemporaryDirectory(prefix="loom-dry-run-") as tmp:
         copy = Path(tmp) / "quilt"
-        shutil.copytree(root, copy, ignore=copy_ignore(root, BUILD, ".git"), symlinks=True)
+        shutil.copytree(root, copy, ignore=copy_ignore(root, CACHE, SCRATCH, ".git"), symlinks=True)
         quilt = load_quilt(copy)
         append_entry(quilt.history_dir, action, data, None)
         return scan(quilt)

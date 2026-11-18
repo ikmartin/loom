@@ -28,11 +28,13 @@ def test_a_title_reaches_the_session_it_names(tmp_path: Path) -> None:
     # a read command naming the session by its title, which used to mkdir ./early/ at the quilt root
     ok("source", "dm-0003", "--session", "early structural results review", cwd=d)
     assert not (d / "early").exists(), "an unmatched --session must never create a directory"
-    assert (d / ".loom" / "sessions" / sid / "run.log").is_file(), "the title must reach the real session's log"
+    assert (d / ".loom" / "agents" / "sessions" / sid / "run.log").is_file(), (
+        "the title must reach the real session's log"
+    )
 
     # and a session-bound write lands in the same session
     ok("session", "say", "Read dm-0003.", "--session", "early structural results review", "--as", "A. Author", cwd=d)
-    said = (d / ".loom" / "sessions" / sid / "inbox.jsonl").read_text()
+    said = (d / ".loom" / "agents" / "sessions" / sid / "inbox.jsonl").read_text()
     assert "Read dm-0003." in said
 
 
@@ -41,12 +43,12 @@ def test_an_unmatched_session_is_an_error_and_never_a_path(tmp_path: Path, name:
     """A session is an id, so there is no path to abuse: an unmatched `--session`, even one naming a directory of the author's, is refused and creates nothing, at the quilt root or inside that directory."""
     d = quilt(tmp_path)
     started(d, "a real sitting")
-    (d / ".loom/build").mkdir(exist_ok=True)
+    (d / ".loom/cache/site").mkdir(parents=True, exist_ok=True)
     before = sorted(p.name for p in d.iterdir())
 
     refused("source", "dm-0003", "--session", name, cwd=d, code=2, match="no session matches")
     assert sorted(p.name for p in d.iterdir()) == before, "nothing may be created at the quilt root"
-    assert not (d / ".loom/build" / "run.log").exists()
+    assert not (d / ".loom/cache/site" / "run.log").exists()
 
 
 def test_an_ambiguous_title_names_its_matches(tmp_path: Path) -> None:

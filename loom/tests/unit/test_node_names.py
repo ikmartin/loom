@@ -25,13 +25,13 @@ def test_renaming_preserves_own_and_downstream_acceptance_and_review_fingerprint
     after = open_scan(str(q))
     assert after.nodes["dm-0001"].directives["name"] == "Fixed points"
     assert key_hash(after, "dm-0001") != original
-    assert "Fixed points" not in read_snapshot(q, original, q / ".loom" / "history")
+    assert "Fixed points" not in read_snapshot(q, original, q / ".loom" / "records" / "history")
     states = Records(q).key_states(after)
     assert all(states[k].fresh for k in ("dm-0001", "dm-0002", "dm-0002/proof"))
     assert fingerprint(after, "dm-0002/proof") == proof
     ok("accept", "dm-0001", "--as", "A. Author", cwd=q)
     saved = Records(q).latest["dm-0001"].text
-    assert "Fixed points" in read_snapshot(q, saved, q / ".loom" / "history")
+    assert "Fixed points" in read_snapshot(q, saved, q / ".loom" / "records" / "history")
     source.write_text(source.read_text().replace("Fixed points", "Fixed-point definition"))
     assert Records(q).key_states(open_scan(str(q)))["dm-0001"].fresh
     source.write_text(source.read_text().replace("\\end{definition}", "A new hypothesis.\n\\end{definition}"))
@@ -120,7 +120,7 @@ def test_names_survive_linearize_and_atomize_without_rendering(tmp_path: Path) -
     (q / "drafting").mkdir()
     (q / "drafting" / "main.tex").write_text(MASTER, encoding="utf-8")
     ok("build", cwd=q)
-    fragments = list((q / ".loom/build/fragments").rglob("*.html"))
+    fragments = list((q / ".loom/cache/site/fragments").rglob("*.html"))
     outside_source = [re.sub(r'<pre class="source"[^>]*>.*?</pre>', "", p.read_text(), flags=re.S) for p in fragments]
     assert fragments and not any("Invisible display name" in text for text in outside_source)
     ok("atomize", "drafting/main.tex", "--to", "drafting/spine.tex", cwd=q)
@@ -139,7 +139,7 @@ def test_missing_old_snapshot_never_establishes_name_equivalence(tmp_path: Path)
     q = demo(tmp_path)
     ok("accept", "dm-0001", "--as", "A. Author", cwd=q)
     original = Records(q).latest["dm-0001"].text
-    (snapshots_dir(q, q / ".loom" / "history") / f"{original.split(':')[1]}.tex").unlink()
+    (snapshots_dir(q, q / ".loom" / "records" / "history") / f"{original.split(':')[1]}.tex").unlink()
     source = q / "drafting/nodes/dm-0001.tex"
     source.write_text(source.read_text().replace("\\end{definition}", "% !LOOM name: A name\n\\end{definition}"))
     assert not Records(q).key_states(open_scan(str(q)))["dm-0001"].fresh

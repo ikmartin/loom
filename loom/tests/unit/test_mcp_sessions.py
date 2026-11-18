@@ -39,7 +39,7 @@ def test_a_conversations_first_write_makes_its_session_and_its_report_lands_ther
         assert said(q, sid) == ["Mode: quick, on dm-0003."]
         assert sessions(q)[sid].title.startswith("Claude Code Agent · ")
         assert live(q)[0]["session"] == sid
-        assert "loom session say" in (q / ".loom/sessions" / sid / "run.log").read_text()
+        assert "loom session say" in (q / ".loom/agents/sessions" / sid / "run.log").read_text()
 
 
 def test_a_resumed_conversation_writes_into_its_session_again(tmp_path: Path) -> None:
@@ -147,8 +147,8 @@ def test_a_write_the_app_stops_the_server_during_lands_with_its_line_in_the_log(
         )
         server.stop(signal.SIGTERM)
         _until(lambda: subprocess.run(["ps", "-p", child[0]], capture_output=True).returncode != 0)
-    assert "written as it stops" in (q / ".loom/annotations/log.jsonl").read_text()
-    assert "loom annotate" in (q / ".loom/sessions" / sid / "run.log").read_text()
+    assert "written as it stops" in (q / ".loom/records/annotations/log.jsonl").read_text()
+    assert "loom annotate" in (q / ".loom/agents/sessions" / sid / "run.log").read_text()
 
 
 def _until(look: Callable[[], Any]) -> Any:

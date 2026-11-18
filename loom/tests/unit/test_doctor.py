@@ -442,13 +442,13 @@ def test_the_permission_files(box: Box) -> None:
     got = item(doctor(box, cwd=q), "permissions")
     assert (got["status"], got["remedy"]) == ("warn", "loom upgrade")
     assert got["detail"] == ".claude/settings.json: not what this loom lets agents run"
-    shutil.rmtree(q / ".loom/ai")
+    shutil.rmtree(q / ".loom/agents/instructions")
     assert item(doctor(box, cwd=q), "permissions")["remedy"] == "loom ai init"
     (q / ".claude" / "settings.json").unlink()
     (q / ".codex" / "rules" / "loom.rules").unlink()
     got = item(doctor(box, cwd=q), "permissions")
-    assert got["status"] == "ok" and got["detail"].startswith("no .loom/ai/")
-    # beside an .loom/ai/ both are due, so a missing one warns and `loom upgrade` writes it
+    assert got["status"] == "ok" and got["detail"].startswith("no .loom/agents/instructions/")
+    # beside an .loom/agents/instructions/ both are due, so a missing one warns and `loom upgrade` writes it
     ok("ai", "init", cwd=q)
     (q / ".codex" / "rules" / "loom.rules").unlink()
     got = item(doctor(box, cwd=q), "permissions")
@@ -521,8 +521,8 @@ def test_the_ai_files_by_upgrades_dry_run(box: Box) -> None:
     q = quilt(box)
     # the agent files as this loom ships them, whatever the committed demo was generated with
     ok("upgrade", cwd=q)
-    versions = q / ".loom/ai" / VERSION_FILE
-    mode = q / ".loom/ai" / "modes" / "quick.md"
+    versions = q / ".loom/agents/instructions" / VERSION_FILE
+    mode = q / ".loom/agents/instructions" / "modes" / "quick.md"
     # shipped by an older loom and never edited: the record holds its hash
     older = "an older quick mode\n"
     mode.write_text(older)
@@ -533,7 +533,7 @@ def test_the_ai_files_by_upgrades_dry_run(box: Box) -> None:
     assert tree(q) == before, "doctor wrote into the quilt"
     assert (got["status"], got["detail"], got["remedy"]) == (
         "warn",
-        "older than this loom: .loom/ai/modes/quick.md",
+        "older than this loom: .loom/agents/instructions/modes/quick.md",
         "loom upgrade (an edited file gets the new version beside it)",
     )
     # edited by the author against what is shipped now: theirs, nothing newer to offer
@@ -544,7 +544,10 @@ def test_the_ai_files_by_upgrades_dry_run(box: Box) -> None:
     record = next(ln for ln in versions.read_text().splitlines() if ln.startswith("quick.md "))
     edit(versions, record, "quick.md 0000")
     got = item(doctor(box, cwd=q), "ai files")
-    assert (got["status"], got["detail"]) == ("warn", "edited, with a newer version shipped: .loom/ai/modes/quick.md")
+    assert (got["status"], got["detail"]) == (
+        "warn",
+        "edited, with a newer version shipped: .loom/agents/instructions/modes/quick.md",
+    )
     ok("upgrade", cwd=q)
     assert item(doctor(box, cwd=q), "ai files")["detail"] == "current, 1 edited"
 
@@ -568,7 +571,7 @@ def test_an_older_macro_block_gets_its_patch(box: Box) -> None:
 
 def test_the_gitignore_lines(box: Box) -> None:
     q = quilt(box)
-    edit(q / ".loom" / ".gitignore", "\nlast-seen.json\n", "\n")
+    edit(q / ".loom" / ".gitignore", "\ncache/\n", "\n")
     got = item(doctor(box, cwd=q), ".gitignore")
     assert (got["status"], got["detail"], got["remedy"]) == (
         "warn",

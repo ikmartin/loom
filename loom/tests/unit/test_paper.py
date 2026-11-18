@@ -82,7 +82,7 @@ def said(r: Result) -> str:
 
 
 def ledger(q: Path) -> list[dict]:
-    path = q / ".loom" / "history" / "ledger.jsonl"
+    path = q / ".loom" / "records" / "history" / "ledger.jsonl"
     return [json.loads(x) for x in path.read_text().splitlines()] if path.exists() else []
 
 
@@ -94,7 +94,7 @@ def test_import_keeps_the_paper_as_received_as_the_landmark_of_step_0001(tmp_pat
     for rel in ("main/main.tex", "main/figures/fig.pdf", "main/refs.bib", "config.toml"):
         assert (q / rel).exists(), rel
     assert not (q / "loom.sty").exists()  # the draft carries loom's macro block instead
-    landmark = (q / ".loom" / "history" / "0001-main" / "main.tex").read_text()
+    landmark = (q / ".loom" / "records" / "history" / "0001-main" / "main.tex").read_text()
     assert "\\input{sections/results}" not in landmark and "\\input{preamble}" not in landmark
     assert "\\usepackage{amsmath}" in landmark and "Beta uses Lemma" in landmark  # both inlined in place
     assert "\\usepackage{loom}" not in landmark and "\\label{pp-" not in landmark  # as received: nothing inserted
@@ -124,7 +124,7 @@ def test_import_drafts_the_working_document_with_ids_and_sets_main(tmp_path: Pat
     assert "\\begin{definition}[Widget]\\label{pp-0002}\\label{def:widget}" in main
     assert "\\section{Results}\\label{pp-0003}" in main and "\\begin{lemma}\\label{pp-0004}" in main
     assert "\\label{lem:a}" in main  # the author's labels stay, as aliases
-    assert "\\label{pp-" not in (q / ".loom" / "history" / "0001-main" / "main.tex").read_text()
+    assert "\\label{pp-" not in (q / ".loom" / "records" / "history" / "0001-main" / "main.tex").read_text()
     assert 'main = "main/main.tex"' in (q / "config.toml").read_text()
     assert "dangling-link" in run("lint", cwd=q).output  # thm:missing was never defined in the paper
 
@@ -220,7 +220,7 @@ def test_import_refuses_line_anchoring_with_the_paper_s_lines_and_fix_anchoring(
     r = refused("import", str(p / "main.tex"), "--yes", cwd=q, code=1, match="line-anchoring")
     assert not (q / "main" / "main.tex").exists() and ledger(q) == []
     ok("import", str(p / "main.tex"), "--yes", "--fix-anchoring", cwd=q)
-    landmark = (q / ".loom" / "history" / "0001-main" / "main.tex").read_text()
+    landmark = (q / ".loom" / "records" / "history" / "0001-main" / "main.tex").read_text()
     assert "\\label{lem:a} Alpha" in landmark  # the paper as received is kept as it is
     lemma = the(enumerate(landmark.splitlines(), 1), lambda il: "\\begin{lemma}" in il[1], "\\begin{lemma} line")[0]
     assert f"line {lemma}: \\begin{{lemma}}" in r.output
@@ -249,7 +249,7 @@ def test_import_outside_tree_warning_and_in_place(tmp_path: Path) -> None:
     assert "loom:import-outside-tree" in r.output
     assert (p / "config.toml").exists() and (p / "main" / "main.tex").is_file()
     assert (p / "main.tex").read_text().startswith("\\documentclass")  # the original still there, unmodified
-    landmark = (p / ".loom" / "history" / "0001-main" / "main.tex").read_text()
+    landmark = (p / ".loom" / "records" / "history" / "0001-main" / "main.tex").read_text()
     assert "\\input{../elsewhere}" in landmark  # left as written; loom copied nothing
     assert "\\input{../elsewhere}" in (p / "main" / "main.tex").read_text()
 
@@ -346,7 +346,7 @@ def test_atomize_requires_dest_moves_nodes_and_identity(tmp_path: Path) -> None:
     assert any(f.endswith(".proof.tex") for f in files), files  # the deferred proof of the theorem
 
     # the source is superseded, not edited: it defines nothing, and no id is defined twice
-    line = json.loads((q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
+    line = json.loads((q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
     assert line["action"] == "atomize" and line["superseded"] == ["main/main.tex"]
     lint = run("lint", cwd=q)
     assert "duplicate-id" not in lint.output and "loom:superseded-file" in lint.output
@@ -381,10 +381,10 @@ def test_atomize_retire_moves_the_source(tmp_path: Path) -> None:
     q = imported(tmp_path)
     ok("atomize", "main/main.tex", "--to", "main/spine.tex", "--retire", cwd=q)
     assert not (q / "main" / "main.tex").exists()
-    assert (q / ".loom/retired" / "main" / "main.tex").read_text().count("\\begin{definition}") == 1
-    line = json.loads((q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
-    assert line["retired"] == [".loom/retired/main/main.tex"] and line["superseded"] == []
-    assert "duplicate-id" not in run("lint", cwd=q).output  # .loom/retired/ is not scanned
+    assert (q / ".loom/records/retired" / "main" / "main.tex").read_text().count("\\begin{definition}") == 1
+    line = json.loads((q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
+    assert line["retired"] == [".loom/records/retired/main/main.tex"] and line["superseded"] == []
+    assert "duplicate-id" not in run("lint", cwd=q).output  # .loom/records/retired/ is not scanned
 
 
 def test_an_acceptance_follows_its_document_through_atomize(tmp_path: Path) -> None:

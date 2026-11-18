@@ -24,7 +24,7 @@ def look(q: Path, *more: str, who: str = AGENT, env: dict[str, str] | None = Non
 
 
 def last_id(q: Path) -> str:
-    return str(json.loads((q / ".loom/annotations" / "log.jsonl").read_text().splitlines()[-1])["id"])
+    return str(json.loads((q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines()[-1])["id"])
 
 
 @pytest.fixture
@@ -209,8 +209,8 @@ def test_the_marker_is_neither_committed_nor_watched(q: Path) -> None:
     from loom.render.watch import snapshot
 
     look(q)
-    assert "since/" in LOOM_LINES
-    assert "\nsince/\n" in (q / ".loom" / ".gitignore").read_text()
+    assert marker_path(q, AGENT).relative_to(q).as_posix().startswith(".loom/local/") and "local/" in LOOM_LINES
+    assert "\nlocal/\n" in (q / ".loom" / ".gitignore").read_text()
     assert marker_path(q, AGENT) not in snapshot(q), "a look would rebuild the site"
 
 
@@ -242,11 +242,11 @@ def test_a_mark_on_a_pdf_page_is_reported_with_where_it_stands_and_a_crop(q: Pat
         False,
         None,
     )
-    assert row["rects"] == [[70.0, 117.0, 330.0, 133.0]] and row["crop"].startswith(".loom/build/crops/")
+    assert row["rects"] == [[70.0, 117.0, 330.0, 133.0]] and row["crop"].startswith(".loom/cache/crops/")
     assert (q / row["crop"]).is_file()
     ok("annotate", "notes/paper.pdf", "And this?", "--page", "1", "--quote", "the median polytope", "--as", WHO, cwd=q)
     text = ok("since", "--as", AGENT, cwd=q).stdout
-    assert "notes/paper.pdf p.1" in text and "      crop: .loom/build/crops/" in text
+    assert "notes/paper.pdf p.1" in text and "      crop: .loom/cache/crops/" in text
 
 
 def test_a_session_looks_first_from_where_its_name_last_looked_and_then_on_its_own(q: Path) -> None:

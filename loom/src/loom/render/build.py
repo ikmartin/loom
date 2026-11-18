@@ -16,7 +16,7 @@ from typing import Any
 from urllib.parse import quote
 
 from loom.history.ledger import load_history
-from loom.paths import BUILD, document_build, document_name
+from loom.paths import BLOCKS, SITE, document_build, document_name
 from loom.records.lastseen import freeze_moved
 from loom.records.store import Records
 from loom.refs.pages import storage_root, store_home
@@ -141,7 +141,7 @@ def _attach_spans(root: Path, manifest: dict[str, Any], files: dict[str, Any]) -
                 ]
             ).encode()
         ).hexdigest()[:32]
-        kept = root / BUILD / "cache" / "spans" / f"{key}.json"
+        kept = root / BLOCKS / "spans" / f"{key}.json"
         if kept.is_file():
             body = kept.read_text(encoding="utf-8")
             if body:
@@ -369,7 +369,7 @@ def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> set[str]:
             stamp = None
         known = _TRANSCRIPTS.get(inbox)
         if stamp is not None and known is not None and known[0] == stamp:
-            if all((root / BUILD / rel).is_file() for rel in known[1]):
+            if all((root / SITE / rel).is_file() for rel in known[1]):
                 kept.update(known[1])
                 continue
         made = {
@@ -441,8 +441,8 @@ def _build(
     tex: bool,
 ) -> BuildReport:
     root = quilt.root
-    build_dir = root / BUILD
-    cache_dir = build_dir / "cache"
+    build_dir = root / SITE
+    cache_dir = root / BLOCKS
 
     def told(stage: str, item: str = "", n: int = 0, total: int | None = None) -> None:
         if progress is not None:

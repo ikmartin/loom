@@ -40,8 +40,8 @@ test('a quilt setting waits for Save, and Save writes config.toml with its comme
 });
 
 test('Settings › Annotations writes the types file whole: a renamed type keeps its id, and a deleted one leaves its annotations looking as they did', async ({ page, served }) => {
-	const file = join(served.root, '.loom/annotation-types.toml');
-	const manifest = () => JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8'));
+	const file = join(served.root, '.loom/records/annotation-types.toml');
+	const manifest = () => JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
 	const question = (Object.values(manifest().annotations) as { id: string; type: string | null; look: unknown; in_reply_to: string | null }[]).find((a) => a.type === 'question' && !a.in_reply_to)!;
 	await page.goto('/node/sy-0002');
 	const mark = page.locator(`.fragment mark.annotation[data-annotation~="${question.id}"]`).first();

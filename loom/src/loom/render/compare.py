@@ -1,6 +1,6 @@
 """Compare's texts: the differing pairs of two items, rendered with their changed words when a viewer asks, never at build.
 
-A pair is two nodes with one plain key (`zk-0001` and `zk-0001-ai`, or a key in a landmark and today). Rendering is cached by content under `.loom/build/compare/`, so a pair renders once however many comparisons ask for it.
+A pair is two nodes with one plain key (`zk-0001` and `zk-0001-ai`, or a key in a landmark and today). Rendering is cached by content under `.loom/cache/site/compare/`, so a pair renders once however many comparisons ask for it.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import Any
 
 from loom.history.ledger import History, load_history
 from loom.history.versions import read_version
-from loom.paths import BUILD
+from loom.paths import BLOCKS, SITE
 from loom.render.canon import CanonDoc, _preamble_for, load_canon
 from loom.render.fragments import FragmentRenderer, RenderPlan
 from loom.render.publish import write_atomic
@@ -142,7 +142,7 @@ def _cached(
         h.update(part.encode("utf-8", errors="replace"))
         h.update(b"\0")
     rel = f"{CACHE}/{h.hexdigest()[:32]}.html"
-    path = root / BUILD / rel
+    path = root / SITE / rel
     if not path.is_file():
         later = _render(renderer, result, context, text, preamble, spans)
         renderer.previews.on_made(later, lambda html: write_atomic(path, html))
@@ -177,8 +177,8 @@ def compare(result: ScanResult, left: str, right: str) -> dict[str, Any]:
         result=result,
         numbers={m: read_numbers(root, m) for m in result.masters},
         cite_labels={m: read_cite_labels(root, m) for m in result.masters},
-        cache=root / BUILD / "cache",
-        svg_out=root / BUILD / "svg",
+        cache=root / BLOCKS,
+        svg_out=root / SITE / "svg",
     )
     renderer = FragmentRenderer(plan)
     pairs: list[dict[str, Any]] = []

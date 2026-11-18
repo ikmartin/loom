@@ -30,7 +30,7 @@ test('the menu lists the live text and the landmarks newest first, each with its
 
 test('a version kept at an act is listed with the rest, named by the act', async ({ page }) => {
 	await serve(page, (m) => {
-		m.canon.push({ ...structuredClone(m.canon[1]), path: '.loom/history/0007-main-before-adopt-aidoc/main-before-adopt-aidoc.tex', stem: 'main-before-adopt-aidoc', name: 'main-before-adopt-aidoc', step: '0007', kept_for: 'adopt', message: 'Before taking changes from the copy “aidoc”' });
+		m.canon.push({ ...structuredClone(m.canon[1]), path: '.loom/records/history/0007-main-before-adopt-aidoc/main-before-adopt-aidoc.tex', stem: 'main-before-adopt-aidoc', name: 'main-before-adopt-aidoc', step: '0007', kept_for: 'adopt', message: 'Before taking changes from the copy “aidoc”' });
 	});
 	await page.goto('/master/drafting/main');
 	await history(page);
@@ -189,7 +189,7 @@ test('Restore on a version asks first, then puts it back and turns to the live t
 	expect(posted).toBeNull();
 	await pane(page, 0).getByTestId('version-restore-go').click();
 	await expect(page).toHaveURL(/\/master\/drafting\/main/);
-	expect(posted).toMatchObject({ document: 'drafting/main.tex', version: '.loom/history/0003-widgets-v2/widgets-v2.tex' });
+	expect(posted).toMatchObject({ document: 'drafting/main.tex', version: '.loom/records/history/0003-widgets-v2/widgets-v2.tex' });
 	// the answer stays under the live text's toolbar until closed
 	await expect(pane(page, 0).getByTestId('version-said')).toContainText('Put main.tex back as “widgets-v2” holds it');
 	await pane(page, 0).getByTestId('strip-close').click();

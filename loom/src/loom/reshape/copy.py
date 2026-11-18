@@ -1,4 +1,4 @@
-"""The copy across the border: a person's document made flat, with every label it defines derived, for an agent to edit in `.loom/copies/`."""
+"""The copy across the border: a person's document made flat, with every label it defines derived, for an agent to edit in `.loom/agents/copies/`."""
 
 from __future__ import annotations
 

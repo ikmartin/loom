@@ -1,5 +1,5 @@
 // Changes and acceptance under a running `loom serve`: in Review › Your Changes an edit is kept or discarded as a change of words, and a block it is in still waits to be accepted, which Accept records and which keeps its edit too.
-import { expect, test } from '../served';
+import { compileFolder, expect, test } from '../served';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -10,7 +10,7 @@ test('an edit made in a file is a change of words: Keep leaves its block waiting
 	// a change is cut by words: the card names the words it puts in
 	const card = (word: string) => page.getByTestId('change-card').filter({ has: page.locator('.ins', { hasText: word }) });
 	// a card goes at once; the publisher has acted once its manifest no longer lists the change
-	const listed = (word: string) => (JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8')).changes ?? []).some((c: { new: string }) => c.new === word);
+	const listed = (word: string) => (JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8')).changes ?? []).some((c: { new: string }) => c.new === word);
 	edit('Every orbit', 'Each orbit');
 	await page.goto('/review');
 	await expect(card('Each')).toHaveCount(1);
@@ -32,8 +32,8 @@ test('an edit made in a file is a change of words: Keep leaves its block waiting
 	edit('Each orbit', 'Any orbit');
 	await expect(card('Any')).toHaveCount(1);
 	// a PDF newer than every source is loom's sign the document compiles, so no TeX run happens here
-	mkdirSync(join(served.root, '.loom/build/drafting/main'), { recursive: true });
-	writeFileSync(join(served.root, '.loom/build/drafting/main/main.pdf'), '%PDF-1.4\n');
+	mkdirSync(compileFolder(served.root, 'drafting/main.tex'), { recursive: true });
+	writeFileSync(join(compileFolder(served.root, 'drafting/main.tex'), 'main.pdf'), '%PDF-1.4\n');
 	await page.locator('[data-testid="review-row"][data-key="sy-0001"]').getByTestId('review-pick').check();
 	await row.getByTestId('review-pick').check();
 	await page.getByTestId('review-accept-picked').click();
@@ -41,6 +41,6 @@ test('an edit made in a file is a change of words: Keep leaves its block waiting
 	await expect(page.locator('[data-testid="review-group"][data-group="changed"] [data-key="sy-0002"]')).toHaveCount(0);
 	await expect(card('Any')).toHaveCount(0);
 	// the agent's suggestion on the block still waits; the edit made in the file does not
-	const edits = () => (JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8')).changes ?? []).filter((c: { kind: string; path: string }) => c.kind === 'edit' && c.path === 'drafting/nodes/sy-0002.tex');
+	const edits = () => (JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8')).changes ?? []).filter((c: { kind: string; path: string }) => c.kind === 'edit' && c.path === 'drafting/nodes/sy-0002.tex');
 	await expect.poll(() => edits().length).toBe(0);
 });

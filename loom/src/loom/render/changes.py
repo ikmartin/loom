@@ -30,7 +30,7 @@ _POINT = '<span class="review-change-point" aria-label="edit point"></span>'
 
 
 def preview_html(r: FragmentRenderer, group: Sequence[Later]) -> list[str]:
-    """Each preview of `group`, which share a document and a preamble, made in one batch: from `.loom/build/cache/previews/` where made before, else by TeX."""
+    """Each preview of `group`, which share a document and a preamble, made in one batch: from `.loom/cache/blocks/previews/` where made before, else by TeX."""
     from loom.render.fragments import _preview_owner
     from loom.render.snippets import render_snippets
 

@@ -69,7 +69,7 @@ def copy_of(source: Path | None, home: Path) -> Path:
 
 def a_result(q: Path) -> tuple[str, str]:
     """An environment of the quilt's own, and the file that defines it, from the published manifest."""
-    m = json.loads((q / ".loom" / "build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom" / "cache" / "site" / "manifest.json").read_text())
     for node in m["nodes"].values():
         key, file = node.get("id"), node.get("file")
         if node.get("kind") != "environment" or node.get("external") or node.get("digest") or not key or not file:
@@ -211,9 +211,9 @@ def main() -> None:
     try:
         q = copy_of(args.quilt.resolve() if args.quilt else None, home)
         if "cold" not in args.skip:
-            shutil.rmtree(q / ".loom" / "build", ignore_errors=True)
+            shutil.rmtree(q / ".loom" / "cache", ignore_errors=True)
             rows["cold build"] = loom(q, "build")
-        elif not (q / ".loom" / "build" / "manifest.json").is_file():
+        elif not (q / ".loom" / "cache" / "site" / "manifest.json").is_file():
             loom(q, "build")
         if "cached" not in args.skip:
             rows["cached build"] = loom(q, "build")

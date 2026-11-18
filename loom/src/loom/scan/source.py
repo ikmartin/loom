@@ -1,6 +1,6 @@
 """File discovery and decoding.
 
-Every .tex under the root outside `.loom/` and tool directories is a source file, and so is every digest, which `.loom/digests/` holds. Decoding tries UTF-8, then Mac Roman, then Latin-1; the fallback is reported by the caller as loom:non-utf8-source. Comments are blanked to spaces so every later stage sees the same offsets as the raw text.
+Every .tex under the root outside `.loom/` and tool directories is a source file, and so is every digest, which `.loom/library/` holds. Decoding tries UTF-8, then Mac Roman, then Latin-1; the fallback is reported by the caller as loom:non-utf8-source. Comments are blanked to spaces so every later stage sees the same offsets as the raw text.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from loom.paths import COPIES, DIGESTS, LOOM, STORAGE
+from loom.paths import COPIES, LIBRARY, LOOM, STORAGE
 from loom.scan.memo import Memo
 from loom.scan.model import SourceFile
 
@@ -22,7 +22,7 @@ _VERBATIM_RE = re.compile(r"\\begin\{(verbatim\*?|lstlisting|comment|filecontent
 def discover_files(root: Path, skip_top: tuple[str, ...] = ()) -> list[str]:
     """Quilt-relative posix paths of every .tex file under root, sorted: every one outside `SKIP_DIRS` and the directories in `skip_top` (the history directory and the sync directory, given relative to root), every digest, and every agent copy.
 
-    Digests are read from `.loom/digests/` on purpose, outside the store: a fetched e-print under the store is a whole paper carrying its own labels (DR-108, DR-192). Agent copies are read from `.loom/copies/`, where `loom draft --ai` makes them.
+    Digests are read from `.loom/library/` on purpose, outside the store: a fetched e-print under the store is a whole paper carrying its own labels (DR-108, DR-192). Agent copies are read from `.loom/agents/copies/`, where `loom draft --ai` makes them.
     """
     found: list[str] = []
     for path in root.rglob("*.tex"):
@@ -32,7 +32,7 @@ def discover_files(root: Path, skip_top: tuple[str, ...] = ()) -> list[str]:
         if len(rel.parts) > 1 and rel.as_posix().startswith(tuple(f"{d.strip('/')}/" for d in skip_top)):
             continue
         found.append(rel.as_posix())
-    digests = root / DIGESTS
+    digests = root / LIBRARY
     if digests.is_dir():
         found += [
             p.relative_to(root).as_posix() for p in digests.rglob("*.tex") if not p.is_relative_to(root / STORAGE)

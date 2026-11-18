@@ -33,8 +33,8 @@ def test_every_listing_follows_the_one_function(tmp_path: Path, monkeypatch: pyt
     assert [p.name for p in prompts(q)] == ["quick", "referee"]
     assert re.findall(r"^- \*\*(\w+)\*\*", mode_index(q), re.M) == ["quick", "referee"]
     assert sorted(rel for rel in layout.tracked_docs(q) if "/modes/" in rel) == [
-        ".loom/ai/modes/quick.md",
-        ".loom/ai/modes/referee.md",
+        ".loom/agents/instructions/modes/quick.md",
+        ".loom/agents/instructions/modes/referee.md",
     ]
     assert {m for named in modes_using(q).values() for m in named} <= {"quick", "referee"}
     refused("ai", "mode", "audit", cwd=q, code=2, match="the modes are quick, referee")

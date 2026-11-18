@@ -300,7 +300,7 @@ def test_init_takes_a_clone_of_the_workspace(tmp_path: Path) -> None:
     subprocess.check_call(["git", "init", "-q", "--bare", str(empty)])
     hollow = cloned(tmp_path, empty, "hollow")
     refused("sync", "init", str(hollow), cwd=root, code=2, match="has no commits; create the project there first")
-    assert not (root / ".loom/source-sync.json").exists()
+    assert not (root / ".loom/records/source-sync.json").exists()
     assert "Overleaf project" in ok("sync", "init", "--help").output
 
 
@@ -311,12 +311,12 @@ def test_init_refuses_the_quilt_s_repository_and_loom_s_own_directories(tmp_path
     run(root, "worktree", "add", "-q", "-b", "side", str(tmp_path / "side"))
     refused("sync", "init", str(tmp_path / "side"), cwd=root, code=2, match="worktree of this quilt's own repository")
     bare = overleaf(tmp_path)
-    for inside in (".loom/overleaf", ".loom/build/overleaf"):
+    for inside in (".loom/overleaf", ".loom/cache/overleaf"):
         refused("sync", "init", str(cloned(root, bare, inside)), cwd=root, code=2, match="is inside .loom/")
     config = root / "config.toml"
     config.write_text(config.read_text().replace("[quilt]\n", '[quilt]\nhistory = "hist"\n', 1))
     refused("sync", "init", str(cloned(root, bare, "hist/overleaf")), cwd=root, code=2, match="is inside hist/")
-    assert not (root / ".loom/source-sync.json").exists()
+    assert not (root / ".loom/records/source-sync.json").exists()
 
 
 def test_a_missing_clone_or_an_old_record_is_refused_with_the_command_that_pairs_again(
@@ -327,7 +327,7 @@ def test_a_missing_clone_or_an_old_record_is_refused_with_the_command_that_pairs
     root, _ = paired(tmp_path)
     shutil.rmtree(tmp_path / "project")
     refused("sync", "fetch", cwd=root, code=2, match="name it again with `loom sync init DIR`")
-    (root / ".loom/source-sync.json").write_text(
+    (root / ".loom/records/source-sync.json").write_text(
         '{"remote":"origin","branch":"main","master":"drafting/main.tex","integrated":"abc"}\n', encoding="utf-8"
     )
     with pytest.raises(SyncError, match="pair again with `loom sync init DIR`"):
@@ -335,8 +335,8 @@ def test_a_missing_clone_or_an_old_record_is_refused_with_the_command_that_pairs
 
 
 def test_a_record_without_documents_selects_the_main_document(tmp_path: Path) -> None:
-    (tmp_path / ".loom").mkdir()
-    (tmp_path / ".loom/source-sync.json").write_text(
+    (tmp_path / ".loom/records").mkdir(parents=True)
+    (tmp_path / ".loom/records/source-sync.json").write_text(
         '{"directory":"project","remote":"origin","url":"overleaf.git","branch":"master","master":"drafting/main.tex","integrated":"abc"}\n',
         encoding="utf-8",
     )
@@ -482,7 +482,7 @@ def test_a_failure_while_incorporating_restores_every_file(
     quilt = load_quilt(root)
     edit(colleague(tmp_path, bare), "edit", {"main.tex": SOURCE.replace("zk-0001}A", "zk-0001}B")})
     state = fetch(quilt, SyncState.read(root))
-    record = (root / ".loom/source-sync.json").read_bytes()
+    record = (root / ".loom/records/source-sync.json").read_bytes()
     landmarks = len(load_history(quilt.history_dir).landmarks())
 
     def broken(*_args: object) -> None:
@@ -492,7 +492,7 @@ def test_a_failure_while_incorporating_restores_every_file(
     with pytest.raises(RuntimeError, match="interrupted"):
         sync.incorporate(quilt, state)
     assert (root / "drafting/main.tex").read_text() == SOURCE
-    assert (root / ".loom/source-sync.json").read_bytes() == record
+    assert (root / ".loom/records/source-sync.json").read_bytes() == record
     assert len(load_history(quilt.history_dir).landmarks()) == landmarks
 
 
@@ -551,7 +551,7 @@ def renamed_pair(tmp_path: Path) -> tuple[Path, Path]:
 def moves(root: Path) -> list[dict]:
     import json
 
-    p = root / ".loom" / "history" / "ledger.jsonl"
+    p = root / ".loom" / "records" / "history" / "ledger.jsonl"
     lines = [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.is_file() else []
     return [x for x in lines if x["action"] == "move"]
 
@@ -660,7 +660,7 @@ def test_sync_init_refuses_the_quilt_s_own_upstream_however_it_is_spelled(tmp_pa
         for dry in ((), ("--dry-run",)):
             r = refused("sync", "init", str(copy), *dry, cwd=root, code=2, match="origin")
             assert "own" in r.stderr and r.stdout == "", r.output
-    assert not (root / ".loom/source-sync.json").exists() and run(upstream, "rev-parse", "main") == before
+    assert not (root / ".loom/records/source-sync.json").exists() and run(upstream, "rev-parse", "main") == before
 
 
 def test_publish_push_refuses_a_workspace_that_holds_a_quilt(tmp_path: Path, compiled: list[str]) -> None:

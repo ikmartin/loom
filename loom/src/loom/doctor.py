@@ -598,7 +598,7 @@ def check_permissions(root: Path) -> Item:
         f"{rel}: loom leaves it alone, since {why}, so what {label.get(rel, 'the app')} reads there is not loom's table; make it a file of the quilt's own, and loom upgrade writes it"
         for rel, why in held.items()
     ]
-    # beside an .loom/ai/, `loom upgrade` writes both; without one, `loom ai init` does
+    # beside an .loom/agents/instructions/, `loom upgrade` writes both; without one, `loom ai init` does
     return Item("permissions", WARN, QUILT, "; ".join(said), "loom upgrade" if layer else "loom ai init")
 
 
@@ -654,7 +654,7 @@ def check_mcp(root: Path) -> list[Item]:
 
 
 def check_ai_files(root: Path) -> Item:
-    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above, and the skills, made whole from the modes at every upgrade, are no file of the author's to fall behind. A `.loom/ai` that is not a directory of the quilt's own (`blocker`) warns, since loom writes nothing there."""
+    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above, and the skills, made whole from the modes at every upgrade, are no file of the author's to fall behind. A `.loom/agents/instructions` that is not a directory of the quilt's own (`blocker`) warns, since loom writes nothing there."""
     from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, blocker, read_versions, sha, tracked_docs, upgrade_layer
     from loom.ai.skills import is_skill
 

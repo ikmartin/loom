@@ -1,4 +1,4 @@
-"""`loom.paths` owns every path loom uses inside a quilt: no other module spells one out, and `[quilt] history` is honoured wherever the history is reached."""
+"""`loom.paths` owns every path loom uses inside a quilt: each lies in the folder of its kind, no other module spells one out, and `[quilt] history` is honoured wherever the history is reached."""
 
 from __future__ import annotations
 
@@ -15,10 +15,38 @@ from tests.helpers import ok
 from tests.unit._quilts import demo
 
 SRC = Path(loom.__file__).parent
-#: Directories loom names; a path built from one of these as a literal belongs in `loom.paths`.
-DIRS = ("build", ".loom", "digests", "annotations", "ai", "nodes", "retired")
+#: Directories loom names, and one it named before; a path built from one of these as a literal belongs in `loom.paths`.
+DIRS = (
+    "build",
+    ".loom",
+    "records",
+    "library",
+    "agents",
+    "local",
+    "cache",
+    "digests",
+    "annotations",
+    "ai",
+    "nodes",
+    "retired",
+)
 #: The prefixes a literal quilt path starts with.
-PREFIXES = tuple(f"{d}/" for d in ("build", ".loom", "digests", "annotations", "ai", "retired"))
+PREFIXES = tuple(
+    f"{d}/"
+    for d in (
+        "build",
+        ".loom",
+        "records",
+        "library",
+        "agents",
+        "local",
+        "cache",
+        "digests",
+        "annotations",
+        "ai",
+        "retired",
+    )
+)
 #: loom's record files, by name.
 RECORDS = {
     "state.toml",
@@ -29,12 +57,19 @@ RECORDS = {
     "adoption-decisions.json",
     "source-sync.json",
     "last-seen.json",
+    "writes.jsonl",
+    "compiles.json",
 }
 #: Literals that look like quilt paths and are not, each with its reason, by file and the stripped source line.
 ALLOWED = {
     # an output directory inside a temporary stage, not the quilt's build output
     ("sync.py", 'stage / "build" / f"{index}-{Path(projected).stem}",'),
     ("section_drafts.py", 'stage, base, under(base, "paper.tex"), stage / "build", result.quilt.config.engine'),
+    # the viewer's route to a work, not a folder
+    ("cli/library/agent.py", 'link = open_url(result.quilt.root, f"library/{citekey}?page={page_no}&{locator}")'),
+    ("cli/review.py", 'where = open_url(result.quilt.root, f"library/{citekey}?page={page}&annot={ann_id}")'),
+    # a module of loom's own source, not of a quilt
+    ("render/keys.py", 'RENDERING = ("render", "scan", "tex", "records/selectors.py")'),
 }
 
 
@@ -69,6 +104,48 @@ def _offences(path: Path) -> list[tuple[int, str]]:
     return found
 
 
+def _named() -> dict[str, str]:
+    """Every quilt path `loom.paths` names under `.loom/`, by constant."""
+    return {
+        k: v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str) and v.startswith(f"{paths.LOOM}/")
+    }
+
+
+def test_every_path_lies_in_the_folder_of_one_kind() -> None:
+    """Each path under `.loom/` is in exactly one kind's folder, or is the layout's number or loom's ignore file: what a folder holds says what it is."""
+    kinds = set(paths.KINDS)
+    loose = []
+    for name, p in _named().items():
+        if p in kinds or p in (paths.FORMAT, paths.LOOM_GITIGNORE):
+            continue
+        holding = [k for k in kinds if p.startswith(f"{k}/")]
+        if len(holding) != 1:
+            loose.append(f"{name} = {p!r}: in {holding or 'no kind'}")
+    assert not loose, "\n".join(loose)
+    assert paths.document_build("paper/main.tex").startswith(f"{paths.TEX}/") and paths.TEX.startswith(
+        f"{paths.CACHE}/"
+    )
+    assert paths.scratch("s-1").startswith(f"{paths.SCRATCH}/") and paths.SCRATCH.startswith(f"{paths.AGENTS}/")
+
+
+def test_the_ignore_file_names_the_three_folders_that_stay_on_one_machine() -> None:
+    """`.loom/.gitignore` is this machine's state, what loom derives and the agents' scratch, each by its folder, and nothing else."""
+    from loom.gitignore import LOOM_IGNORE, LOOM_LINES, OWN
+
+    inside = lambda p: p.removeprefix(f"{paths.LOOM}/") + "/"  # noqa: E731
+    assert LOOM_LINES == (inside(paths.LOCAL), inside(paths.CACHE), inside(paths.SCRATCH))
+    rules = [line for line in LOOM_IGNORE.splitlines() if line and not line.startswith("#")]
+    assert rules == list(LOOM_LINES) and LOOM_IGNORE.endswith(f"{OWN}\n")
+
+
+def test_a_compile_folder_is_named_by_the_document_and_kept_apart_by_its_path() -> None:
+    """Two documents of one file name compile into two folders, each found by its name."""
+    a, b = paths.document_build("paper/main.tex"), paths.document_build("talk/main.tex")
+    assert a != b and a.rsplit("/", 1)[1].startswith("main-") and b.rsplit("/", 1)[1].startswith("main-")
+    assert paths.document_build("paper/main.tex") == paths.document_build("paper/main")
+    assert paths.document_pdf_address("paper/main.tex") == f"{paths.TEX_ADDRESS}/{a.rsplit('/', 1)[1]}/main.pdf"
+
+
 def test_no_module_but_paths_spells_out_a_quilt_path() -> None:
     """Every path loom uses inside a quilt is named once, in `loom.paths`, so moving one is a change in one place."""
     bad = []
@@ -97,14 +174,15 @@ def test_the_history_setting_is_honoured_wherever_the_history_is_reached(tmp_pat
     user.write_text('[quilt]\nhistory = "hist"\n')
     ok("init", str(tmp_path / "fresh"), "--prefix", "zz", "--yes")
     assert (tmp_path / "fresh" / "hist" / "ledger.jsonl").is_file()
-    assert not (tmp_path / "fresh" / ".loom" / "history").exists()
+    assert not (tmp_path / "fresh" / ".loom" / "records" / "history").exists()
 
 
 def test_every_path_under_loom_is_an_agents_place_or_protected() -> None:
     """Every `.loom/` path `loom.paths` names is either where an agent writes, a file of loom's an agent may edit, or in loom's own table, so a record added later is protected until someone decides otherwise: Claude Code's denies name them one by one, since a deny on `.loom/` would beat the places' allows."""
     from loom.scan.quilt import QuiltConfig
 
-    named = {v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str) and v.startswith(f"{paths.LOOM}/")}
+    # a kind's folder holds places of several sorts, each judged below; the folder itself is no place
+    named = set(_named().values()) - {paths.RECORDS, paths.AGENTS}
     under = lambda rel, dirs: any(rel == d or rel.startswith(f"{d}/") for d in dirs)  # noqa: E731
     protected = (*LOOM_DIRS, paths.HISTORY)
     loose = sorted(

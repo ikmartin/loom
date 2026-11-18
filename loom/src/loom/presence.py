@@ -1,4 +1,4 @@
-"""Who is connected: a record per `loom mcp` process at `.loom/live/<pid>.json`, held under a lock while its process runs, and the list of those alive.
+"""Who is connected: a record per `loom mcp` process at `.loom/local/live/<pid>.json`, held under a lock while its process runs, and the list of those alive.
 
 The record's shape is `docs/specs/write-api.md` §1's. The lock is the proof of life: a reader that can take it knows no process holds the record, whatever its pid names now, so a server killed outright, a record copied with a quilt and a reused pid all read as gone, and the reader deletes the record. Nothing here is committed or read by a build; nothing here may stop an agent's server, so a record that cannot be written is left unwritten.
 """
@@ -38,7 +38,7 @@ def record_path(root: Path, pid: int) -> Path:
 
 
 def _place(root: Path, *, make: bool = False) -> Path | None:
-    """`.loom/live/` when it is a directory and not a link, made with `make` where there is none; None otherwise, so nothing is read or written through a link a copied quilt carries."""
+    """`.loom/local/live/` when it is a directory and not a link, made with `make` where there is none; None otherwise, so nothing is read or written through a link a copied quilt carries."""
     where = root / LIVE
     try:
         if make and not os.path.lexists(where):
@@ -179,7 +179,7 @@ def live(root: Path) -> list[dict[str, Any]]:
     Returns
     -------
     list of dict
-        Each record as its server wrote it (`docs/specs/write-api.md` §1). Only a regular file named for a pid in ASCII digits (`NAME`) is opened, in a `.loom/live/` that is no link; anything else there is left alone. One that does not parse, whose `pid` is not its file's name, or whose lock cannot be tried is left where it is and not listed, and no entry stops the look at the rest.
+        Each record as its server wrote it (`docs/specs/write-api.md` §1). Only a regular file named for a pid in ASCII digits (`NAME`) is opened, in a `.loom/local/live/` that is no link; anything else there is left alone. One that does not parse, whose `pid` is not its file's name, or whose lock cannot be tried is left where it is and not listed, and no entry stops the look at the rest.
     """
     where = _place(root)
     if where is None:

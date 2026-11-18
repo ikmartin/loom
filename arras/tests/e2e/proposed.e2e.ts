@@ -2,7 +2,7 @@
 import { expect, test } from '@playwright/test';
 import { manifest, serve } from '../manifest';
 
-const COPY = '.loom/copies/aidoc.tex';
+const COPY = '.loom/agents/copies/aidoc.tex';
 // the fixture's two open suggested edits: one on sy-0002, the newer, and one on sy-0004 answering an annotation
 const TEXT = 'e-2026-09-17-zwvx4m';
 const ANSWERING = 'e-2026-09-16-r2hw0m';

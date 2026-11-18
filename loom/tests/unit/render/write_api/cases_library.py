@@ -31,7 +31,7 @@ def proposed(serve: Serve, tmp_path: Path) -> tuple[ServeSession, Path, str]:
 
 def result_state(q: Path, node: str) -> str:
     ck = node.split("-", 1)[0]
-    recs = json.loads((q / ".loom/digests" / f"{ck}.results.json").read_text())["results"]
+    recs = json.loads((q / ".loom/library" / f"{ck}.results.json").read_text())["results"]
     return str(the(recs, lambda r: r["id"] == node, node)["state"])
 
 
@@ -163,7 +163,7 @@ def _library_add(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
     said = succeeds(s, "library-add", {"text": ENTRY})
     assert said["citekey"] == "Ost18" and said["job"] is None
-    assert "loom-added" in (q / ".loom" / "digests" / "bibliography.bib").read_text(encoding="utf-8")
+    assert "loom-added" in (q / ".loom" / "library" / "bibliography.bib").read_text(encoding="utf-8")
     manifest = json.loads(get(s.url + "build/manifest.json")[2])
     assert manifest["references"]["Ost18"]["added"]["when"].endswith("Z")
     # with fetch, a run is queued on the new work
@@ -182,7 +182,7 @@ def _library_upload(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
         {"name": "pullbacks.pdf", "data": _fake_pdf("Virtual pull-backs", "Cristina Manolache", "arXiv:0805.2065v2")},
     )
     assert said["best"] == "Man12", said
-    assert (q / ".loom" / "incoming" / said["upload"] / "pullbacks.pdf").is_file()
+    assert (q / ".loom" / "local" / "incoming" / said["upload"] / "pullbacks.pdf").is_file()
     # one that shows no work in the library is offered an entry from its own pages
     other = succeeds(
         s,
@@ -240,8 +240,8 @@ def _library_file(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     refuses(s, "library-file", {"upload": other["upload"], "citekey": "Nobody"}, 404, "no-such-work", "no work Nobody")
     named = succeeds(s, "library-file", {"upload": other["upload"], "citekey": "Calloway14"})
     assert named["filed"] is True and named["sibling"] == "Calloway14-v2" and "does not show it is" in named["note"]
-    # filed, it waits in `.loom/incoming/` no longer
-    assert not (q / ".loom" / "incoming" / other["upload"]).exists()
+    # filed, it waits in `.loom/local/incoming/` no longer
+    assert not (q / ".loom" / "local" / "incoming" / other["upload"]).exists()
     refuses(s, "library-file", {"upload": "0" * 64, "citekey": "Man12"}, 404, "no-such-upload", "no PDF was dropped")
 
 
@@ -294,7 +294,7 @@ def _library_files(q: Path) -> dict[str, bytes]:
     """Every file of the library's records, its store and its drops, with its bytes."""
     return {
         p.relative_to(q).as_posix(): p.read_bytes()
-        for d in (q / ".loom" / "digests", q / ".loom" / "incoming")
+        for d in (q / ".loom" / "library", q / ".loom" / "local" / "incoming")
         if d.is_dir()
         for p in sorted(d.rglob("*"))
         if p.is_file()
@@ -345,7 +345,7 @@ def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     data = ("%PDF-1.4\n%FAKE-LOOM\n%%Pages: 1\nGadget towers\nA. Halberd\n" + "padding\n" * 300_000).encode()
     status, said = _stream(s, "Halberd - 2021 - Gadget towers.pdf", data)
     assert status == 200 and said["size"] == len(data) and said["name"] == "Halberd - 2021 - Gadget towers.pdf", said
-    drop = q / ".loom" / "incoming" / said["incoming"]
+    drop = q / ".loom" / "local" / "incoming" / said["incoming"]
     assert (drop / "document.pdf").read_bytes() == data
     assert json.loads((drop / "arrived.json").read_text())["name"] == "Halberd - 2021 - Gadget towers.pdf"
     # the same bytes again are the drop kept already, and receiving rebuilds nothing
@@ -355,7 +355,7 @@ def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     # bytes that are no PDF are kept nowhere
     status, said = _stream(s, "notes.txt", b"plain text, not a document")
     assert (status, said["error"]["code"]) == (400, "not-a-pdf")
-    kept = sorted(p.name for p in (q / ".loom" / "incoming").iterdir())
+    kept = sorted(p.name for p in (q / ".loom" / "local" / "incoming").iterdir())
     assert kept == [drop.name], kept
     assert _stream(s, "x.pdf", data, token="")[0] == 403
     # a length that is no number, on an upload refused for want of a token, is still answered

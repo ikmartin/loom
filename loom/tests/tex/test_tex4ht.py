@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from loom.paths import document_build
 from loom.render.normalise import normalise
 from loom.tex.runner import compile_document
 from loom.tex.tex4ht import compile_html
@@ -43,10 +44,16 @@ def _quilt(q: Path, extra: str = "") -> Path:
 
 
 def _html(q: Path, **kw):  # type: ignore[no-untyped-def]
-    pdf = compile_document(q, "", "main.tex", q / ".loom/build/main")
+    pdf = compile_document(q, "", "main.tex", q / ".loom/cache/tex/main")
     assert pdf.pdf is not None, pdf.first_error
     return compile_html(
-        q, "", "main.tex", q / ".loom/build/main/html", envs=["lemma", "proof"], seed=q / ".loom/build/main", **kw
+        q,
+        "",
+        "main.tex",
+        q / ".loom/cache/tex/main/html",
+        envs=["lemma", "proof"],
+        seed=q / ".loom/cache/tex/main",
+        **kw,
     )
 
 
@@ -100,9 +107,9 @@ def test_a_run_that_makes_no_page_leaves_the_last_good_one(tmp_path: Path) -> No
     assert good.html is not None
     page = good.html.read_text(encoding="utf-8")
     (q / "main.tex").write_text("\\documentclass{article}\\begin{document}\\input{nowhere}\n", encoding="utf-8")
-    bad = compile_html(q, "", "main.tex", q / ".loom/build/main/html", envs=["lemma"], timeout=120)
+    bad = compile_html(q, "", "main.tex", q / ".loom/cache/tex/main/html", envs=["lemma"], timeout=120)
     assert bad.html is None and not bad.ok
-    assert (q / ".loom/build/main/html/main.html").read_text(encoding="utf-8") == page
+    assert (q / ".loom/cache/tex/main/html/main.html").read_text(encoding="utf-8") == page
 
 
 #: A footnote sits at the foot of the PDF's page and at its mark on the page; the PDF's end-of-proof box has no text.
@@ -175,15 +182,15 @@ def test_the_census_reads_on_the_page_as_the_pdf_prints_it(tmp_path: Path) -> No
     q = tmp_path / "q"
     q.mkdir()
     shutil.copy(Path(__file__).with_name("census.tex"), q / "census.tex")
-    pdf = compile_document(q, "", "census.tex", q / ".loom/build/census")
+    pdf = compile_document(q, "", "census.tex", q / ".loom/cache/tex/census")
     assert pdf.pdf is not None, pdf.first_error
     res = compile_html(
         q,
         "",
         "census.tex",
-        q / ".loom/build/census/html",
+        q / ".loom/cache/tex/census/html",
         envs=["theorem", "defn", "proof"],
-        seed=q / ".loom/build/census",
+        seed=q / ".loom/cache/tex/census",
     )
     assert res.html is not None, res.first_error
     text = subprocess.run(
@@ -228,9 +235,11 @@ def test_a_document_reading_another_s_labels_through_xr_makes_html_with_their_nu
     q.mkdir()
     (q / "main.tex").write_text(XR, encoding="utf-8")
     (q / "other.aux").write_text("\\relax\n\\newlabel{thm:a}{{2.3}{5}{Main}{theorem.2.3}{}}\n", encoding="utf-8")
-    pdf = compile_document(q, "", "main.tex", q / ".loom/build/main")
+    pdf = compile_document(q, "", "main.tex", q / ".loom/cache/tex/main")
     assert pdf.pdf is not None, pdf.first_error
-    res = compile_html(q, "", "main.tex", q / ".loom/build/main/html", envs=["lemma"], seed=q / ".loom/build/main")
+    res = compile_html(
+        q, "", "main.tex", q / ".loom/cache/tex/main/html", envs=["lemma"], seed=q / ".loom/cache/tex/main"
+    )
     assert res.html is not None and res.ok, res.first_error
     n = normalise(res.html.read_text(encoding="utf-8"))
     assert re.search(r'data-label="o-thm:a" data-made="">(?:<span[^>]*>)?2\.3<', n.html), n.html
@@ -244,7 +253,7 @@ def test_a_display_whose_braces_do_not_balance_is_shown_as_written_and_the_rest_
     q = tmp_path / "q"
     q.mkdir()
     (q / "main.tex").write_text(UNBALANCED, encoding="utf-8")
-    res = compile_html(q, "", "main.tex", q / ".loom/build/main/html", envs=["lemma", "proof"])
+    res = compile_html(q, "", "main.tex", q / ".loom/cache/tex/main/html", envs=["lemma", "proof"])
     assert res.html is not None, res.first_error
     assert [(r.file, r.line) for r in res.repaired] == [("main.tex", 8)]
     displays = {str(i): r.tex for i, r in enumerate(res.repaired)}
@@ -253,7 +262,7 @@ def test_a_display_whose_braces_do_not_balance_is_shown_as_written_and_the_rest_
     # the display still stepped the counter it shares with the lemmas
     assert re.findall(r"Lemma (\d+\.\d+)", n.html) == ["1.1", "1.3"]
     assert re.findall(r'data-label="l2" data-made="">([\d.]+)</a>', n.html) == ["1.3"]
-    on_disk = (q / ".loom/build/main/html/repaired.json").read_text(encoding="utf-8")
+    on_disk = (q / ".loom/cache/tex/main/html/repaired.json").read_text(encoding="utf-8")
     assert '"line": 8' in on_disk
 
 
@@ -266,8 +275,9 @@ def test_loom_compile_html_says_how_much_of_the_page_it_places(tmp_path: Path) -
     (q / "config.toml").write_text('[quilt]\nname = "q"\nprefix = "qq"\nmain = "main.tex"\n', encoding="utf-8")
     data = json_of("compile", "main.tex", "--html", "--json", cwd=q)
     made = data["html"]
-    assert made["made"] and made["outdir"] == ".loom/build/main/html/", made
-    assert (q / ".loom/build/main/html/main.html").is_file() and (q / ".loom/build/main/html/fragment.html").is_file()
+    html = f"{document_build('main.tex')}/html"
+    assert made["made"] and made["outdir"] == f"{html}/", made
+    assert (q / html / "main.html").is_file() and (q / html / "fragment.html").is_file()
     assert made["nodes"] == made["nodes_in_document"] == 3, made
     # the part's paragraph, and the master's after the part ends; a block of one word is too short to count
     assert made["blocks"] == made["exact"] == 2 and not made["unplaced"], made
@@ -285,7 +295,7 @@ def test_a_document_is_read_from_its_html_and_an_edit_since_is_made_again_by_tex
     shutil.copytree(repo / "loom/tests/quilts/synthetic", q)
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     exits(1, "build", cwd=q)  # the synthetic quilt carries its intentional errors
-    frag = (q / ".loom/build/fragments/masters/drafting/main.html").read_text(encoding="utf-8")
+    frag = (q / ".loom/cache/site/fragments/masters/drafting/main.html").read_text(encoding="utf-8")
     assert 'data-from="tex"' in frag
     assert re.findall(r'<section id="([^"]+)"', frag) == ["sy-0100", "sy-0200", "sy-0201", "sy-0300"]
     assert 'class="included" data-key="drafting/nodes/sy-0002.tex" data-file="drafting/nodes/sy-0002.tex"' in frag
@@ -296,11 +306,11 @@ def test_a_document_is_read_from_its_html_and_an_edit_since_is_made_again_by_tex
     assert len(re.findall(r'<p data-src="drafting/[^"]+:\d+:\d+"', frag)) >= 10
     # every picture is one the build publishes under svg/: the one TeX drew, and an included graphic
     pictures = re.findall(r'<img src="([^"]+)"', frag)
-    assert len(pictures) == 2 and all(s.startswith("svg/") and (q / ".loom/build" / s).is_file() for s in pictures), (
-        pictures
-    )
+    assert len(pictures) == 2 and all(
+        s.startswith("svg/") and (q / ".loom/cache/site" / s).is_file() for s in pictures
+    ), pictures
     # a block's span takes in the citation it ends with, so the citation finds its command, and through its postnote its target
-    node = (q / ".loom/build/fragments/nodes/sy-000A.html").read_text(encoding="utf-8")
+    node = (q / ".loom/cache/site/fragments/nodes/sy-000A.html").read_text(encoding="utf-8")
     assert 'data-postnote="Theorem 2.1" data-target="Kre99-thm-2.1"' in node
     # the paper formats set the title and heads by the document's class
     assert re.match(r'<h1 [^>]*data-documentclass="amsart"', frag)
@@ -312,7 +322,7 @@ def test_a_document_is_read_from_its_html_and_an_edit_since_is_made_again_by_tex
     ]
     validator = repo / "docs/specs/tools/validate-dialect.py"
     checked = subprocess.run(
-        ["python3", str(validator), str(q / ".loom/build/fragments")], capture_output=True, text=True
+        ["python3", str(validator), str(q / ".loom/cache/site/fragments")], capture_output=True, text=True
     )
     assert checked.returncode == 0, checked.stdout + checked.stderr
     # an edit since the compile, two lines added above the statement and its title changed: the page stays, the statement is made again
@@ -320,9 +330,9 @@ def test_a_document_is_read_from_its_html_and_an_edit_since_is_made_again_by_tex
     text = node.read_text(encoding="utf-8").replace("[Orbits]", "[Orbit classes]", 1)
     node.write_text("% added\n% lines\n" + text, encoding="utf-8")
     exits(1, "build", cwd=q)
-    frag = (q / ".loom/build/fragments/masters/drafting/main.html").read_text(encoding="utf-8")
+    frag = (q / ".loom/cache/site/fragments/masters/drafting/main.html").read_text(encoding="utf-8")
     assert 'data-from="tex"' in frag
-    lemma = (q / ".loom/build/fragments/nodes/sy-0002.html").read_text(encoding="utf-8")
+    lemma = (q / ".loom/cache/site/fragments/nodes/sy-0002.html").read_text(encoding="utf-8")
     assert '<span class="title">(Orbit classes)</span>' in lemma and "<pre" not in lemma
     # its proof, unchanged but two lines down, is the page's, with offsets into the file as it now stands
     shown = re.search(r'<details class="env env-proof"[^>]*data-src="drafting/nodes/sy-0002.tex:(\d+):(\d+)"', lemma)

@@ -29,7 +29,7 @@ test("a run over every work starts from the library's page and gathers the bibli
 test("a cited work's problem offers digesting the work again, which starts a run and answers with its verdict", async ({ page, served }) => {
 	const fs = await import('node:fs');
 	const { join } = await import('node:path');
-	const digest = join(served.root, '.loom/digests/Kre99.tex');
+	const digest = join(served.root, '.loom/library/Kre99.tex');
 	// a reference to nothing inside one of Kre99's results, as a fault in the digest writer leaves one
 	fs.writeFileSync(digest, fs.readFileSync(digest, 'utf8').replace('\\end{theorem}', 'See \\ref{nowhere-at-all}.\n\\end{theorem}'));
 	await page.goto('/review/problems');

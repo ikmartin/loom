@@ -21,7 +21,7 @@ from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 from loom.history.ledger import LEDGER, actor_for, append_entry, load_history
 from loom.history.steps import FreezePlan, refuse_interrupted, text_hash, write_step
 from loom.locks import locked
-from loom.paths import BUILD, LOOM, RETIRED, documents_named
+from loom.paths import LOOM, RETIRED, SCRATCH, documents_named
 from loom.reshape.anchoring import anchoring_violations
 from loom.reshape.anchoring import fix_anchoring as repair_anchoring
 from loom.reshape.atomize import node_home, plan_atomize, plan_payload, verify_plan, write_atomize, write_moves
@@ -800,7 +800,7 @@ def _identity_for(result: ScanResult, root: Path, src_rel: str, dest_rel: str) -
     "to",
     required=True,
     metavar="FILE",
-    help=f"The file to write: one flat document, never among the quilt's sources ({BUILD}/ or outside the quilt).",
+    help=f"The file to write: one flat document, never among the quilt's sources (outside the quilt, or an agent's {SCRATCH}/SESSION/).",
 )
 @click.option(
     "--keep-referenced-ids",

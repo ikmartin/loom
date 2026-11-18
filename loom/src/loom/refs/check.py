@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-from loom.paths import DIGESTS
+from loom.paths import LIBRARY
 from loom.scan.bib import BibEntry
 from loom.scan.model import Diagnostic
 from loom.scan.scan import ScanResult
@@ -29,8 +29,8 @@ class Problem:
 
 
 def recorded_works(root: Path) -> list[str]:
-    """Every citekey with a `.loom/digests/<ck>.results.json`, in order."""
-    return [p.name[: -len(".results.json")] for p in sorted((root / DIGESTS).glob("*.results.json"))]
+    """Every citekey with a `.loom/library/<ck>.results.json`, in order."""
+    return [p.name[: -len(".results.json")] for p in sorted((root / LIBRARY).glob("*.results.json"))]
 
 
 def moved_anchors(root: Path, bib: dict[str, BibEntry], works: Iterable[str]) -> tuple[int, list[Problem]]:
@@ -154,7 +154,7 @@ def wrong_documents(
 
 
 def empty_digests(root: Path, works: Iterable[str]) -> list[Problem]:
-    """Works with a `.loom/digests/<ck>.tex` and no result recorded for it."""
+    """Works with a `.loom/library/<ck>.tex` and no result recorded for it."""
     from loom.refs.proposals import digest_path, load_results
 
     return [

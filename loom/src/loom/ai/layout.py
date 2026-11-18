@@ -1,4 +1,4 @@
-"""`loom ai init` and `loom upgrade`: the `.loom/ai/` directory, the vendor files, and their refresh.
+"""`loom ai init` and `loom upgrade`: the `.loom/agents/instructions/` directory, the vendor files, and their refresh.
 
 Mode files are the author's once written: `.loom-modes-version` records the shipped hash of each, so upgrade overwrites only files still equal to what it shipped and writes `<mode>.md.new` beside an edited one.
 """
@@ -16,9 +16,9 @@ from pathlib import Path
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
 
-#: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/ai/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
+#: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/agents/instructions/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
 MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "ingest"]
-RULES = "rules.md"  # `.loom/ai/rules.md`: not a mode, and no longer filed among them
+RULES = "rules.md"  # `.loom/agents/instructions/rules.md`: not a mode, and no longer filed among them
 # The one list: every loom command an agent may run, by its full path in the command tree. Everything else loom offers is the author's, so a command added later is denied until it is named here -- which an enumeration of forbidden commands could never promise, and did not: twelve mutating commands were missing from it (DR-173).
 AGENT_COMMANDS = frozenset(
     {
@@ -38,7 +38,7 @@ AGENT_COMMANDS = frozenset(
         "mcp",
     }
 )  # fmt: skip
-#: What each agent command does to the quilt, which is what an MCP tool's hints say (`loom.mcp.tools.hints`): `read` changes nothing but loom's own command log; `derive` rewrites what `.loom/build/` derives; `write` adds to a record, a session, a document of the agent's or the library, or moves the agent's own marker (`since`); `replace` puts new text in place of a page's. Every command in `AGENT_COMMANDS` is here, and nothing else.
+#: What each agent command does to the quilt, which is what an MCP tool's hints say (`loom.mcp.tools.hints`): `read` changes nothing but loom's own command log; `derive` rewrites what loom derives, in `.loom/cache/`; `write` adds to a record, a session, a document of the agent's or the library, or moves the agent's own marker (`since`); `replace` puts new text in place of a page's. Every command in `AGENT_COMMANDS` is here, and nothing else.
 ACTS: dict[str, str] = {
     **dict.fromkeys(
         (
@@ -128,7 +128,7 @@ def help_commands() -> list[str]:
 def modes(root: Path | None = None) -> list[str]:
     """The modes of the quilt at `root`, in the order its agents are shown them; with no quilt, the ones loom ships.
 
-    Every listing of the modes asks here: the orientation's index, the MCP prompts and the check of a prompt's name, `loom ai mode`, which types each mode names, the manifest's `agents.modes`, and the mode files the agent layer writes. Today a quilt's modes are loom's (`MODES`) whatever its `.loom/ai/modes/` holds, so a quilt's own set is a change to this function and not to its callers.
+    Every listing of the modes asks here: the orientation's index, the MCP prompts and the check of a prompt's name, `loom ai mode`, which types each mode names, the manifest's `agents.modes`, and the mode files the agent layer writes. Today a quilt's modes are loom's (`MODES`) whatever its `.loom/agents/instructions/modes/` holds, so a quilt's own set is a change to this function and not to its callers.
     """
     return list(MODES)
 
@@ -205,7 +205,7 @@ def permissions_json(config: QuiltConfig, *, shell: bool = False) -> str:
 #: Where each agent tool reads the quilt's rules for its agents: one policy, loom's own, rendered per tool (DR-283-ikmartin).
 CLAUDE_SETTINGS = ".claude/settings.json"
 CODEX_RULES = ".codex/rules/loom.rules"
-#: The rules loom last put in Claude Code's permission file, in `.loom/ai/`: `allow` or `deny`, a tab and the rule, a line each, so that a rule loom no longer writes is told from one of the person's.
+#: The rules loom last put in Claude Code's permission file, in `.loom/agents/instructions/`: `allow` or `deny`, a tab and the rule, a line each, so that a rule loom no longer writes is told from one of the person's.
 RULES_FILE = ".loom-rules"
 
 
@@ -252,7 +252,7 @@ def read_plain(root: Path, rel: str) -> str | None:
 
 
 def refuse_layer(root: Path) -> None:
-    """Refuse (`WriteRefused`) to write the agent layer where `.loom/ai/` is there and not a directory of the quilt's own (`blocker`): what is written there through a link lands outside the quilt."""
+    """Refuse (`WriteRefused`) to write the agent layer where `.loom/agents/instructions/` is there and not a directory of the quilt's own (`blocker`): what is written there through a link lands outside the quilt."""
     from loom.writes import WriteRefused
 
     why = blocker(root, AI, folder=True)
@@ -276,7 +276,7 @@ def _rules_wrote(root: Path) -> dict[str, set[str]] | None:
 
 
 def record_rules(root: Path, generated: str, *, before: list[str] | None = None) -> None:
-    """Record loom's rules in `generated`, Claude Code's permission file as loom renders it, as the ones it wrote, once that file is written; nothing where the quilt has no `.loom/ai/`.
+    """Record loom's rules in `generated`, Claude Code's permission file as loom renders it, as the ones it wrote, once that file is written; nothing where the quilt has no `.loom/agents/instructions/`.
 
     With `before`, called ahead of writing that file: the record keeps every rule it held, and each of `before` (`Settings.dropped`, loom's rules in the file as it stands), beside what `generated` renders, so a write that fails at any point leaves a record naming every rule of loom's in the file.
     """
@@ -567,7 +567,7 @@ def ensure_root_line(
 
 
 def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None) -> LayerReport:
-    """Write `.loom/ai/` into a quilt that has no `.loom/ai/` yet, with the permission files, root lines and skills of `apps` (by key, default every app) in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
+    """Write `.loom/agents/instructions/` into a quilt that has no `.loom/agents/instructions/` yet, with the permission files, root lines and skills of `apps` (by key, default every app) in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
     from loom.ai.clients import chosen
     from loom.ai.skills import RECORD as SKILLS_RECORD
     from loom.ai.skills import write_skills
@@ -611,7 +611,7 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
 def upgrade_layer(
     root: Path, write: bool = True, *, shell: bool | None = None, apps: list[str] | tuple[str, ...] | None = None
 ) -> LayerReport:
-    """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them. Nothing where `.loom/ai/` is absent or not a directory of the quilt's own (`blocker`).
+    """Refresh the generated files of an existing `.loom/agents/instructions/`; keep edited mode files and write `.new` beside them. Nothing where `.loom/agents/instructions/` is absent or not a directory of the quilt's own (`blocker`).
 
     The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. A skill of the person's at one of loom's paths is left alone (`theirs`), and loom's own of a mode that is gone is taken away (`removed`). With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
     """
@@ -703,7 +703,7 @@ def write_permissions(
     apps: list[str] | tuple[str, ...] | None = None,
     report: LayerReport | None = None,
 ) -> tuple[list[str], list[str]]:
-    """(written, unchanged): the permission files of `apps` (by default the apps the quilt is set up for, `clients.chosen`) rewritten to what `config` and this loom make them, in one variant, the person's own settings in Claude Code's kept (`settings_for`); a file that cannot be written is refused (`WriteRefused`), the record of loom's rules naming every one in the file whatever failed (`record_rules`), and so is every write where `.loom/ai/` is not the quilt's own (`refuse_layer`).
+    """(written, unchanged): the permission files of `apps` (by default the apps the quilt is set up for, `clients.chosen`) rewritten to what `config` and this loom make them, in one variant, the person's own settings in Claude Code's kept (`settings_for`); a file that cannot be written is refused (`WriteRefused`), the record of loom's rules naming every one in the file whatever failed (`record_rules`), and so is every write where `.loom/agents/instructions/` is not the quilt's own (`refuse_layer`).
 
     A missing one of those apps is written like a stale one; `upgrade_layer` and the viewer's Update Claude Code both come here. `report`, where given, gains the files that keep settings of the person's (`merged`), those left alone (`theirs`) and loom's own rules taken out (`dropped`).
     """

@@ -8,6 +8,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
+from loom.paths import document_build
 from loom.render.compiles import Compiles, last_of, needs_compiling
 from loom.tex.runner import CompileResult
 
@@ -131,7 +132,7 @@ def _scan(root: Path) -> SimpleNamespace:
 
 def test_a_change_asks_only_for_the_documents_it_reaches(tmp_path: Path) -> None:
     result = _scan(tmp_path)
-    built = lambda m: tmp_path / ".loom/build" / f"{m}.pdf"  # noqa: E731
+    built = lambda m: tmp_path / ".loom/cache/site" / f"{m}.pdf"  # noqa: E731
     assert needs_compiling(result, [tmp_path / "paper/ch1.tex"], built) == ["paper/main.tex"]
     assert needs_compiling(result, [tmp_path / "paper/defs.sty"], built) == ["paper/main.tex"]
     # a figure or a bibliography is read from the document's own directory or below, so one under the root may be any document's
@@ -145,7 +146,7 @@ def test_on_starting_every_document_never_compiled_or_edited_since_is_asked_for(
     for f in ("paper/main.tex", "paper/ch1.tex", "paper/defs.sty", "notes.tex"):
         (tmp_path / f).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / f).write_text("x", encoding="utf-8")
-    built = lambda m: tmp_path / ".loom/build" / f"{m}.pdf"  # noqa: E731
+    built = lambda m: tmp_path / ".loom/cache/site" / f"{m}.pdf"  # noqa: E731
     assert needs_compiling(result, None, built) == ["paper/main.tex", "notes.tex"]
     for m in result.masters:
         built(m).parent.mkdir(parents=True, exist_ok=True)
@@ -162,7 +163,7 @@ def test_on_starting_with_tex4ht_a_document_with_no_page_is_asked_for(tmp_path: 
     for f in ("paper/main.tex", "paper/ch1.tex", "paper/defs.sty", "notes.tex"):
         (tmp_path / f).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / f).write_text("x", encoding="utf-8")
-    built = lambda m: tmp_path / ".loom/build" / m.removesuffix(".tex") / f"{Path(m).stem}.pdf"  # noqa: E731
+    built = lambda m: tmp_path / document_build(m) / f"{Path(m).stem}.pdf"  # noqa: E731
     for m in result.masters:
         built(m).parent.mkdir(parents=True, exist_ok=True)
         built(m).write_bytes(b"%PDF")

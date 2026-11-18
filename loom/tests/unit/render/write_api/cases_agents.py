@@ -25,7 +25,7 @@ from tests.unit.render.write_api._cases import (
 
 def index(q: Path, sid: str) -> list[dict[str, Any]]:
     """The session index's events for one session, in order."""
-    lines = (q / ".loom" / "sessions" / "index.jsonl").read_text(encoding="utf-8").splitlines()
+    lines = (q / ".loom" / "agents" / "sessions" / "index.jsonl").read_text(encoding="utf-8").splitlines()
     return [e for e in map(json.loads, filter(None, lines)) if e.get("id") == sid]
 
 
@@ -125,14 +125,14 @@ def _session_purpose(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
 @case("here")
 def _here(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, sid = on_demo(serve, tmp_path)
-    before = sorted(p.relative_to(q).as_posix() for p in q.rglob("*") if "build" not in p.parts)
+    before = sorted(p.relative_to(q).as_posix() for p in q.rglob("*") if "cache" not in p.parts)
     place = {"route": "reading", "item": {"kind": "node", "id": "dm-0002"}, "session": sid}
     succeeds(s, "here", place)
     token = json.loads(get(s.url + "_api")[2])["token"]
     status, _, raw = get(s.url + "_api/here", {"X-Loom-Token": token})
     assert status == 200 and json.loads(raw)["place"] == place, raw
     # held in memory: nothing outside the build moved
-    assert sorted(p.relative_to(q).as_posix() for p in q.rglob("*") if "build" not in p.parts) == before
+    assert sorted(p.relative_to(q).as_posix() for p in q.rglob("*") if "cache" not in p.parts) == before
     refuses(
         s,
         "here",
@@ -148,10 +148,10 @@ def _agents_setup(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     from loom.ai.layout import MCP_LINE, variant
 
     s, q = synthetic(serve, tmp_path)
-    assert not (q / ".loom" / "ai").exists()
+    assert not (q / ".loom" / "agents" / "instructions").exists()
     got = succeeds(s, "agents-setup", {"app": "claude-code", "author": WHO})
     # the layer and Claude Code's own files, over MCP, and no other app's
-    for rel in (".loom/ai/orientation.md", "CLAUDE.md", ".claude/settings.json", ".mcp.json"):
+    for rel in (".loom/agents/instructions/orientation.md", "CLAUDE.md", ".claude/settings.json", ".mcp.json"):
         assert rel in got["written"] and (q / rel).is_file(), rel
     assert got["variant"] == variant(q) == "mcp" and MCP_LINE in (q / "CLAUDE.md").read_text()
     for rel in ("AGENTS.md", "GEMINI.md", ".codex", ".gemini", ".cursor"):

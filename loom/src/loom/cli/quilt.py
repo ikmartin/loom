@@ -177,6 +177,7 @@ def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
     write(target / history / "ledger.jsonl", "")
     write(target / LOOM_GITIGNORE, LOOM_IGNORE)
     # the annotation types, the defaults listed so a person sees what there is to change
+    mkdir((target / ANNOTATION_TYPES).parent)
     write(target / ANNOTATION_TYPES, default_text())
     # the tutorial is written with this quilt's own id prefix, so no example in it is one the person has to translate
     write(

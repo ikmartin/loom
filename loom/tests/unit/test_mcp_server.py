@@ -116,9 +116,9 @@ def test_a_write_is_the_agents_and_each_call_is_logged_once(tmp_path: Path) -> N
         assert not r.is_error and f"({AGENT})" in r.content[0].text, r.content[0].text
 
     attached(q, body)
-    log = (q / ".loom/annotations" / "log.jsonl").read_text().splitlines()[-1]
+    log = (q / ".loom/records/annotations" / "log.jsonl").read_text().splitlines()[-1]
     assert f'"author": "{AGENT}"' in log and '"kind": "agent"' in log
-    runs = [ln for p in (q / ".loom" / "sessions").glob("*/run.log") for ln in p.read_text().splitlines()]
+    runs = [ln for p in (q / ".loom" / "agents" / "sessions").glob("*/run.log") for ln in p.read_text().splitlines()]
     mine = [ln for ln in runs if "(over MCP)" in ln]
     assert len(mine) == 1 and "loom annotate --type question --as 'Test Agent' dm-0002 'Which orbits?'" in mine[0]
     assert not [ln for ln in runs if "annotate" in ln and "(over MCP)" not in ln and "Which orbits" in ln]
@@ -146,7 +146,7 @@ def test_a_result_too_long_for_a_reply_is_a_file_the_agent_reads(tmp_path: Path)
 
     async def body(client: Any) -> None:
         r = await client.call_tool("loom_source", {"target": "dm-0097"})
-        assert not r.is_error and "so it is in .loom/build/agent/" in r.content[0].text, r.content[0].text[:300]
+        assert not r.is_error and "so it is in .loom/agents/scratch/" in r.content[0].text, r.content[0].text[:300]
         kept = q / r.meta["loom/file"]
         assert kept.is_file() and "A long remark." in kept.read_text() and len(kept.read_text()) > 40_000
 
@@ -155,7 +155,7 @@ def test_a_result_too_long_for_a_reply_is_a_file_the_agent_reads(tmp_path: Path)
 
 def test_each_mode_is_a_prompt_expanding_to_the_quilts_own_copy_and_its_checked_target(tmp_path: Path) -> None:
     q = demo(tmp_path)
-    mode = q / ".loom/ai" / "modes" / "audit.md"
+    mode = q / ".loom/agents/instructions" / "modes" / "audit.md"
     mode.write_text(mode.read_text() + "\nThis quilt's own line.\n")
 
     async def body(client: Any) -> None:
@@ -176,7 +176,7 @@ def test_each_mode_is_a_prompt_expanding_to_the_quilts_own_copy_and_its_checked_
             await client.get_prompt("brainstorm")
 
     attached(q, body)
-    runs = [ln for p in (q / ".loom" / "sessions").glob("*/run.log") for ln in p.read_text().splitlines()]
+    runs = [ln for p in (q / ".loom" / "agents" / "sessions").glob("*/run.log") for ln in p.read_text().splitlines()]
     assert [ln for ln in runs if "loom ai mode audit  (over MCP, for the audit prompt)" in ln]
 
 
@@ -186,7 +186,7 @@ def test_what_a_link_names_is_a_resource_read_by_the_command_it_stands_for(tmp_p
         "quilt:sh-0007": ("loom source sh-0007", "\\label{sh-0007}"),
         "quilt:sh-0007?closure": ("loom source --closure sh-0007", "\\label{sh-0007}"),
         "quilt:drafting/main-atomic.tex": ("loom source drafting/main-atomic.tex", "\\documentclass"),
-        "quilt:.loom/history/0001-flows-v1/flows-v1.tex": ("loom history show flows-v1", "\\documentclass"),
+        "quilt:.loom/records/history/0001-flows-v1/flows-v1.tex": ("loom history show flows-v1", "\\documentclass"),
         "quilt:state": ("loom ai orient", "# Research state"),
         "cited:doi:10.4171/showcase/19-2": ("loom library read doi:10.4171/showcase/19-2", "Bellamy19's overview"),
         "cited:doi:10.4171/showcase/19-2?page=3": ("loom library read doi:10.4171/showcase/19-2 3", "Bellamy19 p.3"),
@@ -215,7 +215,7 @@ def test_a_resource_too_long_for_a_reply_is_a_file_the_agent_reads(tmp_path: Pat
 
     async def body(client: Any) -> None:
         r = await client.read_resource("quilt:dm-0097")
-        assert "so it is in .loom/build/agent/" in r.contents[0].text, r.contents[0].text[:300]
+        assert "so it is in .loom/agents/scratch/" in r.contents[0].text, r.contents[0].text[:300]
         assert "A long remark." in (q / r.meta["loom/file"]).read_text()
 
     attached(q, body)
@@ -285,11 +285,11 @@ def test_thirty_annotations_on_an_unchanged_key_keep_one_frozen_text_by_batch_or
     said = [{"target": "dm-0002", "message": f"Point {n}.", "type": "question"} for n in range(30)]
 
     def frozen(q: Path) -> set[str]:
-        d = q / ".loom" / "history" / "texts"
+        d = q / ".loom" / "records" / "history" / "texts"
         return {p.name for p in d.iterdir()} if d.is_dir() else set()
 
     def lines(q: Path) -> list[str]:
-        log = q / ".loom" / "annotations" / "log.jsonl"
+        log = q / ".loom" / "records" / "annotations" / "log.jsonl"
         return log.read_text().splitlines() if log.is_file() else []
 
     for d in ("batch", "calls"):
@@ -311,22 +311,22 @@ def test_thirty_annotations_on_an_unchanged_key_keep_one_frozen_text_by_batch_or
 
 
 def test_a_result_carries_the_crops_it_names_as_images(tmp_path: Path) -> None:
-    """From a `crop` value in JSON and a `crop:` line in text, once each and in order; a path outside `.loom/build/crops/` is no crop; at most eight, the rest counted."""
+    """From a `crop` value in JSON and a `crop:` line in text, once each and in order; a path outside `.loom/cache/crops/` is no crop; at most eight, the rest counted."""
     import base64
     import json
 
     from loom.mcp.server import MAX_IMAGES, _crops
 
-    crops = tmp_path / ".loom" / "build" / "crops"
+    crops = tmp_path / ".loom" / "cache" / "crops"
     crops.mkdir(parents=True)
     names = [f"{n:016x}-p1-{n:016x}.png" for n in range(10)]
     for name in names:
         (crops / name).write_bytes(b"\x89PNG\r\n\x1a\n" + name.encode())
     (tmp_path / "elsewhere.png").write_bytes(b"\x89PNG\r\n\x1a\n")
-    data = {"annotations": [{"crop": f".loom/build/crops/{names[0]}"}, {"crop": "elsewhere.png"}, {"crop": None}]}
+    data = {"annotations": [{"crop": f".loom/cache/crops/{names[0]}"}, {"crop": "elsewhere.png"}, {"crop": None}]}
     images, more = _crops(tmp_path, json.dumps(data))
     assert [i.mime_type for i in images] == ["image/png"] and more == 0
-    lines = [f"      crop: .loom/build/crops/{n}" for n in [names[1], names[1], *names[2:]]]
+    lines = [f"      crop: .loom/cache/crops/{n}" for n in [names[1], names[1], *names[2:]]]
     images, more = _crops(tmp_path, "\n".join([*lines, "      crop: ../x.png"]))
     assert len(images) == MAX_IMAGES and more == 1
     assert base64.b64decode(images[0].data).endswith(names[1].encode())
@@ -347,11 +347,11 @@ def test_an_agent_over_mcp_is_given_a_crop_for_a_mark(tmp_path: Path) -> None:
         got = await client.call_tool("loom_ai_annotations", {"target": "notes/paper.pdf"})
         assert not got.is_error
         text, *images = got.content
-        assert "crop: .loom/build/crops/" in text.text and "notes/paper.pdf p.1" in text.text, text.text
+        assert "crop: .loom/cache/crops/" in text.text and "notes/paper.pdf p.1" in text.text, text.text
         assert [c.type for c in images] == ["image"] and images[0].mime_type == "image/png"
         as_json = await client.call_tool("loom_ai_annotations", {"target": "notes/paper.pdf", "json": True})
         (row,) = as_json.structured_content["annotations"]
         assert (row["page"], row["file"], row["refound"]) == (1, "notes/paper.pdf", False)
-        assert row["crop"].startswith(".loom/build/crops/") and len(as_json.content) == 2
+        assert row["crop"].startswith(".loom/cache/crops/") and len(as_json.content) == 2
 
     attached(q, body)

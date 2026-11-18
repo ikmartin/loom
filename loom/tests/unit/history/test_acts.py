@@ -143,5 +143,5 @@ def test_history_lists_every_act_with_what_it_was_done_to(q: Path) -> None:
     # the node is part of both documents, so a version of each was kept before the undo wrote
     stamps = [a for a in acts if a["action"] == "stamp" and a.get("kept_for") == "undo"]
     assert {a["in"] for a in stamps} == {MAIN, "drafting/talk.tex"}
-    assert all(a["landmark"].startswith(".loom/history/") for a in stamps)
+    assert all(a["landmark"].startswith(".loom/records/history/") for a in stamps)
     assert [a["step"] for a in acts if "step" in a] == sorted(a["step"] for a in acts if "step" in a)

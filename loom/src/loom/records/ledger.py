@@ -1,4 +1,4 @@
-"""The ledger `.loom/state.toml`: acceptance rows, appended only, written only by `loom accept`.
+"""The ledger `.loom/records/state.toml`: acceptance rows, appended only, written only by `loom accept`.
 
 The writer emits every `[[accept]]` block in one fixed shape so git merges of concurrent appends to different keys are clean; the reader uses tomllib. Nothing here edits or removes a row.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 from loom.paths import LEDGER
 
-HEADER = "# .loom/state.toml -- written by `loom accept`. Do not edit.\nschema = 1\n"
+HEADER = "# .loom/records/state.toml -- written by `loom accept`. Do not edit.\nschema = 1\n"
 
 
 @dataclass

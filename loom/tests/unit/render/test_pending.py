@@ -27,7 +27,7 @@ def q(tmp_path: Path) -> Path:
 
 def built(q: Path) -> dict[str, Any]:
     run("build", cwd=q)
-    return json.loads((q / ".loom/build/manifest.json").read_text())  # type: ignore[no-any-return]
+    return json.loads((q / ".loom/cache/site/manifest.json").read_text())  # type: ignore[no-any-return]
 
 
 def test_a_change_is_drawn_in_its_block_with_its_old_and_new_words_marked_by_id(q: Path) -> None:
@@ -36,10 +36,10 @@ def test_a_change_is_drawn_in_its_block_with_its_old_and_new_words_marked_by_id(
     m = built(q)
     (row,) = [c for c in m["changes"] if c["kind"] == "edit"]
     assert (row["key"], row["old"], row["new"], row["state"]) == ("dm-0002", "one or", "at most", "ready")
-    assert row["diff"] == f"changes/{row['id']}.diff" and (q / ".loom/build" / row["diff"]).is_file()
+    assert row["diff"] == f"changes/{row['id']}.diff" and (q / ".loom/cache/site" / row["diff"]).is_file()
     assert row["block"]["src"].startswith(f"{LEMMA}:") and row["block"]["fragment"].startswith("fragments/changes/")
     assert m["changes_since"]["who"] == WHO
-    html = (q / ".loom/build" / row["block"]["fragment"]).read_text()
+    html = (q / ".loom/cache/site" / row["block"]["fragment"]).read_text()
     # TeX is the unit tier's shim, which refuses, so the block shows as its source, its sides marked
     assert html.startswith('<pre class="source"')
     import re
@@ -60,7 +60,7 @@ def test_a_change_inside_a_formula_takes_the_formula_whole(q: Path) -> None:
     edit(q / LEMMA, "$\\sigma x = x$", "$\\sigma x = y$")
     m = built(q)
     (row,) = [c for c in m["changes"] if c["kind"] == "edit"]
-    html = (q / ".loom/build" / row["block"]["fragment"]).read_text()
+    html = (q / ".loom/cache/site" / row["block"]["fragment"]).read_text()
     assert 'data-side="old">$\\sigma x = x$;</span>' in html and 'data-side="new">$\\sigma x = y$;</span>' in html
 
 
@@ -80,7 +80,7 @@ def test_a_block_is_made_by_tex_with_each_side_of_its_change_marked(q: Path) -> 
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     m = built(q)
     (row,) = [c for c in m["changes"] if c["kind"] == "edit"]
-    html = (q / ".loom/build" / row["block"]["fragment"]).read_text()
+    html = (q / ".loom/cache/site" / row["block"]["fragment"]).read_text()
     # the leaf is the lemma's paragraph, made by TeX, and in the document's terms
     assert '<pre class="source"' not in html and f'data-src="{row["block"]["src"]}"' in html
     assert f'data-change="{row["id"]}" data-side="old"' in html and f'data-change="{row["id"]}" data-side="new"' in html
@@ -100,7 +100,7 @@ def synthetic(tmp_path: Path) -> dict[str, Any]:
     shutil.copytree(REPO / "tests" / "quilts" / "synthetic", q, ignore=shutil.ignore_patterns("build", ".git"))
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     m = built(q)
-    return {"m": m, "read": lambda rel: (q / ".loom/build" / rel).read_text()}
+    return {"m": m, "read": lambda rel: (q / ".loom/cache/site" / rel).read_text()}
 
 
 def _without_sides(html: str) -> str:
@@ -222,15 +222,15 @@ def test_a_suggested_edit_keeps_its_last_old_word_and_first_new_word_apart_and_t
     ok("compile", "drafting/main.tex", "--html", cwd=q)
     m = built(q)
     rows = {c["id"]: c for c in m["changes"]}
-    html = (q / ".loom/build" / rows[edit_id]["block"]["fragment"]).read_text()
+    html = (q / ".loom/cache/site" / rows[edit_id]["block"]["fragment"]).read_text()
     plain = re.sub(r"</?mark[^>]*>", "", html)
     old = " ".join(re.findall(rf'data-change="{edit_id}" data-side="old">([^<]*)<', plain)).split()
     new = " ".join(re.findall(rf'data-change="{edit_id}" data-side="new">([^<]*)<', plain)).split()
     assert (old, new) == (["one", "or", "two", "points"], ["notional", "value"]), plain
     assert f'data-src="{rows[edit_id]["block"]["src"]}"' in html and "review-" not in html
     # a display is its own leaf, and keeps the document's id
-    shown = (q / ".loom/build" / rows[display]["block"]["fragment"]).read_text()
-    document = (q / ".loom/build" / m["nodes"]["dm-0001"]["fragment"]).read_text()
+    shown = (q / ".loom/cache/site" / rows[display]["block"]["fragment"]).read_text()
+    document = (q / ".loom/cache/site" / m["nodes"]["dm-0001"]["fragment"]).read_text()
     src = re.escape(rows[display]["block"]["src"])
     ident = re.search(rf'data-src="{src}"[^>]*\bid="([^"]+)"', document) or re.search(
         rf'\bid="([^"]+)"[^>]*data-src="{src}"', document

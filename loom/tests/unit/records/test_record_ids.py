@@ -217,6 +217,6 @@ def test_a_merged_log_reaches_the_manifest_in_the_order_it_was_written(
     later = ok(*args, cwd=one).stdout.split()[0]
     _merge(one, two, ANNOTATION_LOG, 1)
     ok("build", cwd=one)
-    published = json.loads((one / ".loom/build/manifest.json").read_text(encoding="utf-8"))["annotations"]
+    published = json.loads((one / ".loom/cache/site/manifest.json").read_text(encoding="utf-8"))["annotations"]
     order = list(published)
     assert order.index(earlier) < order.index(later)

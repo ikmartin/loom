@@ -755,7 +755,7 @@ def main(paper: Path, out: Path, results: Path, only: list[str] | None = None) -
     if base.exists():
         shutil.rmtree(base)
     shutil.copytree(paper, base)
-    (base / ".loom" / "serve.json").unlink(missing_ok=True)
+    (base / ".loom" / "local" / "serve.json").unlink(missing_ok=True)
     result = scan(load_quilt(base))
     targets = pick_targets(result)
     recs = file_records(base, targets)

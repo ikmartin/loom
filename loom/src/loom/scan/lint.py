@@ -102,7 +102,7 @@ def _derived_in_person_document(result: ScanResult, edges: EdgeResult) -> list[D
 def _agent_documents(result: ScanResult) -> list[Diagnostic]:
     """`loom:agent-document-unrecorded` and `loom:plain-id-in-agent-document`: every agent document was made by a step, and defines derived ids only.
 
-    A document put in `.loom/copies/` by hand has no record of where it came from, so it can be neither adopted nor refreshed; a plain id defined in an agent document writes into the person's id space from a file no adoption reads.
+    A document put in `.loom/agents/copies/` by hand has no record of where it came from, so it can be neither adopted nor refreshed; a plain id defined in an agent document writes into the person's id space from a file no adoption reads.
     """
     record = result.history
     recorded = set(record.copies(result.masters)) if record is not None else set()

@@ -33,7 +33,7 @@ from tests.unit._quilts import showcase
 from tests.unit.refs._made_pdfs import fake_pdf
 
 WHO = "A. Author"
-BIB = ".loom/digests/bibliography.bib"
+BIB = ".loom/library/bibliography.bib"
 HEX = re.compile(r"[0-9a-f]{64}")
 STEPS = int(os.environ.get("LOOM_MODEL_STEPS", "120"))
 SEEDS = [int(x) for x in os.environ.get("LOOM_MODEL_SEEDS", "2,3,20261117").split(",")]
@@ -327,7 +327,7 @@ def _tree(q: Path) -> dict[str, bytes]:
     return {
         p.relative_to(q).as_posix(): p.read_bytes()
         for p in sorted(q.rglob("*"))
-        if p.is_file() and not p.relative_to(q).as_posix().startswith(".loom/build/")
+        if p.is_file() and not p.relative_to(q).as_posix().startswith(".loom/cache/")
     }
 
 

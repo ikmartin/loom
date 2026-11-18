@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from loom.clock import stamp
-from loom.paths import BUILD, LOOM, REVIEW_ORIGINS, SOURCE_SYNC, document_dir, under
+from loom.paths import LOOM, REVIEW_ORIGINS, SOURCE_SYNC, document_dir, under
 from loom.reshape.importer import closure_of
 from loom.scan.quilt import Quilt
 from loom.tex.runner import compile_document
@@ -206,7 +206,7 @@ def skipped_directory(root: Path) -> str | None:
 
 
 def copy_ignore(root: Path, *patterns: str) -> Callable[[str, list[str]], set[str]]:
-    """A `shutil.copytree` ignore for a copy of the quilt at `root`: a pattern with a `/` is a quilt-relative path (`BUILD`), the others names as `shutil.ignore_patterns` takes them; the sync directory is left out by path."""
+    """A `shutil.copytree` ignore for a copy of the quilt at `root`: a pattern with a `/` is a quilt-relative path (`CACHE`), the others names as `shutil.ignore_patterns` takes them; the sync directory is left out by path."""
     by_name = shutil.ignore_patterns(*(p for p in patterns if "/" not in p))
     synced = skipped_directory(root)
     pruned = {root / p for p in patterns if "/" in p} | ({root / synced} if synced else set())
@@ -370,7 +370,7 @@ def _holds_quilt(clone: Path, rev: str) -> bool:
 def _followed(quilt: Quilt, given: str, clone: Path) -> tuple[str, str, str, str]:
     """(remote, branch, URL, tip) of the clone `sync init` was given, refusing a directory loom must not run Git in.
 
-    Refused, each naming what clears it: anything but the top level of a repository with a work tree; a directory inside `.loom/`, the build output or the history, which loom rewrites; the quilt's own repository, as the directory holding the quilt or a worktree of it; a branch that follows no remote; a remote of the quilt's own repository; and a tip holding a quilt.
+    Refused, each naming what clears it: anything but the top level of a repository with a work tree; a directory inside `.loom/` or the history, which loom rewrites; the quilt's own repository, as the directory holding the quilt or a worktree of it; a branch that follows no remote; a remote of the quilt's own repository; and a tip holding a quilt.
     """
     root = quilt.root.resolve()
     clone_it = f"clone the workspace there: `git clone URL {given}`, then `loom sync init {given}`"
@@ -385,7 +385,7 @@ def _followed(quilt: Quilt, given: str, clone: Path) -> tuple[str, str, str, str
         raise SyncError(
             f"{given} is inside the repository {top}, not a clone of its own; name the clone's own directory"
         )
-    for owned in (root / LOOM, root / BUILD, quilt.history_dir.resolve()):
+    for owned in (root / LOOM, quilt.history_dir.resolve()):
         if clone.is_relative_to(owned):
             raise SyncError(
                 f"{given} is inside {owned.relative_to(root).as_posix()}/, which loom rewrites; clone the workspace anywhere else"

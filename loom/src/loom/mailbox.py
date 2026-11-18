@@ -1,4 +1,4 @@
-"""`.loom/sessions/<id>/inbox.jsonl`: a session's transcript, what `loom session say` appends and the viewer's Transcript reads.
+"""`.loom/agents/sessions/<id>/inbox.jsonl`: a session's transcript, what `loom session say` appends and the viewer's Transcript reads.
 
 **Loom keeps a record, not a conversation.** A message is appended; no model is called, no task is assigned and nobody is woken. The inbox is append-only, and its events are sequence-numbered so a reader polling it (`/_api/events`) knows when it missed some.
 """
@@ -175,7 +175,7 @@ def transcript(root: Path, sid: str) -> Transcript:
     return _TRANSCRIPTS[p]
 
 
-#: A block heading in a report: any level, the block's name in brackets, and whatever the agent wrote after it (`.loom/ai/rules.md`, Where work goes).
+#: A block heading in a report: any level, the block's name in brackets, and whatever the agent wrote after it (`.loom/agents/instructions/rules.md`, Where work goes).
 BLOCK_HEADING = re.compile(r"^(?P<hashes>#{1,6})[ \t]*\[(?P<name>[a-z][a-z0-9-]*)\][ \t]*(?P<rest>.*)$", re.M)
 
 
@@ -387,7 +387,7 @@ def on_page(result: Any, ra: Any) -> dict[str, Any]:
     Returns
     -------
     dict
-        `{page, file, mark, rects, refound, detached, source, crop}`: `crop` a quilt-relative path under `.loom/build/crops/` (`records.crops.crop_of`), made when first asked for, the copy it was written on for a detached annotation; `source` `{path, bytes, exact}` (`refs.sourcemap.source_of`).
+        `{page, file, mark, rects, refound, detached, source, crop}`: `crop` a quilt-relative path under `.loom/cache/crops/` (`records.crops.crop_of`), made when first asked for, the copy it was written on for a detached annotation; `source` `{path, bytes, exact}` (`refs.sourcemap.source_of`).
     """
     from loom.records.crops import crop_of, rects_of
     from loom.records.store import Records

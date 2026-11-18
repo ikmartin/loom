@@ -1,4 +1,4 @@
-"""The quilt's annotation types: `.loom/annotation-types.toml`, the presets a person picks from and an agent reads.
+"""The quilt's annotation types: `.loom/records/annotation-types.toml`, the presets a person picks from and an agent reads.
 
 A type is a label with a look, whether its annotations stay open until resolved, whether they are listed in Notes, and instructions for agents. The file's `[plain]` is the look of an annotation with no type. An annotation names its type by id and keeps its own look, so nothing here is needed to read one: a missing or malformed file loads the defaults with a diagnostic and never stops a quilt from loading.
 """

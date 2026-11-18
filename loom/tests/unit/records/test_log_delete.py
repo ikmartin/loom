@@ -73,7 +73,7 @@ def test_a_deletion_takes_every_event_of_an_annotation_and_of_its_replies_all_th
     assert state(q) == [(OTHER, "open", "Other, restated.")]
     assert all(FINDING not in line and REPLY not in line for line in log(q))
     # the log as it was is kept in the build directory, in case the rewrite is cut short
-    assert (q / ".loom/build" / "annotations-before-delete.jsonl").read_text(encoding="utf-8").splitlines() == before
+    assert (q / ".loom/local" / "annotations-before-delete.jsonl").read_text(encoding="utf-8").splitlines() == before
 
 
 def test_deleting_a_reply_leaves_what_it_answers(q: Path) -> None:
@@ -85,7 +85,7 @@ def test_deleting_a_reply_leaves_what_it_answers(q: Path) -> None:
 def test_deleting_what_is_not_there_writes_nothing(q: Path) -> None:
     before = log(q)
     assert delete(q, ["a-1999-01-01-ekn992"]) == []
-    assert log(q) == before and not (q / ".loom/build").exists()
+    assert log(q) == before and not (q / ".loom/local" / "annotations-before-delete.jsonl").exists()
 
 
 def test_a_restore_puts_back_what_a_deletion_took_and_refuses_a_second_time(q: Path) -> None:

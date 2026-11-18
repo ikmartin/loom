@@ -73,7 +73,7 @@ CASES: dict[str, list[Case]] = {
     "id": [
         Case(("--next",)),
         Case(("drafting/main.tex",), json=False, why="every node already has an id: nothing to label"),
-        Case(("drafting/main.tex", "--to", ".loom/build/labelled.tex"), json=False),
+        Case(("drafting/main.tex", "--to", ".loom/agents/scratch/s/labelled.tex"), json=False),
         Case(
             ("drafting/main.tex", "--to", "drafting/nodes/labelled.tex"),
             exit=2,
@@ -101,14 +101,26 @@ CASES: dict[str, list[Case]] = {
         Case(("drafting/main.tex",), exit=2, unchanged=True, why="no destination"),
     ],
     "deloom": [
-        Case(("main.tex", "--to", ".loom/build/plain.tex", "--keep-referenced-ids", "--keep-incomplete")),
+        Case(("main.tex", "--to", ".loom/agents/scratch/s/plain.tex", "--keep-referenced-ids", "--keep-incomplete")),
         Case(
-            ("main.tex", "--to", ".loom/build/plain.tex", "--keep-referenced-ids", "--keep-incomplete", "--dry-run"),
+            (
+                "main.tex",
+                "--to",
+                ".loom/agents/scratch/s/plain.tex",
+                "--keep-referenced-ids",
+                "--keep-incomplete",
+                "--dry-run",
+            ),
             unchanged=True,
         ),
-        Case(("main.tex", "--to", ".loom/build/plain.tex"), exit=1, unchanged=True, why="an \\incomplete blocks it"),
+        Case(
+            ("main.tex", "--to", ".loom/agents/scratch/s/plain.tex"),
+            exit=1,
+            unchanged=True,
+            why="an \\incomplete blocks it",
+        ),
         Case(("main.tex", "--to", "drafting/plain.tex"), exit=2, unchanged=True, why="among the sources"),
-        Case(("absent", "--to", ".loom/build/plain.tex"), exit=2, unchanged=True, why="no such document"),
+        Case(("absent", "--to", ".loom/agents/scratch/s/plain.tex"), exit=2, unchanged=True, why="no such document"),
     ],
     "draft": [
         Case(("drafting/main.tex", "--ai", "aidoc.tex")),
@@ -153,7 +165,7 @@ CASES: dict[str, list[Case]] = {
         Case(("drafting/solo.tex", "--to", "drafting/flat.tex", "--dry-run"), solo_spine, unchanged=True),
         Case(("drafting/absent.tex", "--to", "drafting/flat.tex"), exit=2, unchanged=True, why="no such file"),
         Case(
-            ("drafting/solo.tex", "--to", ".loom/build/flat.tex"),
+            ("drafting/solo.tex", "--to", ".loom/agents/scratch/s/flat.tex"),
             solo_spine,
             exit=2,
             unchanged=True,
@@ -179,7 +191,7 @@ CASES: dict[str, list[Case]] = {
     "history verify": [Case(())],
     "adopt": [
         Case(("contribution",), ai_copy),
-        Case(("contribution", "--to", ".loom/build/adopt.patch"), ai_copy),
+        Case(("contribution", "--to", ".loom/agents/scratch/s/adopt.patch"), ai_copy),
         Case(("contribution", "--to", "drafting/adopt.tex"), ai_copy, exit=2, unchanged=True, why="among the sources"),
         Case(("absent",), exit=2, unchanged=True, why="no such agent document"),
         Case(

@@ -28,7 +28,7 @@ def test_neither_a_quilt_s_latexmkrc_nor_a_write18_runs_with_shell_escape_in_the
     q = _doc(tmp_path / "q", f"\\immediate\\write18{{touch {marker}-tex}}")
     (q / "latexmkrc").write_text(f'system("touch {marker}-rc");\n', encoding="utf-8")
     (q / ".latexmkrc").write_text(f'system("touch {marker}-dotrc");\n', encoding="utf-8")
-    res = compile_document(q, "", "main.tex", q / ".loom/build/main")
+    res = compile_document(q, "", "main.tex", q / ".loom/cache/tex/main")
     assert res.pdf is not None, res.first_error
     assert not list(tmp_path.glob("ran*"))
 
@@ -51,7 +51,7 @@ def test_a_document_writes_nothing_outside_its_directory_and_runs_no_command_wha
         "\\end{document}\n",
         encoding="utf-8",
     )
-    out = q / ".loom/build/paper/main"
+    out = q / ".loom/cache/tex/paper/main"
     res = compile_document(q, "paper", "paper/main.tex", out, halt_on_error=False)
     assert res.log is not None
     log = res.log.read_text(errors="replace").replace("\n", "")  # TeX breaks a log line at 79 columns
@@ -64,7 +64,7 @@ def test_a_document_writes_nothing_outside_its_directory_and_runs_no_command_wha
 @pytest.mark.tex
 def test_a_failed_run_leaves_the_last_good_pdf_and_aux_and_reports_its_own_log(tmp_path: Path) -> None:
     q = _doc(tmp_path / "q")
-    out = q / ".loom/build/main"
+    out = q / ".loom/cache/tex/main"
     good = compile_document(q, "", "main.tex", out)
     assert good.pdf is not None and good.ok, good.first_error
     pdf, aux = good.pdf.read_bytes(), (out / "main.aux").read_text()
@@ -81,7 +81,7 @@ def test_a_failed_run_leaves_the_last_good_pdf_and_aux_and_reports_its_own_log(t
 @pytest.mark.tex
 def test_a_recoverable_error_still_makes_a_pdf_when_the_run_carries_on(tmp_path: Path) -> None:
     q = _doc(tmp_path / "q", "\\hlind{x}")
-    res = compile_document(q, "", "main.tex", q / ".loom/build/main", halt_on_error=False)
+    res = compile_document(q, "", "main.tex", q / ".loom/cache/tex/main", halt_on_error=False)
     assert res.pdf is not None and res.errors and res.errors[0].startswith("! Undefined control sequence")
     halted = compile_document(q, "", "main.tex", tmp_path / "halted")
     assert halted.pdf is None
@@ -91,7 +91,7 @@ def test_a_recoverable_error_still_makes_a_pdf_when_the_run_carries_on(tmp_path:
 def test_a_run_that_never_ends_is_killed_with_everything_it_started(tmp_path: Path) -> None:
     q = _doc(tmp_path / "q", "\\def\\x{\\x}\\x")
     held = []
-    res = compile_document(q, "", "main.tex", q / ".loom/build/main", timeout=3, started=held.append)
+    res = compile_document(q, "", "main.tex", q / ".loom/cache/tex/main", timeout=3, started=held.append)
     assert res.returncode == 124 and "timed out" in res.first_error
     assert not _running(held[0].pid)
 

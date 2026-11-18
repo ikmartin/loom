@@ -1,5 +1,6 @@
 from pathlib import Path
 
+from loom.paths import document_build
 from tests.unit.scan.helpers import PREAMBLE, SINGLE_FILE, make_quilt
 
 
@@ -9,7 +10,7 @@ def codes(r):  # type: ignore[no-untyped-def]
 
 def test_edge_family_alias_classification_closure(tmp_path: Path) -> None:
     r = make_quilt(
-        tmp_path, {"drafting/main.tex": SINGLE_FILE, ".loom/digests/bibliography.bib": "@article{Man12, title={x}}\n"}
+        tmp_path, {"drafting/main.tex": SINGLE_FILE, ".loom/library/bibliography.bib": "@article{Man12, title={x}}\n"}
     )
     edges = {(e.src, e.to, e.kind, e.via) for e in r.edges.edges}
     assert ("ab-0003/proof", "ab-0001", "proof", "uses") in edges
@@ -63,7 +64,7 @@ def test_directives_macros_prefix_disable(tmp_path: Path) -> None:
         tmp_path,
         {
             "drafting/main.tex": "\\documentclass{amsart}\n\\newtheorem{lemma}{Lemma}\n\\newcommand{\\uses}[1]{}\n% !LOOM bogus: 1\n\\begin{document}\n\\begin{lemma}\nA \\uses{x}\n\\end{lemma}\n\\begin{proof}\nP\n\\end{proof}\n\\end{document}\n",
-            ".loom/digests/bibliography.bib": "@misc{Man12, title={t}}\n",
+            ".loom/library/bibliography.bib": "@misc{Man12, title={t}}\n",
         },
         config=cfg,
     )
@@ -80,7 +81,7 @@ def test_dependency_cycle_and_slug_collision(tmp_path: Path) -> None:
         {
             "drafting/main.tex": PREAMBLE
             + "\\begin{document}\n\\begin{lemma}\\label{ab-0001}\nUses \\ref{ab-0002}.\n\\end{lemma}\n\\begin{proof}P\\end{proof}\n\\begin{lemma}\\label{ab-0002}\nUses \\ref{ab-0001}.\n\\end{lemma}\n\\begin{proof}P\\end{proof}\n\\end{document}\n",
-            ".loom/digests/bibliography.bib": "@misc{stacks-project, title={s}}\n@misc{stacksproject, title={s2}}\n",
+            ".loom/library/bibliography.bib": "@misc{stacks-project, title={s}}\n@misc{stacksproject, title={s2}}\n",
         },
     )
     c = codes(r)
@@ -114,7 +115,11 @@ def test_a_reference_into_a_document_named_by_externaldocument_is_not_loose(tmp_
     )
     cites = "\\begin{lemma}\\label{zz-0002}\nBy \\ref{zz-0001}.\n\\end{lemma}\n\\end{document}\n"
     (tmp_path / "examples.tex").write_text(
-        "\\documentclass{article}\n\\usepackage{xr-hyper}\n\\externaldocument{.loom/build/paper/paper}\n" + body + cites
+        "\\documentclass{article}\n\\usepackage{xr-hyper}\n\\externaldocument{"
+        + document_build("paper.tex")
+        + "/paper}\n"
+        + body
+        + cites
     )
     (tmp_path / "other.tex").write_text("\\documentclass{article}\n" + body + cites.replace("zz-0002", "zz-0003"))
     loose = [d for d in scan(load_quilt(tmp_path)).lint if d.code == "loom:reference-to-loose"]

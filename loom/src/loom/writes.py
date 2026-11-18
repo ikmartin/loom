@@ -1,6 +1,6 @@
 """The one door: every write loom makes to a person's file is an act through `act`.
 
-An act holds `<history>/writes.lock` across processes and threads, settles what a crash left, lets its caller read, decide and stage under the lock, then keeps every before and after in the history's text store, journals `begin` before any file, writes each file whole (a temp beside it, the file read once more, its mode kept, a rename), appends the act's record lines and `done`. `docs/design/writes.md` is the design; this module is the only place a person's file is written by the acts routed through it.
+An act holds `.loom/local/writes.lock` across processes and threads, settles what a crash left, lets its caller read, decide and stage under the lock, then keeps every before and after in the history's text store, journals `begin` in `.loom/local/writes.jsonl` before any file, writes each file whole (a temp beside it, the file read once more, its mode kept, a rename), appends the act's record lines and `done`. `docs/design/writes.md` is the design; this module is the only place a person's file is written by the acts routed through it.
 """
 
 from __future__ import annotations
@@ -19,11 +19,8 @@ from typing import Any
 
 from loom.errors import ContentError
 from loom.locks import flush, locked
+from loom.paths import JOURNAL, JOURNAL_INDEX, WRITES_LOCK
 
-#: The journal, the lock every act holds, and the journal's index, in the history directory.
-JOURNAL = "writes.jsonl"
-LOCK = "writes.lock"
-INDEX = "writes-index.json"
 #: The suffix of the temporary file an act writes beside the file it replaces.
 TEMP = ".loom-tmp"
 #: A digest as the store names its texts: anything else is never made into a path.
@@ -291,9 +288,9 @@ class Journal:
         elif event == "aborted":
             self.begun.pop(act, None)
 
-    def append(self, history: Path, entry: dict[str, Any], *, full: bool = False) -> None:
-        """Append `entry` to the journal and take it in; under the lock, so nothing else was appended since this was read."""
-        start, end = _append_journal(history, entry, full=full)
+    def append(self, root: Path, entry: dict[str, Any], *, full: bool = False) -> None:
+        """Append `entry` to the quilt's journal and take it in; under the lock, so nothing else was appended since this was read."""
+        start, end = _append_journal(root, entry, full=full)
         self.fold(start, entry)
         self.offset = end
 
@@ -315,15 +312,15 @@ def _append_line(path: Path, text: str, full: bool = False) -> tuple[int, int]:
     return start, start + len(data)
 
 
-def _append_journal(history: Path, entry: dict[str, Any], *, full: bool = False) -> tuple[int, int]:
-    return _append_line(history / JOURNAL, json.dumps(entry, ensure_ascii=False, sort_keys=True), full)
+def _append_journal(root: Path, entry: dict[str, Any], *, full: bool = False) -> tuple[int, int]:
+    return _append_line(root / JOURNAL, json.dumps(entry, ensure_ascii=False, sort_keys=True), full)
 
 
-def read_journal(history: Path) -> Journal:
-    """The journal folded through its last whole line, starting from the index where the index holds; never writes."""
-    p = history / JOURNAL
+def read_journal(root: Path) -> Journal:
+    """The quilt's journal folded through its last whole line, starting from the index where the index holds; never writes."""
+    p = root / JOURNAL
     size = p.stat().st_size if p.is_file() else 0
-    j = _load_index(history)
+    j = _load_index(root)
     if j is None or j.offset > size:
         j = Journal()
     if j.offset == size:
@@ -345,9 +342,9 @@ def read_journal(history: Path) -> Journal:
     return j
 
 
-def entry_at(history: Path, offset: int) -> dict[str, Any] | None:
-    """The journal's line that starts at `offset`."""
-    p = history / JOURNAL
+def entry_at(root: Path, offset: int) -> dict[str, Any] | None:
+    """The quilt's journal's line that starts at `offset`."""
+    p = root / JOURNAL
     try:
         with p.open("rb") as fh:
             fh.seek(offset)
@@ -357,9 +354,9 @@ def entry_at(history: Path, offset: int) -> dict[str, Any] | None:
     return entry if isinstance(entry, dict) else None
 
 
-def _load_index(history: Path) -> Journal | None:
+def _load_index(root: Path) -> Journal | None:
     try:
-        data = json.loads((history / INDEX).read_text(encoding="utf-8"))
+        data = json.loads((root / JOURNAL_INDEX).read_text(encoding="utf-8"))
         return Journal(
             offset=int(data["offset"]),
             begun={str(k): (int(v[0]), dict(v[1])) for k, v in data["begun"].items()},
@@ -369,9 +366,9 @@ def _load_index(history: Path) -> Journal | None:
         return None
 
 
-def _save_index(history: Path, j: Journal) -> None:
+def _save_index(root: Path, j: Journal) -> None:
     """Write the index by rename; it is a cache of the journal, so it is not flushed, and losing it costs one read from the start."""
-    p = history / INDEX
+    p = root / JOURNAL_INDEX
     tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}{TEMP}")
     try:
         tmp.write_text(
@@ -468,12 +465,12 @@ def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
 
 def unsettled(root: Path, history: Path) -> list[dict[str, Any]]:
     """Each act begun and neither done nor aborted, as its `begin` line: what recovery has yet to settle, or could not."""
-    return [e for _, e in read_journal(history).begun.values()]
+    return [e for _, e in read_journal(root).begun.values()]
 
 
 def written(root: Path, history: Path) -> set[str]:
     """Every `<edit>:<generation>` loom has written into a file, by the journal: a done act's, and an unsettled act's when every file holds what it wrote, as recovery will find. For readers outside the lock."""
-    j = read_journal(history)
+    j = read_journal(root)
     out = set(j.wrote)
     for _, e in j.begun.values():
         if e.get("edits") and not untrusted(root, history, e) and _all_after(root, e):
@@ -529,28 +526,26 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
         holds = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
         if all(after for _, after in holds.values()):
             _append_records(root, e.get("records") or [], unless_there=True)
-            j.append(history, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
+            j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
             said.append(f"finished {act_id}")
         elif all(before or after for before, after in holds.values()):
             for rel, (before, after) in holds.items():
                 if after and not before:
                     b = files[rel][0]
                     _put(root, rel, fetch(history, b) if b else None)
-            j.append(
-                history, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True}
-            )
+            j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
             said.append(f"undid {act_id}")
     return said
 
 
 def recover(root: Path, history: Path) -> list[str]:
     """Settle what a crash left, holding the lock: what `loom serve` runs as it starts, and every act runs first. Returns what was done, in words."""
-    with locked(history / LOCK):
-        j = read_journal(history)
+    with locked(root / WRITES_LOCK):
+        j = read_journal(root)
         if not j.begun:
             return []
         said = _settle(root, history, j)
-        _save_index(history, j)
+        _save_index(root, j)
         return said
 
 
@@ -669,7 +664,7 @@ class Act:
             "edits": self.edits,
             "records": self.records,
         }
-        self.journal.append(self.history, begin, full=True)
+        self.journal.append(self.root, begin, full=True)
         done: list[str] = []
         try:
             for rel, data in changed.items():
@@ -682,13 +677,13 @@ class Act:
                 for tmp in _temps(self.root, rel):
                     tmp.unlink(missing_ok=True)
             why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
-            self.journal.append(self.history, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
-            _save_index(self.history, self.journal)
+            self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
+            _save_index(self.root, self.journal)
             raise
         # every file holds its after bytes: the act has happened, and a failure from here on is recovery's to finish
         _append_records(self.root, self.records)
-        self.journal.append(self.history, {"event": "done", "act": self.id, "when": stamp()})
-        _save_index(self.history, self.journal)
+        self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
+        _save_index(self.root, self.journal)
         self._follow()
 
     def _follow(self) -> None:
@@ -705,7 +700,7 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
     root : Path
         The quilt.
     history : Path
-        The quilt's history directory (`[quilt] history`): the lock, the journal and the text store are there.
+        The quilt's history directory (`[quilt] history`): the text store is there; the lock and the journal are in `.loom/local/`.
     kind : str
         What the act is: `keep`, `discard`, `restore`, `put-back`, `tick`, `settings`.
     actor : str, optional
@@ -721,11 +716,11 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
     WriteRefused
         From the commit: a file changed at the last read before its rename, and the act was undone.
     """
-    with locked(history / LOCK):
-        j = read_journal(history)
+    with locked(root / WRITES_LOCK):
+        j = read_journal(root)
         if j.begun:
             _settle(root, history, j)
-            _save_index(history, j)
+            _save_index(root, j)
         a = Act(root, history, kind, actor, j)
         yield a
         a._commit()

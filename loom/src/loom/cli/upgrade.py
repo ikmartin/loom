@@ -15,7 +15,7 @@ from loom.records.types import default_text
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
 def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
-    """Refresh .loom/.gitignore, write .loom/annotation-types.toml where a quilt has none, and, where .loom/ai/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones."""
+    """Refresh .loom/.gitignore, write .loom/records/annotation-types.toml where a quilt has none, and, where .loom/agents/instructions/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones."""
     from loom.ai.clients import write_clients
     from loom.ai.layout import SHELL, blocker, upgrade_layer, variant
     from loom.cli.ai import NO_SERVER, sdk_groups
@@ -34,11 +34,12 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     if not (root / ANNOTATION_TYPES).exists():
         # a quilt made before there were types gets the defaults; a file that is there is the person's, edited or not
         if not dry_run:
+            (root / ANNOTATION_TYPES).parent.mkdir(parents=True, exist_ok=True)
             (root / ANNOTATION_TYPES).write_text(default_text(), encoding="utf-8")
         written.append(ANNOTATION_TYPES)
     added: list[str] = []
     sdk: list[Group] = []
-    # a `.loom/ai` that is not the quilt's own leads elsewhere, so nothing of the agent layer is written there
+    # a `.loom/agents/instructions` that is not the quilt's own leads elsewhere, so nothing of the agent layer is written there
     blocked = blocker(root, AI, folder=True)
     has_ai = (root / AI).is_dir() and not blocked
     if has_ai:

@@ -1,6 +1,6 @@
 """A thin skill per mode for each agent app that reads skills from the project: `.claude/skills/loom-<mode>/SKILL.md` for Claude Code, `.agents/skills/loom-<mode>/SKILL.md` for Codex.
 
-A skill only points at its mode, whose text stays the one copy in `.loom/ai/modes/` and is read through `loom_ai_mode`, so a person can start a mode from the app's `/` menu whether or not the app lists MCP prompts there. A skill is loom's only where loom wrote it: `.loom/ai/.loom-skills` records each one it wrote with the hash of its text, as `.loom-modes-version` does for the modes. Loom writes a skill where none stands or over its own unedited one, from the quilt's `modes`, at every upgrade, and removes its own unedited skill of a mode the quilt no longer has. Anything else at one of its paths, a skill of the person's, one of loom's they edited, or a link, is left alone and reported, and nothing is written or removed through a link.
+A skill only points at its mode, whose text stays the one copy in `.loom/agents/instructions/modes/` and is read through `loom_ai_mode`, so a person can start a mode from the app's `/` menu whether or not the app lists MCP prompts there. A skill is loom's only where loom wrote it: `.loom/agents/instructions/.loom-skills` records each one it wrote with the hash of its text, as `.loom-modes-version` does for the modes. Loom writes a skill where none stands or over its own unedited one, from the quilt's `modes`, at every upgrade, and removes its own unedited skill of a mode the quilt no longer has. Anything else at one of its paths, a skill of the person's, one of loom's they edited, or a link, is left alone and reported, and nothing is written or removed through a link.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from pathlib import Path
 #: The name every skill loom writes starts with.
 PREFIX = "loom-"
 SKILL = "SKILL.md"
-#: The record of the skills loom wrote, in `.loom/ai/`: a quilt-relative path and the hash of the text written, a line each.
+#: The record of the skills loom wrote, in `.loom/agents/instructions/`: a quilt-relative path and the hash of the text written, a line each.
 RECORD = ".loom-skills"
 
 
@@ -42,7 +42,7 @@ def skill_text(root: Path, name: str) -> str:
         f"Work in loom's {name} mode on what the person named when they asked for it, or on what the conversation names; if it names nothing yet, ask them what to work on.\n\n"
         "1. If you have not called `loom_ai_orient` in this conversation, call it first (in a shell, `loom ai orient`), and follow it.\n"
         f"2. Call `loom_ai_mode` with the name `{name}` (in a shell, `loom ai mode {name}`) and work as it says.\n\n"
-        f"The mode is the quilt's own copy, `.loom/ai/modes/{name}.md`; this skill only points at it, and loom writes it again from the mode.\n"
+        f"The mode is the quilt's own copy, `.loom/agents/instructions/modes/{name}.md`; this skill only points at it, and loom writes it again from the mode.\n"
     )
 
 

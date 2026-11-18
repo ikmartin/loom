@@ -162,7 +162,7 @@ def test_serve_spa_fallback_for_dotted_routes(session) -> None:  # type: ignore[
 def test_serve_offers_a_works_fetched_artifacts(session) -> None:  # type: ignore[no-untyped-def]
     """The viewer opens a reference at the place a comment points to, so the server offers what was fetched -- the first thing it serves that it did not generate (DR-110). Localhost, read only, and confined to the store by the same prefix check the build tree gets."""
     s, d = session
-    home = d / ".loom/digests" / "storage" / "arxiv" / "0805.2065v2"
+    home = d / ".loom/library" / "storage" / "arxiv" / "0805.2065v2"
     home.mkdir(parents=True, exist_ok=True)
     (home / "paper.pdf").write_bytes(b"%PDF-1.4\nfetched\n")
 
@@ -181,19 +181,19 @@ def test_the_watcher_watches_what_the_write_api_writes(tmp_path: Path) -> None:
     from loom.render.watch import snapshot
 
     q = tmp_path / "q"
-    (q / ".loom/annotations").mkdir(parents=True)
+    (q / ".loom/records/annotations").mkdir(parents=True)
     (q / "drafting" / "nodes").mkdir(parents=True)
     (q / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
-    (q / ".loom/annotations" / "log.jsonl").write_text('{"event": "created"}\n', encoding="utf-8")
+    (q / ".loom/records/annotations" / "log.jsonl").write_text('{"event": "created"}\n', encoding="utf-8")
     (q / "drafting" / "nodes" / "n.tex").write_text("\\begin{lemma}\\end{lemma}\n", encoding="utf-8")
 
     watched = {p.relative_to(q).as_posix() for p in snapshot(q)}
-    assert ".loom/annotations/log.jsonl" in watched
+    assert ".loom/records/annotations/log.jsonl" in watched
     assert {"config.toml", "drafting/nodes/n.tex"} <= watched
 
 
 def test_the_watcher_does_not_chase_its_own_build(session, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
-    """Every build rewrites `.loom/last-seen.json`, so a watcher that watches it rebuilds once a second for ever after the first change: the manifest gets a new `generated` each time, and the viewer, which re-renders on a new hash, closed every comment box a second after it was opened."""
+    """Every build rewrites `.loom/local/last-seen.json`, so a watcher that watches it rebuilds once a second for ever after the first change: the manifest gets a new `generated` each time, and the viewer, which re-renders on a new hash, closed every comment box a second after it was opened."""
     from loom.render import watch
     from loom.render.watch import snapshot
 
@@ -280,13 +280,13 @@ def test_a_link_is_offered_only_into_this_quilts_own_server(tmp_path: Path) -> N
 
 
 def test_one_server_runs_per_quilt_and_the_watcher_ignores_its_note(tmp_path: Path) -> None:
-    """T7: two `serve`s on one quilt retriggered each other, each rebuilding when the other wrote `.loom/serve.json`."""
+    """T7: two `serve`s on one quilt retriggered each other, each rebuilding when the other wrote `.loom/local/serve.json`."""
     from loom.render.serve import write_serve_json
     from loom.render.watch import snapshot
 
     q = demo(tmp_path)
     write_serve_json(q, 8791)  # this process stands in for the server that is running
-    assert ".loom/serve.json" not in {p.relative_to(q).as_posix() for p in snapshot(q)}
+    assert ".loom/local/serve.json" not in {p.relative_to(q).as_posix() for p in snapshot(q)}
     refused(
         "serve",
         "--port",
@@ -487,8 +487,8 @@ def test_the_watcher_sees_loom_s_own_records_between_full_scans(tmp_path: Path) 
     """An append to the annotation log is seen though the next scan of the tree is an hour away, so an agent's finding reaches a served page without waiting out a scan (plan 0.19.2)."""
     from loom.render.watch import Watcher
 
-    (tmp_path / ".loom/annotations").mkdir(parents=True)
-    entries = tmp_path / ".loom/annotations" / "log.jsonl"
+    (tmp_path / ".loom/records/annotations").mkdir(parents=True)
+    entries = tmp_path / ".loom/records/annotations" / "log.jsonl"
     entries.write_text("")
     seen: list[list[Path]] = []
     w = Watcher(tmp_path, seen.append, interval=3600.0)
@@ -508,8 +508,8 @@ def test_a_record_written_before_the_watcher_starts_is_seen_on_its_first_poll(tm
     """An annotation filed while the first build ran, after it read the files and before the watcher began, is seen on the first poll rather than at the first full scan, an hour away."""
     from loom.render.watch import Watcher
 
-    (tmp_path / ".loom/annotations").mkdir(parents=True)
-    entries = tmp_path / ".loom/annotations" / "log.jsonl"
+    (tmp_path / ".loom/records/annotations").mkdir(parents=True)
+    entries = tmp_path / ".loom/records/annotations" / "log.jsonl"
     entries.write_text("")
     seen: list[list[Path]] = []
     w = Watcher(tmp_path, seen.append, interval=3600.0)

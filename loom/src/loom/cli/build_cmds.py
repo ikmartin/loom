@@ -58,7 +58,7 @@ def log_run(session: str | None, command: str, root: Path | None = None) -> None
 
 
 def write_bundle(result: ScanResult, b: Bundle) -> Path:
-    """Write a key's closure document under .loom/build/closures/, for `loom compile KEY` and `loom check` to run latexmk on.
+    """Write a key's closure document under .loom/cache/closures/, for `loom compile KEY` and `loom check` to run latexmk on.
 
     Internal: `loom source KEY --closure` is how a reader or an agent gets the text, so nothing copies one elsewhere and nothing gitignores it.
     """
@@ -87,7 +87,7 @@ def write_bundle(result: ScanResult, b: Bundle) -> Path:
     "--html",
     "html",
     is_flag=True,
-    help="Also make a document's HTML with TeX4ht, into .loom/build/<name>/html/, and say how much of it loom can place.",
+    help="Also make a document's HTML with TeX4ht, into .loom/cache/tex/<stem>-<hash>/html/, and say how much of it loom can place.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
@@ -101,7 +101,7 @@ def compile(  # noqa: A001
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """Run latexmk from a master's own directory into .loom/build/<name>/ (default: the default master), its name its path without .tex, or for a key.
+    """Run latexmk from a master's own directory into its compile folder, .loom/cache/tex/<stem>-<hash>/ (default: the default master), or for a key.
 
     Compiling a key builds the document of its closure and runs latexmk on that, so `--with` previews a proposed diff and `--draft` a node that has no id yet: neither writes into the quilt, and a failure names the digests whose packages are missing. `--html` also makes a document's HTML as TeX makes it, which its fragments are cut from: the page, the fragment loom rebuilt from it, and how many of the document's nodes and blocks it places.
     """
@@ -196,7 +196,7 @@ def compile(  # noqa: A001
 def html_report(result: ScanResult, master: str, engine: str) -> dict[str, Any]:
     """Make `master`'s HTML with TeX4ht beside its PDF, rebuild it as a fragment, and say how much of it loom places: `said` is the report's line, the rest its JSON.
 
-    The run starts from the PDF's aux and bibliography in the document's build directory, so its references print what the PDF prints; nodes are counted against the scan's statements and proofs that the document reaches.
+    The run starts from the PDF's aux and bibliography in the document's compile folder, so its references print what the PDF prints; nodes are counted against the scan's statements and proofs that the document reaches.
     """
     from loom.render.normalise import normalise
     from loom.tex.tex4ht import compile_html, placed

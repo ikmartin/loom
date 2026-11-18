@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from loom.paths import document_build, document_pdf_address
 from loom.scan.quilt import load_quilt, save_author
 from loom.scan.scan import scan
 from tests.helpers import json_of, ok, refused
@@ -28,15 +29,22 @@ def test_two_documents_of_one_stem_are_two_documents(tmp_path: Path) -> None:
     assert result.default_master == "drafting/main.tex" and result.document_role("paper/main.tex") == "person"
     ok("compile", "paper/main.tex", cwd=q)
     ok("compile", "drafting/main.tex", cwd=q)
-    assert (q / ".loom/build/paper/main/main.pdf").is_file() and (q / ".loom/build/drafting/main/main.pdf").is_file()
+    assert (q / document_build("paper/main.tex") / "main.pdf").is_file() and (
+        q / document_build("drafting/main.tex") / "main.pdf"
+    ).is_file()
     ok("build", cwd=q)
-    masters = {x["path"]: x for x in json.loads((q / ".loom/build/manifest.json").read_text())["masters"]}
+    masters = {x["path"]: x for x in json.loads((q / ".loom/cache/site/manifest.json").read_text())["masters"]}
     assert (masters["paper/main.tex"]["fragment"], masters["paper/main.tex"]["pdf"]) == (
         "fragments/masters/paper/main.html",
-        "paper/main/main.pdf",
+        document_pdf_address("paper/main.tex"),
+    )
+    assert (
+        masters["drafting/main.tex"]["pdf"]
+        == document_pdf_address("drafting/main.tex")
+        != document_pdf_address("paper/main.tex")
     )
     assert masters["drafting/main.tex"]["fragment"] == "fragments/masters/drafting/main.html"
-    assert (q / ".loom/build/fragments/masters/paper/main.html").is_file()
+    assert (q / ".loom/cache/site/fragments/masters/paper/main.html").is_file()
     urls = {e["key"]: e["url"] for e in json_of("search", "paper", "--json", cwd=q)["matches"] if e["kind"] == "master"}
     assert urls.get("paper/main.tex") == "/master/paper/main", urls
 
@@ -48,7 +56,7 @@ def test_a_stem_two_documents_share_names_neither(tmp_path: Path) -> None:
     (q / "paper").mkdir()
     (q / "paper" / "main.tex").write_text(PAPER, encoding="utf-8")
     for args in (
-        ("deloom", "main", "--to", ".loom/build/flat.tex"),
+        ("deloom", "main", "--to", ".loom/agents/scratch/s/flat.tex"),
         ("search", "1.1", "--in", "main"),
         ("adopt", "main"),
     ):

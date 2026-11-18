@@ -57,7 +57,7 @@ def test_id_and_new_log_themselves_to_the_session(tmp_path: Path) -> None:
     """The orientation lists both among an agent's commands and says every command that takes --session logs the call (F7)."""
     d = demo(tmp_path)
     sid = ok("session", "new", "--name", "Drafting", cwd=d).stdout.split()[0]
-    run_dir = d / ".loom" / "sessions" / sid
+    run_dir = d / ".loom" / "agents" / "sessions" / sid
     ok("id", "--next", "--session", sid, cwd=d)
     ok("new", "lemma", "Rigidity", "--session", sid, cwd=d)
     log = (run_dir / "run.log").read_text()
@@ -77,16 +77,16 @@ def purgeable(tmp_path: Path) -> tuple[Path, str, str]:
     ok("annotate", "--reply", ann, "An answer to it.", "--as", WHO, cwd=q)
     ok("annotate", "--resolve", ann, "Done.", "--as", WHO, cwd=q)
     ok("session", "say", "Looked at dm-0003.", "--session", gone, "--as", WHO, cwd=q)
-    with (q / ".loom/annotations" / "log.jsonl").open("a", encoding="utf-8") as fh:
+    with (q / ".loom/records/annotations" / "log.jsonl").open("a", encoding="utf-8") as fh:
         fh.write("not json, kept as it stands\n")
-    (q / ".loom" / "sessions" / gone / "run.log").write_text("x\n")
+    (q / ".loom" / "agents" / "sessions" / gone / "run.log").write_text("x\n")
     return q, gone, stays
 
 
 def records(q: Path) -> tuple[bytes, bytes, str | None]:
     return (
-        (q / ".loom/annotations" / "log.jsonl").read_bytes(),
-        (q / ".loom" / "sessions" / "index.jsonl").read_bytes(),
+        (q / ".loom/records/annotations" / "log.jsonl").read_bytes(),
+        (q / ".loom" / "agents" / "sessions" / "index.jsonl").read_bytes(),
         active(q),
     )
 
@@ -94,13 +94,13 @@ def records(q: Path) -> tuple[bytes, bytes, str | None]:
 def test_purge_erases_a_session_and_leaves_every_annotation(tmp_path: Path) -> None:
     """A session's directory, transcript and index entry go and it stops being active; annotations are no session's, so the log is left byte for byte, its unparsable line included."""
     q, gone, stays = purgeable(tmp_path)
-    log = (q / ".loom/annotations" / "log.jsonl").read_bytes()
+    log = (q / ".loom/records/annotations" / "log.jsonl").read_bytes()
     said = ok("session", "delete", gone, "--purge", "--yes", cwd=q)
     assert said.stdout.strip() == f'erased {gone} "false start", its directory and its transcript'
-    assert (q / ".loom/annotations" / "log.jsonl").read_bytes() == log
+    assert (q / ".loom/records/annotations" / "log.jsonl").read_bytes() == log
     assert gone not in sessions(q, deleted=True) and stays in sessions(q)
-    assert gone not in (q / ".loom" / "sessions" / "index.jsonl").read_text()
-    assert not (q / ".loom" / "sessions" / gone).exists()
+    assert gone not in (q / ".loom" / "agents" / "sessions" / "index.jsonl").read_text()
+    assert not (q / ".loom" / "agents" / "sessions" / gone).exists()
     assert active(q) is None
 
 
@@ -124,7 +124,7 @@ def test_purge_refuses_without_a_yes_where_nobody_can_answer(tmp_path: Path) -> 
         code=2,
         match=f"--purge erases {gone} and cannot be undone; pass --yes",
     )
-    assert records(q) == was and (q / ".loom" / "sessions" / gone).is_dir()
+    assert records(q) == was and (q / ".loom" / "agents" / "sessions" / gone).is_dir()
 
 
 @pytest.mark.parametrize("answer", ["n", "y"])
@@ -184,7 +184,7 @@ def test_one_resolver_names_an_ambiguous_session_and_writes_into_no_tombstone(tm
 
 
 def test_a_session_dry_run_writes_nothing_and_an_unnamed_agent_is_refused(tmp_path: Path) -> None:
-    """The output check skips `.loom/sessions/`, so the session writers' dry runs are held to it here (K4); who acts is `--as`, and an agent must say who it is (K2)."""
+    """The output check skips `.loom/agents/sessions/`, so the session writers' dry runs are held to it here (K4); who acts is `--as`, and an agent must say who it is (K2)."""
     q = demo(tmp_path)
     sid = new_session(q, "morning")
     ok("session", "close", sid, "--as", WHO, cwd=q)

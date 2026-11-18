@@ -1,6 +1,6 @@
 """`loom serve`: one loop with three jobs, watch, serve, compile.
 
-Serves the arras bundle at / (with index.html as the fallback for any path that is not a file of the bundle or an asset, so the viewer's routes work, dots in keys included) and .loom/build/ at /build/. The manifest carries an ETag so the viewer's poll costs nothing while unchanged, and `/_api/stream` says each time a new one is published, so a viewer that listens fetches it at once rather than on its next poll.
+Serves the arras bundle at / (with index.html as the fallback for any path that is not a file of the bundle or an asset, so the viewer's routes work, dots in keys included) and .loom/cache/site/ at /build/, the compile folders of .loom/cache/tex/ under it at /build/tex/. The manifest carries an ETag so the viewer's poll costs nothing while unchanged, and `/_api/stream` says each time a new one is published, so a viewer that listens fetches it at once rather than on its next poll.
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ from urllib.parse import unquote
 
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
-from loom.paths import BUILD, SERVE_JSON, STORE_ADDRESS, document_build
+from loom.paths import COMPILES, SERVE_JSON, SITE, STORE_ADDRESS, TEX, TEX_ADDRESS, document_build
 from loom.presence import Watch
 from loom.refs.pages import storage_root
 from loom.render.build import BuildReport, build
@@ -53,8 +53,9 @@ ASSET_SUFFIXES = {
 }
 
 
-#: The addresses the server answers loom's files at, fixed wherever the directories behind them sit.
+#: The addresses the server answers loom's files at, fixed wherever the directories behind them sit: `/build/` the site (`paths.SITE`), and under it `tex/` the compile folders (`paths.TEX`).
 BUILD_URL = "/build/"
+TEX_URL = f"{BUILD_URL}{TEX_ADDRESS}/"
 STORE_URL = f"/{STORE_ADDRESS}/"
 #: How often an idle stream says it is still open, so a proxy or a sleeping laptop does not drop it unseen.
 HEARTBEAT = 15.0
@@ -286,6 +287,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
     #: The viewer copied aside at start, which `/_api` reports on; None where the bundle is served from where it lies.
     held: HeldBundle | LiveBundle | None = None
     build_dir: Path = Path(".")
+    #: The compile folders, which `/build/tex/` answers from.
+    tex_dir: Path = Path(".")
     refs_dir: Path = Path(".")
     #: The quilt to write into. `None` serves the corpus read-only and answers `/_api` with 404, which is the
     #: discovery mechanism working: a viewer that gets 404 shows no editing affordances.
@@ -321,9 +324,13 @@ class LoomHandler(SimpleHTTPRequestHandler):
     def _resolve(self) -> Path | None:
         path = self.path.split("?", 1)[0].split("#", 1)[0]
         if path.startswith(BUILD_URL):
-            rel = path[len(BUILD_URL) :]
-            target = (self.build_dir / rel).resolve()
-            return target if str(target).startswith(str(self.build_dir.resolve())) and target.is_file() else None
+            base, rel = (
+                (self.tex_dir, path[len(TEX_URL) :])
+                if path.startswith(TEX_URL)
+                else (self.build_dir, path[len(BUILD_URL) :])
+            )
+            target = (base / rel).resolve()
+            return target if str(target).startswith(str(base.resolve())) and target.is_file() else None
         if path.startswith(STORE_URL):
             # the first thing the server offers that it did not generate: a work's fetched PDF or source, so the
             # viewer can open a reference at the place a comment points to. Localhost only, read only, and still
@@ -573,7 +580,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
             frames = {"frames": self.frames} if self.frames else {}
             # the viewer this server serves, and whether loom has been updated under it, so a page can say to reload or to restart
             served = {"viewer": self.held.version, "stale": self.held.stale()} if self.held else {}
-            # the agent servers alive as the server last looked, where the stream that says when they change is served; no request waits on `.loom/live/`
+            # the agent servers alive as the server last looked, where the stream that says when they change is served; no request waits on `.loom/local/live/`
             connected = (
                 {"connected": json.loads(self.publications.connected_state)} if self.publications is not None else {}
             )
@@ -1002,15 +1009,14 @@ class ServeSession:
         return item.get("id") if item.get("kind") in ("document", "pdf") else None
 
     def _compiles_told(self) -> None:
-        """Say how the compiles stand, on the stream and in the build output for `loom status`."""
-        from loom.render.compiles import COMPILES_JSON
+        """Say how the compiles stand, on the stream and in `.loom/local/compiles.json` for `loom status`."""
         from loom.render.publish import write_atomic
 
         if self.compiles is None:
             return
         state = json.dumps(self.compiles.state(), separators=(",", ":"))
         try:
-            write_atomic(self.quilt.root / BUILD / COMPILES_JSON, state)
+            write_atomic(self.quilt.root / COMPILES, state)
         except OSError:
             pass  # the stream still says it
         self.publications.compiled(state.encode("utf-8"))
@@ -1024,7 +1030,8 @@ class ServeSession:
             {
                 "bundle_dir": self.held.path,
                 "held": self.held,
-                "build_dir": self.quilt.root / BUILD,
+                "build_dir": self.quilt.root / SITE,
+                "tex_dir": self.quilt.root / TEX,
                 "refs_dir": storage_root(self.quilt.root),
                 # The write API is served for the quilt being served, and only ever over this loopback socket.
                 "quilt_root": self.quilt.root,
@@ -1104,14 +1111,12 @@ class ServeSession:
         )
 
     def stop(self) -> None:
-        from loom.render.compiles import COMPILES_JSON
-
         if self._settling is not None:
             self._settling.cancel()
 
         if self.compiles is not None:
             self.compiles.stop()
-        (self.quilt.root / BUILD / COMPILES_JSON).unlink(missing_ok=True)
+        (self.quilt.root / COMPILES).unlink(missing_ok=True)
         if self.presence:
             self.presence.stop()
         self.publications.close()

@@ -46,7 +46,12 @@ def test_a_shown_file_is_served_sandboxed_on_the_viewers_origin(served) -> None:
     status, headers, body = get(s.url + "_files/notes/page.html")
     assert status == 200 and body.decode() == PAGE
     assert headers["Content-Security-Policy"] == "sandbox" and headers["X-Content-Type-Options"] == "nosniff"
-    for rel in ("_files/.hidden/s.txt", "_files/scratch/s.txt", "_files/%2e%2e/outside.txt", "_files/.loom/state.toml"):
+    for rel in (
+        "_files/.hidden/s.txt",
+        "_files/scratch/s.txt",
+        "_files/%2e%2e/outside.txt",
+        "_files/.loom/records/state.toml",
+    ):
         assert get(s.url + rel)[0] == 404, rel
 
 
@@ -100,7 +105,7 @@ def test_a_page_can_list_the_shown_files_and_nothing_else(served) -> None:  # ty
     files = json.loads(body)["files"]
     assert files == sorted(files) and {"notes/page.html", "notes/a.md"} <= set(files)
     assert not [f for f in files if f.startswith((".hidden/", "scratch/", ".loom/"))]
-    assert get(frames + "/.loom/state.toml")[0] == 404, "the one address under .loom it answers"
+    assert get(frames + "/.loom/records/state.toml")[0] == 404, "the one address under .loom it answers"
     port = frames.rsplit(":", 1)[1]
     assert get(frames + "/.loom/files.json", {"Host": f"rebound.example:{port}"})[0] == 404
     put(q, "notes/new.md", "# New\n")
@@ -146,7 +151,7 @@ def test_open_is_the_persons_click_and_never_runs_code(tmp_path: Path, serve, mo
     assert s.builds == builds, "opening changes nothing the manifest shows"
     for body, status, code in [
         ({"file": "run.command"}, 400, "not-openable"),
-        ({"file": ".loom/state.toml"}, 404, "no-such-file"),
+        ({"file": ".loom/records/state.toml"}, 404, "no-such-file"),
         ({"app": "Anki", "file": "deck.apkg"}, 400, "bad-request"),
         ({"app": "--args"}, 400, "bad-app"),
     ]:

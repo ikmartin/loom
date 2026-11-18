@@ -16,23 +16,23 @@ def test_ledger_append_only_and_latest_row_wins(tmp_path: Path) -> None:
         "rl-0004", "A", "2026-09-16T14:02:11Z", "sha256:1", "sha256:p", "drafting/main.tex", {"rl-0002": "sha256:2"}
     )
     append_rows(tmp_path, [r1])
-    text = (tmp_path / ".loom" / "state.toml").read_text()
-    assert text.startswith("# .loom/state.toml -- written by `loom accept`. Do not edit.\nschema = 1\n")
+    text = (tmp_path / ".loom" / "records" / "state.toml").read_text()
+    assert text.startswith("# .loom/records/state.toml -- written by `loom accept`. Do not edit.\nschema = 1\n")
     assert '[[accept]]\nkey = "rl-0004"' in text and '[accept.closure]\n"rl-0002" = "sha256:2"' in text
     r2 = AcceptRow("rl-0004", "B", "2026-09-17T00:00:00Z", "sha256:9", "sha256:p", "drafting/main.tex", {})
     append_rows(tmp_path, [r2])
     rows = read_ledger(tmp_path)
     assert [r.author for r in rows] == ["A", "B"] and rows[0].closure == {"rl-0002": "sha256:2"}
     assert latest_rows(rows)["rl-0004"].text == "sha256:9"
-    assert (tmp_path / ".loom" / "state.toml").read_text().count("[[accept]]") == 2
+    assert (tmp_path / ".loom" / "records" / "state.toml").read_text().count("[[accept]]") == 2
 
 
 def test_snapshots_content_addressed_never_overwritten(tmp_path: Path) -> None:
-    hist = tmp_path / ".loom" / "history"
+    hist = tmp_path / ".loom" / "records" / "history"
     h1, w1 = write_snapshot(tmp_path, "a\n\n\n b  \n", hist)
     h2, w2 = write_snapshot(tmp_path, "a\n\n b\n", hist)
     assert h1 == h2 and w1 and not w2
-    p = tmp_path / ".loom" / "history" / "texts" / (h1.split(":")[1] + ".tex")
+    p = tmp_path / ".loom" / "records" / "history" / "texts" / (h1.split(":")[1] + ".tex")
     assert p.read_text() == "a\n\n b\n"
     p.write_text("tampered")
     write_snapshot(tmp_path, "a\n\n b\n", hist)

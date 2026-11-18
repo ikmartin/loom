@@ -1,7 +1,7 @@
 // Reading a cited work under `loom serve` (plan 0.13 §11): the things the fixture-only suite cannot check because they need the publisher — a selection mapped onto the committed page text and recorded, a box recorded as drawn, the marks the sidecar then carries, and a locator lit from a link.
 //
 // A test that writes (`test`) is served on its own copy of the showcase, and one that only reads (`readOnly`) on its worker's; a test that needs a note to exist writes it first through the API.
-import { expect, readOnly, test, type Served } from '../served';
+import { compileFolder, expect, readOnly, storeDir, test, type Served } from '../served';
 import type { Page } from '@playwright/test';
 import { openPicker, pickSession } from '../picker';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,7 +11,7 @@ const PAGE2 = '/library/Bellamy19?page=2';
 
 /** Bellamy19 as the served copy's manifest has it: its work id, where its pages are filed, and its sidecar. */
 function bellamy(served: Served): { work: string; artifacts: { dir: string }; spans: { path: string } } {
-	return JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8')).references.Bellamy19;
+	return JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8')).references.Bellamy19;
 }
 
 /** Open page 2 with a session chosen, and wait until the paper has been drawn again for the narrower pane; returns the session. */
@@ -233,7 +233,7 @@ test('a locator in the URL is lit while the URL carries it, and a note is focuse
 	// a note by id: one written here, since the showcase's own are in a closed session and closed sessions' annotations are hidden until shown
 	const id = await noteOnPage2(served, served.openSessions().at(-1)!, 'incidence matrix', 'a note to focus by its id');
 	await opened(page, served);
-	const pageText = readFileSync(join(served.root, '.loom', bellamy(served).artifacts.dir, 'pages/0002.txt'), 'utf8') // `artifacts.dir` is the store's address, digests/storage/…, which loom keeps under .loom/;
+	const pageText = readFileSync(join(storeDir(served.root, bellamy(served).artifacts.dir), 'pages/0002.txt'), 'utf8') // `artifacts.dir` is the store's address, digests/storage/…, which loom keeps in .loom/library/storage/;
 	const a = pageText.indexOf('totally unimodular');
 	await page.goto(`${PAGE2}&span=${a}-${a + 'totally unimodular'.length}`);
 	const lit = page.locator('[data-testid="pdf-page-2"] .mark.transient');
@@ -301,13 +301,13 @@ test('a selection records the lines it covers and nothing else', async ({ page, 
 	await selectOnly(page, 'rational polytope');
 	await page.keyboard.press('Escape');
 	// a text anchor publishes its geometry through the sidecar rather than the log (DR-209), so that is where the drawn rectangles are checked
-	const manifest = () => JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8'));
+	const manifest = () => JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
 	type Raw = { id: string; quote?: string | null; target: { page?: number | null } };
 	const found = () => (Object.values(manifest().annotations) as Raw[]).find((a) => (a.quote ?? '').includes('rational polytope'));
 	await expect.poll(() => !!found()).toBe(true);
 	const written = found()!;
 	const id = written.id;
-	const sidecar = join(served.root, '.loom/build', bellamy(served).spans.path);
+	const sidecar = join(served.root, '.loom/cache/site', bellamy(served).spans.path);
 	await expect
 		.poll(() => JSON.parse(readFileSync(sidecar, 'utf8')).marks?.[id]?.length ?? 0)
 		.toBeGreaterThan(0);
@@ -429,7 +429,7 @@ test.describe('a document never compiled', () => {
 	// the talk's compile taken away, so it has none of its own: the default document's `Theorem 3.1` would be plausible and wrong there (V3)
 	test.use({
 		prepareQuilt: async ({}, use) => {
-			await use(({ root }) => rmSync(join(root, '.loom', 'build', 'drafting', 'talk'), { recursive: true, force: true }));
+			await use(({ root }) => rmSync(compileFolder(root, 'drafting/talk.tex'), { recursive: true, force: true }));
 		}
 	});
 
@@ -570,8 +570,8 @@ const QUOTE = 'The median orders of a weighted digraph are in bijection with the
 
 /** A work's file in a copy of the quilt, by what its manifest says. */
 function fileOf(root: string, citekey: string): Buffer {
-	const ref = JSON.parse(readFileSync(join(root, '.loom/build/manifest.json'), 'utf8')).references[citekey];
-	return readFileSync(join(root, '.loom', ref.artifacts.dir, 'paper.pdf'));
+	const ref = JSON.parse(readFileSync(join(root, '.loom/cache/site/manifest.json'), 'utf8')).references[citekey];
+	return readFileSync(join(storeDir(root, ref.artifacts.dir), 'paper.pdf'));
 }
 
 /** The paper's scrolling column in a pane. */

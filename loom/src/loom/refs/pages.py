@@ -15,9 +15,9 @@ import subprocess
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
-from loom.paths import STORAGE, STORE_ADDRESS
+from loom.paths import LIBRARY_CACHE, STORAGE, STORE_ADDRESS
 
 # A numbered heading: "3", "3.1", "A.2". A bare single capital is deliberately NOT a number -- "C (F ) = Spec Sym(F )"
 # and "E = C x_D X" are lines from a real paper in this corpus, and a lone letter matches far more mathematics than
@@ -238,7 +238,7 @@ def page_box(bbox_xml: str) -> tuple[float, float] | None:
 def token_boxes(pdf: Path, page: int, home: Path | None = None) -> str:
     """The `-bbox-layout` XML for one page, written per page on demand and never in bulk (§4.2).
 
-    With `home`, the work's directory in the store, the output is cached under `.loom/digests/storage/cache/boxes/` — which the shipped `.gitignore` ignores. It used to be written beside the page text as `pages/NNNN.boxes.xml`, which that file **commits**: 60 KB a page of derived geometry entering the repository the first time anyone ran `loom refs locate`.
+    With `home`, the work's directory in the store, the output is cached with what loom derives (`store_boxes`), never beside the page text, which travels with the quilt: 60 KB a page of derived geometry.
     """
     if home is None:
         return _pdftotext(["-q", "-bbox-layout", "-f", str(page), "-l", str(page), str(pdf), "-"])
@@ -252,7 +252,7 @@ def token_boxes(pdf: Path, page: int, home: Path | None = None) -> str:
 
 
 def store_boxes(home: Path) -> Path:
-    """Where a stored work's word boxes are cached, one file per page: under the store's `cache/`, which the shipped `.gitignore` ignores.
+    """Where a stored work's word boxes are cached, one file per page: `.loom/cache/library/boxes/<scheme>/<id>`, with what loom derives.
 
     Parameters
     ----------
@@ -264,7 +264,8 @@ def store_boxes(home: Path) -> Path:
     Path
         The directory, which `token_boxes` and `document_boxes` both write.
     """
-    return home.parent.parent / "cache" / "boxes" / home.parent.name / home.name
+    root = home.parents[len(PurePosixPath(STORAGE).parts) + 1]
+    return root / LIBRARY_CACHE / "boxes" / home.parent.name / home.name
 
 
 _PAGE_XML = re.compile(r"<page\b.*?</page>", re.S)
@@ -314,7 +315,7 @@ def page_rotation(pdf: Path, page: int, home: Path | None = None) -> float:
     """
     cache = None
     if home is not None:
-        cache = home.parent.parent / "cache" / "boxes" / home.parent.name / home.name / f"{page:04d}.rot"
+        cache = store_boxes(home) / f"{page:04d}.rot"
         if cache.is_file():
             try:
                 return float(cache.read_text(encoding="utf-8").strip() or 0)

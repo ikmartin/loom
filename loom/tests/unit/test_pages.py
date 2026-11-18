@@ -18,7 +18,7 @@ def hash_of(q: Path, rel: str) -> str:
 
 
 def writes(q: Path) -> list[dict]:  # type: ignore[type-arg]
-    lines = (q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()
+    lines = (q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()
     return [e for e in (json.loads(ln) for ln in lines if ln.strip()) if e["action"] == "page-write"]
 
 
@@ -40,7 +40,10 @@ def test_the_research_state_is_written_once_without_a_base_and_then_only_over_wh
     assert last["actor"] == "Test Agent" and last["page"] == "state" and last["outside"] is True
     from loom.records.snapshots import read_raw
 
-    assert read_raw(q, last["from"], q / ".loom" / "history") == "Goals: the rank theorem, for connected quivers.\n"
+    assert (
+        read_raw(q, last["from"], q / ".loom" / "records" / "history")
+        == "Goals: the rank theorem, for connected quivers.\n"
+    )
     assert "the research state written by Test Agent, over an edit made outside loom" in " ".join(
         ok("history", cwd=q).stdout.split()
     )
@@ -85,7 +88,7 @@ def test_a_works_overview_lives_in_its_store_directory_and_library_read_prints_i
 def test_the_manifest_publishes_each_page_with_who_wrote_it_and_its_links_that_moved_or_broke(tmp_path: Path) -> None:
     q = showcase(tmp_path)
     exits(1, "build", cwd=q)  # the showcase keeps a duplicate id on purpose
-    m = json.loads((q / ".loom/build" / "manifest.json").read_text())
+    m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     state = m["research_state"]
     assert state["by"] == {"kind": "agent", "id": "Referee (Agent)"} and state["edited_since"] is False
     assert state["links"] == {"broken": [], "moved": []} and "<h2>Goals</h2>" in state["body_html"]
@@ -96,7 +99,7 @@ def test_the_manifest_publishes_each_page_with_who_wrote_it_and_its_links_that_m
     with (q / "research-state.md").open("a") as fh:
         fh.write("- See [](quilt:sh-9999).\n")
     exits(1, "build", cwd=q)
-    state = json.loads((q / ".loom/build" / "manifest.json").read_text())["research_state"]
+    state = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["research_state"]
     assert state["edited_since"] is True
     assert [b["href"] for b in state["links"]["broken"]] == ["quilt:sh-9999"]
     assert [mv["href"] for mv in state["links"]["moved"]] == ["quilt:sh-0009"]
@@ -121,7 +124,7 @@ def test_an_agent_may_not_edit_the_research_state_by_hand(tmp_path: Path) -> Non
 def test_the_papers_opening_ends_at_its_first_heading_and_reads_plain(tmp_path: Path) -> None:
     """T4: with no overview, `library read WORK` printed the extracted section raw and ran on into `\\paragraph{Notation and conventions.}`."""
     q = demo(tmp_path)
-    digest = q / ".loom/digests" / "Calloway14.tex"
+    digest = q / ".loom/library" / "Calloway14.tex"
     edit(digest, "Section 2 fixes conventions.", "\\paragraph{Notation and conventions.} Section 2 fixes conventions.")
     out = ok("library", "read", "Calloway14", cwd=q).stdout
     assert out.startswith("Let $X$ be a topological space") and "The fixed locus $\\operatorname{Fix}(\\sigma)$" in out
@@ -134,6 +137,6 @@ def test_a_link_whose_result_is_gone_is_reported_broken_and_the_build_goes_on(tm
     node = q / "drafting" / "nodes" / "sh-0009.tex"
     node.write_text(node.read_text().replace("{theorem}", "{undeclared}"))
     exits(1, "build", cwd=q)  # the showcase keeps a duplicate id on purpose
-    state = json.loads((q / ".loom/build" / "manifest.json").read_text())["research_state"]
+    state = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["research_state"]
     assert [b["href"] for b in state["links"]["broken"]] == ["quilt:sh-0009"]
     assert state["links"]["moved"] == []

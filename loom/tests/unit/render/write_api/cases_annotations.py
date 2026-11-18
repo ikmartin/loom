@@ -171,7 +171,7 @@ def _types_save(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         ("revision", "Must change"),
     ]
     assert said["types"][0]["instructions"] == 'Use \\cite{x} and """.' and said["types"][0]["look"] == look
-    text = (q / ".loom" / "annotation-types.toml").read_text(encoding="utf-8")
+    text = (q / ".loom" / "records" / "annotation-types.toml").read_text(encoding="utf-8")
     assert text.startswith(default_text().split("\n[[type]]", 1)[0])
     assert [t.id for t in load_types(q).types] == ["citation-cite", "revision"]
     manifest = json.loads(get(s.url + "build/manifest.json")[2])
@@ -185,7 +185,7 @@ def _types_save(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         ({"types": [{**given[1], "id": "Bad id"}]}, "its id is lowercase"),
     ):
         refuses(s, "types-save", body, 400, "bad-field", match)
-    assert (q / ".loom" / "annotation-types.toml").read_text(encoding="utf-8") == text
+    assert (q / ".loom" / "records" / "annotation-types.toml").read_text(encoding="utf-8") == text
     # the plain look is saved with the types when sent, and kept when not
     plain = {"color": "green", "style": "underline", "weight": 1, "opacity": 100}
     assert succeeds(s, "types-save", {"types": given, "plain": plain})["plain"] == plain
@@ -198,4 +198,4 @@ def _types_save(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     refuses(s, "types-save", {"defaults": True, "author": "Referee (Agent)"}, 403, "author-only", "only the author")
     said = succeeds(s, "types-save", {"defaults": True})
     assert said["result"] == "restored the default annotation types"
-    assert (q / ".loom" / "annotation-types.toml").read_text(encoding="utf-8") == default_text()
+    assert (q / ".loom" / "records" / "annotation-types.toml").read_text(encoding="utf-8") == default_text()

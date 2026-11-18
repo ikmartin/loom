@@ -1,6 +1,6 @@
 """A crop of a PDF page around a mark, for an agent reading the mark: what it is on, as an image, beside its words.
 
-Made once by `pdftocairo` into `.loom/build/crops/`, named by the copy of the file it shows, the page, and the mark's place and look, so a crop is never made twice and never stands for another place. The mark is drawn over it in its own colour with a PNG reader and writer of the standard library's; one that takes longer than `DRAW_SECONDS` is left plain, its place said by the rectangles beside it. Loom calls no model: what an agent reads off a crop, TeX included, is its own reading (P8).
+Made once by `pdftocairo` into `.loom/cache/crops/`, named by the copy of the file it shows, the page, and the mark's place and look, so a crop is never made twice and never stands for another place. The mark is drawn over it in its own colour with a PNG reader and writer of the standard library's; one that takes longer than `DRAW_SECONDS` is left plain, its place said by the rectangles beside it. Loom calls no model: what an agent reads off a crop, TeX included, is its own reading (P8).
 """
 
 from __future__ import annotations
@@ -16,10 +16,8 @@ import zlib
 from pathlib import Path
 from typing import Any
 
-from loom.paths import BUILD
+from loom.paths import CROPS
 
-#: Where crops are made, under the build directory, which nothing commits.
-CROPS = f"{BUILD}/crops"
 #: Points of the page kept round a mark on every side.
 MARGIN = 24.0
 #: The narrowest crop, in points, and the shortest, as lines of text.
@@ -45,7 +43,7 @@ def crop_of(result: Any, ra: Any) -> Path | None:
     Returns
     -------
     Path or None
-        The PNG under `.loom/build/crops/`. None without `pdftocairo`, without the PDF on this machine, for an annotation not on a page, and for a detached one unless the crop of the copy it was written on was made while it stood there.
+        The PNG under `.loom/cache/crops/`. None without `pdftocairo`, without the PDF on this machine, for an annotation not on a page, and for a detached one unless the crop of the copy it was written on was made while it stood there.
     """
     from loom.records.marks import artifact_of, pdf_of
 
@@ -116,7 +114,7 @@ def crop_region(result: Any, pdf: Path, page: int, rects: list[list[float]]) -> 
     Returns
     -------
     Path or None
-        The PNG under `.loom/build/crops/`; None without `pdftocairo` or the PDF.
+        The PNG under `.loom/cache/crops/`; None without `pdftocairo` or the PDF.
     """
     from loom.records.marks import artifact_of
 

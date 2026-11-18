@@ -41,7 +41,7 @@ interface Ann {
 /** The published annotations, by id, with what a mark is read by. */
 function annotations(served: Served): Record<string, Ann> {
 	type Raw = { id: string; mark?: string | null; look?: { style: string; color: string }; body_html?: string; rects?: number[][] | null; strokes?: number[][] | null; quote?: string | null; target: { key: string; page?: number | null; file?: string | null; work?: string | null }; origin?: { by?: string } | null };
-	const all = JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8')).annotations as Record<string, Raw>;
+	const all = JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8')).annotations as Record<string, Raw>;
 	return Object.fromEntries(
 		Object.values(all ?? {}).map((a) => [
 			a.id,

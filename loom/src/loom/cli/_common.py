@@ -13,7 +13,7 @@ import click
 
 from loom.errors import ContentError, EnvError, NotFoundError, fit
 from loom.identity import agent_marker
-from loom.paths import BUILD
+from loom.paths import SCRATCH
 
 
 def emit_json(obj: Any) -> None:
@@ -127,11 +127,11 @@ def destination(
         not document
         and not source
         and rel is not None
-        and not rel.startswith(f"{BUILD}/")
+        and not rel.startswith(f"{SCRATCH}/")
         and target.suffix in SOURCE_SUFFIXES
     ):
         raise EnvError(
-            f"{path} would be among the quilt's sources, which loom never writes; write it under {BUILD}/ or outside the quilt"
+            f"{path} would be among the quilt's sources, which loom never writes; write it outside the quilt, or, as an agent, under {SCRATCH}/SESSION/"
         )
     refuse_protected(quilt, target)
     if target.exists() and not overwrite:

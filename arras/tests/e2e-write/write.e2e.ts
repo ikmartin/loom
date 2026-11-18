@@ -1,5 +1,5 @@
 // Writing from the viewer, against a publisher that is actually serving the write API.
-import { expect, readOnly, test, type Served } from '../served';
+import { compileFolder, expect, readOnly, test, type Served } from '../served';
 import { openPicker, pickSession } from '../picker';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -83,7 +83,7 @@ test("the publisher's refusal is shown rather than swallowed, and nothing is fil
 
 test('a box drawn round an equation notes the equation itself', async ({ page, served }) => {
 	// the quilt's own edit to sy-0001 is kept first: a block with a pending change is drawn merged, as TeX source where no TeX runs, as here
-	const built = () => JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8'));
+	const built = () => JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
 	const edits = () => (built().changes ?? []).filter((c: { key: string | null; kind: string }) => c.key === 'sy-0001' && c.kind === 'edit').map((c: { id: string }) => c.id);
 	if (edits().length) {
 		await served.api('change-keep', { changes: edits() });
@@ -245,7 +245,7 @@ test("an agent's report arrives in the transcript folded after its summary", asy
 });
 
 function sessionIndex(served: Served): Record<string, unknown>[] {
-	return readFileSync(join(served.root, '.loom/sessions/index.jsonl'), 'utf8')
+	return readFileSync(join(served.root, '.loom/agents/sessions/index.jsonl'), 'utf8')
 		.split('\n')
 		.filter((l) => l.trim())
 		.map((l) => JSON.parse(l));
@@ -316,7 +316,7 @@ test('an annotation is edited, then deleted, which takes its lines out of the lo
 
 /** The served quilt's manifest as loom last published it. */
 function published(served: Served): { annotations: Record<string, { id: string; type: string | null; look: Record<string, unknown> }>; annotation_types: { id: string; look: Record<string, unknown> }[] } {
-	return JSON.parse(readFileSync(join(served.root, '.loom/build/manifest.json'), 'utf8'));
+	return JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
 }
 
 test('a type chosen in the popup drops the look set on the annotation, so it is drawn in the type’s and follows later edits to it', async ({ page, served }) => {
@@ -438,7 +438,7 @@ test('Review\'s Sessions closes, reopens and deletes a session through the same 
  * The synthetic quilt carries no proposal, and a proposal's quotation is checked against the page it names, so the page text comes first. Returns the proposed node's id.
  */
 function proposeKre99(served: Served, statement: string): string {
-	const home = join(served.root, '.loom/digests/storage/arxiv/math_9810166v2');
+	const home = join(served.root, '.loom/library/storage/arxiv/math_9810166v2');
 	mkdirSync(join(home, 'pages'), { recursive: true });
 	writeFileSync(join(home, 'pages/0012.txt'), `Theorem 9.9. ${statement}\n`);
 	writeFileSync(join(home, 'sections.json'), JSON.stringify({ sha256: '0'.repeat(64), pages: 12, chars: 80, sections: [{ n: '1', title: 'Introduction', page: 1 }] }));
@@ -448,7 +448,7 @@ function proposeKre99(served: Served, statement: string): string {
 
 /** One result of a work's results file, by id. */
 function resultOf(served: Served, citekey: string, id: string): Record<string, unknown> {
-	const file = JSON.parse(readFileSync(join(served.root, '.loom/digests', `${citekey}.results.json`), 'utf8')) as { results: Record<string, unknown>[] };
+	const file = JSON.parse(readFileSync(join(served.root, '.loom/library', `${citekey}.results.json`), 'utf8')) as { results: Record<string, unknown>[] };
 	return file.results.find((r) => r.id === id)!;
 }
 
@@ -471,7 +471,7 @@ test('a proposed result is verified from the queue by its key, and the results f
 	expect(verified.statement).toBe(statement);
 	expect((verified.origin as { act: string }[]).map((o) => o.act)).toEqual(['proposed', 'verified']);
 	// nothing is left waiting, so the shadow file of proposals is gone
-	expect(existsSync(join(served.root, '.loom/digests/Kre99.proposed.tex'))).toBe(false);
+	expect(existsSync(join(served.root, '.loom/library/Kre99.proposed.tex'))).toBe(false);
 });
 
 test('a proposed result edited before it is verified records the author’s rendering and both parties', async ({ page, served }) => {
@@ -514,19 +514,19 @@ test('a proposed result is discarded from the queue with its one-line reason ask
 	expect(gone.state).toBe('discarded');
 	expect((gone.origin as { act: string }[]).map((o) => o.act)).toEqual(['proposed', 'discarded']);
 	// the reason is kept in the work's proposal log, which `loom library propose` hands back to whatever proposes it again
-	const events = readFileSync(join(served.root, '.loom/digests/Kre99.proposals.jsonl'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
+	const events = readFileSync(join(served.root, '.loom/library/Kre99.proposals.jsonl'), 'utf8').split('\n').filter((l) => l.trim()).map((l) => JSON.parse(l));
 	expect(events.filter((e) => e.event === 'discarded' && e.id === id).map((e) => e.reason)).toEqual(['the paper states it for schemes only']);
 });
 
 /** The keys the copy's acceptance ledger has a row for, in order. */
 function acceptedKeys(served: Served): string[] {
-	return [...readFileSync(join(served.root, '.loom/state.toml'), 'utf8').matchAll(/^key = "([^"]+)"$/gm)].map((m) => m[1]);
+	return [...readFileSync(join(served.root, '.loom/records/state.toml'), 'utf8').matchAll(/^key = "([^"]+)"$/gm)].map((m) => m[1]);
 }
 
 /** Accepting needs the document to compile; a PDF newer than every source is loom's sign that it already does, so no TeX run happens in this suite (the compile itself is loom's to test). */
 function compiled(served: Served): void {
-	mkdirSync(join(served.root, '.loom/build/drafting/main'), { recursive: true });
-	writeFileSync(join(served.root, '.loom/build/drafting/main/main.pdf'), '%PDF-1.4\n');
+	mkdirSync(compileFolder(served.root, 'drafting/main.tex'), { recursive: true });
+	writeFileSync(join(compileFolder(served.root, 'drafting/main.tex'), 'main.pdf'), '%PDF-1.4\n');
 }
 
 test('a block resting on a stale one not accepted with it is refused, said in its row, and nothing is accepted', async ({ page, served }) => {
@@ -547,7 +547,7 @@ test('Accept records an acceptance at once, and the block leaves the queue', asy
 	await page.locator('[data-testid="review-row"][data-key="sy-0001"]').getByTestId('review-accept').click();
 	expect((await posted).postDataJSON()).toEqual({ reviewer: 'The synthetic quilt', keys: ['sy-0001'] });
 	await expect.poll(() => acceptedKeys(served)).toEqual([...ledger, 'sy-0001']);
-	const row = readFileSync(join(served.root, '.loom/state.toml'), 'utf8').split('[[accept]]').at(-1)!;
+	const row = readFileSync(join(served.root, '.loom/records/state.toml'), 'utf8').split('[[accept]]').at(-1)!;
 	expect(row).toContain('key = "sy-0001"');
 	expect(row).toContain('master = "drafting/main.tex"');
 	expect(row).not.toContain('2026-09-14T09:00:00Z'); // a new row, dated now, not the fixture's
@@ -570,10 +570,10 @@ test('an agent copy is taken back in one pass: Take it, then one Apply writes it
 	const text = '\\documentclass{article}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\nIntroduction.\n\\begin{lemma}\\label{sy-0900}\nOriginal statement.\n\\end{lemma}\n\\end{document}\n';
 	writeFileSync(join(served.root, document), text);
 	served.loom(['draft', document, '--ai', 'adoption-proposal']);
-	const copy = join(served.root, '.loom/copies/adoption-proposal.tex');
+	const copy = join(served.root, '.loom/agents/copies/adoption-proposal.tex');
 	writeFileSync(copy, readFileSync(copy, 'utf8').replace('Original statement.', 'Proposed statement.'));
 	await page.goto('/review/proposed');
-	await page.locator('[data-testid="proposed-card"][data-id=".loom/copies/adoption-proposal.tex"]').getByTestId('proposed-open').click();
+	await page.locator('[data-testid="proposed-card"][data-id=".loom/agents/copies/adoption-proposal.tex"]').getByTestId('proposed-open').click();
 	const bar = page.getByTestId('contribution-bar');
 	await expect(bar).toContainText('From adoption-proposal into adoption-test');
 	await expect(page.getByTestId('change-shown')).toContainText('Proposed statement');
@@ -597,9 +597,9 @@ test('a change marked as checked is accepted as it is taken in; one left stays o
 	const text = '\\documentclass{article}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\n\\begin{lemma}\\label{sy-0910}\nFirst.\n\\end{lemma}\n\\begin{lemma}\\label{sy-0911}\nSecond.\n\\end{lemma}\n\\end{document}\n';
 	writeFileSync(join(served.root, document), text);
 	served.loom(['draft', document, '--ai', 'accept-proposal']);
-	const copy = join(served.root, '.loom/copies/accept-proposal.tex');
+	const copy = join(served.root, '.loom/agents/copies/accept-proposal.tex');
 	writeFileSync(copy, readFileSync(copy, 'utf8').replace('First.', 'First, improved.').replace('Second.', 'Second, improved.'));
-	await page.goto('/review/proposed?copy=' + encodeURIComponent('.loom/copies/accept-proposal.tex'));
+	await page.goto('/review/proposed?copy=' + encodeURIComponent('.loom/agents/copies/accept-proposal.tex'));
 	await page.getByTestId('change-at').click();
 	await page.locator('[data-testid="change-row"][data-key="sy-0910"]').click();
 	// taking it steps on to the next change to decide: leave that one

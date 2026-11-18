@@ -14,7 +14,7 @@ from tests.helpers import ok
 from tests.unit._quilts import demo
 from tests.unit.refs._made_pdfs import fake_pdf
 
-BIB = ".loom/digests/bibliography.bib"
+BIB = ".loom/library/bibliography.bib"
 
 
 def test_a_corrected_title_leaves_a_works_identity_and_its_links_alone(tmp_path: Path) -> None:

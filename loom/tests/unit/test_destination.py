@@ -24,10 +24,10 @@ def test_a_working_document_goes_anywhere_loom_reads_and_nothing_else_among_the_
     ):
         assert destination(q, there, document=True) == (q.root / there).resolve()
     for there, said in (
-        (".loom/retired/flat.tex", "is inside .loom/"),
+        (".loom/records/retired/flat.tex", "is inside .loom/"),
         (".loom/flat.tex", "is inside .loom/"),
-        (".loom/build/flat.tex", "is inside .loom/"),
-        (".loom/copies/flat.tex", "is inside .loom/"),
+        (".loom/cache/flat.tex", "is inside .loom/"),
+        (".loom/agents/copies/flat.tex", "is inside .loom/"),
         ("paper/flat.md", "is a .tex file"),
     ):
         with pytest.raises(EnvError, match=said):
@@ -36,7 +36,7 @@ def test_a_working_document_goes_anywhere_loom_reads_and_nothing_else_among_the_
         destination(q, tmp_path / "elsewhere.tex", document=True)
     with pytest.raises(EnvError, match="among the quilt's sources"):
         destination(q, "drafting/nodes/patched.tex")
-    assert destination(q, ".loom/build/plain.tex") == (q.root / ".loom/build/plain.tex").resolve()
+    assert destination(q, ".loom/agents/scratch/s/plain.tex") == (q.root / ".loom/agents/scratch/s/plain.tex").resolve()
     assert destination(q, tmp_path / "elsewhere.tex") == (tmp_path / "elsewhere.tex").resolve()
 
 
@@ -66,7 +66,7 @@ def test_an_agent_is_refused_what_the_quilt_protects_and_a_person_is_not(
         with pytest.raises(EnvError, match=said):
             destination(q, there, overwrite=True)
     with pytest.raises(EnvError, match=r"\.loom/ is loom's"):
-        destination(q, ".loom/annotations/x.txt")
+        destination(q, ".loom/records/annotations/x.txt")
     assert destination(q, "paper/flat.tex", document=True).name == "flat.tex"
-    assert destination(q, ".loom/build/plain.tex").name == "plain.tex"
+    assert destination(q, ".loom/agents/scratch/s/plain.tex").name == "plain.tex"
     assert destination(q, "notes.md").name == "notes.md"

@@ -13,7 +13,7 @@ from loom.scan.scan import scan
 from loom.sync import SyncError
 
 DOC = "drafting/main.tex"
-COPY = ".loom/copies/proposal.tex"
+COPY = ".loom/agents/copies/proposal.tex"
 TEXT = r"""\documentclass{article}
 \newtheorem{lemma}{Lemma}
 \begin{document}
@@ -159,7 +159,7 @@ def test_record_failure_restores_source_and_history(quilt, monkeypatch):
     assert (quilt.root / DOC).read_text() == TEXT
     assert (quilt.history_dir / "ledger.jsonl").read_bytes() == ledger
     assert sorted(p.name for p in quilt.history_dir.iterdir()) == entries
-    assert not (quilt.root / ".loom/review-origins.json").exists()
+    assert not (quilt.root / ".loom/records/review-origins.json").exists()
     monkeypatch.setattr(origins, "write", original_write)
     incorporate(scan(quilt), COPY, preview["token"])
 
@@ -303,7 +303,7 @@ def test_annotations_and_acceptances_are_not_rewritten(quilt):
     from loom.review_origins import read
 
     root = quilt.root
-    annotations = root / ".loom/annotations/log.jsonl"
+    annotations = root / ".loom/records/annotations/log.jsonl"
     annotations.parent.mkdir()
     annotations.write_text("")
     edit(quilt, "\\begin{lemma}\\label{zk-0001-ai}", "\\begin{lemma}\\label{zk-0001-ai}\n% !LOOM name: Better name")
@@ -311,8 +311,8 @@ def test_annotations_and_acceptances_are_not_rewritten(quilt):
     incorporate(scan(quilt), COPY, preview["token"])
     assert annotations.read_text() == ""
     assert not read(root)
-    assert not (root / ".loom/state.toml").exists()
-    origin_file = root / ".loom/review-origins.json"
+    assert not (root / ".loom/records/state.toml").exists()
+    origin_file = root / ".loom/records/review-origins.json"
     assert json.loads(origin_file.read_text()) == {}
 
 
@@ -667,11 +667,13 @@ def test_an_unlabelled_node_is_document_level_and_never_a_missing_proposal(tmp_p
         "\\begin{remark}\nAn unlabelled remark.\n\\end{remark}\n\n\\end{document}",
     )
     ok("draft", "drafting/main.tex", "--ai", "review", cwd=q)
-    assert "No changes to incorporate" in ok("adopt", ".loom/copies/review.tex", "--json", cwd=q).stdout
-    edit_file(q / ".loom" / "copies" / "review.tex", "An unlabelled remark.", "An unlabelled remark, revised.")
-    waiting = ok("adopt", ".loom/copies/review.tex", "--json", cwd=q).stdout
+    assert "No changes to incorporate" in ok("adopt", ".loom/agents/copies/review.tex", "--json", cwd=q).stdout
+    edit_file(
+        q / ".loom" / "agents" / "copies" / "review.tex", "An unlabelled remark.", "An unlabelled remark, revised."
+    )
+    waiting = ok("adopt", ".loom/agents/copies/review.tex", "--json", cwd=q).stdout
     assert "--document-changes" in waiting
-    r = ok("adopt", ".loom/copies/review.tex", "--document-changes", "--json", cwd=q)
+    r = ok("adopt", ".loom/agents/copies/review.tex", "--document-changes", "--json", cwd=q)
     assert "+An unlabelled remark, revised." in r.stdout
 
 
@@ -706,8 +708,8 @@ def test_adopts_preview_says_what_it_is_doing_on_a_long_run(tmp_path, monkeypatc
     save_author("Tester")
     q = demo(tmp_path)
     ok("draft", "drafting/main.tex", "--ai", "review", cwd=q)
-    edit_file(q / ".loom" / "copies" / "review.tex", "Every orbit", "Each orbit")
-    ok("adopt", ".loom/copies/review.tex", "--json", cwd=q)
+    edit_file(q / ".loom" / "agents" / "copies" / "review.tex", "Every orbit", "Each orbit")
+    ok("adopt", ".loom/agents/copies/review.tex", "--json", cwd=q)
     assert "comparing review.tex with the document it was drafted from" in said[-1]
     assert "checking drafting/main.tex with the selected changes" in said[-1]
 

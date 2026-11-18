@@ -110,10 +110,10 @@ def test_paper_manolache_import_is_a_verbatim_landmark(once: Once) -> None:
     """The paper as received is the landmark of step 0001: the flat text, which typesets as the original and carries nothing loom added."""
     paper, q, said = manolache(once)
     assert "typesets to the same text as the original" in rejoined(said), said
-    received = (q / ".loom" / "history" / "0001-virtual6" / "virtual6.tex").read_text()
+    received = (q / ".loom" / "records" / "history" / "0001-virtual6" / "virtual6.tex").read_text()
     assert received == (paper / "virtual6.tex").read_text()  # one file to begin with, so the flat text is the paper
     assert "\\usepackage{loom}" not in received and "\\label{man-" not in received
-    ledger = [json.loads(x) for x in (q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()]
+    ledger = [json.loads(x) for x in (q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()]
     assert len(ledger) == 1 and ledger[0]["action"] == "import" and ledger[0]["step"] == 1
     assert ledger[0]["drafted"]["path"] == "drafting/virtual6.tex"
 
@@ -152,7 +152,7 @@ def test_paper_manolache_atomize_sections(once: Once, tmp_path: Path) -> None:
     assert "\\begin{theorem}" not in spine and spine.count("\\input{nodes/") >= 5
 
     # the spine superseded the source, so every node is defined once although two files hold its text
-    line = json.loads((q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
+    line = json.loads((q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
     assert line["action"] == "atomize" and line["superseded"] == ["drafting/virtual6.tex"]
     diags = json.loads(run("lint", "--json", cwd=copy(q, tmp_path / "q")).stdout)["diagnostics"]
     assert [d["code"] for d in diags if d["code"] == "loom:superseded-file"] == ["loom:superseded-file"]
@@ -163,7 +163,7 @@ def test_paper_manolache_landmark_shown_plain_is_self_contained(once: Once, tmp_
     """A landmark of an atomized paper, shown `--plain`, compiles in a directory holding nothing but itself and the figures."""
     q = copy(manolache_atomized(once)[0], tmp_path / "q")
     ok("stamp", "drafting/main-atomic.tex", "-m", "virtual6-v1", cwd=q)
-    step = json.loads((q / ".loom" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
+    step = json.loads((q / ".loom" / "records" / "history" / "ledger.jsonl").read_text().splitlines()[-1])
     statements = [k for k in step["froze"] if "/proof" not in k]
     assert len(statements) >= 96, len(statements)
     alone = tmp_path / "alone"

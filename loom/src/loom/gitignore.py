@@ -8,20 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.ai.clients import PROJECT_FILES
-from loom.paths import (
-    BUILD,
-    HISTORY,
-    INCOMING,
-    LAST_SEEN,
-    LIVE,
-    LOOM,
-    LOOM_GITIGNORE,
-    SERVE_JSON,
-    SESSIONS,
-    SINCE,
-    STORAGE,
-)
-from loom.writes import INDEX, JOURNAL, LOCK, TEMP
+from loom.paths import CACHE, LOCAL, LOOM, LOOM_GITIGNORE, SCRATCH
 
 
 def _inside(path: str) -> str:
@@ -29,37 +16,16 @@ def _inside(path: str) -> str:
     return path.removeprefix(f"{LOOM}/")
 
 
-#: What stays on one machine under `.loom/`, as `.loom/.gitignore` names it.
-LOOM_LINES = (
-    f"{_inside(BUILD)}/",
-    _inside(SERVE_JSON),
-    f"{_inside(SINCE)}/",
-    # a record of each agent server running here, which a copied quilt must not carry
-    f"{_inside(LIVE)}/",
-    _inside(LAST_SEEN),
-    f"{_inside(SESSIONS)}/*/attached.json",
-    f"{_inside(SESSIONS)}/*/cursors/",
-    f"{_inside(STORAGE)}/**/paper.pdf",
-    f"{_inside(STORAGE)}/**/src/",
-    f"{_inside(STORAGE)}/cache/",
-    # what a person dropped into the library, waiting or kept for its undo: other people's documents, as in the store
-    f"{_inside(INCOMING)}/",
-    # the journal of loom's writes to this machine's files (docs/design/writes.md), its index and its lock
-    f"{_inside(HISTORY)}/{JOURNAL}",
-    f"{_inside(HISTORY)}/{INDEX}",
-    f"{_inside(HISTORY)}/{LOCK}",
-    f"{_inside(HISTORY)}/**/*{TEMP}",
-)
+#: What stays on one machine under `.loom/`, as `.loom/.gitignore` names it: this machine's state, what loom derives, and the agents' scratch, a folder each.
+LOOM_LINES = (f"{_inside(LOCAL)}/", f"{_inside(CACHE)}/", f"{_inside(SCRATCH)}/")
 
-#: The line after which `.loom/.gitignore` is the person's: a line of their own there, such as `!digests/storage/**/paper.pdf` to commit the store's PDFs, outlives `loom upgrade`.
+#: The line after which `.loom/.gitignore` is the person's: a line of their own there, such as `library/storage/**/paper.pdf` to keep the store's PDFs out of git, outlives `loom upgrade`.
 OWN = "# your own lines go below this one; loom upgrade keeps them"
 
 LOOM_IGNORE = (
-    "# loom's files that stay on this machine: what it rebuilds, its caches and runtime state, the journal of its writes to your files, and its copies of other people's documents. "
-    "Everything else here is committed: the history, the acceptance ledger, annotations, sessions, digests, and a stored document's page text, "
-    "which lets a coauthor who holds no PDF re-check a transcription. `loom upgrade` rewrites the lines above the last.\n"
-    + "\n".join(LOOM_LINES)
-    + f"\n{OWN}\n"
+    "# loom's folders that stay on this machine: its state here, what it can make again, and the agents' scratch. "
+    "Everything else here travels with the quilt, to commit like any file of yours: the records, the library, and the agents' instructions, sessions and copies. "
+    "`loom upgrade` rewrites the lines above the last.\n" + "\n".join(LOOM_LINES) + f"\n{OWN}\n"
 )
 
 #: The lines the root `.gitignore` needs once `loom ai init` has written the agent client files.

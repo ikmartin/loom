@@ -1,15 +1,15 @@
 // A document's compiled PDF (plan 0.29.1): a row under its document in the tree opens it to read, and a new compile opens it again where the reader is, with nobody asking. The suite serves with `--no-compile`, so the test stands in for the compile by putting PDFs where one writes.
 import { appendFileSync, copyFileSync, mkdirSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import { ARRAS, expect, test } from '../served';
+import { ARRAS, compileFolder, expect, test } from '../served';
 import { pane } from '../workspace';
 
 const WORKS = join(ARRAS, '../loom/tests/quilts/sources/showcase-works');
-const built = (root: string) => join(root, '.loom/build/drafting/main/main.pdf');
+const built = (root: string) => join(compileFolder(root, 'drafting/main.tex'), 'main.pdf');
 
 /** Put a PDF where a compile of drafting/main.tex writes, a minute on from now so its time differs from the last. */
 function compiled(root: string, pdf: string, minutes: number): void {
-	mkdirSync(join(root, '.loom/build/drafting/main'), { recursive: true });
+	mkdirSync(compileFolder(root, 'drafting/main.tex'), { recursive: true });
 	copyFileSync(join(WORKS, pdf), built(root));
 	const at = new Date(Date.now() + minutes * 60_000);
 	utimesSync(built(root), at, at);

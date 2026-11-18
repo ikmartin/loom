@@ -20,7 +20,7 @@ AGENT = {"AI_AGENT": "1"}
 
 def _without_prop_3_2(q: Path) -> str:
     """The demo's digest with Proposition 3.2 cut out: what a fresh extraction that no longer states it would write."""
-    text = (q / ".loom/digests" / f"{CK}.tex").read_text()
+    text = (q / ".loom/library" / f"{CK}.tex").read_text()
     start = text.index("\\begin{proposition}[{\\cite[Proposition 3.2")
     end = text.index("\\end{proposition}", start) + len("\\end{proposition}\n")
     return text[:start] + text[end:]
@@ -51,7 +51,7 @@ def test_drop_then_redo_keeps_the_authors_verified_text(tmp_path: Path, monkeypa
     assert list(left) == [RID] and state_of(left[RID]) == VERIFIED
     assert ok("library", "why", RID, cwd=q).stdout.startswith(f"{RID}, verified by A. Author")
     ok("library", "update", CK, "--redo", "--only", "extract", cwd=q)
-    assert "Edited by the author" in (q / ".loom/digests" / f"{CK}.tex").read_text()
+    assert "Edited by the author" in (q / ".loom/library" / f"{CK}.tex").read_text()
 
 
 def test_drop_session_keeps_a_verified_proposal_of_that_session(tmp_path: Path) -> None:
@@ -93,7 +93,7 @@ def test_relate_records_its_actor_never_the_session(tmp_path: Path) -> None:
         "library", "relate", a, b, "--kind", "same-notion", "--why", "x", "--session", "nosuchsession",
         code=2, match="no session matches", cwd=q,
     )  # fmt: skip
-    assert r.stdout == "" and not (q / ".loom/digests" / "links.jsonl").exists()
+    assert r.stdout == "" and not (q / ".loom/library" / "links.jsonl").exists()
     sid = new_session(q)
     made = json_of(
         "library", "relate", a, b, "--kind", "same-notion", "--why", "x", "--session", sid, *AS, "--json", cwd=q
@@ -120,9 +120,9 @@ def test_propose_records_who_proposed_it_with_as(tmp_path: Path) -> None:
         "library", "propose", ck, "--local", "thm-1.1", "--page", "1", "--source-text", "Let $f$ be a DM-type morphism",
         "--statement", "Y", "--session", "nosuchsession", code=2, match="no session matches", cwd=q,
     )  # fmt: skip
-    assert r.stdout == "" and not (q / ".loom/digests" / f"{ck}.results.json").exists()
+    assert r.stdout == "" and not (q / ".loom/library" / f"{ck}.results.json").exists()
     propose(q, ck, "thm-1.1", 1, "Let $f$ be a DM-type morphism", "Y", session=sid, **{"as": "Reader Agent"})
-    rec = json.loads((q / ".loom/digests" / f"{ck}.results.json").read_text())["results"][0]
+    rec = json.loads((q / ".loom/library" / f"{ck}.results.json").read_text())["results"][0]
     act = rec["origin"][0]
     assert act["act"] == "proposed" and act["by"] == "Reader Agent" and act["session"] == sid
     assert "proposed Reader Agent" in " ".join(ok("library", "why", f"{ck}-thm-1.1", cwd=q).stdout.split())
@@ -137,7 +137,7 @@ def test_locate_past_the_last_page_is_refused_by_name(tmp_path: Path) -> None:
     from tests.unit._quilts import showcase
 
     q = showcase(tmp_path)
-    ck = next(p.name[: -len(".tex")] for p in (q / ".loom/digests").glob("*.tex") if p.name != "bibliography.tex")
+    ck = next(p.name[: -len(".tex")] for p in (q / ".loom/library").glob("*.tex") if p.name != "bibliography.tex")
     _ = ck
     from loom.scan.quilt import load_quilt
     from loom.scan.scan import scan
@@ -161,9 +161,9 @@ def test_locate_past_the_last_page_is_refused_by_name(tmp_path: Path) -> None:
 def test_import_refuses_a_name_that_is_not_a_citekey(tmp_path: Path) -> None:
     q = demo(tmp_path)
     src = tmp_path / "elsewhere.tex"
-    src.write_text((q / ".loom/digests" / f"{CK}.tex").read_text())
+    src.write_text((q / ".loom/library" / f"{CK}.tex").read_text())
     refused("library", "import", str(src), "--name", "bad name!", code=2, match="'bad name!' is not a citekey", cwd=q)
-    assert not (q / ".loom/digests" / "bad name!.tex").exists()
+    assert not (q / ".loom/library" / "bad name!.tex").exists()
 
 
 @pytest.mark.parametrize(("typed", "meant"), [(("verfy",), "verify"), (("serch", "pullback"), "search")])
@@ -226,7 +226,7 @@ def test_a_byline_leads_with_its_first_name_whatever_marks_it(byline: str) -> No
 
 def test_add_files_the_behrend_fantechi_pdf_its_byline_marked_for_affiliations(tmp_path: Path) -> None:
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(BEHREND_BIB + OLSSON_BIB)
     pile = tmp_path / "pile"
     _fake_pdf(pile / "Behrend and Fantechi - 1997 - The intrinsic normal cone.pdf", BEHREND)
@@ -249,7 +249,7 @@ def test_add_files_the_behrend_fantechi_pdf_its_byline_marked_for_affiliations(t
 def _olsson_with_a_second_version(tmp_path: Path) -> tuple[Path, str]:
     """The demo with olsson03 filed, and a second document of it added and filed as its version `olsson03-v2`: the shape of the Manolache entries in the author's quilt."""
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB)
     ok(
         "library",
@@ -271,7 +271,7 @@ def _olsson_with_a_second_version(tmp_path: Path) -> tuple[Path, str]:
 def _delete_entry(q: Path, key: str) -> None:
     from loom.scan.bib import raw_entries
 
-    bib = q / ".loom/digests" / "bibliography.bib"
+    bib = q / ".loom/library" / "bibliography.bib"
     text = bib.read_text()
     bib.write_text(text.replace(raw_entries(text)[key], ""))
 
@@ -281,16 +281,16 @@ def test_a_version_set_aside_and_deleted_is_never_offered_again(tmp_path: Path) 
     q, dup = _olsson_with_a_second_version(tmp_path)
     ok("library", "ignore", dup, "--why", "the same paper as olsson03", *AS, cwd=q)
     _delete_entry(q, dup)
-    before = (q / ".loom/digests" / "bibliography.bib").read_text()
+    before = (q / ".loom/library" / "bibliography.bib").read_text()
     r = ok("library", "update", cwd=q)
     assert "new entries" not in r.stdout and "entries for stored documents" not in r.stdout, r.output
-    assert (q / ".loom/digests" / "bibliography.bib").read_text() == before
-    assert not list((q / ".loom/digests").glob("Olsson*.tex"))
+    assert (q / ".loom/library" / "bibliography.bib").read_text() == before
+    assert not list((q / ".loom/library").glob("Olsson*.tex"))
 
 
 def test_check_advises_ignore_for_a_duplicate_entry_and_ignore_clears_it(tmp_path: Path) -> None:
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write("\n@misc{DupA, title={One}, loom-file={file/abc}}\n@misc{DupB, title={Two}, loom-file={file/abc}}\n")
     from loom.refs.pages import storage_root
 
@@ -314,7 +314,7 @@ def _olsson_holding_the_handbook(tmp_path: Path) -> Path:
     from loom.refs.pages import write_map
 
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB)
     home = work_home(q, "olsson03")
     write_map(home, _fake_pdf(home / "paper.pdf", HANDBOOK))
@@ -363,7 +363,7 @@ def test_add_keeps_a_document_naming_an_unknown_identifier_as_a_work_stating_it(
     pdf = _fake_pdf(tmp_path / "pile" / "new.pdf", "A paper nobody cites\nA. Writer\narXiv:2504.01234v1\n")
     said = " ".join(ok("library", "add", str(pdf.parent), *AS, cwd=q).stdout.split())
     assert 'new.pdf as the new work PaperNobodyCites2025, titled "A paper nobody cites"' in said, said
-    entry = parse_bib((q / ".loom/digests/bibliography.bib").read_text())["PaperNobodyCites2025"]
+    entry = parse_bib((q / ".loom/library/bibliography.bib").read_text())["PaperNobodyCites2025"]
     assert entry.fields["eprint"] == "2504.01234v1" and entry.fields["archiveprefix"] == "arXiv"
     assert (work_home(q, "PaperNobodyCites2025") / "paper.pdf").is_file()
 
@@ -371,7 +371,7 @@ def test_add_keeps_a_document_naming_an_unknown_identifier_as_a_work_stating_it(
 def test_add_for_a_work_names_the_version_a_document_is(tmp_path: Path) -> None:
     """The Manolache preprint given `--for` the work: filed under the version it states, which is that work."""
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB + "\n@article{olsson03A, author={Olsson, M}, title={Logarithmic Geometry and Algebraic Stacks}, "
                  "year={2003}, eprint={0301.00001v1}, archiveprefix={arXiv}, loom-copy-of={olsson03}}\n")  # fmt: skip
     pdf = _fake_pdf(tmp_path / "preprint.pdf", OLSSON + "arXiv:0301.00001v1\n")
@@ -383,7 +383,7 @@ def test_add_for_a_work_names_the_version_a_document_is(tmp_path: Path) -> None:
 def test_add_asks_about_the_entry_a_scans_reference_manager_named_it_for(tmp_path: Path) -> None:
     """A scanned book shows nothing on its pages, and a reference manager's file name is what a catalogue says it is: enough to ask whether it is that work."""
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB)
     pdf = _fake_pdf(
         tmp_path / "pile" / "Olsson - 2003 - Logarithmic geometry and algebraic stacks.pdf", "Some scan\nno byline\n"
@@ -396,7 +396,7 @@ def test_add_asks_about_the_entry_a_scans_reference_manager_named_it_for(tmp_pat
 
 def test_add_names_the_nearest_entry_for_a_document_it_keeps_apart(tmp_path: Path) -> None:
     q = demo(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(OLSSON_BIB)
     pdf = _fake_pdf(tmp_path / "pile" / "Olsson - 2003 - Notes on stacks.pdf", "Some scan\nno byline\n")
     said = " ".join(ok("library", "add", str(pdf.parent), "--dry-run", cwd=q).stdout.split())
@@ -475,7 +475,7 @@ def test_search_says_extracted_by_loom_and_the_versions_once(tmp_path: Path) -> 
 def test_search_pages_folds_a_works_versions(tmp_path: Path) -> None:
     """A work and its version holding the same page are one hit, under the work, with the version named once."""
     q, ck = mapped(tmp_path)
-    with (q / ".loom/digests" / "bibliography.bib").open("a") as fh:
+    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
         fh.write(
             f"\n@article{{{ck}A, title={{Virtual pull-backs}}, author={{Manolache, C.}}, year={{2012}}, loom-copy-of={{{ck}}}, loom-file={{file/v}}}}\n"
         )
@@ -618,7 +618,7 @@ def test_a_verified_result_counts_toward_a_digest_that_is_not_thin(tmp_path: Pat
 
 
 def test_why_says_where_a_result_was_read_in_words_and_answers_a_citekey(tmp_path: Path) -> None:
-    """T4: `why` said "anchor .loom/digests/X.tex (tex, level 3, mechanical)"; T3: given a citekey it suggested a search."""
+    """T4: `why` said "anchor .loom/library/X.tex (tex, level 3, mechanical)"; T3: given a citekey it suggested a search."""
     q = demo(tmp_path)
     out = ok("library", "why", RID, cwd=q).stdout
     assert f"read from  p.1 of {CK}'s PDF" in out and "mechanical" not in out and "level" not in out, out

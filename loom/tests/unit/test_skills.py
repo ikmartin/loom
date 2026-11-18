@@ -141,7 +141,7 @@ def test_the_skills_follow_the_quilts_modes(tmp_path: Path, monkeypatch: pytest.
 def test_a_mode_whose_line_the_author_changed_is_described_as_they_wrote_it(tmp_path: Path) -> None:
     q = bare(tmp_path)
     ok("ai", "init", cwd=q)
-    mode = q / ".loom/ai/modes/flow.md"
+    mode = q / ".loom/agents/instructions/modes/flow.md"
     old = next(ln for ln in mode.read_text().splitlines() if ln.startswith("When it fits:"))
     mode.write_text(mode.read_text().replace(old, "When it fits: smoothing a proof this quilt cares about."))
     ok("upgrade", cwd=q)

@@ -1,4 +1,4 @@
-"""The quilt's own bibliography, `.loom/digests/bibliography.bib`, gathered from the documents and the landmarks and only ever appended to.
+"""The quilt's own bibliography, `.loom/library/bibliography.bib`, gathered from the documents and the landmarks and only ever appended to.
 
 A document or a landmark cites through a `.bib` it names or through an inline `thebibliography`; both are read. An entry from a `.bib` is copied verbatim, so nothing the author wrote is lost. A `\\bibitem` is free text, so it becomes an entry holding that text in `loom-text`, the identifiers found in it, and a best-effort author, title and year, marked `loom-parsed = {heuristic}`. An entry already in the file is never rewritten or removed: the author corrects a heuristic entry by hand, and the next scan leaves the correction alone.
 """
@@ -17,7 +17,7 @@ from loom.paths import STORAGE, under
 from loom.refs.fetch import FetchRefused, work_dir
 from loom.refs.identity import WorkId, primary
 from loom.refs.ingest import filename_title, own_identifiers
-from loom.refs.pages import first_pages, sha256_of, storage_root, write_map
+from loom.refs.pages import first_pages, sha256_of, storage_root, store_boxes, write_map
 from loom.refs.unreadable import declarations, set_aside_documents
 from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib, raw_entries
 from loom.scan.quilt import Quilt
@@ -853,7 +853,7 @@ def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = T
     root = quilt.root
     f.home.mkdir(parents=True, exist_ok=True)
     if f.replaces:
-        shutil.rmtree(storage_root(root) / "cache" / "boxes" / f.home.parent.name / f.home.name, ignore_errors=True)
+        shutil.rmtree(store_boxes(f.home), ignore_errors=True)
     if f.kind == "pdf":
         paper = f.home / "paper.pdf"
         if f.replaces or not paper.exists():

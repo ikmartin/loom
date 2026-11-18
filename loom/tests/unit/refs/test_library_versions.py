@@ -12,7 +12,7 @@ from loom.scan.scan import scan
 from tests.helpers import json_of, ok, run
 from tests.unit._quilts import demo, work_home
 
-BIB = ".loom/digests/bibliography.bib"
+BIB = ".loom/library/bibliography.bib"
 CK, V = "Calloway14", "Calloway14A"
 OLSSON = "Logarithmic geometry and algebraic stacks\nMartin C. Olsson\nAnn. Sci. Ecole Norm. Sup.\n"
 OLSSON_BIB = "\n@article{olsson03, author={Olsson, Martin C.}, title={Logarithmic geometry and algebraic stacks}, year={2003}, doi={10.1016/olsson.03}}\n"
@@ -49,9 +49,9 @@ def _versioned(tmp_path: Path) -> Path:
             f"  year = {{2014}},\n  eprint = {{1301.00001v1}},\n  archiveprefix = {{arXiv}},\n"
             f"  loom-copy-of = {{{CK}}},\n  loom-file = {{file/0123456789abcdef}},\n}}\n"
         )
-    (q / ".loom/digests" / f"{V}.tex").write_text(PREPRINT, encoding="utf-8")
+    (q / ".loom/library" / f"{V}.tex").write_text(PREPRINT, encoding="utf-8")
     ok("library", "update", V, "--only", "extract", cwd=q)
-    assert (q / ".loom/digests" / f"{V}.results.json").is_file()
+    assert (q / ".loom/library" / f"{V}.results.json").is_file()
     return q
 
 
@@ -98,8 +98,8 @@ def test_only_the_same_bytes_are_already_here_and_a_lookalike_is_kept_as_a_versi
 def test_a_version_is_not_extracted_unless_cited_or_named(tmp_path: Path) -> None:
     """A second document of a work brings no second digest: `update` skips an uncited version with a source, and extracts it when the author names it or cites it."""
     q = _versioned(tmp_path)
-    (q / ".loom/digests" / f"{V}.tex").unlink()
-    (q / ".loom/digests" / f"{V}.results.json").unlink()
+    (q / ".loom/library" / f"{V}.tex").unlink()
+    (q / ".loom/library" / f"{V}.results.json").unlink()
     src = work_home(q, V) / "src"
     src.mkdir(parents=True)
     (src / "paper.tex").write_text("\\documentclass{article}\n\\begin{document}\nPreprint.\n\\end{document}\n")
@@ -144,8 +144,8 @@ def test_a_key_counts_as_digested_when_a_version_is(tmp_path: Path) -> None:
     from loom.records.store import Records
 
     q = _versioned(tmp_path)
-    (q / ".loom/digests" / f"{CK}.tex").unlink()
-    (q / ".loom/digests" / f"{CK}.results.json").unlink()
+    (q / ".loom/library" / f"{CK}.tex").unlink()
+    (q / ".loom/library" / f"{CK}.results.json").unlink()
     result = scan(load_quilt(q))
     assert not [d for d in result.lint if d.code == "loom:undigested-citekey"], result.lint
     assert [e.to for e in result.edges.edges if e.via == "postnote"] == [f"{V}-prop-3.2"]
@@ -156,7 +156,7 @@ def test_a_key_counts_as_digested_when_a_version_is(tmp_path: Path) -> None:
 def test_the_manifest_names_a_work_s_versions_and_a_version_s_work(tmp_path: Path) -> None:
     q = _versioned(tmp_path)
     ok("build", cwd=q)
-    refs = json.loads((q / ".loom/build" / "manifest.json").read_text())["references"]
+    refs = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["references"]
     assert refs[CK]["versions"] == [
         {
             "citekey": V,

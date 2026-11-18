@@ -173,7 +173,7 @@ def _agents_update(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     from loom.cli.ai import install_layer
 
     s, q, _ = on_demo(serve, tmp_path)
-    shutil.rmtree(q / ".loom" / "ai")
+    shutil.rmtree(q / ".loom" / "agents" / "instructions")
     refuses(s, "agents-update", {}, 409, "no-agent-layer", "loom ai init")
     install_layer(q)
     succeeds(s, "settings-save", {"changes": {"agents.deny": ["notes/"]}})

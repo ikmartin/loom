@@ -42,7 +42,7 @@ def row(q: Path, ann: str) -> dict[str, Any]:
 
 
 def events(q: Path, ann: str) -> list[dict[str, Any]]:
-    lines = (q / ".loom/annotations/log.jsonl").read_text().splitlines()
+    lines = (q / ".loom/records/annotations/log.jsonl").read_text().splitlines()
     return [e for e in map(json.loads, lines) if e.get("id") == ann]
 
 

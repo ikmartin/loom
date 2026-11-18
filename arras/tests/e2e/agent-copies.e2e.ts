@@ -1,4 +1,4 @@
-// The documents an agent edits (plan 0.17.1, 0.22.6): the fixture's agent copy of main.tex, `.loom/copies/aidoc.tex`, sits beneath main.tex in the Docs column, is never given a Review tab, and its derived nodes are left out of every whole-quilt view while a scope on the copy shows them.
+// The documents an agent edits (plan 0.17.1, 0.22.6): the fixture's agent copy of main.tex, `.loom/agents/copies/aidoc.tex`, sits beneath main.tex in the Docs column, is never given a Review tab, and its derived nodes are left out of every whole-quilt view while a scope on the copy shows them.
 import { expect, test } from '@playwright/test';
 
 test("an agent's copy sits beneath the document it copies, and nowhere else in the column", async ({ page }) => {
@@ -20,7 +20,7 @@ test("Your Changes offers an agent's document no place", async ({ page }) => {
 	await page.goto('/review');
 	const picker = page.getByTestId('review-document');
 	await expect(picker).toHaveValue('drafting/main.tex');
-	await expect(picker.locator('option[value=".loom/copies/aidoc.tex"]')).toHaveCount(0);
+	await expect(picker.locator('option[value=".loom/agents/copies/aidoc.tex"]')).toHaveCount(0);
 	// an address naming it falls back to the default document
 	await page.goto('/review?document=.loom%2Fcopies%2Faidoc.tex');
 	await expect(picker).toHaveValue('drafting/main.tex');
@@ -33,6 +33,6 @@ test("the whole quilt counts each of the person's nodes once, and a scope on the
 	// the person's documents come first in Scope, the agent's after them
 	const scope = page.getByLabel('Scope', { exact: true });
 	await expect(scope.locator('option').last()).toHaveText(/aidoc\.tex/);
-	await scope.selectOption('.loom/copies/aidoc.tex');
+	await scope.selectOption('.loom/agents/copies/aidoc.tex');
 	await expect(page.getByTestId('gnode-sy-0003-ai')).toBeVisible();
 });

@@ -1,6 +1,6 @@
 """What an annotation is, and the record one belongs to.
 
-Annotations are stored as events in `.loom/annotations/log.jsonl` (`records/log.py`) and replayed into these shapes; a Record is one author's annotations as they now stand, not a file. Only `loom annotate` writes them.
+Annotations are stored as events in `.loom/records/annotations/log.jsonl` (`records/log.py`) and replayed into these shapes; a Record is one author's annotations as they now stand, not a file. Only `loom annotate` writes them.
 """
 
 from __future__ import annotations
@@ -113,7 +113,7 @@ class Record:
 
 
 def load_records(root: Path) -> tuple[list[Record], list[str]]:
-    """Every record in the quilt, replayed from `.loom/annotations/log.jsonl`, plus one problem per unreadable line."""
+    """Every record in the quilt, replayed from `.loom/records/annotations/log.jsonl`, plus one problem per unreadable line."""
     from loom.records.log import replay
 
     return replay(root)

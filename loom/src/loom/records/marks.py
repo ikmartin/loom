@@ -289,7 +289,7 @@ class DocumentWords:
 
 
 def words_of(result: Any, pdf: Path) -> DocumentWords:
-    """The words of `pdf` (`refs.pages.document_boxes`), kept by the file's hash under the build's cache, or a stored work's under the store's.
+    """The words of `pdf` (`refs.pages.document_boxes`), kept by the file's hash in `.loom/cache/marks/`, or a stored work's in `.loom/cache/library/`.
 
     Parameters
     ----------
@@ -303,7 +303,7 @@ def words_of(result: Any, pdf: Path) -> DocumentWords:
     DocumentWords
         Every word in reading order; MapRefused when pdftotext cannot read the file.
     """
-    from loom.paths import BUILD
+    from loom.paths import MARKS
     from loom.refs.pages import document_boxes, storage_root, store_boxes
 
     root: Path = result.quilt.root
@@ -311,7 +311,7 @@ def words_of(result: Any, pdf: Path) -> DocumentWords:
         pdf.resolve().relative_to(storage_root(root).resolve())
         cache = store_boxes(pdf.parent)
     except ValueError:
-        cache = root / BUILD / "cache" / "boxes" / "files" / artifact_of(pdf)[:16]
+        cache = root / MARKS / "boxes" / artifact_of(pdf)[:16]
     return DocumentWords(document_boxes(pdf, cache))
 
 
@@ -441,7 +441,7 @@ def refind(words: DocumentWords, a: Any) -> Refound | None:
 
 
 def refound(result: Any, pdf: Path, a: Any, artifact: str) -> Refound | None:
-    """`refind` on the PDF as it is now, kept under `.loom/build/cache/refound/` by what it reads, so a build after the first reads nothing.
+    """`refind` on the PDF as it is now, kept under `.loom/cache/marks/refound/` by what it reads, so a build after the first reads nothing.
 
     Parameters
     ----------
@@ -461,18 +461,14 @@ def refound(result: Any, pdf: Path, a: Any, artifact: str) -> Refound | None:
     """
     import json
 
-    from loom.paths import BUILD
+    from loom.paths import MARKS
     from loom.refs.pages import MapRefused
 
     sel = a.selector.to_dict() if a.selector else None
     anchor = a.anchor.to_dict() if getattr(a, "anchor", None) else None
     given = [REFIND, artifact, a.page, a.rects, a.strokes, a.mark, a.gap, sel, anchor]
     path = (
-        result.quilt.root
-        / BUILD
-        / "cache"
-        / "refound"
-        / (hashlib.sha256(json.dumps(given).encode()).hexdigest()[:32] + ".json")
+        result.quilt.root / MARKS / "refound" / (hashlib.sha256(json.dumps(given).encode()).hexdigest()[:32] + ".json")
     )
     try:
         got = json.loads(path.read_text(encoding="utf-8"))

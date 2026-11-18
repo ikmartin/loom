@@ -13,7 +13,7 @@ from loom.scan.bib import parse_bib
 from tests.helpers import edit, json_of, ok, refused, said
 from tests.unit._quilts import demo, propose, work_home
 
-BIB = ".loom/digests/bibliography.bib"
+BIB = ".loom/library/bibliography.bib"
 HANDBOOK = "Logarithmic geometry and moduli\nDan Abramovich, Qile Chen, Danny Gillam, Yuhao Huang, Martin Olsson, Matthew Satriano, and Shenghao Sun\n"
 OLSSON = "Logarithmic geometry and algebraic stacks\nMartin C. Olsson\nAnn. Sci. Ecole Norm. Sup.\n"
 
@@ -52,13 +52,13 @@ def test_redo_keeps_a_verified_result_byte_identical(tmp_path: Path, monkeypatch
 
     q = demo(tmp_path)
     ck = "Calloway14"
-    extracted = (q / ".loom/digests" / f"{ck}.tex").read_text()
+    extracted = (q / ".loom/library" / f"{ck}.tex").read_text()
     monkeypatch.setattr("loom.digest.extract.extract_digest", lambda *_a, **_k: (extracted, None))
     _source_in_store(q)
     propose(q, ck, "rem-4.1", 2, "Let X = {a, b} carry the indiscrete topology", "The indiscrete pair stands.")
     rid = f"{ck}-rem-4.1"
     ok("library", "verify", rid, "--as", "A. Author", "--yes", cwd=q)
-    digest = q / ".loom/digests" / f"{ck}.tex"
+    digest = q / ".loom/library" / f"{ck}.tex"
 
     def node(text: str) -> str:
         start = text.index(f"\\label{{{rid}}}")
@@ -153,7 +153,7 @@ def test_a_pdf_showing_another_work_is_filed_on_the_persons_word_and_the_evidenc
     r = ok("library", "add", handbook, "--for", "olsson03", "--as", "A. Author", cwd=q)
     assert said("on your word, though it is abramovich16's", r.stdout)
     assert (work_home(q, "olsson03") / "paper.pdf").is_file()
-    ledger = json.loads((q / ".loom/digests" / "storage" / "copied.json").read_text())
+    ledger = json.loads((q / ".loom/library" / "storage" / "copied.json").read_text())
     row = next(v for v in ledger.values() if v["from"] == "Handbook of Moduli.pdf")
     assert row["forced"].startswith("it is abramovich16's") and row["by"] == "A. Author"
     # without --for it is filed nowhere, and the question names the work it shows it is

@@ -17,9 +17,9 @@ x.send(JSON.stringify({ title: 'planted' }));
 
 /** Each page by the address it is served at, with the file under `.loom/` that holds it. */
 const PLANTED: Record<string, [string, string]> = {
-	'build/agent/x.html': ['.loom/build/agent/x.html', `<!doctype html><title>planted</title><script>${PAYLOAD}</script>`],
+	'build/agent/x.html': ['.loom/cache/site/agent/x.html', `<!doctype html><title>planted</title><script>${PAYLOAD}</script>`],
 	'digests/storage/arxiv/2101.00001v1/src/figure.svg': [
-		'.loom/digests/storage/arxiv/2101.00001v1/src/figure.svg',
+		'.loom/library/storage/arxiv/2101.00001v1/src/figure.svg',
 		`<svg xmlns="http://www.w3.org/2000/svg"><script><![CDATA[${PAYLOAD}]]></script></svg>`
 	]
 };
@@ -35,7 +35,7 @@ for (const [path, [held, text]] of Object.entries(PLANTED)) {
 		});
 		const res = await page.goto(`/${path}`);
 		expect(res?.status()).toBe(200);
-		const index = join(served.root, '.loom/sessions/index.jsonl');
+		const index = join(served.root, '.loom/agents/sessions/index.jsonl');
 		expect(existsSync(index) ? readFileSync(index, 'utf8') : '', 'the session index').not.toContain('planted');
 		expect(asked, 'requests the planted page made to the write API').toEqual([]);
 		expect(res?.headers()['content-security-policy']).toBe('sandbox');
