@@ -129,9 +129,15 @@ def _block(text: str, key: str) -> tuple[int, int] | None:
     before = text.rfind("\n", 0, start - 1) + 1 if start else 0
     if text[before:start].startswith("% from"):
         start = before
-        if start > 0 and text[start - 1] == "\n" and text[max(0, start - 2)] == "\n":
+        # the blank line before it, in the file's own line ending
+        prefix = text[:start]
+        if prefix.endswith("\r\n\r\n") or prefix == "\r\n":
+            start -= 2
+        elif prefix.endswith("\n\n") or prefix == "\n":
             start -= 1
-    if end < len(text) and text[end] == "\n":
+    if text.startswith("\r\n", end):
+        end += 2
+    elif text.startswith("\n", end):
         end += 1
     return start, end
 
@@ -173,7 +179,9 @@ def _delete_work(result: ScanResult, key: str, who: str) -> str:
 
     root = result.quilt.root
     path = root / BIBLIOGRAPHY
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    from loom.refs.intake import read_exact
+
+    text = read_exact(path)
     entries = parse_bib(text)
     if key not in entries:
         raise NotDeletable("no-such-work", f"the library has no work {key}")
@@ -196,15 +204,15 @@ def _delete_work(result: ScanResult, key: str, who: str) -> str:
 
     held = False
     with library_lock(root):
-        for k in doomed:
-            held = _delete_held(root, k, entries, doomed, who) or held
-        # the entries last: what fails before here leaves a work that can be deleted again
-        text = path.read_text(encoding="utf-8")
+        # the entries first, so no entry ever names a place emptied under it: what stops after leaves a place no entry names, which gathering offers again
+        text = read_exact(path)
         for k in doomed:
             where = _block(text, k)
             assert where is not None
             text = text[: where[0]] + text[where[1] :]
         write_whole(path, text)
+        for k in doomed:
+            held = _delete_held(root, k, entries, doomed, who) or held
     also = f" and its {'copy' if len(doomed) == 2 else 'copies'} {', '.join(doomed[1:])}" if doomed[1:] else ""
     return f"deleted {key}{also} from the library" + (", with loom's copy of the PDF" if held else "")
 

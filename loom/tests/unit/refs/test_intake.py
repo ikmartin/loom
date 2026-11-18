@@ -1002,8 +1002,9 @@ def test_a_lookalike_dropped_on_its_work_is_kept_as_a_version(tmp_path: Path) ->
     assert (again.state, again.citekey, again.why) == ("here", "Har77", "these very bytes are Har77's"), again
 
 
-def test_a_version_is_never_filed_where_another_entry_names(tmp_path: Path) -> None:
-    """The re-check's finding 7: a clone holds the bibliography and not the store; Arden24A's PDF added for Bellamy19 was filed at the place Arden24A names, and both entries named it."""
+@pytest.mark.parametrize("clone", ["without the pdf", "without the place"])
+def test_a_version_is_never_filed_where_another_entry_names(tmp_path: Path, clone: str) -> None:
+    """The re-check's finding 7: a clone holds the bibliography and not the store; the PDF of the showcase's second version of Arden24, added for Bellamy19, was filed at the place that version's entry names, and both entries named it. A clone has no store directory at all, so the place is empty, not merely missing its PDF."""
     import shutil
 
     from loom.refs.pages import sha256_of
@@ -1011,13 +1012,17 @@ def test_a_version_is_never_filed_where_another_entry_names(tmp_path: Path) -> N
 
     q = showcase(tmp_path)
     place = q / ".loom/digests/storage/file/e43d5afaac8f10f0"
-    pdf = tmp_path / "arden24A.pdf"
+    naming = sorted(k for k, e in bib(q).items() if e.fields.get("loom-file") == "file/e43d5afaac8f10f0")
+    assert len(naming) == 1, naming
+    pdf = tmp_path / "second version.pdf"
     shutil.copy(place / "paper.pdf", pdf)
-    (place / "paper.pdf").unlink()
+    if clone == "without the place":
+        shutil.rmtree(place)
+    else:
+        (place / "paper.pdf").unlink()
     (row,) = taken(q, Item(path=pdf, work="Bellamy19", on_word=True))
     assert row.state == "added" and row.sibling, row
-    named = [k for k, e in bib(q).items() if e.fields.get("loom-file") == "file/e43d5afaac8f10f0"]
-    assert named == ["Arden24A"], named
+    assert sorted(k for k, e in bib(q).items() if e.fields.get("loom-file") == "file/e43d5afaac8f10f0") == naming
     assert sha256_of(work_home(q, row.filed_as) / "paper.pdf") == sha256_of(pdf)
 
 
@@ -1204,6 +1209,100 @@ def test_two_discards_and_an_undo_racing_a_delete_each_end_in_an_answer(tmp_path
     assert not [s for s in said if isinstance(s, str) and s.startswith("FAILED")], said
 
 
+def _copies(q: Path, sha: str) -> list[str]:
+    """Every file in the quilt holding these bytes."""
+    from loom.refs.pages import sha256_of
+
+    return sorted(p.relative_to(q).as_posix() for p in q.rglob("*.pdf") if sha256_of(p) == sha)
+
+
+class _Killed(Exception):
+    """The process stopping in the middle of an act, as a test stands it in."""
+
+
+@pytest.mark.parametrize("then", ["dropped again", "taken", "unfiled again"])
+def test_an_unfile_stopped_before_it_recorded_itself_loses_no_pdf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, then: str
+) -> None:
+    """The third review's finding 1: an unfile moved the PDF into its drop before recording itself; stopped between, the drop's record still said its bytes were taken in, and the next take deleted the only copy. The page text it had set aside made every later unfile fail."""
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    real = intake._push
+
+    def killed(d: Path, act: dict[str, object]) -> str:
+        if act.get("kind") == "unfiled":
+            raise _Killed
+        return real(d, act)
+
+    monkeypatch.setattr(intake, "_push", killed)
+    with pytest.raises(_Killed):
+        unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    monkeypatch.setattr(intake, "_push", real)
+    if then == "dropped again":
+        item = dropped(q, "har 0.pdf", HARTSHORNE[0], tmp_path / "again")
+        taken(q, Item(drop=item.drop, work="Har77"))
+    elif then == "taken":
+        taken(q, Item(drop=first.id))
+    else:
+        off = unfile(scan(load_quilt(q)), "Har77", by=WHO)
+        assert off["incoming"] == first.id
+    assert _copies(q, first.id), "the only copy was deleted"
+    assert (work_home(q, "Har77") / "paper.pdf").is_file() or [r["id"] for r in waiting(q)] == [first.id]
+
+
+def test_an_undo_stopped_midway_loses_no_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The third review's finding 1: an undo with earlier acts standing moved the PDF back into the drop before it rewrote the drop's record; stopped between, the next take of the drop deleted the only copy."""
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    (again,) = taken(q, Item(drop=first.id, work="Har77"))
+    assert again.state == "added", again
+    real = intake._restore_records
+
+    def killed(*args: object, **kwargs: object) -> None:
+        real(*args, **kwargs)  # type: ignore[arg-type]
+        raise _Killed
+
+    monkeypatch.setattr(intake, "_restore_records", killed)
+    with pytest.raises(_Killed):
+        undo(scan(load_quilt(q)), first.id, by=WHO)
+    monkeypatch.setattr(intake, "_restore_records", real)
+    assert _copies(q, first.id)
+    taken(q, Item(drop=first.id))
+    assert _copies(q, first.id), "the only copy was deleted"
+
+
+def test_a_file_received_while_its_bytes_are_undone_waits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A second drop of the same bytes answered while the first drop's add is undone used to be deleted with it: a receive places its file whenever none waits, and only a file whose bytes the store holds is ever let go."""
+    import threading
+    import time
+
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path))
+    real = intake._restore_records
+
+    def slow(*args: object, **kwargs: object) -> None:
+        real(*args, **kwargs)  # type: ignore[arg-type]
+        time.sleep(0.6)
+
+    monkeypatch.setattr(intake, "_restore_records", slow)
+    undoing = threading.Thread(target=lambda: undo(scan(load_quilt(q)), row.id, by=WHO))
+    undoing.start()
+    time.sleep(0.2)
+    second = dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path)
+    undoing.join(30)
+    monkeypatch.setattr(intake, "_restore_records", real)
+    assert second.drop == row.id and _copies(q, row.id)
+    (again,) = taken(q, second)
+    assert again.state == "added", again
+
+
 def test_a_library_runs_fetch_never_writes_over_a_pdf_the_person_filed_meanwhile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1268,3 +1367,122 @@ def test_a_take_for_a_work_a_run_acts_on_is_refused(tmp_path: Path) -> None:
     finally:
         _JOBS.pop(q.resolve(), None)
     assert [r["id"] for r in waiting(q)] == [item.drop]
+
+
+def _crlf(q: Path) -> bytes:
+    """The quilt's bibliography rewritten with CRLF line endings, as a Windows checkout or a reference manager's export keeps it."""
+    path = q / BIB
+    path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    return path.read_bytes()
+
+
+def _all_crlf(data: bytes) -> bool:
+    return b"\n" not in data.replace(b"\r\n", b"")
+
+
+def test_a_bibliography_kept_with_crlf_is_changed_only_where_an_act_writes(tmp_path: Path) -> None:
+    """The third review's finding 3: appending rewrote a CRLF bibliography with LF throughout, and an undo, reading the act's byte offsets against it, was refused or left a fragment of an entry."""
+    from loom.refs.added import delete_work
+
+    q = demo(tmp_path)
+    before = _crlf(q)
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path / "a"))
+    after = (q / BIB).read_bytes()
+    assert after.startswith(before) and _all_crlf(after)
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert (q / BIB).read_bytes() == before
+    # an entry the act did not write, edited by hand since: the undo takes out the act's entry and nothing else
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path / "b"))
+    edited = (q / BIB).read_bytes().replace(b"title   = {Virtual pull-backs}", b"title   = {Virtual pullbacks}")
+    (q / BIB).write_bytes(edited)
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert (q / BIB).read_bytes() == before.replace(b"title   = {Virtual pull-backs}", b"title   = {Virtual pullbacks}")
+    # a version unfiled, the bibliography moved on, the unfile undone: its entry goes back at the end, in CRLF
+    (_v1, v2) = _versioned(q, tmp_path, *HARTSHORNE)
+    off = unfile(scan(load_quilt(q)), v2.filed_as, by=WHO)
+    taken(q, dropped(q, "notes.pdf", NOTES, tmp_path / "c"))
+    undo(scan(load_quilt(q)), off["incoming"], by=WHO)
+    now = (q / BIB).read_bytes()
+    assert _all_crlf(now) and v2.filed_as in bib(q)
+    # and a delete takes out its work's entry alone
+    delete_work(scan(load_quilt(q)), v2.filed_as, WHO)
+    assert _all_crlf((q / BIB).read_bytes())
+
+
+def test_a_take_decides_on_the_bibliography_as_it_is_under_the_lock(tmp_path: Path) -> None:
+    """The third review's finding 4: a take decided on the scan its caller read before the lock, so a drop for a work deleted meanwhile was filed under it, and a paste of that work was answered `here`."""
+    from loom.refs.added import delete_work
+
+    q = demo(tmp_path)
+    entry = "title={Spectral gaps of quiver flows}, author={Quill, Ada}, year={2022}, doi={10.5555/spec.2022}"
+    (pasted,) = taken(q, Item(text=f"@article{{Pasted1, {entry}}}"))
+    item = dropped(q, "spectral.pdf", "Spectral gaps of quiver flows\nAda Quill\nBody.\n", tmp_path)
+    stale = bib(q)
+    delete_work(scan(load_quilt(q)), pasted.citekey, WHO)
+    with pytest.raises(IntakeRefused, match="no work Pasted1") as caught:
+        take(load_quilt(q), stale, [Item(drop=item.drop, work="Pasted1")], by=WHO)
+    assert caught.value.code == "no-such-work"
+    assert [r["id"] for r in waiting(q)] == [item.drop]
+    (again,) = take(load_quilt(q), stale, [Item(text=f"@article{{Again, {entry}}}")], by=WHO)
+    assert (again.state, again.citekey) == ("added", "Again"), again
+
+
+def test_a_drop_let_go_as_held_is_given_back_only_while_its_bytes_stand(tmp_path: Path) -> None:
+    """A drop an earlier act stands on, whose bytes the store holds at another work's place, lets its file go under an act of its own; an undo of that act copies the bytes back, and is refused once that place no longer holds them."""
+    import shutil
+
+    from loom.refs.scan import scan_bibliography
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    # the same bytes found in the store, and adopted by gathering as a work of their own
+    place = q / ".loom/digests/storage/file" / first.id[:16]
+    place.mkdir(parents=True)
+    shutil.copy(q / INCOMING / first.id / "document.pdf", place / "paper.pdf")
+    scan_bibliography(load_quilt(q))
+    (row,) = taken(q, Item(drop=first.id))
+    assert row.state == "here" and "these very bytes" in row.why and waiting(q) == [], row
+    said, again = undo(scan(load_quilt(q)), first.id, by=WHO)
+    assert again is not None and again.state == "received", said
+    taken(q, Item(drop=first.id))
+    (place / "paper.pdf").unlink()
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="no longer holds these bytes") as caught:
+        undo(scan(load_quilt(q)), first.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+
+
+def test_an_unfile_is_not_undone_once_its_works_entry_names_another_place(tmp_path: Path) -> None:
+    """A work's year corrected by hand after its document was unfiled moves the place its entry names; putting the document back where the entry no longer points would leave it named by nothing."""
+    q = demo(tmp_path)
+    _versioned(q, tmp_path, HARTSHORNE[0])
+    off = unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    text = (q / BIB).read_text(encoding="utf-8")
+    assert "year      = {1977}" in text
+    (q / BIB).write_text(text.replace("year      = {1977}", "year      = {1978}"), encoding="utf-8")
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="no longer in the bibliography as it was") as caught:
+        undo(scan(load_quilt(q)), off["incoming"], by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+
+
+def test_bytes_received_again_while_an_add_stands_wait_again_when_it_is_undone(tmp_path: Path) -> None:
+    """A second drop of bytes an act took in is let go, the store holding them; undoing that act, with earlier acts on the drop standing, then removed the store's copy and left the second drop's bytes nowhere. The act records that they were received again, and its undo gives them back to wait."""
+    import shutil
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    # the waiting file lost from the drop, and the same bytes added from the command line as a work of their own
+    (q / INCOMING / first.id / "document.pdf").unlink()
+    outside = tmp_path / "outside" / "har.pdf"
+    outside.parent.mkdir()
+    shutil.copy(tmp_path / "h0" / "src" / "har 0.pdf", outside)
+    (added,) = taken(q, Item(path=outside, new=True))
+    assert added.state == "added" and added.id == first.id, added
+    again = dropped(q, "har 0.pdf", HARTSHORNE[0], tmp_path / "again")
+    assert again.drop == first.id and waiting(q) == []
+    undo(scan(load_quilt(q)), first.id, by=WHO)
+    assert [p for p in _copies(q, first.id) if p.startswith(".loom/incoming/")], _copies(q, first.id)
+    assert [r["id"] for r in waiting(q)] == [first.id]

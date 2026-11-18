@@ -1,6 +1,6 @@
 """A model of the library under random use: drops, takes, answers, unfiles, undos, command-line adds, deletes, gathering, pastes and hand edits of the bibliography, some two at once, checked after every step against what must always hold. Every PDF a person gave is still somewhere unless they discarded it, and the records never name what is not there.
 
-Built on the integrator's re-check of the intake (2026-11-17), whose model found an undo writing an entry into the middle of another and an undo deleting a PDF from under a work. `LOOM_MODEL_STEPS` runs it longer by hand.
+Built on the integrator's re-check of the intake (2026-11-17), whose model found an undo writing an entry into the middle of another and an undo deleting a PDF from under a work. One step in twenty stops inside its act, at a random one of its file operations, as a killed process would; after it, every PDF given and not discarded on the person's word is still somewhere, no entry names a place without its PDF, and every later act answers or refuses in a sentence. `LOOM_MODEL_STEPS` runs it longer by hand, and `LOOM_MODEL_SEEDS` (comma-separated) on other seeds.
 """
 
 from __future__ import annotations
@@ -13,7 +13,8 @@ import random
 import re
 import shutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -35,6 +36,7 @@ WHO = "A. Author"
 BIB = ".loom/digests/bibliography.bib"
 HEX = re.compile(r"[0-9a-f]{64}")
 STEPS = int(os.environ.get("LOOM_MODEL_STEPS", "120"))
+SEEDS = [int(x) for x in os.environ.get("LOOM_MODEL_SEEDS", "2,3,20261117").split(",")]
 
 
 def _sha(data: bytes) -> str:
@@ -143,12 +145,19 @@ class Model:
         d = r.choice(standing)
         acts = _acts(self.q / INCOMING / d)
         act = acts[-1].get("act", "") if acts and r.random() < 0.85 else r.choice(["", "deadbeef"])
-        said, _row = undo(scan(load_quilt(self.q)), d, by=WHO, act=act)
-        if HEX.fullmatch(d):
-            if not acts:
-                gone.add(d)  # a drop never taken, discarded
-            elif len(acts) == 1 and acts[-1]["kind"] == "added" and not (acts[-1].get("waiting") or {}).get("over"):
-                gone.add(d)  # a drop's only add, undone
+        # the person's word, which stands once given, if the act stops on the way
+        discards = bool(HEX.fullmatch(d)) and (
+            not acts  # a drop never taken, discarded
+            or (len(acts) == 1 and acts[-1]["kind"] == "added" and not (acts[-1].get("waiting") or {}).get("over"))
+        )
+        if discards:
+            gone.add(d)
+        try:
+            said, _row = undo(scan(load_quilt(self.q)), d, by=WHO, act=act)
+        except IntakeRefused as refused:
+            if refused.code != "no-such-intake":  # gone already: an act beside this one discarded it
+                gone.discard(d)
+            raise
         return f"undo {d[:8]} -> {said}"
 
     def cli(self, r: random.Random, gone: set[str]) -> str | None:
@@ -180,9 +189,13 @@ class Model:
             h = self.home(res.bib[k]) if k in res.bib else None
             if h is not None and (h / "paper.pdf").is_file():
                 shas.append(_sha((h / "paper.pdf").read_bytes()))
-        said = delete_work(res, key, WHO)
         gone.update(shas)
-        return said
+        try:
+            return delete_work(res, key, WHO)
+        except NotDeletable as refused:
+            if refused.code != "no-such-work":  # deleted already by an act beside this one
+                gone.difference_update(shas)
+            raise
 
     def gather(self, r: random.Random, gone: set[str]) -> str | None:
         report = scan_bibliography(load_quilt(self.q))
@@ -234,6 +247,8 @@ ACTS: list[tuple[str, int]] = [
     ("delete", 4),
     ("edit", 3),
 ]
+#: The acts a step stops midway, each of which writes.
+STOPPABLE = ("drop", "take", "answer", "unfile", "undo", "cli", "delete")
 #: The acts that run two at once.
 PAIRED = ("take", "unfile", "undo", "cli", "gather", "answer", "drop")
 
@@ -247,8 +262,8 @@ def _present(m: Model) -> set[str]:
     return out
 
 
-def _faults(m: Model) -> list[str]:
-    """What must always hold, broken: the bibliography whole, each entry's place holding its PDF and no other entry's, one work to each identity, the ledger and each drop's record true to what is there, and every PDF given still somewhere."""
+def _faults(m: Model, crashed: bool = False) -> list[str]:
+    """What must always hold, broken: the bibliography whole, each entry's place holding its PDF and no other entry's, one work to each identity, the ledger and each drop's record true to what is there, and every PDF given still somewhere. Once an act has been stopped midway, a drop may hold what the stopped act left, and a temporary file may be left behind."""
     bad = []
     text = (m.q / BIB).read_text(encoding="utf-8")
     keys = [k for _, k in re.findall(r"^@(\w+)\{([^,\s]+),", text, re.M)]
@@ -287,11 +302,11 @@ def _faults(m: Model) -> list[str]:
         if d.name.startswith("."):
             continue
         acts, pdf = _acts(d), waiting_file(d)
-        if not acts and pdf is None and not (d / "question.json").is_file():
+        if not crashed and not acts and pdf is None and not (d / "question.json").is_file():
             bad.append(f"drop {d.name[:8]} holds, records and waits on nothing: {sorted(x.name for x in d.iterdir())}")
         if pdf is not None and HEX.fullmatch(d.name) and _sha(pdf.read_bytes()) != d.name:
             bad.append(f"drop {d.name[:8]} holds other bytes")
-        if acts and acts[-1]["kind"] == "added" and acts[-1].get("home"):
+        if not crashed and acts and acts[-1]["kind"] == "added" and acts[-1].get("home"):
             paper = m.q / acts[-1]["home"] / "paper.pdf"
             if not paper.is_file() or _sha(paper.read_bytes()) != acts[-1]["sha"]:
                 bad.append(f"drop {d.name[:8]} added {acts[-1]['citekey']}, and the store does not hold it")
@@ -302,7 +317,8 @@ def _faults(m: Model) -> list[str]:
         f"{what} ({sha[:8]}), given and not discarded, is nowhere" for sha, what in m.alive.items() if sha not in there
     ]
     bad += [f"the person's own {src.name} changed" for src, sha in m.outside if _sha(src.read_bytes()) != sha]
-    bad += [f"left behind {p.name}" for p in m.q.rglob("*") if p.name.endswith((".loom-tmp", ".part"))]
+    if not crashed:
+        bad += [f"left behind {p.name}" for p in m.q.rglob("*") if p.name.endswith((".loom-tmp", ".part"))]
     waiting(m.q)
     return bad
 
@@ -315,11 +331,53 @@ def _tree(q: Path) -> dict[str, bytes]:
     }
 
 
+class Stopped(BaseException):
+    """A process killed inside an act; a BaseException, so no `except Exception` in loom catches it, as nothing catches a kill."""
+
+
+#: The file operations an act may be stopped at.
+OPS = [
+    (os, "replace"),
+    (os, "rename"),
+    (os, "link"),
+    (os, "unlink"),
+    (shutil, "copyfile"),
+    (shutil, "copy2"),
+    (shutil, "rmtree"),
+]
+
+
+@contextmanager
+def _stopped_at(n: int) -> Iterator[None]:
+    """Stop the act run inside at its `n`-th file operation; an act with fewer runs whole."""
+    seen = [0]
+    real = {(mod, name): getattr(mod, name) for mod, name in OPS}
+
+    def wrap(f: Callable[..., object]) -> Callable[..., object]:
+        def op(*args: object, **kwargs: object) -> object:
+            seen[0] += 1
+            if seen[0] == n:
+                raise Stopped(f"stopped at file operation {n}, {getattr(f, '__name__', f)}")
+            return f(*args, **kwargs)
+
+        return op
+
+    for (mod, name), f in real.items():
+        setattr(mod, name, wrap(f))
+    try:
+        yield
+    finally:
+        for (mod, name), f in real.items():
+            setattr(mod, name, f)
+
+
 def _run(
     act: Callable[[random.Random, set[str]], str | None], r: random.Random, gone: set[str], out: list[str]
 ) -> None:
     try:
         out.append(str(act(r, gone)))
+    except Stopped as stopped:
+        out.append(f"{act.__name__} STOPPED, {stopped}")
     except (IntakeRefused, NotDeletable) as refused:
         out.append(f"{act.__name__} refused {getattr(refused, 'code', '')}")
     except Exception as exc:  # noqa: BLE001 -- what the model reports, with the step
@@ -337,12 +395,13 @@ def _paired(
     _run(act, r, gone, out)
 
 
-@pytest.mark.parametrize("seed", [2, 3, 20261117])
+@pytest.mark.parametrize("seed", SEEDS)
 def test_the_library_under_random_use_never_loses_a_document_or_damages_a_record(tmp_path: Path, seed: int) -> None:
     q = showcase(tmp_path)
     m = Model(q, tmp_path, seed)
     m.bib()
     total = sum(w for _, w in ACTS)
+    crashed, stops = False, 0
     for step in range(STEPS):
         gone: set[str] = set()
         before = _tree(q)
@@ -362,12 +421,20 @@ def test_the_library_under_random_use_never_loses_a_document_or_damages_a_record
         else:
             x = m.rng.uniform(0, total)
             name = next((n for n, w in ACTS if (x := x - w) <= 0), ACTS[-1][0])
-            _run(getattr(m, name), m.rng, gone, out)
+            if m.rng.random() < 0.05:
+                name = m.rng.choice(STOPPABLE)
+                with _stopped_at(m.rng.randint(1, 12)):
+                    _run(getattr(m, name), m.rng, gone, out)
+            else:
+                _run(getattr(m, name), m.rng, gone, out)
             what = out[0]
+            stops += " STOPPED, " in what
+            crashed = crashed or " STOPPED, " in what
             if " refused " in what:
                 assert _tree(q) == before, f"step {step}: {what}, and still changed the quilt"
         assert "FAILED" not in what, f"step {step}: {what}"
         for sha in gone:
             m.alive.pop(sha, None)
-        bad = _faults(m)
+        bad = _faults(m, crashed)
         assert not bad, f"step {step} ({what}): {bad}"
+    assert stops or STEPS < 100, "no act was stopped midway"

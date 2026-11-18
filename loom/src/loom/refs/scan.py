@@ -361,16 +361,18 @@ def candidates(result: ScanResult, report: ScanReport) -> dict[str, Candidate]:
 
 def _append(path: Path, entries: list[Candidate]) -> None:
     """Add entries to the bibliography, under the library's lock and replacing the file whole. Only ever appends, so a correction made by hand outlives every later scan."""
-    from loom.refs.intake import library_lock, write_whole
+    from loom.refs.intake import library_lock, read_exact, write_whole
 
     if not entries:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
     with library_lock(path.parent.parent.parent):
-        prior = path.read_text(encoding="utf-8") if path.is_file() else HEADER
-        chunks = [prior if prior.endswith("\n") else prior + "\n"]
+        # read and written untranslated, in the file's own line endings, so nothing it held changes
+        prior = read_exact(path) if path.is_file() else HEADER
+        eol = "\r\n" if "\r\n" in prior else "\n"
+        chunks = [prior if prior.endswith("\n") else prior + eol]
         for c in entries:
-            chunks.append(f"\n% from {c.source}\n{c.text}")
+            chunks.append(f"\n% from {c.source}\n{c.text}".replace("\r\n", "\n").replace("\n", eol))
         write_whole(path, "".join(chunks))
 
 

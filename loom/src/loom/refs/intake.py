@@ -157,6 +157,11 @@ def _write_json(p: Path, data: Any) -> None:
     write_whole(p, json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True) + "\n")
 
 
+def read_exact(path: Path) -> str:
+    """A record file's text as its bytes are, line endings untranslated: what a writer that changes only its own part reads, so a file kept with CRLF stays CRLF."""
+    return path.read_bytes().decode("utf-8") if path.is_file() else ""
+
+
 def write_whole(path: Path, text: str) -> None:
     """Replace `path` with `text` whole, by a temporary file beside it and a rename, so a crash leaves the old bytes or the new."""
     tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.loom-tmp")
@@ -269,17 +274,15 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
 
 
 def _place(root: Path, d: Path, tmp: Path, arrived: dict[str, Any]) -> None:
-    """Keep a received file in its drop, waiting on no lock: a drop holding these bytes already, waiting or taken, keeps what it has.
+    """Keep a received file in its drop, waiting on no lock: a drop whose file waits already keeps the one it has.
 
-    An act takes a drop's file only after recording itself, so a drop with no file and no act is one nothing is taking. A file placed beside an act that took these bytes (a receive racing the act) is removed when the library's lock is free at once, and otherwise waits unlisted until the next act on the drop removes it.
+    An act lets a drop's file go only after recording itself, and only when these very bytes stand in the store (`_let_go`). A file placed beside an act that took these bytes in (a receive racing the act) goes the same way, at once when the library's lock is free, else at the next act on the drop, and waits unlisted until then; one placed while an undo of that act runs stays, and waits.
     """
     from loom.errors import EnvError
     from loom.locks import locked
 
     for _ in range(5):
         d.mkdir(exist_ok=True)
-        if _taken(d):
-            return
         try:
             put_file(tmp, d / FILE, link=True)
         except FileExistsError:
@@ -293,7 +296,7 @@ def _place(root: Path, d: Path, tmp: Path, arrived: dict[str, Any]) -> None:
             pass
         try:
             with locked(root / LIBRARY_LOCK, wait=0):
-                _clear_stale(d)
+                _clear_stale(root, d)
         except EnvError:
             pass
         return
@@ -306,11 +309,72 @@ def _taken(d: Path) -> bool:
     return bool(acts) and acts[-1].get("kind") in ("added", "here")
 
 
-def _clear_stale(d: Path) -> None:
-    """Remove what a receive racing an act left in a drop that act took in: a copy of bytes the store holds, and what it arrived as. Under the library's lock."""
-    if d.is_dir() and _taken(d):
-        (d / FILE).unlink(missing_ok=True)
+def _clear_stale(root: Path, d: Path) -> None:
+    """Let go of a file a receive placed in a drop whose last act took these bytes in, through `_let_go`, the act recording that they were received again (`received`, what they arrived as), so that its undo gives the file back to wait rather than leave the bytes nowhere. Under the library's lock."""
+    if not (d.is_dir() and _taken(d) and waiting_file(d) is not None and _stands(root, d)):
+        return
+    acts = _acts(d)
+    # only where its undo keeps the drop, earlier acts standing or the file a command-line add took over; the undo of a drop's one add discards the drop, these bytes with it
+    kept = len(acts) > 1 or bool((acts[-1].get("waiting") or {}).get("over"))
+    if acts[-1].get("kind") == "added" and kept and "received" not in acts[-1]:
+        acts[-1] = {**acts[-1], "received": _read_json(d / ARRIVED) or {}}
+        _write_json(d / ACT, {"acts": acts})
+    _let_go(root, d)
+
+
+def _stands(root: Path, d: Path, also: tuple[Path, ...] = ()) -> bool:
+    """Whether a drop's bytes stand in the store at a place an entry names: where the ledger sends them, a place of their own (`file/<sha16>`), a place an act on this drop filed or found them, or one of `also`."""
+    from loom.refs.pages import sha256_of, storage_root
+    from loom.refs.scan import claimed_places, load_ledger
+
+    sha = d.name
+    if not re.fullmatch(r"[0-9a-f]{64}", sha):
+        return False
+    store = storage_root(root)
+    rec = load_ledger(root).get(sha) or {}
+    places = [*also, store / "file" / sha[:16]]
+    if isinstance(rec.get("to"), str) and rec["to"]:
+        places.append(store / rec["to"])
+    for a in _acts(d):
+        home = a.get("home")
+        if a.get("kind") in ("added", "here") and isinstance(home, str) and home.startswith(f"{STORAGE}/"):
+            places.append(root / home)
+    named: set[Path] | None = None
+    for place in dict.fromkeys(places):
+        paper = place / "paper.pdf"
+        if paper.is_file() and sha256_of(paper) == sha:
+            named = claimed_places(root, _bib_now(root)) if named is None else named
+            if place in named:
+                return True
+    return False
+
+
+def _let_go(root: Path, d: Path, also: tuple[Path, ...] = ()) -> bool:
+    """Remove a drop's file, and what it arrived as, only when these very bytes stand in the store at a place an entry names (`_stands`); whether the drop holds no file now.
+
+    Every removal of a drop's file but the person's own discard goes through here, so a crash that left the only copy in a drop, whatever the drop's record says, never costs it: the file waits instead.
+    """
+    if waiting_file(d) is None:
+        return True
+    if not _stands(root, d, also):
+        return False
+    (d / FILE).unlink(missing_ok=True)
+    (d / ARRIVED).unlink(missing_ok=True)
+    return True
+
+
+def _remove_drop(root: Path, d: Path) -> None:
+    """Remove a drop the intake is done with: its records, and the directory unless a receive has placed a file in it meanwhile, which then waits."""
+    for name in (ACT, QUESTION):
+        (d / name).unlink(missing_ok=True)
+    shutil.rmtree(d / HELD, ignore_errors=True)
+    if waiting_file(d) is None:
         (d / ARRIVED).unlink(missing_ok=True)
+    try:
+        d.rmdir()
+    except OSError:
+        return
+    _tidy(incoming(root))
 
 
 # ---- the lock and the records -----------------------------------------------------------------------------------------
@@ -419,7 +483,7 @@ def _unwritten(root: Path, act: dict[str, Any]) -> _Bib:
         return "keep", ""
     if b["after"] is not None and _digest(bib) == b["after"]:
         return ("unlink", "") if b["size"] < 0 else ("write", bib.read_bytes()[: b["size"]].decode("utf-8"))
-    text = bib.read_text(encoding="utf-8") if bib.is_file() else ""
+    text = read_exact(bib)
     for key, block in act["blocks"].items():
         at = text.find(block)
         if at < 0:
@@ -438,14 +502,15 @@ def _put_back(root: Path, act: dict[str, Any]) -> _Bib:
     removed = act["removed"]
     if not removed:
         return "keep", ""
-    text = bib.read_text(encoding="utf-8") if bib.is_file() else ""
+    text = read_exact(bib)
     exact = _digest(bib) == act["records"]["bibliography"]["after"]
+    eol = "\r\n" if "\r\n" in text else "\n"
     for block in removed.values():
         at, body = block.split("\0", 1)
         if exact and int(at) <= len(text):
             text = text[: int(at)] + body + text[int(at) :]
         else:
-            text = (text if not text or text.endswith("\n") else text + "\n") + body
+            text = (text if not text or text.endswith("\n") else text + eol) + body
     return "write", text
 
 
@@ -656,10 +721,12 @@ class _Heard:
 
 
 def _fresh(t: _Take) -> None:
-    """Add to what a take knows the entries the bibliography holds now and its scan did not: another process's, written since."""
-    path = t.root / BIBLIOGRAPHY
-    if path.is_file():
-        for key, entry in parse_bib(path.read_text(encoding="utf-8")).items():
+    """Decide on the bibliography as it is now: under the lock, its entries and no others, so a work deleted since the caller's scan is gone and one another process added is there; a dry run keeps what it has decided so far beside them."""
+    now = _bib_now(t.root)
+    if t.write:
+        t.bib = now
+    else:
+        for key, entry in now.items():
             t.bib.setdefault(key, entry)
 
 
@@ -667,11 +734,13 @@ def _take_drop(t: _Take, n: int, item: Item) -> Row:
     """A received file, by its drop: the file that waits there, or, the same bytes having been taken in already, the work they went to."""
     d = drop_dir(t.root, item.drop)
     pdf = waiting_file(d) if d.is_dir() else None
-    if d.is_dir() and _taken(d):
-        if t.write:
-            _clear_stale(d)
+    if d.is_dir() and _taken(d) and t.write:
+        _clear_stale(t.root, d)
+        pdf = waiting_file(d)
+    if d.is_dir() and _taken(d) and (pdf is None or (not t.write and _stands(t.root, d))):
         key = str(_acts(d)[-1]["citekey"])
         return Row(item.drop, n, item.name, "here", key, *_shown(t, key), why=f"these very bytes are {key}'s")
+    # a file beside an act whose bytes the store does not hold is the only copy, as a crash leaves it: it is taken
     if pdf is not None:
         arrived = _read_json(d / ARRIVED) or {}
         return _take_file(
@@ -745,11 +814,13 @@ def _here(t: _Take, rid: str, n: int, name: str, key: str, why: str) -> Row:
     """A row for something the library holds already, these very bytes or (for a pasted text) a work stating it: a waiting drop of it goes, since nothing is left to take. One an earlier act stands on keeps its record: its file goes under an act of its own, which an undo gives back."""
     if t.write and rid and re.fullmatch(r"[0-9a-f]{64}|t-[0-9a-f]{16}", rid):
         d = incoming(t.root) / rid
+        home = _place_of(t.root, t.bib[key]) if key in t.bib else None
+        also = (home,) if home is not None else ()
         if d.is_dir() and not (d / ACT).is_file():
-            shutil.rmtree(d)
-            _tidy(incoming(t.root))
+            if _let_go(t.root, d, also):
+                _remove_drop(t.root, d)
         elif d.is_dir():
-            if waiting_file(d) is not None and key in t.bib and (home := _place_of(t.root, t.bib[key])) is not None:
+            if waiting_file(d) is not None and home is not None and _stands(t.root, d, also):
                 _push(
                     d,
                     {
@@ -763,8 +834,7 @@ def _here(t: _Take, rid: str, n: int, name: str, key: str, why: str) -> Row:
                         "by": t.by,
                     },
                 )
-                (d / FILE).unlink()
-                (d / ARRIVED).unlink(missing_ok=True)
+                _let_go(t.root, d, also)
             (d / QUESTION).unlink(missing_ok=True)
     return Row(rid, n, name, "here", key, *_shown(t, key), why=why)
 
@@ -881,7 +951,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
             },
         )
         if waits:
-            (d / FILE).unlink(missing_ok=True)
+            _let_go(t.root, d)
         _settled(d)
     row.pages, row.job, row.why = _read_pages(t, key, f)
     return row
@@ -954,7 +1024,7 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
             },
         )
         if waits:
-            (d / FILE).unlink(missing_ok=True)
+            _let_go(t.root, d)
         _settled(d)
     row.pages, row.job, row.why = _read_pages(t, filed_as, f)
     if note:
@@ -1294,7 +1364,7 @@ def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | 
             raise IntakeRefused("no-such-intake", f"nothing was dropped as {drop[:16]}", 404)
         acts = _acts(d)
         if not acts:
-            shutil.rmtree(d)
+            shutil.rmtree(d)  # the person's own discard
             _tidy(incoming(root))
             return "discarded the drop, which was never taken in", None
         last = acts[-1]
@@ -1327,17 +1397,19 @@ def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | 
                 if act_["entries"]
                 else f"took the document off {act_['citekey']} again"
             )
+        # the record last: a crash before here leaves the act standing, its file where the act's own order put it
         rest = acts[:-1]
         if rest:
             _write_json(d / ACT, {"acts": rest})
+        else:
+            (d / ACT).unlink(missing_ok=True)
+        if act_["kind"] == "unfiled":
+            _let_go(root, d, (root / act_["home"],))  # the document stands under its work again
+        if rest or waiting_file(d) is not None:
             waits = waiting_file(d) is not None or (d / QUESTION).is_file()
             return said, _waiting_row(d, 0) if waits else None
-        (d / ACT).unlink(missing_ok=True)
-        if waiting_file(d) is None:
-            shutil.rmtree(d)
-            _tidy(incoming(root))
-            return said, None
-        return said, _waiting_row(d, 0)
+        _remove_drop(root, d)
+        return said, None
 
 
 def _untrusted(root: Path, d: Path, act: dict[str, Any]) -> str:
@@ -1416,6 +1488,12 @@ def _check_unfile(root: Path, d: Path, act: dict[str, Any]) -> _Bib:
     if not (d / act["name"]).is_file():
         raise IntakeRefused("changed", "the document this unfile took off no longer waits in its drop", 409)
     if (home / "paper.pdf").exists() or any((home / n).exists() for n in act["moved"]):
+        from loom.refs.pages import sha256_of
+
+        if (home / "paper.pdf").is_file() and sha256_of(home / "paper.pdf") == d.name:
+            raise IntakeRefused(
+                "changed", f"{key} holds this very document still: the unfile stopped before the store let it go", 409
+            )
         raise IntakeRefused(
             "changed", f"{key} holds another document now: take that one off first, and this one can go back", 409
         )
@@ -1442,7 +1520,7 @@ def _check_unfile(root: Path, d: Path, act: dict[str, Any]) -> _Bib:
 
 
 def _check_here(root: Path, d: Path, act: dict[str, Any]) -> None:
-    """Refuse to give back a drop let go as already held when the place holding its bytes holds them no longer, or the drop holds a file again."""
+    """Refuse to give back a drop let go as already held when the place that held its bytes holds them no longer, since there is then nothing to copy back."""
     from loom.refs.pages import sha256_of
 
     paper = root / act["home"] / "paper.pdf"
@@ -1460,18 +1538,24 @@ def _undo_here(d: Path, root: Path, act: dict[str, Any]) -> None:
 
 
 def _undo_add(root: Path, d: Path, act: dict[str, Any], plan: _Bib, *, keep: bool) -> None:
-    """Take out what an add wrote: its home or what it put in one, the word boxes read off it, and the records as `plan` and the act's record say; with `keep`, earlier acts on the drop standing, its file waits there again as it did."""
+    """Take out what an add wrote: the records as `plan` and the act's record say, then its home or what it put in one and the word boxes read off it; with `keep`, earlier acts on the drop standing, its file waits there again, as it did before the act or as it was received again while the act stood, linked back before the store lets go of it.
+
+    The records go before the store, so an entry never names a place emptied under it, whenever this stops.
+    """
     from loom.refs.pages import storage_root
 
     held = act.get("waiting") or {}
+    home = root / act["home"] if act["home"] else None
     if keep:
-        if held.get("file") and act["home"] and (root / act["home"] / "paper.pdf").is_file():
-            put_file(root / act["home"] / "paper.pdf", d / FILE, link=True, replace=True)
-        if held.get("arrived") is not None:
-            _write_json(d / ARRIVED, held["arrived"])
+        # its file waited before the act, or these very bytes were received again while it stood
+        if (held.get("file") or "received" in act) and home is not None and (home / "paper.pdf").is_file():
+            put_file(home / "paper.pdf", d / FILE, link=True, replace=True)
+        arrived = held.get("arrived") if held.get("arrived") is not None else act.get("received") or None
+        if arrived is not None:
+            _write_json(d / ARRIVED, arrived)
         (d / QUESTION).unlink(missing_ok=True)
-    if act["home"]:
-        home = root / act["home"]
+    _restore_records(root, act["records"], plan)
+    if home is not None:
         names = act["names"]
         if names is None:
             shutil.rmtree(home, ignore_errors=True)
@@ -1483,7 +1567,29 @@ def _undo_add(root: Path, d: Path, act: dict[str, Any], plan: _Bib, *, keep: boo
         shutil.rmtree(boxes, ignore_errors=True)
         _tidy(boxes.parent)
         _tidy(home.parent)
-    _restore_records(root, act["records"], plan)
+
+
+def _link_tree(src: Path, dst: Path) -> None:
+    """Give `dst` what `src` holds, a file or a tree, by hard links where the filesystem has them, else by copies; `src` stays."""
+
+    def one(a: str, b: str) -> None:
+        try:
+            os.link(a, b)
+        except OSError:
+            shutil.copy2(a, b)
+
+    if src.is_dir():
+        shutil.copytree(src, dst, copy_function=one)
+    else:
+        one(str(src), str(dst))
+
+
+def _clear_unrecorded(d: Path) -> None:
+    """Remove the `held/<n>` an unfile that stopped before recording itself left: copies of page text whose originals still stand, since an unfile removes nothing from the store until its act is recorded."""
+    recorded = {a.get("held") for a in _acts(d)}
+    for p in sorted((d / HELD).iterdir()) if (d / HELD).is_dir() else []:
+        if f"{HELD}/{p.name}" not in recorded:
+            shutil.rmtree(p, ignore_errors=True)
 
 
 def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
@@ -1505,11 +1611,7 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
     from loom.refs.scan import load_ledger
 
     root = result.quilt.root
-    bib = dict(result.bib)
-    path = root / BIBLIOGRAPHY
-    if path.is_file():
-        for key, entry in parse_bib(path.read_text(encoding="utf-8")).items():
-            bib.setdefault(key, entry)
+    bib = _bib_now(root)  # as it is under the lock, not as the caller's scan read it
     if citekey not in bib:
         raise IntakeRefused("no-such-work", f"the library has no work {citekey}", 404)
     home = work_dir(root, bib[citekey])
@@ -1531,7 +1633,7 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
     with library_lock(root):
         sha = sha256_of(paper)
         d = incoming(root) / sha
-        _clear_stale(d)
+        _clear_stale(root, d)
         if waiting_file(d) is not None:
             raise IntakeRefused("already-waiting", f"the same file waits to be taken in already, as {sha[:12]}", 409)
         rec = load_ledger(root).get(sha) or {}
@@ -1539,16 +1641,24 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
         before = _before(root, [sha])
         d.mkdir(parents=True, exist_ok=True)
         arrived = _read_json(d / ARRIVED)
-        place = f"{HELD}/{len(_acts(d))}"
+        _clear_unrecorded(d)
+        slot = len(_acts(d))
+        while (d / HELD / str(slot)).exists():
+            slot += 1
+        place = f"{HELD}/{slot}"
         held = d / place
         held.mkdir(parents=True)
+        # linked into the drop first; the store lets go of the document only once the act is recorded, so a crash anywhere leaves a copy where a record finds it
+        try:
+            put_file(paper, d / name, link=True)
+        except FileExistsError:
+            pass  # a receive of these very bytes placed it meanwhile
         moved = [n for n in READ_OFF if (home / n).exists()]
         for n in moved:
-            shutil.move(str(home / n), str(held / n))
+            _link_tree(home / n, held / n)
         boxes = storage_root(root) / "cache" / "boxes" / home.parent.name / home.name
         if boxes.is_dir():
-            shutil.move(str(boxes), str(held / "boxes"))
-        shutil.move(str(paper), str(d / name))
+            _link_tree(boxes, held / "boxes")
         removed: dict[str, str] = {}
         if entry.fields.get("loom-copy-of") and own:
             removed = _remove_entry(root, citekey)
@@ -1556,9 +1666,7 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
             ledger = load_ledger(root)
             ledger.pop(sha, None)
             write_whole(root / LEDGER, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
-        made = not any(home.iterdir())
-        if made:
-            home.rmdir()
+        made = set(os.listdir(home)) <= {"paper.pdf", *moved}
         refused = sorted({*(arrived or {}).get("not", []), citekey, str(entry.fields.get("loom-copy-of") or citekey)})
         _write_json(
             d / ARRIVED,
@@ -1586,6 +1694,12 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
                 "by": by,
             },
         )
+        paper.unlink()
+        for n in moved:
+            shutil.rmtree(home / n) if (home / n).is_dir() else (home / n).unlink()
+        shutil.rmtree(boxes, ignore_errors=True)
+        if made and home.is_dir() and not any(home.iterdir()):
+            home.rmdir()
     return {"incoming": sha, "act": act_id, "row": _waiting_row(d, 0).to_json()}
 
 
@@ -1594,7 +1708,7 @@ def _remove_entry(root: Path, key: str) -> dict[str, str]:
     from loom.refs.added import _block
 
     bib = root / BIBLIOGRAPHY
-    text = bib.read_text(encoding="utf-8")
+    text = read_exact(bib)
     where = _block(text, key)
     if where is None:
         return {}
@@ -1603,27 +1717,26 @@ def _remove_entry(root: Path, key: str) -> dict[str, str]:
 
 
 def _undo_unfile(root: Path, d: Path, act: dict[str, Any], plan: _Bib) -> None:
-    """Put a document an unfile took off back under its work, with what was read off it."""
+    """Put a document an unfile took off back under its work, with what was read off it: linked into its place before its entry is put back, and let go of in the drop (`undo`, through `_let_go`) only once the act is undone."""
     from loom.refs.pages import storage_root
 
     home = root / act["home"]
     home.mkdir(parents=True, exist_ok=True)
-    shutil.move(str(d / act["name"]), str(home / "paper.pdf"))
+    put_file(d / act["name"], home / "paper.pdf", link=True)
     held = d / act["held"]
     for n in act["moved"]:
-        shutil.move(str(held / n), str(home / n))
+        if (held / n).exists():
+            shutil.move(str(held / n), str(home / n))
     if (held / "boxes").is_dir():
         boxes = storage_root(root) / "cache" / "boxes" / home.parent.name / home.name
         boxes.parent.mkdir(parents=True, exist_ok=True)
         shutil.move(str(held / "boxes"), str(boxes))
+    _restore_records(root, act["records"], plan)
     shutil.rmtree(held, ignore_errors=True)
     _tidy(held.parent)
     if act.get("arrived") is not None:
         _write_json(d / ARRIVED, act["arrived"])
-    else:
-        (d / ARRIVED).unlink(missing_ok=True)
     (d / QUESTION).unlink(missing_ok=True)
-    _restore_records(root, act["records"], plan)
 
 
 # ---- what waits -----------------------------------------------------------------------------------------------------------
