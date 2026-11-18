@@ -458,9 +458,10 @@ class _Rules:
             m = _CROP.match(first)
             return m is not None and (m.group(1), int(m.group(2))) in self.marks
         if top == "library":
-            if first == "boxes" and "/" in name:
-                # a stored work's word boxes, while its folder is in the store
-                return (self.root / STORAGE / PurePosixPath(name).parent).is_dir()
+            work = PurePosixPath(name).parts[:2]
+            if first == "boxes" and len(PurePosixPath(name).parts) > 2:
+                # a stored work's word boxes, its source's among them, while the work's folder, `<scheme>/<id>`, is in the store
+                return (self.root / STORAGE).joinpath(*work).is_dir()
             # an answer of a lookup, which loom can only ask again online, while an entry of the library asks it
             return first == "resolve" and name in self.answers
         # `blocks/`, `marks/` and anything else: named by the build or not at all

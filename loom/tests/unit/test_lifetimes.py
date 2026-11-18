@@ -622,3 +622,105 @@ def test_doctor_reports_the_machines_unpacked_copies_and_removes_none(tmp_path: 
         and item["detail"].startswith("2 unpacked copies of biber, 200 MB")
     )
     assert "unpacked" in flat(run("doctor", cwd=q).stdout) and copy.is_file()
+
+
+# ---- each folder's own rule ---------------------------------------------------------------------------------------
+
+
+def test_a_crop_is_kept_while_an_annotation_was_written_on_its_page_of_its_copy(tmp_path: Path) -> None:
+    """A detached annotation's crop cannot be made again, since the copy it was written on is gone; it stays while the annotation does."""
+    from loom.paths import ANNOTATION_LOG
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    written = "ab" * 32
+    with (q / ANNOTATION_LOG).open("a", encoding="utf-8") as log:
+        log.write(
+            json.dumps(
+                {"event": "created", "id": "a-2026-11-18-crop01", "target": "gone.pdf", "page": 3, "artifact": written}
+            )
+            + "\n"
+        )
+        log.write(
+            json.dumps(
+                {
+                    "event": "created",
+                    "id": "a-2026-11-18-crop02",
+                    "target": "w",
+                    "anchor": {"kind": "pdf", "page": 7, "sha256": "cd" * 32},
+                }
+            )
+            + "\n"
+        )
+    kept = _plant(q / CACHE / f"crops/{written[:16]}-p3-0123456789abcdef.png")
+    anchored = _plant(q / CACHE / f"crops/{'cd' * 8}-p7-0123456789abcdef.png")
+    other_page = _plant(q / CACHE / f"crops/{written[:16]}-p4-0123456789abcdef.png")
+    other_copy = _plant(q / CACHE / "crops/0123456789abcdef-p3-0123456789abcdef.png")
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert kept.is_file() and anchored.is_file() and not other_page.exists() and not other_copy.exists()
+
+
+def test_a_stored_works_word_boxes_are_kept_while_the_work_is_in_the_store(tmp_path: Path) -> None:
+    from loom.paths import STORAGE
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    (q / STORAGE / "doi" / "10.1000_kept").mkdir(parents=True)
+    kept = _plant(q / CACHE / "library/boxes/doi/10.1000_kept/0001.xml")
+    source = _plant(q / CACHE / "library/boxes/doi/10.1000_kept/src/0001.xml")
+    gone = _plant(q / CACHE / "library/boxes/doi/10.1000_removed/0001.xml")
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert kept.is_file() and source.is_file() and not gone.exists()
+
+
+def test_a_lookups_answer_is_kept_while_an_entry_of_the_library_asks_it(tmp_path: Path) -> None:
+    """Answers can be made again only online."""
+    from loom.refs.resolve import answer_names
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    result = scan(load_quilt(q))
+    entry = next(iter(result.bib.values()))
+    asked = [_plant(q / CACHE / "library/resolve" / name) for name in answer_names(entry, result.quilt.config.contact)]
+    other = _plant(q / CACHE / "library/resolve/0123456789abcdef01234567.json")
+    sweep(q, result, index=on_disk(q))
+    assert len(asked) == 2 and all(p.is_file() for p in asked) and not other.exists()
+
+
+def test_a_picture_is_kept_while_a_page_the_site_serves_or_keeps_names_it(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    site = q / CACHE / "site"
+    page = next(p for p in sorted((site / "fragments").rglob("*.html")))
+    page.write_text(page.read_text(encoding="utf-8") + '<img src="svg/aaaaaaaaaaaaaaaa.svg">', encoding="utf-8")
+    _plant(site / "compare/0123.html", b'<img src="svg/bbbbbbbbbbbbbbbb.png">', time.time() - DAY)
+    by_page = _plant(site / "svg/aaaaaaaaaaaaaaaa.svg")
+    by_comparison = _plant(site / "svg/bbbbbbbbbbbbbbbb.png")
+    unnamed = _plant(site / "svg/cccccccccccccccc.svg")
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert by_page.is_file() and by_comparison.is_file() and not unnamed.exists()
+
+
+def test_what_a_render_job_notes_is_what_its_fragment_is_kept_by(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fake TeX here makes no snippets, so a job is made to note one: the index names it by the fragment, and a later build that skips that fragment still keeps it."""
+    from loom.render.fragments import FragmentRenderer
+    from loom.render.uses import used
+
+    q = demo(tmp_path)
+    noted = _plant(q / CACHE / "blocks/snippets/noted.html")
+    unnoted = _plant(q / CACHE / "blocks/snippets/unnoted.html")
+    real = FragmentRenderer.node_fragment
+
+    def noting_one(self: FragmentRenderer, key: str) -> str:
+        used(noted)
+        return real(self, key)
+
+    with monkeypatch.context() as m:
+        m.setattr(FragmentRenderer, "node_fragment", noting_one)
+        ok("build", cwd=q)
+    assert "blocks/snippets/noted.html" in built(q)
+    ok("build", cwd=q)  # renders nothing again: the fragments' uses come from the index
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert noted.is_file() and not unnoted.exists()
