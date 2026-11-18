@@ -505,3 +505,20 @@ def test_doctor_says_why_loom_leaves_codex_s_rules_alone_every_time(tmp_path: Pa
         item = check_permissions(q)
         assert item.status == "warn" and ".codex/rules/loom.rules: loom leaves it alone, since `.codex" in item.detail
         assert "what Codex reads there is not loom's table" in item.detail and "not what this loom" not in item.detail
+
+
+def test_agents_update_refuses_a_file_it_cannot_write_as_agents_setup_does(tmp_path: Path) -> None:
+    from loom.render.endpoints.files import HANDLERS as FILES
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    _deny(q, '["private/**"]')
+    settings = q / ".claude/settings.json"
+    settings.chmod(0o444)
+    try:
+        with pytest.raises(ApiError) as answer:
+            FILES["agents-update"](q, "agents-update", {"author": "A. Author"})
+        assert (answer.value.status, answer.value.code) == (409, "not-writable")
+        assert "loom could not write .claude/settings.json" in answer.value.message
+    finally:
+        settings.chmod(0o644)

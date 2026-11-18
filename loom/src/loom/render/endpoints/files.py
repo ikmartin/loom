@@ -82,12 +82,16 @@ def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
     if endpoint == "agents-update":
         from loom.ai.layout import SHELL, variant, write_permissions
         from loom.paths import AI
+        from loom.writes import WriteRefused
 
         if not (root / AI).is_dir():
             raise ApiError(
                 "no-agent-layer", "this quilt has no agent layer; run `loom ai init` to write one", status=409
             )
-        written, _ = write_permissions(root, quilt.config, shell=variant(root) == SHELL)
+        try:
+            written, _ = write_permissions(root, quilt.config, shell=variant(root) == SHELL)
+        except WriteRefused as exc:
+            raise ApiError(exc.code, exc.message, status=exc.status) from exc
         return {
             "ok": True,
             "result": f"rewrote {', '.join(written)}" if written else "the permission files were current",
