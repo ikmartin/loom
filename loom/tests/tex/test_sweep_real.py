@@ -1,8 +1,12 @@
-"""TeX tier: what the sweep keeps is everything the build as it stands was made from, so a build of every fragment from the swept cache alone, with no TeX, publishes the same site."""
+"""TeX tier: what the sweep keeps is everything the build as it stands was made from, so a build of every fragment from the swept cache alone, with no TeX, publishes the same site.
+
+The same but for blank space in a page: a text two fragments share is sent to TeX by each when the cache is cold, each publishes what its own run made, and the cache keeps the last; two runs can differ in the padding and line breaks TeX4ht writes, so the comparison reads a page with each run of blank space as one.
+"""
 
 from __future__ import annotations
 
 import json
+import re
 import time
 from pathlib import Path
 
@@ -25,6 +29,8 @@ def _site(q: Path) -> dict[str, bytes]:
                 manifest = json.loads(data)
                 manifest.pop("generated", None)
                 data = json.dumps(manifest, sort_keys=True).encode()
+            elif p.suffix == ".html":
+                data = re.sub(rb"\s+", b" ", data)
             out[p.relative_to(q / SITE).as_posix()] = data
     return out
 
