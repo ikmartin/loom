@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from loom import lifetimes
-from loom.lifetimes import DAY, FRESH, KEEP_DAYS, built, condemn, drop_preview, sweep
+from loom.lifetimes import DAY, FRESH, KEEP_DAYS, built, condemn, drop_preview, on_disk, sweep
 from loom.paths import (
     ADOPTION_PREVIEWS,
     AGENTS,
@@ -162,9 +162,9 @@ def test_a_file_just_written_stays_though_nothing_names_it(tmp_path: Path) -> No
     ok("build", cwd=q)
     fresh = _plant(q / CACHE / "blocks/snippets/fresh.html", when=time.time())
     result = scan(load_quilt(q))
-    sweep(q, result)
+    sweep(q, result, index=on_disk(q))
     assert fresh.is_file()
-    sweep(q, result, now=time.time() + FRESH + 1)
+    sweep(q, result, index=on_disk(q), now=time.time() + FRESH + 1)
     assert not fresh.exists()
 
 
@@ -182,7 +182,7 @@ def test_the_sweep_follows_no_link_and_removes_nothing_through_a_cache_that_is_o
     folder_link.symlink_to(outside.parent, target_is_directory=True)
     for p in (link, folder_link):
         os.utime(p, (OLD, OLD), follow_symlinks=False)
-    sweep(q, result)
+    sweep(q, result, index=on_disk(q))
     assert not link.is_symlink() and not folder_link.is_symlink()
     assert target.is_file() and outside.is_file()
 
@@ -191,7 +191,7 @@ def test_the_sweep_follows_no_link_and_removes_nothing_through_a_cache_that_is_o
     (q / CACHE).rename(away)
     (q / CACHE).symlink_to(away, target_is_directory=True)
     stray = _plant(away / "blocks/snippets/0123.html")
-    sweep(q, result, now=time.time() + DAY)
+    sweep(q, result, index=on_disk(q), now=time.time() + DAY)
     assert stray.is_file()
 
 
@@ -213,9 +213,9 @@ def test_a_scratch_is_kept_thirteen_days_after_its_session_last_wrote_and_remove
     result = scan(load_quilt(q))
     now = time.time()
     _session(q, "s-old", now - 20 * DAY)
-    sweep(q, result, now=now - 7 * DAY)  # thirteen days after
+    sweep(q, result, index=on_disk(q), now=now - 7 * DAY)  # thirteen days after
     assert (q / SCRATCH / "s-old").is_dir()
-    sweep(q, result, now=now - 5 * DAY)  # fifteen days after
+    sweep(q, result, index=on_disk(q), now=now - 5 * DAY)  # fifteen days after
     assert not (q / SCRATCH / "s-old").exists()
     assert (q / SESSIONS / "s-old" / "run.log").is_file()
 
@@ -230,7 +230,7 @@ def test_a_session_still_writing_keeps_an_old_scratch(tmp_path: Path) -> None:
     _plant(q / SESSIONS / "s-busy" / "notes.md", b"still here", now - DAY)
     _session(q, "s-scratching", now - 30 * DAY)
     _plant(q / SCRATCH / "s-scratching" / "today.tex", b"%", now - DAY)
-    sweep(q, result, now=now)
+    sweep(q, result, index=on_disk(q), now=now)
     assert (q / SCRATCH / "s-busy" / "work" / "big.aux").is_file()
     assert (q / SCRATCH / "s-scratching" / "work" / "big.aux").is_file()
 
@@ -243,7 +243,7 @@ def test_a_result_with_no_session_goes_fourteen_days_after_it_was_written(tmp_pa
     old = _plant(q / SCRATCH / "none" / "old-result.txt", b"x", now - 15 * DAY)
     young = _plant(q / SCRATCH / "none" / "young-result.txt", b"x", now - 13 * DAY)
     os.utime(q / SCRATCH / "none", (now - 15 * DAY, now - 15 * DAY))
-    sweep(q, result, now=now)
+    sweep(q, result, index=on_disk(q), now=now)
     assert not old.exists() and young.is_file() and (q / SCRATCH / "none").is_dir()
 
 
@@ -257,7 +257,7 @@ def test_removing_a_scratch_removes_a_link_in_it_and_not_what_it_points_at(tmp_p
     link.symlink_to(target.parent, target_is_directory=True)
     os.utime(link, (now - 20 * DAY, now - 20 * DAY), follow_symlinks=False)
     os.utime(q / SCRATCH / "s-linked", (now - 20 * DAY, now - 20 * DAY))
-    sweep(q, scan(load_quilt(q)), now=now)
+    sweep(q, scan(load_quilt(q)), index=on_disk(q), now=now)
     assert not (q / SCRATCH / "s-linked").exists() and target.is_file()
 
 
@@ -268,7 +268,7 @@ def test_a_saved_preview_goes_when_applied_or_fourteen_days_after_it_was_written
     old = _plant(q / ADOPTION_PREVIEWS / f"{'a' * 64}.json", b"{}", now - 15 * DAY)
     young = _plant(q / INCORPORATION_PREVIEWS / f"{'b' * 64}.json", b"{}", now - 13 * DAY)
     applied = _plant(q / ADOPTION_PREVIEWS / f"{'c' * 64}.json", b"{}", now)
-    sweep(q, scan(load_quilt(q)), now=now)
+    sweep(q, scan(load_quilt(q)), index=on_disk(q), now=now)
     assert not old.exists() and young.is_file()
     drop_preview(q, ADOPTION_PREVIEWS, "c" * 64)
     drop_preview(q, ADOPTION_PREVIEWS, "../" + "b" * 61)  # not a token: nothing
@@ -278,7 +278,7 @@ def test_a_saved_preview_goes_when_applied_or_fourteen_days_after_it_was_written
 def test_nothing_is_found_before_a_build_has_said_what_it_names(tmp_path: Path) -> None:
     q = demo(tmp_path)
     stray = _plant(q / CACHE / "blocks/snippets/0123.html")
-    assert condemn(q, scan(load_quilt(q)), now=time.time() + DAY).paths == []
+    assert condemn(q, scan(load_quilt(q)), index=on_disk(q), now=time.time() + DAY).paths == []
     assert stray.is_file()
 
 
@@ -383,7 +383,7 @@ def test_a_file_that_cannot_be_removed_stops_nothing(tmp_path: Path) -> None:
     _age_folders(q / CACHE)
     stuck.parent.chmod(0o555)
     try:
-        swept = sweep(q, scan(load_quilt(q)))
+        swept = sweep(q, scan(load_quilt(q)), index=on_disk(q))
     finally:
         stuck.parent.chmod(0o755)
     assert stuck.is_file() and not loose.exists()
@@ -406,7 +406,7 @@ def test_a_diff_the_manifest_names_is_kept_by_its_name_and_one_it_does_not_goes(
     ]
     assert named, "the demo has a stale acceptance whose cause carries a diff"
     stale = _plant(q / CACHE / "site/diffs/gone-key-dependency-changed.diff")
-    sweep(q, scan(load_quilt(q)), now=time.time() + FRESH + 60)
+    sweep(q, scan(load_quilt(q)), index=on_disk(q), now=time.time() + FRESH + 60)
     assert all((q / CACHE / "site" / rel).is_file() for rel in named)
     assert not stale.exists()
 
@@ -490,9 +490,9 @@ def test_the_sweep_keeps_clear_of_a_folder_that_holds_the_history_whatever_the_l
     scratched = _plant(q / SCRATCH / "s-old/history/texts/a.md", b"x", time.time() - 30 * DAY)
     for history, kept in ((".loom/cache/history", ledger), (".loom/agents/scratch/s-old/history", scratched)):
         result.quilt = Quilt(q, replace(result.quilt.config, history=history))
-        doomed = condemn(q, result, now=time.time() + 30 * DAY)
+        doomed = condemn(q, result, index=on_disk(q), now=time.time() + 30 * DAY)
         assert kept.resolve() not in {p for p, _home in doomed.paths}
-    assert stray in {p for p, _home in condemn(q, scan(load_quilt(q)), now=time.time() + DAY).paths}
+    assert stray in {p for p, _home in condemn(q, scan(load_quilt(q)), index=on_disk(q), now=time.time() + DAY).paths}
 
 
 # ---- removal through open folders ---------------------------------------------------------------------------------
@@ -520,7 +520,7 @@ def _swap(d: Path, home: Path) -> None:
 
 def test_a_folder_swapped_for_a_link_before_the_removal_is_not_entered(tmp_path: Path) -> None:
     q, d, home, victim = _race(tmp_path)
-    doomed = condemn(q, scan(load_quilt(q)), now=time.time())
+    doomed = condemn(q, scan(load_quilt(q)), index=on_disk(q), now=time.time())
     _swap(d, home)
     swept = doomed.remove()
     assert victim.read_bytes() == b"months of work" and swept.failed >= 1
@@ -531,7 +531,7 @@ def test_a_folder_swapped_for_a_link_between_two_removals_in_it_is_not_entered(
 ) -> None:
     """The second name is removed in the folder the sweep opened, wherever that folder now is, and never through the link."""
     q, d, home, victim = _race(tmp_path)
-    doomed = condemn(q, scan(load_quilt(q)), now=time.time())
+    doomed = condemn(q, scan(load_quilt(q)), index=on_disk(q), now=time.time())
     real = os.unlink
 
     def racing(path: object, *a: object, **kw: object) -> None:
@@ -555,7 +555,7 @@ def test_what_changed_after_the_look_is_left(tmp_path: Path) -> None:
     reused = q / CACHE / "site" / publish_picture(picture, q / CACHE / "site/svg")
     os.utime(reused, (OLD, OLD))
     untouched = _plant(q / CACHE / "blocks/snippets/0123.html")
-    doomed = condemn(q, scan(load_quilt(q)), now=time.time())
+    doomed = condemn(q, scan(load_quilt(q)), index=on_disk(q), now=time.time())
     assert {touched.resolve(), reused.resolve(), untouched.resolve()} <= {p for p, _home in doomed.paths}
     os.utime(touched)
     publish_picture(picture, q / CACHE / "site/svg")
@@ -570,7 +570,20 @@ def test_a_system_that_cannot_remove_through_a_folder_removes_nothing(
     ok("build", cwd=q)
     stray = _plant(q / CACHE / "blocks/snippets/0123.html")
     monkeypatch.setattr(lifetimes, "CAN_REMOVE", False)
-    swept = sweep(q, scan(load_quilt(q)))
+    swept = sweep(q, scan(load_quilt(q)), index=on_disk(q))
     assert (
         stray.is_file() and swept.said() == "removed nothing: this system cannot remove a file through an open folder"
     )
+
+
+def test_a_forced_build_of_some_keys_leaves_the_rest_of_the_index_as_it_was(tmp_path: Path) -> None:
+    from loom.lifetimes import read_index
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    before = read_index(q)
+    key = next(k for k, n in scan(load_quilt(q)).nodes.items() if n.kind == "environment")
+    got = json.loads(ok("build", "--force", "--keys", key, "--json", cwd=q).stdout)
+    after = read_index(q)
+    assert got["rendered"] >= 1
+    assert after.fragments == before.fragments and after.uses.keys() == before.uses.keys()

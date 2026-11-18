@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import contextlib
 import errno
+import hashlib
 import json
 import os
 import re
@@ -83,8 +84,16 @@ class BuildIndex:
 def read_index(root: Path) -> BuildIndex:
     """The build's index as the last build wrote it; empty when there is none or it is not this loom's."""
     try:
-        data = json.loads((root / BUILD_INDEX).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+        return _parse_index((root / BUILD_INDEX).read_bytes())
+    except OSError:
+        return BuildIndex()
+
+
+def _parse_index(raw: bytes) -> BuildIndex:
+    """An index from its bytes; empty when they are not this loom's."""
+    try:
+        data = json.loads(raw)
+    except ValueError:
         return BuildIndex()
     if not isinstance(data, dict) or not isinstance(data.get("fragments"), dict):
         return BuildIndex()
@@ -100,24 +109,35 @@ def read_index(root: Path) -> BuildIndex:
         return BuildIndex()
 
 
-def write_index(root: Path, index: BuildIndex) -> None:
-    """Write the build's index whole."""
+def write_index(root: Path, index: BuildIndex) -> str:
+    """Write the build's index whole, and return the digest of what was written (`on_disk`)."""
     from loom.render.publish import write_atomic
 
-    write_atomic(
-        root / BUILD_INDEX,
-        json.dumps(
-            {
-                "fragments": index.fragments,
-                "uses": index.uses,
-                "groups": index.groups,
-                "beside": index.beside,
-                "site": index.site,
-            },
-            indent=0,
-            sort_keys=True,
-        ),
-    )
+    raw = json.dumps(
+        {
+            "fragments": index.fragments,
+            "uses": index.uses,
+            "groups": index.groups,
+            "beside": index.beside,
+            "site": index.site,
+        },
+        indent=0,
+        sort_keys=True,
+    ).encode("utf-8")
+    write_atomic(root / BUILD_INDEX, raw)
+    return _digest(raw)
+
+
+def _digest(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def on_disk(root: Path) -> str:
+    """The digest of the build's index as it is on disk now, '' when there is none: what a sweep by hand passes as `index`, having no build of its own."""
+    try:
+        return _digest((root / BUILD_INDEX).read_bytes())
+    except OSError:
+        return ""
 
 
 def in_cache(root: Path, notes: Iterable[str]) -> list[str]:
@@ -527,10 +547,18 @@ def _holds(home: Home | None, result: Any) -> bool:
     return history == home.path or history.is_relative_to(home.path)
 
 
-def _cache(root: Path, result: Any, now: float, doomed: Doomed) -> None:
-    """Every file under `.loom/cache/` that neither the build as it stands nor its folder's rule keeps, then each folder that leaves empty but those loom writes into by name."""
+def _cache(root: Path, result: Any, built_index: str, now: float, doomed: Doomed) -> None:
+    """Every file under `.loom/cache/` that neither the build as it stands nor its folder's rule keeps, then each folder that leaves empty but those loom writes into by name; nothing, and `doomed.stale`, when the index on disk is not `built_index`, the one the caller's build wrote."""
     home = _own(root, CACHE)
-    index = read_index(root)
+    try:
+        raw = (root / BUILD_INDEX).read_bytes()
+    except OSError:
+        raw = b""
+    if raw and _digest(raw) != built_index:
+        # another build wrote the index since, at another state of the quilt or of some keys only: its own sweep follows it
+        doomed.stale = True
+        return
+    index = _parse_index(raw)
     if home is None or _holds(home, result) or not index.fragments and not index.site:
         # no build has said what it names, so nothing here is known to be unnamed
         return
@@ -610,7 +638,7 @@ def drop_preview(root: Path, rel: str, token: str) -> None:
         doomed.remove()
 
 
-def condemn(root: Path, result: Any, *, now: float | None = None) -> Doomed:
+def condemn(root: Path, result: Any, *, index: str, now: float | None = None) -> Doomed:
     """What has outlived its use under `.loom/`, found and not yet removed: in the cache what the build as it stands does not name and no folder's rule keeps, each scratch whose session last wrote `KEEP_DAYS` ago, and each saved preview written as long ago.
 
     Parameters
@@ -619,6 +647,8 @@ def condemn(root: Path, result: Any, *, now: float | None = None) -> Doomed:
         The quilt's root.
     result : ScanResult
         The scan the last build that succeeded published from: what says which documents, keys and entries the quilt holds.
+    index : str
+        The digest of the index that build wrote (`BuildReport.index`, or `on_disk` for a sweep by hand): the cache is looked at only while it is the index on disk.
     now : float, optional
         The time to judge by, as `time.time()`; default now.
 
@@ -637,13 +667,13 @@ def condemn(root: Path, result: Any, *, now: float | None = None) -> Doomed:
     """
     now = time.time() if now is None else now
     doomed = Doomed()
-    _cache(root, result, now, doomed)
+    _cache(root, result, index, now, doomed)
     _scratch(root, result, now, doomed)
     _previews(root, result, now, doomed)
     return doomed
 
 
-def sweep(root: Path, result: Any, *, now: float | None = None) -> Swept:
+def sweep(root: Path, result: Any, *, index: str, now: float | None = None) -> Swept:
     """Find what has outlived its use under `.loom/` (`condemn`) and remove it: what `loom build` runs after a whole build that succeeded.
 
     Parameters
@@ -652,6 +682,8 @@ def sweep(root: Path, result: Any, *, now: float | None = None) -> Swept:
         The quilt's root.
     result : ScanResult
         The scan the build published from.
+    index : str
+        The digest of the index the build wrote (`BuildReport.index`).
     now : float, optional
         The time to judge by, as `time.time()`; default now.
 
@@ -660,7 +692,7 @@ def sweep(root: Path, result: Any, *, now: float | None = None) -> Swept:
     Swept
         What was removed, and how many removals failed.
     """
-    return condemn(root, result, now=now).remove()
+    return condemn(root, result, index=index, now=now).remove()
 
 
 # ---- sizes, for loom doctor --------------------------------------------------------------------------------------------

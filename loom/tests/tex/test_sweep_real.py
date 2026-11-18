@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.lifetimes import FRESH, sweep
+from loom.lifetimes import FRESH, on_disk, sweep
 from loom.paths import BUILD_INDEX, SITE
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
@@ -38,7 +38,7 @@ def test_a_cache_swept_after_an_edit_still_makes_every_fragment_without_tex(tmp_
     run("build", cwd=q)
     edit(q / "drafting/nodes/sh-0006.tex", "\\label{sh-0006}\n", "\\label{sh-0006}\nMoreover $x^2 \\geq 0$ here. ")
     run("build", cwd=q)
-    swept = sweep(q, scan(load_quilt(q)), now=time.time() + FRESH + 60)
+    swept = sweep(q, scan(load_quilt(q)), index=on_disk(q), now=time.time() + FRESH + 60)
     assert swept.files > 0 and not swept.failed
     before = _site(q)
     (q / BUILD_INDEX).unlink()

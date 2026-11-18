@@ -64,3 +64,27 @@ def test_the_server_removes_nothing_when_a_build_began_while_it_looked(
     monkeypatch.setattr(lifetimes, "condemn", looking)
     s.sweep()
     assert planted.is_file()
+
+
+def test_the_server_sweeps_nothing_in_the_cache_after_another_process_built(
+    tmp_path: Path, serve: Callable[..., ServeSession]
+) -> None:
+    """Another process built one key at another state of the quilt after the server's build, so the index on disk is not the server's: the server, at rest, leaves the cache and stays due, and sweeps after its own next build. A forced build of one key at the same state writes the same index, and does not stop it."""
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.helpers import ok
+
+    q = demo(tmp_path)
+    s = serve(q, watch=False)
+    planted = _plant(q / CACHE / "blocks/snippets/0123.html")
+    result = scan(load_quilt(q))
+    key = next(k for k, n in result.nodes.items() if n.kind == "environment")
+    ok("build", "--force", "--keys", key, cwd=q)
+    source = q / result.nodes[key].file
+    source.write_text(source.read_text(encoding="utf-8") + "\n% another state\n", encoding="utf-8")
+    ok("build", "--keys", key, cwd=q)
+    s.sweep()
+    assert planted.is_file() and s._sweep_due
+    s.rebuild()
+    s.sweep()
+    assert not planted.exists()

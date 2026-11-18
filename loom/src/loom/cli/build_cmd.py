@@ -46,7 +46,7 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
         wanted = [resolve_key(result, k) for k in keys] if result is not None else None
         report = build(quilt, wanted, force=force, reuse=result, progress=progress.told, tex=not no_compile)
     # a whole build names everything the quilt holds now, so what it does not name goes; one limited to keys sweeps nothing
-    swept = sweep(quilt.root, report.result) if not keys else None
+    swept = sweep(quilt.root, report.result, index=report.index) if not keys else None
     errors = [d for d in report.diagnostics if d.severity == "error"]
     bad = has_errors(errors, report.result)
     done = f"published {SITE}/: {counted(len(report.rendered), 'block')} rendered, {len(report.skipped)} unchanged"

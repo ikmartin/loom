@@ -938,10 +938,15 @@ class ServeSession:
             if not self._sweep_due or self.last_report is None:
                 return
             self._sweep_due = False
-            begun, result = self._begun, self.last_report.result
+            begun, result, index = self._begun, self.last_report.result, self.last_report.index
         swept = Swept()
         try:
-            doomed = condemn(self.quilt.root, result)
+            doomed = condemn(self.quilt.root, result, index=index)
+            if doomed.stale:
+                # another process built since: its index is not this build's, so the cache waits for this server's next build
+                with self.lock:
+                    if self._begun == begun:
+                        self._sweep_due = True
             # a part at a time, so a save waits for one part at most
             for part in doomed.parts():
                 with self.lock:

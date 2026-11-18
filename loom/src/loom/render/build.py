@@ -54,6 +54,8 @@ class BuildReport:
     rendered: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    #: The digest of the index this build wrote (`lifetimes.write_index`): a sweep after it sweeps the cache only while that index is the one on disk.
+    index: str = ""
 
     def kept(self) -> BuildReport:
         """This report without its manifest, which is on disk once published: what a server holds between builds, where a large quilt's manifest runs to tens of megabytes as objects."""
@@ -493,8 +495,8 @@ def _build(
         for failed in [*(root / SNIPPETS).glob("*.failed"), *(root / BLOCK_PREVIEWS).glob("*.html")]:
             failed.unlink()
     renderer = FragmentRenderer(plan)
-    before = BuildIndex() if force else read_index(root)
-    # each fragment's input hash, and what it was made from, as the last build left them; a fragment rendered here replaces both
+    before = read_index(root)
+    # each fragment's input hash, and what it was made from, as the last build left them; a fragment rendered here replaces both, and `force` only stops a wanted one being skipped as unchanged, so a forced build of some keys leaves the rest as they were
     index: dict[str, str] = dict(before.fragments)
     uses: dict[str, list[str]] = dict(before.uses)
     fragments: dict[str, str] = {}
@@ -549,7 +551,7 @@ def _build(
             hashes[key] = _input_hash(result, key, aux, texts, pages)
         digest = hashes[key] + _marks_hash(marks, key, result)
         existing = build_dir / rel
-        if (wanted is not None and key not in wanted) or (index.get(rel) == digest and existing.exists()):
+        if (wanted is not None and key not in wanted) or (not force and index.get(rel) == digest and existing.exists()):
             report.skipped.append(key)
             continue
         jobs.append((key, kind, rel, digest))
@@ -563,7 +565,7 @@ def _build(
     for doc in canon_docs:
         rel = canon_fragment_path(doc)
         digest = _canon_hash(doc, root)
-        if (wanted is not None) or (index.get(rel) == digest and (build_dir / rel).exists()):
+        if (wanted is not None) or (not force and index.get(rel) == digest and (build_dir / rel).exists()):
             report.skipped.append(f"canon:{doc.path}")
         else:
             canon_jobs.append((doc, rel, digest))
@@ -676,5 +678,5 @@ def _build(
     groups = {
         g: in_cache(root, renderer.groups[g]) if g in renderer.groups else before.groups.get(g, []) for g in shared
     }
-    write_index(root, BuildIndex(index, uses, groups, read_beside, sorted({*files, *keep})))
+    report.index = write_index(root, BuildIndex(index, uses, groups, read_beside, sorted({*files, *keep})))
     return report
