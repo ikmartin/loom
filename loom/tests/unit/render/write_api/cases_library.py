@@ -371,6 +371,15 @@ def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     answered = conn.getresponse()
     assert answered.status == 403 and json.loads(answered.read())["error"]["code"] == "refused"
     conn.close()
+    # nor one that Python's isdigit takes for a digit and int does not
+    conn = http.client.HTTPConnection(where.hostname, where.port, timeout=60)
+    conn.putrequest("POST", "/_api/library-receive?name=x.pdf")
+    conn.putheader("Content-Type", "application/octet-stream")
+    conn.putheader("Content-Length", "²")
+    conn.endheaders()
+    answered = conn.getresponse()
+    assert answered.status == 403 and json.loads(answered.read())["error"]["code"] == "refused"
+    conn.close()
     refuses(s, "library-receive", {"name": "x.pdf"}, 400, "bad-request", "application/octet-stream")
 
 

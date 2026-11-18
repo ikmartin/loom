@@ -462,3 +462,5 @@ READS: tuple[str, ...] = ("locate", "library-recognise", "library-lookup")
 NO_REBUILD: tuple[str, ...] = (*READS, "library-update", "library-upload", "library-receive")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ()
+#: The ones that take the library's lock themselves, once every lookup has answered, and so run outside the publication's lock: a slow service holds up no rebuild and no other write.
+OWN_LOCK: tuple[str, ...] = ("library-take", "library-answer")
