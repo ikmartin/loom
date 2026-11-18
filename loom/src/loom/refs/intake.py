@@ -2,7 +2,7 @@
 
 Each thing taken in, a file or a pasted identifier or entry, becomes one row in one of four states: `added`, `here`, `question` or `cannot`. Nothing is filed under an existing work unless the person says it is that work. A drop waits in `.loom/incoming/<id>/`, and once taken its `act.json` holds what each act wrote, which is what makes an undo give back the records' exact bytes.
 
-The library's writes are loom's own records, not a person's files, so they do not go through the door (`docs/design/writes.md`): every act holds the library's lock, writes the store before the entry that names it, and replaces each record file whole.
+The library's writes are loom's own records, not a person's files, so they do not go through the door (`docs/design/writes.md`): every act holds the library's lock, writes the store before the entry that names it, and replaces each record file whole. No lock is held while the network is asked, and a receive waits on none, so no slow act of another's can cost a drop its bytes. An undo takes out only what its act left, found by its content, and otherwise refuses and names what is in the way.
 """
 
 from __future__ import annotations
@@ -14,8 +14,8 @@ import re
 import secrets
 import shutil
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
-from dataclasses import dataclass, field
+from contextlib import contextmanager, suppress
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -30,8 +30,10 @@ STATES = ("added", "here", "question", "cannot")
 CHUNK = 1 << 20
 #: What a receive leaves free on the disk beside the file it keeps.
 SPARE = 256 << 20
-#: The record of what each act on a drop wrote, newest last; the question a drop waits on; what it arrived as.
+#: The record of what each act on a drop wrote, newest last; the question a drop waits on; what it arrived as, with the name it was dropped under.
 ACT, QUESTION, ARRIVED = "act.json", "question.json", "arrived.json"
+#: The file a drop holds while it waits, under one name whatever it was dropped as, so two receives of the same bytes keep one file.
+FILE = "document.pdf"
 #: Where an unfiled document's page text waits, inside its drop, until the unfile is undone.
 HELD = "held"
 #: What reading a document writes into a work's home beside the PDF.
@@ -143,12 +145,6 @@ def drop_dir(root: Path, drop: str) -> Path:
     return incoming(root) / drop
 
 
-def safe_name(name: str) -> str:
-    """A dropped file's name as loom keeps it: its own, which is what a reference manager writes a title into, with nothing a path could use."""
-    stem = re.sub(r"[^\w .,()+'’-]", "_", Path(name).stem).strip(" .") or "upload"
-    return f"{stem[:180]}.pdf"
-
-
 def _read_json(p: Path) -> Any:
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -176,7 +172,32 @@ def write_whole(path: Path, text: str) -> None:
 
 def waiting_file(d: Path) -> Path | None:
     """The PDF a drop holds while it waits, or None once it is taken."""
-    return next(iter(sorted(d.glob("*.pdf"))), None)
+    return d / FILE if (d / FILE).is_file() else None
+
+
+def put_file(src: Path, dst: Path, *, link: bool = False, replace: bool = False) -> None:
+    """Give `dst` the bytes of `src`, which stays where it is: with `link` a hard link where the filesystem has them (for a file inside the quilt that loom lets go of next), else a copy. FileExistsError when `dst` exists, unless `replace`."""
+    tmp = dst.with_name(f".{dst.name}.{secrets.token_hex(6)}.loom-tmp")
+    try:
+        try:
+            if not link:
+                raise OSError("a copy, not a link")
+            os.link(src, tmp)
+        except OSError:
+            shutil.copyfile(src, tmp)
+        if replace:
+            os.replace(tmp, dst)
+            return
+        try:
+            os.link(tmp, dst)
+        except FileExistsError:
+            raise
+        except OSError:  # a filesystem with no hard links
+            if dst.exists():
+                raise FileExistsError(dst) from None
+            os.replace(tmp, dst)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def _drain(stream: Reads, left: int) -> None:
@@ -241,16 +262,55 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
         if got < length or got == 0:
             raise IntakeRefused("cut-short", f"{Path(name).name} arrived cut short: {got} of {length} bytes", 400)
         sha = h.hexdigest()
-        d = base / sha
-        # placed under the library's lock: two receives of the same bytes at once keep one file
-        with library_lock(root):
-            d.mkdir(exist_ok=True)
-            if waiting_file(d) is None and not (d / ACT).is_file():
-                os.replace(tmp, d / safe_name(name))
-                _write_json(d / ARRIVED, {"name": Path(name).name, "size": got, "when": stamp(), "not": []})
+        _place(root, base / sha, tmp, {"name": Path(name).name, "size": got, "when": stamp(), "not": []})
     finally:
         tmp.unlink(missing_ok=True)
     return {"incoming": sha, "name": Path(name).name, "size": got}
+
+
+def _place(root: Path, d: Path, tmp: Path, arrived: dict[str, Any]) -> None:
+    """Keep a received file in its drop, waiting on no lock: a drop holding these bytes already, waiting or taken, keeps what it has.
+
+    An act takes a drop's file only after recording itself, so a drop with no file and no act is one nothing is taking. A file placed beside an act that took these bytes (a receive racing the act) is removed when the library's lock is free at once, and otherwise waits unlisted until the next act on the drop removes it.
+    """
+    from loom.errors import EnvError
+    from loom.locks import locked
+
+    for _ in range(5):
+        d.mkdir(exist_ok=True)
+        if _taken(d):
+            return
+        try:
+            put_file(tmp, d / FILE, link=True)
+        except FileExistsError:
+            return
+        except FileNotFoundError:  # the drop was discarded as it was made: make it again
+            continue
+        try:
+            with (d / ARRIVED).open("x", encoding="utf-8") as fh:
+                fh.write(json.dumps(arrived, indent=1, ensure_ascii=False, sort_keys=True) + "\n")
+        except (FileExistsError, FileNotFoundError):
+            pass
+        try:
+            with locked(root / LIBRARY_LOCK, wait=0):
+                _clear_stale(d)
+        except EnvError:
+            pass
+        return
+    raise IntakeRefused("failed", "the file's drop was discarded each time it was made: drop it again", 409)
+
+
+def _taken(d: Path) -> bool:
+    """Whether a drop's last act took its bytes in, so a file beside it is a stale copy of bytes the store holds."""
+    acts = _acts(d)
+    return bool(acts) and acts[-1].get("kind") in ("added", "here")
+
+
+def _clear_stale(d: Path) -> None:
+    """Remove what a receive racing an act left in a drop that act took in: a copy of bytes the store holds, and what it arrived as. Under the library's lock."""
+    if d.is_dir() and _taken(d):
+        (d / FILE).unlink(missing_ok=True)
+        (d / ARRIVED).unlink(missing_ok=True)
 
 
 # ---- the lock and the records -----------------------------------------------------------------------------------------
@@ -298,13 +358,20 @@ def _before(root: Path, shas: list[str]) -> _Before:
 
 
 def _records(root: Path, b: _Before) -> dict[str, Any]:
-    """What an act did to the three record files, as its record keeps it: each one's digest before and after, and the parts the act changed."""
+    """What an act did to the three record files, as its record keeps it: each one's digest before and after, and the parts the act changed, as they were and as it left them."""
+    from loom.refs.scan import load_ledger
     from loom.refs.unreadable import load_events
 
     events = load_events(root) if (root / UNREADABLE).is_file() else []
+    ledger = load_ledger(root)
     return {
         "bibliography": {"size": b.bib_size, "before": b.bib_digest, "after": _digest(root / BIBLIOGRAPHY)},
-        "ledger": {"records": b.ledger, "before": b.ledger_digest, "after": _digest(root / LEDGER)},
+        "ledger": {
+            "records": b.ledger,
+            "left": {sha: ledger.get(sha) for sha in b.ledger},
+            "before": b.ledger_digest,
+            "after": _digest(root / LEDGER),
+        },
         "unreadable": {
             "events": events[max(b.events, 0) :],
             "count": b.events,
@@ -314,38 +381,92 @@ def _records(root: Path, b: _Before) -> dict[str, Any]:
     }
 
 
-def _restore_records(
-    root: Path, rec: dict[str, Any], entries: list[str], *, put_back: dict[str, str] | None = None
-) -> None:
-    """Give the record files back as an act found them: byte for byte while each holds what the act left, and otherwise only the act's own part taken out (`entries` appended, the ledger's records, the events); an unfile's entries are `put_back` where they stood."""
+def _written(root: Path, keys: list[str], since: int) -> dict[str, str]:
+    """The exact text of each entry an act appended after byte `since` of the bibliography, its `% from` line and the blank line before it included: what an undo finds it by."""
     from loom.refs.added import _block
+
+    text = (root / BIBLIOGRAPHY).read_bytes()[max(since, 0) :].decode("utf-8")
+    out = {}
+    for key in keys:
+        if (where := _block(text, key)) is not None:
+            out[key] = text[where[0] : where[1]]
+    return out
+
+
+def _bib_now(root: Path) -> dict[str, BibEntry]:
+    path = root / BIBLIOGRAPHY
+    return parse_bib(path.read_text(encoding="utf-8")) if path.is_file() else {}
+
+
+def _place_of(root: Path, entry: BibEntry) -> Path | None:
+    from loom.refs.fetch import FetchRefused, work_dir
+
+    try:
+        return work_dir(root, entry)
+    except FetchRefused:
+        return None
+
+
+#: What an undo does to the bibliography: leave it, remove it, or write this text.
+_Bib = tuple[str, str]
+
+
+def _unwritten(root: Path, act: dict[str, Any]) -> _Bib:
+    """The bibliography with an add's own entries taken out: byte for byte as the act found it while it holds what the act left, else each entry found by the exact text the act wrote. IntakeRefused (`changed`) when an entry is no longer as written, edited or renamed by hand, since taking out what a person wrote is never an undo's."""
+    bib = root / BIBLIOGRAPHY
+    b = act["records"]["bibliography"]
+    if b["after"] == b["before"]:
+        return "keep", ""
+    if b["after"] is not None and _digest(bib) == b["after"]:
+        return ("unlink", "") if b["size"] < 0 else ("write", bib.read_bytes()[: b["size"]].decode("utf-8"))
+    text = bib.read_text(encoding="utf-8") if bib.is_file() else ""
+    for key, block in act["blocks"].items():
+        at = text.find(block)
+        if at < 0:
+            raise IntakeRefused(
+                "changed",
+                f"the entry this drop wrote for {key} was changed by hand or taken out since, and an undo never takes out what you wrote: delete the work instead",
+                409,
+            )
+        text = text[:at] + text[at + len(block) :]
+    return "write", text
+
+
+def _put_back(root: Path, act: dict[str, Any]) -> _Bib:
+    """The bibliography with the entries an unfile took out back in: each at its place while the file holds what the unfile left, else at the end."""
+    bib = root / BIBLIOGRAPHY
+    removed = act["removed"]
+    if not removed:
+        return "keep", ""
+    text = bib.read_text(encoding="utf-8") if bib.is_file() else ""
+    exact = _digest(bib) == act["records"]["bibliography"]["after"]
+    for block in removed.values():
+        at, body = block.split("\0", 1)
+        if exact and int(at) <= len(text):
+            text = text[: int(at)] + body + text[int(at) :]
+        else:
+            text = (text if not text or text.endswith("\n") else text + "\n") + body
+    return "write", text
+
+
+def _restore_records(root: Path, rec: dict[str, Any], bib_plan: _Bib) -> None:
+    """Give the record files back as an act found them: the bibliography as `bib_plan` says, the ledger's records the act changed where they still hold what it left, and the events it recorded taken out."""
     from loom.refs.scan import load_ledger
     from loom.refs.unreadable import load_events, path_of
 
     bib = root / BIBLIOGRAPHY
-    b = rec["bibliography"]
-    if put_back is not None:
-        if put_back:
-            _put_back_entries(root, put_back)
-    elif b["after"] == b["before"]:
-        pass
-    elif b["after"] is not None and _digest(bib) == b["after"]:
-        if b["size"] < 0:
-            bib.unlink()
-        else:
-            data = bib.read_bytes()[: b["size"]]
-            write_whole(bib, data.decode("utf-8"))
-    elif bib.is_file():
-        text = bib.read_text(encoding="utf-8")
-        for key in entries:
-            if (where := _block(text, key)) is not None:
-                text = text[: where[0]] + text[where[1] :]
-        write_whole(bib, text)
+    if bib_plan[0] == "unlink":
+        bib.unlink(missing_ok=True)
+    elif bib_plan[0] == "write":
+        write_whole(bib, bib_plan[1])
     led = rec["ledger"]
     ledger_path = root / LEDGER
     if led["after"] != led["before"]:
         ledger = load_ledger(root)
+        left = led.get("left") or {}
         for sha, was in led["records"].items():
+            if ledger.get(sha) != left.get(sha):
+                continue  # recorded since by another act, whose record it is
             if was is None:
                 ledger.pop(sha, None)
             else:
@@ -362,17 +483,6 @@ def _restore_records(
             path_of(root).unlink(missing_ok=True)
         else:
             write_whole(path_of(root), json.dumps({"events": events}, indent=1, ensure_ascii=False) + "\n")
-
-
-def _put_back_entries(root: Path, removed: dict[str, str]) -> None:
-    """Put back entries an unfile took out, each its exact text at its place when the bibliography holds what the unfile left, else at the end."""
-    bib = root / BIBLIOGRAPHY
-    text = bib.read_text(encoding="utf-8") if bib.is_file() else ""
-    for _key, block in removed.items():
-        at, body = block.split("\0", 1)
-        place = int(at)
-        text = text[:place] + body + text[place:] if place <= len(text) else text + body
-    write_whole(bib, text)
 
 
 # ---- what a document is -----------------------------------------------------------------------------------------------
@@ -492,16 +602,57 @@ def take(
     t = _Take(quilt, dict(bib), by, online, write, runner, fetch, http)
     rows: list[Row] = []
     for n, item in enumerate(items):
+        if online and write:
+            # every lookup is asked first, holding no lock, and heard again once the lock is held
+            heard = _Heard(http)
+            dry = replace(t, write=False, bib=dict(t.bib), made=dict(t.made), planned=set(t.planned), http=heard.ask)
+            with suppress(Exception):
+                _fresh(dry)
+                _decide(dry, n, item)
+            t.http = heard.again
         # each item is decided and written under the library's lock, against the library as it is then: what another process added since the scan is in it, and the same bytes it filed meanwhile are already here
         with library_lock(t.root) if write else _nothing():
             _fresh(t)
-            if item.drop:
-                rows.append(_take_drop(t, n, item))
-            elif item.path is not None:
-                rows.append(_take_file(t, n, item))
-            else:
-                rows.extend(_take_text(t, n, item.text))
+            rows.extend(_decide(t, n, item))
+        t.http = http
     return rows
+
+
+def _decide(t: _Take, n: int, item: Item) -> list[Row]:
+    if item.drop:
+        return [_take_drop(t, n, item)]
+    if item.path is not None:
+        return [_take_file(t, n, item)]
+    return _take_text(t, n, item.text)
+
+
+class _Heard:
+    """A lookup's transport that asks the network once, holding no lock, then gives the same answers again once the library's lock is held: a slow or silent service holds up no other writer."""
+
+    def __init__(self, http: Any) -> None:
+        self.http = http
+        self.heard: dict[str, bytes | Exception] = {}
+
+    def ask(self, url: str, headers: dict[str, str]) -> bytes:
+        from loom.refs import resolve
+
+        try:
+            got = (self.http or resolve.http_get)(url, headers)
+        except Exception as exc:
+            self.heard[url] = exc
+            raise
+        self.heard[url] = got
+        return bytes(got)
+
+    def again(self, url: str, headers: dict[str, str]) -> bytes:
+        from loom.refs.resolve import ResolveRefused
+
+        got = self.heard.get(url)
+        if got is None:
+            raise ResolveRefused(f"{url.split('?')[0]}: not asked before the library was locked")
+        if isinstance(got, Exception):
+            raise got
+        return got
 
 
 def _fresh(t: _Take) -> None:
@@ -516,15 +667,16 @@ def _take_drop(t: _Take, n: int, item: Item) -> Row:
     """A received file, by its drop: the file that waits there, or, the same bytes having been taken in already, the work they went to."""
     d = drop_dir(t.root, item.drop)
     pdf = waiting_file(d) if d.is_dir() else None
+    if d.is_dir() and _taken(d):
+        if t.write:
+            _clear_stale(d)
+        key = str(_acts(d)[-1]["citekey"])
+        return Row(item.drop, n, item.name, "here", key, *_shown(t, key), why=f"these very bytes are {key}'s")
     if pdf is not None:
         arrived = _read_json(d / ARRIVED) or {}
         return _take_file(
             t, n, Item(path=pdf, name=item.name or str(arrived.get("name") or pdf.name), work=item.work, new=item.new)
         )
-    acts = _acts(d) if d.is_dir() else []
-    if acts and acts[-1]["kind"] == "added":
-        key = str(acts[-1]["citekey"])
-        return Row(item.drop, n, item.name, "here", key, *_shown(t, key), why=f"these very bytes are {key}'s")
     raise IntakeRefused("no-such-incoming", f"nothing waits as {item.drop[:16]}: receive the file first", 404)
 
 
@@ -553,7 +705,7 @@ def _take_file(t: _Take, n: int, item: Item) -> Row:
             "here",
             first.filed_as or first.citekey,
             *_shown(t, first.citekey),
-            why=f"the same file as {first.name}",
+            why=f"these very bytes came in as {first.name}",
         )
     if holder := held_under(t.root, t.bib, sha):
         return _here(t, sha, n, name, holder, f"these very bytes are {holder}'s")
@@ -590,13 +742,29 @@ def _shown(t: _Take, key: str) -> tuple[str, str, str]:
 
 
 def _here(t: _Take, rid: str, n: int, name: str, key: str, why: str) -> Row:
-    """A row for something the library holds already: a waiting drop of it goes, since nothing is left to take, and one an earlier act stands on (an unfile, which its file must stay for) waits on no question."""
+    """A row for something the library holds already, these very bytes or (for a pasted text) a work stating it: a waiting drop of it goes, since nothing is left to take. One an earlier act stands on keeps its record: its file goes under an act of its own, which an undo gives back."""
     if t.write and rid and re.fullmatch(r"[0-9a-f]{64}|t-[0-9a-f]{16}", rid):
         d = incoming(t.root) / rid
         if d.is_dir() and not (d / ACT).is_file():
             shutil.rmtree(d)
             _tidy(incoming(t.root))
         elif d.is_dir():
+            if waiting_file(d) is not None and key in t.bib and (home := _place_of(t.root, t.bib[key])) is not None:
+                _push(
+                    d,
+                    {
+                        "kind": "here",
+                        "citekey": key,
+                        "home": _rel(t.root, home),
+                        "name": FILE,
+                        "sha": rid,
+                        "arrived": _read_json(d / ARRIVED),
+                        "when": stamp(),
+                        "by": t.by,
+                    },
+                )
+                (d / FILE).unlink()
+                (d / ARRIVED).unlink(missing_ok=True)
             (d / QUESTION).unlink(missing_ok=True)
     return Row(rid, n, name, "here", key, *_shown(t, key), why=why)
 
@@ -645,7 +813,7 @@ def _drop_of(t: _Take, item: Item, sha: str) -> tuple[Path, bool]:
 def _held_before(d: Path, item: Item, waits: bool) -> dict[str, Any]:
     """What a drop held before an act took its file: the file's name and what it arrived as, which an undo puts back where earlier acts stand or the file was the viewer's drop taken from the command line (`over`). A question it waited on is not kept: taking the file again asks it again."""
     return {
-        "file": item.path.name if waits and item.path is not None else None,
+        "file": FILE if waits else None,
         "arrived": _read_json(d / ARRIVED),
         "over": item.over,
     }
@@ -681,8 +849,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
             else set()
         )
         key = key_for(offer, taken, sha=sha)
-        claimed = {str(e.fields.get("loom-file") or "").strip() for e in t.bib.values()} - {""}
-        f = plan_new_work(t.root, item.path, key, offer, name, t.planned, claimed)
+        f = plan_new_work(t.root, t.bib, item.path, key, offer, name, t.planned)
         assert f.home is not None and f.new is not None
         t.bib[key] = BibEntry(key, "misc", dict(f.new))
         row = Row(sha, n, name, "added", key, *_shown(t, key), filed_as=key)
@@ -694,7 +861,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
         before = _before(t.root, [sha])
         names = _home_names(f.home)
         withdraw_setting_aside(t.root, sha, t.by)
-        file_document(t.quilt, f, by=t.by, read_pages=t.runner is None, move=waits)
+        file_document(t.quilt, f, by=t.by, read_pages=t.runner is None, link=waits)
         append_entries(t.quilt, [added_entry(key, f.new, t.by, source=f"{name}, added by hand")])
         row.act = _push(
             d,
@@ -702,6 +869,7 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
                 "kind": "added",
                 "citekey": key,
                 "entries": [key],
+                "blocks": _written(t.root, [key], before.bib_size),
                 "home": _rel(t.root, f.home),
                 "names": names,
                 "name": name,
@@ -712,6 +880,8 @@ def _add_new(t: _Take, n: int, item: Item, sha: str, offer: dict[str, str]) -> R
                 "by": t.by,
             },
         )
+        if waits:
+            (d / FILE).unlink(missing_ok=True)
         _settled(d)
     row.pages, row.job, row.why = _read_pages(t, key, f)
     return row
@@ -735,7 +905,7 @@ def _not_anothers(offer: dict[str, str], bib: dict[str, BibEntry]) -> dict[str, 
 
 
 def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = "") -> Row:
-    """File a PDF under the work `key` the person said it is: beside that work's first document as a version, or recorded as a copy of one of its documents and not filed, which answers `here`."""
+    """File a PDF under the work `key` the person said it is: at the work's place when it holds none, else beside its first document as a version, however like that document it looks; only these very bytes, held already, answer `here`."""
     from loom.refs.add import withdraw_setting_aside
     from loom.refs.scan import Filing, append_entries, file_document, plan_filing
 
@@ -746,7 +916,7 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
         taken = set(t.bib)
         sibling = plan_filing(t.quilt, t.bib, f, taken, {}, t.planned)
         if f.already:
-            return _here(t, sha, n, name, f.copy_of or key, f.already)
+            return _here(t, sha, n, name, f.holder or key, f.already)
         assert f.home is not None
         filed_as = sibling.key if sibling is not None else key
         if sibling is not None:
@@ -763,14 +933,16 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
         before = _before(t.root, [sha])
         names = _home_names(f.home)
         withdraw_setting_aside(t.root, sha, t.by)
-        file_document(t.quilt, f, by=t.by, read_pages=t.runner is None, move=waits)
+        file_document(t.quilt, f, by=t.by, read_pages=t.runner is None, link=waits)
         append_entries(t.quilt, [sibling] if sibling is not None else [])
+        entries = [sibling.key] if sibling is not None else []
         row.act = _push(
             d,
             {
                 "kind": "added",
                 "citekey": filed_as,
-                "entries": [sibling.key] if sibling is not None else [],
+                "entries": entries,
+                "blocks": _written(t.root, entries, before.bib_size),
                 "home": _rel(t.root, f.home),
                 "names": names,
                 "name": name,
@@ -781,6 +953,8 @@ def _file_under(t: _Take, n: int, item: Item, sha: str, key: str, note: str = ""
                 "by": t.by,
             },
         )
+        if waits:
+            (d / FILE).unlink(missing_ok=True)
         _settled(d)
     row.pages, row.job, row.why = _read_pages(t, filed_as, f)
     if note:
@@ -885,11 +1059,23 @@ def _take_entry(t: _Take, n: int, rid: str, name: str, fields: dict[str, str], w
 
 
 def _add_entry(t: _Take, n: int, rid: str, name: str, fields: dict[str, str], wanted: str, etype: str) -> Row:
+    """Add a pasted work under the person's key or loom's; `here` when a work in the library is the same work to loom, stating its identifier or, neither stating one, its authors, title and year, since two entries of one identity are one work shown twice."""
     from loom.refs.added import added_entry
+    from loom.refs.identity import primary
     from loom.refs.lookup import key_for
     from loom.refs.scan import append_entries
 
     with library_lock(t.root) if t.write else _nothing():
+        mine = primary(BibEntry("", etype or "misc", dict(fields)))
+        for other, entry in t.bib.items():
+            theirs = primary(entry) if not entry.fields.get("loom-copy-of") else None
+            if (
+                mine is not None
+                and theirs is not None
+                and (theirs.scheme, theirs.value.lower()) == (mine.scheme, mine.value.lower())
+            ):
+                said = "its authors, title and year, and no identifier" if mine.scheme == "work" else str(mine)
+                return _here(t, rid, n, name, other, f"{other} is this work to loom: it has {said}")
         taken = set(t.bib) | (
             set(parse_bib((t.root / BIBLIOGRAPHY).read_text(encoding="utf-8")))
             if (t.root / BIBLIOGRAPHY).is_file()
@@ -910,6 +1096,7 @@ def _add_entry(t: _Take, n: int, rid: str, name: str, fields: dict[str, str], wa
                 "kind": "added",
                 "citekey": key,
                 "entries": [key],
+                "blocks": _written(t.root, [key], before.bib_size),
                 "home": "",
                 "names": None,
                 "name": name,
@@ -978,6 +1165,12 @@ def answer(
     IntakeRefused
         `no-such-question` (404) for a drop that waits on none; `not-a-candidate` (400) for a work the question did not name.
     """
+    if online:
+        # a lookup is asked first, holding no lock, and heard again once the lock is held
+        heard = _Heard(http)
+        with suppress(Exception):
+            _answer(quilt, bib, question, same, by=by, online=online, runner=runner, http=heard.ask, write=False)
+        http = heard.again
     with library_lock(quilt.root):
         return _answer(quilt, bib, question, same, by=by, online=online, runner=runner, http=http)
 
@@ -992,6 +1185,7 @@ def _answer(
     online: bool,
     runner: Callable[[str, bool], dict[str, Any] | None] | None,
     http: Any,
+    write: bool = True,
 ) -> Row:
     d = drop_dir(quilt.root, question)
     asked = _read_json(d / QUESTION)
@@ -1000,7 +1194,7 @@ def _answer(
     keys = [c["citekey"] for c in asked.get("candidates") or []]
     if same is not None and same not in keys:
         raise IntakeRefused("not-a-candidate", f"{same} is not one of the works asked about: {', '.join(keys)}", 400)
-    t = _Take(quilt, dict(bib), by, online, True, runner, False, http)
+    t = _Take(quilt, dict(bib), by, online, write, runner, False, http)
     _fresh(t)
     if same is not None and same not in t.bib:
         raise IntakeRefused("no-such-work", f"the library has no work {same} now", 404)
@@ -1068,7 +1262,9 @@ def _read_off(root: Path, key: str) -> str:
 
 
 def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | None]:
-    """Reverse the last act on a drop: an add (the work, or the document filed under one, and every record it wrote), an unfile (the document goes back under its work), or a drop still waiting (it is discarded).
+    """Reverse the last act on a drop: an add (the work, or the document filed under one, and every record it wrote), an unfile (the document goes back under its work), a drop let go because these very bytes were held (it waits again), or a drop still waiting (it is discarded).
+
+    An undo takes out only what its act left, each part checked by its content: an entry is found by the exact text the act wrote, and a place in the store by the bytes it holds. Anything else in the way, an entry edited, renamed or taken since, a document filed under a pasted work, another entry naming the place, refuses the undo and is named.
 
     Parameters
     ----------
@@ -1089,13 +1285,13 @@ def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | 
     Raises
     ------
     IntakeRefused
-        `no-such-intake` (404); `not-last` (409); `not-new` (409) once the work has results, citations or annotations; `changed` (409) when the store holds something the act did not leave there, which an undo never writes over or removes; `untrusted` (409) for a record of an act loom could not have written.
+        `no-such-intake` (404); `not-last` (409); `not-new` (409) once the work has results, citations or annotations; `changed` (409) when the bibliography or the store holds something the act did not leave there, which an undo never writes over or removes; `untrusted` (409) for a record of an act loom could not have written.
     """
     root = result.quilt.root
     d = drop_dir(root, drop)
-    if not d.is_dir():
-        raise IntakeRefused("no-such-intake", f"nothing was dropped as {drop[:16]}", 404)
     with library_lock(root):
+        if not d.is_dir():
+            raise IntakeRefused("no-such-intake", f"nothing was dropped as {drop[:16]}", 404)
         acts = _acts(d)
         if not acts:
             shutil.rmtree(d)
@@ -1108,9 +1304,13 @@ def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | 
             raise IntakeRefused("untrusted", f"the record of this drop cannot be trusted: {why}", 409)
         act_ = last
         if act_["kind"] == "unfiled":
-            _check_unfile(root, d, act_)
-            _undo_unfile(root, d, act_)
+            plan = _check_unfile(root, d, act_)
+            _undo_unfile(root, d, act_, plan)
             said = f"filed it again under {act_['citekey']}"
+        elif act_["kind"] == "here":
+            _check_here(root, d, act_)
+            _undo_here(d, root, act_)
+            said = f"it waits again; these very bytes are still {act_['citekey']}'s"
         else:
             # a work the act made, or the version entry it made, is the act's alone while new; a document filed under a work the person had is the act's while nothing was read off it
             why = _not_new(result, list(act_["entries"])) if act_["entries"] else _read_off(root, act_["citekey"])
@@ -1120,8 +1320,8 @@ def undo(result: Any, drop: str, *, by: str, act: str = "") -> tuple[str, Row | 
                     f"{why}, so it is no longer only what the intake added; take it off with unfile or delete it",
                     409,
                 )
-            _check_add(root, act_)
-            _undo_add(root, d, act_, keep=len(acts) > 1 or bool((act_.get("waiting") or {}).get("over")))
+            plan = _check_add(root, act_)
+            _undo_add(root, d, act_, plan, keep=len(acts) > 1 or bool((act_.get("waiting") or {}).get("over")))
             said = (
                 f"took {act_['citekey']} out again"
                 if act_["entries"]
@@ -1160,45 +1360,113 @@ def _untrusted(root: Path, d: Path, act: dict[str, Any]) -> str:
         return "where it held page text is no place in the drop"
     if act.get("sha") is not None and not re.fullmatch(r"[0-9a-f]{64}", str(act["sha"])):
         return "its document's hash is no hash"
+    if act.get("kind") == "added" and set(act.get("blocks") or {}) != set(act.get("entries") or []):
+        return "it does not say what it wrote of each entry"
+    if act.get("kind") not in ("added", "unfiled", "here"):
+        return "it is no act loom records"
     return ""
 
 
-def _check_add(root: Path, act: dict[str, Any]) -> None:
-    """Refuse to undo an add whose document is no longer what stands at its home: an undo never removes a document it did not put there."""
+def _check_add(root: Path, act: dict[str, Any]) -> _Bib:
+    """Refuse to undo an add whose parts are no longer as it left them; else what to make of the bibliography. Its document must stand at its place, no entry but its own may name that place, its entries must be found as written, and a work it made must hold nothing filed under it since."""
     from loom.refs.pages import sha256_of
 
-    if not act["home"] or act.get("sha") is None:
-        return
-    paper = root / act["home"] / "paper.pdf"
-    if not paper.is_file() or sha256_of(paper) != act["sha"]:
-        raise IntakeRefused(
-            "changed",
-            f"{act['citekey']}'s place in the store no longer holds the document this drop added; undoing it would remove what is there now",
-            409,
-        )
+    home = root / act["home"] if act["home"] else None
+    key = act["citekey"]
+    if home is not None and act.get("sha") is not None:
+        paper = home / "paper.pdf"
+        if not paper.is_file() or sha256_of(paper) != act["sha"]:
+            raise IntakeRefused(
+                "changed",
+                f"{key}'s place in the store no longer holds the document this drop added; undoing it would remove what is there now",
+                409,
+            )
+    plan = _unwritten(root, act)
+    now = _bib_now(root)
+    mine = set(act["entries"]) | {key}
+    if home is not None:
+        others = sorted(k for k, e in now.items() if k not in mine and _place_of(root, e) == home)
+        if others:
+            raise IntakeRefused(
+                "changed",
+                f"{others[0]} names {key}'s place in the store now; undoing would leave it naming nothing",
+                409,
+            )
+    for made in act["entries"]:
+        versions = sorted(k for k, e in now.items() if str(e.fields.get("loom-copy-of") or "").strip() == made)
+        if versions:
+            raise IntakeRefused(
+                "changed", f"{versions[0]} was filed as another document of {made} since: delete that first", 409
+            )
+        entry = now.get(made)
+        place = _place_of(root, entry) if entry is not None else None
+        if place is not None and place != home and place.is_dir() and any(place.iterdir()):
+            raise IntakeRefused(
+                "changed",
+                f"{made} holds a document filed under it since: take that off first (unfile it), then undo",
+                409,
+            )
+    return plan
 
 
-def _check_unfile(root: Path, d: Path, act: dict[str, Any]) -> None:
-    """Refuse to undo an unfile when the document it took off no longer waits, or when its work holds a document again: an undo never writes over one."""
+def _check_unfile(root: Path, d: Path, act: dict[str, Any]) -> _Bib:
+    """Refuse to undo an unfile when what it left has changed; else what to make of the bibliography. The document must still wait, its place must hold nothing, and the place must still be its work's: the work's entry naming it, or for a version, its key free and no entry naming the place."""
     home = root / act["home"]
+    key = act["citekey"]
     if not (d / act["name"]).is_file():
         raise IntakeRefused("changed", "the document this unfile took off no longer waits in its drop", 409)
     if (home / "paper.pdf").exists() or any((home / n).exists() for n in act["moved"]):
         raise IntakeRefused(
+            "changed", f"{key} holds another document now: take that one off first, and this one can go back", 409
+        )
+    now = _bib_now(root)
+    naming = sorted(k for k, e in now.items() if _place_of(root, e) == home)
+    if act["removed"]:
+        for k in act["removed"]:
+            if k in now:
+                raise IntakeRefused(
+                    "changed", f"{k} is another entry's key now: rename that one, and this one can go back", 409
+                )
+        if naming:
+            raise IntakeRefused("changed", f"{naming[0]} names the place {key}'s document stood now", 409)
+        return _put_back(root, act)
+    if key not in now or _place_of(root, now[key]) != home:
+        raise IntakeRefused(
             "changed",
-            f"{act['citekey']} holds another document now: take that one off first, and this one can go back",
+            f"{key} is no longer in the bibliography as it was, so its document has nowhere to go back to",
             409,
+        )
+    if set(naming) - {key}:
+        raise IntakeRefused("changed", f"{sorted(set(naming) - {key})[0]} names {key}'s place now", 409)
+    return "keep", ""
+
+
+def _check_here(root: Path, d: Path, act: dict[str, Any]) -> None:
+    """Refuse to give back a drop let go as already held when the place holding its bytes holds them no longer, or the drop holds a file again."""
+    from loom.refs.pages import sha256_of
+
+    paper = root / act["home"] / "paper.pdf"
+    if not paper.is_file() or sha256_of(paper) != act["sha"]:
+        raise IntakeRefused(
+            "changed", f"{act['citekey']}'s place no longer holds these bytes, so there is nothing to give back", 409
         )
 
 
-def _undo_add(root: Path, d: Path, act: dict[str, Any], *, keep: bool) -> None:
-    """Take out what an add wrote: its home or what it put in one, the word boxes read off it, and the records as they were; with `keep`, earlier acts on the drop standing, its file waits there again as it did."""
+def _undo_here(d: Path, root: Path, act: dict[str, Any]) -> None:
+    """The drop waits again, a copy of the held bytes as its file."""
+    put_file(root / act["home"] / "paper.pdf", d / FILE, replace=True)
+    if act.get("arrived") is not None:
+        _write_json(d / ARRIVED, act["arrived"])
+
+
+def _undo_add(root: Path, d: Path, act: dict[str, Any], plan: _Bib, *, keep: bool) -> None:
+    """Take out what an add wrote: its home or what it put in one, the word boxes read off it, and the records as `plan` and the act's record say; with `keep`, earlier acts on the drop standing, its file waits there again as it did."""
     from loom.refs.pages import storage_root
 
     held = act.get("waiting") or {}
     if keep:
         if held.get("file") and act["home"] and (root / act["home"] / "paper.pdf").is_file():
-            shutil.move(str(root / act["home"] / "paper.pdf"), str(d / held["file"]))
+            put_file(root / act["home"] / "paper.pdf", d / FILE, link=True, replace=True)
         if held.get("arrived") is not None:
             _write_json(d / ARRIVED, held["arrived"])
         (d / QUESTION).unlink(missing_ok=True)
@@ -1215,7 +1483,7 @@ def _undo_add(root: Path, d: Path, act: dict[str, Any], *, keep: bool) -> None:
         shutil.rmtree(boxes, ignore_errors=True)
         _tidy(boxes.parent)
         _tidy(home.parent)
-    _restore_records(root, act["records"], list(act["entries"]))
+    _restore_records(root, act["records"], plan)
 
 
 def unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
@@ -1263,10 +1531,11 @@ def _unfile(result: Any, citekey: str, *, by: str) -> dict[str, Any]:
     with library_lock(root):
         sha = sha256_of(paper)
         d = incoming(root) / sha
+        _clear_stale(d)
         if waiting_file(d) is not None:
             raise IntakeRefused("already-waiting", f"the same file waits to be taken in already, as {sha[:12]}", 409)
         rec = load_ledger(root).get(sha) or {}
-        name = safe_name(Path(str(rec.get("from") or "paper.pdf")).name)
+        name = FILE
         before = _before(root, [sha])
         d.mkdir(parents=True, exist_ok=True)
         arrived = _read_json(d / ARRIVED)
@@ -1333,7 +1602,7 @@ def _remove_entry(root: Path, key: str) -> dict[str, str]:
     return {key: f"{where[0]}\0{text[where[0] : where[1]]}"}
 
 
-def _undo_unfile(root: Path, d: Path, act: dict[str, Any]) -> None:
+def _undo_unfile(root: Path, d: Path, act: dict[str, Any], plan: _Bib) -> None:
     """Put a document an unfile took off back under its work, with what was read off it."""
     from loom.refs.pages import storage_root
 
@@ -1354,7 +1623,7 @@ def _undo_unfile(root: Path, d: Path, act: dict[str, Any]) -> None:
     else:
         (d / ARRIVED).unlink(missing_ok=True)
     (d / QUESTION).unlink(missing_ok=True)
-    _restore_records(root, act["records"], [], put_back=act["removed"])
+    _restore_records(root, act["records"], plan)
 
 
 # ---- what waits -----------------------------------------------------------------------------------------------------------
@@ -1393,7 +1662,7 @@ def waiting(root: Path) -> list[dict[str, Any]]:
             except FileNotFoundError:
                 continue
     for _, d in sorted(drops):
-        if d.is_dir() and ((d / QUESTION).is_file() or waiting_file(d) is not None):
+        if d.is_dir() and ((d / QUESTION).is_file() or (waiting_file(d) is not None and not _taken(d))):
             row = _waiting_row(d, 0).to_json()
             row.pop("item", None)
             if row["state"] == "received":

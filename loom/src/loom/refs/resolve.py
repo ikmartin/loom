@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import http.client
 import json
 import re
 import time
@@ -182,7 +183,7 @@ def _crossref_candidates(q: Query, data: dict[str, Any]) -> list[Candidate]:
 
 
 def http_get(url: str, headers: dict[str, str]) -> bytes:
-    """GET with loom's User-Agent. The default transport; tests inject their own."""
+    """GET with loom's User-Agent. The default transport; tests inject their own. A service that accepts and never answers, or breaks off its answer, is refused like one that cannot be reached."""
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json", **headers})
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
@@ -193,6 +194,8 @@ def http_get(url: str, headers: dict[str, str]) -> bytes:
         raise ResolveRefused(f"{url.split('?')[0]}: HTTP {exc.code} {exc.reason}") from exc
     except urllib.error.URLError as exc:
         raise ResolveRefused(f"{url.split('?')[0]}: {exc.reason}") from exc
+    except (OSError, http.client.HTTPException) as exc:  # a timeout reading the answer, a connection reset
+        raise ResolveRefused(f"{url.split('?')[0]}: {exc or type(exc).__name__}") from exc
 
 
 class Resolver:

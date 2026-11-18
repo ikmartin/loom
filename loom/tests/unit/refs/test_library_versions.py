@@ -70,8 +70,8 @@ def test_versions_of_reads_loom_copy_of_and_follows_a_chain_to_its_primary() -> 
     assert versions_of(bib) == {"P": ["PA", "PB"]}
 
 
-def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path: Path) -> None:
-    """Same title, authors and page count as the stored document, or the work's own identifier: a copy, already here and never a sibling, which writes nothing; a document with another page is another version, filed beside the first."""
+def test_only_the_same_bytes_are_already_here_and_a_lookalike_is_kept_as_a_version(tmp_path: Path) -> None:
+    """Loom discards nothing a person gives it but bytes it holds already: a PDF with the same title, authors and page count as the stored one, or stating the work's own identifier, is another document of the work and goes beside the first; the very same file again is already here and writes nothing."""
     q = demo(tmp_path)
     (q / BIB).open("a", encoding="utf-8").write(OLSSON_BIB)
     one = _fake_pdf(tmp_path / "one.pdf", OLSSON + "first copy")
@@ -80,24 +80,19 @@ def test_an_identical_document_is_recorded_as_a_duplicate_and_not_filed(tmp_path
     stated = _fake_pdf(tmp_path / "stated.pdf", OLSSON + "doi:10.1016/olsson.03\fand a page the first lacks")
     r = ok("library", "add", same, stated, "--for", "olsson03", "--as", "A. Author", cwd=q)
     said = " ".join(r.stdout.split())
-    assert said.startswith("2 documents: 0 added, 2 already here, 0 to answer, 0 cannot be added"), said
-    assert "same.pdf: the same document as olsson03's: same title, authors and 1 page" in said, said
-    assert (
-        "stated.pdf: the same document as olsson03's: it states doi:10.1016/olsson.03, olsson03's own identifier"
-        in said
-    )
-    assert "olsson03-v2" not in (q / BIB).read_text()
-    ledger = json.loads((q / ".loom/digests" / "storage" / "copied.json").read_text())
-    assert not {v["from"] for v in ledger.values()} & {"same.pdf", "stated.pdf"}
-    # another version: the same title and byline over two pages
-    other = _fake_pdf(tmp_path / "other.pdf", OLSSON + "preprint\fan appendix the journal dropped")
-    r = ok("library", "add", other, "--for", "olsson03", cwd=q)
-    assert "beside its first document as olsson03-v2" in " ".join(r.stdout.split())
-    # a copy of that version is a duplicate of the work, not a third version
-    again = _fake_pdf(tmp_path / "again.pdf", OLSSON + "preprint, downloaded twice\fan appendix the journal dropped")
+    assert said.startswith("2 documents: 2 added, 0 already here, 0 to answer, 0 cannot be added"), said
+    entries = parse_bib((q / BIB).read_text())
+    assert versions_of(entries)["olsson03"] == ["olsson03-v2", "olsson03-v3"]
+    for key, src in (("olsson03-v2", same), ("olsson03-v3", stated)):
+        assert (work_home(q, key) / "paper.pdf").read_bytes() == src.read_bytes()
+    # the very same bytes again, under another name: already here, and nothing is written
+    before = (q / BIB).read_bytes()
+    again = tmp_path / "again" / "one renamed.pdf"
+    again.parent.mkdir()
+    again.write_bytes(one.read_bytes())
     r = ok("library", "add", again, "--for", "olsson03", cwd=q)
-    assert "the same document as olsson03-v2's: same title, authors and 2 pages" in " ".join(r.stdout.split())
-    assert "olsson03-v3" not in (q / BIB).read_text()
+    assert "these very bytes are olsson03's" in " ".join(r.stdout.split()), r.stdout
+    assert (q / BIB).read_bytes() == before
 
 
 def test_a_version_is_not_extracted_unless_cited_or_named(tmp_path: Path) -> None:
@@ -198,7 +193,7 @@ def test_the_library_lists_one_row_per_work_and_search_one_hit(tmp_path: Path) -
 
 
 def test_check_reports_existing_duplicates_once_per_work(tmp_path: Path) -> None:
-    """Versions filed before 0.18.5b that are one document: `library check` names them once for the work, with every key."""
+    """Versions that hold the same bytes: `library check` names them once for the work, with every key."""
     q = demo(tmp_path)
     (q / BIB).open("a", encoding="utf-8").write(OLSSON_BIB)
     ok("library", "add", _fake_pdf(tmp_path / "one.pdf", OLSSON + "first"), "--for", "olsson03", cwd=q)
@@ -207,10 +202,10 @@ def test_check_reports_existing_duplicates_once_per_work(tmp_path: Path) -> None
         ok("library", "add", _fake_pdf(tmp_path / name, pages), "--for", "olsson03", cwd=q)
     entries = parse_bib((q / BIB).read_text())
     assert versions_of(entries)["olsson03"] == ["olsson03-v2", "olsson03-v3"]
-    # what an earlier loom filed: both versions' stored documents become copies of the first
+    # versions whose stored documents are the very same bytes as the first: one document filed three times
     first = (work_home(q, "olsson03") / "paper.pdf").read_bytes()
     for v in ("olsson03-v2", "olsson03-v3"):
-        (work_home(q, v) / "paper.pdf").write_bytes(first + f"%{v}\n".encode())
+        (work_home(q, v) / "paper.pdf").write_bytes(first)
     out = json_of("library", "check", "--json", cwd=q, code=1)
     dups = [p for p in out["problems"] if p["problem"] == "duplicate-document"]
     assert [(p["work"], p["key"]) for p in dups] == [("olsson03", "olsson03, olsson03-v2, olsson03-v3")], dups

@@ -160,6 +160,14 @@ def delete_work(result: ScanResult, key: str, who: str) -> str:
     NotDeletable
         No such work, one a document's bibliography carries, or one a document cites.
     """
+    from loom.refs.intake import library_lock
+
+    # what is checked and what is deleted are one act under the library's lock, so an undo or a second delete between them finds the work gone, or finds it whole
+    with library_lock(result.quilt.root):
+        return _delete_work(result, key, who)
+
+
+def _delete_work(result: ScanResult, key: str, who: str) -> str:
     from loom.refs.build import cited_counts
     from loom.refs.scan import ScanReport, candidates, versions_of
 
@@ -233,7 +241,7 @@ def _delete_held(root: Path, key: str, entries: Mapping[str, BibEntry], doomed: 
     inside = home is not None and home.resolve() != store and home.resolve().is_relative_to(store)
     shared = any(home_of(e) == home for k, e in entries.items() if k not in doomed)
     goes = inside and not shared and home is not None and home.is_dir()
-    hashes = drop_copies(root, key, home if goes else None)
+    hashes = drop_copies(root, home if goes else None)
     if goes and home is not None:
         paper = home / "paper.pdf"
         if paper.is_file():

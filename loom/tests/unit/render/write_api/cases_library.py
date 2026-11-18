@@ -346,7 +346,8 @@ def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     status, said = _stream(s, "Halberd - 2021 - Gadget towers.pdf", data)
     assert status == 200 and said["size"] == len(data) and said["name"] == "Halberd - 2021 - Gadget towers.pdf", said
     drop = q / ".loom" / "incoming" / said["incoming"]
-    assert (drop / "Halberd - 2021 - Gadget towers.pdf").read_bytes() == data
+    assert (drop / "document.pdf").read_bytes() == data
+    assert json.loads((drop / "arrived.json").read_text())["name"] == "Halberd - 2021 - Gadget towers.pdf"
     # the same bytes again are the drop kept already, and receiving rebuilds nothing
     assert _stream(s, "again.pdf", data)[1]["incoming"] == said["incoming"]
     assert s.builds == builds and len(list(drop.glob("*.pdf"))) == 1

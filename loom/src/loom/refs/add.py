@@ -279,44 +279,30 @@ def identify(
 
 def plan_new_work(
     root: Path,
+    bib: dict[str, BibEntry],
     pdf: Path,
     key: str,
     fields: dict[str, str],
     came_from: str,
     planned: set[Path] | None = None,
-    claimed: set[str] | None = None,
 ) -> Filing:
     """Plan `pdf` as a work of its own under `key`, its entry `fields`; reads only.
 
-    A work with no identifier lives under the document's hash, and its entry says so in `loom-file`, since the home its author, title and year would hash to moves when a person corrects its title. One with an identifier lives where that names, unless another document is there already. A home is never one that holds anything, or one another entry names (`claimed`, the store-relative homes in `loom-file`): such a document gets `file/<hash>-2`, `-3`, …, so no work is ever written over another's.
+    A work with no identifier lives under the document's hash, and its entry says so in `loom-file`, since the home its author, title and year would hash to moves when a person corrects its title. One with an identifier lives where that names while that place is free. Either place is checked as every place loom writes a document is (`scan.place_for`): one that holds other bytes, or that another entry in `bib` names, is never written into.
     """
     from loom.refs.identity import declared
     from loom.refs.pages import sha256_of, storage_root
+    from loom.refs.scan import place_for
 
     planned = set() if planned is None else planned
-    claimed = set() if claimed is None else claimed
     store = storage_root(root)
     sha = sha256_of(pdf)
-
-    def free(home: Path) -> bool:
-        taken = home.is_dir() and any(home.iterdir())
-        return not taken and home not in planned and home.relative_to(store).as_posix() not in claimed
-
-    own = store / "file" / sha[:16]
-    n = 2
-    while not free(own):
-        own = store / "file" / f"{sha[:16]}-{n}"
-        n += 1
-    home = own
     ids = declared(BibEntry(key, "misc", dict(fields)))
-    if ids:
-        named = store / ids[0].path
-        if free(named):
-            home = named
+    home = place_for(root, bib, sha, planned, store / ids[0].path if ids else None)
     new = {k: v for k, v in fields.items() if not k.startswith("loom-")}
     new["loom-source"] = came_from
-    if not ids or home == own:
-        new["loom-file"] = own.relative_to(store).as_posix()
+    if not ids or home != store / ids[0].path:
+        new["loom-file"] = home.relative_to(store).as_posix()
     planned.add(home)
     return Filing(pdf, key, "pdf", sha, came_from, home=home, named=True, new=new)
 
@@ -387,7 +373,7 @@ def file_new(
     _offer(seen, bib, pdf, online=online, http=http)
     fields = {**seen.offer, **{k: _text(v) for k, v in (edits or {}).items() if _text(v)}}
     key = key_for(fields, set(bib), sha=sha256_of(pdf))
-    f = plan_new_work(root, pdf, key, fields, came_from)
+    f = plan_new_work(root, bib, pdf, key, fields, came_from)
     withdraw_setting_aside(root, f.sha, by)
     file_document(quilt, f, by=by, read_pages=read_pages)
     assert f.new is not None
@@ -462,7 +448,7 @@ def file_under(
     Returns
     -------
     dict
-        `{citekey, filed, sibling, already, copy_of, note, unmapped}`: whether it was filed, under a sibling entry beside the work's first document, held already, or a copy of one of the work's documents; what it shows against the work; and why it has no page text.
+        `{citekey, filed, sibling, already, copy_of, note, unmapped}`: whether it was filed, under a sibling entry beside the work's first document, or held already, these very bytes being in the store; what it shows against the work; and why it has no page text. `copy_of` is always ''.
 
     See Also
     --------
@@ -470,7 +456,7 @@ def file_under(
     """
     from loom.refs.ingest import identify_document
     from loom.refs.pages import sha256_of
-    from loom.refs.scan import append_entries, file_document, plan_filing, record_copy_of
+    from loom.refs.scan import append_entries, file_document, plan_filing
 
     citekey, why = named_for(identify_document(pdf, bib), bib, citekey)
     f = Filing(pdf, citekey, "pdf", sha256_of(pdf), came_from, forced=why, named=True)
@@ -478,15 +464,12 @@ def file_under(
     withdraw_setting_aside(quilt.root, f.sha, by)
     if not f.already:
         file_document(quilt, f, by=by, read_pages=read_pages)
-    if f.copy_of:
-        record_copy_of(quilt, bib, f)
     append_entries(quilt, [sibling] if sibling is not None else [])
     return _answer(
         citekey,
         filed=not f.already,
         sibling=f.sibling,
         already=f.already,
-        copy_of=f.copy_of,
         note=why if not f.already else "",
         unmapped=f.unmapped,
     )
