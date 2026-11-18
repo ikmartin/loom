@@ -148,16 +148,19 @@ def _merge(base: str, ours: str, theirs: str) -> tuple[str, bool]:
         return theirs, False
     if theirs == base:
         return ours, False
+    names = ("working", "base", "proposal")
     with tempfile.TemporaryDirectory(prefix="loom-adopt-merge-") as temporary:
-        paths = [Path(temporary) / name for name in ("working", "base", "proposal")]
+        paths = [Path(temporary) / name for name in names]
         for path, text in zip(paths, (ours, base, theirs), strict=True):
             path.write_text(text)
         from loom import gitprog
 
+        # the conflict markers name each side by what it is, not by the temporary path, so the same merge reads the same every time
+        labels = [arg for name in names for arg in ("-L", name)]
         try:
             if not gitprog.usable():
                 raise FileNotFoundError("git")
-            run = subprocess.run(["git", "merge-file", "-p", *map(str, paths)], capture_output=True)
+            run = subprocess.run(["git", "merge-file", "-p", *labels, *map(str, paths)], capture_output=True)
         except FileNotFoundError:
             raise SyncError(
                 "Merging the document's prose with your edits needs the git program, which is not installed; install git (loom doctor checks for it)"

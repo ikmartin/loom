@@ -762,3 +762,13 @@ def test_a_change_only_in_a_leading_directive_is_not_a_change_to_the_mathematics
     edit(quilt, "\\begin{lemma}\\label{zk-0001-ai}", "% !LOOM see: zk-0002\n\\begin{lemma}\\label{zk-0001-ai}")
     row = next(r for r in comparison(scan(quilt), COPY)["changes"] if r["key"] == "zk-0001")
     assert row["offered"] and not row["math_changed"]
+
+
+def test_a_conflicted_merge_reads_the_same_every_time():
+    """The markers name each side by what it is, not by the temporary directory the merge ran in, so a conflicted adoption's output, and what is keyed on it, is the same build after build."""
+    from loom.adopt import _merge
+
+    base, ours, theirs = "a\nb\nc\n", "a\nmine\nc\n", "a\ntheirs\nc\n"
+    merged, conflicted = _merge(base, ours, theirs)
+    assert conflicted and _merge(base, ours, theirs) == (merged, True)
+    assert "<<<<<<< working\n" in merged and ">>>>>>> proposal\n" in merged
