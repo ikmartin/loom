@@ -874,7 +874,11 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
     if bad_setting is not None:
         report.items.append(
             Item(
-                "paths", FAIL, QUILT, bad_setting, "move it and say where; every command but doctor refuses until then"
+                "paths",
+                FAIL,
+                QUILT,
+                bad_setting,
+                "move what it names elsewhere and set it there; every command but doctor refuses until then",
             )
         )
     if quilt is not None:

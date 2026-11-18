@@ -256,7 +256,7 @@ def removed_in(root: Path, config: QuiltConfig) -> str | None:
         real = Path(os.path.realpath(root / value))
         for folder in REMOVED_IN:
             if lexical.is_relative_to(folder) or real.is_relative_to(real_root / folder):
-                return f"{setting} is {value}, inside {folder}/, where loom removes files; set it outside {', '.join(f + '/' for f in REMOVED_IN)}"
+                return f"{setting} is {value}, inside {folder}/, where loom removes files; set it outside {REMOVED_IN[0]}/, {REMOVED_IN[1]}/ and {REMOVED_IN[2]}/"
     return None
 
 
