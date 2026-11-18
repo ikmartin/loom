@@ -209,8 +209,8 @@ def test_the_marker_is_neither_committed_nor_watched(q: Path) -> None:
     from loom.render.watch import snapshot
 
     look(q)
-    assert marker_path(q, AGENT).relative_to(q).as_posix().startswith(".loom/local/") and "local/" in LOOM_LINES
-    assert "\nlocal/\n" in (q / ".loom" / ".gitignore").read_text()
+    assert marker_path(q, AGENT).relative_to(q).as_posix().startswith(".loom/local/") and "/local/" in LOOM_LINES
+    assert "\n/local/\n" in (q / ".loom" / ".gitignore").read_text()
     assert marker_path(q, AGENT) not in snapshot(q), "a look would rebuild the site"
 
 

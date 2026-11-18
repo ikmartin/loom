@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 from pathlib import Path
+
+import pytest
 
 import loom
 from loom import paths
@@ -88,20 +91,76 @@ def _docstrings(tree: ast.AST) -> set[int]:
     return out
 
 
+#: `.loom/` and the folders of its kinds, by their names in `loom.paths`: a string joined to one of these, or an f-string built from one, is a path that belongs in `loom.paths`.
+FOLDERS = frozenset({"LOOM", "RECORDS", "LIBRARY", "AGENTS", "LOCAL", "CACHE"})
+
+
+def _folder(node: ast.AST) -> str | None:
+    """The name of `.loom/` or a kind's folder that `node` is, by itself or as `paths.NAME`; else None."""
+    name = node.id if isinstance(node, ast.Name) else node.attr if isinstance(node, ast.Attribute) else None
+    return name if name in FOLDERS else None
+
+
 def _offences(path: Path) -> list[tuple[int, str]]:
-    """(line, why) for each literal in one module that spells out a quilt path."""
+    """(line, why) for each literal in one module that spells out a quilt path, joins a string to `.loom/` or a kind's folder, or builds one from them in an f-string."""
     tree = ast.parse(path.read_text(encoding="utf-8"))
     prose = _docstrings(tree)
     found: list[tuple[int, str]] = []
     for node in ast.walk(tree):
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
             right = node.right
-            if isinstance(right, ast.Constant) and isinstance(right.value, str) and right.value.split("/")[0] in DIRS:
-                found.append((node.lineno, f"joins {right.value!r}"))
+            if isinstance(right, ast.Constant) and isinstance(right.value, str):
+                left = (
+                    node.left.right
+                    if isinstance(node.left, ast.BinOp) and isinstance(node.left.op, ast.Div)
+                    else node.left
+                )
+                if right.value.split("/")[0] in DIRS:
+                    found.append((node.lineno, f"joins {right.value!r}"))
+                elif (folder := _folder(left)) is not None:
+                    found.append((node.lineno, f"joins {right.value!r} to {folder}"))
+        elif isinstance(node, ast.JoinedStr) and id(node) not in prose:
+            parts = node.values
+            for i, part in enumerate(parts):
+                if isinstance(part, ast.FormattedValue) and (folder := _folder(part.value)) is not None:
+                    after = parts[i + 1] if i + 1 < len(parts) else None
+                    # `f"{LOOM}/"` is the folder itself, as a prefix or a label, and prose may follow it; a name after the slash is a path
+                    if (
+                        isinstance(after, ast.Constant)
+                        and isinstance(after.value, str)
+                        and re.match(r"/\.?[\w<-]", after.value)
+                    ):
+                        found.append((node.lineno, f"builds {folder}{after.value!r}"))
         elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in prose:
             if node.value.startswith(PREFIXES) or node.value in RECORDS:
                 found.append((node.lineno, f"spells {node.value!r}"))
     return found
+
+
+def test_the_offences_are_caught() -> None:
+    """Each way of building a quilt path outside `loom.paths` is caught, and naming `.loom/` itself is not."""
+    import tempfile
+
+    caught = [
+        'root / LOOM / "sessions" / "index.jsonl"',
+        'root / AGENTS / "scratch" / "s-1"',
+        'root / CACHE / "site" / "manifest.json"',
+        'root / f"{LOOM}/build/manifest.json"',
+        'root / paths.LOCAL / "serve.json"',
+        'x = f"{RECORDS}/state.toml"',
+    ]
+    fine = [
+        'x = f"{LOOM}/"',
+        'rel.startswith(f"{LOOM}/")',
+        'f"{LOOM}/ (but these)"',
+        "root / LOOM",
+        'root / SITE_SVG / "a.svg"',
+    ]
+    with tempfile.TemporaryDirectory() as tmp:
+        for line in caught + fine:
+            mod = Path(tmp) / "m.py"
+            mod.write_text(line + "\n", encoding="utf-8")
+            assert bool(_offences(mod)) == (line in caught), line
 
 
 def _named() -> dict[str, str]:
@@ -109,6 +168,60 @@ def _named() -> dict[str, str]:
     return {
         k: v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str) and v.startswith(f"{paths.LOOM}/")
     }
+
+
+#: The kind of every path constant `loom.paths` names under `.loom/`, by name; None for the folders themselves and the two files at the top. Moving a path to another kind is a change of this table, made on purpose.
+KIND = {
+    "FORMAT": None,
+    "LOOM_GITIGNORE": None,
+    "RECORDS": None,
+    "LIBRARY": None,
+    "AGENTS": None,
+    "LOCAL": None,
+    "CACHE": None,
+    **dict.fromkeys(
+        (
+            "LEDGER", "ANNOTATIONS", "ANNOTATION_LOG", "EDITS", "EDIT_LOG", "ANNOTATION_TYPES", "REVIEW_DECISIONS",
+            "REVIEW_ORIGINS", "REVIEW_OBSERVATIONS", "ADOPTION_DECISIONS", "SOURCE_SYNC", "RETIRED", "LOOKED", "HISTORY",
+            "FORMAL", "FORMAL_EVIDENCE", "FORMAL_ATTESTED",
+        ),
+        "RECORDS",
+    ),
+    **dict.fromkeys(
+        ("BIBLIOGRAPHY", "UNREADABLE", "LINKS", "LINKS_REMOVED", "SUGGESTED_WORKS", "STORAGE", "STORE_LEDGER"),
+        "LIBRARY",
+    ),
+    **dict.fromkeys(("AI", "SESSIONS", "SESSION_INDEX", "ACTIVE_SESSION", "COPIES", "SCRATCH"), "AGENTS"),
+    **dict.fromkeys(
+        (
+            "SERVE_JSON", "COMPILES", "SINCE", "DELETED", "LIVE", "INCOMING", "LAST_SEEN", "JOURNAL", "JOURNAL_INDEX",
+            "WRITES_LOCK", "ID_LOCK", "LIBRARY_LOCK", "BEFORE_DELETE", "ADOPTION_PREVIEWS", "INCORPORATION_PREVIEWS",
+        ),
+        "LOCAL",
+    ),
+    **dict.fromkeys(
+        (
+            "SITE", "MANIFEST", "SITE_SVG", "DRAFT_PREVIEWS", "TEX", "BLOCKS", "FRAGMENT_INDEX", "SNIPPETS",
+            "BLOCK_PREVIEWS", "BLOCK_SPANS", "LIBRARY_CACHE", "STORE_BOXES", "RESOLVED", "MARKS", "MARK_BOXES",
+            "REFOUND", "CROPS", "CLOSURES",
+        ),
+        "CACHE",
+    ),
+}  # fmt: skip
+
+
+def test_every_path_is_of_the_kind_this_table_gives_it() -> None:
+    """A path constant added, removed or moved to another kind changes the table above, so no move goes unseen."""
+    named = _named()
+    assert set(named) == set(KIND), (
+        f"named but not in KIND: {sorted(set(named) - set(KIND))}; in KIND but not named: {sorted(set(KIND) - set(named))}"
+    )
+    wrong = [
+        f"{name} = {p!r} is not under {KIND[name]}"
+        for name, p in named.items()
+        if KIND[name] is not None and not p.startswith(f"{getattr(paths, KIND[name])}/")
+    ]
+    assert not wrong, "\n".join(wrong)
 
 
 def test_every_path_lies_in_the_folder_of_one_kind() -> None:
@@ -129,13 +242,39 @@ def test_every_path_lies_in_the_folder_of_one_kind() -> None:
 
 
 def test_the_ignore_file_names_the_three_folders_that_stay_on_one_machine() -> None:
-    """`.loom/.gitignore` is this machine's state, what loom derives and the agents' scratch, each by its folder, and nothing else."""
+    """`.loom/.gitignore` is this machine's state, what loom derives and the agents' scratch, each by its folder anchored to `.loom/`, and nothing else."""
     from loom.gitignore import LOOM_IGNORE, LOOM_LINES, OWN
 
-    inside = lambda p: p.removeprefix(f"{paths.LOOM}/") + "/"  # noqa: E731
+    inside = lambda p: "/" + p.removeprefix(f"{paths.LOOM}/") + "/"  # noqa: E731
     assert LOOM_LINES == (inside(paths.LOCAL), inside(paths.CACHE), inside(paths.SCRATCH))
     rules = [line for line in LOOM_IGNORE.splitlines() if line and not line.startswith("#")]
     assert rules == list(LOOM_LINES) and LOOM_IGNORE.endswith(f"{OWN}\n")
+
+
+def test_git_ignores_the_three_folders_and_nothing_of_the_same_name_deeper_down(tmp_path: Path) -> None:
+    """A session's `cache/`, a session's `local/` and a stored source's `local/` are files of the quilt and travel; a file in each of the three folders stays on this machine."""
+    import shutil
+    import subprocess
+
+    from loom.gitignore import write_loom_ignore
+
+    if shutil.which("git") is None:
+        pytest.skip("no git")
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    write_loom_ignore(tmp_path)
+    travels = [
+        f"{paths.SESSIONS}/s-x/cache/result.csv",
+        f"{paths.SESSIONS}/s-x/local/notes.md",
+        f"{paths.STORAGE}/arxiv/1234/src/local/macros.sty",
+    ]
+    stays = [f"{paths.LOCAL}/serve.json", f"{paths.CACHE}/site/manifest.json", f"{paths.scratch('s-x')}/run.tex"]
+    for rel in travels + stays:
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / rel).write_text("x", encoding="utf-8")
+    said = subprocess.run(
+        ["git", "-C", str(tmp_path), "check-ignore", *travels, *stays], capture_output=True, text=True
+    )
+    assert said.stdout.split() == stays
 
 
 def test_a_compile_folder_is_named_by_the_document_and_kept_apart_by_its_path() -> None:

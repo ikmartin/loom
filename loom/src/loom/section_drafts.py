@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loom.history.ledger import History, load_history
-from loom.paths import BLOCKS, LOOM, SITE, document_dir, under
+from loom.paths import BLOCKS, DRAFT_PREVIEWS, LOOM, SITE, SITE_SVG, document_dir, under
 from loom.scan.expand import Expansion, Segment
 from loom.scan.labels import LABEL_DEF, derived_of, is_id_shaped, plain_key
 from loom.scan.model import SourceFile
@@ -253,7 +253,7 @@ def preview_in_paper(result: ScanResult, copy: str) -> dict[str, Any]:
     document = replace_section(meta["context"]["document"], proposal, meta["scope"])
     document = split_preamble(proposal)[0] + split_preamble(document)[1]
     digest = hashlib.sha256((document + meta["context"]["path"]).encode()).hexdigest()
-    home = result.quilt.root / SITE / "draft-previews" / digest
+    home = result.quilt.root / DRAFT_PREVIEWS / digest
     pdf = home / "paper.pdf"
     if not pdf.is_file():
         with tempfile.TemporaryDirectory(prefix="loom-section-paper-") as temporary:
@@ -299,7 +299,7 @@ def attach_context(
         snap = pinned_scan(result, copy)
         context_source = meta["context"].get("source", meta["source"])
         context_id = "context/paper-" + Path(meta["context"]["path"]).name + "-" + Path(meta["source"]).stem + ".tex"
-        renderer = FragmentRenderer(RenderPlan(snap, {}, result.quilt.root / BLOCKS, result.quilt.root / SITE / "svg"))
+        renderer = FragmentRenderer(RenderPlan(snap, {}, result.quilt.root / BLOCKS, result.quilt.root / SITE_SVG))
         # a section draft is compiled by no one: its document is made by TeX as snippets, in its saved context
         renderer.prepare_document(copy)
         macro_name = "draft:" + copy

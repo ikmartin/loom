@@ -571,7 +571,7 @@ def test_an_older_macro_block_gets_its_patch(box: Box) -> None:
 
 def test_the_gitignore_lines(box: Box) -> None:
     q = quilt(box)
-    edit(q / ".loom" / ".gitignore", "\ncache/\n", "\n")
+    edit(q / ".loom" / ".gitignore", "\n/cache/\n", "\n")
     got = item(doctor(box, cwd=q), ".gitignore")
     assert (got["status"], got["detail"], got["remedy"]) == (
         "warn",

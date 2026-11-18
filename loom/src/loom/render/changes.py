@@ -14,6 +14,7 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loom.paths import BLOCK_PREVIEWS, BLOCKS, SNIPPETS, within
 from loom.render.markup import esc
 from loom.render.publish import write_atomic
 from loom.scan.model import SourceFile
@@ -44,7 +45,7 @@ def preview_html(r: FragmentRenderer, group: Sequence[Later]) -> list[str]:
         hashlib.sha256(json.dumps([r.salt, p.key, owner.key, p.text, preamble, p.spans]).encode()).hexdigest()[:32]
         for p in group
     ]
-    cache = r.plan.cache / "previews"
+    cache = r.plan.cache / within(BLOCKS, BLOCK_PREVIEWS)
     out: list[str | None] = [
         (cache / f"{k}.html").read_text(encoding="utf-8") if (cache / f"{k}.html").is_file() else None for k in keys
     ]
@@ -56,7 +57,7 @@ def preview_html(r: FragmentRenderer, group: Sequence[Later]) -> list[str]:
         owner.base,
         preamble,
         [group[i].text for i in todo],
-        r.plan.cache / "snippets",
+        r.plan.cache / within(BLOCKS, SNIPPETS),
         envs=r.envs(owner),
         engine=owner.engine,
         aux=owner.aux,
@@ -88,7 +89,7 @@ def _shaped(r: FragmentRenderer, owner: Owner, p: Later, made: str) -> str:
         _lines_in(made, posixpath.relpath(file, owner.base or "."), 1),
         {},
         "",
-        where=r.plan.cache / "snippets",
+        where=r.plan.cache / within(BLOCKS, SNIPPETS),
         normalised=True,
     )
     doc = DocumentHtml(r, owner, page, only=[], files={file: src}, pairs={})

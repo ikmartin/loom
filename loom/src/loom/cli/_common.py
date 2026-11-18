@@ -13,7 +13,7 @@ import click
 
 from loom.errors import ContentError, EnvError, NotFoundError, fit
 from loom.identity import agent_marker
-from loom.paths import SCRATCH
+from loom.paths import LOOM, SCRATCH
 
 
 def emit_json(obj: Any) -> None:
@@ -105,7 +105,7 @@ def destination(
     Raises
     ------
     EnvError
-        A working document that is no `.tex`, lies outside the quilt or where the scan does not read; anything else among the quilt's sources, which loom never writes; a file that exists; or, under an agent, a path the quilt protects from agents (`refuse_protected`).
+        A working document that is no `.tex`, lies outside the quilt or where the scan does not read; anything else inside `.loom/`, which is loom's, but in an agent's scratch, or among the quilt's sources, which loom never writes; a file that exists; or, under an agent, a path the quilt protects from agents (`refuse_protected`).
     """
     from loom.scan.scan import unread_dir
 
@@ -123,16 +123,13 @@ def destination(
             raise EnvError(
                 f"{path} is inside {unread}/, which loom never reads as a document; put it anywhere else in the quilt"
             )
-    if (
-        not document
-        and not source
-        and rel is not None
-        and not rel.startswith(f"{SCRATCH}/")
-        and target.suffix in SOURCE_SUFFIXES
-    ):
-        raise EnvError(
-            f"{path} would be among the quilt's sources, which loom never writes; write it outside the quilt, or, as an agent, under {SCRATCH}/SESSION/"
-        )
+    if not document and not source and rel is not None:
+        elsewhere = f"write it outside the quilt{f', or in your scratch, {SCRATCH}/SESSION/' if agent_marker() else ''}"
+        if rel == LOOM or rel.startswith(f"{LOOM}/"):
+            if not rel.startswith(f"{SCRATCH}/"):
+                raise EnvError(f"{path} is inside {LOOM}/, which is loom's own; {elsewhere}")
+        elif target.suffix in SOURCE_SUFFIXES:
+            raise EnvError(f"{path} would be among the quilt's sources, which loom never writes; {elsewhere}")
     refuse_protected(quilt, target)
     if target.exists() and not overwrite:
         raise EnvError(f"{path} exists; loom does not overwrite it")

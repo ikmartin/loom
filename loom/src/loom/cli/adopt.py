@@ -12,6 +12,7 @@ from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.report import Progress, Report, counted
 from loom.errors import EnvError
 from loom.identity import agent_marker
+from loom.paths import LOOM
 from loom.scan.quilt import NoAuthorError
 from loom.sync import SyncError
 
@@ -28,7 +29,7 @@ from loom.sync import SyncError
     "output",
     default=None,
     metavar="FILE",
-    help="Write the preview's patch to FILE without incorporating; never among the quilt's sources.",
+    help=f"Write the preview's patch to FILE without incorporating; outside the quilt's sources and {LOOM}/.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option

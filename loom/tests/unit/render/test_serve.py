@@ -176,6 +176,24 @@ def test_serve_offers_a_works_fetched_artifacts(session) -> None:  # type: ignor
     assert status == 404  # nothing outside the store is reachable through it
 
 
+def test_each_served_folder_answers_its_own_files_and_no_sibling_s(session) -> None:  # type: ignore[no-untyped-def]
+    """The site, the compile folders and the store are served from folders side by side, so a sibling whose name begins the same (`tex` and `texx`) is outside, by path and not by spelling."""
+    from loom.paths import SITE, STORAGE, TEX, document_build
+
+    s, d = session
+    pdf = d / document_build("drafting/main.tex") / "main.pdf"
+    pdf.parent.mkdir(parents=True, exist_ok=True)
+    pdf.write_bytes(b"%PDF-1.4\ncompiled\n")
+    status, _, body = get(s.url + f"build/tex/{pdf.parent.name}/main.pdf")
+    assert status == 200 and body.startswith(b"%PDF")
+    for folder in (SITE, TEX, STORAGE):
+        sibling = d / f"{folder}x"
+        sibling.mkdir(parents=True, exist_ok=True)
+        (sibling / "leak.txt").write_text("not served", encoding="utf-8")
+    for address in ("build/../sitex/leak.txt", "build/tex/../texx/leak.txt", "digests/storage/../storagex/leak.txt"):
+        assert get(s.url + address)[0] == 404, address
+
+
 def test_the_watcher_watches_what_the_write_api_writes(tmp_path: Path) -> None:
     """A write through `loom serve`'s own API appended to the log and the page it came from never changed: the watcher's directory list still said `comments/`, the name the log replaced in 0.10, and `.jsonl` was not a watched suffix (DR-174)."""
     from loom.render.watch import snapshot
@@ -190,6 +208,26 @@ def test_the_watcher_watches_what_the_write_api_writes(tmp_path: Path) -> None:
     watched = {p.relative_to(q).as_posix() for p in snapshot(q)}
     assert ".loom/records/annotations/log.jsonl" in watched
     assert {"config.toml", "drafting/nodes/n.tex"} <= watched
+
+
+def test_a_delete_changes_records_alone_and_a_saved_preview_changes_nothing_the_watcher_sees(tmp_path: Path) -> None:
+    """A delete keeps the log as it was in `.loom/local/`, and an adoption or incorporation keeps its preview there until it is applied; no build reads either, so a delete rebuilds from the last scan and a preview rebuilds nothing."""
+    from loom.paths import ADOPTION_PREVIEWS, BEFORE_DELETE, INCORPORATION_PREVIEWS
+    from loom.render.watch import scan_unread, snapshot
+
+    q = demo(tmp_path)
+    made = ok("annotate", "dm-0003", "Which orbit?", "--type", "question", "--as", "A. Author", cwd=q).output.split()[0]
+    before = snapshot(q)
+    time.sleep(0.05)
+    ok("annotate", "--delete", made, "--as", "A. Author", cwd=q)
+    assert (q / BEFORE_DELETE).is_file()
+    after = snapshot(q)
+    changed = [p for p, m in after.items() if before.get(p) != m] + [p for p in before if p not in after]
+    assert changed and scan_unread(q, changed), [p.relative_to(q).as_posix() for p in changed]
+    for folder in (ADOPTION_PREVIEWS, INCORPORATION_PREVIEWS):
+        (q / folder).mkdir(parents=True, exist_ok=True)
+        (q / folder / "token.json").write_text("{}", encoding="utf-8")
+    assert snapshot(q) == after
 
 
 def test_the_watcher_does_not_chase_its_own_build(session, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]

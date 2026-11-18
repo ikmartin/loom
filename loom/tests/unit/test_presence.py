@@ -155,7 +155,7 @@ def test_the_records_are_kept_out_of_git(tmp_path: Path) -> None:
 
     assert (
         LIVE.startswith(f"{LOCAL}/")
-        and "local/" in (q / ".loom" / ".gitignore").read_text(encoding="utf-8").splitlines()
+        and "/local/" in (q / ".loom" / ".gitignore").read_text(encoding="utf-8").splitlines()
     )
 
 

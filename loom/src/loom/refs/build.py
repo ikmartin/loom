@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from loom.paths import LIBRARY, LIBRARY_CACHE
+from loom.paths import LIBRARY, RESOLVED
 from loom.refs.fetch import Fetched, fetch_work, identifier_for, work_dir
 from loom.refs.identity import declared
 from loom.refs.pages import read_map
@@ -620,7 +620,7 @@ def _resolve_step(
         report.resolve_off = True
         return
     root = result.quilt.root
-    resolver = Resolver(cache=root / LIBRARY_CACHE / "resolve", contact=cfg.contact, refresh=refresh)
+    resolver = Resolver(cache=root / RESOLVED, contact=cfg.contact, refresh=refresh)
     for w in _each(progress, "resolve", works):
         entry = result.bib[w.citekey]
         # A PDF on disk is not a reason to stop looking. A source is strictly better -- verbatim statements, real

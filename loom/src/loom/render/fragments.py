@@ -20,7 +20,7 @@ from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loom.paths import document_build
+from loom.paths import BLOCKS, SNIPPETS, document_build, within
 from loom.render.assets import publish_picture
 from loom.render.mathset import EQUATION_ENVS
 from loom.scan.hashing import pair_hash
@@ -220,7 +220,7 @@ class FragmentRenderer:
         """Each display TeX draws as a picture under `owner`'s preamble, published under `svg/`: its path, or None where TeX drew none."""
         from loom.render.snippets import render_snippets
 
-        cache = self.plan.cache / "snippets"
+        cache = self.plan.cache / within(BLOCKS, SNIPPETS)
         made = render_snippets(
             self.result.quilt.root,
             owner.base,
@@ -273,7 +273,7 @@ class FragmentRenderer:
         from loom.render.sourceview import source_block, source_env
 
         files = files if files is not None else dict(self.result.files)
-        cache = self.plan.cache / "snippets"
+        cache = self.plan.cache / within(BLOCKS, SNIPPETS)
         texts = [files[f].text[a:b] for f, a, b in regions]
         made = render_snippets(
             self.result.quilt.root,

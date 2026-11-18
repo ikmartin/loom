@@ -303,7 +303,7 @@ def words_of(result: Any, pdf: Path) -> DocumentWords:
     DocumentWords
         Every word in reading order; MapRefused when pdftotext cannot read the file.
     """
-    from loom.paths import MARKS
+    from loom.paths import MARK_BOXES
     from loom.refs.pages import document_boxes, storage_root, store_boxes
 
     root: Path = result.quilt.root
@@ -311,7 +311,7 @@ def words_of(result: Any, pdf: Path) -> DocumentWords:
         pdf.resolve().relative_to(storage_root(root).resolve())
         cache = store_boxes(pdf.parent)
     except ValueError:
-        cache = root / MARKS / "boxes" / artifact_of(pdf)[:16]
+        cache = root / MARK_BOXES / artifact_of(pdf)[:16]
     return DocumentWords(document_boxes(pdf, cache))
 
 
@@ -461,15 +461,13 @@ def refound(result: Any, pdf: Path, a: Any, artifact: str) -> Refound | None:
     """
     import json
 
-    from loom.paths import MARKS
+    from loom.paths import REFOUND
     from loom.refs.pages import MapRefused
 
     sel = a.selector.to_dict() if a.selector else None
     anchor = a.anchor.to_dict() if getattr(a, "anchor", None) else None
     given = [REFIND, artifact, a.page, a.rects, a.strokes, a.mark, a.gap, sel, anchor]
-    path = (
-        result.quilt.root / MARKS / "refound" / (hashlib.sha256(json.dumps(given).encode()).hexdigest()[:32] + ".json")
-    )
+    path = result.quilt.root / REFOUND / (hashlib.sha256(json.dumps(given).encode()).hexdigest()[:32] + ".json")
     try:
         got = json.loads(path.read_text(encoding="utf-8"))
         return Refound(**got) if isinstance(got, dict) else None

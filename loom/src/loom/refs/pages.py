@@ -17,7 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from pathlib import Path, PurePosixPath
 
-from loom.paths import LIBRARY_CACHE, STORAGE, STORE_ADDRESS
+from loom.paths import STORAGE, STORE_ADDRESS, STORE_BOXES
 
 # A numbered heading: "3", "3.1", "A.2". A bare single capital is deliberately NOT a number -- "C (F ) = Spec Sym(F )"
 # and "E = C x_D X" are lines from a real paper in this corpus, and a lone letter matches far more mathematics than
@@ -252,20 +252,28 @@ def token_boxes(pdf: Path, page: int, home: Path | None = None) -> str:
 
 
 def store_boxes(home: Path) -> Path:
-    """Where a stored work's word boxes are cached, one file per page: `.loom/cache/library/boxes/<scheme>/<id>`, with what loom derives.
+    """Where the word boxes of a folder in the store are cached, one file per page: the same place under `.loom/cache/library/boxes/`, with what loom derives.
 
     Parameters
     ----------
     home : Path
-        The work's directory in the store.
+        A folder in the store: a work's (`<scheme>/<id>`), or one inside it, such as its source's.
 
     Returns
     -------
     Path
         The directory, which `token_boxes` and `document_boxes` both write.
+
+    Raises
+    ------
+    ValueError
+        When `home` is not in a quilt's store.
     """
-    root = home.parents[len(PurePosixPath(STORAGE).parts) + 1]
-    return root / LIBRARY_CACHE / "boxes" / home.parent.name / home.name
+    parts = PurePosixPath(STORAGE).parts
+    for store in home.parents:
+        if store.parts[-len(parts) :] == parts:
+            return store.parents[len(parts) - 1] / STORE_BOXES / home.relative_to(store)
+    raise ValueError(f"{home} is not in a quilt's store")
 
 
 _PAGE_XML = re.compile(r"<page\b.*?</page>", re.S)

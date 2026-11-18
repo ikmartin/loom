@@ -16,13 +16,16 @@ from typing import TYPE_CHECKING
 from loom.mailbox import INBOX
 from loom.paths import (
     ADOPTION_DECISIONS,
+    ADOPTION_PREVIEWS,
     ANNOTATION_LOG,
     ANNOTATIONS,
+    BEFORE_DELETE,
     CACHE,
     COMPILES,
     COPIES,
     EDIT_LOG,
     EDITS,
+    INCORPORATION_PREVIEWS,
     LAST_SEEN,
     LIBRARY,
     LIVE,
@@ -100,8 +103,10 @@ def snapshot(root: Path, shown: Shown | None = None) -> dict[Path, float]:
         # Review decisions are written only by a write that rebuilds after it (`review-accept`, taking changes in), and `serve.json` and `compiles.json` are the server's own notes of where it listens and how its compiles stand, which no build reads
         if rel.as_posix() in (REVIEW_DECISIONS, ADOPTION_DECISIONS, SERVE_JSON, COMPILES):
             continue
-        # where each agent last looked (`loom since`), which no build reads either
-        if rel.as_posix().startswith(f"{SINCE}/"):
+        # where each agent last looked (`loom since`), the log as it was before a delete, and a preview saved until it is applied, which no build reads either
+        if rel.as_posix() == BEFORE_DELETE or rel.as_posix().startswith(
+            (f"{SINCE}/", f"{ADOPTION_PREVIEWS}/", f"{INCORPORATION_PREVIEWS}/")
+        ):
             continue
         # each agent server's record of itself, written at every call it answers, which `loom serve` reads on its own (`loom.presence`)
         if rel.as_posix().startswith(f"{LIVE}/"):

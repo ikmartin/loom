@@ -34,8 +34,14 @@ def test_a_working_document_goes_anywhere_loom_reads_and_nothing_else_among_the_
             destination(q, there, document=True)
     with pytest.raises(EnvError, match="outside the quilt"):
         destination(q, tmp_path / "elsewhere.tex", document=True)
-    with pytest.raises(EnvError, match="among the quilt's sources"):
+    with pytest.raises(
+        EnvError, match="among the quilt's sources, which loom never writes; write it outside the quilt$"
+    ):
         destination(q, "drafting/nodes/patched.tex")
+    # inside `.loom/` the reason is that it is loom's, whatever the file, and a person is offered no agent's place
+    for there in (".loom/cache/plain.tex", ".loom/records/x.patch", ".loom/local/x.md"):
+        with pytest.raises(EnvError, match=r"is inside \.loom/, which is loom's own; write it outside the quilt$"):
+            destination(q, there)
     assert destination(q, ".loom/agents/scratch/s/plain.tex") == (q.root / ".loom/agents/scratch/s/plain.tex").resolve()
     assert destination(q, tmp_path / "elsewhere.tex") == (tmp_path / "elsewhere.tex").resolve()
 
@@ -65,7 +71,9 @@ def test_an_agent_is_refused_what_the_quilt_protects_and_a_person_is_not(
     ):
         with pytest.raises(EnvError, match=said):
             destination(q, there, overwrite=True)
-    with pytest.raises(EnvError, match=r"\.loom/ is loom's"):
+    with pytest.raises(
+        EnvError, match=r"inside \.loom/, which is loom's own; write it outside the quilt, or in your scratch"
+    ):
         destination(q, ".loom/records/annotations/x.txt")
     assert destination(q, "paper/flat.tex", document=True).name == "flat.tex"
     assert destination(q, ".loom/agents/scratch/s/plain.tex").name == "plain.tex"

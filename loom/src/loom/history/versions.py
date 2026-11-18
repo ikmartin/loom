@@ -50,8 +50,16 @@ def read_version(history: History, key: str, ref: str) -> tuple[Version, str]:
         raise LookupError(f"{key} has no version at step {ref}")
     p = version_path(history, v)
     if not p.is_file():
-        raise LookupError(f"the record for {key}@{v.step} is missing: {p.relative_to(history.dir.parent)}")
+        raise LookupError(f"the record for {key}@{v.step} is missing: {_shown(p)}")
     return v, p.read_text(encoding="utf-8")
+
+
+def _shown(p: Path) -> str:
+    """`p` relative to the quilt it is in, wherever `[quilt] history` puts the history; as it is when it is in none."""
+    from loom.scan.quilt import is_quilt_root
+
+    root = next((d for d in p.parents if is_quilt_root(d)), None)
+    return p.relative_to(root).as_posix() if root is not None else str(p)
 
 
 def materialize(text: str, result: ScanResult) -> str:

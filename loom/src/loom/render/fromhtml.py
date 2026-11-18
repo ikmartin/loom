@@ -17,7 +17,7 @@ from html.parser import HTMLParser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from loom.paths import document_build
+from loom.paths import BLOCKS, SNIPPETS, document_page, within
 from loom.render.assets import publish_graphic, publish_picture
 from loom.render.markup import slug
 from loom.render.mathset import math_text, set_display
@@ -61,7 +61,7 @@ class Page:
 def page_for(result: ScanResult, master: str) -> Page | None:
     """`master`'s page, None when it has none; made before the files it reads last changed, it says which lines changed since (`Page.lines`)."""
     root = result.quilt.root
-    where = root / document_build(master) / "html"
+    where = root / document_page(master)
     page = where / f"{Path(master).stem}.html"
     said = where / SOURCES
     if not page.is_file() or not said.is_file():
@@ -388,7 +388,7 @@ class DocumentHtml:
             self.owner.base,
             self.owner.preamble,
             [self.files[n.file].text[n.start : n.end] for n in nodes],
-            self.r.plan.cache / "snippets",
+            self.r.plan.cache / within(BLOCKS, SNIPPETS),
             envs=self.r.envs(self.owner),
             engine=self.owner.engine,
             aux=self.owner.aux,

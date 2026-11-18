@@ -17,13 +17,13 @@ from typing import Any
 
 from loom.clock import stamp
 from loom.locks import locked
-from loom.paths import SESSIONS
+from loom.paths import ACTIVE_SESSION, SESSION_INDEX, SESSIONS
 from loom.records.ids import SESSION, draw
 
 DIR = SESSIONS
-INDEX = f"{DIR}/index.jsonl"
+INDEX = SESSION_INDEX
 #: The one session new work lands in, named here so the CLI and the viewer cannot disagree about which it is.
-ACTIVE = f"{DIR}/active"
+ACTIVE = ACTIVE_SESSION
 
 EVENTS = ("created", "renamed", "purposed", "resumed", "closed", "deleted")
 ID = re.compile(rf"^{SESSION}$")

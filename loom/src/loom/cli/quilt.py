@@ -207,10 +207,9 @@ def undo_minimal_quilt(target: Path, existed: bool, made: list[Path]) -> None:
 
 
 def write_demo_quilt(target: Path) -> None:
-    """Copy the demo quilt into `target`, with its layout's number and loom's ignore lines written rather than copied, so they are this loom's."""
+    """Copy the demo quilt into `target`, its layout's number with it, and loom's ignore lines written rather than copied, so they are this loom's."""
     from loom.ai.clients import write_clients
     from loom.gitignore import ensure, write_loom_ignore
-    from loom.layout import stamp
 
     demo = ASSETS / "demo"
     target.mkdir(parents=True, exist_ok=True)
@@ -219,7 +218,6 @@ def write_demo_quilt(target: Path) -> None:
     )
     for cache in target.rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
-    stamp(target)
     write_loom_ignore(target)
     if not (target / ANNOTATION_TYPES).exists():
         (target / ANNOTATION_TYPES).parent.mkdir(parents=True, exist_ok=True)
