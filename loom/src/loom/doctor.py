@@ -764,6 +764,22 @@ def check_config(quilt: Any) -> Item:
     return Item("config", WARN, QUILT, f"{w[0]}{more}", "loom lint")
 
 
+def check_unpacked() -> Item:
+    """What the machine's one folder for a tool TeX unpacks holds (`machine.unpacked`): its size and how many copies, one for each `biber` that ever ran here (a TeX Live year, loom's own TeX beside the person's). Nothing prunes it."""
+    from loom.lifetimes import readable, size_of
+    from loom.machine import UNPACKED, data_dir
+
+    where = data_dir() / UNPACKED
+    copies = sorted(where.glob("par-*/cache-*")) if where.is_dir() else []
+    if not copies:
+        return Item(
+            "unpacked", OK, OPTIONAL, "nothing unpacked yet", "", {"path": None, "copies": 0, "bytes": 0}, shown=True
+        )
+    size = size_of(where)
+    said = f"{len(copies)} unpacked {'copy' if len(copies) == 1 else 'copies'} of biber, {readable(size)}, in {where}"
+    return Item("unpacked", OK, OPTIONAL, said, "", {"copies": len(copies), "bytes": size}, shown=True)
+
+
 def check_sizes(root: Path) -> list[Item]:
     """What `.loom/` holds, by kind, in the units a person reads, the scratch and the write journal on their own; and each session whose scratch is over `lifetimes.LARGE_SCRATCH`, with the day it is removed, which is the whole of that limit."""
     import datetime
@@ -830,7 +846,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
         if quilt_path or not str(exc).startswith("not inside a quilt"):
             bad_quilt = str(exc)
     report.items += [check_tex(), *check_tools()]
-    report.items += [check_author(quilt), check_bundle()]
+    report.items += [check_author(quilt), check_bundle(), check_unpacked()]
     if bad_quilt is not None:
         # a path with no quilt at it has no config.toml to fix
         none_there = bool(quilt_path) and bad_quilt.startswith("not inside a quilt")

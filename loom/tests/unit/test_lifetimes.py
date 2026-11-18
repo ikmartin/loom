@@ -602,3 +602,23 @@ def test_what_the_index_names_is_read_off_its_strings_whatever_their_letters(tmp
     assert digest == on_disk(tmp_path)
     assert "blocks/snippets/é-1.html" in named and "site/fragments/a.html" in named and "index.json" in named
     assert "blocks/snippets/e-1.html" not in named and "site/fragments/b.html" not in named
+
+
+def test_doctor_reports_the_machines_unpacked_copies_and_removes_none(tmp_path: Path) -> None:
+    from loom.machine import UNPACKED, data_dir
+
+    q = demo(tmp_path)
+    item = next(i for i in json.loads(run("doctor", "--json", cwd=q).stdout)["items"] if i["name"] == "unpacked")
+    assert item["severity"] != "quilt" and item["detail"] == "nothing unpacked yet"
+    for year in ("aaaa", "bbbb"):
+        copy = data_dir() / UNPACKED / "par-6973" / f"cache-{year}" / "libperl.dylib"
+        copy.parent.mkdir(parents=True)
+        with copy.open("wb") as f:
+            f.truncate(100 * 1000**2)
+    item = next(i for i in json.loads(run("doctor", "--json", cwd=q).stdout)["items"] if i["name"] == "unpacked")
+    assert (
+        item["status"] == "ok"
+        and item["copies"] == 2
+        and item["detail"].startswith("2 unpacked copies of biber, 200 MB")
+    )
+    assert "unpacked" in flat(run("doctor", cwd=q).stdout) and copy.is_file()
