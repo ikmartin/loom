@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import re
-from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from loom.scan.edges import _CMD, LIST_CMDS, REF_CMDS
 from loom.scan.envtree import norm_label
 from loom.scan.hashing import hash_text
+from loom.scan.memo import Memo
 from loom.scan.source import blank_comments
 from loom.scan.tokenize import EnvNode, env_tree, read_args
 
@@ -18,11 +18,13 @@ if TYPE_CHECKING:
 DISPLAYS = {"equation", "align", "alignat", "flalign", "gather", "multline", "eqnarray", "displaymath"}
 
 
-@lru_cache(maxsize=256)
-def _environments(text: str) -> list[EnvNode]:
-    """A file's environment tree, built once per text: `display_span` asks once per labelled display, and a file holds hundreds."""
+def _environment_tree(text: str) -> list[EnvNode]:
     roots, _ = env_tree(blank_comments(text))
     return roots
+
+
+#: A file's environment tree, built once per text in use: `display_span` asks once per labelled display, and a file holds hundreds.
+_environments: Memo[str, list[EnvNode]] = Memo(_environment_tree)
 
 
 def display_span(text: str, offset: int) -> tuple[int, int] | None:

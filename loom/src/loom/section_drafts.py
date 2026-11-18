@@ -230,6 +230,7 @@ def pinned_scan(result: ScanResult, copy: str) -> ScanResult:
         Quilt(root, result.quilt.config),
         {copy: (result.quilt.root / copy).read_text()},
         bases={copy: document_dir(context.get("source", metadata(result, copy)["source"]))},
+        copy=True,
     )
 
 

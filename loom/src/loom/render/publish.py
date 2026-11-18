@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -42,19 +43,23 @@ def write_atomic(path: Path, data: str | bytes) -> None:
 #: The paths each build directory's last publication in this process kept, and the prefixes it pruned.
 _PATHS: dict[Path, tuple[frozenset[str], tuple[str, ...]]] = {}
 
-#: What each build directory was last given, by relative path, in this process: a served quilt republishes every few seconds, and comparing with what is in memory spares reading back thousands of files that have not changed.
-_WRITTEN: dict[Path, dict[str, str | bytes]] = {}
+#: A digest of what each build directory was last given, by relative path, in this process: a served quilt republishes every few seconds, and comparing with what this process wrote spares reading back thousands of files that have not changed. A digest and not the bytes, which for a large quilt run to tens of megabytes held for as long as it is served.
+_WRITTEN: dict[Path, dict[str, bytes]] = {}
 
 
-def _unchanged(path: Path, data: str | bytes, before: str | bytes | None = None) -> bool:
-    """True when `path` already holds exactly `data`, so publishing it again would rewrite identical bytes.
+def _digest(raw: bytes) -> bytes:
+    return hashlib.blake2b(raw, digest_size=16).digest()
 
-    Most of a warm build's files are the same as last time (every source/ file, every re-rendered fragment whose text came out the same); comparing costs a read, rewriting costs a write and a rename. `before` is what this process last wrote there; when it matches, a file still present is taken as unchanged without reading it.
+
+def _unchanged(path: Path, raw: bytes, same: bool = False) -> bool:
+    """True when `path` already holds exactly `raw`, so publishing it again would rewrite identical bytes.
+
+    Most of a warm build's files are the same as last time (every source/ file, every re-rendered fragment whose text came out the same); comparing costs a read, rewriting costs a write and a rename. `same` says this process last wrote these bytes there (`_WRITTEN`); then a file still present is taken as unchanged without reading it.
     """
-    if before is not None and before == data and path.exists():
+    if same and path.exists():
         return True
     try:
-        return path.read_bytes() == (data.encode("utf-8") if isinstance(data, str) else data)
+        return path.read_bytes() == raw
     except OSError:
         return False
 
@@ -84,9 +89,11 @@ def publish(
     written = _WRITTEN.setdefault(build_dir.resolve(), {})
     for rel, data in files.items():
         path = build_dir / rel
-        if not _unchanged(path, data, written.get(rel)):
+        raw = data.encode("utf-8") if isinstance(data, str) else data
+        digest = _digest(raw)
+        if not _unchanged(path, raw, written.get(rel) == digest):
             write_atomic(path, data)
-        written[rel] = data
+        written[rel] = digest
     # the same paths as this process's last publication here: nothing it did not write can be under the prefixes, so there is nothing to walk for
     published = (frozenset((*files, *keep)), prune_prefixes)
     last = _PATHS.get(build_dir.resolve())

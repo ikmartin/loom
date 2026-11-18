@@ -229,7 +229,8 @@ def downstream_payload(result: ScanResult, key: str) -> dict[str, Any]:
     n = result.assembly.nodes[key]
     dependents = []
     below = set(result.graph.downstream(key))
-    for dk in result.graph.downstream(key):
+    # in the order of their keys: the graph's walk starts from a set, so its own order follows the process's hash seed
+    for dk in sorted(below, key=natural):
         via = next(
             (
                 e.via

@@ -9,7 +9,7 @@ import hashlib
 import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,7 @@ from loom.render.manifest import build_manifest
 from loom.render.marks import MarkEntry, place_marks
 from loom.render.publish import publish, write_atomic
 from loom.render.versions import Gone, attach_versions, gone_annotations, gone_marks
+from loom.scan.memo import reading
 from loom.scan.model import Diagnostic
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult, scan
@@ -42,6 +43,10 @@ class BuildReport:
     rendered: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
+
+    def kept(self) -> BuildReport:
+        """This report without its manifest, which is on disk once published: what a server holds between builds, where a large quilt's manifest runs to tens of megabytes as objects."""
+        return replace(self, manifest={})
 
 
 class _PageTable:
@@ -235,7 +240,7 @@ def fragment_path(result: ScanResult, key: str) -> str:
 def _input_hash(
     result: ScanResult, key: str, aux: bytes, texts: dict[str, str] | None = None, pages: dict[str, Any] | None = None
 ) -> str:
-    """The cache key of a node, master or digest fragment: loom's version and code, the text of every file it draws on, `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
+    """The cache key of a node, master or digest fragment: loom's version and code, the text of every file it draws on (its own, its claimants', and every file a section's span runs through), `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
 
     `texts` holds each file's text hash, filled as files are met, so a file every digest node draws on is hashed once per scan rather than once per node; `pages` maps each document to its current page, or None.
     """
@@ -251,6 +256,11 @@ def _input_hash(
                 files |= set(exp.reached)
     for ck in n.claimants:
         files.add(result.nodes[ck].file)
+    # a section's text runs through the files it includes, the text they hold around their own nodes too
+    for master, (a, b) in n.exp_ranges.items():
+        expansion = result.expansions.get(master)
+        if expansion is not None:
+            files.update(seg.file for seg in expansion.segments if seg.exp_start < b and seg.exp_end > a)
     for f in sorted(files):
         if f not in texts:
             texts[f] = hashlib.sha256(result.files[f].text.encode("utf-8", errors="replace")).hexdigest()
@@ -342,14 +352,15 @@ def _marks_by_node(result: ScanResult, records: Records, gone: list[Gone] | None
     return out
 
 
-def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> None:
-    """Every session's transcript as pages under `transcripts/<id>/<n>.json`, so a viewer with no publisher running still reads the chat.
+def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> set[str]:
+    """Every session's transcript as pages under `transcripts/<id>/<n>.json`, so a viewer with no publisher running still reads the chat; returns the pages of sessions nobody wrote in since this process last published them, which are on disk as they should be, for `publish` to keep.
 
     Out of the manifest, which every viewer polls: a long conversation would make every poll pay for it.
     """
     from loom.mailbox import inbox_path, pages
     from loom.sessions import sessions
 
+    kept: set[str] = set()
     for sid in sessions(root):
         inbox = inbox_path(root, sid)
         try:
@@ -358,19 +369,21 @@ def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> None:
             stamp = None
         known = _TRANSCRIPTS.get(inbox)
         if stamp is not None and known is not None and known[0] == stamp:
-            files.update(known[1])
-            continue
+            if all((root / BUILD / rel).is_file() for rel in known[1]):
+                kept.update(known[1])
+                continue
         made = {
             f"transcripts/{sid}/{n}.json": json.dumps(page, ensure_ascii=False, indent=1, sort_keys=True)
             for n, page in pages(root, sid).items()
         }
         if stamp is not None:
-            _TRANSCRIPTS[inbox] = (stamp, made)
+            _TRANSCRIPTS[inbox] = (stamp, frozenset(made))
         files.update(made)
+    return kept
 
 
-#: Each session's transcript pages as last written, by its inbox's modification time and size: a session nobody wrote in since is not rendered again by a server that rebuilds on every change.
-_TRANSCRIPTS: dict[Path, tuple[tuple[int, int], dict[str, str]]] = {}
+#: Each session's transcript pages as last published, by its inbox's modification time and size: a session nobody wrote in since is neither rendered nor held again by a server that rebuilds on every change.
+_TRANSCRIPTS: dict[Path, tuple[tuple[int, int], frozenset[str]]] = {}
 
 
 #: The fragments' input hashes for the last scan built from, the numbering they were hashed with, and each file's text hash; a build from the same scan (`reuse`) reads them rather than hashing every file again.
@@ -409,7 +422,24 @@ def build(
     -------
     BuildReport
         The scan, the manifest, and what was rendered and skipped.
+
+    Notes
+    -----
+    A build is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file of the quilt's and keeps what the last build derived, letting go only what it made itself.
     """
+    with reading(keep=reuse is not None):
+        return _build(quilt, keys, records, force, reuse, progress, tex)
+
+
+def _build(
+    quilt: Quilt,
+    keys: list[str] | None,
+    records: Records | None,
+    force: bool,
+    reuse: ScanResult | None,
+    progress: Callable[[str, str, int, int | None], None] | None,
+    tex: bool,
+) -> BuildReport:
     root = quilt.root
     build_dir = root / BUILD
     cache_dir = build_dir / "cache"
@@ -598,7 +628,7 @@ def build(
 
     manifest["unresolved"] = rows_for(result, manifest)
     _write_source(result, fragments, files)
-    _write_transcripts(result.quilt.root, files)
+    transcripts = _write_transcripts(result.quilt.root, files)
     from loom.files import BODIES, attach_files
     from loom.render.pending import DIFFS
 
@@ -621,9 +651,10 @@ def build(
         for rel in list(index):
             if rel not in fragments.values():
                 index.pop(rel)
-    # a fragment the cache skipped is already on disk as it should be: kept from the prune, not read back and rewritten
+    # a fragment the cache skipped, or a transcript nobody wrote in since, is already on disk as it should be: kept from the prune, not read back and rewritten
     told("publishing")
-    publish(build_dir, files, manifest, prune, keep={rel for rel in fragments.values() if rel not in files})
+    keep = {rel for rel in fragments.values() if rel not in files} | transcripts
+    publish(build_dir, files, manifest, prune, keep=keep)
     cache_dir.mkdir(parents=True, exist_ok=True)
     index_path.write_text(json.dumps(index, indent=0, sort_keys=True), encoding="utf-8")
     return report

@@ -204,3 +204,26 @@ def test_a_reports_blocks_are_marked_for_the_viewer_and_a_plain_message_is_not()
     assert "[summary]" not in html and '<span class="math inline">\\(x\\)</span>' in html
     plain = "Done; see $x$.\n\n## A heading of my own\nText."
     assert render_body(plain) == render_markdown(plain)
+
+
+def test_a_rebuild_keeps_an_unchanged_transcript_on_disk_without_holding_it(tmp_path: Path) -> None:
+    """A session nobody wrote in since is kept as published rather than held in memory and handed over again; a page gone from disk is put back, and a message written since is published."""
+    from loom.mailbox import post
+    from loom.paths import BUILD
+    from loom.render import build as built
+    from loom.scan.quilt import load_quilt
+
+    q, sid = quilt(tmp_path)
+    post(q, sid, "the first message", "Seed Agent")
+    built.build(load_quilt(q), tex=False)
+    pages = sorted((q / BUILD / "transcripts" / sid).glob("*.json"))
+    assert pages
+    built.build(load_quilt(q), tex=False)
+    assert all(p.is_file() for p in pages), "kept, not pruned"
+    assert all(isinstance(rels, frozenset) for _, rels in built._TRANSCRIPTS.values()), "paths, not pages"
+    pages[0].unlink()
+    built.build(load_quilt(q), tex=False)
+    assert pages[0].is_file()
+    post(q, sid, "the second message", "Seed Agent")
+    built.build(load_quilt(q), tex=False)
+    assert "the second message" in "".join(p.read_text(encoding="utf-8") for p in pages)

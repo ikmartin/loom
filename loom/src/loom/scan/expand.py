@@ -15,7 +15,7 @@ from pathlib import Path
 
 from loom.paths import document_dir, under
 from loom.scan.model import Diagnostic, Location, SourceFile
-from loom.scan.tokenize import read_mandatory, tokenize
+from loom.scan.tokenize import commands, read_mandatory
 
 INCLUDE_CMDS = {"input", "include", "nest"}
 
@@ -154,9 +154,7 @@ def expand_master(master: SourceFile, root: Path, files: dict[str, SourceFile], 
         exp.reached[src.path] = exp.reached.get(src.path, 0) + 1
         text = src.clean
         pos = 0
-        for t in tokenize(text):
-            if t.kind != "cmd" or t.value not in INCLUDE_CMDS:
-                continue
+        for t in commands(text, INCLUDE_CMDS):
             name, arg_end = _read_include_arg(text, t.end)
             if name is None:
                 continue

@@ -606,6 +606,27 @@ def test_a_preview_and_a_state_are_made_once_while_their_inputs_hold(
     assert renders[0] > 0, "a changed text is rendered again"
 
 
+def test_a_republish_of_the_same_bytes_writes_and_reads_nothing_and_keeps_no_file_in_memory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What this process last published is remembered as a digest of each file, never its bytes, which a served quilt would hold for as long as it runs."""
+    from loom.render import publish as pub
+
+    out = tmp_path / ".loom/build"
+    big = "x" * 100_000
+    pub.publish(out, {"source/a.tex": big, "svg/b.svg": b"<svg/>"}, {"v": 1})
+    written: list[str] = []
+    read: list[str] = []
+    monkeypatch.setattr(pub, "write_atomic", lambda path, data: written.append(path.name))
+    reading = Path.read_bytes
+    monkeypatch.setattr(Path, "read_bytes", lambda self: read.append(self.name) or reading(self))
+    pub.publish(out, {"source/a.tex": big, "svg/b.svg": b"<svg/>"}, {"v": 1})
+    assert written == ["manifest.json"] and read == []
+    pub.publish(out, {"source/a.tex": big + "y", "svg/b.svg": b"<svg/>"}, {"v": 1})
+    assert written == ["manifest.json", "a.tex", "manifest.json"]
+    assert all(len(d) <= 32 for d in pub._WRITTEN[out.resolve()].values())
+
+
 def test_a_published_file_removed_from_disk_is_written_again(tmp_path: Path) -> None:
     """Publishing compares with what this process last wrote rather than reading every file back, and a file gone from disk is still put back."""
     from loom.render.publish import publish
@@ -619,3 +640,27 @@ def test_a_published_file_removed_from_disk_is_written_again(tmp_path: Path) -> 
     publish(out, {"source/a.tex": "A."}, {"v": 1}, ("source/",))
     publish(out, {"source/b.tex": "B."}, {"v": 1}, ("source/",))
     assert sorted(p.name for p in (out / "source").iterdir()) == ["b.tex"]
+
+
+def test_a_section_shows_what_an_included_file_holds_after_its_node(tmp_path: Path) -> None:
+    """A section's text runs through the files it includes, the text they hold around their nodes too, so a sentence added after an included node is in the section's next fragment."""
+    from loom.render.build import build
+    from loom.scan.quilt import load_quilt
+    from tests.unit.scan.helpers import PREAMBLE, make_quilt
+
+    make_quilt(
+        tmp_path,
+        {
+            "drafting/main.tex": PREAMBLE
+            + "\\begin{document}\n\\section{Setup}\\label{ab-0100}\nIntro.\n\\input{nodes/ab-0002}\n\\section{Next}\\label{ab-0101}\nMore.\n\\end{document}\n",
+            "drafting/nodes/ab-0002.tex": "\\begin{lemma}\\label{ab-0002}\nA lemma.\n\\end{lemma}\n",
+        },
+    )
+    root = tmp_path / "quilt"
+    section = root / ".loom/build/fragments/nodes/ab-0100.html"
+    build(load_quilt(root), tex=False)
+    node = root / "drafting/nodes/ab-0002.tex"
+    for word in ("Firstword", "Secondword"):
+        node.write_text(node.read_text(encoding="utf-8") + f"\nA saved sentence, {word}.\n", encoding="utf-8")
+        build(load_quilt(root), tex=False)
+        assert word in section.read_text(encoding="utf-8")

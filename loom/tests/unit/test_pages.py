@@ -126,3 +126,14 @@ def test_the_papers_opening_ends_at_its_first_heading_and_reads_plain(tmp_path: 
     out = ok("library", "read", "Calloway14", cwd=q).stdout
     assert out.startswith("Let $X$ be a topological space") and "The fixed locus $\\operatorname{Fix}(\\sigma)$" in out
     assert "\\emph" not in out and "Notation" not in out and "Section 2" not in out, out
+
+
+def test_a_link_whose_result_is_gone_is_reported_broken_and_the_build_goes_on(tmp_path: Path) -> None:
+    """The research state links `sh-0009`; once its environment is no longer declared the key finds only a label, and the page says the link is dead rather than the build failing."""
+    q = showcase(tmp_path)
+    node = q / "drafting" / "nodes" / "sh-0009.tex"
+    node.write_text(node.read_text().replace("{theorem}", "{undeclared}"))
+    exits(1, "build", cwd=q)  # the showcase keeps a duplicate id on purpose
+    state = json.loads((q / ".loom/build" / "manifest.json").read_text())["research_state"]
+    assert [b["href"] for b in state["links"]["broken"]] == ["quilt:sh-0009"]
+    assert state["links"]["moved"] == []

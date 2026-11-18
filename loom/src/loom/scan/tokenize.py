@@ -6,9 +6,10 @@ Yields commands, environment begin/end, groups, math delimiters, verbatim spans,
 from __future__ import annotations
 
 import re
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from dataclasses import dataclass, field
-from functools import lru_cache
+
+from loom.scan.memo import Memo
 
 VERBATIM_ENVS = {"verbatim", "verbatim*", "lstlisting", "comment", "filecontents", "filecontents*"}
 MATH_SINGLE = {"(": "\\(", ")": "\\)", "[": "\\[", "]": "\\]"}
@@ -25,7 +26,7 @@ _SPECIAL = re.compile(
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Tok:
     kind: str  # cmd begin end verb verbatim math open close bopen bclose text
     start: int
@@ -33,20 +34,46 @@ class Tok:
     value: str
 
 
-#: Below this length a text is tokenized again rather than looked up: the converter tokenizes every paragraph, and a cache of those would churn.
+#: The commands an outline keeps: those naming a file the text reads, which with the environment boundaries is all anything reads of a whole file's tokens.
+OUTLINE_CMDS = frozenset(
+    {
+        "input",
+        "include",
+        "nest",
+        "usepackage",
+        "RequirePackage",
+        "documentclass",
+        "LoadClass",
+        "bibliography",
+        "addbibresource",
+        "bibliographystyle",
+        "includegraphics",
+    }
+)
+
+#: Below this length an outline is made again rather than looked up: a cache of every paragraph's would churn.
 CACHED_FROM = 4096
 
 
 def tokenize(text: str) -> list[Tok]:
-    """The text's tokens, in order. A long text's are remembered (`_cached`), since a served quilt scans every file again on every change and most files have not changed."""
-    if len(text) < CACHED_FROM:
-        return _tokenize(text)
-    return list(_cached(text))
+    """Every token of the text, in order, made afresh; `outline` is the part of a whole file's that is read."""
+    return _tokenize(text)
 
 
-@lru_cache(maxsize=256)
-def _cached(text: str) -> tuple[Tok, ...]:
-    return tuple(_tokenize(text))
+def outline(text: str) -> tuple[Tok, ...]:
+    """The text's `begin` and `end` tokens and its commands among `OUTLINE_CMDS`, in order, as `tokenize` finds them: about one token in a hundred of a mathematical text.
+
+    A long text's is remembered while it is in use (`memo.Memo`), since a served quilt scans every file again on every change and most files have not changed.
+    """
+    return _outline(text) if len(text) < CACHED_FROM else _outlines(text)
+
+
+def commands(text: str, names: Collection[str]) -> Iterator[Tok]:
+    """The text's `cmd` tokens naming one of `names`, in order; each name must be one of `OUTLINE_CMDS`."""
+    unkept = set(names) - OUTLINE_CMDS
+    if unkept:
+        raise ValueError(f"an outline keeps no {', '.join(sorted(unkept))}")
+    return (t for t in outline(text) if t.kind == "cmd" and t.value in names)
 
 
 def _tokenize(text: str) -> list[Tok]:
@@ -100,6 +127,15 @@ def _tokenize(text: str) -> list[Tok]:
             toks.append(Tok(kind, m.start(), m.end(), ch))
         pos = m.end()
     return toks
+
+
+def _outline(text: str) -> tuple[Tok, ...]:
+    return tuple(
+        t for t in _tokenize(text) if t.kind in ("begin", "end") or t.kind == "cmd" and t.value in OUTLINE_CMDS
+    )
+
+
+_outlines: Memo[str, tuple[Tok, ...]] = Memo(_outline)
 
 
 def match_group(text: str, pos: int, open_ch: str = "{", close_ch: str = "}") -> int:
@@ -185,7 +221,7 @@ def env_tree(text: str) -> tuple[list[EnvNode], list[tuple[str, int, str]]]:
     roots: list[EnvNode] = []
     stack: list[EnvNode] = []
     problems: list[tuple[str, int, str]] = []
-    for t in tokenize(text):
+    for t in outline(text):
         if t.kind == "begin":
             optarg, s, e, body = read_optional(text, t.end)
             node = EnvNode(t.value, t.start, -1, body, -1, optarg, (s, e) if optarg is not None else None)
