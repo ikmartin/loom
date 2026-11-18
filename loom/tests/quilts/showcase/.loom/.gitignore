@@ -2,12 +2,14 @@
 build/
 serve.json
 since/
+live/
 last-seen.json
 sessions/*/attached.json
 sessions/*/cursors/
 digests/storage/**/paper.pdf
 digests/storage/**/src/
 digests/storage/cache/
+incoming/
 history/writes.jsonl
 history/writes-index.json
 history/writes.lock

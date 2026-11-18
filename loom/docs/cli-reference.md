@@ -528,17 +528,18 @@ A WORK is a citekey, its identifier (`doi:…`, `arXiv:…`), a fragment of a ci
 
 `loom library add [OPTIONS] FILE...`
 
-Keep PDFs and LaTeX sources in loom's store, a PDF whatever is known about it.
+Take PDFs and LaTeX sources into the library, each added, already here, a question, or one that cannot be added.
 
-A FILE is a PDF, a `.tex` file, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. Every PDF is copied into the store. It is filed under an entry on a strong match: an identifier on its first pages equals the entry's, or its whole title is the entry's and the entry's first author leads its byline or its file name. Any other PDF becomes a work of its own, its entry made from what it shows: its file name, its document information, its first page. A lookup of the identifier it states, where the network is allowed, only adds to that entry. With `--for`, every FILE is that work's: a PDF is taken at your word, and what it shows to the contrary is reported and recorded. A LaTeX source is filed only on a strong match, skipped with its reason otherwise, and with `--for` refused when it shows it is another work's unless `--force`. A work that holds a document gets the new one beside it under a sibling entry, never over it, unless it is a copy of one of the work's documents: it states that version's identifier, or its title, byline and page count are that document's. A copy is recorded in the ledger and not filed. A PDF's page text is written at once.
+A FILE is a PDF, a `.tex` file, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. A PDF that may be a work the library has (the identifier it states as its own is that work's, its whole title is set over that work's first author, a reference manager's file name says so, or the entry it makes of itself shares the work's identifier, or title and year) is filed nowhere: the question names the work, `--for WORK` files it there and `--new` keeps it as a work of its own. Any other PDF is kept as a work of its own, its entry made from what it shows and keyed as its author, title and year give it. With `--for`, every FILE is that work's on your word, and what a PDF shows to the contrary is reported and recorded. A LaTeX source is filed only with `--for`, and refused when it shows it is another work's unless `--force`. A work that holds a document gets the new one beside it as its version (`KEY-v2`), never over it, however like that document it looks. Only the same bytes given twice are already here. A PDF's page text is read at once.
 
 | option | description |
 |---|---|
-| `--for` `WORK` | The work every FILE is, which is taken at your word for a PDF; without it each is matched to the bibliography by what it shows. |
+| `--for` `WORK` | The work every FILE is: a PDF is filed under it on your word, and what it shows to the contrary is reported and recorded. |
+| `--new` | Keep every PDF as a work of its own, whatever work it may be. |
 | `--force` | With --for, file a LaTeX source that shows it is another work; the override is recorded. |
 | `--online` | Allow this run to look up the identifier a PDF states, over `[library] online`. |
 | `--as` `NAME` | Who is filing, when the user config and git do not say. |
-| `--dry-run` | Say what would be filed, skipped and refused, and write nothing. |
+| `--dry-run` | Say what would be added, asked and refused, and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -947,11 +948,12 @@ The viewer tab they touched last reports it to `loom serve`, which keeps it in m
 
 Report what people did since you last looked, and move your marker past it.
 
-People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name, and kept on this machine only.
+People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
 
 | option | description |
 |---|---|
 | `--as` | Who is looking. An agent names itself, including Agent or AI. |
+| `--session` `SESSION` | Look as this session, one conversation's: its own marker, whose first look starts where your name's stands. An id, a title, or a unique id suffix. |
 | `--dry-run` | Report, and leave your marker where it was. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -1054,7 +1056,7 @@ The permission files say what agents may run, for Claude Code (.claude/settings.
 | option | description |
 |---|---|
 | `--mcp`, `--shell` | How agents here reach loom: the loom MCP server's tools with loom in a shell beside them, or loom in a shell alone, for an agent with no MCP. Default the way the quilt already uses, else MCP. |
-| `--client` | Print the loom server's entry for this agent app, to add to its settings by hand, and write nothing. |
+| `--client` `APP` | Print the loom server's entry for agent app APP, to add to its settings by hand, and write nothing: claude-code, codex, gemini-cli, cursor. |
 | `--dry-run` | Say what would be written and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |

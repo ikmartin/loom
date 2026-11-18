@@ -1,4 +1,85 @@
 {
+ "agents": {
+  "apps": [
+   {
+    "key": "claude-code",
+    "label": "Claude Code",
+    "set_up": false
+   },
+   {
+    "key": "codex",
+    "label": "Codex",
+    "set_up": false
+   },
+   {
+    "key": "gemini-cli",
+    "label": "Gemini CLI",
+    "set_up": false
+   },
+   {
+    "key": "cursor",
+    "label": "Cursor",
+    "set_up": false
+   }
+  ],
+  "line": "",
+  "modes": [
+   {
+    "edited": false,
+    "fits": "a question asked in passing whose answer is worth finding again — a definition recalled, a step explained, a constant checked (\"what is $W_\\chi$ a subscheme of?\").",
+    "name": "quick",
+    "path": ".loom/ai/modes/quick.md"
+   },
+   {
+    "edited": false,
+    "fits": "a question that wants understanding — definitions, examples, edge cases, what breaks without a hypothesis (\"how does the procedure change if a type is fixed first?\").",
+    "name": "question",
+    "path": ".loom/ai/modes/question.md"
+   },
+   {
+    "edited": false,
+    "fits": "what a result actually uses — which hypotheses are needed, whether a citation covers its use, whether a statement stands alone (\"what are the needed hypotheses on the target?\").",
+    "name": "audit",
+    "path": ".loom/ai/modes/audit.md"
+   },
+   {
+    "edited": false,
+    "fits": "whether the mathematics is right, before anyone relies on it — new or changed mathematics, a computation to check (\"run it through referee\").",
+    "name": "referee",
+    "path": ".loom/ai/modes/referee.md"
+   },
+   {
+    "edited": false,
+    "fits": "improving a text before someone else reads it — errors, citations, wording and clarity, every finding graded, drop-in text for each (\"provide annotations on the document text\").",
+    "name": "review",
+    "path": ".loom/ai/modes/review.md"
+   },
+   {
+    "edited": false,
+    "fits": "shorter text with the same mathematics (\"simplify\", \"tighten this\").",
+    "name": "simplify",
+    "path": ".loom/ai/modes/simplify.md"
+   },
+   {
+    "edited": false,
+    "fits": "reading order and clarity for a named reader, with the same mathematics (\"edit for clarity and flow\", \"write it so it is clear to me\").",
+    "name": "flow",
+    "path": ".loom/ai/modes/flow.md"
+   },
+   {
+    "edited": false,
+    "fits": "new mathematics or text from the author's plan or request (\"implement each example in section 8\", \"restate Section 7 for $M(X,\\tau)$, marking what still needs proof\").",
+    "name": "draft",
+    "path": ".loom/ai/modes/draft.md"
+   },
+   {
+    "edited": false,
+    "fits": "a cited paper to trust or to understand — its digest checked against the paper itself, the results of a paper with no source proposed from its pages, or an overview of what it proves and how.",
+    "name": "ingest",
+    "path": ".loom/ai/modes/ingest.md"
+   }
+  ]
+ },
  "annotation_plain": {
   "color": "yellow",
   "opacity": 60,
@@ -586,12 +667,13 @@
    "version": null
   }
  },
+ "arriving": [],
  "canon": [
   {
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "c5ca44e151690e36fa414438f3b450c4ed076427d50453dec0c629990082f94d",
+   "hash": "88e84608d7f2c5c7ad3ba60cf8520f11835fcf5931b6838c392824caac76d296",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -606,7 +688,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "22e7ef82fc2eb7e0c68533f6c232a981f4cc907f0ff5a2aa4b4dc9086985cc09",
+   "hash": "333efd95145ccebe21d006f5f04ea4c3351ae557f52dc83954c3a2a42c3557ef",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -621,7 +703,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "13bf14da87394d4fa34c9d85abf6a3513eb3ebf763cfeb5263169a83bddead16",
+   "hash": "4107f62d6c5a55ce6fd4ba5f5a918e145a0cc8946b5d83ce29c6b0e02fd67a45",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",

@@ -934,63 +934,6 @@
  {
   "annotations": {
    "destructive_hint": false,
-   "idempotent_hint": false,
-   "open_world_hint": false,
-   "read_only_hint": false
-  },
-  "command": "loom library relate",
-  "description": "Assert a typed relation between two results, FROM and TO, with a reason; with --undo LINK_ID, remove one.\n\n**Nobody verifies this and it says so.** A relation has no page span to check it against, so a verification step would be theatre; it is an assertion, attributed to whoever made it: `--as`, else you as the quilt's reviewer. Relations are never citable, never enter a closure, and are never written into a digest: they are navigation, not mathematics. `loom library why ID` lists a result's relations.",
-  "inputSchema": {
-   "additionalProperties": false,
-   "properties": {
-    "dry_run": {
-     "description": "Check everything and say what would change, writing nothing.",
-     "type": "boolean"
-    },
-    "frm": {
-     "type": "string"
-    },
-    "json": {
-     "description": "Print the report as one JSON object.",
-     "type": "boolean"
-    },
-    "kind": {
-     "description": "How FROM relates to TO; required unless --undo.",
-     "enum": [
-      "contradicts",
-      "depends-on",
-      "generalises",
-      "same-notion",
-      "specialises"
-     ],
-     "type": "string"
-    },
-    "session": {
-     "description": "Log this call to the session.",
-     "type": "string"
-    },
-    "to": {
-     "type": "string"
-    },
-    "undo": {
-     "description": "Remove this relation instead; an agent removes only an agent's.",
-     "type": "string"
-    },
-    "why": {
-     "description": "One or two sentences: what you read six months later, or why a relation is removed.",
-     "type": "string"
-    }
-   },
-   "required": [
-    "why"
-   ],
-   "type": "object"
-  },
-  "name": "loom_library_relate"
- },
- {
-  "annotations": {
-   "destructive_hint": false,
    "idempotent_hint": true,
    "open_world_hint": false,
    "read_only_hint": true
@@ -1452,7 +1395,7 @@
    "read_only_hint": false
   },
   "command": "loom since",
-  "description": "Report what people did since you last looked, and move your marker past it.\n\nPeople's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name, and kept on this machine only.",
+  "description": "Report what people did since you last looked, and move your marker past it.\n\nPeople's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -1463,6 +1406,10 @@
     "json": {
      "description": "Print the report as one JSON object.",
      "type": "boolean"
+    },
+    "session": {
+     "description": "Look as this session, one conversation's: its own marker, whose first look starts where your name's stands. An id, a title, or a unique id suffix.",
+     "type": "string"
     }
    },
    "type": "object"
