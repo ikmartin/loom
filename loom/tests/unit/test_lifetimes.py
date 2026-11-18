@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from loom import lifetimes
 from loom.lifetimes import DAY, FRESH, KEEP_DAYS, built, condemn, drop_preview, sweep
 from loom.paths import (
     ADOPTION_PREVIEWS,
@@ -492,3 +493,84 @@ def test_the_sweep_keeps_clear_of_a_folder_that_holds_the_history_whatever_the_l
         doomed = condemn(q, result, now=time.time() + 30 * DAY)
         assert kept.resolve() not in {p for p, _home in doomed.paths}
     assert stray in {p for p, _home in condemn(q, scan(load_quilt(q)), now=time.time() + DAY).paths}
+
+
+# ---- removal through open folders ---------------------------------------------------------------------------------
+
+
+def _race(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """A built demo with an expired scratch `s-race/d/` holding two files, and outside it a home-like folder holding a file of the second one's name: the quilt, `d`, the home, and the file there that must survive."""
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    home = tmp_path / "home-like"
+    victim = _plant(home / "b-thesis.tex", b"months of work")
+    d = q / SCRATCH / "s-race" / "d"
+    long_ago = time.time() - 30 * DAY
+    _plant(d / "a-first.txt", when=long_ago)
+    _plant(d / "b-thesis.tex", when=long_ago)
+    for p in (d, d.parent):
+        os.utime(p, (long_ago, long_ago))
+    return q, d, home, victim
+
+
+def _swap(d: Path, home: Path) -> None:
+    d.rename(d.parent / "d-real")
+    d.symlink_to(home, target_is_directory=True)
+
+
+def test_a_folder_swapped_for_a_link_before_the_removal_is_not_entered(tmp_path: Path) -> None:
+    q, d, home, victim = _race(tmp_path)
+    doomed = condemn(q, scan(load_quilt(q)), now=time.time())
+    _swap(d, home)
+    swept = doomed.remove()
+    assert victim.read_bytes() == b"months of work" and swept.failed >= 1
+
+
+def test_a_folder_swapped_for_a_link_between_two_removals_in_it_is_not_entered(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second name is removed in the folder the sweep opened, wherever that folder now is, and never through the link."""
+    q, d, home, victim = _race(tmp_path)
+    doomed = condemn(q, scan(load_quilt(q)), now=time.time())
+    real = os.unlink
+
+    def racing(path: object, *a: object, **kw: object) -> None:
+        real(path, *a, **kw)  # type: ignore[arg-type]
+        if str(path).endswith("a-first.txt"):
+            _swap(d, home)
+
+    monkeypatch.setattr(lifetimes.os, "unlink", racing)
+    doomed.remove()
+    assert victim.read_bytes() == b"months of work"
+
+
+def test_what_changed_after_the_look_is_left(tmp_path: Path) -> None:
+    """A file touched, or a picture a page named again, between finding what goes and removing it stays."""
+    from loom.render.assets import publish_picture
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    touched = _plant(q / CACHE / "site/compare/0123.html", when=time.time() - 20 * DAY)
+    picture = _plant(tmp_path / "drawn.svg", b"<svg/>")
+    reused = q / CACHE / "site" / publish_picture(picture, q / CACHE / "site/svg")
+    os.utime(reused, (OLD, OLD))
+    untouched = _plant(q / CACHE / "blocks/snippets/0123.html")
+    doomed = condemn(q, scan(load_quilt(q)), now=time.time())
+    assert {touched.resolve(), reused.resolve(), untouched.resolve()} <= {p for p, _home in doomed.paths}
+    os.utime(touched)
+    publish_picture(picture, q / CACHE / "site/svg")
+    swept = doomed.remove()
+    assert touched.is_file() and reused.is_file() and not untouched.exists() and swept.changed >= 2
+
+
+def test_a_system_that_cannot_remove_through_a_folder_removes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    stray = _plant(q / CACHE / "blocks/snippets/0123.html")
+    monkeypatch.setattr(lifetimes, "CAN_REMOVE", False)
+    swept = sweep(q, scan(load_quilt(q)))
+    assert (
+        stray.is_file() and swept.said() == "removed nothing: this system cannot remove a file through an open folder"
+    )

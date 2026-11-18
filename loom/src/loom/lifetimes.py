@@ -8,6 +8,7 @@ Every removal is of a path resolved and shown to lie in one of `SWEPT`, never th
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
 import re
@@ -157,53 +158,131 @@ def built(root: Path, index: BuildIndex | None = None) -> set[str]:
 
 @dataclass
 class Swept:
-    """What one sweep removed: files and links, the bytes they held, folders left empty, and removals that failed."""
+    """What one sweep removed: files and links, the bytes they held, folders left empty; what it left because it changed since the sweep looked; removals that failed; and whether this system could remove at all (`CAN_REMOVE`)."""
 
     files: int = 0
     freed: int = 0
     folders: int = 0
+    changed: int = 0
     failed: int = 0
+    unable: bool = False
 
     def said(self) -> str:
         """One line for a log; '' when nothing was removed or failed."""
+        if self.unable:
+            return "removed nothing: this system cannot remove a file through an open folder"
         if not self.files and not self.failed:
             return ""
         out = f"removed {self.files} file{'s' if self.files != 1 else ''} ({readable(self.freed)})"
         return out + (f"; {self.failed} could not be removed" if self.failed else "")
 
 
-def _own(root: Path, rel: str) -> Path | None:
-    """`root / rel` resolved, when it is that folder itself: None when a link on the way leads anywhere else, or it is not a folder."""
+#: Whether this system removes a file by its name in an open folder, opening each folder without following a link, which is the only way the sweep removes anything.
+CAN_REMOVE = (
+    {os.open, os.stat, os.unlink, os.rmdir} <= os.supports_dir_fd
+    and os.stat in os.supports_follow_symlinks
+    and hasattr(os, "O_NOFOLLOW")
+    and hasattr(os, "O_DIRECTORY")
+)
+_OPEN = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_CLOEXEC", 0)
+
+
+@dataclass(frozen=True)
+class Home:
+    """A folder the sweep removes in, as `_own` found it: its resolved path, and its device and inode, which the folder opened at removal must still have."""
+
+    path: Path
+    dev: int
+    ino: int
+
+
+def _own(root: Path, rel: str) -> Home | None:
+    """`root / rel`, resolved, when it is that folder itself: None when a link on the way leads anywhere else, or it is not a folder."""
     there = root / rel
     try:
         real = Path(os.path.realpath(there))
         if real != Path(os.path.realpath(root)) / rel or not there.is_dir() or there.is_symlink():
             return None
+        st = os.stat(real, follow_symlinks=False)
     except OSError:
         return None
-    return real
+    return Home(real, st.st_dev, st.st_ino)
 
 
-def _remove(path: Path, home: Path, swept: Swept, real: dict[Path, Path] | None = None) -> None:
-    """Remove the file, link or empty folder at `path`, once its folder is resolved and shown to lie in `home` (one of `SWEPT`, resolved by `_own`); a link is removed itself, never followed. `real` keeps each folder as resolved, for a caller removing many files in few folders."""
+@dataclass(frozen=True)
+class Doom:
+    """One thing a sweep removes: its home, its path's parts below the home, and the inode and modification time the sweep saw, without which it is left."""
+
+    home: Home
+    parts: tuple[str, ...]
+    ino: int
+    mtime_ns: int
+    folder: bool
+
+    @property
+    def path(self) -> Path:
+        return self.home.path.joinpath(*self.parts)
+
+
+def _remove_in(home: Home, dooms: list[Doom], swept: Swept) -> None:
+    """Remove `dooms`, all in `home`, each by its name in its folder opened one component at a time from the home without following a link, so that a folder swapped for a link is never entered: one folder's chain is open at a time. What has changed since the sweep looked is left (`Swept.changed`); a folder on the way that is gone or became a link counts as failed."""
     try:
-        real = {} if real is None else real
-        if path.parent not in real:
-            real[path.parent] = Path(os.path.realpath(path.parent))
-        where = real[path.parent] / path.name
-        if where == home or not where.is_relative_to(home):
-            swept.failed += 1
+        top = os.open(home.path, _OPEN)
+    except OSError:
+        swept.failed += len(dooms)
+        return
+    chain: list[tuple[str, int]] = []
+    try:
+        st = os.fstat(top)
+        if (st.st_dev, st.st_ino) != (home.dev, home.ino):
+            swept.failed += len(dooms)
             return
-        st = where.lstat()
-        if stat.S_ISDIR(st.st_mode):
-            os.rmdir(where)
-            swept.folders += 1
-            return
-        os.unlink(where)
-        swept.files += 1
-        swept.freed += st.st_size
+        for doom in dooms:
+            folders, name = doom.parts[:-1], doom.parts[-1]
+            same = 0
+            while same < min(len(chain), len(folders)) and chain[same][0] == folders[same]:
+                same += 1
+            while len(chain) > same:
+                os.close(chain.pop()[1])
+            try:
+                for part in folders[same:]:
+                    chain.append((part, os.open(part, _OPEN, dir_fd=chain[-1][1] if chain else top)))
+            except OSError:
+                swept.failed += 1
+                continue
+            _remove_one(chain[-1][1] if chain else top, name, doom, swept)
+    finally:
+        for _part, fd in chain:
+            os.close(fd)
+        os.close(top)
+
+
+def _remove_one(at: int, name: str, doom: Doom, swept: Swept) -> None:
+    """Remove `name` in the open folder `at` when it is still what the sweep saw: the same inode, and for a file the same modification time."""
+    try:
+        st = os.stat(name, dir_fd=at, follow_symlinks=False)
+    except FileNotFoundError:
+        return
     except OSError:
         swept.failed += 1
+        return
+    is_dir = stat.S_ISDIR(st.st_mode)
+    if st.st_ino != doom.ino or is_dir != doom.folder or (not is_dir and st.st_mtime_ns != doom.mtime_ns):
+        swept.changed += 1
+        return
+    try:
+        if is_dir:
+            os.rmdir(name, dir_fd=at)
+            swept.folders += 1
+        else:
+            os.unlink(name, dir_fd=at)
+            swept.files += 1
+            swept.freed += st.st_size
+    except OSError as exc:
+        if is_dir and exc.errno in (errno.ENOTEMPTY, errno.EEXIST):
+            swept.changed += 1
+        else:
+            swept.failed += 1
 
 
 def _walk(folder: Path) -> Iterator[tuple[Path, os.stat_result, bool]]:
@@ -371,9 +450,11 @@ class _Rules:
 _SVG = re.compile(r"svg/([0-9a-f]{16}\.[A-Za-z0-9]+)")
 
 
-def _doomed(folder: Path, rel: str, goes: Callable[[str, os.stat_result, bool], bool]) -> tuple[list[Path], bool]:
-    """What under `folder` (at `rel` in its home) `goes` condemns, a folder after what it holds, and whether all of it goes; `goes` judges a folder only once all it holds goes, and no link is followed."""
-    out: list[Path] = []
+def _doomed(
+    folder: Path, rel: str, goes: Callable[[str, os.stat_result, bool], bool]
+) -> tuple[list[tuple[Path, os.stat_result]], bool]:
+    """What under `folder` (at `rel` in its home) `goes` condemns, each with what the look saw of it, a folder after what it holds, and whether all of it goes; `goes` judges a folder only once all it holds goes, and no link is followed."""
+    out: list[tuple[Path, os.stat_result]] = []
     whole = True
     try:
         entries = [] if folder.is_symlink() else list(os.scandir(folder))
@@ -390,11 +471,11 @@ def _doomed(folder: Path, rel: str, goes: Callable[[str, os.stat_result, bool], 
             under, all_of_it = _doomed(Path(entry.path), here, goes)
             out += under
             if all_of_it and goes(here, st, True):
-                out.append(Path(entry.path))
+                out.append((Path(entry.path), st))
             else:
                 whole = False
         elif goes(here, st, False):
-            out.append(Path(entry.path))
+            out.append((Path(entry.path), st))
         else:
             whole = False
     return out, whole
@@ -402,33 +483,48 @@ def _doomed(folder: Path, rel: str, goes: Callable[[str, os.stat_result, bool], 
 
 @dataclass
 class Doomed:
-    """What a sweep will remove, each path with the folder of `SWEPT` it was shown to lie in, in the order it goes: a folder after what it holds."""
+    """What a sweep will remove, in the order it goes, a folder after what it holds; `stale` when the cache was not looked at because the index on disk is not the build's own."""
 
-    paths: list[tuple[Path, Path]] = field(default_factory=list)
+    dooms: list[Doom] = field(default_factory=list)
+    stale: bool = False
 
-    def add(self, home: Path, paths: Iterable[Path]) -> None:
-        self.paths += [(p, home) for p in paths]
+    @property
+    def paths(self) -> list[tuple[Path, Path]]:
+        """Each path that goes, with its home's."""
+        return [(d.path, d.home.path) for d in self.dooms]
+
+    def add(self, home: Home, found: Iterable[tuple[Path, os.stat_result]]) -> None:
+        for path, st in found:
+            parts = path.relative_to(home.path).parts
+            self.dooms.append(Doom(home, parts, st.st_ino, st.st_mtime_ns, stat.S_ISDIR(st.st_mode)))
 
     def remove(self, swept: Swept | None = None) -> Swept:
-        """Remove each, a failure stopping nothing, adding to `swept` when given."""
+        """Remove each through its open folder (`_remove_in`), a failure stopping nothing, adding to `swept` when given; on a system that cannot (`CAN_REMOVE`), nothing."""
         swept = Swept() if swept is None else swept
-        real: dict[Path, Path] = {}
-        for path, home in self.paths:
-            _remove(path, home, swept, real)
+        if not CAN_REMOVE:
+            swept.unable = True
+            return swept
+        start = 0
+        while start < len(self.dooms):
+            end = start
+            while end < len(self.dooms) and self.dooms[end].home == self.dooms[start].home:
+                end += 1
+            _remove_in(self.dooms[start].home, self.dooms[start:end], swept)
+            start = end
         return swept
 
     def parts(self, size: int = 1000) -> Iterator[Doomed]:
         """What goes in parts of `size`, in order, so that a caller holding a lock takes it for one part at a time."""
-        for i in range(0, len(self.paths), size):
-            yield Doomed(self.paths[i : i + size])
+        for i in range(0, len(self.dooms), size):
+            yield Doomed(self.dooms[i : i + size])
 
 
-def _holds(home: Path | None, result: Any) -> bool:
+def _holds(home: Home | None, result: Any) -> bool:
     """Whether `home`, a folder the sweep removes in, is or holds the quilt's history, which the loader refuses (`scan.quilt.removed_in`) and the sweep keeps clear of whatever the loader did."""
     if home is None:
         return False
     history = Path(os.path.realpath(result.quilt.history_dir))
-    return history == home or history.is_relative_to(home)
+    return history == home.path or history.is_relative_to(home.path)
 
 
 def _cache(root: Path, result: Any, now: float, doomed: Doomed) -> None:
@@ -445,7 +541,7 @@ def _cache(root: Path, result: Any, now: float, doomed: Doomed) -> None:
             return "/" in rel and rel not in _FOLDERS and now - st.st_mtime >= FRESH
         return not rules.keeps(rel, st.st_mtime)
 
-    doomed.add(home, _doomed(home, "", goes)[0])
+    doomed.add(home, _doomed(home.path, "", goes)[0])
 
 
 # ---- the scratch and the saved previews ---------------------------------------------------------------------------------
@@ -472,7 +568,7 @@ def _scratch(root: Path, result: Any, now: float, doomed: Doomed) -> None:
         return
     since = now - KEEP_DAYS * DAY
     try:
-        entries = list(os.scandir(home))
+        entries = list(os.scandir(home.path))
     except OSError:
         return
     for entry in entries:
@@ -482,7 +578,11 @@ def _scratch(root: Path, result: Any, now: float, doomed: Doomed) -> None:
             continue
         if _written_since(root, entry.name, since):
             continue
-        doomed.add(home, [*(p for p, _st, _d in _walk(path)), path])
+        try:
+            itself = entry.stat(follow_symlinks=False)
+        except OSError:
+            continue
+        doomed.add(home, [*((p, st) for p, st, _d in _walk(path)), (path, itself)])
 
 
 def _previews(root: Path, result: Any, now: float, doomed: Doomed) -> None:
@@ -491,14 +591,23 @@ def _previews(root: Path, result: Any, now: float, doomed: Doomed) -> None:
     for rel in (ADOPTION_PREVIEWS, INCORPORATION_PREVIEWS):
         home = _own(root, rel)
         if home is not None and not _holds(home, result):
-            doomed.add(home, [p for p, st, is_dir in _walk(home) if not is_dir and st.st_mtime <= since])
+            doomed.add(home, [(p, st) for p, st, is_dir in _walk(home.path) if not is_dir and st.st_mtime <= since])
 
 
 def drop_preview(root: Path, rel: str, token: str) -> None:
     """Remove the saved preview `token` from `rel`, `ADOPTION_PREVIEWS` or `INCORPORATION_PREVIEWS`: it has been applied."""
     home = _own(root, rel) if rel in (ADOPTION_PREVIEWS, INCORPORATION_PREVIEWS) else None
-    if home is not None and re.fullmatch(r"[0-9a-f]{64}", token) and (home / f"{token}.json").is_file():
-        _remove(home / f"{token}.json", home, Swept())
+    if home is None or not re.fullmatch(r"[0-9a-f]{64}", token):
+        return
+    path = home.path / f"{token}.json"
+    try:
+        st = path.lstat()
+    except OSError:
+        return
+    if stat.S_ISREG(st.st_mode):
+        doomed = Doomed()
+        doomed.add(home, [(path, st)])
+        doomed.remove()
 
 
 def condemn(root: Path, result: Any, *, now: float | None = None) -> Doomed:
