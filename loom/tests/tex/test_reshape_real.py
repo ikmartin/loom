@@ -137,7 +137,7 @@ def test_deloom_gives_back_the_paper_as_received(once: Once, tmp_path: Path) -> 
     q = copy(atomized(once)[0], tmp_path / "q")
     r = ok("deloom", "main/spine.tex", "--to", ".loom/agents/scratch/s/plain.tex", cwd=q)
     assert r.output.startswith("wrote .loom/agents/scratch/s/plain.tex") and "kept" not in r.output
-    plain = (q / ".loom/cache/site" / "plain.tex").read_text()
+    plain = (q / ".loom/agents/scratch/s" / "plain.tex").read_text()
     assert "pp-" not in plain and "\\input{nodes/" not in plain and "{loom}" not in plain
     res = identity_test(q, "main/spine.tex", q, ".loom/agents/scratch/s/plain.tex", tmp_path / "scratch", base="main")
     assert res.passed, res.summary()
