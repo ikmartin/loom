@@ -1,4 +1,4 @@
-// Diagnostics as Review › Problems reads them: whose each is to fix, what is wrong in words, and where to open it. Unknown codes are titled by their message; nothing here fails on a code it has never seen.
+// Diagnostics as Review › Problems reads them: which a person is shown, whose each is to fix, what is wrong in words, and where to open it. Unknown codes are titled by their message; nothing here fails on a code it has never seen.
 import type { Diagnostic, Fix, Manifest } from './manifest/types';
 import { keyTarget, placeUrl } from './nav';
 import { pathFor } from './workspace/item';
@@ -8,6 +8,18 @@ export type Owner = 'person' | 'copy' | 'work';
 
 export function ownerOf(d: Diagnostic): Owner {
 	return d.owner === 'copy' ? 'copy' : d.owner === 'work' ? 'work' : 'person';
+}
+
+/** What kind of problem a diagnostic is: in a document's LaTeX, in loom's model of the quilt, or loom's own difficulty. A publisher that does not say, or says what this viewer does not know, makes it the person's LaTeX, so nothing it reports goes unseen. */
+export type Class = 'latex' | 'model' | 'internal';
+
+export function classOf(d: Pick<Diagnostic, 'class'>): Class {
+	return d.class === 'model' ? 'model' : d.class === 'internal' ? 'internal' : 'latex';
+}
+
+/** What a person is shown of `items`: the problems in a document's LaTeX, one that did not compile among them, their own and an agent's copy's. Loom's model and its own difficulties are an agent's, which `loom lint` lists; the manifest keeps every one. */
+export function forPerson(items: Diagnostic[]): Diagnostic[] {
+	return items.filter((d) => classOf(d) === 'latex');
 }
 
 /** What each code says is wrong, in words, by the code's name after any publisher's namespace (`ns:name`), so the table names no publisher; `name severity` where one code says two things. Two codes that say one thing share a title, and so a group. */
@@ -81,7 +93,9 @@ const TITLES: Record<string, string> = {
 	'plain-id-in-agent-document': "A plain id in an agent's copy",
 	'agent-permissions-stale': "Claude Code's permissions are out of date",
 	'home-missing': 'The home page is missing',
-	'document-gone': 'A document is gone'
+	'document-gone': 'A document is gone',
+	'compile-failed': 'A document did not compile',
+	'compile-errors': 'A document compiled with errors'
 };
 
 /** What `d` says is wrong: its code's title at its severity, else its code's, else its message. */
@@ -133,9 +147,9 @@ export function partsOf(items: Diagnostic[]): Parts {
 	return out;
 }
 
-/** The person's errors and warnings: what Problems counts. */
+/** The errors and warnings in the person's own LaTeX: what Problems counts. */
 export function yoursCount(m: Pick<Manifest, 'diagnostics'>): number {
-	return partsOf(m.diagnostics).yours.length;
+	return partsOf(forPerson(m.diagnostics)).yours.length;
 }
 
 /** The work a cited work's diagnostic is about: the work its fix digests again, else its results' digest, else the digest its location is in, else '' when it says none. */
@@ -175,7 +189,7 @@ export function lineUrl(m: Manifest, path: string, line: number): string {
 	return pathFor(m, { kind: 'file', id: path, anchor: `L${line}` });
 }
 
-/** The fixes a viewer acts on itself, by the endpoint each names, and those it offers as a command to copy. */
+/** The fixes a viewer acts on itself, by the endpoint each names, and the rest, each a command an agent runs, which a person is never shown. */
 export function splitFixes(d: Diagnostic): { acts: Fix[]; commands: Fix[] } {
 	const fixes = d.fixes ?? [];
 	return { acts: fixes.filter((f) => f.act), commands: fixes.filter((f) => !f.act) };

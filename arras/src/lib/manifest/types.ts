@@ -555,6 +555,8 @@ export interface Diagnostic {
   subject?: "source" | "record" | (string & {});
   /** Whose it is to fix: the person's, an agent's copy's, or a cited work's, whose digest loom wrote. Absent means the person's. */
   owner?: "person" | "copy" | "work" | (string & {});
+  /** What kind of problem it is: in a document's LaTeX, a failed compile among them; in loom's model of the quilt, an agent's to keep; or loom's own difficulty. Absent means a document's LaTeX. */
+  class?: "latex" | "model" | "internal" | (string & {});
 }
 
 export interface Taxon {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byWork, groupProblems, ownerOf, partsOf, splitFixes, titleOf, workOf } from './diagnostics';
+import { byWork, classOf, forPerson, groupProblems, ownerOf, partsOf, splitFixes, titleOf, workOf, yoursCount } from './diagnostics';
 import type { Diagnostic, Manifest } from './manifest/types';
 
 const d = (code: string, more: Partial<Diagnostic> = {}): Diagnostic => ({ severity: 'error', code, message: `${code} said`, locations: [], keys: [], ...more });
@@ -10,6 +10,28 @@ describe('Problems', () => {
 		expect(ownerOf(d('dangling-link', { owner: 'copy' }))).toBe('copy');
 		expect(ownerOf(d('dangling-link', { owner: 'work' }))).toBe('work');
 		expect(ownerOf(d('dangling-link', { owner: 'someone new' }))).toBe('person');
+	});
+
+	it("shows a person the problems in their own LaTeX alone, and leaves loom's model and its own difficulties in the manifest", () => {
+		expect([classOf(d('a')), classOf(d('a', { class: 'model' })), classOf(d('a', { class: 'internal' })), classOf(d('a', { class: 'someday' }))]).toEqual(['latex', 'model', 'internal', 'latex']);
+		const items = [
+			d('loom:compile-failed', { class: 'latex' }),
+			d('loom:unattached-proof', { class: 'model', severity: 'warning' }),
+			d('loom:history-corrupt', { class: 'internal' }),
+			d('duplicate-id', { class: 'model', severity: 'warning' }),
+			d('duplicate-id', { class: 'latex' }),
+			d('other:said-nothing')
+		];
+		expect(forPerson(items).map((x) => [x.code, x.class ?? '-'])).toEqual([
+			['loom:compile-failed', 'latex'],
+			['duplicate-id', 'latex'],
+			['other:said-nothing', '-']
+		]);
+		// Review counts the person's errors and warnings in their LaTeX, and the manifest still holds every one
+		const m = { diagnostics: [...items, d('loom:compile-errors', { class: 'latex', owner: 'copy' }), d('dangling-link', { class: 'latex', severity: 'info' })] };
+		expect(yoursCount(m)).toBe(3);
+		expect(m.diagnostics.map((x) => x.code)).toContain('loom:unattached-proof');
+		expect([titleOf(d('loom:compile-failed')), titleOf(d('loom:compile-errors'))]).toEqual(['A document did not compile', 'A document compiled with errors']);
 	});
 
 	it("puts the person's errors and warnings first and every remark apart, whoever's it is", () => {

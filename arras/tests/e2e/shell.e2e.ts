@@ -135,8 +135,8 @@ test('no route reaches an unknown key from review or the problems page', async (
 	await expect(page.getByTestId('review-panel')).toBeVisible();
 	for (const start of ['/review/problems']) {
 		await page.goto(start);
-		await expect(page.locator('main a[href^="/node/"]').first()).toBeAttached();
-		const hrefs = await page.locator('main a[href^="/node/"]').evaluateAll((els) => [...new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href')!))]);
+		await expect(page.locator('main [data-testid="problem-open"]').first()).toBeAttached();
+		const hrefs = await page.locator('main [data-testid="problem-open"], main a[href^="/node/"]').evaluateAll((els) => [...new Set(els.map((e) => (e as HTMLAnchorElement).getAttribute('href')!))]);
 		expect(hrefs.length).toBeGreaterThan(0);
 		for (const href of hrefs) {
 			await page.goto(href.split('#')[0]);

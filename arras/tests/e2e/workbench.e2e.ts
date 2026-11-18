@@ -39,16 +39,22 @@ test('the corpus is named by the project, not by its directory', async ({ page }
 });
 
 test('a doubly defined id has no text, and says where both definitions are', async ({ page }) => {
-	await page.goto('/review/problems?code=duplicate-id');
-	const item = page.getByTestId('problem-group').getByTestId('problem').first();
-	await expect(item).toContainText('is defined by');
-	const key = (manifest.diagnostics as { code: string; keys: string[] }[]).find((d) => d.code === 'duplicate-id')!.keys[0];
-	await page.goto('/node/' + key);
+	// defined in two documents, which LaTeX accepts: loom's model, so the node says it and Problems does not
+	const dup = (manifest.diagnostics as { code: string; class: string; keys: string[] }[]).find((d) => d.code === 'duplicate-id')!;
+	expect(dup.class).toBe('model');
+	await page.goto('/node/' + dup.keys[0]);
 	const conflicted = page.getByTestId('conflicted');
 	await expect(conflicted).toContainText('Defined twice, in');
 	await expect(conflicted.locator('code')).toHaveCount(2);
-	await expect(conflicted.getByRole('link', { name: 'problems' })).toBeVisible();
+	await expect(conflicted.getByRole('link', { name: 'problems' })).toHaveCount(0);
 	await expect(page.locator('.fragment')).toHaveCount(0);
+	await page.goto('/review/problems?code=duplicate-id');
+	await expect(page.getByTestId('problem')).toHaveCount(0);
+	// read twice by one document's compile, it is the person's LaTeX, and the node points at Problems, where it is
+	await serve(page, (m) => void m.diagnostics.forEach((d: { code: string; class: string; severity: string }) => d.code === 'duplicate-id' && Object.assign(d, { class: 'latex', severity: 'error' })));
+	await page.goto('/node/' + dup.keys[0]);
+	await page.getByTestId('conflicted').getByRole('link', { name: 'problems' }).click();
+	await expect(page.getByTestId('problem-group').getByTestId('problem').first()).toContainText('is defined by');
 });
 
 test('without working documents, document views point at landmarks and the graph keeps the corpus', async ({ page }) => {
