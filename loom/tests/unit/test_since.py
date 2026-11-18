@@ -323,3 +323,11 @@ def test_a_session_that_has_not_looked_for_fourteen_days_holds_no_notice(q: Path
     assert [a["id"] for a in look(q, "--session", one)["acts"]] == [gap]
     assert [e for e in deletions(q) if e.get("to") == AGENT] == []
 
+
+def test_an_agent_that_opens_a_session_and_then_looks_sees_what_came_before(q: Path) -> None:
+    """In a shell: `session new` makes the agent's session active, and its first look still opens where it would have, had it come first."""
+    ok("annotate", "dm-0003", "Please look at this first.", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    ok("session", "new", "--name", "working on dm-0003", "--as", AGENT, cwd=q)
+    got = look(q)
+    assert got["first"] is True and [a["body"] for a in got["annotations"]] == ["Please look at this first."]

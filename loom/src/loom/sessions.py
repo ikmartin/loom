@@ -51,6 +51,10 @@ class Session:
     purpose: str = ""
     #: The agent app's id for the conversation the session was made for (`for_conversation`); empty for one a person or an agent opened by name.
     conversation: str = ""
+    #: Who opened it, as the `created` event names them.
+    who: str = ""
+    #: The session that was active when this one was opened and made active in its place; empty where none was, or it was not made active.
+    replaced: str = ""
 
     @property
     def last_opened(self) -> str:
@@ -118,6 +122,8 @@ def sessions(root: Path, *, deleted: bool = False) -> dict[str, Session]:
                 rounds=[Round(opened=when)],
                 purpose=str(e.get("purpose", "")),
                 conversation=str(e.get("conversation", "")),
+                who=str(e.get("who", "")),
+                replaced=str(e.get("replaced", "")),
             )
             continue
         s = out.get(sid)
@@ -148,7 +154,9 @@ def next_id(root: Path, date: str) -> str:
     return draw(f"s-{date}-", {str(e["id"]) for e in load_events(root)})
 
 
-def create(root: Path, title: str, who: str, *, purpose: str = "", conversation: str = "") -> Session:
+def create(
+    root: Path, title: str, who: str, *, purpose: str = "", conversation: str = "", replaced: str = ""
+) -> Session:
     """Mint a session and return it; the directory is not made until something is written into it.
 
     Parameters
@@ -163,6 +171,8 @@ def create(root: Path, title: str, who: str, *, purpose: str = "", conversation:
         What the sitting is for; shown under the title and changed later with `purposed`.
     conversation : str, default ''
         The agent app's id for the conversation it is made for, which `for_conversation` finds it by.
+    replaced : str, default ''
+        The session that was active, where this one is made active in its place; `loom since` opens an agent's first look there when the agent made this one.
 
     Returns
     -------
@@ -176,7 +186,8 @@ def create(root: Path, title: str, who: str, *, purpose: str = "", conversation:
             root,
             {"event": "created", "id": sid, "title": title, "who": who, "when": when}
             | ({"purpose": purpose} if purpose else {})
-            | ({"conversation": conversation} if conversation else {}),
+            | ({"conversation": conversation} if conversation else {})
+            | ({"replaced": replaced} if replaced else {}),
         )
     return sessions(root)[sid]
 

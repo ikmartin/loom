@@ -159,3 +159,13 @@ def _until(look: Callable[[], Any]) -> Any:
             return got
         time.sleep(0.01)
     raise AssertionError("waited in vain")
+
+
+def test_a_conversation_that_opens_a_session_first_still_sees_what_came_before(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    ok("annotate", "dm-0010", "Please look at this before anything else", "--type", "question", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    with AgentServer(q, "Claude Code Agent", env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_new", {"name": "Work on dm-0010"})
+        assert "Please look at this before anything else" in server.call("loom_since")["content"][0]["text"]
