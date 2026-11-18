@@ -26,7 +26,13 @@ def data_dir() -> Path:
 
 
 def unpacked() -> Path:
-    """Where a self-unpacking tool a TeX run starts unpacks, `UNPACKED` in `data_dir`, made if it is not there: a tool given a folder it cannot write unpacks again elsewhere."""
+    """The machine's one folder for a tool a TeX run starts that unpacks itself, `biber`: `UNPACKED` in `data_dir`, made if it is not there.
+
+    Returns
+    -------
+    Path
+        The folder, whether or not it could be made; a tool that cannot write it unpacks in its temporary folder.
+    """
     p = data_dir() / UNPACKED
     try:
         p.mkdir(parents=True, exist_ok=True)

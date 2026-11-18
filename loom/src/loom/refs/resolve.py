@@ -199,14 +199,38 @@ def http_get(url: str, headers: dict[str, str]) -> bytes:
 
 
 def zbmath_url(q: Query) -> str:
-    """The zbMATH Open request for `q`."""
+    """The zbMATH Open request for a query.
+
+    Parameters
+    ----------
+    q : Query
+        The entry's title, surnames and year (`query_for`).
+
+    Returns
+    -------
+    str
+        The URL asked.
+    """
     terms = [f"ti:{q.title}"] + ([f"au:{q.surnames[0]}"] if q.surnames else [])
     params = {"search_string": " & ".join(terms), "page": "0", "results_per_page": "5"}
     return ZBMATH + "?" + urllib.parse.urlencode(params)
 
 
 def crossref_url(q: Query, contact: str = "") -> str:
-    """The Crossref request for `q`, sent with `contact` as `mailto` when it is set."""
+    """The Crossref request for a query.
+
+    Parameters
+    ----------
+    q : Query
+        The entry's title, surnames and year (`query_for`).
+    contact : str, default ''
+        Sent as `mailto` when set.
+
+    Returns
+    -------
+    str
+        The URL asked.
+    """
     params = {"query.bibliographic": q.bibliographic, "rows": "5", "select": "DOI,title,author,issued"}
     if contact:
         params["mailto"] = contact
@@ -214,12 +238,36 @@ def crossref_url(q: Query, contact: str = "") -> str:
 
 
 def answer_name(url: str) -> str:
-    """The file a request's answer is kept in, in the resolver's cache."""
+    """The file a request's answer is kept in, in the resolver's cache.
+
+    Parameters
+    ----------
+    url : str
+        The request.
+
+    Returns
+    -------
+    str
+        The file's name: 24 hex digits of its SHA-256 and `.json`.
+    """
     return hashlib.sha256(url.encode("utf-8")).hexdigest()[:24] + ".json"
 
 
 def answer_names(entry: BibEntry, contact: str = "") -> set[str]:
-    """The files the answers of an entry's lookups are kept in, whether or not either was asked: what `lifetimes` keeps while the entry is in the library."""
+    """The files the answers of an entry's two lookups are kept in, whether or not either was asked: what the sweep keeps while the entry is in the library.
+
+    Parameters
+    ----------
+    entry : BibEntry
+        An entry of the bibliography.
+    contact : str, default ''
+        The quilt's `[library] contact`, part of the Crossref request.
+
+    Returns
+    -------
+    set of str
+        The two files' names (`answer_name`).
+    """
     q = query_for(entry)
     return {answer_name(zbmath_url(q)), answer_name(crossref_url(q, contact))}
 

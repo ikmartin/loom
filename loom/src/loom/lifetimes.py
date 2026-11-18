@@ -72,7 +72,7 @@ SWEPT = (CACHE, SCRATCH, ADOPTION_PREVIEWS, INCORPORATION_PREVIEWS)
 class BuildIndex:
     """What the build as it stands names, as `paths.BUILD_INDEX` holds it; every path relative to `.loom/cache/`.
 
-    `fragments` is each fragment's input hash by its path in the site; `uses` what each was made from, a path or `@group`; `groups` what a group noted (`render.uses`); `beside` what the build read beside its fragments (the spans, the previews, marks found again); `site` every file the publish wrote or kept.
+    `fragments` is each fragment's input hash by its path in the site; `uses` what each was made from, a path or `@group`; `groups` what a group noted (`render.uses`); `beside` what the build read or wrote beside its fragments (the spans, the previews, marks found again, the diffs of stale acceptances it writes into the site); `site` every file the publish wrote or kept.
     """
 
     fragments: dict[str, str] = field(default_factory=dict)
@@ -83,7 +83,18 @@ class BuildIndex:
 
 
 def read_index(root: Path) -> BuildIndex:
-    """The build's index as the last build wrote it; empty when there is none or it is not this loom's."""
+    """The build's index as the last build wrote it.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+
+    Returns
+    -------
+    BuildIndex
+        Empty when there is none or it is not this loom's.
+    """
     try:
         return _parse_index((root / BUILD_INDEX).read_bytes())
     except OSError:
@@ -111,7 +122,20 @@ def _parse_index(raw: bytes) -> BuildIndex:
 
 
 def write_index(root: Path, index: BuildIndex) -> str:
-    """Write the build's index whole, and return the digest of what was written (`on_disk`)."""
+    """Write the build's index whole.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+    index : BuildIndex
+        What the build names.
+
+    Returns
+    -------
+    str
+        The digest of the bytes written, as `on_disk` reads it.
+    """
     from loom.render.publish import write_atomic
 
     raw = json.dumps(
@@ -134,7 +158,18 @@ def _digest(raw: bytes) -> str:
 
 
 def on_disk(root: Path) -> str:
-    """The digest of the build's index as it is on disk now, '' when there is none: what a sweep by hand passes as `index`, having no build of its own."""
+    """The digest of the build's index as it is on disk now: what a sweep by hand passes as `index`, having no build of its own.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+
+    Returns
+    -------
+    str
+        A SHA-256 in hex; '' when there is no index.
+    """
     digest = hashlib.sha256()
     try:
         with (root / BUILD_INDEX).open("rb") as f:
@@ -146,7 +181,20 @@ def on_disk(root: Path) -> str:
 
 
 def in_cache(root: Path, notes: Iterable[str]) -> list[str]:
-    """`notes` (`render.uses`) as the index keeps them: each path relative to `.loom/cache/`, a group as it is, and a path outside the cache left out."""
+    """`notes` as the index keeps them.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root the notes' paths were made from.
+    notes : iterable of str
+        What `render.uses.noting` collected: paths, and groups as `@name`.
+
+    Returns
+    -------
+    list of str
+        Each path relative to `.loom/cache/` and each group as it is, sorted, once; a path outside the cache left out.
+    """
     base = root / CACHE
     out: set[str] = set()
     for n in notes:
@@ -744,7 +792,17 @@ def _previews(root: Path, result: Any, now: float, doomed: Doomed) -> None:
 
 
 def drop_preview(root: Path, rel: str, token: str) -> None:
-    """Remove the saved preview `token` from `rel`, `ADOPTION_PREVIEWS` or `INCORPORATION_PREVIEWS`: it has been applied."""
+    """Remove a saved preview that has been applied, through its open folder as the sweep removes.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+    rel : str
+        `paths.ADOPTION_PREVIEWS` or `paths.INCORPORATION_PREVIEWS`; anything else removes nothing.
+    token : str
+        The preview's token, 64 hex digits; anything else removes nothing.
+    """
     home = _own(root, rel) if rel in (ADOPTION_PREVIEWS, INCORPORATION_PREVIEWS) else None
     if home is None or not re.fullmatch(r"[0-9a-f]{64}", token):
         return
@@ -820,7 +878,18 @@ def sweep(root: Path, result: Any, *, index: str, now: float | None = None) -> S
 
 
 def readable(n: float) -> str:
-    """A size in the units a person reads: `512 B`, `6.5 MB`, `68 MB`, `3.4 GB`."""
+    """A size in the units a person reads.
+
+    Parameters
+    ----------
+    n : float
+        Bytes.
+
+    Returns
+    -------
+    str
+        `512 B`, `6.5 MB`, `68 MB`, `3.4 GB`: decimal units, one decimal below ten.
+    """
     for unit in ("B", "KB", "MB", "GB"):
         if n < 1000 or unit == "GB":
             if unit == "B":
@@ -831,7 +900,18 @@ def readable(n: float) -> str:
 
 
 def size_of(path: Path) -> int:
-    """The bytes the file at `path`, or the files under it, hold, no link followed; 0 where there is nothing."""
+    """The bytes a file, or the files under a folder, hold.
+
+    Parameters
+    ----------
+    path : Path
+        A file or a folder; no link is followed, `path` itself included.
+
+    Returns
+    -------
+    int
+        Apparent sizes summed; 0 where there is nothing.
+    """
     try:
         st = path.lstat()
     except OSError:
@@ -855,14 +935,36 @@ class Scratch:
 
 
 def sizes(root: Path) -> dict[str, int]:
-    """The bytes each kind holds (`paths.KINDS`), and the agents' scratch on its own under `SCRATCH`."""
+    """What `.loom/` holds by kind, for `loom doctor`.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+
+    Returns
+    -------
+    dict of str to int
+        Bytes by each of `paths.KINDS`, and the agents' scratch on its own under `paths.SCRATCH`.
+    """
     out = {kind: size_of(root / kind) for kind in KINDS}
     out[SCRATCH] = size_of(root / SCRATCH)
     return out
 
 
 def scratches(root: Path) -> list[Scratch]:
-    """Each session's scratch but `none/`, with its size and its session's last write."""
+    """Each session's scratch, for `loom doctor`.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+
+    Returns
+    -------
+    list of Scratch
+        By session, `none/` left out: its size, and its session's last write.
+    """
     out: list[Scratch] = []
     try:
         entries = sorted(os.scandir(root / SCRATCH), key=lambda e: e.name)
