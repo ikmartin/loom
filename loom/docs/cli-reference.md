@@ -121,7 +121,7 @@ FILE is never modified.
 
 | option | description |
 |---|---|
-| `--to` `FILE` | Write the patched copy here instead of printing a diff; never among the quilt's sources. |
+| `--to` `FILE` | Write the patched copy here instead of printing a diff: outside the quilt's sources and .loom/, but for an agent's scratch, .loom/agents/scratch/SESSION/. |
 | `--sections`, `--no-sections` | Also label sections through subsubsection (default on). |
 | `--all-levels` | Also label paragraphs and subparagraphs. |
 | `--prefix` | The id prefix (default: the quilt's). |
@@ -495,7 +495,7 @@ Removed: `\usepackage{loom}`, `% !LOOM` lines, `\uses{…}`, and every label tha
 
 | option | description |
 |---|---|
-| `--to` `FILE` | The file to write: one flat document, never among the quilt's sources (outside the quilt, or an agent's .loom/agents/scratch/SESSION/). |
+| `--to` `FILE` | The file to write: one flat document, outside the quilt's sources and .loom/. |
 | `--keep-referenced-ids` | Keep the id label of a referenced result that has no label of yours, and the references to it. |
 | `--keep-incomplete` | Keep every \incomplete{…}, defined to print nothing as loom.sty defines it. |
 | `--dry-run` | Say what would be removed and written, and write nothing. |
@@ -816,7 +816,7 @@ The preview is the dry run: without a terminal to confirm on, or with --json or 
 | `--preamble-changes` | Include the separately reviewed preamble changes. |
 | `--document-only` | Include document-level changes while keeping every node version. |
 | `--incorporate` `TOKEN` | Incorporate exactly the previously inspected preview. |
-| `--to` `FILE` | Write the preview's patch to FILE without incorporating; never among the quilt's sources. |
+| `--to` `FILE` | Write the preview's patch to FILE without incorporating; outside the quilt's sources and .loom/. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -1270,7 +1270,7 @@ Show the document workspace's revisions, the selection and what is prepared; --p
 | option | description |
 |---|---|
 | `--patch` | Print the incoming revision as a patch against the quilt's paths instead. |
-| `--to` `FILE` | With --patch, write the patch to FILE, a new file outside the quilt's sources. |
+| `--to` `FILE` | With --patch, write the patch to FILE, a new file outside the quilt's sources and .loom/. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 

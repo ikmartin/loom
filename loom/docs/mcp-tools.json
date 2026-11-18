@@ -699,7 +699,7 @@
      "type": "string"
     },
     "to": {
-     "description": "Write the patched copy here instead of printing a diff; never among the quilt's sources.",
+     "description": "Write the patched copy here instead of printing a diff: outside the quilt's sources and .loom/, but for an agent's scratch, .loom/agents/scratch/SESSION/.",
      "type": "string"
     }
    },
