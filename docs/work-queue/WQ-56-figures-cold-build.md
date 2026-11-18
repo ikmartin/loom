@@ -4,11 +4,11 @@
 
 ## Trigger
 
-`scripts/bench` on a copy of the author's quilt shows a cold build over three minutes after a change that makes cold builds common (a loom release that changes the snippet cache key, or a workflow that deletes `.loom/build/`), or the author reports a cited paper's statement shown as its source with TeX's complaint.
+`scripts/bench` on a copy of the author's quilt shows a cold build over three minutes after a change that makes cold builds common (a loom release that changes the snippet cache key, or a workflow that deletes `.loom/cache/`), or the author reports a cited paper's statement shown as its source with TeX's complaint.
 
 ## Why deferred
 
-Text no compile makes, a digest's statements, a landmark, a node no document reaches, a comparison, is made by TeX as snippets (plan 0.29.5): one TeX4ht run per preamble with every text between marks, as many runs at once as half the cores, at most four, each text cached by its content. The 0.29.4 gate measured a thousand of relloc's statements at 22 s cold with four runs at once, and a cold build is rare: the cache survives every rebuild and every loom upgrade that leaves the code making a text alone, and a text TeX refused is remembered, so only deleting `.loom/build/` pays again.
+Text no compile makes, a digest's statements, a landmark, a node no document reaches, a comparison, is made by TeX as snippets (plan 0.29.5): one TeX4ht run per preamble with every text between marks, as many runs at once as half the cores, at most four, each text cached by its content. The 0.29.4 gate measured a thousand of relloc's statements at 22 s cold with four runs at once, and a cold build is rare: the cache survives every rebuild and every loom upgrade that leaves the code making a text alone, and a text TeX refused is remembered, so only deleting `.loom/cache/` pays again.
 
 ## What is left
 
@@ -19,5 +19,5 @@ Measured on 2026-10-03, before snippets, a cold build of the relloc copy compile
 
 ## Rough design
 
-- A format per distinct preamble a run is made under, under `.loom/build/cache/fmt/`, keyed by its text; `snippets.render_snippets` runs against it when it exists and dumps it once when it does not.
+- A format per distinct preamble a run is made under, under `.loom/cache/blocks/fmt/`, keyed by its text; `snippets.render_snippets` runs against it when it exists and dumps it once when it does not.
 - For the failures, the extraction (`loom digest extract`) records which of the paper's macros a block uses, so the macro block carries them, and a clash with the quilt's preamble is resolved by `\providecommand` rather than `\newcommand`; `\rm` and its kin are provided in a digest's preamble as LaTeX 2.09 compatibility.

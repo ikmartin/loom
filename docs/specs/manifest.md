@@ -1,4 +1,4 @@
-# Manifest: `.loom/build/manifest.json`
+# Manifest: `.loom/cache/site/manifest.json`
 
 The manifest is the only index a viewer reads. It carries the graph and everything non-textual: nodes, keys, edges, inclusion trees, numbering, states and causes, annotations, threads, diagnostics, tags, taxa, macros, search entries. Text lives in fragments.
 
@@ -46,7 +46,7 @@ Field names are fixed; unknown fields must be ignored by viewers. All timestamps
 
 **[decided]** **Arriving** is what was added to the library and waits on the person (write-api.md §6), oldest first: each a drop's row in state `question` (`{id, name, state, question, document, candidates}`, answered with `library-answer`) or `received` (`{id, name, state}`, a file received and not yet taken, which a viewer takes with `library-take`). A drop that has been taken, or that is already here, is not listed. Empty when nothing waits; a viewer's tray reads it after a reload.
 
-**[decided]** `annotation_types` is the quilt's annotation types in its file's order (`.loom/annotation-types.toml`, else the defaults): each `{id, name, look: {color, style, weight, opacity}, open, notes, instructions, modes}`, `modes` naming the modes whose text names the type. `color` is one of grey, brown, red, orange, yellow, green, blue, purple, pink; `style` is underline, highlight or strike; `weight` is whole pixels and `opacity` percent. `open` says an annotation of the type stays open until resolved; `notes` that it is listed in Notes. A viewer offers these types and draws an annotation in its own look; it never decides what to show by a type's id.
+**[decided]** `annotation_types` is the quilt's annotation types in its file's order (`.loom/records/annotation-types.toml`, else the defaults): each `{id, name, look: {color, style, weight, opacity}, open, notes, instructions, modes}`, `modes` naming the modes whose text names the type. `color` is one of grey, brown, red, orange, yellow, green, blue, purple, pink; `style` is underline, highlight or strike; `weight` is whole pixels and `opacity` percent. `open` says an annotation of the type stays open until resolved; `notes` that it is listed in Notes. A viewer offers these types and draws an annotation in its own look; it never decides what to show by a type's id.
 
 **[decided]** `annotation_plain` is the plain look, `{color, style, weight, opacity}` as a type's look is: how an annotation with no type that sets no look of its own is drawn, the types file's `[plain]`, else loom's (a yellow highlight, weight 2, opacity 60). A viewer calls having no type Plain and draws a new untyped annotation in this look unless the reader sets another.
 
@@ -58,7 +58,7 @@ Field names are fixed; unknown fields must be ignored by viewers. All timestamps
 
 **[decided]** **Config** (plan 0.23) is what the quilt's configuration holds and what follows from it, for a viewer's Settings: `{"editable", "read_only", "quilt", "library", "lint", "agents", "review", "sync", "warnings"}`. `quilt` is `{"name", "main", "home", "prefix", "engine", "history", "research_state"}`, `library` `{"online", "contact"}`, and `lint` `{"disable", "codes"}`, `codes` being every diagnostic code that can be silenced. `agents` is `{"deny", "protected", "layer", "variant", "stale", "command", "clients"}`: the deny list as loom accepted it; what is always protected, as the orientation names it; whether the quilt has an agent layer; how its agents reach loom, `"mcp"`, `"shell"` or null; whether Claude Code's permission file lags the list (`loom:agent-permissions-stale`); and per agent app with a file in the quilt, `{"key", "label", "file", "set_up", "command"}`. `review` is `{"track_edits"}`, whether in-place edits since the reviewer's look are among `changes` (plan 0.31). `sync` is `{"paired": true, "directory", "workspace", "branch", "documents"}` or `{"paired": false, "command"}`. `editable` and `read_only` are the `table.key` names a viewer may change through `settings-save` and the ones it shows only (`write-api.md`). `warnings` are the configuration's own. Each `command` is what a person runs for what the viewer cannot do, given here because a viewer names no command of its own; empty when there is nothing to run. Optional and additive: a viewer that finds no `config` shows its own preferences alone.
 
-**[decided]** **Agents** is how agents are set up in the quilt and what they are told, for a viewer's setup and its account of what an agent sees and may change: `{"apps", "line", "modes"}`. `apps` is each agent app the write API's `agents-setup` sets up, in the order a viewer offers them, `{"key", "label", "set_up"}`: `set_up` is true when the quilt is set up for the app (its agent layer records it, or records no app, which is every app) and, where agents attach over MCP, the app's server file names loom. `line` is the line loom puts in each app's root file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), verbatim, in the way the quilt's agents reach loom: the first thing an agent is told; empty with no agent layer. `modes` is the quilt's modes in the order its agents are shown them, each `{"name", "fits", "path", "edited"}`: `fits` its "When it fits" line as the quilt's copy has it, `path` that copy (`.loom/ai/modes/<name>.md`), which an agent reads in place of loom's, and `edited` whether it is the author's own, differing from what loom wrote. What agents may change is said once, elsewhere: `config.agents` holds the deny list and what is always protected, `files[].denied` marks each file they may not edit, and `config.review.track_edits` says whether their edits in place wait in `changes`. Who is connected changes with every call an agent makes, so it is the write API's (`write-api.md` §1, `connected`), not the manifest's. Optional and additive.
+**[decided]** **Agents** is how agents are set up in the quilt and what they are told, for a viewer's setup and its account of what an agent sees and may change: `{"apps", "line", "modes"}`. `apps` is each agent app the write API's `agents-setup` sets up, in the order a viewer offers them, `{"key", "label", "set_up"}`: `set_up` is true when the quilt is set up for the app (its agent layer records it, or records no app, which is every app) and, where agents attach over MCP, the app's server file names loom. `line` is the line loom puts in each app's root file (`CLAUDE.md`, `AGENTS.md`, `GEMINI.md`), verbatim, in the way the quilt's agents reach loom: the first thing an agent is told; empty with no agent layer. `modes` is the quilt's modes in the order its agents are shown them, each `{"name", "fits", "path", "edited"}`: `fits` its "When it fits" line as the quilt's copy has it, `path` that copy (`.loom/agents/instructions/modes/<name>.md`), which an agent reads in place of loom's, and `edited` whether it is the author's own, differing from what loom wrote. What agents may change is said once, elsewhere: `config.agents` holds the deny list and what is always protected, `files[].denied` marks each file they may not edit, and `config.review.track_edits` says whether their edits in place wait in `changes`. Who is connected changes with every call an agent makes, so it is the write API's (`write-api.md` §1, `connected`), not the manifest's. Optional and additive.
 
 **[decided]** **Pages** (plan 0.21.3) are a reading loom keeps for one thing, which a person edits and an agent writes through the publisher, never a source. Each is `{"path", "hash", "body_html", "by": {"kind": "agent"|"person", "id"}, "when", "edited_since", "links": {"broken": [{"href", "why"}], "moved": [{"href", "key"}]}}`: `hash` the exact text's, `body_html` its Markdown rendered as a transcript message's (§10.1), `by` and `when` the last write through the publisher (absent when there was none), `edited_since` true when the text has changed since that write, `broken` the links that name nothing now and `moved` the linked results whose text has changed since the write. `research_state`, at the top level, is the quilt's; a work's is `references[CK].overview` (§13). Both are optional, and absent until one is written.
 
@@ -78,7 +78,7 @@ The values are properties of the publisher and its corpora, not of this corpus's
 
 ```json
 "canon": [
-  {"path": ".loom/history/0002-paper-v1/paper-v1.tex", "stem": "paper-v1", "title": "Relative virtual localization",
+  {"path": ".loom/records/history/0002-paper-v1/paper-v1.tex", "stem": "paper-v1", "title": "Relative virtual localization",
    "fragment": "fragments/canon/paper-v1.html", "hash": "3f9a...",
    "step": "0002", "name": "paper-v1", "message": "Submitted to the Journal", "when": "2026-09-13T09:00:00Z",
    "in": "drafting/paper.tex", "macros": "canon:paper-v1"}
@@ -101,12 +101,12 @@ The values are properties of the publisher and its corpora, not of this corpus's
   "fragment": "fragments/masters/drafting/main.html",
   "engine": "pdflatex",
   "compiled": "2026-09-16T14:39:10Z",
-  "pdf": "drafting/main/main.pdf",
+  "pdf": "tex/main-6f1b8942/main.pdf",
   "numbering_known": true
 }
 ```
 
-`compiled`, `pdf`, and `numbering_known` are absent or false before the first compile. `compiled` is the PDF's own time, so it changes with every compile that makes one, and a viewer that shows the PDF reads it again when it does. A document is named by its path without `.tex`, kept as a path: `fragment` is `fragments/masters/<name>.html` and `pdf` is `<name>/<stem>.pdf`, both under the build directory, so two documents that share a file name in two directories never share either; a viewer addresses a document by the same name. An agent's document is one that carries `copy_of`, the document it was copied from, where the history's moves have taken it; only one of the person's is the default, has a Review tab, or is selected by the document workspace, and the list holds the person's documents first. A viewer shows a copy beside the document `copy_of` names.
+`compiled`, `pdf`, and `numbering_known` are absent or false before the first compile. `compiled` is the PDF's own time, so it changes with every compile that makes one, and a viewer that shows the PDF reads it again when it does. A document is named by its path without `.tex`, kept as a path: `fragment` is `fragments/masters/<name>.html`, under the build directory, and `pdf` is `tex/<stem>-<hash>/<stem>.pdf`, the PDF in the document's compile folder (`.loom/cache/tex/<stem>-<hash>/`), which the server answers under the build directory's address; `<hash>` is the first eight hex digits of the SHA-256 of the name, so two documents that share a file name in two directories never share either; a viewer addresses a document by the same name. An agent's document is one that carries `copy_of`, the document it was copied from, where the history's moves have taken it; only one of the person's is the default, has a Review tab, or is selected by the document workspace, and the list holds the person's documents first. A viewer shows a copy beside the document `copy_of` names.
 
 ## 3. Nodes
 
@@ -392,7 +392,7 @@ The **id** is minted once and is the address; the **title** is the author's and 
   "participants": [],
   "targets": [],
   "attachments": [
-    {"name": "orbit-counts.py", "kind": "file", "path": ".loom/sessions/s-2026-09-16-cd0j88/orbit-counts.py"}
+    {"name": "orbit-counts.py", "kind": "file", "path": ".loom/agents/sessions/s-2026-09-16-cd0j88/orbit-counts.py"}
   ],
   "log": [{"time": "...", "command": "loom source rl-0004 --closure", "names": [{"key": "rl-0004"}]}],
   "discarded": false
@@ -452,7 +452,7 @@ The session's `seq` in `sessions` is the last event's number, so a viewer knows 
   "work": "doi:10.1090/S1056-3911-2011-00606-1",
   "works": ["doi:10.1090/S1056-3911-2011-00606-1", "arXiv:0805.2065v2"],
   "artifacts": {"dir": "digests/storage/doi/10.1090_S1056-3911-2011-00606-1", "pdf": true, "source": false},
-  "digest": {"file": ".loom/digests/Man12.tex", "fragment": "fragments/digests/Man12.html",
+  "digest": {"file": ".loom/library/Man12.tex", "fragment": "fragments/digests/Man12.html",
              "source": "arXiv:0805.2065v2", "extracted_from": "arXiv:0805.2065v2",
              "published_as": "doi:10.1090/S1056-3911-2011-00606-1",
              "method": "extract", "nodes": ["Man12-setup", "Man12-thm-4.1"]},
@@ -479,9 +479,9 @@ The session's `seq` in `sessions` is the last event's number, so a viewer knows 
 
 **[decided]** `unreadable`, present only where the author has declared one, is `{"why": …, "who": …, "when": …}`: the standing claim that the work has no document to hold at all. Nothing in a bibliography entry says so, which is why it is declared and never inferred, and a viewer says it rather than showing an empty pane (DR-198).
 
-**[decided]** `proposed`, null when the work has none, is `{"file": …, "fragment": …, "nodes": [...]}` for the work's proposals: results an agent read off a page that nobody has vouched for yet. They live in `.loom/digests/<citekey>.proposed.tex`, which nothing inputs, so their nodes are in no bundle and no closure and can be neither cited nor compiled; a viewer shows them among the digest's nodes, flagged (DR-178). Their `fragment` is a page of its own, `fragments/digests/<citekey>.proposed.html`, never the digest's.
+**[decided]** `proposed`, null when the work has none, is `{"file": …, "fragment": …, "nodes": [...]}` for the work's proposals: results an agent read off a page that nobody has vouched for yet. They live in `.loom/library/<citekey>.proposed.tex`, which nothing inputs, so their nodes are in no bundle and no closure and can be neither cited nor compiled; a viewer shows them among the digest's nodes, flagged (DR-178). Their `fragment` is a page of its own, `fragments/digests/<citekey>.proposed.html`, never the digest's.
 
-**[decided]** `results`, by result id, is what `.loom/digests/<citekey>.results.json` records for each of the work's results (`digests.md`), as a viewer needs it:
+**[decided]** `results`, by result id, is what `.loom/library/<citekey>.results.json` records for each of the work's results (`digests.md`), as a viewer needs it:
 
 ```json
 "Man12-thm-4.1": {"state": "extracted", "level": 3, "class": "mechanical", "page": 12, "artifact": "4b8db624054b",

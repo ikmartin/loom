@@ -4,7 +4,7 @@
 
 ## Trigger
 
-`.loom/history/texts/` exceeds a few thousand files or fifty megabytes, or `git status` on a quilt is visibly slowed by it.
+`.loom/records/history/texts/` exceeds a few thousand files or fifty megabytes, or `git status` on a quilt is visibly slowed by it.
 
 ## Why deferred
 

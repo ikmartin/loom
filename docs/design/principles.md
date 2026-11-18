@@ -84,7 +84,7 @@ Mathematicians already know LaTeX, and every construct the tool needs is a label
 
 ### P2. Author data in the source, decisions in the ledger, records in logs loom owns, derived data never durable.
 
-Four kinds of information have four homes, and nothing fits in more than one. Consequence: `config.toml` has a handful of keys; the ledger records acceptances only; the history and sessions are append-only logs that only loom writes, and the annotation log is appended too, rewritten only to delete an annotation, which removes it rather than marking it; `.loom/build/` can be deleted at any moment and regenerated.
+Four kinds of information have four homes, and nothing fits in more than one. Consequence: `config.toml` has a handful of keys; the ledger records acceptances only; the history and sessions are append-only logs that only loom writes, and the annotation log is appended too, rewritten only to delete an annotation, which removes it rather than marking it; `.loom/cache/` can be deleted at any moment and regenerated.
 
 ### P3. States are computed, never stored.
 
@@ -100,7 +100,7 @@ Where a file lives carries no meaning. Consequence: one file per node and twelve
 
 ### P6. Config only for what the preamble cannot say.
 
-The preamble is the author's declaration of their conventions, and the tool reads it. Consequence: taxa come from `\newtheorem`, style classes from `\theoremstyle`, macros from the preamble closure, the engine from `% !TEX program`. `config.toml` names the default document, the file the viewer opens on, the id prefix, a default engine, the paths agents may not write and whether their edits in place are reviewed, and little else. A quilt's annotation types are in a file of their own, `.loom/annotation-types.toml`, which `loom init` writes with the defaults: the preamble cannot say them, and a type's instructions for agents run to paragraphs, which `config.toml`, edited line by line, is not for.
+The preamble is the author's declaration of their conventions, and the tool reads it. Consequence: taxa come from `\newtheorem`, style classes from `\theoremstyle`, macros from the preamble closure, the engine from `% !TEX program`. `config.toml` names the default document, the file the viewer opens on, the id prefix, a default engine, the paths agents may not write and whether their edits in place are reviewed, and little else. A quilt's annotation types are in a file of their own, `.loom/records/annotation-types.toml`, which `loom init` writes with the defaults: the preamble cannot say them, and a type's instructions for agents run to paragraphs, which `config.toml`, edited line by line, is not for.
 
 ### P7. Loom changes an author's file only when the author incorporates a change, and keeps the old text first.
 

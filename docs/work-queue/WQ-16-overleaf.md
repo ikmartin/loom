@@ -14,7 +14,7 @@ It is a manual procedure requiring an Overleaf account, and it is the author's t
 
 Unchanged:
 
-1. `loom init demo --demo`; `loom compile drafting/main.tex`; record `pdftotext` of the local PDF (`.loom/build/drafting/main/main.pdf`).
+1. `loom init demo --demo`; `loom compile drafting/main.tex`; record `pdftotext` of the local PDF (in `.loom/cache/tex/main-<hash>/main.pdf`).
 2. Send the document to a new Overleaf project the way a person does: clone the project, pair with `loom sync init DIR`, and `loom sync publish --push`. A document compiles from its own directory with loom's macros inline (plan 0.22.4), so the project holds that directory alone, its main `main.tex` at the top; compile it on Overleaf.
 3. Download the PDF; compare `pdftotext` with the local one. Equal modulo whitespace is a pass.
 4. Record Overleaf's TeX Live version and the result in the release notes.

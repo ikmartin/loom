@@ -91,9 +91,9 @@ Review:
 - `loom:retired-ledger-key` (info): a ledger row whose key no longer exists.
 - `loom:detached-annotation` (info): annotations whose selectors no longer match, with a count per key.
 - `loom:previous-key-match` (info): an acceptance row matches the text of a differently keyed proof.
-- `loom:foreign-annotations` (warning): a line of `.loom/annotations/log.jsonl` that is not a review event, or of `.loom/edits/log.jsonl` that is not a suggested edit's; it is skipped and the rest of the log still loads.
+- `loom:foreign-annotations` (warning): a line of `.loom/records/annotations/log.jsonl` that is not a review event, or of `.loom/records/edits/log.jsonl` that is not a suggested edit's; it is skipped and the rest of the log still loads.
 - `loom:repeated-id` (warning, subject `record`): a line of the annotation log, the suggested edits' log, the session index or the links file that gives a second record an id another record already has, usually a line a hand-resolved merge kept twice. One per line, naming both lines and the edit that clears it; nothing is dropped or renumbered.
-- `loom:annotation-types` (warning, subject `record`): `.loom/annotation-types.toml` is not TOML, so the default types are used, or one of its types cannot be read and is skipped, naming what is wrong with it; info when there is no file, so the defaults are used and `loom upgrade` writes them. Annotations keep their own look either way, so nothing is drawn differently.
+- `loom:annotation-types` (warning, subject `record`): `.loom/records/annotation-types.toml` is not TOML, so the default types are used, or one of its types cannot be read and is skipped, naming what is wrong with it; info when there is no file, so the defaults are used and `loom upgrade` writes them. Annotations keep their own look either way, so nothing is drawn differently.
 
 References and digests:
 
@@ -127,7 +127,7 @@ Both are listed here so the codes are reserved, and both are in the **viewer's**
 - `loom:node-recovered` (info, subject `source`): an id the history retired is defined again with a text it did record.
 - `loom:no-live-document` (info, subject `source`): the quilt holds no document of the person's, so it defines no nodes. With a landmark, it carries the fix that starts one from the newest, `loom history restore NAME --to FILE`; with none, its message says a document may be written anywhere in the quilt, and it carries `loom import FILE` (a paper being written) and `loom library add FILE` (a paper being read). A viewer's page for a quilt with nothing to read shows these fixes.
 - `loom:derived-id-in-person-document` (error, subject `source`): one of the person's documents defines or cites an agent document's derived id; the message names the plain id to use.
-- `loom:agent-document-unrecorded` (error, subject `source`): a document in `.loom/copies/` that no `copy` step made, so it can be neither adopted nor refreshed; carries the fix `loom draft DOC --ai NAME.tex`, DOC the default document.
+- `loom:agent-document-unrecorded` (error, subject `source`): a document in `.loom/agents/copies/` that no `copy` step made, so it can be neither adopted nor refreshed; carries the fix `loom draft DOC --ai NAME.tex`, DOC the default document.
 - `loom:plain-id-in-agent-document` (error, subject `source`): a plain id defined in an agent document, where every id is derived; carries the fix `loom id --next`, whose id takes `-ai`.
 - `loom:agent-permissions-stale` (warning): `.claude/settings.json` is not what `[agents] deny` and this loom make it, so Claude Code holds agents to an older boundary than loom's own commands do; carries the fix `loom upgrade`.
 - `loom:home-missing` (warning): `[quilt] home` names a file the viewer does not show — missing, or hidden — so the viewer opens on the root README.md or the default document instead (plan 0.22.7).

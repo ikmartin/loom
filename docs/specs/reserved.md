@@ -12,9 +12,8 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 
 | path | holds | owner |
 |---|---|---|
-| `.loom/format` | the quilt's format number, which a loom older than the quilt reads to say so | the safe write path |
-| `.loom/digests/suggested.jsonl` | the works an agent suggested | the library |
-| `.loom/formal/`, with `evidence.jsonl` and `attest.toml` | formal evidence, and the person's attestations | formalization |
+| `.loom/library/suggested.jsonl` | the works an agent suggested | the library |
+| `.loom/records/formal/`, with `evidence.jsonl` and `attest.toml` | formal evidence, and the person's attestations | formalization |
 
 Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the list of recent quilts, the switch that turns formalization on for this machine) are their owner's alone.
 
