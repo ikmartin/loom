@@ -432,9 +432,9 @@ class LoomHandler(SimpleHTTPRequestHandler):
             )
             with lock:
                 answer = handle(self.quilt_root, endpoint, body)
-            # The viewer's refresh finds the write immediately. Reads need no rebuild; review decisions already published queue metadata without touching document renderings.
-            if self.rebuild is not None and endpoint not in NO_REBUILD:
-                self.rebuild(records=endpoint in RECORD_WRITES)
+                # The viewer's refresh finds the write immediately. Reads need no rebuild; review decisions already published queue metadata without touching document renderings. Published under the hold that wrote it: a watcher that saw the write while the request held the lock would otherwise publish it first, and the request would build it a second time before it answered.
+                if self.rebuild is not None and endpoint not in NO_REBUILD:
+                    self.rebuild(records=endpoint in RECORD_WRITES)
             self._json(HTTPStatus.OK, answer)
         except ApiError as exc:
             self._json(exc.status, exc.answer())
@@ -824,7 +824,8 @@ class ServeSession:
         self.port = port
         self.compile_masters = compile_masters
         self.interval = interval
-        self.lock = threading.Lock()
+        # reentrant: a write through the API publishes under the hold that wrote it (`LoomHandler.do_POST`)
+        self.lock = threading.RLock()
         self.builds = 0
         self._settling: threading.Timer | None = None
         self._settling_lock = threading.Lock()

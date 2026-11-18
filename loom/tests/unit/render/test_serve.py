@@ -408,6 +408,35 @@ def test_a_write_of_records_publishes_from_the_last_scan_and_once(
     assert s.builds == before + 3, "the watcher built again what the API had published"
 
 
+def test_a_write_the_watcher_sees_first_is_published_once_by_its_own_request(
+    serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    """A write that is slow to return is seen by the watcher while its request still holds the publication lock. The request publishes under that same hold, so the watcher, which takes the lock next, finds the write published and builds nothing, and the answer does not wait behind a second build."""
+    from loom.render import api
+    from tests.unit.render._serve import post
+
+    s = serve(demo(tmp_path))
+    real = api.handle
+
+    def slow(root, endpoint, body):  # type: ignore[no-untyped-def]
+        answer = real(root, endpoint, body)
+        if endpoint == "annotate":
+            time.sleep(0.8)  # four polls: the watcher has seen the log by now and waits on the lock
+        return answer
+
+    monkeypatch.setattr(api, "handle", slow)
+    status, made = post(s.url + "_api/session-new", {"title": "a sitting", "author": "A. Author"})
+    assert status == 200
+    sid = str(made["result"]).split()[0]
+    time.sleep(0.6)  # the watcher has looked at the new session
+    before = s.builds
+    note = {"target": "dm-0003", "message": "A note.", "session": sid, "author": "A. Author"}
+    assert post(s.url + "_api/annotate", note)[0] == 200
+    assert s.builds == before + 1, "the watcher published the write first, and its request built it again"
+    time.sleep(0.6)
+    assert s.builds == before + 1
+
+
 def test_a_burst_of_edits_publishes_once(session) -> None:  # type: ignore[no-untyped-def]
     """A poll that sees the first edit of a burst publishes all of it, since a build reads the files as they are when it begins. The publication lock makes it so here: that poll's build waits on it while the rest of the burst is written, where it would otherwise depend on whether the burst fits between two polls."""
     s, d = session
