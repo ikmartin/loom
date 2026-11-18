@@ -118,3 +118,11 @@ def test_deps_and_downstream_say_how_in_the_readers_words(tmp_path: Path) -> Non
     rows = [ln for ln in down.splitlines() if "drafting/nodes/dm-0003.tex:" in ln]
     assert len(rows) == len(set(rows)) >= 2 and any("lem:orbits" in r for r in rows), down
     assert "via transitive" not in down and "transitive" not in down
+
+
+def test_downstream_lists_its_dependents_in_the_order_of_their_keys(tmp_path: Path) -> None:
+    """The same quilt prints the same rows whatever the process's hash seed: the graph's walk starts from a set, so the rows are sorted."""
+    q = tmp_path / "q"
+    shutil.copytree(Path(__file__).parents[1] / "quilts" / "synthetic", q)
+    keys = [d["key"] for d in json_of("downstream", "sy-0002", "--json", cwd=q)["dependents"]]
+    assert keys == ["sy-0004", "sy-0005", "sy-0009", "sy-0009/proof"]
