@@ -157,6 +157,11 @@ def install_layer(
     ClientReport
         The client files written, current, left alone or, in the shell variant, removed.
 
+    Raises
+    ------
+    WriteRefused
+        Where `.loom/ai/` is not a directory of the quilt's own (`refuse_layer`), and nothing is written; or where a file cannot be written.
+
     See Also
     --------
     loom.ai.layout.upgrade_layer : the refresh alone, which `loom upgrade` runs.
@@ -169,10 +174,13 @@ def install_layer(
         SHELL,
         VERSION_FILE,
         LayerReport,
+        _write,
         ensure_root_line,
         init_layer,
         permission_files,
         quilt_config,
+        read_plain,
+        refuse_layer,
         tracked_docs,
         upgrade_layer,
         variant,
@@ -180,6 +188,7 @@ def install_layer(
     from loom.ai.skills import RECORD as SKILLS_RECORD
     from loom.ai.skills import write_skills
 
+    refuse_layer(root)
     if shell is None:
         shell = variant(root) == SHELL
     # read before anything is written, which would change what the quilt is set up for
@@ -205,13 +214,11 @@ def install_layer(
     else:
         rep = upgrade_layer(root, write=write, shell=shell, apps=apps)
     clients = write_clients(root, write, shell=shell, apps=apps)
-    record = root / AI / APPS_FILE
     said = "".join(f"{key}\n" for key in apps)
-    if not record.is_file() or record.read_text(encoding="utf-8") != said:
+    if read_plain(root, f"{AI}/{APPS_FILE}") != said:
         rep.written.append(f"{AI}/{APPS_FILE}")
         if write:
-            record.parent.mkdir(parents=True, exist_ok=True)
-            record.write_text(said, encoding="utf-8")
+            _write(root, f"{AI}/{APPS_FILE}", said)
     if write:
         # the client files name this machine's paths, so the root .gitignore keeps them out of the repository
         from loom.gitignore import ensure

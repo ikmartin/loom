@@ -251,42 +251,82 @@ def read_plain(root: Path, rel: str) -> str | None:
         os.close(fd)
 
 
+def refuse_layer(root: Path) -> None:
+    """Refuse (`WriteRefused`) to write the agent layer where `.loom/ai/` is there and not a directory of the quilt's own (`blocker`): what is written there through a link lands outside the quilt."""
+    from loom.writes import WriteRefused
+
+    why = blocker(root, AI, folder=True)
+    if why:
+        raise WriteRefused(
+            "not-writable", f"loom writes nothing into {AI}/, since {why}; make it a directory of the quilt's own"
+        )
+
+
 def _rules_wrote(root: Path) -> dict[str, set[str]] | None:
-    """The rules loom last wrote into Claude Code's permission file, by list, as `RULES_FILE` records them; None where there is no record."""
-    try:
-        lines = (root / AI / RULES_FILE).read_text(encoding="utf-8").splitlines()
-    except OSError:
+    """The rules loom last wrote into Claude Code's permission file, by list, as `RULES_FILE` records them; None where there is no record, or none that can be read (`read_plain`)."""
+    text = read_plain(root, f"{AI}/{RULES_FILE}")
+    if text is None:
         return None
     out: dict[str, set[str]] = {"allow": set(), "deny": set()}
-    for line in lines:
+    for line in text.splitlines():
         kind, _, rule = line.partition("\t")
         if kind in out and rule:
             out[kind].add(rule)
     return out
 
 
-def record_rules(root: Path, generated: str) -> None:
-    """Record loom's rules in `generated`, Claude Code's permission file as loom renders it, as the ones it wrote, once that file is written; nothing where the quilt has no `.loom/ai/`."""
+def record_rules(root: Path, generated: str, *, before: list[str] | None = None) -> None:
+    """Record loom's rules in `generated`, Claude Code's permission file as loom renders it, as the ones it wrote, once that file is written; nothing where the quilt has no `.loom/ai/`.
+
+    With `before`, called ahead of writing that file: the record keeps every rule it held, and each of `before` (`Settings.dropped`, loom's rules in the file as it stands), beside what `generated` renders, so a write that fails at any point leaves a record naming every rule of loom's in the file.
+    """
     ours = json.loads(generated)["permissions"]
-    said = "".join(f"{kind}\t{rule}\n" for kind in ("allow", "deny") for rule in ours[kind])
-    p = root / AI / RULES_FILE
-    if p.parent.is_dir() and (not p.is_file() or p.read_text(encoding="utf-8") != said):
+    rules = {kind: list(ours[kind]) for kind in ("allow", "deny")}
+    if before is not None:
+        held = _rules_wrote(root) or {"allow": set(), "deny": set()}
+        for d in before:
+            kind, _, rule = d.partition(" ")
+            held[kind].add(rule)
+        for kind in rules:
+            rules[kind] += sorted(held[kind] - set(rules[kind]))
+    said = "".join(f"{kind}\t{rule}\n" for kind in ("allow", "deny") for rule in rules[kind])
+    if (root / AI).is_dir() and read_plain(root, f"{AI}/{RULES_FILE}") != said:
         _write(root, f"{AI}/{RULES_FILE}", said)
 
 
 def _write(root: Path, rel: str, text: str) -> None:
-    """Write one file of the agent layer, or refuse in a sentence where it cannot be written."""
+    """Write one file of the agent layer whole or not at all, or refuse in a sentence where it cannot be written.
+
+    Written beside and moved into place, keeping the file's mode, so a write cut short (a full disk, a size limit) leaves the person's file as it was; a file without write permission is refused, as writing it in place would be.
+    """
+    import errno
+    import secrets
+
     from loom.writes import WriteRefused
 
     p = root / rel
+    tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}.tmp")
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        try:
+            mode: int | None = stat.S_IMODE(os.stat(p).st_mode)
+        except FileNotFoundError:
+            mode = None
+        if mode is not None and not os.access(p, os.W_OK):
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(p))
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o666 if mode is None else mode)
+        with os.fdopen(fd, "wb") as fh:
+            if mode is not None:
+                os.fchmod(fh.fileno(), mode)
+            fh.write(text.encode("utf-8"))
+        os.replace(tmp, p)
     except OSError as exc:
         raise WriteRefused(
             "not-writable",
             f"loom could not write {rel} ({exc.strerror}); nothing after it was written, so run this again once it can be",
         ) from exc
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 @dataclass
@@ -414,6 +454,8 @@ class Permissions:
     merged: list[str] = field(default_factory=list)
     theirs: list[str] = field(default_factory=list)
     dropped: list[str] = field(default_factory=list)
+    #: Claude Code's `Settings.dropped`, as `record_rules` takes it.
+    rules_out: list[str] = field(default_factory=list)
 
 
 def permission_files(
@@ -435,6 +477,7 @@ def permission_files(
             if got.text != bare[CLAUDE_SETTINGS]:
                 out.merged.append(CLAUDE_SETTINGS)
             out.dropped = [f"{CLAUDE_SETTINGS}: {d}" for d in got.dropped]
+            out.rules_out = got.dropped
     return out
 
 
@@ -536,9 +579,7 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
     (ai / "modes").mkdir(parents=True)
     texts = tracked_docs(root)
     for rel, text in texts.items():
-        p = root / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        _write(root, rel, text)
         rep.written.append(rel)
     for name in ("README.md",):
         (ai / name).write_text(_asset(name), encoding="utf-8")
@@ -548,12 +589,15 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
     config = quilt_config(root)
     made = permission_files(root, config, shell=shell, apps=apps)
     rep.merged, rep.theirs, rep.dropped = made.merged, made.theirs, made.dropped
+    generated = permissions_json(config, shell=shell)
     for rel, text in made.texts.items():
+        if rel == CLAUDE_SETTINGS:
+            record_rules(root, generated, before=made.rules_out)
         _write(root, rel, text)
         rep.written.append(rel)
     if CLAUDE_SETTINGS in made.texts:
-        # after the file it describes, so a write that fails leaves the record saying what is there
-        record_rules(root, permissions_json(config, shell=shell))
+        # before the file and after it, so a write that fails at any point leaves the record naming every rule of loom's there
+        record_rules(root, generated)
         rep.written.append(f"{AI}/{RULES_FILE}")
     rep.written.extend(ensure_root_line(root, shell=shell, apps=apps, report=rep))
     skills = write_skills(root, chosen(root, apps))
@@ -567,7 +611,7 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
 def upgrade_layer(
     root: Path, write: bool = True, *, shell: bool | None = None, apps: list[str] | tuple[str, ...] | None = None
 ) -> LayerReport:
-    """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them.
+    """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them. Nothing where `.loom/ai/` is absent or not a directory of the quilt's own (`blocker`).
 
     The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. A skill of the person's at one of loom's paths is left alone (`theirs`), and loom's own of a mode that is gone is taken away (`removed`). With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
     """
@@ -579,7 +623,7 @@ def upgrade_layer(
     apps = chosen(root, apps)
     ai = root / AI
     rep = LayerReport()
-    if not ai.is_dir():
+    if not ai.is_dir() or blocker(root, AI, folder=True):
         return rep
     recorded = read_versions(root)
     texts = tracked_docs(root)
@@ -591,8 +635,7 @@ def upgrade_layer(
         name = Path(rel).name
         if not p.is_file():
             if write:
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(shipped, encoding="utf-8")
+                _write(root, rel, shipped)
             rep.written.append(rel)
             continue
         current = p.read_text(encoding="utf-8")
@@ -601,7 +644,7 @@ def upgrade_layer(
             continue
         if recorded.get(name) == sha(current):
             if write:
-                p.write_text(shipped, encoding="utf-8")  # untouched since it was shipped: refresh
+                _write(root, rel, shipped)  # untouched since it was shipped: refresh
             rep.written.append(rel)
         else:
             beside = p.with_name(name + ".new")
@@ -615,7 +658,7 @@ def upgrade_layer(
             # a .new as loom wrote it is brought up to date; one the author has begun merging into is theirs (K4)
             if there is None or (sha(there) == last and there != shipped):
                 if write:
-                    beside.write_text(shipped, encoding="utf-8")
+                    _write(root, f"{rel}.new", shipped)
                 wrote_beside[name + ".new"] = sha(shipped)
             elif last:
                 wrote_beside[name + ".new"] = last
@@ -635,7 +678,7 @@ def upgrade_layer(
         text = _asset(name)
         if not p.is_file() or p.read_text(encoding="utf-8") != text:
             if write:
-                p.write_text(text, encoding="utf-8")
+                _write(root, f"{AI}/{name}", text)
             rep.written.append(f"{AI}/{name}")
         else:
             rep.unchanged.append(f"{AI}/{name}")
@@ -660,12 +703,14 @@ def write_permissions(
     apps: list[str] | tuple[str, ...] | None = None,
     report: LayerReport | None = None,
 ) -> tuple[list[str], list[str]]:
-    """(written, unchanged): the permission files of `apps` (by default the apps the quilt is set up for, `clients.chosen`) rewritten to what `config` and this loom make them, in one variant, the person's own settings in Claude Code's kept (`settings_for`); a file that cannot be written is refused (`WriteRefused`), the record of loom's rules left as it was.
+    """(written, unchanged): the permission files of `apps` (by default the apps the quilt is set up for, `clients.chosen`) rewritten to what `config` and this loom make them, in one variant, the person's own settings in Claude Code's kept (`settings_for`); a file that cannot be written is refused (`WriteRefused`), the record of loom's rules naming every one in the file whatever failed (`record_rules`), and so is every write where `.loom/ai/` is not the quilt's own (`refuse_layer`).
 
     A missing one of those apps is written like a stale one; `upgrade_layer` and the viewer's Update Claude Code both come here. `report`, where given, gains the files that keep settings of the person's (`merged`), those left alone (`theirs`) and loom's own rules taken out (`dropped`).
     """
     from loom.ai.clients import chosen
 
+    if write:
+        refuse_layer(root)
     written: list[str] = []
     unchanged: list[str] = []
     made = permission_files(root, config, shell=shell, apps=chosen(root, apps))
@@ -673,16 +718,19 @@ def write_permissions(
         report.merged += made.merged
         report.theirs += made.theirs
         report.dropped += made.dropped
+    generated = permissions_json(config, shell=shell)
     for rel, text in made.texts.items():
         if read_plain(root, rel) == text:
             unchanged.append(rel)
             continue
         if write:
+            if rel == CLAUDE_SETTINGS:
+                record_rules(root, generated, before=made.rules_out)
             _write(root, rel, text)
         written.append(rel)
     if write and CLAUDE_SETTINGS in made.texts:
-        # after the file it describes, so a write that fails leaves the record saying what is there
-        record_rules(root, permissions_json(config, shell=shell))
+        # before the file and after it, so a write that fails at any point leaves the record naming every rule of loom's there
+        record_rules(root, generated)
     return written, unchanged
 
 

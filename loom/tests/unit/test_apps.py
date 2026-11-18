@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -333,3 +334,123 @@ def test_variant_and_upgrade_never_wait_on_a_root_file_that_is_a_fifo(tmp_path: 
             os.close(os.open(fifo, os.O_WRONLY | os.O_NONBLOCK))
         except OSError:
             pass
+
+
+def _cut_short(monkeypatch: pytest.MonkeyPatch, target: Path) -> None:
+    """Every write of `target` fails part way, as a full disk fails it: written in place, half the text and then the error; written beside and moved into place, the move."""
+    real_write, real_replace = Path.write_text, os.replace
+    where = os.path.realpath(target)
+
+    def write_text(self: Path, data: str, *args: Any, **kwargs: Any) -> int:
+        if os.path.realpath(self) == where:
+            real_write(self, data[: len(data) // 2], *args, **kwargs)
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+        return real_write(self, data, *args, **kwargs)
+
+    def replace(src: Any, dst: Any, *args: Any, **kwargs: Any) -> None:
+        if os.path.realpath(dst) == where:
+            raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+        real_replace(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", write_text)
+    monkeypatch.setattr(os, "replace", replace)
+
+
+@pytest.mark.parametrize("rel", [".claude/settings.json", "CLAUDE.md"])
+def test_a_write_cut_short_leaves_the_persons_file_as_it_was(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, rel: str
+) -> None:
+    """A write that fails part way leaves the file byte for byte as it was and nothing beside it, so the refusal's run-it-again holds."""
+    from loom.ai.layout import SHELL_LINE
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    data = _settings(q)
+    data["env"] = {"MINE": "1"}
+    data["hooks"] = {"Stop": [{"hooks": [{"type": "command", "command": "say done"}]}]}
+    (q / ".claude/settings.json").write_text(json.dumps(data, indent=2) + "\n")
+    _deny(q, '["private/**"]')
+    # the other variant's line, so the root file is written again
+    (q / "CLAUDE.md").write_text("# My project\n\nKeep the notation of chapter 2.\n\n" + SHELL_LINE + "\n")
+    target = q / rel
+    before = target.read_bytes()
+    with monkeypatch.context() as patched:
+        _cut_short(patched, target)
+        refused = exits(1, "upgrade", cwd=q)
+    assert f"loom could not write {rel}" in refused.output
+    assert target.read_bytes() == before
+    assert [p.name for p in target.parent.iterdir() if p.name.startswith(f".{target.name}.")] == []
+    ok("upgrade", cwd=q)
+    assert _settings(q)["env"] == {"MINE": "1"} and MCP_LINE in (q / "CLAUDE.md").read_text().splitlines()
+
+
+def test_the_record_names_loom_s_rules_in_the_file_whichever_write_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The record is written before the settings and after them: where the one after fails, it still names the rules loom put in, so one it stops writing goes."""
+    from loom.ai import layout
+    from loom.writes import WriteRefused
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    _deny(q, '["paper/"]')
+    ok("upgrade", cwd=q)
+    _deny(q, '["private/**"]')
+    settings = q / ".claude/settings.json"
+    real = layout._write
+
+    def write(root: Path, rel: str, text: str) -> None:
+        if rel.endswith(layout.RULES_FILE) and "private" in settings.read_text():
+            raise WriteRefused("not-writable", "loom could not write the record (No space left on device)")
+        real(root, rel, text)
+
+    with monkeypatch.context() as patched:
+        patched.setattr(layout, "_write", write)
+        exits(1, "upgrade", cwd=q)
+    assert any("private" in r for r in _settings(q)["permissions"]["deny"])
+    _deny(q, "[]")
+    got = json_of("upgrade", "--json", cwd=q)
+    assert not any("private" in r for r in _settings(q)["permissions"]["deny"])
+    assert any("private" in d for d in got["dropped"])
+
+
+RECORDS = (".loom-rules", ".loom-skills", ".loom-apps")
+
+
+@pytest.mark.parametrize("name", RECORDS)
+def test_a_record_that_is_a_fifo_is_no_record_and_nothing_waits_on_it(tmp_path: Path, name: str) -> None:
+    from loom.ai.layout import permissions_stale, quilt_config, upgrade_layer
+    from loom.doctor import check_ai_files, check_mcp, check_permissions
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    record = q / ".loom/ai" / name
+    record.unlink()
+    os.mkfifo(record)
+    try:
+        got: list[object] = []
+
+        def run() -> None:
+            check_permissions(q), check_ai_files(q), check_mcp(q), permissions_stale(q, quilt_config(q))
+            got.append(upgrade_layer(q).written)
+
+        look = threading.Thread(target=run, daemon=True)
+        look.start()
+        look.join(20)
+        assert got, f"something waited on {name}, a FIFO"
+    finally:
+        try:
+            os.close(os.open(record, os.O_WRONLY | os.O_NONBLOCK))
+        except OSError:
+            pass
+
+
+@pytest.mark.parametrize("name", RECORDS)
+def test_a_record_that_is_not_utf8_is_no_record(tmp_path: Path, name: str) -> None:
+    from loom.doctor import check_ai_files, check_permissions
+
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    (q / ".loom/ai" / name).write_bytes(b"\xff\xfe\x00")
+    json_of("upgrade", "--json", cwd=q)
+    check_permissions(q), check_ai_files(q)

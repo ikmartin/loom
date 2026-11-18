@@ -67,15 +67,12 @@ def skill_files(root: Path, apps: list[str]) -> dict[str, str]:
 
 
 def read_record(root: Path) -> dict[str, str]:
-    """Quilt-relative path -> hash of the text loom wrote there, as `RECORD` says; empty where there is none."""
+    """Quilt-relative path -> hash of the text loom wrote there, as `RECORD` says; empty where there is none, or none that can be read (`layout.read_plain`)."""
+    from loom.ai.layout import read_plain
     from loom.paths import AI
 
     out: dict[str, str] = {}
-    try:
-        lines = (root / AI / RECORD).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        return out
-    for line in lines:
+    for line in (read_plain(root, f"{AI}/{RECORD}") or "").splitlines():
         rel, _, digest = line.rpartition(" ")
         if rel and digest:
             out[rel] = digest
@@ -105,7 +102,7 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
     A file at one of loom's paths that loom did not write, or wrote and the person has edited since, is theirs: left alone and named in `theirs`. The record (`RECORD`) is rewritten to what loom's skills now are; it is not itself reported.
     """
     from loom.ai.clients import PROJECT
-    from loom.ai.layout import sha
+    from loom.ai.layout import _write, sha
     from loom.paths import AI
 
     recorded = read_record(root)
@@ -130,8 +127,7 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
         rep.written.append(rel)
         record[rel] = sha(text)
         if write:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(text, encoding="utf-8")
+            _write(root, rel, text)
     for d in sorted(mine):
         if not _plain(root, d, folder=True) or not (root / d).is_dir():
             continue
@@ -154,5 +150,5 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
                     pass  # something of the person's beside it stays, and so does the directory
     if write and (record != recorded or (record and not (root / AI / RECORD).is_file())):
         said = "".join(f"{rel} {h}\n" for rel, h in sorted(record.items()))
-        (root / AI / RECORD).write_text(said, encoding="utf-8")
+        _write(root, f"{AI}/{RECORD}", said)
     return rep

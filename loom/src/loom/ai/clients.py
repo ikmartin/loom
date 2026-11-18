@@ -114,17 +114,17 @@ BY_KEY = {c.key: c for c in CLIENTS}
 
 
 def apps_in(root: Path) -> list[str] | None:
-    """The apps the quilt is set up for, by key in `PROJECT`'s order, as its agent layer records them (`layout.APPS_FILE`); None where it records none, which is a quilt set up for every app.
+    """The apps the quilt is set up for, by key in `PROJECT`'s order, as its agent layer records them (`layout.APPS_FILE`); None where it records none, or none that can be read (`layout.read_plain`), which is a quilt set up for every app.
 
     Recorded rather than read off the files, since a server's file is never committed and Cursor has no other file of its own.
     """
-    from loom.ai.layout import APPS_FILE
+    from loom.ai.layout import APPS_FILE, read_plain
     from loom.paths import AI
 
-    try:
-        keys = set((root / AI / APPS_FILE).read_text(encoding="utf-8").split())
-    except OSError:
+    text = read_plain(root, f"{AI}/{APPS_FILE}")
+    if text is None:
         return None
+    keys = set(text.split())
     return [c.key for c in PROJECT if c.key in keys]
 
 
@@ -246,7 +246,7 @@ def write_clients(
 
     A file of the person's, or one git tracks with a loom server in it, is never written or removed: the first is reported `foreign`, the second `tracked`, and `loom doctor` fails on it. So is one that is a link, not a regular file or not UTF-8 (`layout.read_plain`), reported `foreign`.
     """
-    from loom.ai.layout import blocker, read_plain
+    from loom.ai.layout import _write, blocker, read_plain
 
     rep = ClientReport()
     under_git = tracked(root, PROJECT_FILES)
@@ -278,6 +278,5 @@ def write_clients(
             continue
         rep.written.append(c.file)
         if write:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(want, encoding="utf-8")
+            _write(root, c.file, want)
     return rep
