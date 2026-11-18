@@ -228,19 +228,39 @@ def test_the_file_holding_the_token_is_readable_by_its_owner_alone(tmp_path: Pat
     import os
     import stat
 
-    from loom.render.serve import SERVE_JSON, read_serve_json, write_serve_json
+    from loom.machine import read_token, token_file
+    from loom.render.serve import write_serve_json
 
     root = tmp_path / "quilt"
     old = os.umask(0)
     try:
         token = write_serve_json(root, 8791)
-        assert stat.S_IMODE((root / SERVE_JSON).stat().st_mode) == 0o600
-        (root / SERVE_JSON).chmod(0o644)
+        assert stat.S_IMODE(token_file(root).stat().st_mode) == 0o600
+        assert stat.S_IMODE(token_file(root).parent.stat().st_mode) == 0o700
+        token_file(root).chmod(0o644)
         again = write_serve_json(root, 8791)
     finally:
         os.umask(old)
-    assert stat.S_IMODE((root / SERVE_JSON).stat().st_mode) == 0o600
-    assert again != token and read_serve_json(root)["token"] == again
+    assert stat.S_IMODE(token_file(root).stat().st_mode) == 0o600
+    assert again != token and read_token(root) == again
+
+
+def test_a_quilt_committed_or_copied_whole_carries_no_token(tmp_path: Path) -> None:
+    """The token that authorises writes is kept in the machine's place, keyed by the quilt's path, so nothing under the quilt holds it and a copy of the quilt reads none."""
+    import shutil
+
+    from loom.machine import data_dir, forget_token, read_token, token_file
+    from loom.render.serve import write_serve_json
+
+    here, copy = tmp_path / "here", tmp_path / "copy"
+    here.mkdir()
+    token = write_serve_json(here, 8791)
+    assert token_file(here).is_relative_to(data_dir()) and not token_file(here).is_relative_to(here)
+    assert not any(token.encode() in p.read_bytes() for p in here.rglob("*") if p.is_file())
+    shutil.copytree(here, copy)
+    assert read_token(here) == token and read_token(copy) == ""
+    forget_token(here)
+    assert read_token(here) == ""
 
 
 def test_a_link_into_the_running_viewer_is_offered_only_while_one_is_running(tmp_path: Path) -> None:

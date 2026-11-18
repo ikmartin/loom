@@ -144,34 +144,33 @@ class Publications:
 
 
 def write_serve_json(root: Path, port: int) -> str:
-    """Record where this server is listening, and the token a write must carry; return the token.
+    """Record where this server is listening, and keep the token a write must carry; return the token.
 
-    Two jobs in one file. A command that wants to print an openable link reads the port and the pid to know whether anything is listening. The **token** is what makes the write API safe to leave running: a browser blocks a cross-origin *response* and never the *request*, so any page the author happens to be reading could otherwise POST into their quilt. A cross-site form post cannot set a custom header, so requiring one closes it. This is CSRF protection and not a login -- it keeps other *pages* out, not other people.
+    A command that wants to print an openable link reads the port and the pid in `serve.json` to know whether anything is listening. The **token** is what makes the write API safe to leave running: a browser blocks a cross-origin *response* and never the *request*, so any page the author happens to be reading could otherwise POST into their quilt. A cross-site form post cannot set a custom header, so requiring one closes it. This is CSRF protection and not a login -- it keeps other *pages* out, not other people. It is kept outside the quilt, in the machine's place (`loom.machine`), so a quilt committed or copied whole carries none.
     """
     import os
     import secrets
 
+    from loom.machine import write_token
+
     token = secrets.token_urlsafe(24)
+    write_token(root, token)
     p = root / SERVE_JSON
     p.parent.mkdir(parents=True, exist_ok=True)
-    # the token is for this person's programs alone, so nobody else on the machine may read the file; one an earlier server left keeps the mode it was made with, so it is emptied and closed to others before the token goes in
-    fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(
-            json.dumps(
-                {
-                    "port": port,
-                    "pid": os.getpid(),
-                    "token": token,
-                    "url": f"http://127.0.0.1:{port}/",
-                    # a copied quilt carries the file, and a link it printed would open the other quilt's viewer
-                    "root": str(Path(root).resolve()),
-                },
-                indent=1,
-            )
-            + "\n"
+    p.write_text(
+        json.dumps(
+            {
+                "port": port,
+                "pid": os.getpid(),
+                "url": f"http://127.0.0.1:{port}/",
+                # a copied quilt carries the file, and a link it printed would open the other quilt's viewer
+                "root": str(Path(root).resolve()),
+            },
+            indent=1,
         )
+        + "\n",
+        encoding="utf-8",
+    )
     return token
 
 
@@ -205,7 +204,7 @@ def open_url(root: Path, path: str = "") -> str:
 
     See Also
     --------
-    write_serve_json : What puts the port, the pid and the token there.
+    write_serve_json : What puts the port and the pid there.
     """
     import os
 
@@ -628,7 +627,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 self.send_header(name, value)
 
     def _here(self) -> None:
-        """`GET /_api/here`: the last place a viewer tab reported, for `loom here`, which reads the token from `.loom/serve.json`.
+        """`GET /_api/here`: the last place a viewer tab reported, for `loom here`, which reads the token from the machine's place (`loom.machine`).
 
         Where a person is reading, and the words they selected, are theirs: the token is required, and so is this server's own origin when a browser sends one.
         """
@@ -1126,8 +1125,11 @@ class ServeSession:
             if server:
                 server.shutdown()
                 server.server_close()
-        # nothing is listening any more, so nothing should tell a command that something is
+        # nothing is listening any more, so nothing should tell a command that something is, and no write may carry its token
         (self.quilt.root / SERVE_JSON).unlink(missing_ok=True)
+        from loom.machine import forget_token
+
+        forget_token(self.quilt.root)
         if self.held:
             self.held.close()
         from loom.render.api import forget_place

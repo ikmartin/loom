@@ -22,12 +22,13 @@ from loom.scan.scan import ScanResult
 )
 @quilt_option
 def here_command(as_json: bool, quilt_path: str | None) -> None:
-    """Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, the annotation whose popup is open, and the session they have chosen. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/build/crops/.
+    """Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, the annotation whose popup is open, and the session they have chosen. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/cache/crops/.
 
     The viewer tab they touched last reports it to `loom serve`, which keeps it in memory only. With nothing serving the quilt, or no tab open, it says so. Each thing is named with the link `loom link` prints.
     """
     root = open_quilt(quilt_path).root
-    from loom.render.serve import open_url, read_serve_json
+    from loom.machine import read_token
+    from loom.render.serve import open_url
 
     url = open_url(root)
     if not url:
@@ -37,7 +38,7 @@ def here_command(as_json: bool, quilt_path: str | None) -> None:
             data={"serving": False, "place": None},
         ).emit(as_json)
         return
-    got = _fetch(url, str(read_serve_json(root).get("token") or ""))
+    got = _fetch(url, read_token(root))
     if got.get("place") is None:
         Report(
             f"loom serve is running, but no viewer tab has reported where it is; the person opens {url}",

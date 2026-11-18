@@ -103,7 +103,7 @@ def par_cache(tmp_path_factory: pytest.TempPathFactory) -> Path:
 def isolated_env(
     request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fake_bin: Path, par_cache: Path
 ) -> Path:
-    """Isolate PATH, HOME, XDG_CONFIG_HOME, every TeX tree and every LOOM_* variable but the tier gates; return the temporary HOME. `tex` puts the real TeX first on PATH, `poppler` the real pdftotext, and each skips when it is absent."""
+    """Isolate PATH, HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, every TeX tree and every LOOM_* variable but the tier gates; return the temporary HOME. `tex` puts the real TeX first on PATH, `poppler` the real pdftotext, and each skips when it is absent."""
     assert not str(tmp_path.resolve()).startswith(str(NOTES)), "tests must never run under ~/notes"
     home = tmp_path / "home"
     (home / ".config").mkdir(parents=True)
@@ -127,6 +127,8 @@ def isolated_env(
     monkeypatch.setenv("PATH", ":".join(parts))
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(home / ".config"))
+    # the machine's place (`loom.machine.data_dir`), where a server keeps its write token, under the temporary HOME on every system
+    monkeypatch.setenv("XDG_DATA_HOME", str(home / ".local" / "share"))
     for var in ("TEXMFHOME", "TEXMFLOCAL", "TEXMFVAR", "TEXMFCONFIG"):
         monkeypatch.setenv(var, str(texmf))
     for var in ("TEXINPUTS", "BIBINPUTS", "BSTINPUTS", "FAKE_TEX_FAIL"):

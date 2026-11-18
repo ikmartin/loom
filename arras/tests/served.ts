@@ -81,8 +81,13 @@ function freePort(): Promise<number> {
  */
 function tokenFrom(root: string, port: number): string {
 	try {
-		const record = JSON.parse(readFileSync(join(root, '.loom/serve.json'), 'utf8')) as { port: number; token: string };
-		return record.port === port ? record.token : '';
+		const record = JSON.parse(readFileSync(join(root, '.loom/local/serve.json'), 'utf8')) as { port: number };
+		if (record.port !== port) return '';
+		// the token is kept outside the quilt, in the machine's place, by the quilt's resolved path (`loom.machine`)
+		const data = process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support') : process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+		const at = realpathSync(root);
+		const kept = JSON.parse(readFileSync(join(data, 'loom', 'tokens', `${createHash('sha256').update(at).digest('hex').slice(0, 24)}.json`), 'utf8')) as { root: string; token: string };
+		return kept.root === at ? kept.token : '';
 	} catch {
 		return '';
 	}
