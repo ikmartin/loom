@@ -105,6 +105,48 @@ def test_a_scan_inside_a_build_from_a_held_scan_leaves_the_next_build_nothing_to
     assert [n for n in made if n >= tokenize.CACHED_FROM] == []
 
 
+def test_a_scan_of_a_copy_outside_a_build_leaves_the_next_build_nothing_to_tokenize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An adoption's comparison, which a Review decision runs outside any build, scans a temporary copy; the quilt's own entries must outlive it."""
+    from loom.adopt import _flat_shape
+
+    quilt = load_quilt(a_quilt(tmp_path))
+    report = build(quilt, tex=False)
+    other = PREAMBLE + "\\begin{document}\n" + chapter("gadgets") + "\\end{document}\n"
+    _flat_shape(report.result, other, "drafting")
+    made: list[int] = []
+    tokens = tokenize._tokenize
+    monkeypatch.setattr(tokenize, "_tokenize", lambda text: made.append(len(text)) or tokens(text))
+    build(quilt, tex=False)
+    assert [n for n in made if n >= tokenize.CACHED_FROM] == []
+
+
+def test_a_reading_that_outlives_an_older_one_keeps_what_the_older_one_asked_for() -> None:
+    """A request's scan that begins during a rebuild and ends after it: when it ends, what the rebuild read is still there."""
+    m = Memo(str.upper)
+    build_reading, request_reading = reading(), reading()
+    build_reading.__enter__()
+    m("the build's")
+    request_reading.__enter__()
+    m("the request's")
+    build_reading.__exit__(None, None, None)
+    request_reading.__exit__(None, None, None)
+    assert "the build's" in m and "the request's" in m
+
+
+def test_a_keeping_reading_that_outlives_an_older_one_keeps_what_the_older_one_made() -> None:
+    m = Memo(str.upper)
+    build_reading, copy_reading = reading(), reading(keep=True)
+    build_reading.__enter__()
+    copy_reading.__enter__()
+    m("made by the build while the copy was read")
+    build_reading.__exit__(None, None, None)
+    m("made by the copy alone")
+    copy_reading.__exit__(None, None, None)
+    assert "made by the build while the copy was read" in m and "made by the copy alone" not in m
+
+
 def test_a_keeping_reading_lets_go_only_what_it_made() -> None:
     m = Memo(str.upper)
     m("before")

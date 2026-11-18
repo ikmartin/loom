@@ -111,7 +111,7 @@ def _flat_shape(result: ScanResult, text: str, base: str) -> tuple[dict[str, str
                 target = root / name
                 target.parent.mkdir(parents=True, exist_ok=True)
                 target.write_text(source.read_text())
-        snap = scan(Quilt(root, result.quilt.config))
+        snap = scan(Quilt(root, result.quilt.config), copy=True)
         bodies, _, skeletons = _shape(snap, doc)
         return bodies, skeletons[doc]
 

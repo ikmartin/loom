@@ -230,12 +230,14 @@ def landmark_documents(quilt: Quilt) -> list[str]:
     return out
 
 
-def scan(quilt: Quilt, overlay: dict[str, str] | None = None, *, bases: dict[str, str] | None = None) -> ScanResult:
-    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`).
+def scan(
+    quilt: Quilt, overlay: dict[str, str] | None = None, *, bases: dict[str, str] | None = None, copy: bool = False
+) -> ScanResult:
+    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`). `copy` says `quilt` is a copy made of another (a temporary directory, a saved context).
 
-    A scan is a `memo.reading`: when it ends, unless a build or another reading that began before it is still open, what the scanner remembers of a text it did not read is forgotten.
+    A scan is a `memo.reading`: when it ends, unless a build or another reading that began before it is still open, what the scanner remembers of a text it did not read is forgotten. A scan of a copy keeps instead: it forgets only what it made, so the quilt it was made from keeps its entries.
     """
-    with reading():
+    with reading(keep=copy):
         return _scan(quilt, overlay, bases)
 
 

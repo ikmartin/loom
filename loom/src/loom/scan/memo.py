@@ -8,6 +8,7 @@ from __future__ import annotations
 import threading
 from collections.abc import Callable, Hashable, Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Generic, TypeVar
 
 K = TypeVar("K", bound=Hashable)
@@ -15,9 +16,21 @@ V = TypeVar("V")
 
 _lock = threading.Lock()
 _memos: list[Memo] = []  # type: ignore[type-arg]
-#: The generation each open reading began in, in every thread; each reading begins one of its own.
-_open: set[int] = set()
 _generation = 0
+
+
+@dataclass
+class _Reading:
+    """An open reading: the generation it began in, its own; the oldest it reaches back to, which an older reading that ended while it was open lowers; and, when it keeps, the generation from which what was made is its own to let go."""
+
+    began: int
+    keep: bool
+    reaches: int
+    own_from: int
+
+
+#: Every open reading, in every thread, by the generation it began in.
+_open: dict[int, _Reading] = {}
 
 
 class Memo(Generic[K, V]):
@@ -51,28 +64,33 @@ class Memo(Generic[K, V]):
     def __len__(self) -> int:
         return len(self._entries)
 
-    def _forget(self, began: int, keep: bool) -> None:
+    def _forget(self, ended: _Reading) -> None:
         for key, (_, used, made) in list(self._entries.items()):
-            if (made >= began) if keep else (used < began):
+            if (made >= ended.own_from) if ended.keep else (used < ended.reaches):
                 self._entries.pop(key, None)
 
 
 @contextmanager
 def reading(keep: bool = False) -> Iterator[None]:
-    """Read the quilt inside this: when it ends with no older reading still open, every memo forgets what was not asked for since it began; with `keep`, only what was made since it began.
+    """Read the quilt inside this: when it ends with no older reading still open, every memo forgets what was not asked for since it began, or since the oldest reading it overlapped began; with `keep`, it forgets only what was made while it alone was open.
 
-    A scan inside a build forgets nothing, so the build's rendering finds what the build before it derived; readings in other threads keep what they have asked for. A build from a scan it already holds reads with `keep`: it reads no file of the quilt's, and the scans it makes of other texts (a pinned version, a temporary copy) must not take the quilt's own entries with them, while what only they made (a temporary copy's styles) is let go.
+    A scan inside a build forgets nothing, so the build's rendering finds what the build before it derived. A reading that begins during another and outlives it (a request's scan during a rebuild) reaches back to the other's start, so it does not take what the other asked for with it. A keeping reading reads no file of the quilt's as it now is: a build from a scan it already holds, or a scan of a copy (a pinned version, a temporary directory); the quilt's own entries must outlive it, while what only it made (a temporary copy's texts and styles) is let go.
     """
     global _generation
     with _lock:
         _generation += 1
-        began = _generation
-        _open.add(began)
+        this = _Reading(_generation, keep, _generation, _generation)
+        _open[this.began] = this
     try:
         yield
     finally:
         with _lock:
-            _open.discard(began)
-            if all(other > began for other in _open):
+            del _open[this.began]
+            _generation += 1  # what is made from here on is told from what was made while this was open
+            for other in _open.values():
+                if other.began > this.began:
+                    other.reaches = min(other.reaches, this.reaches)
+                    other.own_from = _generation
+            if all(other.began > this.began for other in _open.values()):
                 for memo in _memos:
-                    memo._forget(began, keep)
+                    memo._forget(this)
