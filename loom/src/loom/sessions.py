@@ -53,8 +53,8 @@ class Session:
     conversation: str = ""
     #: Who opened it, as the `created` event names them.
     who: str = ""
-    #: The session that was active when this one was opened and made active in its place; empty where none was, or it was not made active.
-    replaced: str = ""
+    #: The session that was active when opening this one made it active in its place, '' where none was; None where opening it did not make it active.
+    replaced: str | None = None
 
     @property
     def last_opened(self) -> str:
@@ -123,7 +123,7 @@ def sessions(root: Path, *, deleted: bool = False) -> dict[str, Session]:
                 purpose=str(e.get("purpose", "")),
                 conversation=str(e.get("conversation", "")),
                 who=str(e.get("who", "")),
-                replaced=str(e.get("replaced", "")),
+                replaced=None if e.get("replaced") is None else str(e["replaced"]),
             )
             continue
         s = out.get(sid)
@@ -155,7 +155,7 @@ def next_id(root: Path, date: str) -> str:
 
 
 def create(
-    root: Path, title: str, who: str, *, purpose: str = "", conversation: str = "", replaced: str = ""
+    root: Path, title: str, who: str, *, purpose: str = "", conversation: str = "", replaced: str | None = None
 ) -> Session:
     """Mint a session and return it; the directory is not made until something is written into it.
 
@@ -171,8 +171,8 @@ def create(
         What the sitting is for; shown under the title and changed later with `purposed`.
     conversation : str, default ''
         The agent app's id for the conversation it is made for, which `for_conversation` finds it by.
-    replaced : str, default ''
-        The session that was active, where this one is made active in its place; `loom since` opens an agent's first look there when the agent made this one.
+    replaced : str, optional
+        Where the caller makes this one active: the session that was active, '' for none; `loom since` opens an agent's first look there when the agent made this one. Default None, not made active.
 
     Returns
     -------
@@ -187,7 +187,7 @@ def create(
             {"event": "created", "id": sid, "title": title, "who": who, "when": when}
             | ({"purpose": purpose} if purpose else {})
             | ({"conversation": conversation} if conversation else {})
-            | ({"replaced": replaced} if replaced else {}),
+            | ({"replaced": replaced} if replaced is not None else {}),
         )
     return sessions(root)[sid]
 
@@ -254,7 +254,7 @@ def ensure_active(root: Path, who: str, title: str = "") -> Session:
         found = _active_session(root)
         if found is not None:
             return found
-        s = create(root, title or f"session of {stamp()[:10]}", who)
+        s = create(root, title or f"session of {stamp()[:10]}", who, replaced="")
         set_active(root, s.id)
     return s
 

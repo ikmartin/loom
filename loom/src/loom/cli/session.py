@@ -74,7 +74,7 @@ def new_command(
         ).emit(as_json)
         return
     # the session this one stands in for, so an agent's first look opens where it would have before this one (`loom.since`)
-    s = create(root, name, who, replaced="" if no_use else (active(root) or ""))
+    s = create(root, name, who, replaced=None if no_use else (active(root) or ""))
     if not no_use:
         set_active(root, s.id)
     Report(
@@ -300,7 +300,7 @@ def delete_command(
 
 
 def _purge_index(root, sid: str) -> None:  # type: ignore[no-untyped-def]
-    """Drop one session's events from the index, rewriting it, and its id where another session names it as the one it `replaced`."""
+    """Drop one session's events from the index, rewriting it, and its id where another session names it as the one it `replaced`, which then replaced none."""
     import json
 
     p = index_path(root)
@@ -316,7 +316,7 @@ def _purge_index(root, sid: str) -> None:  # type: ignore[no-untyped-def]
         if isinstance(event, dict) and str(event.get("id", "")) == sid:
             continue
         if isinstance(event, dict) and event.get("replaced") == sid:
-            del event["replaced"]
+            event["replaced"] = ""
             line = json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
         kept.append(line)
     p.write_text("".join(kept), encoding="utf-8")

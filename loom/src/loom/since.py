@@ -205,7 +205,7 @@ def note_deletion(root: Path, removed: list[dict[str, Any]], by: str) -> None:
 def since(result: ScanResult, name: str, session: Session | None = None) -> Since:
     """What people did since `name` last looked, or `name` in `session`, and the marker that would close the window; nothing is written.
 
-    With no marker the window opens when the active session was last opened, or at the start of the quilt with none; where `name` itself opened the active session, making it active, the window opens where the session it replaced would have opened it, so an agent that opens a session and then looks sees what a person did before. A session with no marker of its own opens where the name's marker stands, else as with no session: never when the session itself opened, since over MCP a conversation's session is made at its first look and what a person did before it is what that look is for. "People" are the records whose kind is human, and for a message or a page write the names `is_agent` does not call an agent.
+    With no marker the window opens when the active session was last opened, or at the start of the quilt with none; where `name` itself opened the active session and opening it made it active, the window opens where the session it replaced would have opened it, so an agent that opens a session and then looks sees what a person did before. A session with no marker of its own opens where the name's marker stands, else as with no session: never when the session itself opened, since over MCP a conversation's session is made at its first look and what a person did before it is what that look is for. "People" are the records whose kind is human, and for a message or a page write the names `is_agent` does not call an agent.
 
     Parameters
     ----------
@@ -235,9 +235,9 @@ def since(result: ScanResult, name: str, session: Session | None = None) -> Sinc
         standing = sessions(root)
         here = active(root)
         found = standing.get(here) if here else None
-        # a session this agent opened, making it active, stands where the one it replaced stood: the look opens as it would have, had it come first
+        # a session this agent opened, opening it making it active, stands where the one it replaced stood: the look opens as it would have, had it come first
         for _ in range(len(standing)):
-            if found is None or found.who != name:
+            if found is None or found.who != name or found.replaced is None:
                 break
             found = standing.get(found.replaced) if found.replaced else None
         start = found.last_opened if found else ""

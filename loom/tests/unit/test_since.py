@@ -324,6 +324,16 @@ def test_a_session_that_has_not_looked_for_fourteen_days_holds_no_notice(q: Path
     assert [e for e in deletions(q) if e.get("to") == AGENT] == []
 
 
+def test_a_session_an_agent_opened_aside_and_a_person_made_active_opens_the_look_at_its_opening(q: Path) -> None:
+    """`session new --no-use` makes nothing active, so the session stands where no other stood: made active later by a person, it is any active session, and a first look opens at its opening."""
+    ok("annotate", "dm-0003", "Before the agent's session.", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds
+    made = json_of("session", "new", "--name", "aside", "--no-use", "--as", AGENT, "--json", cwd=q)
+    ok("session", "use", made["session"], "--as", WHO, cwd=q)
+    got = look(q)
+    assert got["first"] is True and got["annotations"] == []
+
+
 def test_an_agent_that_opens_a_session_and_then_looks_sees_what_came_before(q: Path) -> None:
     """In a shell: `session new` makes the agent's session active, and its first look still opens where it would have, had it come first."""
     ok("annotate", "dm-0003", "Please look at this first.", "--as", WHO, cwd=q)
