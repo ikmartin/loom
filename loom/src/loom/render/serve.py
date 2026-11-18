@@ -726,8 +726,8 @@ def _relief() -> Any:
 
 
 class ServeSession:
-    #: Seconds after the last rebuild before the server, at rest, gives back what its builds left (`give_back`); a burst of saves settles once.
-    SETTLE_AFTER = 1.0
+    #: Seconds after the last rebuild before the server, at rest, gives back what its builds left (`give_back`): long enough that a burst of saves settles once and a write that follows a write does not meet the collection, which holds the interpreter for tens of milliseconds.
+    SETTLE_AFTER = 5.0
 
     def __init__(
         self,
