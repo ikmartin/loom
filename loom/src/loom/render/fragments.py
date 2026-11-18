@@ -304,9 +304,9 @@ class FragmentRenderer:
         return DocumentHtml(self, owner, page, only=only, files=files, pairs=pairs, labels=labels)
 
     def prepare(self, keys: list[str] | None = None) -> None:
-        """Make by TeX, before fragments are cut, what no compile makes among `keys` (default all): the nodes no document reaches, all of them in one batch under the default document's preamble when any is among `keys`, and each digest under its own.
+        """Make by TeX, before fragments are cut, what no compile makes among `keys` (default all): the nodes no document reaches that have a fragment, all of them in one batch under the default document's preamble when any is among `keys`, and each digest under its own.
 
-        Done once per build, ahead of the fragments that read it, so each preamble is paid for once rather than once per node. The nodes no document reaches are made together, from the cache where unchanged, so that what the batch noted (`groups['loose']`) is what every one of them was made from.
+        Done once per build, ahead of the fragments that read it, so each preamble is paid for once rather than once per node. The nodes no document reaches are made together, from the cache where unchanged, as a build that renders every fragment makes them, so that what the batch noted (`groups['loose']`) is what every one of them was made from.
         """
         result = self.result
         wanted = set(keys) if keys is not None else None
@@ -314,7 +314,7 @@ class FragmentRenderer:
         loose = [
             k
             for k, n in result.nodes.items()
-            if n.kind in ("environment", "proof", "section")
+            if (n.kind in ("environment", "section") or (n.kind == "proof" and n.id))
             and not n.reached_by
             and n.file in result.files
             and n.file not in digests
