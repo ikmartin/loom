@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 #: Where the markers live, one file per agent name.
 MARKERS = SINCE
+#: How long an open session that has not looked still holds a deletion notice for its name, in days: a conversation that ends leaves its session open, and would hold one for ever. An agent's scratch is kept as long.
+HOLD_DAYS = 14
 
 
 @dataclass
@@ -124,7 +126,7 @@ def write_marker(root: Path, name: str, marker: Marker, session: str | None = No
     for p in [marker_path(root, name), *([marker_path(root, name, session)] if session else [])]:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    # a deletion goes once every look of this name still to come starts after it: an open session that has looked has a window of its own
+    # a deletion goes once every look of this name still to come starts after it: an open session that has looked within HOLD_DAYS has a window of its own
     looks = [marker, *_open_looks(root, name)]
 
     def told(e: dict[str, Any]) -> bool:
@@ -137,16 +139,20 @@ def write_marker(root: Path, name: str, marker: Marker, session: str | None = No
 
 
 def _open_looks(root: Path, name: str) -> list[Marker]:
-    """Each open session's own marker for `name`: the windows a deletion must still reach before it goes."""
+    """Each open session's own marker for `name` set within `HOLD_DAYS`: the windows a deletion must still reach before it goes."""
+    from datetime import timedelta
+
+    from loom.clock import now
     from loom.sessions import sessions
 
     stem = slug(name) + "."
     found = sessions(root)
+    held = (now() - timedelta(days=HOLD_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     out: list[Marker] = []
     for p in (root / MARKERS).glob(f"{stem}*.json"):
         sid = p.name[len(stem) : -len(".json")]
         s = found.get(sid)
-        if s is not None and s.state == "open" and (m := read_marker(root, name, sid)) is not None:
+        if s is not None and s.state == "open" and (m := read_marker(root, name, sid)) is not None and m.when >= held:
             out.append(m)
     return out
 

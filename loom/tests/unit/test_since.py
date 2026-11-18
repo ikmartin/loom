@@ -300,3 +300,26 @@ def test_a_deletion_is_said_to_each_open_session_of_the_name_that_has_looked(q: 
     assert [a["id"] for a in look(q, "--session", two)["acts"]] == [gap]
     assert [e for e in deletions(q) if e.get("to") == AGENT] == []
     assert look(q, "--session", one)["acts"] == [] and look(q, "--session", two)["acts"] == []
+
+
+def test_a_session_that_has_not_looked_for_fourteen_days_holds_no_notice(q: Path) -> None:
+    """A conversation that ends leaves its session open; after fourteen days without a look it no longer keeps a deletion notice for the others."""
+    from datetime import timedelta
+
+    from loom.clock import now
+    from loom.since import HOLD_DAYS, deletions
+
+    one = new_session(q, "conversation one", WHO)
+    two = new_session(q, "conversation two", WHO)
+    ok("annotate", "dm-0003", "A gap here.", "--as", AGENT, cwd=q)
+    gap = last_id(q)
+    look(q, "--session", one)
+    look(q, "--session", two)
+    old = marker_path(q, AGENT, two)
+    data = json.loads(old.read_text())
+    data["when"] = (now() - timedelta(days=HOLD_DAYS, hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    old.write_text(json.dumps(data))
+    ok("annotate", "--delete", gap, "--as", WHO, cwd=q)
+    assert [a["id"] for a in look(q, "--session", one)["acts"]] == [gap]
+    assert [e for e in deletions(q) if e.get("to") == AGENT] == []
+
