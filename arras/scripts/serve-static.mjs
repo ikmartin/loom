@@ -2,7 +2,7 @@
 //
 // Usage: node scripts/serve-static.mjs DIR PORT
 //
-// Resolution follows loom's `render/serve.py`: `/build/...` is a file of the corpus or 404, taken literally since fragment names carry `%2F`; `/digests/storage/...` is percent-decoded; a missing `_app/` file or asset is 404, never the shell; `/_api` is 404, so the viewer shows no editing affordances; every other path is the app shell, dots in keys included. Listens on 127.0.0.1 only.
+// Resolution follows loom's `render/serve.py`: `/build/...` is a file of the staged corpus or 404, taken literally since fragment names carry `%2F`, and `/build/tex/...` a file of the compile folders `scripts/stage-fixture.mjs` stages there from a quilt (loom answers it from `.loom/cache/tex/`); `/digests/storage/...` is percent-decoded; a missing `_app/` file or asset is 404, never the shell; `/_api` is 404, so the viewer shows no editing affordances; every other path is the app shell, dots in keys included. Listens on 127.0.0.1 only.
 
 import { createServer } from 'node:http';
 import { createReadStream, statSync } from 'node:fs';
