@@ -5,7 +5,6 @@ import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { cpSync, createWriteStream, existsSync, readFileSync, realpathSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { patient } from './sites';
@@ -75,9 +74,10 @@ function freePort(): Promise<number> {
 	});
 }
 
-/** Where the server on `root` keeps its write token: outside the quilt, in the machine's place, by the quilt's resolved path (`loom.machine.token_file`). */
-function tokenFile(root: string): string {
-	const data = process.platform === 'darwin' ? join(homedir(), 'Library', 'Application Support') : process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share');
+/** Where the server on `root`, started with `env`, keeps its write token: outside the quilt, in the machine's place under that environment's home, by the quilt's resolved path (`loom.machine.token_file`). */
+function tokenFile(root: string, env: NodeJS.ProcessEnv): string {
+	const home = env.HOME!;
+	const data = process.platform === 'darwin' ? join(home, 'Library', 'Application Support') : env.XDG_DATA_HOME || join(home, '.local', 'share');
 	return join(data, 'loom', 'tokens', `${createHash('sha256').update(realpathSync(root)).digest('hex').slice(0, 24)}.json`);
 }
 
@@ -85,11 +85,11 @@ function tokenFile(root: string): string {
  *
  * The record is written only once the port is held, whereas an answer on the port proves nothing: when two workers are given one port, the server that took it answers the other's probe before the loser has exited, and a test left on it writes to the other test's quilt.
  */
-function tokenFrom(root: string, port: number): string {
+function tokenFrom(root: string, port: number, env: NodeJS.ProcessEnv): string {
 	try {
 		const record = JSON.parse(readFileSync(join(root, '.loom/local/serve.json'), 'utf8')) as { port: number };
 		if (record.port !== port) return '';
-		const kept = JSON.parse(readFileSync(tokenFile(root), 'utf8')) as { root: string; token: string };
+		const kept = JSON.parse(readFileSync(tokenFile(root, env), 'utf8')) as { root: string; token: string };
 		return kept.root === realpathSync(root) ? kept.token : '';
 	} catch {
 		return '';
@@ -114,8 +114,10 @@ export function reviewerEnv(suite: Suite, directory: string): NodeJS.ProcessEnv 
 	mkdirSync(config, { recursive: true });
 	const name = suite.quilt === 'synthetic' ? 'The synthetic quilt' : 'The loom showcase';
 	writeFileSync(join(config, 'config.toml'), `[author]\nname = ${JSON.stringify(name)}\n`);
-	// loom runs as the author here: an agent running the suite must not make loom refuse the author's own commands, as the Python suite's conftest arranges too
-	const env: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: directory };
+	// loom runs as the author here: an agent running the suite must not make loom refuse the author's own commands, as the Python suite's conftest arranges too; and in a home of the suite's own, so that nothing a loom keeps for the machine, a server's write token first, reaches the person's
+	const home = join(directory, 'home');
+	mkdirSync(home, { recursive: true });
+	const env: NodeJS.ProcessEnv = { ...process.env, XDG_CONFIG_HOME: directory, HOME: home, XDG_DATA_HOME: join(home, '.local', 'share') };
 	for (const marker of AGENT_MARKERS) delete env[marker];
 	return env;
 }
@@ -153,7 +155,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 		proc.stderr!.pipe(out);
 		let exited = false;
 		const gone = new Promise<void>((r) => proc.once('exit', () => ((exited = true), r())));
-		// killed outright: a graceful stop waits out the watcher's poll, over a second per test, and the copy is thrown away after; so the token a graceful stop would remove from the machine's place is removed here
+		// killed outright: a graceful stop waits out the watcher's poll, over a second per test, and the copy is thrown away after; so the token a graceful stop would remove from the suite's home is removed here
 		const stop = async () => {
 			if (!exited) {
 				try {
@@ -164,7 +166,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 				await gone;
 			}
 			try {
-				rmSync(tokenFile(root), { force: true });
+				rmSync(tokenFile(root, env), { force: true });
 			} catch {
 				/* the copy is gone already */
 			}
@@ -180,7 +182,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 				// leave Node’s parser paused when the server closes the connection.
 				await res.arrayBuffer();
 				if (res.ok) {
-					token = tokenFrom(root, port);
+					token = tokenFrom(root, port, env);
 					if (token) break;
 				}
 			} catch {
