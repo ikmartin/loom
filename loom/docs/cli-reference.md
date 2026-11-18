@@ -68,7 +68,7 @@ SRC is not modified; the history records that the spine superseded it, so it def
 | `--sections` | Also move labelled sections and subsections to nodes/. |
 | `--all` | Act on SRC and every file it reaches, writing spines under --to-dir. |
 | `--to-dir` `DIR` | With --all: the directory the spines are written under. |
-| `--retire` | Move SRC into .loom/retired/ once its spine is written, instead of leaving it superseded in place. |
+| `--retire` | Move SRC into .loom/records/retired/ once its spine is written, instead of leaving it superseded in place. |
 | `--dry-run` | Say what would be written and moved, and write nothing; no identity test. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -495,7 +495,7 @@ Removed: `\usepackage{loom}`, `% !LOOM` lines, `\uses{…}`, and every label tha
 
 | option | description |
 |---|---|
-| `--to` `FILE` | The file to write: one flat document, never among the quilt's sources (.loom/build/ or outside the quilt). |
+| `--to` `FILE` | The file to write: one flat document, never among the quilt's sources (outside the quilt, or an agent's .loom/agents/scratch/SESSION/). |
 | `--keep-referenced-ids` | Keep the id label of a referenced result that has no label of yours, and the references to it. |
 | `--keep-incomplete` | Keep every \incomplete{…}, defined to print nothing as loom.sty defines it. |
 | `--dry-run` | Say what would be removed and written, and write nothing. |
@@ -612,7 +612,7 @@ A work with no document is declared unreadable -- the Stacks Project is a living
 
 `loom library import [OPTIONS] PATH`
 
-Copy a digest from another quilt into .loom/digests/, rewriting its citekey and id prefix when --name renames it.
+Copy a digest from another quilt into .loom/library/, rewriting its citekey and id prefix when --name renames it.
 
 It never overwrites a digest already there.
 
@@ -644,7 +644,7 @@ Token geometry is thirty times the size of plain page text, so it is produced fo
 
 An agent's tool: propose one result of WORK, its quotation checked against the page or source file it claims to come from.
 
-The only write an agent makes to the library's results. SOURCE-TEXT must appear on PAGE — whitespace, hyphenation across lines and ligatures are normalised, nothing else is — and on failure nothing is stored and the page's text is printed so the quotation can be corrected in the same turn. For a work with a LaTeX source, quote the source with --source-file instead: the mathematics is there, and in a PDF's text layer it is often control bytes. A proposal lands in `.loom/digests/CITEKEY.proposed.tex`, which no bundle inputs, and waits there for the author to verify or discard it.
+The only write an agent makes to the library's results. SOURCE-TEXT must appear on PAGE — whitespace, hyphenation across lines and ligatures are normalised, nothing else is — and on failure nothing is stored and the page's text is printed so the quotation can be corrected in the same turn. For a work with a LaTeX source, quote the source with --source-file instead: the mathematics is there, and in a PDF's text layer it is often control bytes. A proposal lands in `.loom/library/CITEKEY.proposed.tex`, which no bundle inputs, and waits there for the author to verify or discard it.
 
 | option | description |
 |---|---|
@@ -789,13 +789,13 @@ Hand a document to an agent, take its changes back, the sessions you both work i
 
 `loom draft [OPTIONS] DOCUMENT`
 
-Draft an agent document NAME from a live working document: flat, in `.loom/copies/`, with every label it defines derived.
+Draft an agent document NAME from a live working document: flat, in `.loom/agents/copies/`, with every label it defines derived.
 
 A copy step records what each of its nodes began from, and who drafted it: `--as`, else the configured author; an agent that has not named itself is refused. A document of an agent's own needs no command: it is a file the agent writes where the quilt lets it. Starting a document from an old version of one is `loom history restore`.
 
 | option | description |
 |---|---|
-| `--ai` `NAME` | The agent document to write, .loom/copies/NAME.tex. |
+| `--ai` `NAME` | The agent document to write, .loom/agents/copies/NAME.tex. |
 | `--as` `NAME` | Who drafts it; an agent names itself, including Agent or AI. |
 | `--section` `ID` | Copy only this section or subsection and its descendants. |
 | `--dry-run` | Say what would be written, and write nothing. |
@@ -933,7 +933,7 @@ Make WHICH the active session, resuming it when it was closed. WHICH is an id, a
 
 `loom here [OPTIONS]`
 
-Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, the annotation whose popup is open, and the session they have chosen. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/build/crops/.
+Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, the annotation whose popup is open, and the session they have chosen. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/cache/crops/.
 
 The viewer tab they touched last reports it to `loom serve`, which keeps it in memory only. With nothing serving the quilt, or no tab open, it says so. Each thing is named with the link `loom link` prints.
 
@@ -1049,9 +1049,9 @@ Before a large instruction, an agent checks its document here: a stale one is re
 
 `loom ai init [OPTIONS]`
 
-Write the agent layer: .loom/ai/ (orientation, rules, modes), CLAUDE.md, AGENTS.md and GEMINI.md, the permission files, and what starts the loom MCP server for each agent's app.
+Write the agent layer: .loom/agents/instructions/ (orientation, rules, modes), CLAUDE.md, AGENTS.md and GEMINI.md, the permission files, and what starts the loom MCP server for each agent's app.
 
-The permission files say what agents may run, for Claude Code (.claude/settings.json) and Codex (.codex/rules/loom.rules). Over MCP, the default, the server's files are .mcp.json (Claude Code, VS Code), .codex/config.toml, .gemini/settings.json and .cursor/mcp.json, gitignored because they name this machine's paths; one that holds settings of your own is left alone, and --client prints the entry to add to it, or to an app configured outside the quilt. Where .loom/ai/ exists this refreshes what `loom upgrade` would, keeping an edited mode file and writing the new version beside it.
+The permission files say what agents may run, for Claude Code (.claude/settings.json) and Codex (.codex/rules/loom.rules). Over MCP, the default, the server's files are .mcp.json (Claude Code, VS Code), .codex/config.toml, .gemini/settings.json and .cursor/mcp.json, gitignored because they name this machine's paths; one that holds settings of your own is left alone, and --client prints the entry to add to it, or to an app configured outside the quilt. Where .loom/agents/instructions/ exists this refreshes what `loom upgrade` would, keeping an edited mode file and writing the new version beside it.
 
 | option | description |
 |---|---|
@@ -1067,7 +1067,7 @@ The permission files say what agents may run, for Claude Code (.claude/settings.
 
 Print mode NAME in full: when it fits, what it is for, and what its report shows.
 
-The quilt's own copy in .loom/ai/modes/ is printed, so an edit the author made there holds; with no .loom/ai/, the shipped one. `loom ai orient` lists every mode with its one line.
+The quilt's own copy in .loom/agents/instructions/modes/ is printed, so an edit the author made there holds; with no .loom/agents/instructions/, the shipped one. `loom ai orient` lists every mode with its one line.
 
 | option | description |
 |---|---|
@@ -1117,7 +1117,7 @@ Reopen a retained agent document when its scope and identities are available.
 
 Serve this quilt's agent commands as MCP tools over stdio, for an agent's app to start; it runs until the app closes it.
 
-One tool per agent command, named for it (`loom status` is `loom_status`), its options its arguments; the author's commands are not tools. Each call runs the command it names, as NAME, and its result is that command's report. The instructions tell the agent to call `loom_ai_orient` first. A result too long for a reply is written under `.loom/build/agent/` and the tool returns its path.
+One tool per agent command, named for it (`loom status` is `loom_status`), its options its arguments; the author's commands are not tools. Each call runs the command it names, as NAME, and its result is that command's report. The instructions tell the agent to call `loom_ai_orient` first. A result too long for a reply is written under `.loom/agents/scratch/` and the tool returns its path.
 
 | option | description |
 |---|---|
@@ -1132,7 +1132,7 @@ Build the site and the PDFs, serve them, and exchange sources with a workspace.
 
 `loom build [OPTIONS]`
 
-Scan, derive, render, and publish .loom/build/. Exit 1 if any error-severity diagnostic exists outside the works nothing cites (the build is still published).
+Scan, derive, render, and publish .loom/cache/site/, what the viewer is served. Exit 1 if any error-severity diagnostic exists outside the works nothing cites (the build is still published).
 
 A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a digest, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
 
@@ -1150,7 +1150,7 @@ A document is read from the HTML its compile made, and shows as its source until
 
 Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
-The viewer is at /, and the build directory it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
+The viewer is at /, and what it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
 
 | option | description |
 |---|---|
@@ -1164,7 +1164,7 @@ The viewer is at /, and the build directory it reads at /build/. One server runs
 
 `loom compile [OPTIONS] [TARGET]`
 
-Run latexmk from a master's own directory into .loom/build/<name>/ (default: the default master), its name its path without .tex, or for a key.
+Run latexmk from a master's own directory into its compile folder, .loom/cache/tex/<stem>-<hash>/ (default: the default master), or for a key.
 
 Compiling a key builds the document of its closure and runs latexmk on that, so `--with` previews a proposed diff and `--draft` a node that has no id yet: neither writes into the quilt, and a failure names the digests whose packages are missing. `--html` also makes a document's HTML as TeX makes it, which its fragments are cut from: the page, the fragment loom rebuilt from it, and how many of the document's nodes and blocks it places.
 
@@ -1174,7 +1174,7 @@ Compiling a key builds the document of its closure and runs latexmk on that, so 
 | `--with` `FILE` | Substitute a unified diff, a .tex file, or a suggested edit's text (by its id) for KEY's text; the quilt is not touched. |
 | `--draft` `FILE` | Compile a node file not yet in the quilt. |
 | `--session` `SESSION` | Log this call to the session. |
-| `--html` | Also make a document's HTML with TeX4ht, into .loom/build/<name>/html/, and say how much of it loom can place. |
+| `--html` | Also make a document's HTML with TeX4ht, into .loom/cache/tex/<stem>-<hash>/html/, and say how much of it loom can place. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -1282,7 +1282,7 @@ Keep loom's own files current, and documents live.
 
 `loom upgrade [OPTIONS]`
 
-Refresh .loom/.gitignore, write .loom/annotation-types.toml where a quilt has none, and, where .loom/ai/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones.
+Refresh .loom/.gitignore, write .loom/records/annotation-types.toml where a quilt has none, and, where .loom/agents/instructions/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones.
 
 | option | description |
 |---|---|

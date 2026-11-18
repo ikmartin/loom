@@ -28,55 +28,55 @@
     "edited": false,
     "fits": "a question asked in passing whose answer is worth finding again — a definition recalled, a step explained, a constant checked (\"what is $W_\\chi$ a subscheme of?\").",
     "name": "quick",
-    "path": ".loom/ai/modes/quick.md"
+    "path": ".loom/agents/instructions/modes/quick.md"
    },
    {
     "edited": false,
     "fits": "a question that wants understanding — definitions, examples, edge cases, what breaks without a hypothesis (\"how does the procedure change if a type is fixed first?\").",
     "name": "question",
-    "path": ".loom/ai/modes/question.md"
+    "path": ".loom/agents/instructions/modes/question.md"
    },
    {
     "edited": false,
     "fits": "what a result actually uses — which hypotheses are needed, whether a citation covers its use, whether a statement stands alone (\"what are the needed hypotheses on the target?\").",
     "name": "audit",
-    "path": ".loom/ai/modes/audit.md"
+    "path": ".loom/agents/instructions/modes/audit.md"
    },
    {
     "edited": false,
     "fits": "whether the mathematics is right, before anyone relies on it — new or changed mathematics, a computation to check (\"run it through referee\").",
     "name": "referee",
-    "path": ".loom/ai/modes/referee.md"
+    "path": ".loom/agents/instructions/modes/referee.md"
    },
    {
     "edited": false,
     "fits": "improving a text before someone else reads it — errors, citations, wording and clarity, every finding graded, drop-in text for each (\"provide annotations on the document text\").",
     "name": "review",
-    "path": ".loom/ai/modes/review.md"
+    "path": ".loom/agents/instructions/modes/review.md"
    },
    {
     "edited": false,
     "fits": "shorter text with the same mathematics (\"simplify\", \"tighten this\").",
     "name": "simplify",
-    "path": ".loom/ai/modes/simplify.md"
+    "path": ".loom/agents/instructions/modes/simplify.md"
    },
    {
     "edited": false,
     "fits": "reading order and clarity for a named reader, with the same mathematics (\"edit for clarity and flow\", \"write it so it is clear to me\").",
     "name": "flow",
-    "path": ".loom/ai/modes/flow.md"
+    "path": ".loom/agents/instructions/modes/flow.md"
    },
    {
     "edited": false,
     "fits": "new mathematics or text from the author's plan or request (\"implement each example in section 8\", \"restate Section 7 for $M(X,\\tau)$, marking what still needs proof\").",
     "name": "draft",
-    "path": ".loom/ai/modes/draft.md"
+    "path": ".loom/agents/instructions/modes/draft.md"
    },
    {
     "edited": false,
     "fits": "a cited paper to trust or to understand — its digest checked against the paper itself, the results of a paper with no source proposed from its pages, or an overview of what it proves and how.",
     "name": "ingest",
-    "path": ".loom/ai/modes/ingest.md"
+    "path": ".loom/agents/instructions/modes/ingest.md"
    }
   ]
  },
@@ -673,12 +673,12 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "88e84608d7f2c5c7ad3ba60cf8520f11835fcf5931b6838c392824caac76d296",
+   "hash": "c636fb8363f01533d0b73df00d1a68794627f3d7b0af2d96221fa2802420d08d",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
    "name": "widgets-v1",
-   "path": ".loom/history/0001-widgets-v1/widgets-v1.tex",
+   "path": ".loom/records/history/0001-widgets-v1/widgets-v1.tex",
    "stem": "widgets-v1",
    "step": "0001",
    "title": "Widgets, gadgets, and their fixed loci",
@@ -688,12 +688,12 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "333efd95145ccebe21d006f5f04ea4c3351ae557f52dc83954c3a2a42c3557ef",
+   "hash": "9230e5f27ee7fe480b66e63bf5a2cd42ab561ad63543cfba13e068e0d4bca626",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
    "name": "widgets-v2",
-   "path": ".loom/history/0003-widgets-v2/widgets-v2.tex",
+   "path": ".loom/records/history/0003-widgets-v2/widgets-v2.tex",
    "stem": "widgets-v2",
    "step": "0003",
    "title": "Widgets, gadgets, and their fixed loci",
@@ -703,12 +703,12 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "4107f62d6c5a55ce6fd4ba5f5a918e145a0cc8946b5d83ce29c6b0e02fd67a45",
+   "hash": "751c0c31f501108bc01478108673a239b867b4f6b2f9ca5932450279b8eecd6a",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
    "name": "widgets-v3",
-   "path": ".loom/history/0005-widgets-v3/widgets-v3.tex",
+   "path": ".loom/records/history/0005-widgets-v3/widgets-v3.tex",
    "stem": "widgets-v3",
    "step": "0005",
    "title": "Widgets, gadgets, and their fixed loci",
@@ -877,7 +877,7 @@
    "deny": [],
    "layer": false,
    "protected": [
-    ".loom/ (but .loom/sessions/, .loom/build/, .loom/copies/, .loom/annotation-types.toml)",
+    ".loom/ (but .loom/agents/sessions/, .loom/agents/copies/, .loom/agents/scratch/, .loom/records/annotation-types.toml)",
     "config.toml",
     "research-state.md"
    ],
@@ -972,7 +972,7 @@
   },
   "quilt": {
    "engine": "pdflatex",
-   "history": ".loom/history",
+   "history": ".loom/records/history",
    "home": "",
    "main": "drafting/main.tex",
    "name": "The synthetic quilt",
@@ -1032,10 +1032,10 @@
      "documents": [
       "drafting/main.tex"
      ],
-     "incoming": "fragments/incoming/5bffc0f5f43d3a61a238-proposal.html",
-     "incoming_macros": "adopt:f311691cf45a95c1fbed",
+     "incoming": "fragments/incoming/a95e37d38dc939f71daf-proposal.html",
+     "incoming_macros": "adopt:4af9d99873c18c23766b",
      "key": "sy-0001",
-     "local": "fragments/incoming/5bffc0f5f43d3a61a238-local.html",
+     "local": "fragments/incoming/a95e37d38dc939f71daf-local.html",
      "math_changed": true,
      "merged": "",
      "name": "Widget",
@@ -1073,10 +1073,10 @@
       "drafting/main.tex",
       "drafting/talk.tex"
      ],
-     "incoming": "fragments/incoming/096133aa7b5ad40b25ba-proposal.html",
-     "incoming_macros": "adopt:f311691cf45a95c1fbed",
+     "incoming": "fragments/incoming/990a24799f6597aef74a-proposal.html",
+     "incoming_macros": "adopt:4af9d99873c18c23766b",
      "key": "sy-0002",
-     "local": "fragments/incoming/096133aa7b5ad40b25ba-local.html",
+     "local": "fragments/incoming/990a24799f6597aef74a-local.html",
      "math_changed": true,
      "merged": "",
      "name": "Orbits",
@@ -1093,10 +1093,10 @@
       "drafting/main.tex",
       "drafting/talk.tex"
      ],
-     "incoming": "fragments/incoming/5806c251e53a5ab6de59-proposal.html",
-     "incoming_macros": "adopt:f311691cf45a95c1fbed",
+     "incoming": "fragments/incoming/ca79decb2c1ab9cea4f7-proposal.html",
+     "incoming_macros": "adopt:4af9d99873c18c23766b",
      "key": "sy-0008",
-     "local": "fragments/incoming/5806c251e53a5ab6de59-local.html",
+     "local": "fragments/incoming/ca79decb2c1ab9cea4f7-local.html",
      "math_changed": false,
      "merged": "",
      "name": "Gadget",
@@ -1118,9 +1118,9 @@
       "drafting/main.tex"
      ],
      "incoming": null,
-     "incoming_macros": "adopt:f311691cf45a95c1fbed",
+     "incoming_macros": "adopt:4af9d99873c18c23766b",
      "key": "sy-0202",
-     "local": "fragments/incoming/1f0fd6893341a8ca0608-local.html",
+     "local": "fragments/incoming/c216b5fc83387c168f48-local.html",
      "math_changed": true,
      "merged": "",
      "name": null,
@@ -1137,9 +1137,9 @@
       "drafting/main.tex"
      ],
      "incoming": null,
-     "incoming_macros": "adopt:f311691cf45a95c1fbed",
+     "incoming_macros": "adopt:4af9d99873c18c23766b",
      "key": "sy-0202/proof",
-     "local": "fragments/incoming/3f0ca17b635b1ef84e44-local.html",
+     "local": "fragments/incoming/f3333a64c2e83a2cf38a-local.html",
      "math_changed": true,
      "merged": "",
      "name": null,
@@ -1153,8 +1153,8 @@
      "class": "new",
      "current": "",
      "documents": [],
-     "incoming": "fragments/incoming/add0f299bcc43406947b-proposal.html",
-     "incoming_macros": "adopt:f311691cf45a95c1fbed",
+     "incoming": "fragments/incoming/23acfeea6bc88535f63e-proposal.html",
+     "incoming_macros": "adopt:4af9d99873c18c23766b",
      "key": "sy-999C",
      "local": null,
      "math_changed": true,
@@ -1167,25 +1167,25 @@
    ],
    "choices": {
     "document": false,
-    "fingerprint": "f311691cf45a95c1fbedbd54fbd565912e1c58a9f146e34508f111ccee0d3c81",
+    "fingerprint": "4af9d99873c18c23766b44af44b5d63182f66815c093f2df996036d63f453b9c",
     "invalidated": [],
     "kept": [],
     "keys": [],
     "preamble": false,
     "revision": 0
    },
-   "copy": ".loom/copies/aidoc.tex",
+   "copy": ".loom/agents/copies/aidoc.tex",
    "document_changed": true,
    "document_comparison": {
     "current": "\n\\maketitle\n\n\\section{Introduction}\\label{sy-0100}\n\nThis paper studies widgets. The basic identity is\n\\begin{equation}\\label{eq:prose}\n\\sigma^2 = \\mathrm{id},\n\\end{equation}\nwhich we use throughout.\\footnote{The name comes from nowhere.} The \\GW{} theory of gadgets is not touched. See \\cite[Chapter II]{Har77} for schemes and \\cite[Theorem 2.1]{Kre99} for cycle groups; the lemma \\cite[Lemma 9]{Kre99} is not in the digest. Note also the dangling reference to Lemma~\\ref{sy-9999}.\n\n% !LOOM adopt-node: sy-0001\n\n\n% !LOOM author: The synthetic quilt\n% !LOOM created: 2026-09-16\n% !LOOM tags: orbits, setup\n\n% !LOOM adopt-node: sy-0002\n\n% !LOOM adopt-node: sy-0002/proof\n\n\n\n\\begin{itemize}\n\\item widgets,\n\\item gadgets.\n\\end{itemize}\n\n\\begin{tabular}{ll}\nobject & involution \\\\\nwidget & yes \\\\\ngadget & no\n\\end{tabular}\n\n\\begin{center}\n\\begin{tikzcd}\nX \\arrow[r, \"\\sigma\"] \\arrow[d] & X \\arrow[d] \\\\\nY \\arrow[r] & Y\n\\end{tikzcd}\n\\end{center}\n\n\\includegraphics[width=3cm]{figures/fig.pdf}\n\n\\parbox{5cm}{A boxed paragraph the converter renders as an image.}\n\n\\red{This sentence is in red.}\n\n% !LOOM author: The synthetic quilt\n% !LOOM tags: results\n\n\\section{Results}\\label{sy-0200}\n\nThe main results, with one proof deferred to the end of the section.\n\n% !LOOM author: The synthetic quilt\n% !LOOM created: 2026-09-16\n% !LOOM tags: main\n\n% !LOOM adopt-node: sy-0003\n\n% !LOOM adopt-node: sy-0004\n\n% !LOOM adopt-node: sy-0005\n\n\n\n\\subsection{Consequences}\\label{sy-0201}\n\n% !LOOM adopt-node: sy-0006\n\n% !LOOM adopt-node: sy-0006/proof\n\n% !LOOM adopt-node: sy-0006/proof/2\n\n\n\n% !LOOM tags: deferred\n\n% !LOOM adopt-node: sy-0007\n\n\n\n% !LOOM adopt-node: sy-0008\n\n\n\n% !LOOM adopt-node: sy-0007/proof\n\n\n% !LOOM adopt-node: sy-0202\n\n% !LOOM adopt-node: sy-0202/proof\n\n\n\n\\subsection{Appendix: an incomplete argument}\\label{sy-0300}\n\nThis file is nested, so its section renders one level down.\n\n% !LOOM adopt-node: sy-000C\n\n% !LOOM adopt-node: sy-000C/proof\n\n\n% !LOOM adopt-node: sy-000D\n\n\n\\begin{remark}\nAn unlabelled remark: gadgets never have odd order.\n\\end{remark}\n\n% !LOOM adopt-node: sy-000E\n\n% !LOOM adopt-node: sy-000E/proof\n\n\n% !LOOM priority: high\n\n% !LOOM adopt-node: sy-000D/proof\n\n\n\n% A missing \\input for the missing-include diagnostic. LaTeX would abort on it, so it sits inside \\iffalse, which LaTeX skips and the scanner does not interpret.\n\\iffalse\n\\input{nodes/missing}\n\\fi\n\n% !LOOM adopt-node: sy-000A\n\n\n\n% !LOOM adopt-node: sy-000B\n\n% !LOOM adopt-node: sy-000B/proof\n\n\n\n% !LOOM adopt-node: sy-999B\n\n\n\n\\bibliographystyle{amsplain}\n\\bibliography{refs}\n\n",
     "incoming": "fragments/incoming/prose-d4fa7d3c5a1c0143b8d29d35-incoming.html",
-    "incoming_macros": "adopt:f311691cf45a95c1fbed",
+    "incoming_macros": "adopt:4af9d99873c18c23766b",
     "local": "fragments/incoming/prose-d4fa7d3c5a1c0143b8d29d35-local.html",
     "proposed": "\n\\maketitle\n\n\\section{Introduction}\\label{sy-0100}\n\nThis paper studies widgets. The basic identity is\n\\begin{equation}\\label{eq:prose}\n\\sigma^2 = \\mathrm{id},\n\\end{equation}\nwhich we use throughout.\\footnote{The name comes from nowhere.} The \\GW{} theory of gadgets is not touched. See \\cite[Chapter II]{Har77} for schemes and \\cite[Theorem 2.1]{Kre99} for cycle groups; the lemma \\cite[Lemma 9]{Kre99} is not in the digest.\n\n% !LOOM adopt-node: sy-0001\n\n\n% !LOOM author: The synthetic quilt\n% !LOOM created: 2026-09-16\n% !LOOM tags: orbits, setup\n\n% !LOOM adopt-node: sy-000A\n\n\n% !LOOM adopt-node: sy-0002\n\n% !LOOM adopt-node: sy-0002/proof\n\n\n\n\\begin{itemize}\n\\item widgets,\n\\item gadgets.\n\\end{itemize}\n\n\\begin{tabular}{ll}\nobject & involution \\\\\nwidget & yes \\\\\ngadget & no\n\\end{tabular}\n\n\\begin{center}\n\\begin{tikzcd}\nX \\arrow[r, \"\\sigma\"] \\arrow[d] & X \\arrow[d] \\\\\nY \\arrow[r] & Y\n\\end{tikzcd}\n\\end{center}\n\n\\includegraphics[width=3cm]{figures/fig.pdf}\n\n\\parbox{5cm}{A boxed paragraph the converter renders as an image.}\n\n\\red{This sentence is in red.}\n\n% !LOOM author: The synthetic quilt\n% !LOOM tags: results\n\n% !LOOM adopt-node: sy-999C\n\n\n\\section{Results}\\label{sy-0200}\n\nThe main results, with one proof deferred to the end of the section.\n\n% !LOOM author: The synthetic quilt\n% !LOOM created: 2026-09-16\n% !LOOM tags: main\n\n% !LOOM adopt-node: sy-0003\n\n% !LOOM adopt-node: sy-0004\n\n% !LOOM adopt-node: sy-0005\n\n\n\n\\subsection{Consequences}\\label{sy-0201}\n\n% !LOOM adopt-node: sy-0006\n\n% !LOOM adopt-node: sy-0006/proof\n\n% !LOOM adopt-node: sy-0006/proof/2\n\n\n\n% !LOOM tags: deferred\n\n% !LOOM adopt-node: sy-0007\n\n\n\n% !LOOM adopt-node: sy-0008\n\n\n\n% !LOOM adopt-node: sy-0007/proof\n\n\n\n\n\\subsection{Appendix: an incomplete argument}\\label{sy-0300}\n\nThis file is nested, so its section renders one level down.\n\n% !LOOM adopt-node: sy-000C\n\n% !LOOM adopt-node: sy-000C/proof\n\n\n% !LOOM adopt-node: sy-000D\n\n\n\\begin{remark}\nAn unlabelled remark: gadgets never have odd order.\n\\end{remark}\n\n% !LOOM adopt-node: sy-000E\n\n% !LOOM adopt-node: sy-000E/proof\n\n\n% !LOOM priority: high\n\n% !LOOM adopt-node: sy-000D/proof\n\n\n\n% A missing \\input for the missing-include diagnostic. LaTeX would abort on it, so it sits inside \\iffalse, which LaTeX skips and the scanner does not interpret.\n\\iffalse\n\\fi\n\n\n\n% !LOOM adopt-node: sy-000B\n\n% !LOOM adopt-node: sy-000B/proof\n\n\n\n\\bibliographystyle{amsplain}\n\\bibliography{refs}\n\n"
    },
    "document_conflict": false,
    "document_diff": "--- Working document\n+++ Proposed document\n@@ -28,7 +28,7 @@\n \\begin{equation}\\label{eq:prose}\n \\sigma^2 = \\mathrm{id},\n \\end{equation}\n-which we use throughout.\\footnote{The name comes from nowhere.} The \\GW{} theory of gadgets is not touched. See \\cite[Chapter II]{Har77} for schemes and \\cite[Theorem 2.1]{Kre99} for cycle groups; the lemma \\cite[Lemma 9]{Kre99} is not in the digest. Note also the dangling reference to Lemma~\\ref{sy-9999}.\n+which we use throughout.\\footnote{The name comes from nowhere.} The \\GW{} theory of gadgets is not touched. See \\cite[Chapter II]{Har77} for schemes and \\cite[Theorem 2.1]{Kre99} for cycle groups; the lemma \\cite[Lemma 9]{Kre99} is not in the digest.\n \n % !LOOM adopt-node: sy-0001\n \n@@ -36,6 +36,9 @@\n % !LOOM author: The synthetic quilt\n % !LOOM created: 2026-09-16\n % !LOOM tags: orbits, setup\n+\n+% !LOOM adopt-node: sy-000A\n+\n \n % !LOOM adopt-node: sy-0002\n \n@@ -69,6 +72,9 @@\n \n % !LOOM author: The synthetic quilt\n % !LOOM tags: results\n+\n+% !LOOM adopt-node: sy-999C\n+\n \n \\section{Results}\\label{sy-0200}\n \n@@ -109,10 +115,6 @@\n % !LOOM adopt-node: sy-0007/proof\n \n \n-% !LOOM adopt-node: sy-0202\n-\n-% !LOOM adopt-node: sy-0202/proof\n-\n \n \n \\subsection{Appendix: an incomplete argument}\\label{sy-0300}\n@@ -144,10 +146,7 @@\n \n % A missing \\input for the missing-include diagnostic. LaTeX would abort on it, so it sits inside \\iffalse, which LaTeX skips and the scanner does not interpret.\n \\iffalse\n-\\input{nodes/missing}\n \\fi\n-\n-% !LOOM adopt-node: sy-000A\n \n \n \n@@ -157,10 +156,6 @@\n \n \n \n-% !LOOM adopt-node: sy-999B\n-\n-\n-\n \\bibliographystyle{amsplain}\n \\bibliography{refs}\n \n",
-   "fingerprint": "f311691cf45a95c1fbedbd54fbd565912e1c58a9f146e34508f111ccee0d3c81",
+   "fingerprint": "4af9d99873c18c23766b44af44b5d63182f66815c093f2df996036d63f453b9c",
    "issues": [],
    "kind": "adopt",
    "label": "Incoming from agent document “aidoc”",
@@ -1307,7 +1307,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 108
     }
    ],
@@ -1336,7 +1336,7 @@
    "keys": [],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 173
     }
    ],
@@ -1364,7 +1364,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 164
     }
    ],
@@ -1379,7 +1379,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 184
     }
    ],
@@ -1431,7 +1431,7 @@
    "code": "loom:taxon-conflict",
    "keys": [],
    "locations": [],
-   "message": "environment proposition declared differently: drafting/main.tex: Proposition/plain; .loom/copies/aidoc.tex: Proposition/plain; drafting/talk.tex: Proposition/definition",
+   "message": "environment proposition declared differently: drafting/main.tex: Proposition/plain; .loom/agents/copies/aidoc.tex: Proposition/plain; drafting/talk.tex: Proposition/definition",
    "owner": "person",
    "severity": "warning"
   },
@@ -1440,7 +1440,7 @@
    "keys": [],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 171
     }
    ],
@@ -1474,7 +1474,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 31
     }
    ],
@@ -1567,11 +1567,11 @@
   {
    "code": "loom:unlabelled-node",
    "keys": [
-    ".loom/copies/aidoc.tex#remark:2"
+    ".loom/agents/copies/aidoc.tex#remark:2"
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 160
     }
    ],
@@ -1617,7 +1617,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 51
     }
    ],
@@ -1638,7 +1638,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 120
     }
    ],
@@ -1659,7 +1659,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 137
     }
    ],
@@ -1680,7 +1680,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 173
     }
    ],
@@ -1701,7 +1701,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 188
     }
    ],
@@ -1722,7 +1722,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 188
     }
    ],
@@ -1863,7 +1863,7 @@
    ],
    "locations": [
     {
-     "file": ".loom/copies/aidoc.tex",
+     "file": ".loom/agents/copies/aidoc.tex",
      "line": 137
     }
    ],
@@ -1974,7 +1974,7 @@
    "from": "sy-0001-ai",
    "kind": "statement",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 34
    },
    "to": "sy-0100-ai",
@@ -1984,7 +1984,7 @@
    "from": "sy-0002-ai",
    "kind": "statement",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 49
    },
    "to": "sy-0001-ai",
@@ -1994,7 +1994,7 @@
    "from": "sy-0002-ai",
    "kind": "statement",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 49
    },
    "to": "sy-0001-ai",
@@ -2004,7 +2004,7 @@
    "from": "sy-000B-ai",
    "kind": "statement",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 185
    },
    "to": "sy-0003-ai",
@@ -2014,7 +2014,7 @@
    "from": "sy-000B-ai",
    "kind": "statement",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 185
    },
    "to": "sy-0006-ai",
@@ -2024,7 +2024,7 @@
    "from": "Kre99-thm-2.1",
    "kind": "statement",
    "src": {
-    "file": ".loom/digests/Kre99.tex",
+    "file": ".loom/library/Kre99.tex",
     "line": 24
    },
    "to": "Kre99-setup",
@@ -2094,7 +2094,7 @@
    "from": "sy-0002-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 56
    },
    "to": "sy-0100-ai",
@@ -2104,7 +2104,7 @@
    "from": "sy-0004-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 103
    },
    "to": "sy-0002-ai",
@@ -2114,7 +2114,7 @@
    "from": "sy-0004-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 104
    },
    "to": "sy-0002-ai",
@@ -2124,7 +2124,7 @@
    "from": "sy-0005-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 107
    },
    "to": "sy-0002-ai",
@@ -2134,7 +2134,7 @@
    "from": "sy-0005-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 107
    },
    "to": "sy-0001-ai",
@@ -2144,7 +2144,7 @@
    "from": "sy-0005-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 108
    },
    "to": "sy-0002-ai/proof",
@@ -2154,7 +2154,7 @@
    "from": "sy-0005-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 108
    },
    "to": "sy-0002-ai",
@@ -2164,7 +2164,7 @@
    "from": "sy-0005-ai",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 108
    },
    "to": "sy-0001-ai",
@@ -2174,7 +2174,7 @@
    "from": "sy-0006-ai/proof/2",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 121
    },
    "to": "sy-0003-ai",
@@ -2184,7 +2184,7 @@
    "from": "sy-0007-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 138
    },
    "to": "sy-0001-ai",
@@ -2194,7 +2194,7 @@
    "from": "sy-0007-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 139
    },
    "to": "sy-0008-ai",
@@ -2204,7 +2204,7 @@
    "from": "sy-000C-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 152
    },
    "to": "sy-0008-ai",
@@ -2214,7 +2214,7 @@
    "from": "sy-000C-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 153
    },
    "to": "sy-0008-ai",
@@ -2224,7 +2224,7 @@
    "from": "sy-000D-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 173
    },
    "to": "sy-0007-ai",
@@ -2234,7 +2234,7 @@
    "from": "sy-000B-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 189
    },
    "to": "sy-0003-ai",
@@ -2244,7 +2244,7 @@
    "from": "sy-000B-ai/proof",
    "kind": "proof",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 189
    },
    "to": "sy-0006-ai",
@@ -2424,7 +2424,7 @@
    "from": "sy-000A-ai",
    "kind": "statement",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 45
    },
    "to": "Kre99-thm-2.1",
@@ -2454,7 +2454,7 @@
    "from": "sy-0100-ai",
    "kind": "prose",
    "src": {
-    "file": ".loom/copies/aidoc.tex",
+    "file": ".loom/agents/copies/aidoc.tex",
     "line": 31
    },
    "to": "Kre99-thm-2.1",
@@ -2470,7 +2470,7 @@
   },
   {
    "body": "files/README.md.html",
-   "bytes": 750,
+   "bytes": 726,
    "denied": null,
    "kind": "markdown",
    "path": "README.md"
@@ -2655,7 +2655,7 @@
     "action": "stamp",
     "actor": "The synthetic quilt",
     "in": "drafting/main.tex",
-    "landmark": ".loom/history/0001-widgets-v1/widgets-v1.tex",
+    "landmark": ".loom/records/history/0001-widgets-v1/widgets-v1.tex",
     "message": "widgets-v1",
     "step": 1,
     "when": "2026-09-13T09:00:00Z"
@@ -2678,7 +2678,7 @@
     "action": "stamp",
     "actor": "The synthetic quilt",
     "in": "drafting/main.tex",
-    "landmark": ".loom/history/0003-widgets-v2/widgets-v2.tex",
+    "landmark": ".loom/records/history/0003-widgets-v2/widgets-v2.tex",
     "message": "widgets-v2",
     "step": 3,
     "when": "2026-09-15T13:00:00Z"
@@ -2694,7 +2694,7 @@
     "action": "stamp",
     "actor": "The synthetic quilt",
     "in": "drafting/main.tex",
-    "landmark": ".loom/history/0005-widgets-v3/widgets-v3.tex",
+    "landmark": ".loom/records/history/0005-widgets-v3/widgets-v3.tex",
     "message": "widgets-v3",
     "step": 5,
     "when": "2026-09-15T16:00:00Z"
@@ -2720,7 +2720,7 @@
     "actor": "The synthetic quilt",
     "document": "drafting/main.tex",
     "in": "drafting/main.tex",
-    "landmark": ".loom/history/0001-widgets-v1/widgets-v1.tex",
+    "landmark": ".loom/records/history/0001-widgets-v1/widgets-v1.tex",
     "message": "widgets-v1",
     "name": "widgets-v1",
     "step": 1,
@@ -2739,7 +2739,7 @@
     "actor": "The synthetic quilt",
     "document": "drafting/main.tex",
     "in": "drafting/main.tex",
-    "landmark": ".loom/history/0003-widgets-v2/widgets-v2.tex",
+    "landmark": ".loom/records/history/0003-widgets-v2/widgets-v2.tex",
     "message": "widgets-v2",
     "name": "widgets-v2",
     "step": 3,
@@ -2758,7 +2758,7 @@
     "actor": "The synthetic quilt",
     "document": "drafting/main.tex",
     "in": "drafting/main.tex",
-    "landmark": ".loom/history/0005-widgets-v3/widgets-v3.tex",
+    "landmark": ".loom/records/history/0005-widgets-v3/widgets-v3.tex",
     "message": "widgets-v3",
     "name": "widgets-v3",
     "step": 5,
@@ -2767,8 +2767,8 @@
    {
     "action": "copy",
     "actor": "The synthetic quilt",
-    "document": ".loom/copies/aidoc.tex",
-    "in": ".loom/copies/aidoc.tex",
+    "document": ".loom/agents/copies/aidoc.tex",
+    "in": ".loom/agents/copies/aidoc.tex",
     "name": "copy-aidoc",
     "step": 6,
     "when": "2026-09-16T10:00:00Z"
@@ -2776,7 +2776,7 @@
   ]
  },
  "inclusion": {
-  ".loom/copies/aidoc.tex": {
+  ".loom/agents/copies/aidoc.tex": {
    "children": [
     {
      "children": [
@@ -2870,7 +2870,7 @@
         },
         {
          "children": [],
-         "key": ".loom/copies/aidoc.tex#remark:2",
+         "key": ".loom/agents/copies/aidoc.tex#remark:2",
          "shift": 0,
          "via": "nested-env"
         },
@@ -2897,7 +2897,7 @@
      "via": "section"
     }
    ],
-   "key": ".loom/copies/aidoc.tex"
+   "key": ".loom/agents/copies/aidoc.tex"
   },
   "drafting/main.tex": {
    "children": [
@@ -3184,18 +3184,18 @@
   }
  },
  "keys": {
-  ".loom/copies/aidoc.tex#remark:2": {
+  ".loom/agents/copies/aidoc.tex#remark:2": {
    "closure": [
-    ".loom/copies/aidoc.tex#remark:2"
+    ".loom/agents/copies/aidoc.tex#remark:2"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:c724707ee5682e97b2645e844f752bd43603ea4aeef3f07ca642fb04ae9519db",
    "incomplete": [],
-   "key": ".loom/copies/aidoc.tex#remark:2",
+   "key": ".loom/agents/copies/aidoc.tex#remark:2",
    "kind": "statement",
-   "node": ".loom/copies/aidoc.tex#remark:2",
+   "node": ".loom/agents/copies/aidoc.tex#remark:2",
    "previous_key_match": null,
-   "review_fragment": "fragments/review/dcafcad849e0cfdea32d-block.html",
+   "review_fragment": "fragments/review/ebec34f8246358b49041-block.html",
    "review_macros": "review-current:e7d0afbb3c6e1e4382e0",
    "reviews": {
     "detached": 0,
@@ -3212,7 +3212,7 @@
    "closure": [
     "Kre99-setup"
    ],
-   "file": ".loom/digests/Kre99.tex",
+   "file": ".loom/library/Kre99.tex",
    "hash": "sha256:b3e1d390ba41d48a8f3fb1caf1c16d78dd7e7ff8bdaea2df3c1aa5a5b351a592",
    "incomplete": [],
    "key": "Kre99-setup",
@@ -3241,7 +3241,7 @@
     "Kre99-setup",
     "Kre99-thm-2.1"
    ],
-   "file": ".loom/digests/Kre99.tex",
+   "file": ".loom/library/Kre99.tex",
    "hash": "sha256:02714f87b2e495507ba11d0acddc82902fb21d315b23a4dd74aa2c24b76bbcfa",
    "incomplete": [],
    "key": "Kre99-thm-2.1",
@@ -3419,7 +3419,7 @@
     "sy-0100-ai",
     "sy-0001-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:23af724e7489dda40cb7ec18adb5a39c219ce8fd3433d712c4b515420473c2ee",
    "incomplete": [],
    "key": "sy-0001-ai",
@@ -3532,7 +3532,7 @@
     "sy-0001-ai",
     "sy-0002-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:d89c9d6e0d63fa8cf66bb7d2baceff273b8e228ea17141cf3be125ae03579848",
    "incomplete": [],
    "key": "sy-0002-ai",
@@ -3560,7 +3560,7 @@
     "sy-0001-ai",
     "sy-0002-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:1dbe0db48fadab88119db52465afb53612d2277bc4271cc0d682acf06c73288a",
    "incomplete": [],
    "key": "sy-0002-ai/proof",
@@ -3684,7 +3684,7 @@
    "closure": [
     "sy-0003-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:77d193f2003f55f97e195645fea1cb991991ad79e67fe7f9801aad94389ade7a",
    "incomplete": [],
    "key": "sy-0003-ai",
@@ -3769,7 +3769,7 @@
     "sy-0002-ai",
     "sy-0003-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:e45e4b2a99f5f77853bffe4806f035b61d23a982479d7fa9e9e7448683fdbb9e",
    "incomplete": [],
    "key": "sy-0004-ai",
@@ -3884,7 +3884,7 @@
     "sy-0002-ai",
     "sy-0003-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:3f934b3c8e530f815166caa81a0c0146d629a7d8e0be2a6d8a38038303d168e9",
    "incomplete": [],
    "key": "sy-0005-ai",
@@ -3940,7 +3940,7 @@
    "closure": [
     "sy-0006-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:f6fed8d0f7f18bfc6f3c4bb426bd75b4b3fc4f9a1a57d8a033f64f0d10ab0e38",
    "incomplete": [],
    "key": "sy-0006-ai",
@@ -3964,7 +3964,7 @@
    "closure": [
     "sy-0006-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:6cbefc2a75d69966fab85f20d70e3b1b96f916e48ddd1e1b1f4062c327aa7c87",
    "incomplete": [],
    "key": "sy-0006-ai/proof",
@@ -3990,7 +3990,7 @@
     "sy-0003-ai",
     "sy-0006-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:ba94c9dac3c06d17c8567fa48217acff90e06204df30e6584090a24999c6b5e0",
    "incomplete": [],
    "key": "sy-0006-ai/proof/2",
@@ -4106,7 +4106,7 @@
    "closure": [
     "sy-0007-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:b1b840878f1dc62021c6d60766930129710c1771e9915d392bebec0d396fa835",
    "incomplete": [],
    "key": "sy-0007-ai",
@@ -4133,7 +4133,7 @@
     "sy-0008-ai",
     "sy-0007-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:a2d902c6d8480133726c9bcc7dfce9387136fc5def071fcbfe719e8fb115882a",
    "incomplete": [],
    "key": "sy-0007-ai/proof",
@@ -4224,7 +4224,7 @@
    "closure": [
     "sy-0008-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:80cc0b836bf834712a951990985786b134e553b1503e57e05e413e842ff0972d",
    "incomplete": [],
    "key": "sy-0008-ai",
@@ -4349,7 +4349,7 @@
     "Kre99-thm-2.1",
     "sy-000A-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:36c21ad693129fcdcbef45abef260d8759398fe4226c16ce6b8f8a0679226882",
    "incomplete": [],
    "key": "sy-000A-ai",
@@ -4410,7 +4410,7 @@
     "sy-0006-ai",
     "sy-000B-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:e93ce2c04d98db1a749f311769e280accae3e9fe0a3a6d1c084b0b2965c7abee",
    "incomplete": [],
    "key": "sy-000B-ai",
@@ -4439,7 +4439,7 @@
     "sy-0006-ai",
     "sy-000B-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:29f62a6e5402acd0264c1aa92045548d7f707309d9bda20fbb2dbe0f7e241fcb",
    "incomplete": [],
    "key": "sy-000B-ai/proof",
@@ -4529,7 +4529,7 @@
    "closure": [
     "sy-000C-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:a4b517cd49ddcf70c2d695acfdfbf0ea18bb8ec713154d6419e7e3c6825414a0",
    "incomplete": [],
    "key": "sy-000C-ai",
@@ -4554,7 +4554,7 @@
     "sy-0008-ai",
     "sy-000C-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:509e781182bbc4bdb34482c2352127230703ec283d4b917f53dbd4d4c56954a9",
    "incomplete": [
     "Show that there are no fixed points using Definition~\\ref{sy-0008-ai}."
@@ -4645,7 +4645,7 @@
    "closure": [
     "sy-000D-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:89515bd43054e0e14d233cea0a86fb96f4cd15bdeb9338ca81ec17655bbef194",
    "incomplete": [],
    "key": "sy-000D-ai",
@@ -4670,7 +4670,7 @@
     "sy-0007-ai",
     "sy-000D-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:063e9713f583ed28af5721c10b859871a4c889185b2697062f8e230b31731e2f",
    "incomplete": [],
    "key": "sy-000D-ai/proof",
@@ -4757,7 +4757,7 @@
    "closure": [
     "sy-000E-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:59579a48e8f7b773c01674f3183c96ea8bff096900695005982636362ff7edc8",
    "incomplete": [],
    "key": "sy-000E-ai",
@@ -4781,7 +4781,7 @@
    "closure": [
     "sy-000E-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:81da139027186924ca9a2ea23235007959775a7f907b030c0c1a82cb482dac3a",
    "incomplete": [],
    "key": "sy-000E-ai/proof",
@@ -4975,7 +4975,7 @@
    "closure": [
     "sy-999C-ai"
    ],
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "hash": "sha256:34d38777d0c6e50628e317aeac32a8b7b59f93b5bb359cb92c39998612800f45",
    "incomplete": [],
    "key": "sy-999C-ai",
@@ -5078,7 +5078,7 @@
      "name": "Hom"
     }
    ],
-   "adopt:f311691cf45a95c1fbed": [
+   "adopt:4af9d99873c18c23766b": [
     {
      "args": 0,
      "body": "\\operatorname{Fix}",
@@ -5445,7 +5445,7 @@
    "fragment": "fragments/masters/drafting/main.html",
    "numbering_known": true,
    "path": "drafting/main.tex",
-   "pdf": "drafting/main/main.pdf",
+   "pdf": "tex/main-6f1b8942/main.pdf",
    "title": "Widgets, gadgets, and their fixed loci"
   },
   {
@@ -5455,7 +5455,7 @@
    "fragment": "fragments/masters/drafting/talk.html",
    "numbering_known": true,
    "path": "drafting/talk.tex",
-   "pdf": "drafting/talk/talk.pdf",
+   "pdf": "tex/talk-4d7ddb4b/talk.pdf",
    "title": "Widgets, in twenty minutes"
   },
   {
@@ -5463,10 +5463,10 @@
    "copy_of": "drafting/main.tex",
    "default": false,
    "engine": "pdflatex",
-   "fragment": "fragments/masters/.loom/copies/aidoc.html",
+   "fragment": "fragments/masters/.loom/agents/copies/aidoc.html",
    "numbering_known": true,
-   "path": ".loom/copies/aidoc.tex",
-   "pdf": ".loom/copies/aidoc/aidoc.pdf",
+   "path": ".loom/agents/copies/aidoc.tex",
+   "pdf": "tex/aidoc-1f6ccd4b/aidoc.pdf",
    "scope": {
     "kind": "document"
    },
@@ -5474,7 +5474,7 @@
   }
  ],
  "nodes": {
-  ".loom/copies/aidoc.tex#remark:2": {
+  ".loom/agents/copies/aidoc.tex#remark:2": {
    "aliases": [],
    "author": [],
    "basis": "expository",
@@ -5487,19 +5487,19 @@
    },
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
-   "fragment": "fragments/keys/.loom%2Fcopies%2Faidoc.tex%23remark%3A2.html",
-   "id": ".loom/copies/aidoc.tex#remark:2",
+   "file": ".loom/agents/copies/aidoc.tex",
+   "fragment": "fragments/keys/.loom%2Fagents%2Fcopies%2Faidoc.tex%23remark%3A2.html",
+   "id": ".loom/agents/copies/aidoc.tex#remark:2",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {},
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0300-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0300-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     4471,
@@ -5511,7 +5511,7 @@
    "taxon": "Remark",
    "title": null
   },
-  ".loom/digests/Kre99.tex#section:1": {
+  ".loom/library/Kre99.tex#section:1": {
    "aliases": [],
    "author": [],
    "children": [],
@@ -5522,9 +5522,9 @@
    },
    "digest": "Kre99",
    "external": true,
-   "file": ".loom/digests/Kre99.tex",
-   "fragment": "fragments/keys/.loom%2Fdigests%2FKre99.tex%23section%3A1.html",
-   "id": ".loom/digests/Kre99.tex#section:1",
+   "file": ".loom/library/Kre99.tex",
+   "fragment": "fragments/keys/.loom%2Flibrary%2FKre99.tex%23section%3A1.html",
+   "id": ".loom/library/Kre99.tex#section:1",
    "incomplete": [],
    "kind": "section",
    "level": 1,
@@ -5556,7 +5556,7 @@
    },
    "digest": "Kre99",
    "external": true,
-   "file": ".loom/digests/Kre99.tex",
+   "file": ".loom/library/Kre99.tex",
    "fragment": "fragments/nodes/Kre99-sec-1.html",
    "id": "Kre99-sec-1",
    "incomplete": [],
@@ -5590,7 +5590,7 @@
    },
    "digest": "Kre99",
    "external": true,
-   "file": ".loom/digests/Kre99.tex",
+   "file": ".loom/library/Kre99.tex",
    "fragment": "fragments/nodes/Kre99-sec-2.html",
    "id": "Kre99-sec-2",
    "incomplete": [],
@@ -5624,7 +5624,7 @@
    },
    "digest": "Kre99",
    "external": true,
-   "file": ".loom/digests/Kre99.tex",
+   "file": ".loom/library/Kre99.tex",
    "fragment": "fragments/nodes/Kre99-setup.html",
    "id": "Kre99-setup",
    "incomplete": [],
@@ -5658,7 +5658,7 @@
    },
    "digest": "Kre99",
    "external": true,
-   "file": ".loom/digests/Kre99.tex",
+   "file": ".loom/library/Kre99.tex",
    "fragment": "fragments/nodes/Kre99-thm-2.1.html",
    "id": "Kre99-thm-2.1",
    "incomplete": [],
@@ -5852,24 +5852,24 @@
    "derived_of": "sy-0001",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0001-ai.html",
    "id": "sy-0001-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "1.1",
      "page": 1
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0100-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0100-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     995,
@@ -5956,26 +5956,26 @@
    "derived_of": "sy-0002",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0002-ai.html",
    "id": "sy-0002-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "1.3",
      "page": 1
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0100-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0100-ai"
    },
    "proofs": [
     "sy-0002-ai/proof"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     1518,
@@ -6056,27 +6056,27 @@
    "derived_of": "sy-0003",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0003-ai.html",
    "id": "sy-0003-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.1",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0200-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0200-ai"
    },
    "proofs": [
     "sy-0004-ai",
     "sy-0005-ai"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     2668,
@@ -6149,23 +6149,23 @@
    "derived_of": "sy-0004",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0004-ai.html",
    "id": "sy-0004-ai",
    "incomplete": [],
    "kind": "proof",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0200-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0200-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     2803,
@@ -6238,23 +6238,23 @@
    "derived_of": "sy-0005",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0005-ai.html",
    "id": "sy-0005-ai",
    "incomplete": [],
    "kind": "proof",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0200-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0200-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     2966,
@@ -6331,27 +6331,27 @@
    "derived_of": "sy-0006",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0006-ai.html",
    "id": "sy-0006-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.2",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0201-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0201-ai"
    },
    "proofs": [
     "sy-0006-ai/proof",
     "sy-0006-ai/proof/2"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     3257,
@@ -6429,26 +6429,26 @@
    "derived_of": "sy-0007",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0007-ai.html",
    "id": "sy-0007-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.3",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0201-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0201-ai"
    },
    "proofs": [
     "sy-0007-ai/proof"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     3521,
@@ -6534,24 +6534,24 @@
    "derived_of": "sy-0008",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0008-ai.html",
    "id": "sy-0008-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.4",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0201-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0201-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     3627,
@@ -6662,24 +6662,24 @@
    "derived_of": "sy-000A",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-000A-ai.html",
    "id": "sy-000A-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "1.2",
      "page": 1
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0100-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0100-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     1387,
@@ -6755,26 +6755,26 @@
    "derived_of": "sy-000B",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-000B-ai.html",
    "id": "sy-000B-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.2",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0300-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0300-ai"
    },
    "proofs": [
     "sy-000B-ai/proof"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     5087,
@@ -6850,26 +6850,26 @@
    "derived_of": "sy-000C",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-000C-ai.html",
    "id": "sy-000C-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.5",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0300-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0300-ai"
    },
    "proofs": [
     "sy-000C-ai/proof"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     4136,
@@ -6945,26 +6945,26 @@
    "derived_of": "sy-000D",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-000D-ai.html",
    "id": "sy-000D-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.6",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0300-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0300-ai"
    },
    "proofs": [
     "sy-000D-ai/proof"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     4372,
@@ -7040,26 +7040,26 @@
    "derived_of": "sy-000E",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-000E-ai.html",
    "id": "sy-000E-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.8",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0300-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0300-ai"
    },
    "proofs": [
     "sy-000E-ai/proof"
    ],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     4552,
@@ -7130,14 +7130,14 @@
    "derived_of": "sy-0100",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0100-ai.html",
    "id": "sy-0100-ai",
    "incomplete": [],
    "kind": "section",
    "level": 1,
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "1",
      "page": 1
     }
@@ -7145,7 +7145,7 @@
    "parent": {},
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     576,
@@ -7223,14 +7223,14 @@
    "derived_of": "sy-0200",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0200-ai.html",
    "id": "sy-0200-ai",
    "incomplete": [],
    "kind": "section",
    "level": 1,
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2",
      "page": 2
     }
@@ -7238,7 +7238,7 @@
    "parent": {},
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     2477,
@@ -7314,24 +7314,24 @@
    "derived_of": "sy-0201",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0201-ai.html",
    "id": "sy-0201-ai",
    "incomplete": [],
    "kind": "section",
    "level": 2,
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.1",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0200-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0200-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     3212,
@@ -7444,7 +7444,7 @@
    "children": [
     "sy-000C-ai",
     "sy-000D-ai",
-    ".loom/copies/aidoc.tex#remark:2",
+    ".loom/agents/copies/aidoc.tex#remark:2",
     "sy-000E-ai",
     "sy-000B-ai"
    ],
@@ -7456,24 +7456,24 @@
    "derived_of": "sy-0300",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-0300-ai.html",
    "id": "sy-0300-ai",
    "incomplete": [],
    "kind": "section",
    "level": 2,
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2.2",
      "page": 2
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0200-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0200-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     4010,
@@ -7620,24 +7620,24 @@
    "derived_of": "sy-999C",
    "digest": null,
    "external": false,
-   "file": ".loom/copies/aidoc.tex",
+   "file": ".loom/agents/copies/aidoc.tex",
    "fragment": "fragments/nodes/sy-999C-ai.html",
    "id": "sy-999C-ai",
    "incomplete": [],
    "inline_proof": false,
    "kind": "environment",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "1.4",
      "page": 1
     }
    },
    "parent": {
-    ".loom/copies/aidoc.tex": "sy-0100-ai"
+    ".loom/agents/copies/aidoc.tex": "sy-0100-ai"
    },
    "proofs": [],
    "reached_by": [
-    ".loom/copies/aidoc.tex"
+    ".loom/agents/copies/aidoc.tex"
    ],
    "src": [
     2360,
@@ -7715,7 +7715,7 @@
    "citekey": "Kre99",
    "digest": {
     "extracted_from": "arXiv:math/9810166v2",
-    "file": ".loom/digests/Kre99.tex",
+    "file": ".loom/library/Kre99.tex",
     "fragment": "fragments/digests/Kre99.html",
     "method": "manual",
     "nodes": [
@@ -7790,7 +7790,7 @@
    "key": "sy-0001-ai#eq:fix-ai",
    "label": "eq:fix-ai",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "2"
     }
    },
@@ -7805,7 +7805,7 @@
    "key": "sy-0002-ai/proof#eq:step-ai",
    "label": "eq:step-ai",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "3"
     }
    },
@@ -7853,7 +7853,7 @@
    "key": "sy-0100-ai#eq:prose-ai",
    "label": "eq:prose-ai",
    "numbers": {
-    ".loom/copies/aidoc.tex": {
+    ".loom/agents/copies/aidoc.tex": {
      "number": "1"
     }
    },
@@ -7896,21 +7896,21 @@
  "search": [
   {
    "aliases": [],
-   "key": ".loom/history/0001-widgets-v1/widgets-v1.tex",
+   "key": ".loom/records/history/0001-widgets-v1/widgets-v1.tex",
    "kind": "canon",
    "tags": [],
    "title": "Widgets, gadgets, and their fixed loci"
   },
   {
    "aliases": [],
-   "key": ".loom/history/0003-widgets-v2/widgets-v2.tex",
+   "key": ".loom/records/history/0003-widgets-v2/widgets-v2.tex",
    "kind": "canon",
    "tags": [],
    "title": "Widgets, gadgets, and their fixed loci"
   },
   {
    "aliases": [],
-   "key": ".loom/history/0005-widgets-v3/widgets-v3.tex",
+   "key": ".loom/records/history/0005-widgets-v3/widgets-v3.tex",
    "kind": "canon",
    "tags": [],
    "title": "Widgets, gadgets, and their fixed loci"
@@ -7918,11 +7918,11 @@
   {
    "aliases": [],
    "excerpt": "An unlabelled remark: gadgets never have odd order.",
-   "key": ".loom/copies/aidoc.tex#remark:2",
+   "key": ".loom/agents/copies/aidoc.tex#remark:2",
    "kind": "environment",
    "tags": [],
    "taxon": "Remark",
-   "title": ".loom/copies/aidoc.tex#remark:2"
+   "title": ".loom/agents/copies/aidoc.tex#remark:2"
   },
   {
    "aliases": [],
@@ -8161,7 +8161,7 @@
   {
    "aliases": [],
    "excerpt": "Kresch constructs Chow groups for Artin stacks. This digest holds the standing assumptions and the one theorem the synthetic paper cites.",
-   "key": ".loom/digests/Kre99.tex#section:1",
+   "key": ".loom/library/Kre99.tex#section:1",
    "kind": "section",
    "tags": [],
    "taxon": "Section",
@@ -8232,7 +8232,7 @@
   },
   {
    "aliases": [],
-   "key": ".loom/copies/aidoc.tex",
+   "key": ".loom/agents/copies/aidoc.tex",
    "kind": "master",
    "tags": [],
    "title": "Widgets, gadgets, and their fixed loci"
@@ -8428,7 +8428,7 @@
    "kind": "session",
    "log": [],
    "participants": [],
-   "path": ".loom/sessions/s-2026-09-15-fk1w66",
+   "path": ".loom/agents/sessions/s-2026-09-15-fk1w66",
    "targets": [],
    "title": "quick"
   },
@@ -8481,7 +8481,7 @@
     }
    ],
    "participants": [],
-   "path": ".loom/sessions/s-2026-09-16-p9z37z",
+   "path": ".loom/agents/sessions/s-2026-09-16-p9z37z",
    "targets": [],
    "title": "referee"
   }

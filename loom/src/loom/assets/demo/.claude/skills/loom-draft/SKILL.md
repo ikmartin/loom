@@ -8,4 +8,4 @@ Work in loom's draft mode on what the person named when they asked for it, or on
 1. If you have not called `loom_ai_orient` in this conversation, call it first (in a shell, `loom ai orient`), and follow it.
 2. Call `loom_ai_mode` with the name `draft` (in a shell, `loom ai mode draft`) and work as it says.
 
-The mode is the quilt's own copy, `.loom/ai/modes/draft.md`; this skill only points at it, and loom writes it again from the mode.
+The mode is the quilt's own copy, `.loom/agents/instructions/modes/draft.md`; this skill only points at it, and loom writes it again from the mode.
