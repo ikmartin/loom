@@ -23,7 +23,7 @@ const m = {
 	},
 	unresolved: [
 		row('a', 'earlier-change'),
-		row('b', 'adopted', { contribution: '.loom/copies/examples-shared.tex' }),
+		row('b', 'adopted', { contribution: '.loom/agents/copies/examples-shared.tex' }),
 		row('c', 'adopted', { source_label: 'Taken in from the copy “aidoc”' }),
 		row('d', 'never-accepted', { refusal: 'It is marked incomplete.' }),
 		row('e', 'never-accepted')

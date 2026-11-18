@@ -7,7 +7,7 @@ const m = fixture as unknown as Manifest;
 // the fixture's two open suggested edits: one on sy-0002, the newer, and one on sy-0004 answering an annotation
 const TEXT = 'e-2026-09-17-zwvx4m';
 const ANSWERING = 'e-2026-09-16-r2hw0m';
-const COPY = '.loom/copies/aidoc.tex';
+const COPY = m.masters.find((x) => x.copy_of)!.path;
 
 /** The fixture with `over` applied to a deep copy. */
 function changed(over: (x: Manifest) => void): Manifest {

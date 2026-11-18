@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { CanonDoc, HistoryAct, Manifest } from '$lib/manifest/types';
 import { actWords, actsOf, neighbours, versionLabel, versionsOf } from './timeline';
 
-const v = (step: string, more: Partial<CanonDoc> = {}): CanonDoc => ({ path: `.loom/history/${step}-v/v${step}.tex`, stem: `v${step}`, title: '', fragment: '', hash: '', step, in: 'drafting/main.tex', ...more });
+const v = (step: string, more: Partial<CanonDoc> = {}): CanonDoc => ({ path: `.loom/records/history/${step}-v/v${step}.tex`, stem: `v${step}`, title: '', fragment: '', hash: '', step, in: 'drafting/main.tex', ...more });
 
 describe('a document’s versions', () => {
 	const m = { canon: [v('0003', { message: 'Kept an edit', kept_for: 'keep' }), v('0001', { action: 'import', message: 'ignored' }), v('0005', { message: 'Before referee' }), v('0004', { in: 'drafting/talk.tex' })] } as unknown as Manifest;
@@ -31,7 +31,7 @@ describe('everything recorded', () => {
 			actWords(a('restore', { in: 'drafting/main.tex', version: 'v.tex' })),
 			actWords(a('restore', { path: 'README.md' })),
 			actWords(a('move', { from: 'notes/a.md', to: 'drafts/b.md' })),
-			actWords(a('move', { from: 'drafting-ai/x.tex', to: '.loom/copies/x.tex' })),
+			actWords(a('move', { from: 'drafting-ai/x.tex', to: '.loom/agents/copies/x.tex' })),
 			actWords(a('something-new'))
 		]).toEqual([
 			'Kept an edit to x.tex',
@@ -42,7 +42,7 @@ describe('everything recorded', () => {
 			'Put main.tex back as a version',
 			'Put back in README.md the text an undo set aside',
 			'Moved a.md to b.md',
-			'Moved drafting-ai/x.tex to .loom/copies/x.tex',
+			'Moved drafting-ai/x.tex to .loom/agents/copies/x.tex',
 			'something new'
 		]);
 	});

@@ -5,7 +5,7 @@ import { edited, pending, published, same } from './draft';
 const config = {
 	editable: ['quilt.name', 'library.online', 'agents.deny', 'quilt.home'],
 	read_only: ['quilt.history'],
-	quilt: { name: 'ring', main: '', home: '', prefix: 'r', engine: 'pdflatex', history: '.loom/history', research_state: 'research-state.md' },
+	quilt: { name: 'ring', main: '', home: '', prefix: 'r', engine: 'pdflatex', history: '.loom/records/history', research_state: 'research-state.md' },
 	library: { online: false, contact: '' },
 	lint: { disable: [], codes: [] },
 	agents: { deny: ['paper/'], protected: [], layer: true, variant: 'mcp', stale: false, command: '', clients: [] },

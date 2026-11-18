@@ -4,8 +4,10 @@ import type { Manifest } from '$lib/manifest/types';
 import { historyOf, landmarkName } from './history';
 
 const fixture = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
-const V1 = '.loom/history/0001-widgets-v1/widgets-v1.tex';
-const V2 = '.loom/history/0003-widgets-v2/widgets-v2.tex';
+// named by where the fixture's quilt keeps them, which these tests do not fix
+const V1 = fixture.canon!.find((c) => c.name === 'widgets-v1')!.path;
+const V2 = fixture.canon!.find((c) => c.name === 'widgets-v2')!.path;
+const COPY = fixture.masters.find((x) => x.copy_of)!.path;
 
 describe("a document's history", () => {
 	it('is a draft, its landmarks newest first, and its live agent copies', () => {
@@ -15,7 +17,7 @@ describe("a document's history", () => {
 		expect(h.draft).toBe('drafting/main.tex');
 		expect(h.at).toBeUndefined();
 		expect(h.landmarks.map((c) => c.name)).toEqual(['widgets-v3', 'widgets-v2', 'widgets-v1']);
-		expect(h.copies.map((x) => x.path)).toEqual(['.loom/copies/aidoc.tex']);
+		expect(h.copies.map((x) => x.path)).toEqual([COPY]);
 	});
 
 	it("is, for a landmark, its draft's, at the landmark", () => {
@@ -32,7 +34,7 @@ describe("a document's history", () => {
 	});
 
 	it('is, for an agent copy, the draft it was copied from', () => {
-		expect(historyOf(fixture, '.loom/copies/aidoc.tex')).toEqual({ of: 'copy', copy: '.loom/copies/aidoc.tex', source: 'drafting/main.tex' });
+		expect(historyOf(fixture, COPY)).toEqual({ of: 'copy', copy: COPY, source: 'drafting/main.tex' });
 	});
 
 	it('is nothing for a draft with neither, a landmark no live draft leads to, or a closed copy', () => {
@@ -40,8 +42,8 @@ describe("a document's history", () => {
 		const m = structuredClone(fixture);
 		delete m.canon![0].in;
 		expect(historyOf(m, V1)).toBeNull();
-		m.masters.find((x) => x.path === '.loom/copies/aidoc.tex')!.closed = true;
-		expect(historyOf(m, '.loom/copies/aidoc.tex')).toBeNull();
+		m.masters.find((x) => x.path === COPY)!.closed = true;
+		expect(historyOf(m, COPY)).toBeNull();
 	});
 });
 

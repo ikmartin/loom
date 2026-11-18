@@ -37,10 +37,10 @@ describe('Problems', () => {
 	});
 
 	it("finds a cited work's diagnostic its work by the fix that digests it again, else by its results", () => {
-		const m = { nodes: { 'Kre99-thm-2.1': { digest: 'Kre99', file: '.loom/digests/Kre99.tex' } } } as unknown as Pick<Manifest, 'nodes'>;
+		const m = { nodes: { 'Kre99-thm-2.1': { digest: 'Kre99', file: '.loom/library/Kre99.tex' } } } as unknown as Pick<Manifest, 'nodes'>;
 		const again = d('dangling-link', { owner: 'work', fixes: [{ label: 'digest Man12 again', command: 'x', act: { endpoint: 'library-update', body: { works: ['Man12'], redo: true, steps: ['extract'] } } }] });
 		const keyed = d('loom:converter-fallback', { owner: 'work', keys: ['Kre99-thm-2.1'] });
-		const located = d('loom:missing-package', { owner: 'work', locations: [{ file: '.loom/digests/Kre99.tex', line: 1 }] });
+		const located = d('loom:missing-package', { owner: 'work', locations: [{ file: '.loom/library/Kre99.tex', line: 1 }] });
 		expect([workOf(m, again), workOf(m, keyed), workOf(m, located), workOf(m, d('x', { owner: 'work' }))]).toEqual(['Man12', 'Kre99', 'Kre99', '']);
 		expect(byWork(m, [keyed, again, keyed]).map((w) => [w.work, w.items.length])).toEqual([['Kre99', 2], ['Man12', 1]]);
 	});

@@ -14,7 +14,7 @@ describe('lcs', () => {
 
 describe('with a base: a copy against its source', () => {
 	const main = doc('drafting/main.tex');
-	const copy = doc('.loom/copies/aidoc.tex', { copyOf: 'drafting/main.tex', copy: true });
+	const copy = doc('.loom/agents/copies/aidoc.tex', { copyOf: 'drafting/main.tex', copy: true });
 	const left = [f('s1', 'h1'), f('s2', 'h2'), f('s3'), f('s4', 's4', 's4', '2'), f('gone')];
 	const right = [ai('s1', 'h1*'), ai('s4', 's4', '1'), ai('s2', 'h2*'), ai('s3'), ai('new')];
 	const bases: Record<string, string> = { 's1-ai': 'h0', 's2-ai': 'h2' };
@@ -57,7 +57,7 @@ describe('with a base: a copy against its source', () => {
 
 describe('landmarks', () => {
 	it('the earlier holds the base, and order is only "order differs"', () => {
-		const v1 = doc('.loom/history/0001-v1/v1.tex', { kind: 'landmark', name: 'v1 @1', step: 1 });
+		const v1 = doc('.loom/records/history/0001-v1/v1.tex', { kind: 'landmark', name: 'v1 @1', step: 1 });
 		const now = doc('drafting/main.tex');
 		const p = plan([[f('a', 'a0'), f('b'), f('c')], [f('a', 'a1'), f('c'), f('b')]], [now, v1], () => null, null);
 		expect(p.marks[1].get('a')?.kind).toBe('del');
@@ -91,7 +91,7 @@ describe('without a base: two of the author’s documents', () => {
 
 describe('a version against now', () => {
 	const live = doc('drafting/main.tex');
-	const landmark = (step: number) => doc(`.loom/history/000${step}-v/v.tex`, { kind: 'landmark', step });
+	const landmark = (step: number) => doc(`.loom/records/history/000${step}-v/v.tex`, { kind: 'landmark', step });
 
 	it('stands the wedge of a block the version lacks before the next shared block when none precedes it, so both sides move to it', () => {
 		const p = plan([[f('a'), f('b')], [f('new'), f('a'), f('b')]], [landmark(1), live], () => null, null);

@@ -37,11 +37,11 @@ export const SECTIONS: Section[] = [
 	{ id: 'files', label: 'Files', group: 'loom', where: `${BROWSER} What Docs shows of the project.`, icon: 'M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z' },
 	{ id: 'general', label: 'General', group: 'quilt', where: QUILT, icon: 'M4 6h16M4 12h16M4 18h10' },
 	{ id: 'documents', label: 'Documents', group: 'quilt', where: QUILT, icon: 'M7 3h7l5 5v13H7zM14 3v5h5' },
-	{ id: 'annotations', label: 'Annotations', group: 'quilt', where: "Saved in this quilt's .loom/annotation-types.toml, shared with everyone who has the quilt. You change it here; an agent may edit the file.", icon: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
+	{ id: 'annotations', label: 'Annotations', group: 'quilt', where: "Saved in this quilt's .loom/records/annotation-types.toml, shared with everyone who has the quilt. You change it here; an agent may edit the file.", icon: 'm9 11-6 6v3h9l3-3M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4' },
 	{ id: 'agents', label: 'Agents', group: 'quilt', where: QUILT, icon: 'M7 7h10a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3v-6a3 3 0 0 1 3-3M12 3v4M9 13h.01M15 13h.01' },
 	{ id: 'library', label: 'Library', group: 'quilt', where: QUILT, icon: 'M5 4v16M9 4v16M13 5l4 15M19 4l-2 16' },
 	{ id: 'problems', label: 'Problems', group: 'quilt', where: QUILT, icon: 'M12 3l9 16H3zM12 10v4M12 17h.01' },
-	{ id: 'overleaf', label: 'Overleaf', group: 'quilt', where: 'Recorded in .loom/source-sync.json, committed with the quilt; the folder it names is a clone on this computer.', icon: 'M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5M18 3v4h-4M6 21v-4h4' }
+	{ id: 'overleaf', label: 'Overleaf', group: 'quilt', where: 'Recorded in .loom/records/source-sync.json, committed with the quilt; the folder it names is a clone on this computer.', icon: 'M4 12a8 8 0 0 1 14-5M20 12a8 8 0 0 1-14 5M18 3v4h-4M6 21v-4h4' }
 ];
 
 export const SETTINGS: Setting[] = [

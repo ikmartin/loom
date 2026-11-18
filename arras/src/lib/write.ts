@@ -15,7 +15,7 @@ const SESSIONED = new Set(['library-verify', 'library-discard']);
 export interface Capabilities {
 	write_api: number;
 	capabilities: string[];
-	/** What every write must carry, from the publisher's own `.loom/serve.json`. Absent from a corpus nobody is serving. */
+	/** What every write must carry: the publisher's own token, which it keeps outside the quilt. Absent from a corpus nobody is serving. */
 	token?: string;
 	/** Whether the publisher says when it publishes a new manifest, at `/_api/stream` (manifest/stream.ts). */
 	stream?: boolean;

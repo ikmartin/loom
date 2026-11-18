@@ -19,7 +19,7 @@ describe('Review opens a thing where it lives (plan 0.25.1)', () => {
 	});
 
 	it("opens a result of an agent's copy in the copy, and sends a cited work's result where it always went", () => {
-		expect(placeUrl(fixture, 'sy-0002-ai')).toBe('/master/.loom/copies/aidoc#sy-0002-ai');
+		expect(placeUrl(fixture, 'sy-0002-ai')).toBe(`/master/${fixture.masters.find((x) => x.copy_of)!.path.replace(/\.tex$/, '')}#sy-0002-ai`);
 		// the person's own document is preferred where both read a result
 		expect(placeUrl(fixture, 'sy-0001')).toBe('/master/drafting/main#sy-0001');
 		expect(placeUrl(fixture, 'Kre99-sec-1')).not.toContain('/master/');

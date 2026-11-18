@@ -83,15 +83,15 @@ describe('the pending changes the manifest lists', () => {
 
 	it('groups them by the document that lists them, the person\'s own first, a change in no document under its file', () => {
 		const masters = [
-			{ path: '.loom/copies/aidoc.tex', agent: { name: 'Claude' }, copy_of: MAIN },
+			{ path: '.loom/agents/copies/aidoc.tex', agent: { name: 'Claude' }, copy_of: MAIN },
 			{ path: MAIN, default: true },
 			{ path: 'drafting/old.tex', closed: true }
 		] as unknown as Manifest['masters'];
-		const changes = [change({ id: 'c-1', documents: ['.loom/copies/aidoc.tex', MAIN] }), change({ id: 'c-2', documents: ['drafting/old.tex'], path: 'drafting/old.tex' }), change({ id: 'c-3', documents: ['.loom/copies/aidoc.tex'] }), change({ id: 'c-4', documents: [], path: 'notes/a.md', key: null })];
+		const changes = [change({ id: 'c-1', documents: ['.loom/agents/copies/aidoc.tex', MAIN] }), change({ id: 'c-2', documents: ['drafting/old.tex'], path: 'drafting/old.tex' }), change({ id: 'c-3', documents: ['.loom/agents/copies/aidoc.tex'] }), change({ id: 'c-4', documents: [], path: 'notes/a.md', key: null })];
 		const groups = byDocument({ masters, changes });
 		expect(groups.map((g) => [g.path, g.document, g.changes.map((c) => c.id)])).toEqual([
 			[MAIN, true, ['c-1']],
-			['.loom/copies/aidoc.tex', true, ['c-3']],
+			['.loom/agents/copies/aidoc.tex', true, ['c-3']],
 			['drafting/old.tex', false, ['c-2']],
 			['notes/a.md', false, ['c-4']]
 		]);
