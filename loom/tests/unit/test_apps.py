@@ -263,7 +263,7 @@ def test_the_merge_keeps_the_persons_text_as_written(tmp_path: Path) -> None:
     text = settings.read_text(encoding="utf-8")
     assert text.startswith("﻿{") and '"AUTHOR": "Zoë Ñ"' in text
     now = _settings(q)
-    assert list(now) == ["$schema", "permissions", "env", "sandbox"]
+    assert list(now) == ["$schema", "permissions", "env"]
     assert list(now["permissions"]) == ["defaultMode", "deny", "allow"]
     assert "mcp__loom__*" in now["permissions"]["allow"] and now["permissions"]["deny"][-1] == "Read(./secrets/**)"
 

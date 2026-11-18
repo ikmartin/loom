@@ -316,44 +316,29 @@ def test_a_compile_starts_latexmk_with_the_machines_folder(tmp_path: Path, monke
     assert seen and all(e.get("PAR_GLOBAL_TMPDIR") == str(data_dir() / UNPACKED) for e in seen)
 
 
-def test_an_agents_sandbox_may_write_the_machines_folder_and_nothing_wider() -> None:
-    from loom.ai.layout import permissions_json
-    from loom.machine import UNPACKED_HOMES
+def test_no_agent_is_granted_the_machines_folder() -> None:
+    """A folder whose contents the person's own `loom` runs is no place of an agent's: a sandboxed agent's `biber` unpacks its own copy where its temporary folder is."""
+    from loom.ai.layout import codex_rules, permissions_json
+    from loom.machine import UNPACKED
     from loom.scan.quilt import QuiltConfig
 
     for shell in (False, True):
-        said = json.loads(permissions_json(QuiltConfig(), shell=shell))
-        assert said["sandbox"] == {"filesystem": {"allowWrite": list(UNPACKED_HOMES)}}
-        assert all(p.endswith("/loom/unpacked") for p in UNPACKED_HOMES)
+        said = permissions_json(QuiltConfig(), shell=shell)
+        assert "sandbox" not in json.loads(said) and UNPACKED not in said
+    assert UNPACKED not in codex_rules()
 
 
-def test_the_persons_sandbox_settings_are_kept_beside_looms(tmp_path: Path) -> None:
-    from loom.ai.layout import permissions_json, record_rules, settings_for
-    from loom.machine import UNPACKED_HOMES
-    from loom.paths import AI
-    from loom.scan.quilt import QuiltConfig
+def test_a_tex_run_starts_when_the_machines_folder_cannot_be_made(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.machine import UNPACKED, data_dir
+    from loom.tex.runner import tex_env
 
-    (tmp_path / AI).mkdir(parents=True)
-    generated = permissions_json(QuiltConfig())
-    record_rules(tmp_path, generated)
-    # an older loom's grant, recorded as loom's, beside the person's own
-    (tmp_path / AI / ".loom-rules").write_text(
-        (tmp_path / AI / ".loom-rules").read_text() + "write\t~/old/loom/place\n", encoding="utf-8"
-    )
-    (tmp_path / ".claude").mkdir()
-    theirs = {
-        "permissions": {"allow": [], "deny": []},
-        "sandbox": {"enabled": True, "filesystem": {"allowWrite": ["~/.kube", "~/old/loom/place"]}},
-    }
-    (tmp_path / ".claude/settings.json").write_text(json.dumps(theirs), encoding="utf-8")
-    made = settings_for(tmp_path, generated)
-    assert made.text is not None
-    now = json.loads(made.text)
-    assert now["sandbox"]["enabled"] is True
-    assert now["sandbox"]["filesystem"]["allowWrite"] == [*UNPACKED_HOMES, "~/.kube"]
-    assert made.dropped == ["write ~/old/loom/place"]
-    (tmp_path / ".claude/settings.json").write_text(json.dumps({**theirs, "sandbox": []}), encoding="utf-8")
-    assert settings_for(tmp_path, generated).text is None
+    place = data_dir()
+    place.parent.mkdir(parents=True, exist_ok=True)
+    place.write_text("not a folder")  # so nothing can be made under it
+    env = tex_env()
+    assert env["PAR_GLOBAL_TMPDIR"] == str(place / UNPACKED) and not (place / UNPACKED).exists()
 
 
 # ---- sizes ------------------------------------------------------------------------------------------------------------

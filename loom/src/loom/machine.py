@@ -15,8 +15,6 @@ from pathlib import Path
 TOKENS = "tokens"
 #: The folder of `data_dir` a tool that unpacks itself on its first run unpacks into, once for the machine: TeX Live's `biber`, about 200 MB.
 UNPACKED = "unpacked"
-#: That folder from the home folder, where `data_dir` is on a Mac and by default elsewhere: what an agent's sandbox is let write (`ai.layout.permissions_json`), the same in every quilt on every machine.
-UNPACKED_HOMES = ("~/Library/Application Support/loom/unpacked", "~/.local/share/loom/unpacked")
 
 
 def data_dir() -> Path:
