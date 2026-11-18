@@ -151,7 +151,12 @@ def published(result: Any, page: Page) -> dict[str, Any] | None:
             broken.append({"href": href, "why": str(exc)})
             continue
         then = recorded.get(href, {}).get("hash")
-        if then and target.kind == "node" and key_hash(result, target.key) != then:
+        if not then or target.kind != "node":
+            continue
+        if target.key not in result.nodes:
+            # it named a result when written; its key now finds only a label (the environment deleted, or no longer declared)
+            broken.append({"href": href, "why": f"{href}: the result it named when written is gone"})
+        elif key_hash(result, target.key) != then:
             moved.append({"href": href, "key": target.key})
     out: dict[str, Any] = {
         "path": page.path,
