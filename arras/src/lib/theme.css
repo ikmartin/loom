@@ -269,6 +269,11 @@ pre {
 	border-radius: var(--rad-control);
 	overflow-x: auto;
 }
+/* code in a block is the block's text: an inline code's side padding would indent its first line alone */
+pre code {
+	padding: 0;
+	background: none;
+}
 h1,
 h2,
 h3,
