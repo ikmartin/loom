@@ -28,6 +28,7 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     beside: list[str] = []
     removed: list[str] = []
     theirs: list[str] = []
+    dropped: list[str] = []
     if write_loom_ignore(root, write=not dry_run):
         written.append(LOOM_GITIGNORE)
     if not (root / ANNOTATION_TYPES).exists():
@@ -50,7 +51,7 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             written.append(".gitignore")
         kept += [str(rel) for rel in rep.kept]
         beside = [rel for rel in kept if f"{rel}.new" in rep.new_beside]
-        removed, theirs = rep.removed, rep.theirs
+        removed, theirs, dropped = rep.removed, rep.theirs, rep.dropped
     groups = [
         Group(
             "would write" if dry_run else "wrote",
@@ -87,6 +88,11 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             limit=None,
         ),
         Group("yours, at a path loom writes, so left alone", [Item("", key=rel) for rel in theirs], limit=None),
+        Group(
+            "would take out" if dry_run else "took out",
+            [Item("loom's own rule, which it no longer writes", key=rule) for rule in dropped],
+            limit=None,
+        ),
     ]
     if written or kept or removed:
         parts = (
@@ -123,6 +129,7 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             "beside": beside,
             "removed": removed,
             "theirs": theirs,
+            "dropped": dropped,
             "gitignore": added,
             "ai": has_ai,
         },

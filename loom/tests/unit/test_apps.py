@@ -14,7 +14,7 @@ import pytest
 from loom.ai.clients import PROJECT, apps_in, chosen
 from loom.ai.layout import MCP, MCP_LINE, SHELL, variant
 from loom.render.endpoints.base import ApiError
-from tests.helpers import exits, ok
+from tests.helpers import exits, json_of, ok
 from tests.unit._quilts import demo
 
 EVERY = [c.key for c in PROJECT]
@@ -214,9 +214,10 @@ def test_a_persons_rules_are_kept_whatever_they_name_where_loom_records_its_own(
     data["permissions"]["deny"] += theirs
     data["permissions"]["allow"].append("mcp__loom__loom_session_say")
     (q / ".claude/settings.json").write_text(json.dumps(data, indent=2) + "\n")
-    ok("upgrade", cwd=q)
+    got = json_of("upgrade", "--json", cwd=q)
     after = _settings(q)["permissions"]
     assert after["deny"][-3:] == theirs and after["allow"][-1] == "mcp__loom__loom_session_say"
+    assert got["dropped"] == []
 
 
 def test_without_the_record_only_an_allow_naming_loom_is_taken_for_an_older_looms(tmp_path: Path) -> None:
@@ -227,10 +228,22 @@ def test_without_the_record_only_an_allow_naming_loom_is_taken_for_an_older_loom
     data["permissions"]["allow"].append("Bash(loom accept*)")
     data["permissions"]["deny"].append("mcp__loom__loom_write")
     (q / ".claude/settings.json").write_text(json.dumps(data, indent=2) + "\n")
-    ok("upgrade", cwd=q)
+    got = json_of("upgrade", "--json", cwd=q)
     after = _settings(q)["permissions"]
     assert "Bash(loom accept*)" not in after["allow"] and after["deny"][-1] == "mcp__loom__loom_write"
+    assert got["dropped"] == [".claude/settings.json: allow Bash(loom accept*)"]
     assert (q / ".loom/ai/.loom-rules").is_file()
+
+
+def test_loom_names_each_of_its_own_rules_it_takes_out(tmp_path: Path) -> None:
+    q = bare(tmp_path)
+    setup(q, "claude-code")
+    _deny(q, '["paper/"]')
+    ok("upgrade", cwd=q)
+    _deny(q, "[]")
+    got = json_of("upgrade", "--json", cwd=q)
+    assert got["dropped"] == [".claude/settings.json: deny Edit(/**/paper/**)"]
+    assert "Edit(/**/paper/**)" not in _settings(q)["permissions"]["deny"]
 
 
 def test_the_merge_keeps_the_persons_text_as_written(tmp_path: Path) -> None:
