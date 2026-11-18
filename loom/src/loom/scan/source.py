@@ -5,38 +5,41 @@ Every .tex under the root outside `.loom/` and tool directories is a source file
 
 from __future__ import annotations
 
+import os
 import re
+from collections.abc import Collection
 from pathlib import Path
 
 from loom.paths import COPIES, LIBRARY, LOOM, STORAGE
 from loom.scan.memo import Memo
 from loom.scan.model import SourceFile
 
-#: Directories never read, by name at any depth: loom's own, whose digests alone are read on purpose, and tools'.
-SKIP_DIRS = {".git", "node_modules", LOOM, ".svelte-kit", ".claude"}
+#: Directories never read, by name at any depth: loom's own, whose digests alone are read on purpose, and tools', among them a Lake project's `.lake`, which holds its build and every package it depends on (Mathlib's alone is tens of thousands of files).
+SKIP_DIRS = {".git", "node_modules", LOOM, ".svelte-kit", ".claude", ".lake"}
 IGNORE_RE = re.compile(r"^\s*%\s*!LOOM\s+ignore\s*$", re.M)
 _VERB_RE = re.compile(r"\\verb\*?(\S)(.*?)\1")
 _VERBATIM_RE = re.compile(r"\\begin\{(verbatim\*?|lstlisting|comment|filecontents\*?)\}.*?\\end\{\1\}", re.S)
 
 
+def _tex_under(root: Path, top: Path, skip: set[Path], names: Collection[str] = ()) -> list[str]:
+    """Quilt-relative paths of the .tex files under `top`, never descending into a directory in `skip` or named in `names`, so a pruned one is never listed."""
+    found: list[str] = []
+    for here, dirs, files in os.walk(top):
+        dirs[:] = [d for d in dirs if d not in names and Path(here) / d not in skip]
+        rel = Path(here).relative_to(root)
+        found += [(rel / f).as_posix() for f in files if f.endswith(".tex")]
+    return found
+
+
 def discover_files(root: Path, skip_top: tuple[str, ...] = ()) -> list[str]:
     """Quilt-relative posix paths of every .tex file under root, sorted: every one outside `SKIP_DIRS` and the directories in `skip_top` (the history directory and the sync directory, given relative to root), every digest, and every agent copy.
 
-    Digests are read from `.loom/library/` on purpose, outside the store: a fetched e-print under the store is a whole paper carrying its own labels (DR-108, DR-192). Agent copies are read from `.loom/agents/copies/`, where `loom draft --ai` makes them.
+    The tree is walked with those directories pruned, never listed and filtered after. Digests are read from `.loom/library/` on purpose, outside the store: a fetched e-print under the store is a whole paper carrying its own labels (DR-108, DR-192). Agent copies are read from `.loom/agents/copies/`, where `loom draft --ai` makes them.
     """
-    found: list[str] = []
-    for path in root.rglob("*.tex"):
-        rel = path.relative_to(root)
-        if any(part in SKIP_DIRS for part in rel.parts[:-1]):
-            continue
-        if len(rel.parts) > 1 and rel.as_posix().startswith(tuple(f"{d.strip('/')}/" for d in skip_top)):
-            continue
-        found.append(rel.as_posix())
+    found = _tex_under(root, root, {root / d.strip("/") for d in skip_top if d.strip("/")}, SKIP_DIRS)
     digests = root / LIBRARY
     if digests.is_dir():
-        found += [
-            p.relative_to(root).as_posix() for p in digests.rglob("*.tex") if not p.is_relative_to(root / STORAGE)
-        ]
+        found += _tex_under(root, digests, {root / STORAGE})
     copies = root / COPIES
     if copies.is_dir():
         found += [p.relative_to(root).as_posix() for p in copies.glob("*.tex") if p.is_file()]
