@@ -1,1 +1,1 @@
-error duplicate-id
+warning duplicate-id model

@@ -1350,7 +1350,7 @@ def test_rewriting_one_unattached_proof_detaches_only_the_annotation_on_its_word
     rewritten = ok("annotate", first, "A hint.", "--quote", "The first answer is short", *AS, cwd=d).output.split()[0]
     kept = ok("annotate", second, "Another.", "--quote", "The second answer is unique", *AS, cwd=d).output.split()[0]
     edit(main, "The first answer is short.", "This answer has been rewritten at considerably greater length.")
-    exits(1, "build", cwd=d, match="unattached-proof")
+    ok("build", cwd=d)  # a proof after \item compiles: loom's model, a warning, and the build succeeds
     annotations = json.loads((d / ".loom/cache/site" / "manifest.json").read_text())["annotations"]
     assert annotations[rewritten]["detached"] is True
     assert annotations[kept]["detached"] is False
@@ -1412,6 +1412,7 @@ def test_a_document_deleted_by_hand_is_gone_not_changed(tmp_path: Path) -> None:
         {
             "severity": "warning",
             "code": "loom:document-gone",
+            "class": "model",
             "message": "drafting/main.tex is gone and the history does not say where it went; 2 acceptance rows and 1 annotation name it",
             "locations": [],
             "keys": ["dm-0001", "dm-0002"],
@@ -1491,7 +1492,7 @@ def test_a_conflicted_id_is_a_row_of_its_own_and_its_definitions_are_not(tmp_pat
     assert keys["sy-999B"]["conflict"] == ["drafting/nodes/sy-999B.tex", "drafting/talk.tex"]
     assert not [k for k in keys if "#lemma:" in k and k.startswith(("drafting/talk.tex", "drafting/nodes/sy-999B.tex"))]
     said = ok("status", cwd=q).output
-    assert "loom fork sy-999B --in drafting/talk.tex" in said
+    assert "loom id --next, and put that id in place of sy-999B in drafting/talk.tex" in flat(said)
     assert ": 1 conflicted," in said.splitlines()[0]  # the verdict counts it, first
 
 

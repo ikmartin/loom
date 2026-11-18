@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from loom.scan.diagnostics import MODEL
 from loom.scan.directives import file_level, list_value, within
 from loom.scan.model import Diagnostic, Location, SourceFile
 from loom.scan.nodes import Assembly
@@ -51,13 +52,15 @@ def find_relations(asm: Assembly, files: dict[str, SourceFile]) -> RelationResul
         for item in list_value(value):
             target = asm.labels.get(item)
             if target is None:
+                # a relation is loom's alone: TeX never reads it
                 res.diagnostics.append(
                     Diagnostic(
-                        "error",
+                        "warning",
                         "dangling-link",
                         f"% !LOOM see: {item} refers to no node or label",
                         [Location(path, line, column)],
                         [from_key],
+                        class_=MODEL,
                     )
                 )
                 continue

@@ -59,8 +59,10 @@ def test_an_attached_agent_is_told_where_to_start_and_offered_every_agent_comman
 
 def test_a_call_returns_the_commands_report_and_each_exit_as_it_means(tmp_path: Path) -> None:
     q = demo(tmp_path)
-    (q / "drafting" / "nodes" / "dm-0098.tex").write_text(
-        "\\begin{lemma}\\label{dm-0001}\nTwice.\n\\end{lemma}\n"
+    (q / "drafting" / "nodes" / "dm-0098.tex").write_text("\\begin{lemma}\\label{dm-0001}\nTwice.\n\\end{lemma}\n")
+    main = q / "drafting" / "main.tex"
+    main.write_text(
+        main.read_text().replace("\\end{document}", "\\input{nodes/dm-0098}\n\\end{document}")
     )  # lint exits 1
 
     async def body(client: Any) -> None:

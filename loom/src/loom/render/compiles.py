@@ -1,6 +1,6 @@
-"""The compiles `loom serve` runs in the background: each document whose files changed, the one being read first, as many at once as there are workers.
+"""The compiles `loom serve` runs in the background: each document whose files changed, the one being read first, as many at once as there are workers; and what a document's last compile says, read from its log.
 
-A document asked for while it compiles runs once more afterwards, however often it was asked; one asked for while it waits keeps its place and waits `delay` again, so a burst of saves is one run. How each stands is what the stream and `loom status` report.
+A document asked for while it compiles runs once more afterwards, however often it was asked; one asked for while it waits keeps its place and waits `delay` again, so a burst of saves is one run. How each stands is what the stream and `loom status` report. A compile that stopped on an error or finished with errors is a problem on its document (`compile_problems`), in the manifest and in `loom lint`, whichever compile left the log, the server's or `loom compile`'s.
 """
 
 from __future__ import annotations
@@ -14,10 +14,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loom.scan.model import Diagnostic, Location
 from loom.tex.runner import CompileResult, stop_run
 
 #: The line of the log that says where TeX was when it stopped: `l.12 \hlind{...}`.
 _AT = re.compile(r"^l\.\d+ .*$", re.M)
+#: A file TeX opens, as its log shows it: `(` then a path with an extension.
+_OPENED = re.compile(r"\(([^\s()]+\.[A-Za-z]+)")
+#: The line TeX stopped at, after an error: `l.12 <the text up to the point>`.
+_STOPPED = re.compile(r"^l\.(\d+) (.*)$", re.M)
+_MACRO = re.compile(r"\\(?:[A-Za-z@]+|.)")
+#: What TeX writes when it made a PDF or DVI, whatever went wrong before it.
+_WRITTEN = re.compile(r"^Output written on ", re.M)
+#: An error line of the log, which TeX starts with `!`.
+_ERROR = re.compile(r"^!.*$", re.M)
+#: The codes `compile_problems` reports.
+COMPILE_CODES = frozenset({"loom:compile-failed", "loom:compile-errors"})
 
 
 @dataclass
@@ -46,6 +58,89 @@ def last_of(res: CompileResult, ended: str) -> Last:
     return Last("errors" if res.pdf is not None else "failed", ended, res.first_error[:300], at)
 
 
+def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
+    """Where the log's first error is: the file TeX had open, the line it stopped at, and for an undefined control sequence the macro.
+
+    Read from the log, whose `(file` and `)` mark what TeX opened and closed; a log that says less gives None, or the fields it does say.
+    """
+    if res.log is None or not res.errors:
+        return None
+    try:
+        text = res.log.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    at = text.find(res.errors[0])
+    if at < 0:
+        return None
+    stack: list[str | None] = []
+    i = 0
+    while i < at:
+        c = text[i]
+        if c == "(":
+            m = _OPENED.match(text, i)
+            stack.append(m.group(1) if m else None)
+        elif c == ")" and stack:
+            stack.pop()
+        i += 1
+    opened = next((f for f in reversed(stack) if f and f.endswith(".tex")), None)
+    out: dict[str, Any] = {"file": None, "line": None, "macro": None}
+    if opened:
+        # the log names files from where latexmk ran, the document's own directory (P12)
+        p = Path(opened) if Path(opened).is_absolute() or res.cwd is None else res.cwd / opened
+        rel = (
+            p.resolve().relative_to(root.resolve())
+            if p.is_absolute() and p.resolve().is_relative_to(root.resolve())
+            else p
+        )
+        out["file"] = rel.as_posix().removeprefix("./")
+    stopped = _STOPPED.search(text, at)
+    if stopped is not None and text.count("\n", at, stopped.start()) <= 8:
+        out["line"] = int(stopped.group(1))
+        if "Undefined control sequence" in res.errors[0]:
+            macros = _MACRO.findall(stopped.group(2))
+            out["macro"] = macros[-1] if macros else None
+    return out if any(out.values()) else None
+
+
+def compile_problems(result: Any) -> list[Diagnostic]:
+    """`loom:compile-failed` for each document whose last compile stopped on a TeX error and made no PDF, `loom:compile-errors` for one that made its PDF though TeX reported errors; none where its log reports no error, or where it has none.
+
+    Read from the log in the document's compile folder, which every compile of it leaves, so the problem goes when a compile succeeds. Each is on the document's key, at the file and line TeX names when it names a file of the quilt, else at the document's first line; its message gives TeX's first error.
+    """
+    from loom.paths import document_build
+
+    root = result.quilt.root
+    out: list[Diagnostic] = []
+    for doc in result.masters:
+        log = root / document_build(doc) / f"{Path(doc).stem}.log"
+        try:
+            text = log.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        errors = _ERROR.findall(text)
+        if not errors:
+            continue
+        res = CompileResult(False, "", log.parent, 1, errors=errors, log=log, cwd=root / result.base_of(doc))
+        place = error_place(res, root) or {}
+        said = errors[0].removeprefix("!").strip().rstrip(".")
+        if place.get("macro"):
+            said += f" {place['macro']}"
+        named = place.get("file")
+        # a line counts only in a file of the quilt, or where the log names none and TeX was reading the document itself
+        where = str(named) if named in result.files else doc
+        line = place.get("line") if named in result.files or named is None else None
+        if _WRITTEN.search(text):
+            n = len(errors)
+            code, message = (
+                "loom:compile-errors",
+                f"{doc} compiled with {n} error{'s' if n != 1 else ''}, the first: {said}",
+            )
+        else:
+            code, message = "loom:compile-failed", f"{doc} did not compile: {said}"
+        out.append(Diagnostic("error", code, message, [Location(where, line or 1)], [doc]))
+    return out
+
+
 class Compiles:
     """A queue of document compiles served by a fixed number of worker threads, started on first use.
 
@@ -62,6 +157,8 @@ class Compiles:
         Called, outside the lock, after any change to how a compile stands.
     made : callable, optional
         Called with a document whose run made a PDF, from the worker that ran it.
+    failed : callable, optional
+        Called with a document whose run made none, from the worker that ran it.
     """
 
     def __init__(
@@ -73,6 +170,7 @@ class Compiles:
         first: Callable[[], str | None] = lambda: None,
         told: Callable[[], None] = lambda: None,
         made: Callable[[str], None] = lambda doc: None,
+        failed: Callable[[str], None] = lambda doc: None,
     ) -> None:
         self._run = run
         self._workers = workers
@@ -80,6 +178,7 @@ class Compiles:
         self._first = first
         self._told = told
         self._made = made
+        self._failed = failed
         self._cond = threading.Condition()
         self._due: dict[str, float] = {}  # waiting, by when it may start
         self._running: dict[str, Any] = {}  # compiling, with latexmk's process once it has one
@@ -191,6 +290,8 @@ class Compiles:
             self._told()
             if res is not None and res.pdf is not None:
                 self._made(doc)
+            elif res is not None:
+                self._failed(doc)
 
 
 def served(root: Path) -> dict[str, Any] | None:

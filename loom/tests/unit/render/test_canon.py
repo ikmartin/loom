@@ -116,7 +116,10 @@ def test_a_conflicted_key_is_published_with_no_text(tmp_path: Path) -> None:
     assert key["state"] == "conflicted" and key["hash"] == "" and key["uses"] == []
     assert m["states"]["labels"]["conflicted"] == {"label": "conflicted", "color": "negative"}
     d = the(m["diagnostics"], lambda x: x["code"] == "duplicate-id", "duplicate-id diagnostic")
-    assert [f["command"] for f in d["fixes"]][0].startswith("loom fork pp-0002 --in")
+    assert [f["command"] for f in d["fixes"]][
+        0
+    ] == "loom id --next, and put that id in place of pp-0002 in main/main.tex"
+    assert (d["severity"], d["class"]) == ("error", "latex")  # the document's compile reads both definitions
     assert not (q / ".loom/cache/site" / "fragments" / "nodes" / "pp-0002.html").exists()
 
 

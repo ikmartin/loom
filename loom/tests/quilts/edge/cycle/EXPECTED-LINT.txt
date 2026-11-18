@@ -1,1 +1,1 @@
-error inclusion-cycle
+error inclusion-cycle latex

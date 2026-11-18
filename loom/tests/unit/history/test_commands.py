@@ -232,8 +232,8 @@ def test_a_retired_id_is_never_allocated_again_and_written_again_is_reuse_or_rec
     assert "loom:node-recovered" in lint.output and "loom:id-reused" not in lint.output
 
     main.write_text(text.replace("Beta uses", "Gamma uses"))
-    lint2 = exits(1, "lint", cwd=q)
-    assert "loom:id-reused" in lint2.output and "an id names one node forever" in lint2.output
+    lint2 = ok("lint", cwd=q)  # loom's model, which TeX never sees: a warning
+    assert "warning loom:id-reused (model)" in lint2.output and "an id names one node forever" in lint2.output
 
 
 def test_history_verify_reports_an_edited_record(tmp_path: Path) -> None:
@@ -291,7 +291,9 @@ def test_verify_names_each_part_of_a_step_that_is_missing_or_edited(tmp_path: Pa
     pre.unlink()
     copy.unlink()
     r = exits(1, "history", "verify", cwd=q)
-    assert "loom:history-missing: the … of step 0002 is missing from .loom/records/history" in said(r), r.output
+    assert "loom:history-missing (internal): the … of step 0002 is missing from .loom/records/history" in said(r), (
+        r.output
+    )
     lines = [ln.strip() for ln in r.output.splitlines()]
     assert "preamble" in lines and "copy of v1.tex" in lines, r.output
     for p in d.iterdir():
@@ -371,7 +373,7 @@ def test_ancestry_the_history_no_longer_resolves_is_dangling(tmp_path: Path) -> 
         {"action": "revert", "key": "pp-0002", "step": 7, "in": "main/main.tex"},
     )
     r = ok("history", "verify", cwd=q)
-    assert "warning loom:dangling-ancestry (3)" in r.output, r.output
+    assert "warning loom:dangling-ancestry (internal) (3)" in r.output, r.output
     assert "pp-0100 was forked from pp-0002@7, which the history no longer resolves" in r.output
     assert "pp-0101 was forked from pp-0999@2, which the history no longer resolves" in r.output
     assert "pp-0002 was reverted to @7, which the history no longer resolves" in r.output
@@ -555,12 +557,15 @@ def test_restoring_a_landmark_whose_ids_are_still_live_adds_no_second_id(tmp_pat
     assert re.search(r"\\label\{pp-[0-9A-Z]{4}\}\s*\\label\{pp-", text) is None, text
     assert "0 ids inserted" in r.stdout
     assert "ids it defines another live document also defines" in said(r)
-    # the one safe way out forks inside the restored copy: forking the live one would move its records onto this one (T3)
+    # the one safe way out gives the restored copy the fresh id: the live one keeps its records (T3)
     keys = json_of("status", "--json", cwd=q)["keys"]
     twice = [k for k, e in keys.items() if e["state"] == "conflicted"]
-    assert twice and all(keys[k]["fixes"] == [f"loom fork {k} --in main/again.tex"] for k in twice), keys
-    lint = [d for d in json_of("lint", "--json", cwd=q, code=1)["diagnostics"] if d["code"] == "duplicate-id"]
-    assert [f["command"] for d in lint for f in d["fixes"]] == [f"loom fork {k} --in main/again.tex" for k in twice]
+    fresh = [f"loom id --next, and put that id in place of {k} in main/again.tex" for k in twice]
+    assert twice and [keys[k]["fixes"] for k in twice] == [[f] for f in fresh], keys
+    lint = [d for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] == "duplicate-id"]
+    assert [f["command"] for d in lint for f in d["fixes"]] == fresh
+    # two documents, each read by its own compile: loom's model, a warning
+    assert {(d["severity"], d["class"]) for d in lint} == {("warning", "model")}
 
 
 def test_history_restore_has_a_dry_run(tmp_path: Path) -> None:

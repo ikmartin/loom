@@ -1,2 +1,2 @@
-info loom:superseded-file
-warning loom:missing-proof
+info loom:superseded-file model
+warning loom:missing-proof model

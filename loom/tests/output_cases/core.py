@@ -10,10 +10,12 @@ FAIL_TEX = (("FAKE_TEX_FAIL", "1"),)
 
 
 def duplicate_id(q: Path) -> None:
-    """A second file defining `dm-0001`: an error diagnostic, which `lint`, `build` and `check` exit 1 on."""
+    """A second file defining `dm-0001`, which the document reads beside the first: an error of the person's LaTeX, which `lint`, `build` and `check` exit 1 on."""
     (q / "drafting" / "nodes" / "bad.tex").write_text(
         "\\begin{lemma}\\label{dm-0001}\ndup\n\\end{lemma}\n", encoding="utf-8"
     )
+    main = q / "drafting" / "main.tex"
+    main.write_text(main.read_text(encoding="utf-8").replace("\\end{document}", "\\input{nodes/bad}\n\\end{document}"))
 
 
 def stale(q: Path) -> None:

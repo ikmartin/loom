@@ -203,7 +203,19 @@ def assemble(
     _proof_nodes(asm, files, slugs, expansions, default_master)
     _partition(asm, files)
     _regions_and_details(asm, files, expansions, default_master, basis_names or {})
+    _grade_definitions(asm, expansions)
     return asm
+
+
+def _grade_definitions(asm: Assembly, expansions: dict[str, Expansion]) -> None:
+    """An id or label defined twice stays an error of the person's LaTeX where one document's compile reads two of its definitions, since TeX sees both there; defined in two documents, or where no document reads it, LaTeX accepts it, and it is a warning of loom's model."""
+    from loom.scan.diagnostics import MODEL
+
+    for d in asm.diagnostics:
+        if d.code not in ("duplicate-id", "loom:duplicate-label"):
+            continue
+        if not any(sum(loc.file in e.reached for loc in d.locations) >= 2 for e in expansions.values()):
+            d.severity, d.class_ = "warning", MODEL
 
 
 def _order(exp: Expansion | None, file: str, offset: int, files: dict[str, SourceFile]) -> float:
@@ -321,12 +333,15 @@ def _placeholders(asm: Assembly, files: dict[str, SourceFile], conflicted: dict[
             Location(d.file, files[d.file].line_of(d.start)) for d in sorted(demoted, key=lambda d: (d.file, d.start))
         ]
         locations = locations or [Location(path, 1) for path in paths]
-        # forking gives one document its own copy; two definitions inside one file can only be told apart by hand
-        fixes = [
-            Fix(f"fork the copy in {path}", f"loom fork {node_id} --in {path}") for path in paths if len(paths) > 1
-        ]
-        if not any(path in asm.digest_files for path in paths):  # a digest is loom's to rewrite, not the author's
-            fixes.append(Fix("give one copy a fresh id by hand", "loom id --next"))
+        # one definition keeps the id and what is recorded on it, and each other takes a fresh one; a digest is loom's to rewrite, not the author's
+        fresh = f"loom id --next, and put that id in place of {node_id} in"
+        fixes = (
+            []
+            if any(path in asm.digest_files for path in paths)
+            else [Fix(f"give the definition in {path} a fresh id", f"{fresh} {path}") for path in paths]
+            if len(paths) > 1
+            else [Fix("give one of the two a fresh id", f"{fresh} one of its definitions in {paths[0]}")]
+        )
         asm.diagnostics.append(
             Diagnostic(
                 "error",
@@ -510,7 +525,7 @@ def _proof_nodes(
         if stmt_key is None:
             asm.diagnostics.append(
                 Diagnostic(
-                    "error",
+                    "warning",
                     "loom:unattached-proof",
                     "proof is neither adjacent to a statement nor names one with \\ref"
                     + (f" (unknown label {ref_labels[0]})" if ref_labels else ""),

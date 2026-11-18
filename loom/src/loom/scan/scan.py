@@ -356,7 +356,7 @@ def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | 
                 else f"\\end{{{env}}} has no matching \\begin in this file"
             )
             result.diagnostics.append(
-                Diagnostic("error", "loom:environment-spans-files", msg, [Location(path, src.line_of(off))])
+                Diagnostic("warning", "loom:environment-spans-files", msg, [Location(path, src.line_of(off))])
             )
     from loom.refs.scan import other_versions
 

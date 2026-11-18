@@ -31,11 +31,13 @@ def test_two_files_defining_one_id_leave_it_conflicted(tmp_path: Path) -> None:
     (d,) = _diag(r, "duplicate-id")
     assert "defined by drafting/main.tex and drafting/talk.tex" in d.message and "no text" in d.message
     assert [loc.file for loc in d.locations] == ["drafting/main.tex", "drafting/talk.tex"]
+    # one definition keeps the id and each other takes a fresh one, said with the commands that stay
     assert [f.command for f in d.fixes] == [
-        "loom fork ab-0001 --in drafting/main.tex",
-        "loom fork ab-0001 --in drafting/talk.tex",
-        "loom id --next",
+        "loom id --next, and put that id in place of ab-0001 in drafting/main.tex",
+        "loom id --next, and put that id in place of ab-0001 in drafting/talk.tex",
     ]
+    # two documents each define it once, which LaTeX accepts: loom's model's, a warning
+    assert (d.severity, d.class_) == ("warning", "model")
     assert not _diag(r, "loom:unlabelled-node")  # a demoted definition is not an unlabelled node
     assert not _diag(r, "loom:duplicate-label")  # the id's collision is said once, as duplicate-id
 
@@ -106,8 +108,10 @@ def test_two_copies_in_one_file_are_conflicted_too(tmp_path: Path) -> None:
     )
     (d,) = _diag(r, "duplicate-id")
     assert d.message == "ab-0001 is defined twice in drafting/main.tex; it has no text until one definition remains"
-    assert [f.command for f in d.fixes] == ["loom id --next"], (
-        "forking splits documents; one file is told apart by hand"
-    )
+    assert [f.command for f in d.fixes] == [
+        "loom id --next, and put that id in place of ab-0001 in one of its definitions in drafting/main.tex"
+    ]
     assert len(d.locations) == 2, "both definitions are located"
+    # the document's compile reads both, so TeX sees the label twice: the person's LaTeX, an error
+    assert (d.severity, d.class_) == ("error", "latex")
     assert r.nodes["ab-0001"].kind == "conflict"

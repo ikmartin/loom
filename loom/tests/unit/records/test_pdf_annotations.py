@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from tests.helpers import exits, json_of, ok, refused
+from tests.helpers import json_of, ok, refused
 from tests.unit._pdfs import PROSE, STEP, lines_pdf
 from tests.unit._quilts import demo, showcase
 
@@ -384,7 +384,7 @@ def test_a_note_on_a_work_filed_by_its_hash_is_read_on_the_copy_it_was_written_o
     (decoy / "sections.json").write_text(json.dumps({"sha256": sha, "pages": 3, "chars": 0, "sections": []}))
     for n, text in ((1, "Nothing here."), (2, "Nor here."), (3, f"Here: {quote}.")):
         (decoy / "pages" / f"{n:04d}.txt").write_text(text + "\n")
-    exits(1, "build", cwd=q)
+    ok("build", cwd=q)
     row = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["annotations"][note["id"]]
     assert (row["target"]["work"], row["target"]["page"]) == (version, 2)
     assert (row["recorded"], row["anchored"], row["refound"], row["detached"]) == (True, True, False, False)

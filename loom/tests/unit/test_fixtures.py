@@ -57,10 +57,13 @@ def test_lint_fixture_expected_codes(quilt: Path, tmp_path: Path) -> None:
     names = {"synthetic": "The synthetic quilt", "demo": "The loom demo", "showcase": "The loom showcase"}
     if quilt.name in names:
         save_author(names[quilt.name])
-    expected = (quilt / "EXPECTED-LINT.txt").read_text(encoding="utf-8").split()
-    expected_lines = sorted(" ".join(pair) for pair in zip(expected[0::2], expected[1::2], strict=True))
+    expected_lines = sorted(
+        " ".join(line.split())
+        for line in (quilt / "EXPECTED-LINT.txt").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    )
     r = run("lint", "--json", cwd=q)
-    got = sorted(f"{d['severity']} {d['code']}" for d in json.loads(r.stdout)["diagnostics"])
+    got = sorted(f"{d['severity']} {d['code']} {d['class']}" for d in json.loads(r.stdout)["diagnostics"])
     assert got == expected_lines
     code = 1 if any(line.startswith("error") for line in got) else 0
     assert r.exit_code == code, f"expected exit {code}" + describe(("lint", "--json"), r)
@@ -96,14 +99,15 @@ def _literals(expr: object) -> list[str]:
 
 
 def test_every_code_loom_can_emit_is_reserved_or_namespaced() -> None:
-    """Every code in the table, and every one a `Diagnostic(...)` in loom's source names, is a reserved code or starts with `loom:`; and each one named is in the table."""
+    """Every code in the table, and every one a `Diagnostic(...)` in loom's source names, is a reserved code or starts with `loom:`; each one named is in the table; and each emitted with a literal severity is emitted at the table's, unless its instances differ (`VARIES`)."""
     import ast
 
-    from loom.scan.diagnostics import RESERVED
+    from loom.scan.diagnostics import RESERVED, VARIES, registered
 
     assert set(RESERVED) == RESERVED_CODES
     known = set(all_codes())
     named: dict[str, str] = {}
+    graded: list[str] = []
     src = Path(__file__).resolve().parents[2] / "src" / "loom"
     for path in sorted(src.rglob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
@@ -114,12 +118,28 @@ def test_every_code_loom_can_emit_is_reserved_or_namespaced() -> None:
             code = (
                 node.args[1] if len(node.args) > 1 else next((k.value for k in node.keywords if k.arg == "code"), None)
             )
+            severity = node.args[0] if node.args else None
             for c in _literals(code):
-                named[c] = f"{path.relative_to(src)}:{node.lineno}"
+                named[c] = where = f"{path.relative_to(src)}:{node.lineno}"
+                entry = registered(c)
+                if entry is not None and c not in VARIES:
+                    graded += [f"{c} {s} ({where})" for s in _literals(severity) if s != entry.severity]
     assert len(named) > 40, "the walk found too few codes to be reading the source"
     assert sorted(f"{c} ({w})" for c, w in named.items() if c not in known) == [], "codes missing from the table"
     stray = sorted(c for c in known | set(named) if c not in RESERVED_CODES and not c.startswith("loom:"))
     assert stray == [], "codes that are neither reserved nor loom:"
+    assert sorted(graded) == [], "codes emitted at another severity than the table's"
+
+
+def test_every_code_has_a_class(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The registry gives every code one of the three classes, and the check finds a code given none."""
+    from loom.scan import diagnostics
+    from loom.scan.diagnostics import CLASSES, LOOM, Code, unclassed
+
+    assert unclassed() == []
+    assert {LOOM[c].cls for c in LOOM} <= set(CLASSES)
+    monkeypatch.setitem(LOOM, "loom:made-up", Code("warning", ""))
+    assert diagnostics.unclassed() == ["loom:made-up"]
 
 
 @pytest.mark.tree

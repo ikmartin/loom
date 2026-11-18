@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tests.helpers import edit, exits, json_of, ok, refused, said
+from tests.helpers import edit, json_of, ok, refused, said
 from tests.unit._quilts import demo, showcase
 
 AGENT = ("--as", "Test Agent")
@@ -87,7 +87,9 @@ def test_a_works_overview_lives_in_its_store_directory_and_library_read_prints_i
 
 def test_the_manifest_publishes_each_page_with_who_wrote_it_and_its_links_that_moved_or_broke(tmp_path: Path) -> None:
     q = showcase(tmp_path)
-    exits(1, "build", cwd=q)  # the showcase keeps a duplicate id on purpose
+    ok(
+        "build", cwd=q
+    )  # the showcase's duplicate id is in two documents, which LaTeX accepts: a warning of loom's model
     m = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     state = m["research_state"]
     assert state["by"] == {"kind": "agent", "id": "Referee (Agent)"} and state["edited_since"] is False
@@ -98,7 +100,7 @@ def test_the_manifest_publishes_each_page_with_who_wrote_it_and_its_links_that_m
     edit(q / "drafting" / "nodes" / "sh-0009.tex", "has $c$ connected components", "has $c$ components")
     with (q / "research-state.md").open("a") as fh:
         fh.write("- See [](quilt:sh-9999).\n")
-    exits(1, "build", cwd=q)
+    ok("build", cwd=q)
     state = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["research_state"]
     assert state["edited_since"] is True
     assert [b["href"] for b in state["links"]["broken"]] == ["quilt:sh-9999"]
@@ -136,7 +138,9 @@ def test_a_link_whose_result_is_gone_is_reported_broken_and_the_build_goes_on(tm
     q = showcase(tmp_path)
     node = q / "drafting" / "nodes" / "sh-0009.tex"
     node.write_text(node.read_text().replace("{theorem}", "{undeclared}"))
-    exits(1, "build", cwd=q)  # the showcase keeps a duplicate id on purpose
+    ok(
+        "build", cwd=q
+    )  # the showcase's duplicate id is in two documents, which LaTeX accepts: a warning of loom's model
     state = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["research_state"]
     assert [b["href"] for b in state["links"]["broken"]] == ["quilt:sh-0009"]
     assert state["links"]["moved"] == []

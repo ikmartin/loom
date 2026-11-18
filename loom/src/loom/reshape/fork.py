@@ -105,21 +105,26 @@ def unapplied_fork(result: ScanResult, history: History, node_id: str, doc: str)
 
 
 def conflict_fixes(result: ScanResult, history: History, key: str, paths: list[str]) -> list[str]:
-    """The command that resolves `key`, defined by each of `paths`, and is safe in the state that left it so; `status` and `lint` both name it (T3).
+    """What resolves `key`, defined by each of `paths`, and is safe in the state that left it so, each said with the commands that stay; `status` and `lint` both name it (T3).
 
-    A node file nothing reads whose text the one read file still holds is what `atomize --key` leaves until its patch is applied, and running it again prints that patch. A document `history restore` wrote is the copy to fork: forking the live one would move its acceptances and annotations onto the restored copy. Otherwise either copy may be forked.
+    A node file nothing reads whose text the one read file still holds is a node moved out and never put in its place: reading it there in place of the text finishes the move, and removing it undoes it. A document `history restore` wrote is the one to take a fresh id, so the live one keeps its acceptances and annotations. Otherwise either definition may take one; `loom id --next` names it.
     """
     reached = set(result.masters) | {f for e in result.expansions.values() for f in e.reached}
     read = [p for p in paths if p in reached]
     unread = [p for p in paths if p not in reached]
     if len(read) == 1 and len(unread) == 1 and result.files[unread[0]].text.strip() in result.files[read[0]].text:
-        return [f"loom atomize {read[0]} --key {key}"]
+        base = result.base_of(read[0])
+        stem = (unread[0].removeprefix(f"{base}/") if base else unread[0]).removesuffix(".tex")
+        return [f"\\input{{{stem}}} in {read[0]} in place of its text there, or remove {unread[0]}"]
     restored = [
         p for p in paths if any(e.action == "restore" and (e.get("to") or {}).get("path") == p for e in history.entries)
     ]
+    fresh = "loom id --next, and put that id in place of " + key
     if len(restored) == 1:
-        return [f"loom fork {key} --in {restored[0]}"]
-    return [f"loom fork {key} --in {p}" for p in paths] if len(paths) > 1 else ["loom id --next"]
+        return [f"{fresh} in {restored[0]}"]
+    return (
+        [f"{fresh} in {p}" for p in paths] if len(paths) > 1 else [f"{fresh} in one of its definitions in {paths[0]}"]
+    )
 
 
 def plan_fork(

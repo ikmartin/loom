@@ -140,12 +140,13 @@ class Owners:
 
 
 def stamped(result: ScanResult, diags: list[Diagnostic]) -> list[Diagnostic]:
-    """Each diagnostic with its `owner`, a digest's problem given the fix that digests its work again.
+    """Each diagnostic with its `owner`, a digest's problem given the fix that digests its work again and the class `internal`.
 
-    A digest is loom's own writing, so what is wrong in one is mended by digesting its work again: the fix runs the extraction step alone, which a viewer offers as a button through `library-update`. One that digesting again does not mend (`NOT_MENDED`) gets no such fix.
+    A digest is loom's own writing, its reading of another paper, so what is wrong in one is loom's own difficulty whatever its code, and is mended by digesting its work again: the fix runs the extraction step alone, which a viewer offers as a button through `library-update`. One that digesting again does not mend (`NOT_MENDED`) gets no such fix.
     """
     from dataclasses import replace
 
+    from loom.scan.diagnostics import INTERNAL
     from loom.scan.model import Fix
 
     owners = Owners(result)
@@ -162,5 +163,5 @@ def stamped(result: ScanResult, diags: list[Diagnostic]) -> list[Diagnostic]:
                 )
                 for ck in sorted(owners.digests(d))
             ]
-        out.append(replace(d, owner=whose, fixes=fixes))
+        out.append(replace(d, owner=whose, fixes=fixes, class_=INTERNAL if whose == WORK else d.class_))
     return out

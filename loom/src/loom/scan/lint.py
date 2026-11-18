@@ -12,7 +12,7 @@ from loom.paths import COPIES
 from loom.refs.identity import declared
 from loom.refs.resolve import load as load_candidates
 from loom.scan.bib import BibEntry, citekey_slug
-from loom.scan.diagnostics import can_disable
+from loom.scan.diagnostics import LATEX, MODEL, can_disable
 from loom.scan.digests import digest_header, extracted_from, missing_packages, other_version, source_version
 from loom.scan.directives import KNOWN_KEYS, REGION_KEYS
 from loom.scan.edges import EdgeResult
@@ -76,7 +76,7 @@ def _derived_in_person_document(result: ScanResult, edges: EdgeResult) -> list[D
         if n.derived_of and owned(key):
             out.append(
                 Diagnostic(
-                    "error",
+                    "warning",
                     "loom:derived-id-in-person-document",
                     f"{key} is an agent document's id, and {', '.join(m for m in n.reached_by if result.document_role(m) == 'person')} defines it; a person's document names the plain id, {n.derived_of}",
                     [_loc(result, n)],
@@ -89,7 +89,7 @@ def _derived_in_person_document(result: ScanResult, edges: EdgeResult) -> list[D
         if target and target.derived_of and source and not source.derived_of and owned(e.src):
             out.append(
                 Diagnostic(
-                    "error",
+                    "warning",
                     "loom:derived-id-in-person-document",
                     f"{e.src} cites {e.to}, an agent document's id; a person's document cites the plain id, {target.derived_of}",
                     [Location(e.file, e.line)],
@@ -114,7 +114,7 @@ def _agent_documents(result: ScanResult) -> list[Diagnostic]:
             continue
         out.append(
             Diagnostic(
-                "error",
+                "warning",
                 "loom:agent-document-unrecorded",
                 f"{m} is in {COPIES}/ but no step made it, so it can be neither adopted nor refreshed; an agent document starts as a copy of one of the person's, and a document of the agent's own goes anywhere else the quilt lets it write",
                 [Location(m, 1)],
@@ -128,7 +128,7 @@ def _agent_documents(result: ScanResult) -> list[Diagnostic]:
             continue
         out.append(
             Diagnostic(
-                "error",
+                "warning",
                 "loom:plain-id-in-agent-document",
                 f"{n.id} is defined in {n.file}, an agent document, where every id is derived; a new node there takes a fresh id with -ai after it",
                 [_loc(result, n)],
@@ -276,7 +276,9 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
         loose_to_loose = not src_masters and not target.reached_by and target.file != source.file
         reach = src_masters.union(*(external.get(m, ()) for m in src_masters))
         if (src_masters and not (reach & set(target.reached_by))) or loose_to_loose:
-            sev = "error" if any(m in result.masters for m in src_masters) else "info"
+            # a reference the document's compile reads prints ?? there; `\uses` prints nothing, and two loose files meet no TeX
+            read = any(m in result.masters for m in src_masters)
+            sev = ("error" if e.via != "uses" else "warning") if read else "info"
             diags.append(
                 Diagnostic(
                     sev,
@@ -284,6 +286,7 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
                     f"{e.src} refers to {e.to}, which its master does not reach",
                     [Location(e.file, e.line)],
                     [e.src, e.to],
+                    class_=LATEX if sev == "error" else MODEL,
                 )
             )
         if (
@@ -387,7 +390,7 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
                 seen.add(env.name)
                 diags.append(
                     Diagnostic(
-                        "error",
+                        "warning",
                         "loom:unknown-environment",
                         f"environment {env.name} looks theorem-like but no master declares it; add % !LOOM environment: {env.name} = Name, plain",
                         [Location(path, files[path].line_of(env.start))],
@@ -452,7 +455,7 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
         if len(keys) > 1:
             diags.append(
                 Diagnostic(
-                    "error",
+                    "warning",
                     "loom:citekey-slug-collision",
                     f"citekeys {', '.join(sorted(keys))} share the digest prefix {slug}",
                     [],

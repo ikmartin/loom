@@ -100,10 +100,12 @@ def test_status_and_the_manifest_count_the_persons_nodes_once(tmp_path: Path) ->
 def test_two_definitions_of_a_derived_id_are_a_duplicate_id(tmp_path: Path) -> None:
     q = with_copy(tmp_path)
     (q / ".loom" / "agents" / "copies" / "second.tex").write_text(AIDOC, encoding="utf-8")
-    dup = [d for d in codes(q, 1) if d["code"] == "duplicate-id"]
+    dup = [d for d in codes(q) if d["code"] == "duplicate-id"]
     assert {k for d in dup for k in d.get("keys", [])} >= {"dm-0004-ai"} or any(
         "dm-0004-ai" in d["message"] for d in dup
     )
+    # two documents each define it once, which LaTeX accepts: loom's model, the agent's to keep
+    assert {(d["severity"], d["class"], d["owner"]) for d in dup} == {("warning", "model", "copy")}
 
 
 def test_a_persons_document_neither_defines_nor_cites_a_derived_id(tmp_path: Path) -> None:
@@ -337,7 +339,12 @@ def test_the_copies_directory_holds_documents_a_step_made_that_define_derived_id
     (q / ".loom" / "agents" / "copies" / "scratch.tex").write_text(
         AIDOC.replace("dm-0005-ai", "dm-0901").replace("dm-0004-ai", "dm-0900-ai"), encoding="utf-8"
     )
-    found = {d["code"]: d for d in codes(q, code=1)}
+    found = {d["code"]: d for d in codes(q)}  # loom's model, warnings that police the boundary for agents
+    assert (
+        found["loom:agent-document-unrecorded"]["severity"]
+        == found["loom:plain-id-in-agent-document"]["severity"]
+        == "warning"
+    )
     assert [f["command"] for f in found["loom:agent-document-unrecorded"]["fixes"]] == [
         "loom draft drafting/main.tex --ai NAME.tex"
     ]

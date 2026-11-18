@@ -857,7 +857,14 @@ class ServeSession:
 
         self.jobs = Jobs(self._run_job)
         self.compiles = (
-            Compiles(self._compile, first=self._reading, told=self._compiles_told, made=lambda doc: self.rebuild())
+            Compiles(
+                self._compile,
+                first=self._reading,
+                told=self._compiles_told,
+                made=lambda doc: self.rebuild(),
+                # the log a failed run left is the problem the manifest names on the document
+                failed=lambda doc: self.rebuild(),
+            )
             if compile_masters
             else None
         )
