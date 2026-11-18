@@ -46,8 +46,11 @@ def flat(text: str) -> str:
 
 def quilt_at(tmp_path: Path, files: dict[str, str]) -> Path:
     """A quilt that is no repository: loom needs none to pair with a workspace."""
+    from loom.layout import stamp
+
     root = tmp_path / "quilt"
     root.mkdir()
+    stamp(root)
     (root / "config.toml").write_text(CONFIG, encoding="utf-8")
     for rel, text in {"drafting/loom.sty": "% local support\n", **files}.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)

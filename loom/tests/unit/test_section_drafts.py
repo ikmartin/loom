@@ -35,9 +35,12 @@ Second statement uses \ref{zk-0001}.
 
 @pytest.fixture
 def quilt(tmp_path: Path):
+    from loom.layout import stamp
+
     save_author("Tester")
     (tmp_path / "drafting").mkdir()
-    (tmp_path / ".loom" / "copies").mkdir(parents=True)
+    stamp(tmp_path)
+    (tmp_path / ".loom" / "agents" / "copies").mkdir(parents=True)
     (tmp_path / "config.toml").write_text('[quilt]\nname="sections"\nprefix="zk"\nmain="drafting/main.tex"\n')
     (tmp_path / DOC).write_text(TEXT)
     return load_quilt(tmp_path)

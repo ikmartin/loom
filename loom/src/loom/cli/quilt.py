@@ -14,7 +14,7 @@ import click
 from loom.cli.paper import check_prefix
 from loom.cli.report import Group, Item, Report
 from loom.errors import EnvError, NotFoundError
-from loom.paths import AI, ANNOTATION_TYPES, HISTORY, LOOM, LOOM_GITIGNORE
+from loom.paths import AI, ANNOTATION_TYPES, FORMAT, HISTORY, LOOM, LOOM_GITIGNORE
 from loom.records.types import default_text
 from loom.scan.labels import PREFIX
 from loom.scan.quilt import is_quilt_root, load_user_config, user_config_path
@@ -146,11 +146,12 @@ def _user_history() -> str:
 
 
 def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
-    """Write a quilt's three entries into `target`: `config.toml`, the tutorial `README.md`, and `.loom/` with its ignore file and an empty history.
+    """Write a quilt's three entries into `target`: `config.toml`, the tutorial `README.md`, and `.loom/` with its layout's number, its ignore file and an empty history.
 
     Returns the paths it created, deepest first, so `init --from` can undo them when the import that follows fails; paths that were already there are not listed and so are never removed.
     """
     from loom.gitignore import LOOM_IGNORE
+    from loom.layout import NUMBER
 
     made: list[Path] = []
     history = _user_history()
@@ -172,6 +173,7 @@ def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
         path.write_text(text, encoding="utf-8")
 
     mkdir(target / LOOM)
+    write(target / FORMAT, f"{NUMBER}\n")
     mkdir(target / history)
     write(target / "config.toml", CONFIG_TEMPLATE.format(name=target.resolve().name, prefix=prefix))
     write(target / history / "ledger.jsonl", "")
@@ -205,9 +207,10 @@ def undo_minimal_quilt(target: Path, existed: bool, made: list[Path]) -> None:
 
 
 def write_demo_quilt(target: Path) -> None:
-    """Copy the demo quilt into `target`, with loom's ignore lines written from `loom.gitignore` rather than copied, so they are this loom's."""
+    """Copy the demo quilt into `target`, with its layout's number and loom's ignore lines written rather than copied, so they are this loom's."""
     from loom.ai.clients import write_clients
     from loom.gitignore import ensure, write_loom_ignore
+    from loom.layout import stamp
 
     demo = ASSETS / "demo"
     target.mkdir(parents=True, exist_ok=True)
@@ -216,8 +219,10 @@ def write_demo_quilt(target: Path) -> None:
     )
     for cache in target.rglob("__pycache__"):
         shutil.rmtree(cache, ignore_errors=True)
+    stamp(target)
     write_loom_ignore(target)
     if not (target / ANNOTATION_TYPES).exists():
+        (target / ANNOTATION_TYPES).parent.mkdir(parents=True, exist_ok=True)
         (target / ANNOTATION_TYPES).write_text(default_text(), encoding="utf-8")
     # the demo carries the agent layer, so it gets what starts the loom server, for this machine and this path, and the root lines that keep those files out of the repository
     write_clients(target)

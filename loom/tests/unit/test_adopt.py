@@ -35,11 +35,13 @@ def quilt(tmp_path: Path):
 
 def made(tmp_path: Path, text: str):
     """A quilt whose one document is `text`, with an agent's copy of it recorded."""
+    from loom.layout import stamp
     from loom.scan.quilt import save_author
 
     save_author("Tester")
     (tmp_path / "drafting").mkdir()
-    (tmp_path / ".loom" / "copies").mkdir(parents=True)
+    stamp(tmp_path)
+    (tmp_path / ".loom" / "agents" / "copies").mkdir(parents=True)
     (tmp_path / "config.toml").write_text('[quilt]\nname="test"\nprefix="zk"\nmain="drafting/main.tex"\n')
     (tmp_path / DOC).write_text(text)
     q = load_quilt(tmp_path)
@@ -630,12 +632,14 @@ def test_refresh_conflict_names_the_command_with_its_path_quoted(tmp_path):
     import shlex
 
     from loom.adopt import refresh
+    from loom.layout import stamp
     from loom.scan.quilt import save_author
 
     save_author("Tester")
-    spaced = ".loom/copies/my proposal.tex"
+    spaced = ".loom/agents/copies/my proposal.tex"
     (tmp_path / "drafting").mkdir()
-    (tmp_path / ".loom" / "copies").mkdir(parents=True)
+    stamp(tmp_path)
+    (tmp_path / ".loom" / "agents" / "copies").mkdir(parents=True)
     (tmp_path / "config.toml").write_text('[quilt]\nname="test"\nprefix="zk"\nmain="drafting/main.tex"\n')
     (tmp_path / DOC).write_text(TEXT)
     q = load_quilt(tmp_path)

@@ -47,8 +47,10 @@ def demo(tmp_path: Path, clean: bool = True) -> Path:
     ok("init", str(tmp_path / "demo"), "--demo", cwd=tmp_path)
     d = tmp_path / "demo"
     if clean:
+        from loom.layout import stamp
+
         shutil.rmtree(d / ".loom", ignore_errors=True)
-        shutil.rmtree(d / ".loom/annotations", ignore_errors=True)
+        stamp(d)
     return d
 
 

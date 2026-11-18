@@ -19,9 +19,11 @@ def test_init_writes_a_config_a_readme_and_loom_s_directory_and_nothing_else(tmp
     assert sorted(p.name for p in q.iterdir()) == [".loom", "README.md", "config.toml"]
     assert sorted(p.relative_to(q).as_posix() for p in (q / ".loom").rglob("*")) == [
         ".loom/.gitignore",
-        ".loom/annotation-types.toml",
-        ".loom/history",
-        ".loom/history/ledger.jsonl",
+        ".loom/format",
+        ".loom/records",
+        ".loom/records/annotation-types.toml",
+        ".loom/records/history",
+        ".loom/records/history/ledger.jsonl",
     ]
     config = (q / "config.toml").read_text()
     assert 'prefix = "zz"' in config and "drafting" not in config and "\nmain =" not in config
@@ -75,10 +77,8 @@ def test_init_writes_loom_s_ignore_file_always_and_a_repository_only_when_asked(
     ignored = [
         ln for ln in (tmp_path / "n" / ".loom" / ".gitignore").read_text().splitlines() if ln and not ln.startswith("#")
     ]
-    assert "build/" in ignored and "serve.json" in ignored and "last-seen.json" in ignored
-    # the artifacts are ignored and the page text is not: an anchor stays re-checkable by a coauthor with no PDF
-    assert "digests/storage/**/paper.pdf" in ignored and "digests/storage/**/src/" in ignored
-    assert not any(ln.endswith(".tex") or ln in ("digests/", "annotations/", "history/", "sessions/") for ln in ignored)
+    assert ignored == ["local/", "cache/", "agents/scratch/"]
+    assert (tmp_path / "n" / ".loom" / "format").read_text() == "1\n"
 
 
 def test_the_starter_preamble_declares_candidate_taxa() -> None:

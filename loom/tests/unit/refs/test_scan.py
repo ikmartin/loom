@@ -28,19 +28,21 @@ def landmark(n: int, name: str) -> str:
 
 
 def _quilt(tmp_path: Path, files: dict[str, str]):  # type: ignore[no-untyped-def]
-    """A quilt holding `files`; each under `.loom/history/` is a landmark, recorded by a step line as a stamp records one."""
+    """A quilt holding `files`; each under `.loom/records/history/` is a landmark, recorded by a step line as a stamp records one."""
     from loom.history.ledger import append_entry
+    from loom.layout import stamp
 
     root = tmp_path / "q"
     root.mkdir()
+    stamp(root)
     (root / "config.toml").write_text('[quilt]\nmain = "drafting/main.tex"\nprefix = "ab"\n', encoding="utf-8")
     for rel, text in files.items():
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
         (root / rel).write_text(text, encoding="utf-8")
-        if rel.startswith(".loom/history/"):
-            step_dir, name = rel.split("/")[2], rel.split("/")[3]
+        if rel.startswith(".loom/records/history/"):
+            step_dir, name = rel.split("/")[3], rel.split("/")[4]
             data = {"step": int(step_dir[:4]), "dir": step_dir, "landmark": name, "froze": {}}
-            append_entry(root / ".loom" / "history", "stamp", data, "A. Author")
+            append_entry(root / ".loom" / "records" / "history", "stamp", data, "A. Author")
     return load_quilt(root)
 
 

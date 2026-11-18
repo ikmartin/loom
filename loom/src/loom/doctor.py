@@ -773,12 +773,14 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
     Report
         Every item in order, machine first; `exit_code` is what `loom doctor` exits with.
     """
-    from loom.scan.quilt import NoQuiltError, find_quilt
+    from loom.scan.quilt import LayoutError, NoQuiltError, find_quilt
 
     report = Report(sys.version.split()[0], __version__, strict=strict)
-    quilt, bad_quilt = None, None
+    quilt, bad_quilt, bad_layout = None, None, None
     try:
         quilt = find_quilt(Path(quilt_path).expanduser() if quilt_path else None)
+    except LayoutError as exc:
+        bad_layout = str(exc)
     except NoQuiltError as exc:
         # not being in a quilt is normal here; a quilt that cannot be read is not
         if quilt_path or not str(exc).startswith("not inside a quilt"):
@@ -797,6 +799,16 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
                 f"loom init {quilt_path} makes a quilt there, or give --quilt a quilt's root"
                 if none_there
                 else "fix config.toml: every command but init and doctor refuses until it reads",
+            )
+        )
+    if bad_layout is not None:
+        report.items.append(
+            Item(
+                "format",
+                FAIL,
+                QUILT,
+                bad_layout,
+                "open it with the loom that made it; every command but doctor refuses",
             )
         )
     if quilt is not None:

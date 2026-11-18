@@ -166,13 +166,15 @@ def _apply(root: Path, lines: list[str]) -> tuple[str, str]:
 
 
 def _copy_sources(name: str, dest: Path) -> None:
-    """The author's files of `sources/<name>/`, in a quilt as `loom init` leaves one: with loom's ignore file, the source's own lines kept below loom's, and the default annotation types."""
+    """The author's files of `sources/<name>/`, in a quilt as `loom init` leaves one: with the layout's number, loom's ignore file, the source's own lines kept below loom's, and the default annotation types."""
     from loom.gitignore import write_loom_ignore
+    from loom.layout import stamp
 
     src = SOURCES / name
     if not src.is_dir():
         raise SystemExit(f"{src} is missing")
     shutil.copytree(src, dest)
+    stamp(dest)
     write_loom_ignore(dest)
     # the annotation types, the defaults listed, as `loom init` writes them
     from loom.paths import ANNOTATION_TYPES
