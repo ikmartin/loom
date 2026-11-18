@@ -8,7 +8,6 @@ from __future__ import annotations
 import json
 import re
 import shutil
-import string
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -16,9 +15,9 @@ from typing import TYPE_CHECKING
 from loom.clock import stamp
 from loom.paths import STORAGE, under
 from loom.refs.fetch import FetchRefused, work_dir
-from loom.refs.identity import WorkId, declared, primary
-from loom.refs.ingest import TOP_LINES, _title_span, filename_title, identifiers_in
-from loom.refs.pages import first_pages, page_count, page_texts, sha256_of, storage_root, write_map
+from loom.refs.identity import WorkId, primary
+from loom.refs.ingest import filename_title, own_identifiers
+from loom.refs.pages import first_pages, sha256_of, storage_root, write_map
 from loom.refs.unreadable import declarations, set_aside_documents
 from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib, raw_entries
 from loom.scan.quilt import Quilt
@@ -361,15 +360,20 @@ def candidates(result: ScanResult, report: ScanReport) -> dict[str, Candidate]:
 
 
 def _append(path: Path, entries: list[Candidate]) -> None:
-    """Add entries to the bibliography. Only ever appends, so a correction made by hand outlives every later scan."""
+    """Add entries to the bibliography, under the library's lock and replacing the file whole. Only ever appends, so a correction made by hand outlives every later scan."""
+    from loom.refs.intake import library_lock, read_exact, write_whole
+
     if not entries:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    prior = path.read_text(encoding="utf-8") if path.is_file() else HEADER
-    chunks = [prior if prior.endswith("\n") else prior + "\n"]
-    for c in entries:
-        chunks.append(f"\n% from {c.source}\n{c.text}")
-    path.write_text("".join(chunks), encoding="utf-8")
+    with library_lock(path.parent.parent.parent):
+        # read and written untranslated, in the file's own line endings, so nothing it held changes
+        prior = read_exact(path) if path.is_file() else HEADER
+        eol = "\r\n" if "\r\n" in prior else "\n"
+        chunks = [prior if prior.endswith("\n") else prior + eol]
+        for c in entries:
+            chunks.append(f"\n% from {c.source}\n{c.text}".replace("\r\n", "\n").replace("\n", eol))
+        write_whole(path, "".join(chunks))
 
 
 def scan_bibliography(quilt: Quilt, *, write: bool = True, result: ScanResult | None = None) -> ScanReport:
@@ -389,22 +393,29 @@ def scan_bibliography(quilt: Quilt, *, write: bool = True, result: ScanResult | 
     ScanReport
         What was added, how many entries were already there, conflicts between sources, and `.bib` files a landmark names that do not exist.
     """
+    from contextlib import nullcontext
+
+    from loom.refs.intake import library_lock
+
     report = ScanReport(dry_run=not write)
     path = quilt.root / BIBLIOGRAPHY
-    existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else {}
-    from_canon = [c for key, c in candidates(result or scan(quilt), report).items() if key not in existing]
-    report.present = len(existing)
-    report.added += from_canon
-    if write:
-        _append(path, from_canon)
-        existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else existing
-    else:
-        existing = {**existing, **parse_bib("".join(c.text for c in from_canon))}
-    # last, and against everything the bibliography now knows: a document the store holds and no entry names
-    orphans = [c for c in adopt_orphans(quilt, existing, report) if c.key not in existing]
-    report.added += orphans
-    if write:
-        _append(path, orphans)
+    res = result or scan(quilt)
+    # what is read and what is appended are one act under the library's lock, so an add half done in another process is never adopted as an orphan
+    with library_lock(quilt.root) if write else nullcontext():
+        existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else {}
+        from_canon = [c for key, c in candidates(res, report).items() if key not in existing]
+        report.present = len(existing)
+        report.added += from_canon
+        if write:
+            _append(path, from_canon)
+            existing = parse_bib(path.read_text(encoding="utf-8", errors="replace")) if path.is_file() else existing
+        else:
+            existing = {**existing, **parse_bib("".join(c.text for c in from_canon))}
+        # last, and against everything the bibliography now knows: a document the store holds and no entry names
+        orphans = [c for c in adopt_orphans(quilt, existing, report) if c.key not in existing]
+        report.added += orphans
+        if write:
+            _append(path, orphans)
     report.duplicates = _duplicates(existing, set(declarations(quilt.root, "forget")))
     return report
 
@@ -444,42 +455,6 @@ def one_work_of(keys: list[str], bib: dict[str, BibEntry]) -> str:
     """The primary of the one work `keys` all belong to, or '' when they name more than one; how a document naming a work and its versions equally is filed."""
     tops = {primary_of(bib).get(k, k) for k in keys}
     return tops.pop() if len(tops) == 1 else ""
-
-
-def _held(pdf: Path, title: str) -> tuple[str, int] | None:
-    """(byline, page count) of a PDF whose first page sets `title` whole; None when it does not, or cannot be read."""
-    from loom.refs.resolve import _fold
-
-    try:
-        pages = first_pages(pdf, 1)
-    except Exception:  # noqa: BLE001 -- an unreadable document matches nothing
-        return None
-    lines = [_fold(" ".join(x.split())) for x in (pages[0] if pages else "").splitlines()[:TOP_LINES] if x.strip()]
-    span = _title_span(lines, title) if title else None
-    if span is None:
-        return None
-    count = page_count(pdf)  # `pdfinfo` is optional, and a page count is what tells a copy from a longer version
-    return (lines[span[1]] if span[1] < len(lines) else ""), len(page_texts(pdf)) if count is None else count
-
-
-def same_document(pdf: Path, wid: WorkId | None, stored: list[tuple[BibEntry, Path]]) -> tuple[str, str]:
-    """(citekey, why) when `pdf` is a copy of a version's document, else ('', ''): a copy is recorded, never filed beside the document it copies.
-
-    A copy states a version's own identifier, or sets the same title over the same byline on as many pages as that version's stored PDF. `stored` is each version of one work with where its PDF is, primary first; `wid` is what `pdf` states (`_own_account`).
-    """
-    from loom.refs.resolve import _fold
-
-    if wid is not None:
-        for entry, _ in stored:
-            if any(w.scheme == wid.scheme and w.value.lower() == wid.value.lower() for w in declared(entry)):
-                return entry.key, f"it states {wid}, {entry.key}'s own identifier"
-    for entry, path in stored:
-        title = _fold(str(entry.fields.get("title") or ""))
-        theirs = _held(path, title) if path.is_file() else None
-        if theirs is not None and _held(pdf, title) == theirs:
-            n = theirs[1]
-            return entry.key, f"same title, authors and {n} page{'' if n == 1 else 's'}"
-    return "", ""
 
 
 def stored_versions(root: Path, bib: dict[str, BibEntry], top: str) -> list[tuple[BibEntry, Path]]:
@@ -526,18 +501,20 @@ def load_ledger(root: Path) -> dict[str, dict[str, str]]:
     return data if isinstance(data, dict) else {}
 
 
-def drop_copies(root: Path, key: str, home: Path | None) -> list[str]:
-    """Take out of the ledger the records of copies of `key`, and of what went to `home`; the hashes they held.
+def drop_copies(root: Path, home: Path | None) -> list[str]:
+    """Take out of the ledger the records of what went to `home`; the hashes they held.
 
     For deleting a work, so that the same PDF given again is a new document.
     """
     ledger = load_ledger(root)
     to = home.relative_to(storage_root(root)).as_posix() if home is not None else None
-    gone = [sha for sha, rec in ledger.items() if rec.get("duplicate-of") == key or (to and rec.get("to") == to)]
+    gone = [sha for sha, rec in ledger.items() if to and rec.get("to") == to]
     if gone:
+        from loom.refs.intake import write_whole
+
         for sha in gone:
             del ledger[sha]
-        (storage_root(root) / LEDGER).write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        write_whole(storage_root(root) / LEDGER, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
     return gone
 
 
@@ -555,42 +532,44 @@ def record_copy(root: Path, sha: str, source: str, home: Path, extra: dict[str, 
         **(extra or {}),
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(ledger, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    from loom.refs.intake import write_whole
+
+    write_whole(path, json.dumps(ledger, indent=2, sort_keys=True) + "\n")
 
 
-def _free_key(key: str, taken: set[str]) -> str:
-    """`Man12`, then `Man12A`, `Man12B`: the sibling entry a second document for one work gets (DR-192)."""
-    for letter in string.ascii_uppercase:
-        if f"{key}{letter}" not in taken:
-            return f"{key}{letter}"
+def version_key(key: str, taken: set[str]) -> str:
+    """`Man12-v2`, then `-v3`: the entry a second document of the work `key` is filed under, beside its first, which is no collision and so takes no collision's letter."""
     n = 2
-    while f"{key}{n}" in taken:
+    while f"{key}-v{n}" in taken:
         n += 1
-    return f"{key}{n}"
+    return f"{key}-v{n}"
 
 
-def _own_account(pdf: Path) -> tuple[WorkId | None, dict[str, str]]:
-    """What the document says about itself: the identifier on its first pages, and a heuristic title and year.
+def _own_account(pdf: Path, name: str = "") -> tuple[WorkId | None, dict[str, str]]:
+    """What the document says about itself: the identifier it states as its own (`ingest.own_identifiers`; arXiv's stamp, else the DOI it prints, else a printed arXiv id), and a heuristic title and year.
 
     Only the filename is read for a title, and only when a reference manager wrote it (`Author - 2019 - The Title.pdf`), because that came from a catalogue. A title guessed from page one is not: the longest early line on a real paper is a sentence of the abstract, which is the mistake `title_lines` exists to record.
     """
     fields: dict[str, str] = {}
-    named = filename_title(pdf.stem)
-    if named and named != pdf.stem:
+    stem = Path(name).stem if name else pdf.stem
+    named = filename_title(stem)
+    if named and named != stem:
         fields["title"] = named
-        stem_year = re.search(r"\b((?:19|20)\d\d)\b", pdf.stem)
+        stem_year = re.search(r"\b((?:19|20)\d\d)\b", stem)
         if stem_year:
             fields["year"] = stem_year.group(1)
     try:
         pages = first_pages(pdf)
     except Exception:  # noqa: BLE001 -- an unreadable PDF is reported, never fatal
         return None, fields
-    head = "\n".join(pages[:2])
-    dois, arxivs = identifiers_in(head)
-    if arxivs:
-        return WorkId("arxiv", sorted(arxivs)[0], "candidate"), fields
+    dois, arxivs, stamped = own_identifiers(pages[0] if pages else "")
+    # arXiv's stamp says the PDF is that preprint; else the DOI it prints names it, and an arXiv id printed beside a DOI names its preprint, another document
+    if stamped:
+        return WorkId("arxiv", sorted(stamped)[0], "candidate"), fields
     if dois:
         return WorkId("doi", sorted(dois)[0], "candidate"), fields
+    if arxivs:
+        return WorkId("arxiv", sorted(arxivs)[0], "candidate"), fields
     return None, fields
 
 
@@ -621,13 +600,6 @@ def _sibling(pdf: Path, wid: WorkId | None, entry: BibEntry, key: str, *, source
     fields = {k: v for k, v in entry.fields.items() if k in ("author", "title", "year")}
     fields["loom-copy-of"] = entry.key
     return Candidate(key, _entry_for(pdf, wid, fields, key, source=source, filed=home.as_posix()), source, source)
-
-
-def _derived_key(pdf: Path, sha: str, taken: set[str]) -> str:
-    """A citekey for a document nothing in the bibliography claims: its filename, or its hash when the name says nothing."""
-    stem = re.sub(r"[^A-Za-z0-9]", "", pdf.stem)[:24]
-    key = stem or f"pdf{sha[:8]}"
-    return key if key not in taken else _free_key(key, taken)
 
 
 def _spaced(text: str) -> str:
@@ -661,6 +633,9 @@ def adopt_orphans(quilt: Quilt, bib: dict[str, BibEntry], report: ScanReport) ->
     --------
     file_document : How `loom library add` files a document the store has not seen.
     """
+    from loom.refs.add import own_entry
+    from loom.refs.lookup import key_for
+
     store = storage_root(quilt.root)
     if not store.is_dir():
         return []
@@ -676,7 +651,7 @@ def adopt_orphans(quilt: Quilt, bib: dict[str, BibEntry], report: ScanReport) ->
         if wid is not None:
             claimed.add(wid.path)
     records = load_ledger(quilt.root)
-    ledger = {rec.get("to", ""): rec for rec in records.values() if not rec.get("duplicate-of")}
+    ledger = {rec.get("to", ""): rec for rec in records.values()}
     # What the author has deliberately deleted the entry for. Without this the offer is loom undoing their decision on every scan, which is the whole reason `loom library ignore` sets a document aside; the hash is what names it once its entry is gone.
     forgotten = declarations(quilt.root, "forget")
     aside = set_aside_documents(quilt.root)
@@ -698,15 +673,10 @@ def adopt_orphans(quilt: Quilt, bib: dict[str, BibEntry], report: ScanReport) ->
         filed_at = str(records.get(sha, {}).get("to", ""))
         if filed_at and filed_at != f"{home.parent.name}/{home.name}" and filed_at in claimed:
             continue  # the same bytes, filed again under the work they are and named there: a stale copy, not an orphan
-        wid, said = _own_account(pdf)  # the real file, for what the document says about itself
-        stem = Path(came).stem
-        named = filename_title(stem)
-        if named and named != stem:
-            said.setdefault("title", named)
-            year = re.search(r"\b((?:19|20)\d\d)\b", stem)
-            if year:
-                said.setdefault("year", year.group(1))
-        key = _derived_key(Path(came), sha, taken)
+        wid = _own_account(pdf)[0]  # the real file, for the identifier it states
+        # what it says of itself under the name it was given, keyed as every route keys a work
+        said = {k: v for k, v in own_entry(pdf, Path(came).name).items() if k not in ("eprint", "archiveprefix", "doi")}
+        key = key_for(said, taken, sha=sha)
         # A tombstone on the citekey, which is what the author types after deleting the entry the last scan offered
         if key in forgotten:
             report.forgotten += 1
@@ -747,10 +717,10 @@ class Filing:
     home: Path | None = None
     #: The sibling entry's key when the work already holds a document, so this one is filed beside it.
     sibling: str = ""
-    #: Why nothing is filed: the same document is in the store already; '' when it is filed.
+    #: Why nothing is filed: these very bytes are in the store already; '' when it is filed.
     already: str = ""
-    #: The version this document is a copy of (`same_document`), which the ledger records; '' otherwise.
-    copy_of: str = ""
+    #: The work that holds these very bytes, when `already` says so.
+    holder: str = ""
     #: What the document shows against the work a person named for it, recorded in the ledger with who named it.
     forced: str = ""
     #: A person named the work (`--for`, or a work's own upload): bytes filed under another work are filed here all the same.
@@ -769,21 +739,56 @@ class Filing:
 
 
 def held_under(root: Path, bib: dict[str, BibEntry], sha: str) -> str:
-    """The work the library holds these bytes under, or '': the ledger's record, while its document stands and an entry names its home.
+    """The work the library holds these very bytes under, or '': where the ledger says they went, or the place of a document of their own (`file/<sha16>`), while it holds them and an entry names it.
 
-    A record can outlive what it records: an entry deleted by hand leaves its copy behind, unnamed, and the same PDF added again must be filed rather than told it is held. A recorded copy of a version's document is held under that version.
+    A record can outlive what it records: an entry deleted by hand leaves its copy behind, unnamed, and the same PDF added again must be filed rather than told it is held. Only the same bytes are held; a document that merely looks like one the library has is not.
     """
-    rec = load_ledger(root).get(sha)
-    if rec is None:
-        return ""
-    copy_of = str(rec.get("duplicate-of") or "")
-    if copy_of:
-        return copy_of if copy_of in bib else ""
+    rec = load_ledger(root).get(sha) or {}
     store = storage_root(root)
-    stored = store / rec.get("to", "") / "paper.pdf"
-    if not stored.is_file() or sha256_of(stored) != sha:
-        return ""
-    return next((k for k, e in bib.items() if work_dir(root, e) == stored.parent), "")
+    for place in dict.fromkeys(p for p in (str(rec.get("to") or ""), f"file/{sha[:16]}") if p):
+        stored = store / place / "paper.pdf"
+        if stored.is_file() and sha256_of(stored) == sha:
+            key = next((k for k, e in bib.items() if _home(root, e) == stored.parent), "")
+            if key:
+                return key
+    return ""
+
+
+def _home(root: Path, entry: BibEntry) -> Path | None:
+    try:
+        return work_dir(root, entry)
+    except FetchRefused:
+        return None
+
+
+def claimed_places(root: Path, bib: dict[str, BibEntry]) -> set[Path]:
+    """Every place in the store an entry names, by `loom-file` or by its identifier."""
+    return {h for e in bib.values() if (h := _home(root, e)) is not None}
+
+
+def place_for(root: Path, bib: dict[str, BibEntry], sha: str, planned: set[Path], home: Path | None = None) -> Path:
+    """Where a document of its own is stored: `home` when given and free, else `file/<sha16>`, then `-2`, `-3`, ….
+
+    A place is free when nothing is planned there, no entry names it, and it holds nothing, or holds these very bytes as a crashed add leaves them, which makes it this document's. Every place loom writes a document goes through here, so no document is ever written over another's or into a place another entry names.
+    """
+    claimed = claimed_places(root, bib)
+
+    def free(place: Path) -> bool:
+        if place in planned or place in claimed:
+            return False
+        if not place.is_dir() or not any(place.iterdir()):
+            return True
+        paper = place / "paper.pdf"
+        return paper.is_file() and sha256_of(paper) == sha
+
+    if home is not None and free(home):
+        return home
+    store = storage_root(root)
+    own, n = store / "file" / sha[:16], 2
+    while not free(own):
+        own = store / "file" / f"{sha[:16]}-{n}"
+        n += 1
+    return own
 
 
 def plan_filing(
@@ -796,12 +801,12 @@ def plan_filing(
 ) -> Candidate | None:
     """Decide where `f` lands, filling in its home, sibling or `already`; returns the sibling entry to append, or None.
 
-    Never over a document, unless the author set it aside (`library ignore`): then the new PDF takes its place at the work's home, even when the same bytes are filed elsewhere. Otherwise a copy of a version's document (`same_document`) is not filed and `record_copy_of` records it, another version goes beside the first under `<key>A`, and the same bytes already in the store, or given twice in one run, are filed once; bytes held under another work are filed here too where a person named this one. `planned` is the homes this run has given out, so two documents of one work in one run do not land on one home. Reads only; `file_document` writes.
+    Never over a document, unless the author set it aside (`library ignore`): then the new PDF takes its place at the work's home, even when the same bytes are filed elsewhere. Otherwise any other bytes go beside the work's first document as a version, `<key>-v2`, at a place of their own (`place_for`), however like that document they look; only these very bytes, already in the store or given twice in one run, are filed once, and bytes held under another work are filed here too where a person named this one. `planned` is the homes this run has given out, so two documents of one work in one run do not land on one home. Reads only; `file_document` writes.
     """
     root = quilt.root
     store = storage_root(root)
     if f.sha in seen:
-        f.already = f"the same document as {seen[f.sha]}"
+        f.already = f"these very bytes came in as {seen[f.sha]}"
         return None
     seen[f.sha] = f.path.name
     planned = set() if planned is None else planned
@@ -817,45 +822,31 @@ def plan_filing(
         return None
     holder = held_under(root, bib, f.sha) if f.kind == "pdf" else ""
     if holder and (not f.named or one_work_of([holder, f.citekey], bib)):
-        rec = load_ledger(root)[f.sha]
-        f.already = (
-            f"already recorded as a copy of {rec['duplicate-of']}'s document, from {rec.get('from', 'elsewhere')}"
-            if rec.get("duplicate-of")
-            else f"already in loom's store, filed from {rec.get('from', 'elsewhere')}"
-        )
+        f.already, f.holder = f"these very bytes are {holder}'s", holder
         return None
     if not held:
         f.home = claimed
         planned.add(claimed)
         return None
     if f.kind == "pdf" and stands and sha256_of(first) == f.sha:
-        f.already = f"already filed for {f.citekey}"
+        f.already, f.holder = f"these very bytes are {f.citekey}'s", f.citekey
         return None
     top = primary_of(bib).get(f.citekey, f.citekey)
     wid = _own_account(f.path)[0] if f.kind == "pdf" else None
-    if f.kind == "pdf":
-        same, why = same_document(f.path, wid, stored_versions(root, bib, top))
-        if same:
-            f.already, f.copy_of = f"the same document as {same}'s: {why}", same
-            return None
-    own = store / "file" / f.sha[:16]
+    own = place_for(root, bib, f.sha, planned) if f.kind == "pdf" else store / "file" / f.sha[:16]
     f.home = own
     planned.add(own)
-    f.sibling = _free_key(top, taken)
+    f.sibling = version_key(top, taken)
     taken.add(f.sibling)
     return _sibling(f.path, wid, bib[top], f.sibling, source=f.source, home=own.relative_to(store))
 
 
-def record_copy_of(quilt: Quilt, bib: dict[str, BibEntry], f: Filing) -> None:
-    """Record in the copy ledger that `f` is a copy of `f.copy_of`'s document, so it is never offered again and nothing is filed."""
-    record_copy(quilt.root, f.sha, f.source, work_dir(quilt.root, bib[f.copy_of]), {"duplicate-of": f.copy_of})
+def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = True, link: bool = False) -> None:
+    """Put a planned filing in the store, its source left where it is (hard-linked with `link`, for a drop's file the intake lets go of next), write a PDF's page text, and record it in the copy ledger, with what the document showed against the work a person named and who named it.
 
-
-def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = True) -> None:
-    """Copy a planned filing into the store, write a PDF's page text, and record it in the copy ledger, with what the document showed against the work a person named and who named it.
-
-    With `read_pages` false the page text is left to a library run, since a long book takes seconds and the PDF stands without it. A filing that replaces a set-aside document clears what was read off it (its word boxes; its page text is rewritten), keeps it set aside by its hash, and withdraws the work's own claim, since the work now holds a document wanted.
+    A place already holding these very bytes keeps them (`place_for`). With `read_pages` false the page text is left to a library run, since a long book takes seconds and the PDF stands without it. A filing that replaces a set-aside document clears what was read off it (its word boxes; its page text is rewritten), keeps it set aside by its hash, and withdraws the work's own claim, since the work now holds a document wanted.
     """
+    from loom.refs.intake import put_file
     from loom.refs.unreadable import declare
 
     assert f.home is not None and not f.already
@@ -864,7 +855,11 @@ def file_document(quilt: Quilt, f: Filing, *, by: str = "", read_pages: bool = T
     if f.replaces:
         shutil.rmtree(storage_root(root) / "cache" / "boxes" / f.home.parent.name / f.home.name, ignore_errors=True)
     if f.kind == "pdf":
-        shutil.copy(f.path, f.home / "paper.pdf")
+        paper = f.home / "paper.pdf"
+        if f.replaces or not paper.exists():
+            put_file(f.path, paper, link=link, replace=bool(f.replaces))
+        elif sha256_of(paper) != f.sha:
+            raise FileExistsError(f"{f.home} holds a document already, and loom never writes over one")
         try:
             if read_pages and not write_map(f.home, f.home / "paper.pdf").chars:
                 f.unmapped = "it has no text layer"

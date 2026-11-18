@@ -47,42 +47,45 @@ def test_a_pdf_with_no_identifier_that_is_no_published_work_is_copied_in_and_rea
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / NOTES, NOTES_TEXT)
     said = " ".join(ok("library", "add", pdf, *AS, cwd=q).stdout.split())
-    assert 'as the new work Sta, titled "Statistics For Quants : Revision Notes", with its page text' in said, said
-    entry = _entries(q)["Sta"]
+    assert (
+        'as the new work StatisticsQuantsRevision, titled "Statistics For Quants : Revision Notes", with its page text'
+        in said
+    ), said
+    entry = _entries(q)["StatisticsQuantsRevision"]
     home = work_dir(q, entry)
     assert (home / "paper.pdf").read_bytes() == pdf.read_bytes()
     assert (home / "pages" / "0001.txt").is_file()
     assert entry.fields["loom-source"] == NOTES and entry.fields["loom-added"].endswith("A. Author")
 
-    _cites(q, "Sta")
+    _cites(q, "StatisticsQuantsRevision")
     lint = json_of("lint", "--json", cwd=q)
-    codes = {d["code"] for d in lint["diagnostics"] if "Sta" in d.get("keys", [])}
+    codes = {d["code"] for d in lint["diagnostics"] if "StatisticsQuantsRevision" in d.get("keys", [])}
     assert not codes & {"loom:unresolved-work", "loom:no-readable-copy"}, codes
-    assert "Statistics For Quants" in ok("library", "read", "Sta", "1", cwd=q).stdout
-    assert ok("library", "check", "Sta", cwd=q).stdout.startswith("nothing wrong")
+    assert "Statistics For Quants" in ok("library", "read", "StatisticsQuantsRevision", "1", cwd=q).stdout
+    assert ok("library", "check", "StatisticsQuantsRevision", cwd=q).stdout.startswith("nothing wrong")
 
 
 def test_a_book_whose_entry_resolves_keeps_its_pdf_and_gets_its_author_from_the_file_name(tmp_path: Path) -> None:
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / BOOK, BOOK_TEXT)
     ok("library", "add", pdf, *AS, cwd=q)
-    entry = _entries(q)["Shr"]
+    entry = _entries(q)["shreveStochasticCalculusFinance"]
     assert entry.fields["author"] == "Shreve" and entry.fields["title"] == "Stochastic Calculus for Finance II"
     assert (work_dir(q, entry) / "paper.pdf").read_bytes() == pdf.read_bytes()
 
 
-def test_the_entry_a_failed_add_left_behind_takes_the_pdf_when_it_is_given_again(tmp_path: Path) -> None:
-    """The viewer wrote `@misc{Wor, title = {Stochastic Calculus for Finance II}}` and then refused the PDF as not showing it, which is how the author's quilt stands."""
+def test_the_entry_a_failed_add_left_behind_takes_the_pdf_when_the_person_names_it(tmp_path: Path) -> None:
+    """The viewer wrote `@misc{Wor, title = {Stochastic Calculus for Finance II}}` and then refused the PDF as not showing it, which is how the author's quilt stands. The entry names no author, so a file name stating its title does not name it; the person does."""
     q = demo(tmp_path)
     with (q / BIB).open("a", encoding="utf-8") as fh:
         fh.write(
             "\n@misc{Wor,\n  title = {Stochastic Calculus for Finance II},\n  loom-added = {2026-11-04T23:43:32Z, The author},\n}\n"
         )
     pdf = _fake_pdf(tmp_path / BOOK, BOOK_TEXT)
-    row = json_of("library", "add", pdf, *AS, "--json", cwd=q)["documents"][0]
-    assert (row["citekey"], row["outcome"]) == ("Wor", "filed"), row
+    row = json_of("library", "add", pdf, "--for", "Wor", *AS, "--json", cwd=q)["documents"][0]
+    assert (row["citekey"], row["state"], row["under"]) == ("Wor", "added", "Wor"), row
     assert (work_home(q, "Wor") / "paper.pdf").read_bytes() == pdf.read_bytes()
-    assert set(_entries(q)) >= {"Wor"} and "Shr" not in _entries(q)
+    assert set(_entries(q)) >= {"Wor"} and "shreveStochasticCalculusFinance" not in _entries(q)
 
 
 def test_naming_the_work_files_a_pdf_that_shows_nothing_of_it(tmp_path: Path) -> None:
@@ -98,23 +101,26 @@ def test_naming_the_work_files_a_pdf_that_shows_nothing_of_it(tmp_path: Path) ->
     assert "may not be their work" not in ok("library", "check", "Man12", cwd=q).stdout
 
 
-def test_a_pdf_held_under_one_work_is_filed_under_another_the_person_names(tmp_path: Path) -> None:
+def test_bytes_one_work_holds_are_already_here_and_never_stored_twice(tmp_path: Path) -> None:
+    """B3: a PDF another work held was filed again under the work named for it, and the store held its bytes twice."""
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / NOTES, NOTES_TEXT)
     ok("library", "add", pdf, *AS, cwd=q)
     said = " ".join(ok("library", "add", pdf, "--for", "Man12", *AS, cwd=q).stdout.split())
-    assert "as Man12's PDF" in said, said
-    assert (work_home(q, "Man12") / "paper.pdf").read_bytes() == pdf.read_bytes()
+    assert "1 already here" in said and "these very bytes are StatisticsQuantsRevision's" in said, said
+    assert not (work_home(q, "Man12") / "paper.pdf").exists()
 
 
 def test_the_same_bytes_are_kept_once_and_two_documents_of_one_title_are_both_kept(tmp_path: Path) -> None:
+    """The second edition shares the first's title, so it is asked about; said to be a work of its own, both are kept."""
     q = demo(tmp_path)
     pile = tmp_path / "pile"
     one = _fake_pdf(pile / "a.pdf", "Lecture notes on widgets\nfirst edition\n")
     (pile / "again.pdf").write_bytes(one.read_bytes())
     two = _fake_pdf(pile / "b.pdf", "Lecture notes on widgets\nsecond edition\n")
     data = json_of("library", "add", pile, *AS, "--json", cwd=q)
-    assert data["filed"] == 2, data
+    assert (data["added"], data["here"], data["questions"]) == (1, 1, 1), data
+    assert ok("library", "add", two, "--new", *AS, cwd=q).stdout.startswith("1 document: 1 added")
     made = {k: e for k, e in _entries(q).items() if e.fields.get("title") == "Lecture notes on widgets"}
     assert len(made) == 2
     held = {(work_dir(q, e) / "paper.pdf").read_bytes() for e in made.values()}
@@ -126,11 +132,11 @@ def test_a_title_corrected_by_hand_keeps_the_pdf(tmp_path: Path) -> None:
     pdf = _fake_pdf(tmp_path / NOTES, NOTES_TEXT)
     ok("library", "add", pdf, *AS, cwd=q)
     edit(q / BIB, "Statistics For Quants : Revision Notes", "Statistics for Quants")
-    assert (work_dir(q, _entries(q)["Sta"]) / "paper.pdf").read_bytes() == pdf.read_bytes()
+    assert (work_dir(q, _entries(q)["StatisticsQuantsRevision"]) / "paper.pdf").read_bytes() == pdf.read_bytes()
 
 
 def test_deleting_a_work_leaves_nothing_of_it_and_it_can_be_given_again(tmp_path: Path) -> None:
-    from loom.paths import BUILD
+    from loom.paths import INCOMING
     from loom.refs.added import delete_work
     from loom.refs.links import add_link, read_links
     from loom.refs.pages import sha256_of
@@ -141,35 +147,41 @@ def test_deleting_a_work_leaves_nothing_of_it_and_it_can_be_given_again(tmp_path
     q = demo(tmp_path)
     pdf = _fake_pdf(tmp_path / NOTES, NOTES_TEXT)
     ok("library", "add", pdf, *AS, cwd=q)
-    home = work_dir(q, _entries(q)["Sta"])
+    home = work_dir(q, _entries(q)["StatisticsQuantsRevision"])
     sha = sha256_of(pdf)
     assert (home / "paper.pdf").is_file() and sha in load_ledger(q)
     # what a run, an agent and the viewer leave beside it
-    save_results(q, "Sta", {"Sta-thm-1": Result(id="Sta-thm-1", local="thm-1")})
+    save_results(
+        q,
+        "StatisticsQuantsRevision",
+        {"StatisticsQuantsRevision-thm-1": Result(id="StatisticsQuantsRevision-thm-1", local="thm-1")},
+    )
     for made in (digest_path, proposed_path, log_path):
-        made(q, "Sta").write_text("%\n", encoding="utf-8")
-    add_link(q, "Sta-thm-1", "Other-thm-1", "depends-on", "It says so.", "A. Author")
+        made(q, "StatisticsQuantsRevision").write_text("%\n", encoding="utf-8")
+    add_link(q, "StatisticsQuantsRevision-thm-1", "Other-thm-1", "depends-on", "It says so.", "A. Author")
     add_link(q, "Mine-thm-1", "Other-thm-1", "depends-on", "Nothing to do with it.", "A. Author")
-    upload = q / BUILD / "uploads" / sha / "notes.pdf"
-    upload.parent.mkdir(parents=True)
+    upload = q / INCOMING / sha / "notes.pdf"
+    upload.parent.mkdir(parents=True, exist_ok=True)
     upload.write_bytes(pdf.read_bytes())
 
-    said = delete_work(scan(load_quilt(q)), "Sta", "A. Author")
+    said = delete_work(scan(load_quilt(q)), "StatisticsQuantsRevision", "A. Author")
 
-    assert said == "deleted Sta from the library, with loom's copy of the PDF"
-    assert "Sta" not in _entries(q) and not home.exists()
+    assert said == "deleted StatisticsQuantsRevision from the library, with loom's copy of the PDF"
+    assert "StatisticsQuantsRevision" not in _entries(q) and not home.exists()
     assert not upload.parent.exists() and sha not in load_ledger(q)
-    assert not any(made(q, "Sta").exists() for made in (digest_path, proposed_path, results_path, log_path))
+    assert not any(
+        made(q, "StatisticsQuantsRevision").exists() for made in (digest_path, proposed_path, results_path, log_path)
+    )
     assert [x.frm for x in read_links(q)] == ["Mine-thm-1"]
-    assert "Sta" in (q / ".loom/digests/links-removed.jsonl").read_text(encoding="utf-8")
+    assert "StatisticsQuantsRevision" in (q / ".loom/digests/links-removed.jsonl").read_text(encoding="utf-8")
     # gathering brings nothing back, and nothing says it is set aside
-    assert "Sta" not in declarations(q, "forget")
-    assert "Sta" not in {
+    assert "StatisticsQuantsRevision" not in declarations(q, "forget")
+    assert "StatisticsQuantsRevision" not in {
         a["key"] for a in json_of("library", "update", "--only", "gather", "--json", cwd=q)["scan"]["added"]
     }
     said = " ".join(ok("library", "add", pdf, *AS, cwd=q).stdout.split())
-    assert "as the new work Sta" in said, said
-    assert (work_dir(q, _entries(q)["Sta"]) / "paper.pdf").read_bytes() == pdf.read_bytes()
+    assert "as the new work StatisticsQuantsRevision" in said, said
+    assert (work_dir(q, _entries(q)["StatisticsQuantsRevision"]) / "paper.pdf").read_bytes() == pdf.read_bytes()
 
 
 def test_a_work_goes_with_its_copies_and_a_copy_goes_alone(tmp_path: Path) -> None:
@@ -181,26 +193,37 @@ def test_a_work_goes_with_its_copies_and_a_copy_goes_alone(tmp_path: Path) -> No
     # each with pages the others lack, so another version and not a copy
     for n, name in enumerate(("second.pdf", "third.pdf"), 1):
         other = _fake_pdf(tmp_path / name, NOTES_TEXT + "\fan appendix" * n)
-        ok("library", "add", other, "--for", "Sta", *AS, cwd=q)
-    assert {"StaA", "StaB"} <= set(_entries(q))
-    homes = {k: work_dir(q, _entries(q)[k]) for k in ("Sta", "StaA", "StaB")}
+        ok("library", "add", other, "--for", "StatisticsQuantsRevision", *AS, cwd=q)
+    assert {"StatisticsQuantsRevision-v2", "StatisticsQuantsRevision-v3"} <= set(_entries(q))
+    homes = {
+        k: work_dir(q, _entries(q)[k])
+        for k in ("StatisticsQuantsRevision", "StatisticsQuantsRevision-v2", "StatisticsQuantsRevision-v3")
+    }
 
-    assert delete_work(scan(load_quilt(q)), "StaB", "A. Author").startswith("deleted StaB from the library")
-    assert "StaB" not in _entries(q) and not homes["StaB"].exists()
-    assert {"Sta", "StaA"} <= set(_entries(q)) and homes["Sta"].exists() and homes["StaA"].exists()
+    assert delete_work(scan(load_quilt(q)), "StatisticsQuantsRevision-v3", "A. Author").startswith(
+        "deleted StatisticsQuantsRevision-v3 from the library"
+    )
+    assert "StatisticsQuantsRevision-v3" not in _entries(q) and not homes["StatisticsQuantsRevision-v3"].exists()
+    assert (
+        {"StatisticsQuantsRevision", "StatisticsQuantsRevision-v2"} <= set(_entries(q))
+        and homes["StatisticsQuantsRevision"].exists()
+        and homes["StatisticsQuantsRevision-v2"].exists()
+    )
 
     # a copy a document cites keeps its whole work
-    _cites(q, "StaA")
+    _cites(q, "StatisticsQuantsRevision-v2")
     with pytest.raises(NotDeletable) as caught:
-        delete_work(scan(load_quilt(q)), "Sta", "A. Author")
-    assert caught.value.code == "cited" and "StaA" in caught.value.message
-    assert homes["Sta"].exists() and "Sta" in _entries(q)
-    edit(q / "drafting" / "main.tex", "\\cite{StaA}\n", "")
+        delete_work(scan(load_quilt(q)), "StatisticsQuantsRevision", "A. Author")
+    assert caught.value.code == "cited" and "StatisticsQuantsRevision-v2" in caught.value.message
+    assert homes["StatisticsQuantsRevision"].exists() and "StatisticsQuantsRevision" in _entries(q)
+    edit(q / "drafting" / "main.tex", "\\cite{StatisticsQuantsRevision-v2}\n", "")
 
-    said = delete_work(scan(load_quilt(q)), "Sta", "A. Author")
-    assert said.startswith("deleted Sta and its copy StaA from the library"), said
-    assert not {"Sta", "StaA"} & set(_entries(q))
-    assert not homes["Sta"].exists() and not homes["StaA"].exists()
+    said = delete_work(scan(load_quilt(q)), "StatisticsQuantsRevision", "A. Author")
+    assert said.startswith(
+        "deleted StatisticsQuantsRevision and its copy StatisticsQuantsRevision-v2 from the library"
+    ), said
+    assert not {"StatisticsQuantsRevision", "StatisticsQuantsRevision-v2"} & set(_entries(q))
+    assert not homes["StatisticsQuantsRevision"].exists() and not homes["StatisticsQuantsRevision-v2"].exists()
 
 
 def test_deleting_touches_no_directory_that_is_not_the_works_alone(tmp_path: Path) -> None:
@@ -241,8 +264,8 @@ def test_a_file_that_is_no_pdf_is_refused_by_name_and_the_rest_are_kept(tmp_path
     assert not _is_pdf(pile / "broken.pdf")
     data = json_of("library", "add", pile, *AS, "--json", cwd=q)
     rows = {Path(r["file"]).name: r for r in data["documents"]}
-    assert (rows["broken.pdf"]["outcome"], rows["broken.pdf"]["reason"]) == ("refused", "it is not a PDF")
-    assert rows[NOTES]["outcome"] == "filed"
+    assert (rows["broken.pdf"]["state"], rows["broken.pdf"]["why"]) == ("cannot", "broken.pdf is not a PDF")
+    assert rows[NOTES]["state"] == "added"
 
 
 def _doi_says(title: str):
@@ -353,13 +376,19 @@ def test_a_scan_with_no_text_layer_is_kept_under_what_its_document_information_s
         b"trailer<</Root 1 0 R/Info 4 0 R>>\n%%EOF\n"
     )
     said = " ".join(ok("library", "add", pdf, *AS, cwd=q).stdout.split())
-    assert 'as the new work Cas, titled "Statistical Inference", without page text' in said, said
-    entry = _entries(q)["Cas"]
+    assert 'as the new work casellaStatisticalInference, titled "Statistical Inference", without page text' in said, (
+        said
+    )
+    entry = _entries(q)["casellaStatisticalInference"]
     assert entry.fields["author"] == "George Casella and Roger L. Berger"
     assert (work_dir(q, entry) / "paper.pdf").read_bytes() == pdf.read_bytes()
     # a run says so in a field of its own, which the viewer speaks of; a run on one work says how far through its pages it is
-    report = json_of("library", "update", "Cas", "--only", "map", "--redo", "--json", cwd=q)
-    assert next(w for w in report["works"] if w["citekey"] == "Cas")["no_text"] is True
-    _cites(q, "Cas")
-    codes = {d["code"] for d in json_of("lint", "--json", cwd=q)["diagnostics"] if "Cas" in d.get("keys", [])}
+    report = json_of("library", "update", "casellaStatisticalInference", "--only", "map", "--redo", "--json", cwd=q)
+    assert next(w for w in report["works"] if w["citekey"] == "casellaStatisticalInference")["no_text"] is True
+    _cites(q, "casellaStatisticalInference")
+    codes = {
+        d["code"]
+        for d in json_of("lint", "--json", cwd=q)["diagnostics"]
+        if "casellaStatisticalInference" in d.get("keys", [])
+    }
     assert not codes & {"loom:unresolved-work", "loom:no-readable-copy"}, codes

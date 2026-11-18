@@ -14,7 +14,6 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 |---|---|---|
 | `.loom/format` | the quilt's format number, which a loom older than the quilt reads to say so | the safe write path |
 | `.loom/live/`, one `<pid>.json` each | a record for each agent server process attached to the quilt | attaching an agent |
-| `.loom/incoming/`, one `<sha>/` each | files dropped on the viewer and not yet filed | the library |
 | `.loom/digests/suggested.jsonl` | the works an agent suggested | the library |
 | `.loom/formal/`, with `evidence.jsonl` and `attest.toml` | formal evidence, and the person's attestations | formalization |
 
@@ -27,10 +26,6 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | operation | does | owner |
 |---|---|---|
 | `change-undo` | undoes the Keep of the suggested edits it names, each in one step | the safe write path; Review and the document call it |
-| `library-take` | takes in what was dropped or what an agent suggested | the library |
-| `library-answer` | answers the one question an intake asked | the library |
-| `library-undo` | undoes an intake | the library |
-| `library-unfile` | takes a wrongly filed document off a work | the library |
 | `library-dismiss` | dismisses works an agent suggested | the library |
 | `formal-enable` | turns formalization on for the quilt, on this machine | formalization |
 | `formal-check` | runs loom's own check of a formal proof again | formalization |

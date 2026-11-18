@@ -680,9 +680,9 @@ def test_a_compiled_paper_with_an_unlabelled_result_says_numbering_mixed(tmp_pat
     )
     labelled = tmp_path / "paper" / "ref.tex"
     edit(labelled, "\\begin{thm}\nUnlabelled theorem.", "\\begin{thm}\\label{last}\nLabelled now.")
-    ok("library", "add", labelled, "--for", "Ref20", cwd=q)  # filed beside the first source, as Ref20A
-    r = ok("library", "update", "Ref20A", "--only", "extract", cwd=q)
-    assert "% !LOOM numbering" not in (q / ".loom/digests" / "Ref20A.tex").read_text()
+    ok("library", "add", labelled, "--for", "Ref20", cwd=q)  # filed beside the first source, as Ref20-v2
+    r = ok("library", "update", "Ref20-v2", "--only", "extract", cwd=q)
+    assert "% !LOOM numbering" not in (q / ".loom/digests" / "Ref20-v2.tex").read_text()
     assert "numbered as the paper's own compile numbers them" in r.stdout and "numbered by counting" not in r.stdout
 
 

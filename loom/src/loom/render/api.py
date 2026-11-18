@@ -22,6 +22,7 @@ __all__ = [
     "CAPABILITIES",
     "MAX_BODY",
     "NO_REBUILD",
+    "OWN_LOCK",
     "READS",
     "RECORD_WRITES",
     "WRITE_API_VERSION",
@@ -53,6 +54,8 @@ MAX_BODY = 344 * 1024 * 1024
 NO_REBUILD = tuple(name for family in FAMILIES for name in family.NO_REBUILD)
 #: Writes that change records alone, which the scan never reads, or keep a version, whose landmark the build reads again (`build(reuse=…)`); their publication builds from the last scan (`ServeSession.rebuild`).
 RECORD_WRITES = tuple(name for family in FAMILIES for name in family.RECORD_WRITES)
+#: Writes that take their own locks and hold none while they wait on the network, so the publisher runs them outside the publication's lock.
+OWN_LOCK = ("here", *library.OWN_LOCK)
 
 
 def discovery() -> dict[str, Any]:

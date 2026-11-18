@@ -16,6 +16,7 @@ import tarfile
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC
 from pathlib import Path
@@ -324,14 +325,17 @@ def fetch_work(
         record_source(home, f"arxiv:{ident}", via)
     if pdf and not (home / "paper.pdf").is_file():
         try:
-            p = home / "paper.pdf"
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_bytes(_get(f"https://export.arxiv.org/pdf/{ident}"))
-            out.files.append(p)
-            out.pdf = True
+            data = _get(f"https://export.arxiv.org/pdf/{ident}")
         except FetchRefused as exc:
             if not out.source:
                 out.refused = str(exc)
+        else:
+            p = home / "paper.pdf"
+            if _keep_fetched(quilt.root, data, p, lambda _: True):
+                out.files.append(p)
+                out.pdf = True
+            elif not out.source:
+                out.refused = f"{citekey} holds a document now, put there while this run fetched; it is kept"
     if out.files:
         out.refused = ""
     return out
@@ -375,6 +379,31 @@ def _discard(src: Path) -> None:
     shutil.rmtree(src, ignore_errors=True)
 
 
+def _keep_fetched(root: Path, data: bytes, dest: Path, wanted: Callable[[Path], bool]) -> bool:
+    """Put a downloaded PDF at `dest` when `wanted` says it is the work's and `dest` is still empty; whether it was put there.
+
+    The bytes go to a file of their own first, and are placed under the library's lock, never over a document: a person may file their own PDF on this work while the download runs, and loom never writes over or removes a document it did not put there.
+    """
+    import secrets
+
+    from loom.refs.intake import library_lock, put_file
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(f".fetched.{secrets.token_hex(6)}.pdf")
+    try:
+        tmp.write_bytes(data)
+        if not wanted(tmp):
+            return False
+        with library_lock(root):
+            try:
+                put_file(tmp, dest, link=True)
+            except FileExistsError:
+                return False
+        return True
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def pdf_url(entry: BibEntry) -> str:
     """The entry's `url` when it points straight at a PDF; '' otherwise.
 
@@ -405,12 +434,22 @@ def _fetch_url(quilt: Quilt, citekey: str, entry: BibEntry, url: str, out: Fetch
     if data[:4] != b"%PDF":
         out.refused = f"{url} did not return a PDF"
         return out
-    dest.write_bytes(data)
-    carries, best, _line = carries_title(dest, entry)
-    out.title_score = best
-    if not carries:
-        dest.unlink(missing_ok=True)
-        out.discarded = f"the PDF at {url} does not carry this entry's title on its first page ({best:.2f})"
+    verdict: dict[str, float | bool] = {}
+
+    def carries(path: Path) -> bool:
+        ok, best, _line = carries_title(path, entry)
+        verdict.update(ok=bool(ok), best=best)
+        return bool(ok)
+
+    kept = _keep_fetched(quilt.root, data, dest, carries)
+    out.title_score = float(verdict["best"]) if "best" in verdict else None
+    if not verdict.get("ok"):
+        out.discarded = (
+            f"the PDF at {url} does not carry this entry's title on its first page ({out.title_score or 0:.2f})"
+        )
+        return out
+    if not kept:
+        out.refused = f"{citekey} holds a document now, put there while this run fetched; it is kept"
         return out
     # the date is the point: a draft's numbering is only meaningful against the revision it was read from
     (home / "fetched.json").write_text(

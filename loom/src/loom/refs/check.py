@@ -184,9 +184,10 @@ def duplicate_documents(
 ) -> list[Problem]:
     """Entries holding one document, once per work; with `works`, those touching one of them.
 
-    Two kinds, merged by work: entries naming one stored document by `loom-file` (`scan._duplicates`), and versions of a work whose stored PDFs are copies of each other by the filing rule (`scan.same_document`), which an earlier loom filed as versions. An entry the author set aside (`library ignore`) is the cleared copy and is left out.
+    Two kinds, merged by work: entries naming one stored document by `loom-file` (`scan._duplicates`), and versions of a work whose stored PDFs are the same bytes. A version that only looks like another (same title, byline and pages) is a document of its own and is not reported. An entry the author set aside (`library ignore`) is the cleared copy and is left out.
     """
-    from loom.refs.scan import _duplicates, _own_account, primary_of, same_document, stored_versions, versions_of
+    from loom.refs.pages import sha256_of
+    from loom.refs.scan import _duplicates, primary_of, stored_versions, versions_of
     from loom.refs.unreadable import declarations
 
     aside = set(declarations(root, "forget"))
@@ -202,11 +203,12 @@ def duplicate_documents(
         if progress is not None:
             progress("comparing versions", top, n, len(tops_with_versions))
         stored = [(e, p) for e, p in stored_versions(root, bib, top) if p.is_file() and e.key not in aside]
-        for i, (entry, path) in enumerate(stored):
-            same, reason = same_document(path, _own_account(path)[0], stored[:i])
-            if same:
+        first: dict[str, str] = {}
+        for entry, path in stored:
+            same = first.setdefault(sha256_of(path), entry.key)
+            if same != entry.key:
                 keys.setdefault(top, set()).update({same, entry.key})
-                why.setdefault(top, []).append(f"{entry.key} is a copy of {same}'s document: {reason}")
+                why.setdefault(top, []).append(f"{entry.key} holds the same bytes as {same}")
     wanted = set(works) if works is not None else None
     return [
         Problem("duplicate-document", ", ".join(sorted(ks)), "; ".join(why[work]), work)

@@ -1877,7 +1877,7 @@ def test_library_add_files_a_pdf_or_source_and_never_replaces_one(tmp_path: Path
     said = ok("library", "add", one, "--for", "Man12", cwd=q).stdout
     assert "one.pdf as Man12's PDF, with its page text" in said and (home / "pages").is_dir()  # mapped at once
     said = " ".join(ok("library", "add", two, "--for", "Man12", cwd=q).stdout.split())
-    assert "two.pdf as Man12's PDF, beside its first document as Man12A" in said, said
+    assert "two.pdf as Man12's PDF, beside its first document as Man12-v2" in said, said
     assert b"first copy" in (home / "paper.pdf").read_bytes(), "a second document never replaces the first"
 
     src = tmp_path / "eprint"
@@ -1892,15 +1892,17 @@ def test_library_add_files_a_pdf_or_source_and_never_replaces_one(tmp_path: Path
     other = tmp_path / "other.tex"
     other.write_text("\\documentclass{amsart}")
     said = " ".join(ok("library", "add", other, "--for", "Man12", cwd=q).stdout.split())
-    assert "other.tex as Man12's LaTeX source, beside its first document as Man12B" in said, said
+    assert "other.tex as Man12's LaTeX source, beside its first document as Man12-v3" in said, said
     assert sorted(p.name for p in (home / "src").rglob("*.tex")) == [
         "main.tex",
         "one.tex",
     ]  # neither replaced nor merged
 
 
-def test_library_add_files_what_a_document_shows_plainly_and_says_why_it_skipped_the_rest(tmp_path: Path) -> None:
-    """An identifier on the page files a document alone, and so does its whole title with the entry's first author leading its byline; anything weaker is kept as a work of its own, with the reason; a work that has a PDF gets the new one beside it; --dry-run files nothing."""
+def test_library_add_asks_about_what_a_document_shows_plainly_and_keeps_the_rest_as_works_of_their_own(
+    tmp_path: Path,
+) -> None:
+    """The identifier a document states as its own, or its whole title with the entry's first author leading its byline, is a question and files nothing; anything weaker is kept as a work of its own, with the reason; named, a document goes under its work, beside the PDF it has; --dry-run writes nothing."""
     q = demo(tmp_path)
     pile = tmp_path / "pile"
     _fake_pdf(pile / "a.pdf", "Virtual pull-backs\nCristina Manolache\narXiv:0805.2065v2 [math.AG]")
@@ -1915,24 +1917,35 @@ def test_library_add_files_what_a_document_shows_plainly_and_says_why_it_skipped
 
     dry = json_of("library", "add", pile, "--dry-run", "--json", cwd=q)
     rows = {Path(r["file"]).name: r for r in dry["documents"]}
-    assert (dry["filed"], dry["skipped"], dry["refused"]) == (5, 0, 0)
-    assert (rows["a.pdf"]["citekey"], rows["a.pdf"]["outcome"]) == ("Man12", "filed")
-    assert rows["a.pdf"]["strong"][0]["how"] == "arXiv:0805.2065v2 is on its first pages"
+    assert (dry["added"], dry["here"], dry["questions"], dry["cannot"]) == (2, 0, 3, 0)
+    assert rows["a.pdf"]["state"] == "question"
+    assert [(c["citekey"], c["how"]) for c in rows["a.pdf"]["candidates"]] == [
+        ("Man12", "it prints arXiv:0805.2065v2 as its own, and the entry's title")
+    ]
     hart = rows["Hartshorne - 1977 - Notes on geometry.pdf"]
-    assert hart["outcome"] == "filed" and hart["new"] and hart["citekey"] != "Har77"
-    assert hart["reason"].startswith("Har77 is the nearest entry, by its first author")
-    assert (rows["b.pdf"]["citekey"], rows["b.pdf"]["outcome"]) == ("Har77", "filed")
-    assert (rows["c.pdf"]["outcome"], rows["c.pdf"]["sibling"]) == ("filed", "Calloway14A")
-    assert (rows["d.pdf"]["outcome"], rows["d.pdf"]["reason"]) == ("filed", "nothing in the bibliography matches it")
+    assert hart["state"] == "added" and hart["citekey"] == "hartshorneNotesGeometry1977" and hart["nearest"] == "Har77"
+    assert hart["apart"].startswith("Har77 is the nearest entry, by its first author")
+    assert [c["citekey"] for c in rows["b.pdf"]["candidates"]] == ["Har77"]
+    assert [c["citekey"] for c in rows["c.pdf"]["candidates"]] == ["Calloway14"]
+    assert (rows["d.pdf"]["state"], rows["d.pdf"]["apart"]) == ("added", "nothing in the bibliography matches it")
     assert not (work_home(q, "Man12") / "paper.pdf").exists() and not (work_home(q, "Har77") / "paper.pdf").exists()
 
     r = ok("library", "add", pile, cwd=q)
+    assert r.stdout.startswith("5 documents: 2 added, 0 already here, 3 to answer, 0 cannot be added"), r.output
+    assert not (work_home(q, "Man12") / "paper.pdf").exists() and not (work_home(q, "Har77") / "paper.pdf").exists()
+    said = " ".join(r.stdout.split())
+    assert 'd.pdf as the new work LectureNotesSomething, titled "Lecture notes on something unrelated"' in said
+    assert (
+        'Hartshorne - 1977 - Notes on geometry.pdf as the new work hartshorneNotesGeometry1977, titled "Notes on geometry"'
+        in said
+    )
+    assert "a.pdf may be Man12" in said and "loom library add FILE --for Man12 files it there" in said
+    ok("library", "add", pile / "a.pdf", "--for", "Man12", cwd=q)
+    ok("library", "add", pile / "b.pdf", "--for", "Har77", cwd=q)
     assert (work_home(q, "Man12") / "paper.pdf").read_bytes() == (pile / "a.pdf").read_bytes()
     assert (work_home(q, "Har77") / "paper.pdf").read_bytes() == (pile / "b.pdf").read_bytes()
-    assert r.stdout.startswith("5 documents: 5 filed, 0 skipped, 0 refused"), r.output
-    said = " ".join(r.stdout.split())
-    assert 'd.pdf as the new work Lec, titled "Lecture notes on something unrelated"' in said
-    assert 'Hartshorne - 1977 - Notes on geometry.pdf as the new work Har77A, titled "Notes on geometry"' in said
+    said = " ".join(ok("library", "add", pile / "c.pdf", "--for", "Calloway14", cwd=q).stdout.split())
+    assert "c.pdf as Calloway14's PDF, beside its first document as Calloway14-v2" in said, said
     assert b"Imogen" not in (work_home(q, "Calloway14") / "paper.pdf").read_bytes()  # the shipped copy is untouched
 
 

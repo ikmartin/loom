@@ -116,24 +116,32 @@ def test_a_work_argument_narrows_every_step_and_one_naming_nothing_is_refused(tm
 
 
 def test_a_weak_match_is_not_filed_against_the_entry_and_the_pdf_is_kept_as_a_work_of_its_own(tmp_path: Path) -> None:
-    """The handbook names Olsson fifth and shares half the title of his 2003 paper; two weak signals filed it as that paper, and then skipped the real one because the slot was taken (audit §4). Neither is lost now: the handbook is a work of its own, with the nearest entry named."""
+    """The handbook names Olsson fifth and shares half the title of his 2003 paper; two weak signals filed it as that paper, and then skipped the real one because the slot was taken (audit §4). Neither is lost now: the handbook is a work of its own, with the nearest entry named, and the real one is asked about, since nothing is filed under a work on loom's guess."""
     q = demo(tmp_path)
     _olsson(q)
     pile = tmp_path / "pile"
     _fake_pdf(pile / "Handbook of Moduli.pdf", HANDBOOK)
     _fake_pdf(pile / "olsson.pdf", OLSSON)
     r = ok("library", "add", pile, "--as", "A. Author", cwd=q)
-    assert r.stdout.startswith("2 documents: 2 filed, 0 skipped, 0 refused"), r.output
+    assert r.stdout.startswith("2 documents: 1 added, 0 already here, 1 to answer, 0 cannot be added"), r.output
     said = " ".join(r.stdout.split())
-    assert 'Handbook of Moduli.pdf as the new work Log, titled "Logarithmic geometry and moduli"' in said
+    assert (
+        'Handbook of Moduli.pdf as the new work LogarithmicGeometryModuli, titled "Logarithmic geometry and moduli"'
+        in said
+    )
     assert "--for olsson03 files it there instead, if that is what it is" in said
-    assert "olsson.pdf as olsson03's PDF, with its page text" in said
+    assert "olsson.pdf may be olsson03 (olsson03: its title is the entry's and Olsson leads its byline)" in said
+    assert "loom library add FILE --for olsson03 files it there" in said
     home = work_home(q, "olsson03")
+    assert not (home / "paper.pdf").exists()
+    ok("library", "add", pile / "olsson.pdf", "--for", "olsson03", "--as", "A. Author", cwd=q)
     assert (home / "paper.pdf").read_bytes() == (pile / "olsson.pdf").read_bytes()
-    assert (work_home(q, "Log") / "paper.pdf").read_bytes() == (pile / "Handbook of Moduli.pdf").read_bytes()
+    assert (work_home(q, "LogarithmicGeometryModuli") / "paper.pdf").read_bytes() == (
+        pile / "Handbook of Moduli.pdf"
+    ).read_bytes()
     rows = {Path(d["file"]).name: d for d in json_of("library", "add", pile, "--dry-run", "--json", cwd=q)["documents"]}
-    assert rows["Handbook of Moduli.pdf"]["outcome"] == "skipped" and rows["olsson.pdf"]["outcome"] == "skipped"
-    assert rows["olsson.pdf"]["reason"].startswith("already in loom's store")
+    assert rows["Handbook of Moduli.pdf"]["state"] == "here" and rows["olsson.pdf"]["state"] == "here"
+    assert rows["olsson.pdf"]["why"] == "these very bytes are olsson03's"
 
 
 def test_a_pdf_showing_another_work_is_filed_on_the_persons_word_and_the_evidence_recorded(tmp_path: Path) -> None:
@@ -148,9 +156,9 @@ def test_a_pdf_showing_another_work_is_filed_on_the_persons_word_and_the_evidenc
     ledger = json.loads((q / ".loom/digests" / "storage" / "copied.json").read_text())
     row = next(v for v in ledger.values() if v["from"] == "Handbook of Moduli.pdf")
     assert row["forced"].startswith("it is abramovich16's") and row["by"] == "A. Author"
-    # without --for it is filed under the work it shows it is
+    # without --for it is filed nowhere, and the question names the work it shows it is
     other = _fake_pdf(tmp_path / "again.pdf", HANDBOOK + "a second printing\n")
-    assert "again.pdf as abramovich16's PDF" in " ".join(ok("library", "add", other, cwd=q).stdout.split())
+    assert "again.pdf may be abramovich16" in " ".join(ok("library", "add", other, cwd=q).stdout.split())
 
 
 def test_a_second_document_is_filed_beside_the_first_and_keeps_its_pdf(tmp_path: Path) -> None:
@@ -161,14 +169,14 @@ def test_a_second_document_is_filed_beside_the_first_and_keeps_its_pdf(tmp_path:
     _olsson(q)
     one = _fake_pdf(tmp_path / "one.pdf", OLSSON + "first copy")
     two = _fake_pdf(tmp_path / "two.pdf", OLSSON + "second copy\fan appendix the first lacks")
-    ok("library", "add", one, cwd=q)
+    ok("library", "add", one, "--for", "olsson03", cwd=q)
     r = ok("library", "add", two, "--for", "olsson03", cwd=q)
-    assert "two.pdf as olsson03's PDF, beside its first document as olsson03A" in " ".join(r.stdout.split())
+    assert "two.pdf as olsson03's PDF, beside its first document as olsson03-v2" in " ".join(r.stdout.split())
     entries = parse_bib((q / BIB).read_text())
-    sibling = entries["olsson03A"]
+    sibling = entries["olsson03-v2"]
     assert sibling.fields["loom-copy-of"] == "olsson03" and sibling.fields["loom-file"].startswith("file/")
     assert b"first copy" in (work_dir(q, entries["olsson03"]) / "paper.pdf").read_bytes()
     assert b"second copy" in (work_dir(q, sibling) / "paper.pdf").read_bytes()
     again = ok("library", "add", two, "--for", "olsson03", cwd=q)
-    assert again.stdout.startswith("1 document: 0 filed, 1 already in loom's store, 0 skipped"), again.output
-    assert "olsson03B" not in (q / BIB).read_text()
+    assert again.stdout.startswith("1 document: 0 added, 1 already here, 0 to answer, 0 cannot be added"), again.output
+    assert "olsson03-v3" not in (q / BIB).read_text()

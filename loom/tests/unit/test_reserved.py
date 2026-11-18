@@ -39,7 +39,7 @@ def test_every_reserved_path_is_named_once_and_kept_from_agents() -> None:
     """A reserved path is a constant in `loom.paths` already, so that two pieces of work do not spell it twice, and no agent may write it, so that the permission files a quilt has today already say so."""
     named = {v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str)}
     reserved = [name for name in first_cells(section("Paths in a quilt")) if name.startswith(".loom/")]
-    assert len(reserved) >= 5, reserved
+    assert len(reserved) >= 4, reserved
     for path in reserved:
         rel = path.rstrip("/")
         assert rel in named, f"{path} is reserved and loom.paths does not name it"

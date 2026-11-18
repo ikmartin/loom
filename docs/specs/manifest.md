@@ -38,9 +38,12 @@ Field names are fixed; unknown fields must be ignored by viewers. All timestamps
   "files": [ ... ],
   "changes": [ ... ],
   "changes_since": { "who": "…", "when": "…" },
-  "config": { "quilt": { ... }, "library": { ... }, "lint": { ... }, "agents": { ... }, "review": { ... }, "sync": { ... } }
+  "config": { "quilt": { ... }, "library": { ... }, "lint": { ... }, "agents": { ... }, "review": { ... }, "sync": { ... } },
+  "arriving": [ { "id": "…", "name": "Halberd - 2021 - Gadget towers.pdf", "state": "question", ... } ]
 }
 ```
+
+**[decided]** **Arriving** is what was added to the library and waits on the person (write-api.md §6), oldest first: each a drop's row in state `question` (`{id, name, state, question, document, candidates}`, answered with `library-answer`) or `received` (`{id, name, state}`, a file received and not yet taken, which a viewer takes with `library-take`). A drop that has been taken, or that is already here, is not listed. Empty when nothing waits; a viewer's tray reads it after a reload.
 
 **[decided]** `annotation_types` is the quilt's annotation types in its file's order (`.loom/annotation-types.toml`, else the defaults): each `{id, name, look: {color, style, weight, opacity}, open, notes, instructions, modes}`, `modes` naming the modes whose text names the type. `color` is one of grey, brown, red, orange, yellow, green, blue, purple, pink; `style` is underline, highlight or strike; `weight` is whole pixels and `opacity` percent. `open` says an annotation of the type stays open until resolved; `notes` that it is listed in Notes. A viewer offers these types and draws an annotation in its own look; it never decides what to show by a type's id.
 

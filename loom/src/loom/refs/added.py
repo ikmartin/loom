@@ -11,7 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from loom.clock import stamp
-from loom.paths import BUILD
+from loom.paths import INCOMING
 from loom.refs.scan import Candidate, append_entries
 from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib
 from loom.scan.quilt import Quilt
@@ -129,9 +129,15 @@ def _block(text: str, key: str) -> tuple[int, int] | None:
     before = text.rfind("\n", 0, start - 1) + 1 if start else 0
     if text[before:start].startswith("% from"):
         start = before
-        if start > 0 and text[start - 1] == "\n" and text[max(0, start - 2)] == "\n":
+        # the blank line before it, in the file's own line ending
+        prefix = text[:start]
+        if prefix.endswith("\r\n\r\n") or prefix == "\r\n":
+            start -= 2
+        elif prefix.endswith("\n\n") or prefix == "\n":
             start -= 1
-    if end < len(text) and text[end] == "\n":
+    if text.startswith("\r\n", end):
+        end += 2
+    elif text.startswith("\n", end):
         end += 1
     return start, end
 
@@ -160,12 +166,22 @@ def delete_work(result: ScanResult, key: str, who: str) -> str:
     NotDeletable
         No such work, one a document's bibliography carries, or one a document cites.
     """
+    from loom.refs.intake import library_lock
+
+    # what is checked and what is deleted are one act under the library's lock, so an undo or a second delete between them finds the work gone, or finds it whole
+    with library_lock(result.quilt.root):
+        return _delete_work(result, key, who)
+
+
+def _delete_work(result: ScanResult, key: str, who: str) -> str:
     from loom.refs.build import cited_counts
     from loom.refs.scan import ScanReport, candidates, versions_of
 
     root = result.quilt.root
     path = root / BIBLIOGRAPHY
-    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    from loom.refs.intake import read_exact
+
+    text = read_exact(path)
     entries = parse_bib(text)
     if key not in entries:
         raise NotDeletable("no-such-work", f"the library has no work {key}")
@@ -184,15 +200,19 @@ def delete_work(result: ScanResult, key: str, who: str) -> str:
             )
         if _block(text, k) is None:
             raise NotDeletable("no-such-work", f"the library's entry for {k} could not be found in {BIBLIOGRAPHY}")
+    from loom.refs.intake import library_lock, write_whole
+
     held = False
-    for k in doomed:
-        held = _delete_held(root, k, entries, doomed, who) or held
-    # the entries last: what fails before here leaves a work that can be deleted again
-    for k in doomed:
-        where = _block(text, k)
-        assert where is not None
-        text = text[: where[0]] + text[where[1] :]
-    path.write_text(text, encoding="utf-8")
+    with library_lock(root):
+        # the entries first, so no entry ever names a place emptied under it: what stops after leaves a place no entry names, which gathering offers again
+        text = read_exact(path)
+        for k in doomed:
+            where = _block(text, k)
+            assert where is not None
+            text = text[: where[0]] + text[where[1] :]
+        write_whole(path, text)
+        for k in doomed:
+            held = _delete_held(root, k, entries, doomed, who) or held
     also = f" and its {'copy' if len(doomed) == 2 else 'copies'} {', '.join(doomed[1:])}" if doomed[1:] else ""
     return f"deleted {key}{also} from the library" + (", with loom's copy of the PDF" if held else "")
 
@@ -229,7 +249,7 @@ def _delete_held(root: Path, key: str, entries: Mapping[str, BibEntry], doomed: 
     inside = home is not None and home.resolve() != store and home.resolve().is_relative_to(store)
     shared = any(home_of(e) == home for k, e in entries.items() if k not in doomed)
     goes = inside and not shared and home is not None and home.is_dir()
-    hashes = drop_copies(root, key, home if goes else None)
+    hashes = drop_copies(root, home if goes else None)
     if goes and home is not None:
         paper = home / "paper.pdf"
         if paper.is_file():
@@ -237,5 +257,5 @@ def _delete_held(root: Path, key: str, entries: Mapping[str, BibEntry], doomed: 
         shutil.rmtree(home)
     for sha in hashes:
         if re.fullmatch(r"[0-9a-f]{64}", sha):
-            shutil.rmtree(root / BUILD / "uploads" / sha, ignore_errors=True)
+            shutil.rmtree(root / INCOMING / sha, ignore_errors=True)
     return goes

@@ -147,6 +147,19 @@ def synthetic(entry: BibEntry) -> WorkId:
     return WorkId("work", digest, "declared")
 
 
+#: Where a work with no identifier keeps the PDF it came in with, as its entry's `loom-file` says: the first 16 hex digits of that PDF's hash, and a number after them where that place was another work's.
+_FILED = re.compile(r"^file/([0-9a-f]{16})(-[0-9]+)?$")
+
+
+def filed(entry: BibEntry) -> WorkId | None:
+    """The identity of a work that came in as a PDF stating no identifier: `work:` and the first eight digits of that PDF's hash, read from where its entry says the PDF went (`loom-file`); None for any other.
+
+    Its title, authors and year are a guess a person corrects, and a correction must not move it: links to it and annotations on it name this identity.
+    """
+    m = _FILED.match(str(entry.fields.get("loom-file") or "").strip())
+    return WorkId("work", m.group(1)[:8] + (m.group(2) or ""), "declared") if m else None
+
+
 def identify(entry: BibEntry | None) -> list[WorkId]:
     """Every global identifier for a bibliography entry, most authoritative first.
 
@@ -158,7 +171,7 @@ def identify(entry: BibEntry | None) -> list[WorkId]:
     Returns
     -------
     list of WorkId
-        The declared identifiers in resolution order, or a single deterministic `work:<hash>` when the entry declares none. Never empty for a real entry, so a work always has somewhere to be filed.
+        The declared identifiers in resolution order; when the entry declares none, the one its PDF's hash gives (`filed`), or else a deterministic `work:<hash>` of its authors, title and year. Never empty for a real entry, so a work always has somewhere to be filed.
 
     See Also
     --------
@@ -167,7 +180,7 @@ def identify(entry: BibEntry | None) -> list[WorkId]:
     if entry is None:
         return []
     found = declared(entry)
-    return found if found else [synthetic(entry)]
+    return found if found else [filed(entry) or synthetic(entry)]
 
 
 def primary(entry: BibEntry | None) -> WorkId | None:

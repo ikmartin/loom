@@ -1,0 +1,1488 @@
+"""The one intake (`refs.intake`): every file or pasted work becomes one row in one of four states, nothing is filed under an existing work without the person's word, and an undo gives the quilt back byte for byte. The study's B3, B4, B10 and B12 (`docs/reports/v0.1-study/raw/library.md` section 10) are tests here."""
+
+from __future__ import annotations
+
+import io
+import random
+from pathlib import Path
+
+import pytest
+
+from loom.paths import INCOMING
+from loom.refs.intake import IntakeRefused, Item, Row, _acts, answer, receive, take, undo, unfile, waiting
+from loom.scan.bib import BibEntry
+from loom.scan.quilt import load_quilt
+from loom.scan.scan import scan
+from tests.unit._quilts import demo, work_home
+from tests.unit.refs._made_pdfs import fake_pdf, real_pdf
+
+WHO = "A. Author"
+BIB = ".loom/digests/bibliography.bib"
+#: A second version of Calloway14, the work the demo cites: its title over its author's byline, with a page more and no identifier, since a PDF stating the work's own DOI is a copy of its document.
+CALLOWAY = "Fixed loci of involutions on separated spaces\nImogen Calloway\nA preprint\n\fA second page"
+#: A page that names no work in the demo's library.
+NOTES = "Notes on balanced quivers\nA. Halloway\nWe record what is known.\n"
+
+
+def tree(q: Path) -> dict[str, bytes]:
+    """Every file of the quilt outside `.loom/build/`, which every rebuild writes again, with its bytes."""
+    return {
+        p.relative_to(q).as_posix(): p.read_bytes()
+        for p in sorted(q.rglob("*"))
+        if p.is_file() and not p.relative_to(q).as_posix().startswith(".loom/build/")
+    }
+
+
+def bib(q: Path) -> dict[str, BibEntry]:
+    return scan(load_quilt(q)).bib
+
+
+def dropped(q: Path, name: str, text: str = NOTES, tmp: Path | None = None) -> Item:
+    """A file received as the viewer streams one, as an item to take."""
+    src = fake_pdf((tmp or q.parent) / "src" / name, text)
+    got = receive(q, name, io.BytesIO(src.read_bytes()), src.stat().st_size)
+    return Item(drop=got["incoming"], name=name)
+
+
+def taken(q: Path, *items: Item, online: bool = False) -> list[Row]:
+    return take(load_quilt(q), bib(q), list(items), by=WHO, online=online)
+
+
+def test_a_new_pdf_is_added_and_its_undo_leaves_the_quilt_byte_for_byte_as_before_the_drop(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    bib(q)
+    before = tree(q)
+    item = dropped(q, "Halloway - 2026 - Notes on balanced quivers.pdf")
+    (row,) = taken(q, item)
+    assert (row.state, row.citekey, row.pages) == ("added", "hallowayNotesBalancedQuivers2026", "read"), row
+    assert row.to_json()["title"] == "Notes on balanced quivers"
+    # B12: the drop has left `.loom/incoming/` for the store, and only the record of the act waits there
+    assert [p.name for p in (q / INCOMING / row.id).iterdir()] == ["act.json"]
+    assert (work_home(q, row.citekey) / "paper.pdf").is_file()
+    said, again = undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert again is None and "took hallowayNotesBalancedQuivers2026 out" in said
+    assert tree(q) == before
+
+
+def test_a_file_dropped_twice_says_it_is_already_here(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    (first,) = taken(q, dropped(q, "notes.pdf"))
+    (second,) = taken(q, dropped(q, "notes again.pdf"))
+    assert (second.state, second.citekey) == ("here", first.citekey) and "these very bytes" in second.why
+    # and twice in one take, from the command line
+    one = fake_pdf(tmp_path / "a" / "x.pdf", "A paper about widgets\nW. Smith\n")
+    two = tmp_path / "b" / "y.pdf"
+    two.parent.mkdir()
+    two.write_bytes(one.read_bytes())
+    rows = taken(q, Item(path=one), Item(path=two))
+    assert [r.state for r in rows] == ["added", "here"] and rows[1].citekey == rows[0].citekey
+
+
+def test_a_pdf_naming_a_work_is_a_question_and_nothing_is_filed_until_answered(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    bib(q)
+    before = tree(q)
+    item = dropped(q, "calloway-v2.pdf", CALLOWAY, tmp_path)
+    (row,) = taken(q, item)
+    assert row.state == "question" and [c["citekey"] for c in row.candidates] == ["Calloway14"], row
+    assert row.candidates[0]["how"] == "its title is the entry's and Calloway leads its byline"
+    assert row.document == {
+        "title": "Fixed loci of involutions on separated spaces",
+        "byline": "Imogen Calloway",
+        "identifiers": [],
+    }
+    assert waiting(q) == [row.to_json() | {"item": 0}] or waiting(q)[0]["state"] == "question"
+    assert {k for k in tree(q)} - set(before) == {
+        f"{INCOMING}/{row.id}/{n}" for n in ("arrived.json", "question.json", "document.pdf")
+    }
+    with pytest.raises(IntakeRefused, match="not one of the works asked about"):
+        answer(load_quilt(q), bib(q), row.question, "Man12", by=WHO)
+    said = answer(load_quilt(q), bib(q), row.question, "Calloway14", by=WHO)
+    assert (said.state, said.under, said.sibling) == ("added", "Calloway14", "Calloway14-v2"), said
+    assert waiting(q) == []
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert tree(q) == before
+
+
+def test_a_different_work_is_kept_as_its_own(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "calloway-v2.pdf", CALLOWAY, tmp_path))
+    said = answer(load_quilt(q), bib(q), row.question, None, by=WHO)
+    assert said.state == "added" and not said.under and said.citekey == "FixedLociInvolutions"
+
+
+def test_the_quant_incident_through_the_intake(tmp_path: Path) -> None:
+    """B1 end to end: the library holds `Of`, made of a masthead; the Cox PDF from the same journal is added as a work of its own, under its own title."""
+    q = demo(tmp_path)
+    with (q / BIB).open("a", encoding="utf-8") as fh:
+        fh.write("\n@misc{Of,\n  title = {of Financial},\n  loom-added = {2026-11-11T21:00:00Z, The author},\n}\n")
+    cox = (
+        "Journal\nof Financial\nEconomics\nOPTION PRICING: A SIMPLIFIED APPROACH*\n7 (1979) 229-263.\n"
+        "John C. COX\nMassachusetts Institute of Technology, Cambridge, MA 02139, USA\n"
+    )
+    (row,) = taken(q, dropped(q, "1-s2.0-0304405X79900151-main.pdf", cox, tmp_path))
+    assert (row.state, row.under, row.title) == ("added", "", "OPTION PRICING: A SIMPLIFIED APPROACH"), row
+
+
+def test_an_entry_naming_no_author_is_asked_about_when_the_pdfs_own_title_is_its_title(tmp_path: Path) -> None:
+    """The author's request of 2026-11-04 holds through the question: a work whose entry is a title alone is still offered."""
+    q = demo(tmp_path)
+    with (q / BIB).open("a", encoding="utf-8") as fh:
+        fh.write("\n@misc{Wor,\n  title = {Stochastic Calculus for Finance II},\n}\n")
+    book = "Stochastic Calculus for Finance II\nContinuous-Time Models\nSteven E. Shreve\nPreface\n"
+    (row,) = taken(q, dropped(q, "Shreve - Stochastic Calculus for Finance II.pdf", book, tmp_path))
+    assert row.state == "question" and [(c["citekey"], c["how"]) for c in row.candidates] == [
+        ("Wor", "its title is Wor's")
+    ]
+
+
+def test_a_drop_on_a_work_is_filed_there_unless_it_shows_another_work_or_another_holds_it(tmp_path: Path) -> None:
+    """B3: the per-work upload filed on drop, though the PDF was another work's, and stored the bytes twice."""
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    (schedule,) = taken(q, dropped(q, "seminar.pdf", "Department of Mathematics\nSeminar schedule, spring\n", tmp_path))
+    assert schedule.state == "added"
+    item = dropped(q, "seminar again.pdf", "Department of Mathematics\nSeminar schedule, spring\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Har77"))
+    assert (row.state, row.citekey) == ("here", schedule.citekey)
+    sha = sha256_of(work_home(q, schedule.citekey) / "paper.pdf")
+    stored = [p for p in (q / ".loom/digests/storage").rglob("paper.pdf") if sha256_of(p) == sha]
+    assert len(stored) == 1 and not (work_home(q, "Har77") / "paper.pdf").exists()
+    stamped = dropped(
+        q,
+        "pullbacks.pdf",
+        "arXiv:0805.2065v2 [math.AG] 13 May 2008\nVirtual pull-backs\nCristina Manolache\n",
+        tmp_path,
+    )
+    (asked,) = taken(q, Item(drop=stamped.drop, name=stamped.name, work="Har77"))
+    assert asked.state == "question" and [c["citekey"] for c in asked.candidates] == ["Har77", "Man12"]
+    plain = dropped(q, "hartshorne.pdf", "Some scanned pages\n", tmp_path)
+    (filed,) = taken(q, Item(drop=plain.drop, name=plain.name, work="Har77"))
+    assert (filed.state, filed.under) == ("added", "Har77") and (work_home(q, "Har77") / "paper.pdf").is_file()
+
+
+def test_a_wrongly_filed_pdf_is_taken_off_its_work_and_undo_files_it_again(tmp_path: Path) -> None:
+    """B4: nothing could take a filed document off a work, and deleting a cited one is refused."""
+    q = demo(tmp_path)
+    item = dropped(q, "schedule.pdf", "Department of Mathematics\nSeminar schedule, spring\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Man12"))
+    assert (row.state, row.under) == ("added", "Man12")
+    filed = tree(q)
+    off = unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    assert off["incoming"] == row.id and off["row"]["state"] == "received"
+    assert not (work_home(q, "Man12") / "paper.pdf").exists()
+    assert [r["id"] for r in waiting(q)] == [row.id]
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert tree(q) == filed
+    # taken off again and taken in again, it is never asked about the work it was taken off
+    unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    (again,) = taken(q, Item(drop=row.id, name="schedule.pdf"))
+    assert again.state == "added" and not again.under
+    with pytest.raises(IntakeRefused, match="has results read off this PDF") as caught:
+        unfile(scan(load_quilt(q)), "Calloway14", by=WHO)
+    assert caught.value.code == "has-results"
+    with pytest.raises(IntakeRefused, match="holds no PDF"):
+        unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    # a work that came in with its PDF is nothing without it: undo or delete takes it out whole
+    with pytest.raises(IntakeRefused, match="came in with this PDF") as caught:
+        unfile(scan(load_quilt(q)), again.citekey, by=WHO)
+    assert caught.value.code == "own-document"
+
+
+def test_an_undo_is_refused_once_the_work_is_cited(tmp_path: Path) -> None:
+    from tests.helpers import edit
+
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "notes.pdf"))
+    edit(q / "drafting" / "main.tex", "\\end{document}", f"\\cite{{{row.citekey}}}\n\\end{{document}}")
+    with pytest.raises(IntakeRefused, match="is cited by your documents") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "not-new"
+
+
+@pytest.mark.poppler
+def test_a_scan_with_no_text_and_a_textbook_with_no_doi_each_come_in(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    book = real_pdf(
+        tmp_path / "src" / "casella.pdf",
+        [[], []],
+        info={"Title": "Statistical Inference", "Author": "George Casella, Roger L. Berger"},
+    )
+    scan_ = real_pdf(tmp_path / "src" / "scanned-surgery.pdf", [[]], info={"Author": "https://imagemagick.org"})
+    rows = taken(q, Item(path=book), Item(path=scan_))
+    assert [(r.state, r.citekey, r.pages) for r in rows] == [
+        ("added", "casellaStatisticalInference", "none"),
+        ("added", "ScannedSurgery", "none"),
+    ], rows
+
+
+def test_many_files_dropped_at_once_are_each_a_row(tmp_path: Path) -> None:
+    """B10: a drop of twelve PDFs added one, silently."""
+    q = demo(tmp_path)
+    items = [
+        dropped(q, f"paper {k}.pdf", f"On the {w} of widgets\nW. Smith\n", tmp_path)
+        for k, w in enumerate(("rank", "genus", "degree", "height"))
+    ]
+    items.append(
+        Item(path=fake_pdf(tmp_path / "src" / "notes.txt", "not a pdf").with_name("notes.txt"), name="notes.txt")
+    )
+    items[-1].path.write_text("plain text")  # type: ignore[union-attr]
+    rows = taken(q, *items)
+    assert [r.state for r in rows] == ["added", "added", "added", "added", "cannot"] and rows[-1].code == "not-a-pdf"
+    assert len({r.citekey for r in rows[:4]}) == 4
+
+
+def test_a_pasted_text_is_a_row_a_line_or_an_entry(tmp_path: Path) -> None:
+    """B8: two BibTeX entries pasted were one; a list of identifiers was not recognised."""
+    q = demo(tmp_path)
+    two = "@article{Ost18, author={Ostrander, D.}, title={Widget categories and their duals}, year={2018}}\n@book{Vale20, author={Vale, E.}, title={Gadgets}, year={2020}}"
+    rows = taken(q, Item(text=two))
+    assert [(r.state, r.citekey) for r in rows] == [("added", "Ost18"), ("added", "Vale20")]
+    again = taken(q, Item(text=two.split("\n")[0].replace("Ost18", "Other")))
+    assert again[0].state == "question" and again[0].candidates[0]["citekey"] == "Ost18"
+    ids = taken(q, Item(text="arXiv:0805.2065\n10.5555/x.1\nISBN 978-0-387-98549-7\nwidgets, somewhere"))
+    assert [(r.state, r.code) for r in ids] == [
+        ("cannot", "offline"),
+        ("cannot", "offline"),
+        ("cannot", "no-service"),
+        ("cannot", "not-recognised"),
+    ]
+    before = tree(q)
+    (last,) = taken(q, Item(text="@misc{Lone, title={A lone entry}}"))
+    undo(scan(load_quilt(q)), last.id, by=WHO)
+    assert tree(q) == before
+
+
+def test_a_dry_run_writes_nothing(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    pdf = fake_pdf(tmp_path / "src" / "x.pdf", NOTES)
+    before = tree(q)
+    (row,) = take(load_quilt(q), bib(q), [Item(path=pdf)], by=WHO, write=False)
+    assert row.state == "added" and tree(q) == before
+
+
+def _whole(q: Path) -> None:
+    """No damage: the bibliography reads, and every work whose entry says where its PDF is holds it there."""
+    from loom.refs.fetch import work_dir
+
+    for key, entry in bib(q).items():
+        if entry.fields.get("loom-file"):
+            assert (work_dir(q, entry) / "paper.pdf").is_file() or entry.fields.get("loom-copy-of") is None, key
+
+
+@pytest.mark.parametrize("seed", [20261117, 7, 31])
+def test_random_drops_answers_unfiles_and_undos_never_damage_and_each_undo_restores_the_exact_bytes(
+    tmp_path: Path, seed: int
+) -> None:
+    """The Safe gate's check for the library, on the demo: a seeded sequence of acts, each undone in turn back to the quilt as it was."""
+    q = demo(tmp_path)
+    bib(q)
+    start = tree(q)
+    rng = random.Random(seed)
+    pool = [
+        NOTES,
+        CALLOWAY,
+        "On the rank of widgets\nW. Smith\n",
+        "Some scanned pages\n",
+        "Department of Mathematics\nSchedule\n",
+    ]
+    done: list[tuple[str, dict[str, bytes]]] = []
+    for step in range(24):
+        roll = rng.random()
+        before = tree(q)
+        if roll < 0.5 or not done:
+            text = rng.choice(pool)
+            (row,) = taken(q, dropped(q, f"drop {step}.pdf", text, tmp_path / str(step)))
+            if row.state == "question":
+                row = answer(
+                    load_quilt(q), bib(q), row.question, rng.choice([None, row.candidates[0]["citekey"]]), by=WHO
+                )
+            if row.state == "added":
+                done.append((row.id, before))
+            elif row.state == "here":
+                outside = {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")}
+                assert outside == {k: v for k, v in before.items() if not k.startswith(f"{INCOMING}/")}
+        elif roll < 0.65:
+            filed = [r for r, _ in done]
+            unfilable = [
+                a["citekey"]
+                for r in filed
+                for a in _acts(q / INCOMING / r)[-1:]
+                if a["kind"] == "added" and a.get("home")
+            ]
+            if not unfilable:
+                continue
+            key = rng.choice(unfilable)
+            try:
+                got = unfile(scan(load_quilt(q)), key, by=WHO)
+            except IntakeRefused as refused:
+                assert refused.code in ("own-document", "has-results", "no-document") and tree(q) == before
+                continue
+            done.append((got["incoming"], before))
+        else:
+            drop, was = done.pop()
+            undo(scan(load_quilt(q)), drop, by=WHO)
+            assert tree(q) == was, f"step {step}: undoing {drop[:12]} left the quilt changed"
+        _whole(q)
+    while done:
+        drop, was = done.pop()
+        undo(scan(load_quilt(q)), drop, by=WHO)
+        assert tree(q) == was
+    assert tree(q) == start
+
+
+def test_every_route_gives_one_work_one_key(tmp_path: Path) -> None:
+    """The command line, the intake the viewer's drop goes through, gathering's adoption of a stored PDF no entry names, and a pasted DOI against the PDF that states it: each keys one work alike."""
+    import hashlib
+    import json
+
+    from loom.paths import STORAGE
+    from loom.refs.scan import record_copy
+    from tests.helpers import ok
+
+    name = "Halloway - 2026 - Notes on balanced quivers.pdf"
+    pdf = fake_pdf(tmp_path / "src" / name, NOTES)
+    quilts = {}
+    for route in ("cli", "intake", "adopted"):
+        (tmp_path / route).mkdir()
+        quilts[route] = demo(tmp_path / route)
+    ok("library", "add", str(pdf), "--as", WHO, cwd=quilts["cli"])
+    (row,) = taken(quilts["intake"], dropped(quilts["intake"], name, NOTES, tmp_path / "drop"))
+    c = quilts["adopted"]
+    sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    home = c / STORAGE / "file" / sha[:16]
+    home.mkdir(parents=True)
+    (home / "paper.pdf").write_bytes(pdf.read_bytes())
+    record_copy(c, sha, name, home)
+    ok("library", "update", "--only", "gather", cwd=c)
+    keys = {
+        route: {k for k, e in bib(q).items() if e.fields.get("title") == "Notes on balanced quivers"}
+        for route, q in quilts.items()
+    }
+    assert (
+        keys == {route: {"hallowayNotesBalancedQuivers2026"} for route in quilts}
+        and row.citekey == "hallowayNotesBalancedQuivers2026"
+    )
+
+    def doi_org(url: str, headers: dict[str, str]) -> bytes:
+        return json.dumps(
+            {
+                "title": "Median orders on weighted digraphs",
+                "author": [{"family": "Bellamy", "given": "Rosalind"}],
+                "issued": {"date-parts": [[2019]]},
+                "DOI": "10.4171/x.19",
+            }
+        ).encode()
+
+    for route in ("pasted", "dropped"):
+        (tmp_path / route).mkdir()
+    pasted, dropped_ = demo(tmp_path / "pasted"), demo(tmp_path / "dropped")
+    (by_text,) = take(load_quilt(pasted), bib(pasted), [Item(text="10.4171/x.19")], by=WHO, online=True, http=doi_org)
+    page = "Median orders on weighted digraphs\nRosalind Bellamy\ndoi:10.4171/x.19\n"
+    (by_pdf,) = take(
+        load_quilt(dropped_),
+        bib(dropped_),
+        [Item(path=fake_pdf(tmp_path / "src" / "median.pdf", page))],
+        by=WHO,
+        online=True,
+        http=doi_org,
+    )
+    assert by_text.citekey == by_pdf.citekey == "bellamyMedianOrdersWeighted2019"
+
+
+def test_an_undo_never_writes_over_or_removes_a_document_it_did_not_put_there(tmp_path: Path) -> None:
+    """The integrator's review, finding 1: P1 dropped on a work and unfiled, P2 dropped on it, then P1's undo wrote P1 over P2, and P2's undo removed P1 in turn; both PDFs were gone. Now the first undo is refused with nothing touched, and in the other order both come back."""
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    first = dropped(q, "first.pdf", "Some scanned pages\nthe first scan\n", tmp_path / "1")
+    (one,) = taken(q, Item(drop=first.drop, name=first.name, work="Man12"))
+    unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    second = dropped(q, "second.pdf", "Some scanned pages\na better scan\n", tmp_path / "2")
+    (two,) = taken(q, Item(drop=second.drop, name=second.name, work="Man12"))
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="holds another document now") as caught:
+        undo(scan(load_quilt(q)), one.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == held
+    undo(scan(load_quilt(q)), two.id, by=WHO)
+    undo(scan(load_quilt(q)), one.id, by=WHO)
+    paper = work_home(q, "Man12") / "paper.pdf"
+    assert sha256_of(paper) == one.id
+
+
+def test_an_undo_refuses_when_the_document_it_added_is_no_longer_there(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "notes.pdf"))
+    paper = work_home(q, row.citekey) / "paper.pdf"
+    paper.write_bytes(fake_pdf(tmp_path / "other.pdf", "Another document\n").read_bytes())
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="no longer holds the document this drop added") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == held
+
+
+def test_an_undo_names_its_act_so_a_second_click_undoes_nothing_more(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    item = dropped(q, "schedule.pdf", "Department of Mathematics\nSeminar schedule\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Man12"))
+    off = unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    assert row.act and off["act"] and off["act"] != row.act
+    undo(scan(load_quilt(q)), row.id, by=WHO, act=off["act"])
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="undone already") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO, act=off["act"])
+    assert caught.value.code == "not-last" and tree(q) == held
+
+
+def test_a_record_of_an_act_that_names_a_place_outside_the_store_is_not_acted_on(tmp_path: Path) -> None:
+    """A drop travels with a quilt copied as a folder, so its record is checked before an undo reads or writes anything for it."""
+    import json
+
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "notes.pdf"))
+    record = q / INCOMING / row.id / "act.json"
+    acts = json.loads(record.read_text())
+    acts["acts"][-1]["home"] = ".loom/digests/storage/../../../drafting"
+    record.write_text(json.dumps(acts))
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="cannot be trusted") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "untrusted" and tree(q) == held
+
+
+def test_a_work_that_came_in_with_its_pdf_is_never_unfiled_even_when_gathering_adopted_it(tmp_path: Path) -> None:
+    """The integrator's review, finding 2, its first step: a work adopted from a PDF in the store was unfiled, and another PDF dropped on it then sat in the first one's place."""
+    import hashlib
+
+    from loom.paths import STORAGE
+    from loom.refs.scan import record_copy
+    from tests.helpers import ok
+
+    q = demo(tmp_path)
+    pdf = fake_pdf(tmp_path / "src" / "Holm - 2020 - Knots in lens spaces.pdf", "Knots in lens spaces\nGreta Holm\n")
+    sha = hashlib.sha256(pdf.read_bytes()).hexdigest()
+    home = q / STORAGE / "file" / sha[:16]
+    home.mkdir(parents=True)
+    (home / "paper.pdf").write_bytes(pdf.read_bytes())
+    record_copy(q, sha, pdf.name, home)
+    ok("library", "update", "--only", "gather", cwd=q)
+    held = tree(q)
+    with pytest.raises(IntakeRefused, match="came in with this PDF") as caught:
+        unfile(scan(load_quilt(q)), "holmKnotsLensSpaces2020", by=WHO)
+    assert caught.value.code == "own-document" and tree(q) == held
+
+
+def test_a_new_work_never_takes_a_place_another_works_pdf_holds(tmp_path: Path) -> None:
+    """The integrator's review, finding 2: A's own place in the store held B, filed there for the work A came in with, and taking A as a work of its own wrote A over B. Now A gets a place, and an identity, of its own."""
+    from loom.refs.identity import identify
+    from loom.refs.pages import sha256_of
+    from tests.helpers import ok
+
+    q = demo(tmp_path)
+    a = fake_pdf(tmp_path / "a" / "lens.pdf", "Knots in lens spaces\nGreta Holm\nthe first scan\n")
+    b = fake_pdf(tmp_path / "b" / "lens.pdf", "Knots in lens spaces\nGreta Holm\na better scan\n")
+    (first,) = taken(q, Item(path=a))
+    ok("library", "ignore", first.citekey, "--why", "a poor scan", "--as", WHO, cwd=q)
+    (better,) = taken(q, Item(path=b, work=first.citekey, on_word=True))
+    assert better.replaced and sha256_of(work_home(q, first.citekey) / "paper.pdf") == sha256_of(b)
+    (again,) = taken(q, Item(path=a, new=True))
+    assert again.state == "added" and again.citekey != first.citekey
+    assert sha256_of(work_home(q, first.citekey) / "paper.pdf") == sha256_of(b)
+    assert sha256_of(work_home(q, again.citekey) / "paper.pdf") == sha256_of(a)
+    entries = bib(q)
+    assert entries[again.citekey].fields["loom-file"] == entries[first.citekey].fields["loom-file"] + "-2"
+    assert identify(entries[again.citekey])[0] != identify(entries[first.citekey])[0]
+
+
+def test_two_takes_of_one_file_at_once_add_it_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The integrator's review, finding 3: two adds of the same bytes at once each found them not held, outside the lock, and made two works on one home."""
+    import shutil
+    import threading
+
+    import loom.refs.add as add
+
+    q = demo(tmp_path)
+    one = fake_pdf(tmp_path / "a" / "twice.pdf", "Sheaves on exotic manifolds\nZelda Quist\n")
+    two = tmp_path / "b" / "twice-copy.pdf"
+    two.parent.mkdir()
+    shutil.copy(one, two)
+    meet = threading.Barrier(2)
+    real = add.identify
+
+    def slow(*args: object, **kwargs: object) -> add.Seen:
+        seen = real(*args, **kwargs)  # type: ignore[arg-type]
+        try:
+            meet.wait(timeout=2)  # both are past the check together, unless the lock keeps one out
+        except threading.BrokenBarrierError:
+            pass
+        return seen
+
+    monkeypatch.setattr(add, "identify", slow)
+    rows: list[Row] = []
+    threads = [threading.Thread(target=lambda p=p: rows.extend(taken(q, Item(path=p)))) for p in (one, two)]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    assert sorted(r.state for r in rows) == ["added", "here"], rows
+    assert [k for k, e in bib(q).items() if e.fields.get("title") == "Sheaves on exotic manifolds"] == [
+        rows[0].citekey or rows[1].citekey
+    ]
+
+
+def test_two_versions_filed_from_two_old_scans_take_two_keys(tmp_path: Path) -> None:
+    """The integrator's review, finding 3: two adds `--for` one work, each with the bibliography it read before the other wrote, both took `-v2`."""
+    q = demo(tmp_path)
+    first, second = bib(q), bib(q)
+    a = fake_pdf(
+        tmp_path / "a" / "x.pdf", "Fixed loci of involutions on separated spaces\nImogen Calloway\npreprint\n\f2"
+    )
+    b = fake_pdf(
+        tmp_path / "b" / "y.pdf", "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides\n\f2\f3"
+    )
+    (one,) = take(load_quilt(q), first, [Item(path=a, work="Calloway14", on_word=True)], by=WHO)
+    (two,) = take(load_quilt(q), second, [Item(path=b, work="Calloway14", on_word=True)], by=WHO)
+    assert (one.sibling, two.sibling) == ("Calloway14-v2", "Calloway14-v3")
+    assert (q / BIB).read_text().count("@misc{Calloway14-v2,") + (q / BIB).read_text().count(
+        "@article{Calloway14-v2,"
+    ) == 1
+
+
+def test_gathering_while_a_file_is_taken_in_adopts_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The integrator's review, finding 3: gathering in another process, while an add read a long book's pages, adopted the stored PDF as an orphan under another key; after the add's undo that entry named a home that was gone."""
+    import threading
+    import time
+
+    import loom.refs.scan as rs
+    from loom.refs.scan import scan_bibliography
+
+    q = demo(tmp_path)
+    reading = threading.Event()
+    real = rs.write_map
+
+    def slow(*args: object, **kwargs: object) -> object:
+        reading.set()
+        time.sleep(1.5)  # a long book
+        return real(*args, **kwargs)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(rs, "write_map", slow)
+    scanned = scan(load_quilt(q))  # gathering's own scan, taken before, so that it acts inside the window
+    rows: list[Row] = []
+    adder = threading.Thread(
+        target=lambda: rows.extend(
+            taken(
+                q,
+                Item(path=fake_pdf(tmp_path / "src" / "book.pdf", "Lectures on braided categories\nQuentin Ostrava\n")),
+            )
+        )
+    )
+    adder.start()
+    assert reading.wait(timeout=60)
+    scan_bibliography(load_quilt(q), result=scanned)
+    adder.join()
+    named = [
+        k
+        for k, e in bib(q).items()
+        if "braided" in e.fields.get("title", "").lower() or "book" in e.fields.get("loom-source", "")
+    ]
+    assert named == [rows[0].citekey], named
+    undo(scan(load_quilt(q)), rows[0].id, by=WHO)
+    from loom.refs.fetch import work_dir
+
+    assert all(work_dir(q, e).is_dir() for e in bib(q).values() if e.fields.get("loom-file"))
+
+
+def test_an_identifier_a_page_cites_never_becomes_the_pdfs_own(tmp_path: Path) -> None:
+    """The integrator's review, finding 4: a note whose abstract opened on "a question raised in arXiv:…" took that paper's arXiv id, year and home as its own."""
+    from loom.refs.fetch import work_dir
+    from loom.refs.identity import identify
+
+    q = demo(tmp_path)
+    page = (
+        "Acyclic orientations and cycle bases\nTomas Lind\nDepartment of Mathematics, Invented University\nAbstract\n"
+        "We answer a question raised in arXiv:0805.2065 about\nthe cycle space of a quiver.\n"
+    )
+    (row,) = taken(q, dropped(q, "lind.pdf", page, tmp_path))
+    assert row.state == "added", row
+    entry = bib(q)[row.citekey]
+    assert "eprint" not in entry.fields and work_dir(q, entry).parent.name == "file"
+    assert identify(entry) != identify(bib(q)["Man12"])
+
+
+def test_a_work_of_its_own_never_takes_an_identifier_another_work_states(tmp_path: Path) -> None:
+    """A PDF said to be a work of its own is not given the identity of a work it shows, which it can only have cited."""
+    from loom.refs.identity import identify
+
+    q = demo(tmp_path)
+    page = "A remark on virtual pull-backs\nby Hugo Ness\narXiv:0805.2065\nWe point out a gap.\n"
+    (asked,) = taken(q, dropped(q, "reply.pdf", page, tmp_path))
+    assert asked.state == "question" and [c["citekey"] for c in asked.candidates] == ["Man12"]
+    row = answer(load_quilt(q), bib(q), asked.question, None, by=WHO)
+    entry = bib(q)[row.citekey]
+    assert "eprint" not in entry.fields and identify(entry) != identify(bib(q)["Man12"])
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "Erratum to doi:10.4171/showcase/19-2",
+        "Comment on arXiv:0805.2065",
+        "Reply to the comment on arXiv:0805.2065",
+        "Corrigendum to arXiv:0805.2065",
+    ],
+)
+def test_an_identifier_after_erratum_to_or_comment_on_is_the_answered_works(head: str) -> None:
+    from loom.refs.ingest import own_identifiers
+
+    page = f"{head}\nErratum: Median orders on weighted digraphs\nRosalind Bellamy\nWe correct Lemma 3.\n"
+    assert own_identifiers(page)[:2] == (set(), set())
+
+
+@pytest.mark.parametrize(
+    ("head", "doi"),
+    [
+        (
+            "The Review of Symbolic Logic, Volume 12, Number 3, doi:10.1017/S1755020319000182",
+            "10.1017/s1755020319000182",
+        ),
+        ("Review of Economic Studies (2020) 87, 1-30 doi:10.1093/restud/rdz001", "10.1093/restud/rdz001"),
+        ("Supplement to the Annals of Statistics doi:10.1214/19-AOS1234SUPP", "10.1214/19-aos1234supp"),
+    ],
+)
+def test_a_journals_line_that_names_a_review_or_a_supplement_keeps_the_papers_own_doi(head: str, doi: str) -> None:
+    """The third review's finding 5: the answered-work rule read "Review of" and "Supplement to" anywhere on a line, and so took the paper's own DOI off a journal's line. It reads only the words that begin a line, and neither of those."""
+    from loom.refs.ingest import own_identifiers
+
+    assert own_identifiers(f"{head}\nModal logics of finite frames\nAnna Smith\nAbstract. We study.\n")[0] == {doi}
+
+
+def test_an_erratum_dropped_on_the_work_it_corrects_is_kept_beside_it(tmp_path: Path) -> None:
+    """The re-check's finding 6: "Erratum to doi:…" at the head was read as the erratum's own DOI, so dropped on the work it corrects, or added for it, the erratum was taken for a copy of that work's document and thrown away."""
+    from loom.refs.pages import sha256_of
+    from tests.unit._quilts import showcase
+
+    page = "Erratum to doi:10.4171/showcase/19-2\nErratum: Median orders on weighted digraphs\nRosalind Bellamy\nWe correct Lemma 3.\n"
+    for how in ("dropped", "for"):
+        q = showcase(tmp_path / how)
+        item = dropped(q, "erratum.pdf", page, tmp_path / how)
+        sha = sha256_of(tmp_path / how / "src" / "erratum.pdf")
+        if how == "dropped":
+            (row,) = taken(q, Item(drop=item.drop, work="Bellamy19"))
+        else:
+            (row,) = taken(q, Item(path=tmp_path / how / "src" / "erratum.pdf", work="Bellamy19", on_word=True))
+        assert row.state == "added" and row.under == "Bellamy19" and row.sibling, row
+        assert sha256_of(work_home(q, row.filed_as) / "paper.pdf") == sha
+
+
+def test_the_published_version_dropped_on_its_work_is_filed_and_not_taken_for_a_copy(tmp_path: Path) -> None:
+    """The integrator's review, finding 5: a published version printing its own DOI at its head and its preprint's arXiv id at its foot was judged a copy of the preprint and thrown away."""
+    from tests.unit._quilts import showcase
+
+    q = showcase(tmp_path)
+    page = (
+        "J. Invented Combin. 12 (2024) 1-30\ndoi:10.9999/jic.2024.12\nCycle spaces of finite quivers\nElspeth Arden\n"
+        "Abstract. A published text, revised after review.\nPreprint: arXiv:2504.01234v1\n"
+    )
+    (row,) = taken(q, Item(drop=dropped(q, "published.pdf", page, tmp_path).drop, work="Arden24"))
+    assert row.state == "added" and row.under == "Arden24" and row.sibling, row
+
+
+def test_a_survey_listing_identifiers_at_its_foot_states_none_of_them_as_its_own() -> None:
+    from loom.refs.ingest import own_identifiers
+
+    page = "A survey of quivers\nLena Field\nBody text.\narXiv:2504.01234\narXiv:0805.2065\ndoi:10.4171/x.1\ndoi:10.4171/x.2\n"
+    assert own_identifiers(page) == (set(), set(), set())
+
+
+def test_a_command_line_add_of_bytes_a_viewers_drop_holds_takes_that_drop(tmp_path: Path) -> None:
+    """The integrator's review, finding 6: an add from the command line of bytes waiting in a drop wrote its act into that drop and took its question away, and the drop then waited for good as a row with no name."""
+    import shutil
+
+    q = demo(tmp_path)
+    page = "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides of a talk\n"
+    item = dropped(q, "talk.pdf", page, tmp_path)
+    (asked,) = taken(q, item)
+    assert asked.state == "question"
+    library = {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")}
+    copy = tmp_path / "elsewhere" / "talk copy.pdf"
+    copy.parent.mkdir()
+    shutil.copy(next((q / INCOMING / item.drop).glob("*.pdf")), copy)
+    (added,) = taken(q, Item(path=copy, new=True))
+    assert added.state == "added" and added.id == item.drop and waiting(q) == []
+    (again,) = taken(q, Item(drop=item.drop))
+    assert again.state == "here" and waiting(q) == []
+    undo(scan(load_quilt(q)), item.drop, by=WHO)
+    # the viewer's drop waits again as it was received, and the library is as before the add
+    assert [(r["id"], r["state"], r["name"]) for r in waiting(q)] == [(item.drop, "received", "talk.pdf")]
+    assert {k: v for k, v in tree(q).items() if not k.startswith(f"{INCOMING}/")} == library
+
+
+def test_a_dropped_file_is_read_under_the_name_it_came_with(tmp_path: Path) -> None:
+    """The integrator's review, finding 7: a reference manager's name dropped in the viewer was read under the name loom stored it as, and its title lost its apostrophe; one that holds a colon, which no stored name keeps, lost that too."""
+    q = demo(tmp_path)
+    name = "Grothendieck - 1957 - Sur quelques points d'algèbre homologique: I.pdf"
+    (row,) = taken(q, dropped(q, name, "Some scanned pages\n", tmp_path))
+    entry = bib(q)[row.citekey]
+    assert entry.fields["title"] == "Sur quelques points d'algèbre homologique: I", entry.fields
+    assert (entry.fields["author"], entry.fields["year"]) == ("Grothendieck", "1957")
+
+
+def test_what_waits_is_listed_while_receives_come_and_go(tmp_path: Path) -> None:
+    """The integrator's review, finding 8: listing what waits looked at every file of the folder, a receive's `.part` among them, which can be gone by the time it is looked at; the manifest's build then failed."""
+    q = demo(tmp_path)
+    item = dropped(q, "notes.pdf")
+    (q / INCOMING / ".gone.part").symlink_to(q / INCOMING / "nothing-there")
+    assert [r["id"] for r in waiting(q)] == [item.drop]
+
+
+def test_an_empty_upload_is_no_pdf_and_a_full_disk_keeps_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import shutil
+    from collections import namedtuple
+
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    with pytest.raises(IntakeRefused, match="empty, which is no PDF") as caught:
+        receive(q, "empty.pdf", io.BytesIO(b""), 0)
+    assert caught.value.code == "not-a-pdf"
+    usage = namedtuple("usage", "total used free")
+    monkeypatch.setattr(intake.shutil, "disk_usage", lambda _: usage(1, 1, 1000))
+    data = fake_pdf(tmp_path / "src" / "big.pdf", NOTES).read_bytes()
+    with pytest.raises(IntakeRefused, match="has not that much to spare") as caught:
+        receive(q, "big.pdf", io.BytesIO(data), len(data))
+    assert caught.value.code == "no-space" and caught.value.status == 507
+    assert not any(p.is_file() for p in (q / INCOMING).rglob("*"))
+    monkeypatch.setattr(intake.shutil, "disk_usage", shutil.disk_usage)
+
+
+def test_an_unfile_undone_answers_no_row_since_nothing_waits(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    item = dropped(q, "schedule.pdf", "Department of Mathematics\nSeminar schedule\n", tmp_path)
+    (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Man12"))
+    unfile(scan(load_quilt(q)), "Man12", by=WHO)
+    said, again = undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert said == "filed it again under Man12" and again is None and waiting(q) == []
+
+
+def test_an_answer_naming_a_work_since_removed_is_refused(tmp_path: Path) -> None:
+    """The integrator's review, finding 9: answering with a candidate taken out of the bibliography meanwhile was a KeyError, a 500 over the wire."""
+    from loom.refs.added import _block
+
+    q = demo(tmp_path)
+    page = "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides of a talk\n"
+    (asked,) = taken(q, dropped(q, "talk.pdf", page, tmp_path))
+    text = (q / BIB).read_text(encoding="utf-8")
+    where = _block(text, "Calloway14")
+    assert where is not None
+    (q / BIB).write_text(text[: where[0]] + text[where[1] :], encoding="utf-8")
+    with pytest.raises(IntakeRefused, match="no work Calloway14") as caught:
+        answer(load_quilt(q), bib(q), asked.question, "Calloway14", by=WHO)
+    assert caught.value.code == "no-such-work" and caught.value.status == 404
+
+
+def _sound(q: Path) -> None:
+    """No damage, whatever order acts and undos came in: every record of a copy points at a PDF holding those bytes, each drop's last act is what the store holds, and no two entries loom wrote name one place."""
+    import json
+
+    from loom.refs.fetch import work_dir
+    from loom.refs.pages import sha256_of, storage_root
+
+    ledger_path = storage_root(q) / "copied.json"
+    ledger = json.loads(ledger_path.read_text()) if ledger_path.is_file() else {}
+    for sha, rec in ledger.items():
+        if not rec.get("duplicate-of") and str(rec.get("from", "")).lower().endswith(".pdf"):
+            paper = storage_root(q) / rec["to"] / "paper.pdf"
+            assert paper.is_file() and sha256_of(paper) == sha, (sha[:12], rec)
+    base = q / INCOMING
+    for d in base.iterdir() if base.is_dir() else []:
+        acts = _acts(d)
+        if not acts or not acts[-1].get("home"):
+            continue
+        last = acts[-1]
+        if last["kind"] == "added":
+            paper = q / last["home"] / "paper.pdf"
+            assert paper.is_file() and sha256_of(paper) == last["sha"], (d.name[:12], last["citekey"])
+        else:
+            assert (d / last["name"]).is_file() and sha256_of(d / last["name"]) == d.name, d.name[:12]
+    homes: dict[Path, str] = {}
+    for key, entry in bib(q).items():
+        if entry.fields.get("loom-file"):
+            home = work_dir(q, entry)
+            assert home not in homes, (key, homes.get(home))
+            homes[home] = key
+
+
+@pytest.mark.parametrize("seed", [20261117, 5, 23])
+def test_drops_unfiles_retakes_undos_in_any_order_and_acts_at_once_never_lose_a_document(
+    tmp_path: Path, seed: int
+) -> None:
+    """The integrator's review asked for the sequences that lost two PDFs, and the races, among the random test's acts: a drop on a work after its PDF was unfiled, a waiting drop taken as a work of its own, undos in any order, and two acts at once. A refused act changes nothing."""
+    import shutil
+    import threading
+
+    from loom.refs.scan import scan_bibliography
+
+    q = demo(tmp_path)
+    rng = random.Random(seed)
+    pool = [
+        "Some scanned pages\nthe first scan\n",
+        "Some scanned pages\na better scan\n",
+        "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides\n",
+        "On the rank of widgets\nW. Smith\n",
+        "Department of Mathematics\nSchedule\n",
+    ]
+    drops: list[str] = []
+    for step in range(30):
+        roll = rng.random()
+        before = tree(q)
+        try:
+            if roll < 0.3:
+                item = dropped(q, f"drop {step}.pdf", rng.choice(pool), tmp_path / str(step))
+                drops.append(item.drop)
+                work = rng.choice([None, None, "Man12", "Har77"])
+                (row,) = taken(q, Item(drop=item.drop, name=item.name, work=work or ""))
+                if row.state == "question":
+                    answer(
+                        load_quilt(q), bib(q), row.question, rng.choice([None, row.candidates[0]["citekey"]]), by=WHO
+                    )
+            elif roll < 0.45:
+                held = [k for k, e in bib(q).items() if (work_home(q, k) / "paper.pdf").is_file()]
+                if held:
+                    unfile(scan(load_quilt(q)), rng.choice(held), by=WHO)
+            elif roll < 0.6:
+                waits = [r for r in waiting(q) if r["state"] == "received"]
+                if waits:
+                    pick = rng.choice(waits)
+                    choice = rng.choice(["new", "Man12", "Har77", ""])
+                    item = Item(drop=pick["id"], new=choice == "new", work=choice if choice not in ("new", "") else "")
+                    (row,) = taken(q, item)
+                    if row.state == "question":
+                        answer(load_quilt(q), bib(q), row.question, None, by=WHO)
+            elif roll < 0.85:
+                standing = [d for d in drops if (q / INCOMING / d).is_dir()]
+                if standing:
+                    undo(scan(load_quilt(q)), rng.choice(standing), by=WHO)
+            elif roll < 0.93:
+                # the same bytes taken from two places at once
+                one = fake_pdf(
+                    tmp_path / f"twin{step}" / f"twin {step}.pdf", f"Twins taken at step {step}\nA. Writer\n"
+                )
+                two = tmp_path / f"twin{step}" / "b" / f"twin {step} copy.pdf"
+                two.parent.mkdir()
+                shutil.copy(one, two)
+                rows: list[Row] = []
+                threads = [
+                    threading.Thread(target=lambda p=p, into=rows: into.extend(taken(q, Item(path=p))))
+                    for p in (one, two)
+                ]
+                for th in threads:
+                    th.start()
+                for th in threads:
+                    th.join()
+                assert sorted(r.state for r in rows) == ["added", "here"], rows
+                drops.append(rows[0].id)
+            else:
+                # gathering while a file is taken in
+                item = dropped(
+                    q, f"gather {step}.pdf", f"Gathered while taken {step}\nB. Writer\n", tmp_path / str(step)
+                )
+                drops.append(item.drop)
+                adder = threading.Thread(target=lambda i=item: taken(q, i))
+                adder.start()
+                scan_bibliography(load_quilt(q))
+                adder.join()
+        except IntakeRefused as refused:
+            assert tree(q) == before, f"step {step}: refused with {refused.code} and still changed the quilt"
+        _sound(q)
+
+
+#: Algebraic Geometry, the demo's Har77, as two different scans would set its first page: one title over one byline on one page each, different bytes.
+HARTSHORNE = (
+    "Algebraic Geometry\nRobin Hartshorne\nthe first scan\n",
+    "Algebraic Geometry\nRobin Hartshorne\na later scan\n",
+)
+
+
+def _heads(q: Path) -> list[str]:
+    import re
+
+    return re.findall(r"^@\w+\{([^,\s]+),", (q / BIB).read_text(encoding="utf-8"), re.M)
+
+
+def _versioned(q: Path, tmp: Path, *pages: str) -> list[Row]:
+    """Each page dropped on Har77 in turn: the first goes to Har77's place, each other beside it as a version."""
+    rows = []
+    for n, page in enumerate(pages):
+        item = dropped(q, f"har {n}.pdf", page, tmp / f"h{n}")
+        (row,) = taken(q, Item(drop=item.drop, name=item.name, work="Har77"))
+        assert row.state == "added", row
+        rows.append(row)
+    return rows
+
+
+def test_an_unfile_undone_after_the_bibliography_moved_puts_its_entry_back_whole(tmp_path: Path) -> None:
+    """The re-check's finding 1: an unfile's undo wrote the version's entry back at the offset it had stood at, which an earlier entry's undo had moved, so it landed inside another entry; that entry then named the version's PDF and the version's own was named by nothing."""
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    (first,) = taken(q, dropped(q, "ab.pdf", "Ab\nAl Bo\nshort\n", tmp_path / "a"))
+    (_v1, v2) = _versioned(q, tmp_path, HARTSHORNE[0], HARTSHORNE[1] + "\fa second page")
+    long_title = "A Considerably Longer Title About Categorified Combinatorial Structures"
+    (third,) = taken(q, dropped(q, "c.pdf", f"{long_title}\nCecilia Montgomery\nBody.\n", tmp_path / "c"))
+    v2_sha = sha256_of(work_home(q, v2.filed_as) / "paper.pdf")
+    off = unfile(scan(load_quilt(q)), v2.filed_as, by=WHO)
+    undo(scan(load_quilt(q)), first.id, by=WHO)
+    undo(scan(load_quilt(q)), off["incoming"], by=WHO, act=off["act"])
+    heads = _heads(q)
+    entries = bib(q)
+    assert len(heads) == len(set(heads)) == len(entries), heads
+    assert entries[third.citekey].fields["title"].startswith("A Considerably Longer"), entries[third.citekey].fields
+    assert sha256_of(work_home(q, v2.filed_as) / "paper.pdf") == v2_sha
+    assert all("@" not in str(v) for e in entries.values() for v in e.fields.values())
+
+
+def test_an_unfile_is_not_undone_onto_a_key_taken_since(tmp_path: Path) -> None:
+    """The re-check's finding 2: a version unfiled, another filed under the same version key, and the unfile undone gave two entries one key; the next undo then took out the wrong one and left a PDF named by nothing."""
+    q = demo(tmp_path)
+    (_v1, v2) = _versioned(q, tmp_path, HARTSHORNE[0], HARTSHORNE[1])
+    off = unfile(scan(load_quilt(q)), v2.filed_as, by=WHO)
+    (_again,) = _versioned(q, tmp_path / "w", "Algebraic Geometry\nRobin Hartshorne\na third scan\n\fa page")
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="is another entry's key now") as caught:
+        undo(scan(load_quilt(q)), off["incoming"], by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+    assert _heads(q).count(v2.filed_as) == 1
+
+
+def test_a_pasted_work_with_a_document_filed_under_it_is_not_undone(tmp_path: Path) -> None:
+    """The re-check's finding 3: a pasted entry, a PDF dropped on it, the paste undone: the PDF was left under no entry, and once gathering adopted it, undoing the drop deleted it."""
+    q = demo(tmp_path)
+    (pasted,) = taken(q, Item(text="@article{pasted, title={A Pasted Paper}, author={Paste, Pat}, year={2021}}"))
+    item = dropped(q, "pasted.pdf", "A Pasted Paper\nPat Paste\nBody.\n", tmp_path)
+    (filed,) = taken(q, Item(drop=item.drop, name=item.name, work="pasted"))
+    assert (filed.state, filed.under) == ("added", "pasted"), filed
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="holds a document filed under it since") as caught:
+        undo(scan(load_quilt(q)), pasted.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+    assert (work_home(q, "pasted") / "paper.pdf").is_file()
+
+
+@pytest.mark.parametrize("edit", ["rename", "retitle"])
+def test_an_entry_corrected_by_hand_is_not_undone(tmp_path: Path, edit: str) -> None:
+    """The re-check's finding 4: a key corrected by hand, then the drop undone: the PDF was deleted and the corrected entry left naming an empty place. An undo finds its entry by the text it wrote, and refuses when that has changed."""
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path))
+    text = (q / BIB).read_text(encoding="utf-8")
+    if edit == "rename":
+        text = text.replace("{" + row.citekey + ",", "{nils2026spiders,")
+    else:
+        text = text.replace("title = {Homotopy types of spiders}", "title = {Homotopy Types of Spiders}")
+    assert text != (q / BIB).read_text(encoding="utf-8")
+    (q / BIB).write_text(text, encoding="utf-8")
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="changed by hand or taken out since") as caught:
+        undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+
+
+def test_a_lookalike_dropped_on_its_work_is_kept_as_a_version(tmp_path: Path) -> None:
+    """The re-check's finding 5: a PDF with the stored one's title, byline and page count and other bytes was taken for a copy and thrown away. Only these very bytes are already here."""
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    (first, second) = _versioned(q, tmp_path, *HARTSHORNE)
+    assert (second.under, second.sibling) == ("Har77", "Har77-v2"), second
+    shas = {sha256_of(work_home(q, k) / "paper.pdf") for k in ("Har77", "Har77-v2")}
+    assert shas == {sha256_of(tmp_path / f"h{n}" / "src" / f"har {n}.pdf") for n in (0, 1)}
+    (again,) = taken(q, dropped(q, "har once more.pdf", HARTSHORNE[0], tmp_path / "again"))
+    assert (again.state, again.citekey, again.why) == ("here", "Har77", "these very bytes are Har77's"), again
+
+
+@pytest.mark.parametrize("clone", ["without the pdf", "without the place"])
+def test_a_version_is_never_filed_where_another_entry_names(tmp_path: Path, clone: str) -> None:
+    """The re-check's finding 7: a clone holds the bibliography and not the store; the PDF of the showcase's second version of Arden24, added for Bellamy19, was filed at the place that version's entry names, and both entries named it. A clone has no store directory at all, so the place is empty, not merely missing its PDF."""
+    import shutil
+
+    from loom.refs.pages import sha256_of
+    from tests.unit._quilts import showcase
+
+    q = showcase(tmp_path)
+    place = q / ".loom/digests/storage/file/e43d5afaac8f10f0"
+    naming = sorted(k for k, e in bib(q).items() if e.fields.get("loom-file") == "file/e43d5afaac8f10f0")
+    assert len(naming) == 1, naming
+    pdf = tmp_path / "second version.pdf"
+    shutil.copy(place / "paper.pdf", pdf)
+    if clone == "without the place":
+        shutil.rmtree(place)
+    else:
+        (place / "paper.pdf").unlink()
+    (row,) = taken(q, Item(path=pdf, work="Bellamy19", on_word=True))
+    assert row.state == "added" and row.sibling, row
+    assert sorted(k for k, e in bib(q).items() if e.fields.get("loom-file") == "file/e43d5afaac8f10f0") == naming
+    assert sha256_of(work_home(q, row.filed_as) / "paper.pdf") == sha256_of(pdf)
+
+
+def test_no_lock_is_held_while_the_network_is_asked(tmp_path: Path) -> None:
+    """The re-check's finding 8: a lookup ran inside the library's lock, so one silent service held every other write; a drop received meanwhile waited two minutes and was lost. Every lookup is asked first, holding no lock, and a receive waits on none."""
+    import threading
+
+    from loom.locks import locked
+    from loom.paths import LIBRARY_LOCK
+    from loom.refs.resolve import ResolveRefused
+
+    q = demo(tmp_path)
+    asked, release = threading.Event(), threading.Event()
+
+    def silent(url: str, headers: dict[str, str]) -> bytes:
+        asked.set()
+        release.wait(30)
+        raise ResolveRefused(f"{url}: no answer")
+
+    got: list[Row] = []
+    lookup = threading.Thread(
+        target=lambda: got.extend(
+            take(load_quilt(q), bib(q), [Item(text="10.5555/silent")], by=WHO, online=True, http=silent)
+        )
+    )
+    lookup.start()
+    try:
+        assert asked.wait(30)
+        with locked(q / LIBRARY_LOCK, wait=2):
+            pass
+    finally:
+        release.set()
+        lookup.join(30)
+    assert [(r.state, r.code) for r in got] == [("cannot", "unreachable")], got
+    # a receive takes no lock: one held by another writer for as long as it likes costs it nothing
+    holding, done = threading.Event(), threading.Event()
+
+    def hold() -> None:
+        with locked(q / LIBRARY_LOCK):
+            holding.set()
+            done.wait(30)
+
+    holder = threading.Thread(target=hold)
+    holder.start()
+    try:
+        assert holding.wait(30)
+        kept: list[Item] = []
+        receiving = threading.Thread(target=lambda: kept.append(dropped(q, "meanwhile.pdf", NOTES, tmp_path)))
+        receiving.start()
+        receiving.join(5)
+        assert not receiving.is_alive() and kept, "a receive waited on the library's lock"
+    finally:
+        done.set()
+        holder.join(30)
+    assert [r["id"] for r in waiting(q)] == [kept[0].drop]
+
+
+def test_an_answer_asks_the_network_before_it_takes_the_lock(tmp_path: Path) -> None:
+    import threading
+
+    from loom.locks import locked
+    from loom.paths import LIBRARY_LOCK
+    from loom.refs.resolve import ResolveRefused
+
+    q = demo(tmp_path)
+    page = "doi:10.5555/own.1\nFixed loci of involutions on separated spaces\nImogen Calloway\nslides\n"
+    (asked_row,) = taken(q, dropped(q, "talk.pdf", page, tmp_path))
+    assert asked_row.state == "question", asked_row
+    asked, release = threading.Event(), threading.Event()
+
+    def silent(url: str, headers: dict[str, str]) -> bytes:
+        asked.set()
+        release.wait(30)
+        raise ResolveRefused(f"{url}: no answer")
+
+    got: list[Row] = []
+    answering = threading.Thread(
+        target=lambda: got.append(
+            answer(load_quilt(q), bib(q), asked_row.question, None, by=WHO, online=True, http=silent)
+        )
+    )
+    answering.start()
+    try:
+        assert asked.wait(30)
+        with locked(q / LIBRARY_LOCK, wait=2):
+            pass
+    finally:
+        release.set()
+        answering.join(30)
+    assert got and got[0].state == "added", got
+
+
+def test_an_add_that_crashed_is_taken_again_into_the_place_it_left(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The re-check's finding 9: an add that stopped after the store was written stored the same bytes a second time when retried, at `file/<hash>-2`, its identity `work:<hash8>-2`, and the first copy was never named. A place holding these very bytes is this document's place."""
+    import loom.refs.scan as rscan
+    from loom.refs.identity import identify
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    item = dropped(q, "crash.pdf", "Crashes of persistent heaps\nUna Vik\nBody.\n", tmp_path)
+    real = rscan.append_entries
+
+    def crash(*_: object, **__: object) -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(rscan, "append_entries", crash)
+    with pytest.raises(KeyboardInterrupt):
+        taken(q, item)
+    monkeypatch.setattr(rscan, "append_entries", real)
+    sha = item.drop
+    again = dropped(q, "crash.pdf", "Crashes of persistent heaps\nUna Vik\nBody.\n", tmp_path)
+    assert again.drop == sha
+    (row,) = taken(q, again)
+    entry = bib(q)[row.citekey]
+    assert entry.fields["loom-file"] == f"file/{sha[:16]}" and str(identify(entry)[0]) == f"work:{sha[:8]}"
+    stored = [p for p in (q / ".loom/digests/storage").rglob("paper.pdf") if sha256_of(p) == sha]
+    assert len(stored) == 1, stored
+
+
+def test_a_waiting_file_taken_again_ends_filed_and_waits_no_longer(tmp_path: Path) -> None:
+    """The re-check's finding 10: an unfiled PDF taken again on its work, where a lookalike now stood, answered `here` each time and stayed waiting, its undo refused."""
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    _versioned(q, tmp_path / "b", HARTSHORNE[1])
+    (row,) = taken(q, Item(drop=first.id, work="Har77"))
+    assert (row.state, row.sibling) == ("added", "Har77-v2"), row
+    assert waiting(q) == []
+    (again,) = taken(q, Item(drop=first.id, work="Har77"))
+    assert again.state == "here" and waiting(q) == []
+
+
+def test_a_silent_service_is_unreachable_and_no_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The re-check's finding 11: a service that accepts and never answers raised a timeout past the lookup, a 500 over the wire."""
+    import urllib.request
+
+    from loom.refs import resolve
+
+    def silent(*_: object, **__: object) -> object:
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", silent)
+    with pytest.raises(resolve.ResolveRefused, match="timed out"):
+        resolve.http_get("https://doi.org/10.5555/x", {})
+
+
+def test_two_discards_and_an_undo_racing_a_delete_each_end_in_an_answer(tmp_path: Path) -> None:
+    """A double click on discard, and an undo racing a delete of its work: each act checked before it held the library's lock, so the second failed with a missing file or an assertion."""
+    import threading
+
+    from loom.refs.added import NotDeletable, delete_work
+
+    q = demo(tmp_path)
+    said: list[object] = []
+
+    def both(*acts: object) -> None:
+        bar = threading.Barrier(len(acts))
+
+        def run(act: object) -> None:
+            res = scan(load_quilt(q))
+            bar.wait()
+            try:
+                said.append(act(res))  # type: ignore[operator]
+            except (IntakeRefused, NotDeletable) as refused:
+                said.append(refused)
+            except Exception as exc:  # noqa: BLE001
+                said.append(f"FAILED {type(exc).__name__}: {exc}")
+
+        threads = [threading.Thread(target=run, args=(a,)) for a in acts]
+        for th in threads:
+            th.start()
+        for th in threads:
+            th.join(60)
+
+    for _ in range(3):
+        item = dropped(q, "twice.pdf", "Twice discarded papers\nDee Double\nBody.\n", tmp_path)
+        both(*(lambda res, d=item.drop: undo(res, d, by=WHO) for _ in range(2)))
+        item = dropped(q, "twice.pdf", "Twice discarded papers\nDee Double\nBody.\n", tmp_path)
+        (row,) = taken(q, item)
+        both(lambda res, d=row.id: undo(res, d, by=WHO), lambda res, k=row.citekey: delete_work(res, k, WHO))
+        assert row.citekey not in bib(q)
+    assert not [s for s in said if isinstance(s, str) and s.startswith("FAILED")], said
+
+
+def _copies(q: Path, sha: str) -> list[str]:
+    """Every file in the quilt holding these bytes."""
+    from loom.refs.pages import sha256_of
+
+    return sorted(p.relative_to(q).as_posix() for p in q.rglob("*.pdf") if sha256_of(p) == sha)
+
+
+class _Killed(Exception):
+    """The process stopping in the middle of an act, as a test stands it in."""
+
+
+@pytest.mark.parametrize("then", ["dropped again", "taken", "unfiled again"])
+def test_an_unfile_stopped_before_it_recorded_itself_loses_no_pdf(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, then: str
+) -> None:
+    """The third review's finding 1: an unfile moved the PDF into its drop before recording itself; stopped between, the drop's record still said its bytes were taken in, and the next take deleted the only copy. The page text it had set aside made every later unfile fail."""
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    real = intake._push
+
+    def killed(d: Path, act: dict[str, object]) -> str:
+        if act.get("kind") == "unfiled":
+            raise _Killed
+        return real(d, act)
+
+    monkeypatch.setattr(intake, "_push", killed)
+    with pytest.raises(_Killed):
+        unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    monkeypatch.setattr(intake, "_push", real)
+    if then == "dropped again":
+        item = dropped(q, "har 0.pdf", HARTSHORNE[0], tmp_path / "again")
+        taken(q, Item(drop=item.drop, work="Har77"))
+    elif then == "taken":
+        taken(q, Item(drop=first.id))
+    else:
+        off = unfile(scan(load_quilt(q)), "Har77", by=WHO)
+        assert off["incoming"] == first.id
+    assert _copies(q, first.id), "the only copy was deleted"
+    assert (work_home(q, "Har77") / "paper.pdf").is_file() or [r["id"] for r in waiting(q)] == [first.id]
+
+
+def test_an_undo_stopped_midway_loses_no_pdf(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The third review's finding 1: an undo with earlier acts standing moved the PDF back into the drop before it rewrote the drop's record; stopped between, the next take of the drop deleted the only copy."""
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    (again,) = taken(q, Item(drop=first.id, work="Har77"))
+    assert again.state == "added", again
+    real = intake._restore_records
+
+    def killed(*args: object, **kwargs: object) -> None:
+        real(*args, **kwargs)  # type: ignore[arg-type]
+        raise _Killed
+
+    monkeypatch.setattr(intake, "_restore_records", killed)
+    with pytest.raises(_Killed):
+        undo(scan(load_quilt(q)), first.id, by=WHO)
+    monkeypatch.setattr(intake, "_restore_records", real)
+    assert _copies(q, first.id)
+    taken(q, Item(drop=first.id))
+    assert _copies(q, first.id), "the only copy was deleted"
+
+
+def test_a_file_received_while_its_bytes_are_undone_waits(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A second drop of the same bytes answered while the first drop's add is undone used to be deleted with it: a receive places its file whenever none waits, and only a file whose bytes the store holds is ever let go."""
+    import threading
+    import time
+
+    import loom.refs.intake as intake
+
+    q = demo(tmp_path)
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path))
+    real = intake._restore_records
+
+    def slow(*args: object, **kwargs: object) -> None:
+        real(*args, **kwargs)  # type: ignore[arg-type]
+        time.sleep(0.6)
+
+    monkeypatch.setattr(intake, "_restore_records", slow)
+    undoing = threading.Thread(target=lambda: undo(scan(load_quilt(q)), row.id, by=WHO))
+    undoing.start()
+    time.sleep(0.2)
+    second = dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path)
+    undoing.join(30)
+    monkeypatch.setattr(intake, "_restore_records", real)
+    assert second.drop == row.id and _copies(q, row.id)
+    (again,) = taken(q, second)
+    assert again.state == "added", again
+
+
+def test_a_library_runs_fetch_never_writes_over_a_pdf_the_person_filed_meanwhile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The third review's finding 2: a run fetching a work's PDF checked the place before its download and wrote over whatever was there after, a PDF the person had dropped on that work meanwhile among it."""
+    import threading
+
+    import loom.refs.fetch as fetch
+    from loom.refs.pages import sha256_of
+
+    q = demo(tmp_path)
+    config = q / "config.toml"
+    config.write_text(config.read_text().replace("online = false", "online = true"))
+    with (q / BIB).open("a", encoding="utf-8") as fh:
+        fh.write(
+            "\n@article{Zed25,\n  author = {Zed, Ana},\n  title = {Zeta functions of quivers},\n  year = {2025},\n  eprint = {2501.00001},\n  archiveprefix = {arXiv},\n}\n"
+        )
+    downloading, done = threading.Event(), threading.Event()
+    arxivs = fake_pdf(tmp_path / "arxiv.pdf", "Zeta functions of quivers\nAna Zed\narXiv's copy\n").read_bytes()
+
+    def get(url: str, attempts: int = 3) -> bytes:
+        if "/e-print/" in url:
+            raise fetch.FetchRefused("no source")
+        downloading.set()
+        done.wait(30)
+        return arxivs
+
+    monkeypatch.setattr(fetch, "_get", get)
+    got: list[fetch.Fetched] = []
+    run = threading.Thread(
+        target=lambda: got.append(fetch.fetch_work(load_quilt(q), "Zed25", bib(q)["Zed25"], pdf=True))
+    )
+    run.start()
+    try:
+        assert downloading.wait(30)
+        item = dropped(q, "zed.pdf", "Zeta functions of quivers\nAna Zed\nmy annotated copy\n", tmp_path)
+        (row,) = taken(q, Item(drop=item.drop, work="Zed25"))
+        assert row.state == "added", row
+    finally:
+        done.set()
+        run.join(30)
+    assert sha256_of(work_home(q, "Zed25") / "paper.pdf") == item.drop
+    assert got and not got[0].pdf and "kept" in got[0].refused, got
+
+
+def test_a_take_for_a_work_a_run_acts_on_is_refused(tmp_path: Path) -> None:
+    """The third review's finding 2: a take for a work skipped the check every other library write on that work makes."""
+    from loom.render.api import ApiError, handle, offer_jobs
+    from loom.render.endpoints.library import _JOBS
+
+    q = demo(tmp_path)
+    item = dropped(q, "talk.pdf", "Fixed loci of involutions on separated spaces\nImogen Calloway\nslides\n", tmp_path)
+
+    class Running:
+        def touching(self, citekey: str) -> bool:
+            return citekey == "Calloway14"
+
+    offer_jobs(q, Running())
+    try:
+        with pytest.raises(ApiError) as caught:
+            handle(q, "library-take", {"items": [{"incoming": item.drop, "for": "Calloway14"}]})
+        assert caught.value.code == "library-busy" and caught.value.status == 409
+    finally:
+        _JOBS.pop(q.resolve(), None)
+    assert [r["id"] for r in waiting(q)] == [item.drop]
+
+
+def _crlf(q: Path) -> bytes:
+    """The quilt's bibliography rewritten with CRLF line endings, as a Windows checkout or a reference manager's export keeps it."""
+    path = q / BIB
+    path.write_bytes(path.read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))
+    return path.read_bytes()
+
+
+def _all_crlf(data: bytes) -> bool:
+    return b"\n" not in data.replace(b"\r\n", b"")
+
+
+def test_a_bibliography_kept_with_crlf_is_changed_only_where_an_act_writes(tmp_path: Path) -> None:
+    """The third review's finding 3: appending rewrote a CRLF bibliography with LF throughout, and an undo, reading the act's byte offsets against it, was refused or left a fragment of an entry."""
+    from loom.refs.added import delete_work
+
+    q = demo(tmp_path)
+    before = _crlf(q)
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path / "a"))
+    after = (q / BIB).read_bytes()
+    assert after.startswith(before) and _all_crlf(after)
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert (q / BIB).read_bytes() == before
+    # an entry the act did not write, edited by hand since: the undo takes out the act's entry and nothing else
+    (row,) = taken(q, dropped(q, "spiders.pdf", "Homotopy types of spiders\nPetra Nils\nBody.\n", tmp_path / "b"))
+    edited = (q / BIB).read_bytes().replace(b"title   = {Virtual pull-backs}", b"title   = {Virtual pullbacks}")
+    (q / BIB).write_bytes(edited)
+    undo(scan(load_quilt(q)), row.id, by=WHO)
+    assert (q / BIB).read_bytes() == before.replace(b"title   = {Virtual pull-backs}", b"title   = {Virtual pullbacks}")
+    # a version unfiled, the bibliography moved on, the unfile undone: its entry goes back at the end, in CRLF
+    (_v1, v2) = _versioned(q, tmp_path, *HARTSHORNE)
+    off = unfile(scan(load_quilt(q)), v2.filed_as, by=WHO)
+    taken(q, dropped(q, "notes.pdf", NOTES, tmp_path / "c"))
+    undo(scan(load_quilt(q)), off["incoming"], by=WHO)
+    now = (q / BIB).read_bytes()
+    assert _all_crlf(now) and v2.filed_as in bib(q)
+    # and a delete takes out its work's entry alone
+    delete_work(scan(load_quilt(q)), v2.filed_as, WHO)
+    assert _all_crlf((q / BIB).read_bytes())
+
+
+def test_a_take_decides_on_the_bibliography_as_it_is_under_the_lock(tmp_path: Path) -> None:
+    """The third review's finding 4: a take decided on the scan its caller read before the lock, so a drop for a work deleted meanwhile was filed under it, and a paste of that work was answered `here`."""
+    from loom.refs.added import delete_work
+
+    q = demo(tmp_path)
+    entry = "title={Spectral gaps of quiver flows}, author={Quill, Ada}, year={2022}, doi={10.5555/spec.2022}"
+    (pasted,) = taken(q, Item(text=f"@article{{Pasted1, {entry}}}"))
+    item = dropped(q, "spectral.pdf", "Spectral gaps of quiver flows\nAda Quill\nBody.\n", tmp_path)
+    stale = bib(q)
+    delete_work(scan(load_quilt(q)), pasted.citekey, WHO)
+    with pytest.raises(IntakeRefused, match="no work Pasted1") as caught:
+        take(load_quilt(q), stale, [Item(drop=item.drop, work="Pasted1")], by=WHO)
+    assert caught.value.code == "no-such-work"
+    assert [r["id"] for r in waiting(q)] == [item.drop]
+    (again,) = take(load_quilt(q), stale, [Item(text=f"@article{{Again, {entry}}}")], by=WHO)
+    assert (again.state, again.citekey) == ("added", "Again"), again
+
+
+def test_a_drop_let_go_as_held_is_given_back_only_while_its_bytes_stand(tmp_path: Path) -> None:
+    """A drop an earlier act stands on, whose bytes the store holds at another work's place, lets its file go under an act of its own; an undo of that act copies the bytes back, and is refused once that place no longer holds them."""
+    import shutil
+
+    from loom.refs.scan import scan_bibliography
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    # the same bytes found in the store, and adopted by gathering as a work of their own
+    place = q / ".loom/digests/storage/file" / first.id[:16]
+    place.mkdir(parents=True)
+    shutil.copy(q / INCOMING / first.id / "document.pdf", place / "paper.pdf")
+    scan_bibliography(load_quilt(q))
+    (row,) = taken(q, Item(drop=first.id))
+    assert row.state == "here" and "these very bytes" in row.why and waiting(q) == [], row
+    said, again = undo(scan(load_quilt(q)), first.id, by=WHO)
+    assert again is not None and again.state == "received", said
+    taken(q, Item(drop=first.id))
+    (place / "paper.pdf").unlink()
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="no longer holds these bytes") as caught:
+        undo(scan(load_quilt(q)), first.id, by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+
+
+def test_an_unfile_is_not_undone_once_its_works_entry_names_another_place(tmp_path: Path) -> None:
+    """A work's year corrected by hand after its document was unfiled moves the place its entry names; putting the document back where the entry no longer points would leave it named by nothing."""
+    q = demo(tmp_path)
+    _versioned(q, tmp_path, HARTSHORNE[0])
+    off = unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    text = (q / BIB).read_text(encoding="utf-8")
+    assert "year      = {1977}" in text
+    (q / BIB).write_text(text.replace("year      = {1977}", "year      = {1978}"), encoding="utf-8")
+    before = tree(q)
+    with pytest.raises(IntakeRefused, match="no longer in the bibliography as it was") as caught:
+        undo(scan(load_quilt(q)), off["incoming"], by=WHO)
+    assert caught.value.code == "changed" and tree(q) == before
+
+
+def test_bytes_received_again_while_an_add_stands_wait_again_when_it_is_undone(tmp_path: Path) -> None:
+    """A second drop of bytes an act took in is let go, the store holding them; undoing that act, with earlier acts on the drop standing, then removed the store's copy and left the second drop's bytes nowhere. The act records that they were received again, and its undo gives them back to wait."""
+    import shutil
+
+    q = demo(tmp_path)
+    (first,) = _versioned(q, tmp_path, HARTSHORNE[0])
+    unfile(scan(load_quilt(q)), "Har77", by=WHO)
+    # the waiting file lost from the drop, and the same bytes added from the command line as a work of their own
+    (q / INCOMING / first.id / "document.pdf").unlink()
+    outside = tmp_path / "outside" / "har.pdf"
+    outside.parent.mkdir()
+    shutil.copy(tmp_path / "h0" / "src" / "har 0.pdf", outside)
+    (added,) = taken(q, Item(path=outside, new=True))
+    assert added.state == "added" and added.id == first.id, added
+    again = dropped(q, "har 0.pdf", HARTSHORNE[0], tmp_path / "again")
+    assert again.drop == first.id and waiting(q) == []
+    undo(scan(load_quilt(q)), first.id, by=WHO)
+    assert [p for p in _copies(q, first.id) if p.startswith(".loom/incoming/")], _copies(q, first.id)
+    assert [r["id"] for r in waiting(q)] == [first.id]

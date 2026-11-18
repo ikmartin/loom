@@ -202,6 +202,28 @@ def pdf_info(pdf: Path) -> dict[str, str]:
 
 
 _PAGE = re.compile(r'<page\s+width="([\d.]+)"\s+height="([\d.]+)"')
+_LINE = re.compile(r'<line xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</line>', re.S)
+_WORD = re.compile(r"<word[^>]*>(.*?)</word>", re.S)
+
+
+def sized_lines(pdf: Path, page: int = 1) -> list[tuple[str, float]]:
+    """Each line of one page with its height in points, top down, as `pdftotext -bbox-layout` sets it: how large its type is.
+
+    A line taller than it is wide is set sideways (arXiv's stamp in the margin) and is left out. [] when the page has no text or cannot be read; the fake toolchain of the unit tier answers so.
+    """
+    import html
+
+    try:
+        xml = _pdftotext(["-q", "-bbox-layout", "-f", str(page), "-l", str(page), str(pdf), "-"])
+    except MapRefused:
+        return []
+    found: list[tuple[float, str, float]] = []
+    for m in _LINE.finditer(xml):
+        x0, y0, x1, y1 = (float(m.group(i)) for i in range(1, 5))
+        words = [html.unescape(w) for w in _WORD.findall(m.group(5))]
+        if words and y1 - y0 <= x1 - x0:
+            found.append((y0, " ".join(words), round(y1 - y0, 2)))
+    return [(text, height) for _, text, height in sorted(found, key=lambda f: f[0])]
 
 
 def page_box(bbox_xml: str) -> tuple[float, float] | None:

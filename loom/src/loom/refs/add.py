@@ -47,8 +47,16 @@ _NO_TITLE = re.compile(
     r"^(?:untitled.*|title|document\d*|layout \d+|slide \d+|cover|microsoft .*|doi[: ].*|pii[: ].*|arxiv:.*|\S+\.(?:dvi|pdf|tex|docx?|pptx?|indd|ps|qxd|qxp|fm))$",
     re.I,
 )
-#: An author a PDF's document information carries that names nobody: the account that made the file.
-_NO_AUTHOR = re.compile(r"^(?:user|admin(?:istrator)?|owner|author|unknown|default|\S+@\S+)$", re.I)
+#: An author a PDF's document information carries that names nobody: the account that made the file, a link, or the program that wrote it (a scan once gave its author as "https://imagemagick.org").
+_NO_AUTHOR = re.compile(
+    r"^(?:user|admin(?:istrator)?|owner|author|unknown|default|\S+@\S+|https?://\S*|www\.\S*)$"
+    r"|\b(?:imagemagick|adobe|acrobat|microsoft|ghostscript|pdftex|latex|xetex|luatex|pdfcreator|scansnap|xerox|canon|epson)\b",
+    re.I,
+)
+#: Marks a title on page one carries after it: a footnote's star or dagger.
+_TITLE_MARKS = re.compile(r"[\s*†‡§¶]+$")
+#: How much larger than the page's text a line must be set to be taken for its title.
+TITLE_SIZE = 1.1
 #: A number closing a file name, as a download's timestamp does.
 _TAIL = re.compile(r"[\s_-]*\d{6,}$")
 
@@ -74,30 +82,76 @@ def _info_authors(info: dict[str, str]) -> str:
     return " and ".join(n.strip() for n in names if n.strip())
 
 
-def _first_page_title(pdf: Path) -> str:
-    """The first line on page one that could be a title and is no sentence, or ''."""
-    from loom.refs.ingest import title_lines
-    from loom.refs.pages import first_pages
+def _largest(lines: list[tuple[str, float]]) -> str:
+    """The line of page one set in the largest type, with the lines under it in that type, up to three, or '' when no line is set larger than the page's text.
 
+    Lines of a masthead are passed over first, since a journal's name is often the largest thing on the page.
+    """
+    from loom.refs.ingest import masthead
+
+    lines = lines[:30]
+    skip = masthead([text for text, _ in lines])
+    shown = [(i, text, h) for i, (text, h) in enumerate(lines) if i not in skip and sum(c.isalpha() for c in text) >= 3]
+    if not shown:
+        return ""
+    heights = sorted(h for _, h in lines)
+    top = max(h for _, _, h in shown)
+    if top < heights[len(heights) // 2] * TITLE_SIZE:
+        return ""
+    run: list[str] = []
+    last = -2
+    for i, text, h in shown:
+        if abs(h - top) > 0.6:
+            if run:
+                break
+            continue
+        if run and i != last + 1:
+            break
+        run.append(text)
+        last = i
+        if len(run) == 3:
+            break
+    title = " ".join(run)
+    return title if len(title.split()) <= 24 else ""
+
+
+def _first_page_title(pdf: Path) -> str:
+    """The title page one sets: its largest type where one line stands out, else the first line that could be a title and is no sentence; '' for a page with neither."""
+    from loom.refs.ingest import title_lines
+    from loom.refs.pages import first_pages, sized_lines
+
+    if title := _largest(sized_lines(pdf, 1)):
+        return _text(_TITLE_MARKS.sub("", title))
     try:
         pages = first_pages(pdf, 1)
     except Exception:  # noqa: BLE001 -- an unreadable PDF has no first page to read a title from
         return ""
     for line in title_lines(pages[0]) if pages else []:
         if not line.endswith(".") and len(line.split()) <= 16 and any(c.isalpha() for c in line):
-            return _text(line)
+            return _text(_TITLE_MARKS.sub("", line))
     return ""
 
 
-def own_entry(pdf: Path) -> dict[str, str]:
+def _arxiv_year(value: str) -> str:
+    """The year an arXiv id was given in: `0805.2065` is 2008, `math/0211159` 2002; '' for anything else."""
+    m = re.match(r"^(\d{2})\d{2}\.\d{4,5}", value) or re.match(r"^[a-z-]+(?:\.[A-Z]{2})?/(\d{2})\d{5}", value)
+    if m is None:
+        return ""
+    yy = int(m.group(1))
+    return str(1900 + yy if yy >= 91 else 2000 + yy)
+
+
+def own_entry(pdf: Path, name: str = "") -> dict[str, str]:
     """The entry a PDF makes of itself, which always has a title.
 
-    In order of trust: the identifier on its first pages, a reference manager's file name, its document information, the first line of page one that could be a title, and at the least its file name. The title of a heuristic guess is one line a person corrects by hand; a PDF is never turned away for want of a better one.
+    In order of trust: the identifier it states as its own (`ingest.own_identifiers`), a reference manager's file name, its document information, the title page one sets in its largest type or else its first line that could be a title, a masthead never, and at the least its file name. The title of a heuristic guess is one line a person corrects by hand; a PDF is never turned away for want of a better one.
 
     Parameters
     ----------
     pdf : Path
-        The document, under the name it was given.
+        The document.
+    name : str, default ''
+        The name it was given, where that is not `pdf`'s own: a stored copy is always `paper.pdf`.
 
     Returns
     -------
@@ -105,43 +159,48 @@ def own_entry(pdf: Path) -> dict[str, str]:
         BibTeX fields; `title` is never empty.
     """
     from loom.refs.ingest import filename_authors
+    from loom.refs.lookup import UNTITLED
     from loom.refs.pages import pdf_info, sha256_of
     from loom.refs.scan import _own_account
 
-    wid, said = _own_account(pdf)
+    stem = Path(name).stem if name else pdf.stem
+    wid, said = _own_account(pdf, name)
     fields = {k: _text(v) for k, v in said.items()}
     info = pdf_info(pdf)
     if fields.get("title"):
-        if who := _text(filename_authors(pdf.stem)):
+        if who := _text(filename_authors(stem)):
             fields["author"] = who
     elif title := _info_title(info):
         fields["title"] = title
     else:
-        name = _text(_TAIL.sub("", re.sub(r"[_\s]+", " ", pdf.stem)))
+        named = _text(_TAIL.sub("", re.sub(r"[_\s]+", " ", stem)))
         fields["title"] = (
             _first_page_title(pdf)
-            or (name if any(c.isalpha() for c in name) else "")
-            or f"Untitled PDF {sha256_of(pdf)[:8]}"
+            or (named if any(c.isalpha() for c in named) else "")
+            or f"{UNTITLED} {sha256_of(pdf)[:8]}"
         )
     if not fields.get("author") and _info_title(info) == fields["title"] and (who := _info_authors(info)):
         fields["author"] = who
     if wid is not None:
         if wid.scheme == "arxiv":
             fields.update(eprint=wid.value, archiveprefix="arXiv")
+            if not fields.get("year") and (year := _arxiv_year(wid.value)):
+                fields["year"] = year
         else:
             fields[wid.scheme] = wid.value
     return fields
 
 
-def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, http: Any = None) -> None:
+def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, http: Any = None, name: str = "") -> None:
     """Fill in the entry a PDF makes of itself, and what a lookup of the identifier it states adds.
 
     A found record is kept only when the PDF carries its title: an identifier on the first pages may be one the document cites, and then it is not this work's.
     """
     from loom.refs.fetch import carries_title
     from loom.refs.lookup import duplicates, key_for, look_up
+    from loom.refs.pages import sha256_of
 
-    fields = own_entry(pdf)
+    fields = own_entry(pdf, name)
     ident = fields.get("eprint") or fields.get("doi") or ""
     try:
         found = look_up(ident, bib, online=online, http=http) if ident else None
@@ -156,12 +215,19 @@ def _offer(seen: Seen, bib: dict[str, BibEntry], pdf: Path, *, online: bool, htt
         for name in ("eprint", "archiveprefix", "doi"):
             fields.pop(name, None)
     seen.offer = fields
-    seen.key = key_for(fields, set(bib))
+    seen.key = key_for(fields, set(bib), sha=sha256_of(pdf))
     seen.duplicates = duplicates(fields, None, bib)
 
 
 def identify(
-    root: Path, bib: dict[str, BibEntry], pdf: Path, *, online: bool = False, http: Any = None, offer: bool = True
+    root: Path,
+    bib: dict[str, BibEntry],
+    pdf: Path,
+    *,
+    online: bool = False,
+    http: Any = None,
+    offer: bool = True,
+    name: str = "",
 ) -> Seen:
     """What `pdf` shows itself to be against the library's entries, and the entry it makes of itself when it is none of them.
 
@@ -179,6 +245,8 @@ def identify(
         The transport `refs.lookup.look_up` asks with; tests inject their own.
     offer : bool, default True
         Whether to make the entry it would be as a work of its own, which a person may want even of a PDF matching a work; a lookup is asked only where no work is best.
+    name : str, default ''
+        The name it was given, where `pdf` is kept under another: what a reference manager wrote into it is read from this.
 
     Returns
     -------
@@ -192,7 +260,7 @@ def identify(
     holder = held_under(root, bib, sha256_of(pdf))
     if holder:
         return Seen(best=holder, held=True)
-    identity = identify_document(pdf, bib)
+    identity = identify_document(pdf, bib, name)
     seen = Seen(
         matches=[{"citekey": m.citekey, "strength": m.strength, "how": m.how} for m in identity.strong],
         nearest=identity.nearest,
@@ -205,35 +273,36 @@ def identify(
     else:
         seen.weak = identity.weak if not best else f"it names {' and '.join(m.citekey for m in best)} equally"
     if offer:
-        _offer(seen, bib, pdf, online=online and not seen.best, http=http)
+        _offer(seen, bib, pdf, online=online and not seen.best, http=http, name=name)
     return seen
 
 
 def plan_new_work(
-    root: Path, pdf: Path, key: str, fields: dict[str, str], came_from: str, planned: set[Path] | None = None
+    root: Path,
+    bib: dict[str, BibEntry],
+    pdf: Path,
+    key: str,
+    fields: dict[str, str],
+    came_from: str,
+    planned: set[Path] | None = None,
 ) -> Filing:
     """Plan `pdf` as a work of its own under `key`, its entry `fields`; reads only.
 
-    A work with no identifier lives under the document's hash, and its entry says so in `loom-file`, since the home its author, title and year would hash to moves when a person corrects its title. One with an identifier lives where that names, unless another document is there already.
+    A work with no identifier lives under the document's hash, and its entry says so in `loom-file`, since the home its author, title and year would hash to moves when a person corrects its title. One with an identifier lives where that names while that place is free. Either place is checked as every place loom writes a document is (`scan.place_for`): one that holds other bytes, or that another entry in `bib` names, is never written into.
     """
     from loom.refs.identity import declared
     from loom.refs.pages import sha256_of, storage_root
+    from loom.refs.scan import place_for
 
     planned = set() if planned is None else planned
     store = storage_root(root)
     sha = sha256_of(pdf)
-    own = store / "file" / sha[:16]
-    home = own
     ids = declared(BibEntry(key, "misc", dict(fields)))
-    if ids:
-        named = store / ids[0].path
-        stored = named / "paper.pdf"
-        if named not in planned and (not stored.is_file() or sha256_of(stored) == sha):
-            home = named
+    home = place_for(root, bib, sha, planned, store / ids[0].path if ids else None)
     new = {k: v for k, v in fields.items() if not k.startswith("loom-")}
     new["loom-source"] = came_from
-    if not ids or home == own:
-        new["loom-file"] = own.relative_to(store).as_posix()
+    if not ids or home != store / ids[0].path:
+        new["loom-file"] = home.relative_to(store).as_posix()
     planned.add(home)
     return Filing(pdf, key, "pdf", sha, came_from, home=home, named=True, new=new)
 
@@ -303,8 +372,8 @@ def file_new(
     seen = Seen()
     _offer(seen, bib, pdf, online=online, http=http)
     fields = {**seen.offer, **{k: _text(v) for k, v in (edits or {}).items() if _text(v)}}
-    key = key_for(fields, set(bib))
-    f = plan_new_work(root, pdf, key, fields, came_from)
+    key = key_for(fields, set(bib), sha=sha256_of(pdf))
+    f = plan_new_work(root, bib, pdf, key, fields, came_from)
     withdraw_setting_aside(root, f.sha, by)
     file_document(quilt, f, by=by, read_pages=read_pages)
     assert f.new is not None
@@ -379,7 +448,7 @@ def file_under(
     Returns
     -------
     dict
-        `{citekey, filed, sibling, already, copy_of, note, unmapped}`: whether it was filed, under a sibling entry beside the work's first document, held already, or a copy of one of the work's documents; what it shows against the work; and why it has no page text.
+        `{citekey, filed, sibling, already, copy_of, note, unmapped}`: whether it was filed, under a sibling entry beside the work's first document, or held already, these very bytes being in the store; what it shows against the work; and why it has no page text. `copy_of` is always ''.
 
     See Also
     --------
@@ -387,7 +456,7 @@ def file_under(
     """
     from loom.refs.ingest import identify_document
     from loom.refs.pages import sha256_of
-    from loom.refs.scan import append_entries, file_document, plan_filing, record_copy_of
+    from loom.refs.scan import append_entries, file_document, plan_filing
 
     citekey, why = named_for(identify_document(pdf, bib), bib, citekey)
     f = Filing(pdf, citekey, "pdf", sha256_of(pdf), came_from, forced=why, named=True)
@@ -395,15 +464,12 @@ def file_under(
     withdraw_setting_aside(quilt.root, f.sha, by)
     if not f.already:
         file_document(quilt, f, by=by, read_pages=read_pages)
-    if f.copy_of:
-        record_copy_of(quilt, bib, f)
     append_entries(quilt, [sibling] if sibling is not None else [])
     return _answer(
         citekey,
         filed=not f.already,
         sibling=f.sibling,
         already=f.already,
-        copy_of=f.copy_of,
         note=why if not f.already else "",
         unmapped=f.unmapped,
     )

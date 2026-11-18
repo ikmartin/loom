@@ -74,7 +74,7 @@ def test_a_doi_is_asked_of_doi_org_and_found() -> None:
     assert got.state == "found" and got.kind == "doi"
     assert got.entry["title"] == "Widget categories and their duals" and got.entry["year"] == "2018"
     assert got.entry["author"] == "Ostrander, D. and Vale, E." and got.entry["journal"] == "J. Widget Theory"
-    assert got.key == "Ost18" and got.digest == "lookup" and got.duplicates == []
+    assert got.key == "ostranderWidgetCategoriesTheir2018" and got.digest == "lookup" and got.duplicates == []
     # content negotiation, so every registry's DOIs answer
     assert http.asked[0][1]["Accept"] == "application/vnd.citationstyles.csl+json"
 
@@ -91,7 +91,7 @@ def test_an_arxiv_id_is_found_digestible_and_a_duplicate_of_its_other_version() 
     assert got.entry["title"] == "Virtual pull-backs" and got.entry["author"] == "Manolache, Cristina"
     assert got.entry["eprint"] == "0805.2065" and got.entry["year"] == "2008"
     # the library holds v2 of the same preprint
-    assert got.duplicates == ["Man12"] and got.key == "Man08"
+    assert got.duplicates == ["Man12"] and got.key == "manolacheVirtualPullBacks2008"
 
 
 def test_an_arxiv_id_arxiv_does_not_have_is_missing() -> None:
@@ -119,7 +119,7 @@ def test_without_the_network_an_identifier_is_not_looked_up_and_an_entry_still_i
         http=never,
     )
     # the entry is what it says; its own key is taken, so it gets a letter; loom's fields are never a paste's
-    assert got.state == "found" and got.key == "Kre99A" and "loom-added" not in got.entry
+    assert got.state == "found" and got.key == "Kre99a" and "loom-added" not in got.entry
     assert got.duplicates == ["Kre99"]
 
 
@@ -131,8 +131,38 @@ def test_what_loom_does_not_look_up_asks_for_more(text: str, kind: str) -> None:
     assert got.state == "cannot" and got.kind == kind and "DOI" in got.message
 
 
-def test_a_key_is_the_surname_and_year_and_never_one_taken() -> None:
-    assert key_for({"author": "Ångström, A. and Euler, L.", "year": "1999"}, set()) == "Ang99"
-    assert key_for({"author": "Kresch, Andrew", "year": "1999"}, {"Kre99"}) == "Kre99A"
-    assert key_for({"author": "", "year": ""}, set()) == "Wor"
-    assert key_for({}, {"Hal21"}, wanted="Hal21") == "Hal21A"
+def test_a_key_is_better_bibtexs_and_never_one_taken() -> None:
+    """`auth.lower + shorttitle(3,3) + year`, the key Better BibTeX gives by default and the author's own export uses; a part not known is left out, never guessed."""
+    assert key_for({"author": "Ångström, A. and Euler, L.", "year": "1999"}, set()) == "angstrom1999"
+    assert (
+        key_for({"author": "Cox, John C.", "title": "Option pricing: A simplified approach", "year": "1979"}, set())
+        == "coxOptionPricingSimplified1979"
+    )
+    assert (
+        key_for(
+            {"author": "Perelman, Grisha", "title": "Ricci flow with surgery on three-manifolds", "year": "2003"}, set()
+        )
+        == "perelmanRicciFlowSurgery2003"
+    )
+    assert (
+        key_for({"author": "Shreve, Steven E.", "title": "Stochastic Calculus for Finance II"}, set())
+        == "shreveStochasticCalculusFinance"
+    )
+    godel = {"author": r"G{\"o}del, Kurt", "title": r"{\"U}ber formal unentscheidbare S{\"a}tze", "year": "1931"}
+    assert key_for(godel, set()) == "godelUberFormalUnentscheidbare1931"
+    assert key_for({"author": "Kresch, Andrew", "year": "1999"}, {"kresch1999", "kresch1999a"}) == "kresch1999b"
+    assert key_for({}, {"Hal21"}, wanted="Hal21") == "Hal21a"
+
+
+def test_a_work_nothing_names_is_untitled_by_its_pdfs_hash() -> None:
+    sha = "1a2b3c4d" + "0" * 56
+    assert key_for({"author": "", "year": "2001"}, set(), sha=sha) == "untitled-1a2b3c4d"
+    assert key_for({"title": "Untitled PDF 1a2b3c4d"}, set(), sha=sha) == "untitled-1a2b3c4d"
+    assert key_for({"title": "1 2 3"}, set(), sha=sha) == "untitled-1a2b3c4d"
+
+
+def test_a_second_document_of_a_work_is_its_version_and_no_collision() -> None:
+    from loom.refs.scan import version_key
+
+    assert version_key("Arden24", {"Arden24"}) == "Arden24-v2"
+    assert version_key("Arden24", {"Arden24", "Arden24-v2"}) == "Arden24-v3"

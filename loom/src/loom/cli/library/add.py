@@ -51,8 +51,9 @@ def _came_from(root: Path, path: Path) -> str:
     "for_work",
     default=None,
     metavar="WORK",
-    help="The work every FILE is, which is taken at your word for a PDF; without it each is matched to the bibliography by what it shows.",
+    help="The work every FILE is: a PDF is filed under it on your word, and what it shows to the contrary is reported and recorded.",
 )
+@click.option("--new", is_flag=True, help="Keep every PDF as a work of its own, whatever work it may be.")
 @click.option(
     "--force",
     is_flag=True,
@@ -64,12 +65,13 @@ def _came_from(root: Path, path: Path) -> str:
 @click.option(
     "--as", "as_name", default=None, metavar="NAME", help="Who is filing, when the user config and git do not say."
 )
-@click.option("--dry-run", is_flag=True, help="Say what would be filed, skipped and refused, and write nothing.")
+@click.option("--dry-run", is_flag=True, help="Say what would be added, asked and refused, and write nothing.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
 def add_command(
     files: tuple[Path, ...],
     for_work: str | None,
+    new: bool,
     force: bool,
     online: bool,
     as_name: str | None,
@@ -77,29 +79,16 @@ def add_command(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """Keep PDFs and LaTeX sources in loom's store, a PDF whatever is known about it.
+    """Take PDFs and LaTeX sources into the library, each added, already here, a question, or one that cannot be added.
 
-    A FILE is a PDF, a `.tex` file, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. Every PDF is copied into the store. It is filed under an entry on a strong match: an identifier on its first pages equals the entry's, or its whole title is the entry's and the entry's first author leads its byline or its file name. Any other PDF becomes a work of its own, its entry made from what it shows: its file name, its document information, its first page. A lookup of the identifier it states, where the network is allowed, only adds to that entry. With `--for`, every FILE is that work's: a PDF is taken at your word, and what it shows to the contrary is reported and recorded. A LaTeX source is filed only on a strong match, skipped with its reason otherwise, and with `--for` refused when it shows it is another work's unless `--force`. A work that holds a document gets the new one beside it under a sibling entry, never over it, unless it is a copy of one of the work's documents: it states that version's identifier, or its title, byline and page count are that document's. A copy is recorded in the ledger and not filed. A PDF's page text is written at once.
+    A FILE is a PDF, a `.tex` file, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. A PDF that may be a work the library has (the identifier it states as its own is that work's, its whole title is set over that work's first author, a reference manager's file name says so, or the entry it makes of itself shares the work's identifier, or title and year) is filed nowhere: the question names the work, `--for WORK` files it there and `--new` keeps it as a work of its own. Any other PDF is kept as a work of its own, its entry made from what it shows and keyed as its author, title and year give it. With `--for`, every FILE is that work's on your word, and what a PDF shows to the contrary is reported and recorded. A LaTeX source is filed only with `--for`, and refused when it shows it is another work's unless `--force`. A work that holds a document gets the new one beside it as its version (`KEY-v2`), never over it, however like that document it looks. Only the same bytes given twice are already here. A PDF's page text is read at once.
     """
-    from loom.refs.add import identify, named_for, plan_new_work, withdraw_setting_aside
-    from loom.refs.added import added_entry
-    from loom.refs.ingest import identify_document, identify_source
-    from loom.refs.lookup import key_for
-    from loom.refs.pages import sha256_of
-    from loom.refs.scan import (
-        Filing,
-        append_entries,
-        bib_file,
-        file_document,
-        one_work_of,
-        plan_filing,
-        record_copy_of,
-        tree_sha,
-    )
-    from loom.scan.bib import BibEntry
+    from loom.refs.intake import Item, Row, take
 
     if force and not for_work:
         raise EnvError("--force applies only with --for: name the work the document is")
+    if new and for_work:
+        raise EnvError("--new keeps each PDF as a work of its own and --for files it under one: give one of them")
     refuse_under_agent(
         "loom library add",
         "Filing a document under a work is the author's: a wrong PDF under the right entry is read by every anchor into it.",
@@ -108,84 +97,47 @@ def add_command(
     docs = _documents(files)
     result = open_scan(quilt_path)
     root = result.quilt.root
-    # holds the works this run makes as well, so a second PDF of one is filed beside the first
-    bib = dict(result.bib)
-    allowed = online or result.quilt.config.online
     target = one_work(result, for_work) if for_work else None
-    rows: list[dict[str, Any]] = []
-    plans: list[Filing] = []
-    refused: list[tuple[Path, str]] = []
-    skipped: list[tuple[Path, str]] = []
-    #: The command that files each skipped document, for the case its reason shows.
-    fixes: dict[Path, str] = {}
-    #: A refused document's own work, when it is a version of the work named by --for.
-    versions: dict[Path, str] = {}
-    where: str | None = None  # the .bib a missing entry goes in, read once and only when needed
-    planned: set[Path] = set()
-    #: The works this run makes, by their document's hash.
-    made: dict[str, str] = {}
+    by = "" if dry_run else whoever(root, as_name)
+    sources = [p for p, kind in docs if kind == "source"]
+    refused = _refused_sources(result, sources, target, force)
+    pdfs = [p for p, kind in docs if kind == "pdf"]
+    items = [Item(path=p, name=p.name, work=target or "", on_word=target is not None, new=new) for p in pdfs]
+    allowed = online or result.quilt.config.online
     with Progress("reading documents", len(docs)) as progress:
-        for path, kind in docs:
-            progress.item(path.name)
-            row: dict[str, Any] = {"file": str(path), "kind": kind, "strong": [], "citekey": "", "reason": ""}
-            rows.append(row)
-            if kind == "pdf" and not _is_pdf(path):
-                refused.append((path, "it is not a PDF"))
-                row.update(outcome="refused", reason="it is not a PDF")
-                continue
-            if kind == "pdf" and target is None:
-                sha = sha256_of(path)
-                seen = identify(root, bib, path, online=allowed, offer=sha not in made)
-                row.update(strong=seen.matches, reason=seen.weak)
-                ck = seen.best or made.get(sha, "")
-                if ck:
-                    plans.append(Filing(path, ck, kind, sha, _came_from(root, path)))
-                    row.update(citekey=ck, forced="")
-                    continue
-                key = key_for(seen.offer, set(bib))
-                f = plan_new_work(root, path, key, seen.offer, _came_from(root, path), planned)
-                f.apart, f.nearest = seen.weak, seen.nearest
-                assert f.new is not None
-                bib[key] = BibEntry(key, "misc", dict(f.new))
-                made[sha] = key
-                plans.append(f)
-                row.update(citekey=key, forced="", new=True)
-                continue
-            identity = identify_source(path, bib) if kind == "source" else identify_document(path, bib)
-            row["strong"] = [{"citekey": m.citekey, "strength": m.strength, "how": m.how} for m in identity.strong]
-            forced = ""
-            if target is not None and kind == "pdf":
-                ck, forced = named_for(identity, bib, target)
-            elif target is not None:
-                why = identity.refusal_for(target, bib[target])
-                if why and not force:
-                    refused.append((path, why))
-                    row.update(outcome="refused", citekey=target, reason=why)
-                    other = next((m.citekey for m in identity.strong if m.citekey != target), "")
-                    if other and one_work_of([other, target], bib):
-                        versions[path] = other
-                    continue
-                forced, ck = why, target
-            else:
-                best = identity.best()
-                if len(best) > 1 and (top := one_work_of([m.citekey for m in best], bib)):
-                    best = [m for m in best if m.citekey == top] or best[:1]
-                if len(best) > 1:
-                    why = f"it names {' and '.join(m.citekey for m in best)} equally"
-                    refused.append((path, why))
-                    row.update(outcome="refused", reason=why)
-                    continue
-                if not best:
-                    skipped.append((path, identity.weak))
-                    where = bib_file(result) if where is None else where
-                    fixes[path] = _fix_for(identity, where)
-                    row.update(outcome="skipped", reason=identity.weak)
-                    continue
-                ck = best[0].citekey
-            sha = sha256_of(path) if kind == "pdf" else tree_sha(path)
-            plans.append(Filing(path, ck, kind, sha, _came_from(root, path), forced=forced, named=target is not None))
-            row.update(citekey=ck, forced=forced)
-    if target is not None and refused:
+        progress.item(", ".join(p.name for p in pdfs[:3]))
+        rows: list[tuple[Path, Row]] = [
+            (pdfs[r.item], r)
+            for r in take(result.quilt, dict(result.bib), items, by=by, online=allowed, write=not dry_run)
+        ]
+    for path in sources:
+        rows.append((path, _take_source(result, path, target, refused.get(path, ""), dry_run, by)))
+    notes = []
+    if pdfs and not online and not result.quilt.config.online_asked:
+        notes.append("this quilt has not said whether loom may look papers up online: --online allows this run")
+    _report(rows, dry_run, notes).emit(as_json)
+
+
+def _refused_sources(result: Any, sources: list[Path], target: str | None, force: bool) -> dict[Path, str]:
+    """Why each LaTeX source shows it is another work than `--for` names, which `--force` overrides; EnvError, before anything is written, when one is refused."""
+    from loom.refs.ingest import identify_source
+    from loom.refs.scan import one_work_of
+
+    if target is None:
+        return {}
+    out: dict[Path, str] = {}
+    refused: list[tuple[Path, str]] = []
+    versions: dict[Path, str] = {}
+    for path in sources:
+        identity = identify_source(path, result.bib)
+        why = identity.refusal_for(target, result.bib[target])
+        if why and not force:
+            refused.append((path, why))
+            other = next((m.citekey for m in identity.strong if m.citekey != target), "")
+            if other and one_work_of([other, target], result.bib):
+                versions[path] = other
+        out[path] = why
+    if refused:
         shown = "; ".join(f"{p.name}: {why}" for p, why in refused)
         version = next(iter(set(versions.values())), "") if len(set(versions.values())) == 1 else ""
         raise EnvError(
@@ -196,41 +148,52 @@ def add_command(
                 else f"If it is {target}'s, pass --force with --for {target}, and the override is recorded"
             )
         )
-    taken, once = set(bib), dict[str, str]()
-    entries = []
-    for f in plans:
-        if f.new is not None:
-            once[f.sha] = f.path.name
-            continue
-        sibling = plan_filing(result.quilt, bib, f, taken, once, planned)
-        if sibling is not None:
-            entries.append(sibling)
-    filed = [f for f in plans if not f.already]
+    return out
+
+
+def _take_source(result: Any, path: Path, target: str | None, forced: str, dry_run: bool, by: str) -> Any:
+    """A LaTeX source as a row: filed under `--for`'s work, beside its first source as a version where it has one; without `--for`, a question naming the work it shows it is, or one that cannot be added."""
+    from loom.refs.ingest import identify_source
+    from loom.refs.intake import Row
+    from loom.refs.scan import Filing, append_entries, bib_file, file_document, one_work_of, plan_filing, tree_sha
+
+    root = result.quilt.root
+    if target is None:
+        identity = identify_source(path, result.bib)
+        best = identity.best()
+        if len(best) > 1 and (top := one_work_of([m.citekey for m in best], result.bib)):
+            best = [m for m in best if m.citekey == top] or best[:1]
+        if not best:
+            where = bib_file(result) or "your bibliography"
+            return Row(
+                "",
+                0,
+                path.name,
+                "cannot",
+                code="not-recognised",
+                why=f"{identity.weak}; add its entry to {where}, then loom library add FILE --for KEY files it",
+            )
+        candidates = [{"citekey": m.citekey, "title": "", "authors": "", "year": "", "how": m.how} for m in best]
+        return Row("", 0, path.name, "question", candidates=candidates)
+    f = Filing(path, target, "source", tree_sha(path), _came_from(root, path), forced=forced, named=True)
+    sibling = plan_filing(result.quilt, dict(result.bib), f, set(result.bib), {})
+    if f.already:
+        return Row("", 0, path.name, "here", target, why=f.already)
     if not dry_run:
-        by = whoever(root, as_name)
-        for f in plans:
-            if f.kind == "pdf":
-                withdraw_setting_aside(root, f.sha, by)
-        for f in filed:
-            file_document(result.quilt, f, by=by)
-            if f.new is not None:
-                entries.append(added_entry(f.citekey, f.new, by, source="`loom library add`, added by hand"))
-        for f in plans:
-            if f.copy_of:
-                record_copy_of(result.quilt, bib, f)
-        append_entries(result.quilt, entries)
-    for f in plans:
-        row = next(r for r in rows if r["file"] == str(f.path))
-        row.update(
-            outcome="skipped" if f.already else "filed",
-            reason=f.already or f.apart,
-            sibling=f.sibling,
-            home=f.home.relative_to(root).as_posix() if f.home is not None and not f.already else "",
-            page_text=f.kind == "pdf" and not f.already and not f.unmapped and not dry_run,
-            error=f.unmapped,
-        )
-    held = [f for f in plans if f.already]
-    _report(filed, skipped, refused, rows, dry_run, fixes, held).emit(as_json)
+        file_document(result.quilt, f, by=by)
+        append_entries(result.quilt, [sibling] if sibling is not None else [])
+    return Row(
+        "",
+        0,
+        path.name,
+        "added",
+        target,
+        under=target,
+        sibling=f.sibling,
+        why=forced,
+        filed_as=f.sibling or target,
+        pages="source",
+    )
 
 
 def _is_pdf(path: Path) -> bool:
@@ -242,93 +205,68 @@ def _is_pdf(path: Path) -> bool:
         return False
 
 
-def _fix_for(identity: Any, bib: str) -> str:
-    """The command that files a skipped LaTeX source, for the reason it was skipped: the entry to write for a source nothing matches."""
-    where = bib or "your bibliography"
-    return f"add its entry to {where}, then loom library add FILE files it"
-
-
-def _report(
-    filed: list[Any],
-    skipped: list[tuple[Path, str]],
-    refused: list[tuple[Path, str]],
-    rows: list[dict[str, Any]],
-    dry_run: bool,
-    how: dict[Path, str],
-    held: list[Any] | None = None,
-) -> Report:
-    """Every document as filed, already held, skipped or refused, each with its reason (audit §4), and under a skipped one the command `how` gives for it.
-
-    A PDF kept as a work of its own says the title it was given and the entry nearest it. A document the store holds already is said once under one heading, beside the work it is filed under; only a copy of another work's document says more.
-    """
-    held = held or []
+def _report(rows: list[tuple[Path, Any]], dry_run: bool, notes: list[str]) -> Report:
+    """Every document in one of four states, each with its reason: added (as a new work, or under the work named, beside its first document), already here, a question with the commands that answer it, or one that cannot be added."""
+    added = [(p, r) for p, r in rows if r.state == "added"]
+    here = [(p, r) for p, r in rows if r.state == "here"]
+    asked = [(p, r) for p, r in rows if r.state == "question"]
+    cannot = [(p, r) for p, r in rows if r.state == "cannot"]
     items: list[Item] = []
-    for f in filed:
-        what = "PDF" if f.kind == "pdf" else "LaTeX source"
-        titled = f'as the new work {f.citekey}, titled "{f.new["title"]}"' if f.new else f"as {f.citekey}'s {what}"
-        text = f"{f.path.name} {titled}" + (
-            f", beside its first document as {f.sibling}"
-            if f.sibling
-            else ", in place of the document you set aside"
-            if f.replaces
-            else ""
+    for p, r in added:
+        what = "LaTeX source" if r.pages == "source" else "PDF"
+        text = (
+            f'{p.name} as the new work {r.citekey}, titled "{r.title}"'
+            if not r.under
+            else f"{p.name} as {r.under}'s {what}"
         )
-        if f.kind == "pdf" and not dry_run:
-            text += f", without page text ({f.unmapped})" if f.unmapped else ", with its page text"
-        if f.forced:
-            text += f"; on your word, though {f.forced}"
-        work = f.sibling or f.citekey
-        fixes = [f"loom library update {work} --only extract makes its digest"] if f.kind == "source" else []
-        if f.new and f.nearest:
-            fixes.append(f"loom library add FILE --for {f.nearest} files it there instead, if that is what it is")
-        items.append(Item(text, fixes=fixes))
-    total = len(filed) + len(held) + len(skipped) + len(refused)
+        if r.sibling:
+            text += f", beside its first document as {r.sibling}"
+        elif r.replaced:
+            text += ", in place of the document you set aside"
+        if what == "PDF" and not dry_run:
+            text += f", without page text ({r.why})" if r.pages == "none" else ", with its page text"
+        if r.under and r.why and r.pages != "none":
+            text += f"; on your word, though {r.why}"
+        fixes = [f"loom library update {r.filed_as} --only extract makes its digest"] if what == "LaTeX source" else []
+        if not r.under and r.nearest:
+            fixes.append(f"loom library add FILE --for {r.nearest} files it there instead, if that is what it is")
+        items.append(Item(text, key=r.citekey, fixes=fixes))
+    questions = []
+    for p, r in asked:
+        named = " or ".join(c["citekey"] for c in r.candidates)
+        how = "; ".join(f"{c['citekey']}: {c['how']}" for c in r.candidates)
+        fixes = [f"loom library add FILE --for {c['citekey']} files it there" for c in r.candidates]
+        if p.suffix.lower() == ".pdf":
+            fixes.append("loom library add FILE --new keeps it as a work of its own")
+        questions.append(Item(f"{p.name} may be {named} ({how})", fixes=fixes))
+    total = len(rows)
     verdict = (
-        f"{counted(total, 'document')}: {len(filed)} {'would be filed' if dry_run else 'filed'}, "
-        + (f"{len(held)} already in loom's store, " if held else "")
-        + f"{len(skipped)} skipped, {len(refused)} refused"
+        f"{counted(total, 'document')}: {len(added)} {'would be added' if dry_run else 'added'}, "
+        f"{len(here)} already here, {len(asked)} to answer, {len(cannot)} cannot be added"
     )
     return Report(
         verdict,
-        ok=not (skipped or refused),
+        ok=not (asked or cannot),
         dry_run=dry_run,
         groups=present(
-            Group(
-                "refused",
-                [Item(f"{p.name}: {why}") for p, why in refused],
-                problem=True,
-                limit=None,
-                next="loom library add FILE --for WORK files a source under the one it is"
-                if any(p.suffix.lower() != ".pdf" for p, _ in refused)
-                else None,
-            ),
-            Group(
-                "skipped",
-                [Item(f"{p.name}: {why}", fixes=[how[p]] if p in how else []) for p, why in skipped],
-                limit=None,
-            ),
-            Group("would be filed" if dry_run else "filed", items, limit=None),
-            Group(
-                "already in loom's store, under the work each is",
-                [
-                    Item(
-                        f.path.name
-                        + (
-                            ""
-                            if f.already.startswith(("already in loom's store", "already filed"))
-                            else f": {f.already}"
-                        ),
-                        key=f.citekey,
-                    )
-                    for f in held
-                ],
-                limit=None,
-            ),
+            Group("cannot be added", [Item(f"{p.name}: {r.why}") for p, r in cannot], problem=True, limit=None),
+            Group("to answer: filed nowhere until you say which work each is", questions, problem=True, limit=None),
+            Group("would be added" if dry_run else "added", items, limit=None),
+            Group("already here", [Item(f"{p.name}: {r.why}", key=r.citekey) for p, r in here], limit=None),
         ),
-        notes=["the store is not in version control: a collaborator fetches or adds their own copy"]
-        if filed and not dry_run
-        else [],
-        data={"filed": len(filed), "skipped": len(skipped), "refused": len(refused), "documents": rows},
+        notes=notes
+        + (
+            ["the store is not in version control: a collaborator fetches or adds their own copy"]
+            if added and not dry_run
+            else []
+        ),
+        data={
+            "added": len(added),
+            "here": len(here),
+            "questions": len(asked),
+            "cannot": len(cannot),
+            "documents": [{"file": str(p), **r.to_json(), "nearest": r.nearest, "apart": r.apart} for p, r in rows],
+        },
     )
 
 

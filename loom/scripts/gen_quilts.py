@@ -20,7 +20,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from loom.paths import AI, ANNOTATION_LOG, BIBLIOGRAPHY, BUILD, COPIES, SINCE, STORAGE
+from loom.paths import AI, ANNOTATION_LOG, BIBLIOGRAPHY, BUILD, COPIES, INCOMING, SINCE, STORAGE
 
 REPO = Path(__file__).resolve().parents[1]
 SOURCES = REPO / "tests" / "quilts" / "sources"
@@ -592,9 +592,9 @@ def build_demo(dest: Path) -> None:
     g.run("accept", "dm-0002", "--proofs", "--as", "The loom demo", "--force")
     g.run("stamp", "drafting/main.tex", "-m", "widgets-v1")
 
-    # The cited work, the showcase's way: an invented paper this repository compiles, so the demo has a real document behind its digest rather than prose about a paper nobody holds. Gathering reads the entry from the document's bibliography, the author adds the PDF, which is filed under the identifier it prints, and the source beside it; the digest is extracted by the command that extracts one.
+    # The cited work, the showcase's way: an invented paper this repository compiles, so the demo has a real document behind its digest rather than prose about a paper nobody holds. Gathering reads the entry from the document's bibliography, the author adds the PDF, naming the work it is, since nothing is filed under a work on loom's guess, and the source beside it; the digest is extracted by the command that extracts one.
     g.run("library", "update", "--only", "gather")
-    g.run("library", "add", str(DEMO_WORKS / "calloway-fixed-loci.pdf"))
+    g.run("library", "add", str(DEMO_WORKS / "calloway-fixed-loci.pdf"), "--for", "Calloway14")
     g.run("library", "add", str(DEMO_WORKS / "calloway-fixed-loci.tex"), "--for", "Calloway14")
     g.run("library", "update", "Calloway14", "--only", "map")
     g.run("library", "update", "Calloway14", "--only", "extract", "--no-compile")
@@ -716,18 +716,19 @@ def build_showcase(dest: Path) -> None:
     g.run("stamp", "drafting/main-atomic.tex", "-m", "flows-v1")
 
     # ---- Loom's store. -------------------------------------------------------------------------------------
-    # Gathering reads the document's bibliography; the author adds the PDFs they hold, and each is filed under the identifier it states on its own first page.
+    # Gathering reads the document's bibliography; the author adds the PDFs they hold, each naming the work it is, since nothing is filed under a work on loom's guess.
     g.at("2026-09-14T09:10:00Z")
     g.run("library", "update", "--only", "gather")
-    g.run("library", "add", *(str(pdf) for pdf in sorted(WORKS.glob("*.pdf")) if pdf != ARDEN_V2.with_suffix(".pdf")))
+    for pdf, work in (("arden-cycle-spaces.pdf", "Arden24"), ("bellamy-median-orders.pdf", "Bellamy19")):
+        g.run("library", "add", str(WORKS / pdf), "--for", work)
     g.at("2026-09-14T09:15:00Z")
     # The source goes into the store before the digest is made: a digest extracted from a file only this machine holds cites pages nobody else can open, which is the invariant extraction enforces (plan 0.13 §4).
     g.run("library", "add", str(WORKS / "arden-cycle-spaces.tex"), "--for", "Arden24")
     g.run("library", "update", "Arden24", "--only", "extract", "--no-compile")
-    # A second document of Arden24, its arXiv v2, which states a theorem the version cited does not: filed beside the first as the version Arden24A, with its source, and extracted by name, since loom extracts a version only when it is cited or named. The paper cites that theorem as Arden24's, and the citation resolves through the version.
+    # A second document of Arden24, its arXiv v2, which states a theorem the version cited does not: filed beside the first as the version Arden24-v2, with its source, and extracted by name, since loom extracts a version only when it is cited or named. The paper cites that theorem as Arden24's, and the citation resolves through the version.
     g.run("library", "add", str(ARDEN_V2.with_suffix(".pdf")), "--for", "Arden24")
-    g.run("library", "add", str(ARDEN_V2.with_suffix(".tex")), "--for", "Arden24A")
-    g.run("library", "update", "Arden24A", "--only", "extract", "--no-compile")
+    g.run("library", "add", str(ARDEN_V2.with_suffix(".tex")), "--for", "Arden24-v2")
+    g.run("library", "update", "Arden24-v2", "--only", "extract", "--no-compile")
     g.at("2026-09-14T09:20:00Z")
     g.run("ai", "init")
 
@@ -1667,10 +1668,11 @@ def _drop_clients(root: Path) -> None:
 
 
 def _sync(src: Path, dest: Path) -> None:
-    """Replace `dest` with `src` as git would check it out: no build output, and no empty directory, which git cannot hold but a test copying the working tree would see."""
+    """Replace `dest` with `src` as git would check it out: no build output, no record of the library's drops, which stays on the machine that dropped them, and no empty directory, which git cannot hold but a test copying the working tree would see."""
     if dest.exists():
         shutil.rmtree(dest)
     shutil.copytree(src, dest, ignore=shutil.ignore_patterns("build", "__pycache__", ".git"))
+    shutil.rmtree(dest / INCOMING, ignore_errors=True)
     for d in sorted((p for p in dest.rglob("*") if p.is_dir()), key=lambda p: len(p.parts), reverse=True):
         if not any(d.iterdir()):
             d.rmdir()
@@ -1684,6 +1686,7 @@ def _differences(a: Path, b: Path) -> list[str]:
         # quilt's .gitignore deliberately keeps them out of its committed copy.
         return not (
             rel.startswith(f"{BUILD}/")
+            or rel.startswith(f"{INCOMING}/")
             or rel.startswith(f"{SINCE}/")
             or rel.startswith(f"{STORAGE}/cache/")
             or (rel.startswith(f"{STORAGE}/") and "/src/" in rel)
