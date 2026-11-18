@@ -38,7 +38,7 @@ readOnly('beside Review\'s panel it is the block under review, and with two tabs
 	expect(looking(served).review.cause).toBeTruthy();
 	// the first tab is touched again, and says where it is though nothing there changed; headless Chromium keeps both tabs visible and fires no focus on switching, so the test sends it
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-	await expect.poll(() => looking(served).route).toBe('reading');
-	expect(looking(served).item.link).toBe('quilt:sy-0003');
+	// one reading of both: the other tab's place is a reading route too, so the route alone does not say the first tab's report has landed
+	await expect.poll(() => { const l = looking(served); return `${l.route} ${l.item?.link}`; }).toBe('reading quilt:sy-0003');
 	await other.close();
 });
