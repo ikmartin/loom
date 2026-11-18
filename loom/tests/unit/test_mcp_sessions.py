@@ -1,0 +1,171 @@
+"""A loom session per conversation: `loom mcp` binds one at a conversation's first look or write when a call names none, finds it again when the conversation resumes in a new process, and gives it to what writes into a session or looks as one."""
+
+from __future__ import annotations
+
+import signal
+import subprocess
+import time
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
+from loom.mailbox import read_events
+from loom.presence import live
+from loom.sessions import sessions
+from tests.helpers import PATIENCE, ok
+from tests.unit._agent_server import AgentServer
+from tests.unit._quilts import demo, new_session
+
+WHO = "A. Author"
+
+
+def made_for(q: Path, conversation: str) -> list[str]:
+    return [s.id for s in sessions(q).values() if s.conversation == conversation]
+
+
+def said(q: Path, sid: str) -> list[str]:
+    return [e.body for e in read_events(q, sid)]
+
+
+def test_a_conversations_first_write_makes_its_session_and_its_report_lands_there(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    with AgentServer(q, "Claude Code Agent", env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_status")
+        assert made_for(q, "conv-a") == [], "a read makes no session"
+        got = server.call("loom_session_say", {"text": "Mode: quick, on dm-0003."})
+        assert not got.get("isError"), got
+        [sid] = made_for(q, "conv-a")
+        assert said(q, sid) == ["Mode: quick, on dm-0003."]
+        assert sessions(q)[sid].title.startswith("Claude Code Agent · ")
+        assert live(q)[0]["session"] == sid
+        assert "loom session say" in (q / ".loom/sessions" / sid / "run.log").read_text()
+
+
+def test_a_resumed_conversation_writes_into_its_session_again(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_say", {"text": "first sitting"})
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_say", {"text": "second sitting"})
+    [sid] = made_for(q, "conv-a")
+    assert said(q, sid) == ["first sitting", "second sitting"]
+
+
+def test_two_conversations_have_two_sessions_and_each_sees_what_came_since_it_looked(tmp_path: Path) -> None:
+    """The window is the conversation's own: one looking does not move the other's."""
+    q = demo(tmp_path)
+    with (
+        AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as a,
+        AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-b"}) as b,
+    ):
+        for server in (a, b):
+            server.discover()
+            server.call("loom_since")
+        assert len(made_for(q, "conv-a")) == len(made_for(q, "conv-b")) == 1
+        ok("annotate", "dm-0003", "Is this sharp?", "--as", WHO, cwd=q)
+        assert "Is this sharp?" in a.call("loom_since")["content"][0]["text"]
+        assert "Is this sharp?" in b.call("loom_since")["content"][0]["text"]
+
+
+def test_a_session_the_call_names_is_the_one_written_into(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    mine = new_session(q, "the author's", WHO)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_say", {"text": "here, as asked", "session": mine})
+    assert said(q, mine) == ["here, as asked"]
+    assert made_for(q, "conv-a") == []
+
+
+def test_a_session_the_agent_opens_is_the_one_its_later_calls_write_into(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_new", {"name": "refereeing chapter 2"})
+        server.call("loom_session_say", {"text": "begun"})
+    [opened] = [s for s in sessions(q).values() if s.title == "refereeing chapter 2"]
+    assert said(q, opened.id) == ["begun"]
+    assert made_for(q, "conv-a") == []
+
+
+def test_a_session_the_person_closed_is_not_written_into_again(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_say", {"text": "before"})
+        [first] = made_for(q, "conv-a")
+        ok("session", "close", first, "--as", WHO, cwd=q)
+        server.call("loom_session_say", {"text": "after"})
+        later = [sid for sid in made_for(q, "conv-a") if sid != first]
+        assert said(q, first) == ["before"] and len(later) == 1 and said(q, later[0]) == ["after"]
+
+
+def test_a_conversations_first_look_reports_what_a_person_did_before_it(tmp_path: Path) -> None:
+    """The order the gate is for: a person comments, then asks their agent, whose first look is what makes its session."""
+    q = demo(tmp_path)
+    ok("annotate", "dm-0010", "Please look at this before anything else", "--type", "question", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    with AgentServer(q, "Claude Code Agent", env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        assert "Please look at this before anything else" in server.call("loom_since")["content"][0]["text"]
+        assert len(made_for(q, "conv-a")) == 1
+
+
+def test_a_dry_run_of_session_new_binds_nothing(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_new", {"name": "only asking", "dry_run": True})
+        server.call("loom_session_new", {"name": "only asking", "dry_run": True, "json": True})
+        assert live(q)[0]["session"] is None, "the record names no session that does not exist"
+        got = server.call("loom_session_say", {"text": "still mine"})
+        assert not got.get("isError"), got
+    [sid] = made_for(q, "conv-a")
+    assert said(q, sid) == ["still mine"]
+    assert not [s for s in sessions(q).values() if s.title == "only asking"]
+
+
+def test_a_write_the_app_stops_the_server_during_lands_with_its_line_in_the_log(tmp_path: Path) -> None:
+    """The command is a process of its own and finishes after the server has gone; the server logs the call as it starts, so the log says what landed."""
+    q = demo(tmp_path)
+    with AgentServer(q, env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_since")
+        [sid] = made_for(q, "conv-a")
+        server.send(
+            "tools/call",
+            {
+                "name": "loom_annotate",
+                "arguments": {"target": "dm-0010", "message": "written as it stops", "type": "question"},
+            },
+        )
+        child = _until(
+            lambda: subprocess.run(["pgrep", "-P", str(server.pid)], capture_output=True, text=True).stdout.split()
+        )
+        server.stop(signal.SIGTERM)
+        _until(lambda: subprocess.run(["ps", "-p", child[0]], capture_output=True).returncode != 0)
+    assert "written as it stops" in (q / ".loom/annotations/log.jsonl").read_text()
+    assert "loom annotate" in (q / ".loom/sessions" / sid / "run.log").read_text()
+
+
+def _until(look: Callable[[], Any]) -> Any:
+    """`look()` once it is truthy, failed after `PATIENCE` seconds."""
+    end = time.monotonic() + PATIENCE
+    while time.monotonic() < end:
+        if got := look():
+            return got
+        time.sleep(0.01)
+    raise AssertionError("waited in vain")
+
+
+def test_a_conversation_that_opens_a_session_first_still_sees_what_came_before(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    ok("annotate", "dm-0010", "Please look at this before anything else", "--type", "question", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    with AgentServer(q, "Claude Code Agent", env={"CLAUDE_CODE_SESSION_ID": "conv-a"}) as server:
+        server.discover()
+        server.call("loom_session_new", {"name": "Work on dm-0010"})
+        assert "Please look at this before anything else" in server.call("loom_since")["content"][0]["text"]

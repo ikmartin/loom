@@ -41,6 +41,23 @@ if sys.platform == "win32":
         os.lseek(fd, _FAR, os.SEEK_SET)
         msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)
 
+    def hold(fd: int) -> None:
+        """Take the lock on `fd`, waiting for it, and keep it while `fd` is open."""
+        os.lseek(fd, _FAR, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_LOCK, 1)
+
+    def held(fd: int) -> bool | None:
+        """Whether another open file holds `fd`'s file locked: True while one does, False when none does, None where the filesystem takes no locks."""
+        try:
+            if not _try(fd):
+                return True
+        except OSError as exc:
+            if exc.errno in _UNSUPPORTED:
+                return None
+            raise
+        _release(fd)
+        return False
+
     def flush(fd: int, full: bool = False) -> None:
         """Flush what was written to `fd` to the disk."""
         os.fsync(fd)
@@ -58,6 +75,22 @@ else:
 
     def _release(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
+
+    def hold(fd: int) -> None:
+        """Take the lock on `fd`, waiting for it, and keep it while `fd` is open: what a process holds on a file that says it is alive (`loom.presence`)."""
+        fcntl.flock(fd, fcntl.LOCK_EX)
+
+    def held(fd: int) -> bool | None:
+        """Whether another open file holds `fd`'s file locked: True while one does, False when none does, None where the filesystem takes no locks. Asks with a shared lock, which goes when `fd` is closed."""
+        try:
+            fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError as exc:
+            if exc.errno in _UNSUPPORTED:
+                return None
+            raise
+        return False
 
     def flush(fd: int, full: bool = False) -> None:
         """Flush what was written to `fd` to the disk; `full` also asks the drive to empty its own cache where macOS can (`F_FULLFSYNC`), which a plain `fsync` there does not."""

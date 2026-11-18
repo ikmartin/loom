@@ -19,6 +19,7 @@ from tests.unit.render.write_api._cases import (
     on_demo,
     refuses,
     succeeds,
+    synthetic,
 )
 
 
@@ -139,4 +140,22 @@ def _here(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         400,
         "bad-field",
         "route must be reading, review or elsewhere",
+    )
+
+
+@case("agents-setup")
+def _agents_setup(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.ai.layout import MCP_LINE, variant
+
+    s, q = synthetic(serve, tmp_path)
+    assert not (q / ".loom" / "ai").exists()
+    got = succeeds(s, "agents-setup", {"app": "claude-code", "author": WHO})
+    # the layer and Claude Code's own files, over MCP, and no other app's
+    for rel in (".loom/ai/orientation.md", "CLAUDE.md", ".claude/settings.json", ".mcp.json"):
+        assert rel in got["written"] and (q / rel).is_file(), rel
+    assert got["variant"] == variant(q) == "mcp" and MCP_LINE in (q / "CLAUDE.md").read_text()
+    for rel in ("AGENTS.md", "GEMINI.md", ".codex", ".gemini", ".cursor"):
+        assert not (q / rel).exists(), rel
+    refuses(
+        s, "agents-setup", {"app": "codex", "author": "Referee Agent"}, 403, "author-only", "only the author sets up"
     )

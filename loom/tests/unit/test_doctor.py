@@ -436,6 +436,8 @@ def test_the_engine(box: Box) -> None:
 
 def test_the_permission_files(box: Box) -> None:
     q = quilt(box)
+    # the files as this loom writes them, whatever the committed demo was generated with
+    ok("upgrade", cwd=q)
     edit(q / ".claude" / "settings.json", '"Bash(rm *)"', '"Bash(rm -rf *)"')
     got = item(doctor(box, cwd=q), "permissions")
     assert (got["status"], got["remedy"]) == ("warn", "loom upgrade")
@@ -517,6 +519,8 @@ def test_the_ai_files_by_upgrades_dry_run(box: Box) -> None:
     from loom.ai.layout import VERSION_FILE, sha
 
     q = quilt(box)
+    # the agent files as this loom ships them, whatever the committed demo was generated with
+    ok("upgrade", cwd=q)
     versions = q / ".loom/ai" / VERSION_FILE
     mode = q / ".loom/ai" / "modes" / "quick.md"
     # shipped by an older loom and never edited: the record holds its hash

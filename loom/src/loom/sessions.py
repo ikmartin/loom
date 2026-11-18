@@ -49,6 +49,12 @@ class Session:
     rounds: list[Round] = field(default_factory=list)
     #: What the sitting is for, in the author's words -- a line under the title, not a second name (plan 0.13.1).
     purpose: str = ""
+    #: The agent app's id for the conversation the session was made for (`for_conversation`); empty for one a person or an agent opened by name.
+    conversation: str = ""
+    #: Who opened it, as the `created` event names them.
+    who: str = ""
+    #: The session that was active when opening this one made it active in its place, '' where none was; None where opening it did not make it active.
+    replaced: str | None = None
 
     @property
     def last_opened(self) -> str:
@@ -115,6 +121,9 @@ def sessions(root: Path, *, deleted: bool = False) -> dict[str, Session]:
                 created=when,
                 rounds=[Round(opened=when)],
                 purpose=str(e.get("purpose", "")),
+                conversation=str(e.get("conversation", "")),
+                who=str(e.get("who", "")),
+                replaced=None if e.get("replaced") is None else str(e["replaced"]),
             )
             continue
         s = out.get(sid)
@@ -145,7 +154,9 @@ def next_id(root: Path, date: str) -> str:
     return draw(f"s-{date}-", {str(e["id"]) for e in load_events(root)})
 
 
-def create(root: Path, title: str, who: str, *, purpose: str = "") -> Session:
+def create(
+    root: Path, title: str, who: str, *, purpose: str = "", conversation: str = "", replaced: str | None = None
+) -> Session:
     """Mint a session and return it; the directory is not made until something is written into it.
 
     Parameters
@@ -158,6 +169,10 @@ def create(root: Path, title: str, who: str, *, purpose: str = "") -> Session:
         The author creating it.
     purpose : str, default ''
         What the sitting is for; shown under the title and changed later with `purposed`.
+    conversation : str, default ''
+        The agent app's id for the conversation it is made for, which `for_conversation` finds it by.
+    replaced : str, optional
+        Where the caller makes this one active: the session that was active, '' for none; `loom since` opens an agent's first look there when the agent made this one. Default None, not made active.
 
     Returns
     -------
@@ -170,7 +185,9 @@ def create(root: Path, title: str, who: str, *, purpose: str = "") -> Session:
         append_event(
             root,
             {"event": "created", "id": sid, "title": title, "who": who, "when": when}
-            | ({"purpose": purpose} if purpose else {}),
+            | ({"purpose": purpose} if purpose else {})
+            | ({"conversation": conversation} if conversation else {})
+            | ({"replaced": replaced} if replaced is not None else {}),
         )
     return sessions(root)[sid]
 
@@ -237,9 +254,22 @@ def ensure_active(root: Path, who: str, title: str = "") -> Session:
         found = _active_session(root)
         if found is not None:
             return found
-        s = create(root, title or f"session of {stamp()[:10]}", who)
+        s = create(root, title or f"session of {stamp()[:10]}", who, replaced="")
         set_active(root, s.id)
     return s
+
+
+def for_conversation(root: Path, conversation: str | None, who: str, title: str) -> Session:
+    """The open session made for agent conversation `conversation`, made now where it has none; with no conversation, a new one.
+
+    `loom mcp` binds one per process (`docs/design/agents.md`), so an app's conversation that is resumed in a new process finds its session again. Found or made under the index's lock, so two processes never make two.
+    """
+    with locked(index_path(root)):
+        if conversation:
+            for s in reversed(list(sessions(root).values())):
+                if s.conversation == conversation and s.state == "open":
+                    return s
+        return create(root, title, who, conversation=conversation or "")
 
 
 def _active_session(root: Path) -> Session | None:

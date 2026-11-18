@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import click
 
-from loom.ai.clients import BY_KEY, CLIENTS
+from loom.ai.clients import BY_KEY, CLIENTS, PROJECT
 from loom.cli._common import find_session
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
@@ -134,8 +134,10 @@ def delete_command(
     Report(f"deleted {counted(len(hits), 'annotation')}, with their replies", groups=listed, data=data).emit(as_json)
 
 
-def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) -> tuple[LayerReport, ClientReport]:
-    """Write the agent layer into a quilt, or refresh it where `.loom/ai/` exists, with the MCP client files of its variant.
+def install_layer(
+    root: Path, *, write: bool = True, shell: bool | None = None, apps: list[str] | None = None
+) -> tuple[LayerReport, ClientReport]:
+    """Write the agent layer into a quilt, or refresh it where `.loom/ai/` exists, with the files of the agent apps it is for: their root lines, permission files and, in the MCP variant, the files that start the server.
 
     Parameters
     ----------
@@ -145,43 +147,78 @@ def install_layer(root: Path, *, write: bool = True, shell: bool | None = None) 
         False writes nothing and reports what would be written.
     shell : bool, optional
         True for an agent with no MCP, which runs `loom` in a shell; False for one that attaches over MCP, with the shell beside the tools; default the way the quilt already uses, else MCP.
+    apps : list of str, optional
+        The apps (`ai.clients.PROJECT` keys) whose files are written; default the apps the quilt is set up for, or every app where it is set up for none (`ai.clients.chosen`).
 
     Returns
     -------
     LayerReport
-        `written` (quilt-relative paths), and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files, as `loom upgrade` reports them.
+        `written` (quilt-relative paths); `theirs`, a file of the person's at one of loom's paths, left alone; `merged`, one loom wrote its part into, the person's settings in it kept; and where `.loom/ai/` existed, `kept` and `new_beside` for edited mode files and `removed`, as `loom upgrade` reports them.
     ClientReport
         The client files written, current, left alone or, in the shell variant, removed.
+
+    Raises
+    ------
+    WriteRefused
+        Where `.loom/ai/` is not a directory of the quilt's own (`refuse_layer`), and nothing is written; or where a file cannot be written.
 
     See Also
     --------
     loom.ai.layout.upgrade_layer : the refresh alone, which `loom upgrade` runs.
     """
-    from loom.ai.clients import write_clients
+    from loom.ai.clients import chosen, write_clients
     from loom.ai.layout import (
+        APPS_FILE,
+        CLAUDE_SETTINGS,
+        RULES_FILE,
         SHELL,
         VERSION_FILE,
         LayerReport,
+        _write,
         ensure_root_line,
         init_layer,
+        permission_files,
         quilt_config,
+        read_plain,
+        refuse_layer,
         tracked_docs,
         upgrade_layer,
         variant,
-        vendor_files,
     )
+    from loom.ai.skills import RECORD as SKILLS_RECORD
+    from loom.ai.skills import write_skills
 
+    refuse_layer(root)
     if shell is None:
         shell = variant(root) == SHELL
+    # read before anything is written, which would change what the quilt is set up for
+    apps = chosen(root, apps)
     if not (root / AI).exists():
         if write:
-            rep = init_layer(root, shell=shell)
+            rep = init_layer(root, shell=shell, apps=apps)
         else:
-            rep = LayerReport(written=[*tracked_docs(), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
-            rep.written += [*vendor_files(quilt_config(root), shell=shell), *ensure_root_line(root, False, shell=shell)]
+            rep = LayerReport(written=[*tracked_docs(root), f"{AI}/README.md", f"{AI}/{VERSION_FILE}"])
+            skills = write_skills(root, apps, write=False)
+            made = permission_files(root, quilt_config(root), shell=shell, apps=apps)
+            rep.merged, rep.theirs, rep.dropped = made.merged, made.theirs, made.dropped
+            permissions = made.texts
+            rep.written += [
+                *permissions,
+                *ensure_root_line(root, False, shell=shell, apps=apps, report=rep),
+                *skills.written,
+                *([f"{AI}/{SKILLS_RECORD}"] if skills.written or skills.unchanged else []),
+            ]
+            rep.theirs += skills.theirs
+            if CLAUDE_SETTINGS in permissions:
+                rep.written.append(f"{AI}/{RULES_FILE}")
     else:
-        rep = upgrade_layer(root, write=write, shell=shell)
-    clients = write_clients(root, write, shell=shell)
+        rep = upgrade_layer(root, write=write, shell=shell, apps=apps)
+    clients = write_clients(root, write, shell=shell, apps=apps)
+    said = "".join(f"{key}\n" for key in apps)
+    if read_plain(root, f"{AI}/{APPS_FILE}") != said:
+        rep.written.append(f"{AI}/{APPS_FILE}")
+        if write:
+            _write(root, f"{AI}/{APPS_FILE}", said)
     if write:
         # the client files name this machine's paths, so the root .gitignore keeps them out of the repository
         from loom.gitignore import ensure
@@ -228,8 +265,11 @@ def sdk_groups(shell: bool) -> list[Group]:
 @click.option(
     "--client",
     type=click.Choice([c.key for c in CLIENTS]),
+    metavar="APP",
     default=None,
-    help="Print the loom server's entry for this agent app, to add to its settings by hand, and write nothing.",
+    help="Print the loom server's entry for agent app APP, to add to its settings by hand, and write nothing: "
+    + ", ".join(c.key for c in CLIENTS if c.listed)
+    + ".",
 )
 @click.option("--dry-run", is_flag=True, help="Say what would be written and write nothing.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
@@ -247,7 +287,7 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
 
     existed = (quilt.root / AI).is_dir()
     shell = variant(quilt.root) == SHELL if mcp is None else not mcp
-    rep, clients = install_layer(quilt.root, write=not dry_run, shell=shell)
+    rep, clients = install_layer(quilt.root, write=not dry_run, shell=shell, apps=[c.key for c in PROJECT])
     written = sorted(dict.fromkeys(str(rel) for rel in rep.written))
     by_dir: dict[str, list[str]] = {}
     for rel in written:
@@ -274,12 +314,36 @@ def ai_init(mcp: bool | None, client: str | None, dry_run: bool, as_json: bool, 
                 limit=None,
             )
         )
+    if rep.theirs:
+        groups.append(Group("yours, at a path loom writes, so left alone", [Item("", key=rel) for rel in rep.theirs]))
+    if rep.merged:
+        groups.append(
+            Group("yours, loom's rules written in, your own settings kept", [Item("", key=rel) for rel in rep.merged])
+        )
+    if rep.removed:
+        groups.append(
+            Group(
+                "would remove" if dry_run else "removed",
+                [Item("loom's own, for a mode the quilt no longer has", key=rel) for rel in rep.removed],
+            )
+        )
+    if rep.dropped:
+        groups.append(
+            Group(
+                "would take out" if dry_run else "took out",
+                [Item("loom's own rule, which it no longer writes", key=rule) for rule in rep.dropped],
+            )
+        )
     sdk = sdk_groups(shell)
     groups += _client_groups(clients, dry_run) + sdk
     data = {
         "written": written,
         "kept": sorted(rep.kept),
         "new_beside": sorted(rep.new_beside),
+        "theirs": rep.theirs,
+        "merged": rep.merged,
+        "removed": rep.removed,
+        "dropped": rep.dropped,
         "refreshed": existed,
         "variant": SHELL if shell else "mcp",
         "clients": clients.to_json(),
@@ -413,13 +477,13 @@ def ai_mode(name: str, session: str | None, quilt_path: str | None) -> None:
 
     The quilt's own copy in .loom/ai/modes/ is printed, so an edit the author made there holds; with no .loom/ai/, the shipped one. `loom ai orient` lists every mode with its one line.
     """
-    from loom.ai.layout import MODES
+    from loom.ai.layout import modes
     from loom.ai.orient import mode_text
     from loom.cli.build_cmds import log_run
 
     quilt = open_quilt(quilt_path)
-    if name not in MODES:
-        raise NotFoundError("mode", f"no mode {name!r}; the modes are {', '.join(MODES)}")
+    if name not in modes(quilt.root):
+        raise NotFoundError("mode", f"no mode {name!r}; the modes are {', '.join(modes(quilt.root))}")
     found = find_session(quilt.root, session) if session else None
     click.echo(mode_text(quilt.root, name), nl=False)
     log_run(found.id if found else None, f"loom ai mode {name}", quilt.root)

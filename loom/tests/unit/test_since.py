@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any
 
@@ -246,3 +247,97 @@ def test_a_mark_on_a_pdf_page_is_reported_with_where_it_stands_and_a_crop(q: Pat
     ok("annotate", "notes/paper.pdf", "And this?", "--page", "1", "--quote", "the median polytope", "--as", WHO, cwd=q)
     text = ok("since", "--as", AGENT, cwd=q).stdout
     assert "notes/paper.pdf p.1" in text and "      crop: .loom/build/crops/" in text
+
+
+def test_a_session_looks_first_from_where_its_name_last_looked_and_then_on_its_own(q: Path) -> None:
+    """Two conversations of one agent each look as their own session: one looking does not move the other's window, and a new one starts where the name last looked."""
+    one = new_session(q, "conversation one", WHO)
+    two = new_session(q, "conversation two", WHO)
+    look(q)
+    ok("annotate", "dm-0003", "First.", "--as", WHO, cwd=q)
+    got = look(q, "--session", one)
+    assert got["first"] is True and got["session"] == one
+    assert got["verdict"].startswith(f"your first look in {one}, since {AGENT} last looked")
+    assert [a["body"] for a in got["annotations"]] == ["First."]
+    assert marker_path(q, AGENT, one).is_file() and marker_path(q, AGENT).is_file()
+    assert look(q, "--session", two)["annotations"] == [], "it starts where the name's marker stands"
+    ok("annotate", "dm-0003", "Second.", "--as", WHO, cwd=q)
+    assert [a["body"] for a in look(q, "--session", one)["annotations"]] == ["Second."]
+    assert [a["body"] for a in look(q, "--session", two)["annotations"]] == ["Second."]
+
+
+def test_a_session_whose_name_never_looked_starts_when_it_opened(q: Path) -> None:
+    ok("annotate", "dm-0003", "Before.", "--as", WHO, cwd=q)
+    sid = new_session(q, "later", WHO)
+    got = look(q, "--session", sid)
+    assert got["first"] is True and got["verdict"].startswith(f"your first look as {AGENT}, since the session opened")
+
+
+def test_a_sessions_first_look_with_no_marker_starts_where_a_look_with_no_session_does(q: Path) -> None:
+    """Over MCP a conversation's session is made at its first look, so that look opens where the name's first look would, at the active session's opening, and not at its own: a person comments, then asks their agent."""
+    from loom.sessions import for_conversation
+
+    ok("annotate", "dm-0003", "Please look at this first.", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    sid = for_conversation(q, "conv-a", AGENT, f"{AGENT} · now").id
+    got = look(q, "--session", sid)
+    assert got["first"] is True and [a["body"] for a in got["annotations"]] == ["Please look at this first."]
+    assert look(q)["annotations"] == [], "the name's marker moved with the session's"
+
+
+def test_a_deletion_is_said_to_each_open_session_of_the_name_that_has_looked(q: Path) -> None:
+    """One conversation hearing of a deletion does not take it from another that has looked as the same name; once both have, it goes."""
+    from loom.since import deletions
+
+    one = new_session(q, "conversation one", WHO)
+    two = new_session(q, "conversation two", WHO)
+    ok("annotate", "dm-0003", "A gap here.", "--as", AGENT, cwd=q)
+    gap = last_id(q)
+    look(q, "--session", one)
+    look(q, "--session", two)
+    ok("annotate", "--delete", gap, "--as", WHO, cwd=q)
+    assert [a["id"] for a in look(q, "--session", one)["acts"]] == [gap]
+    assert [a["id"] for a in look(q, "--session", two)["acts"]] == [gap]
+    assert [e for e in deletions(q) if e.get("to") == AGENT] == []
+    assert look(q, "--session", one)["acts"] == [] and look(q, "--session", two)["acts"] == []
+
+
+def test_a_session_that_has_not_looked_for_fourteen_days_holds_no_notice(q: Path) -> None:
+    """A conversation that ends leaves its session open; after fourteen days without a look it no longer keeps a deletion notice for the others."""
+    from datetime import timedelta
+
+    from loom.clock import now
+    from loom.since import HOLD_DAYS, deletions
+
+    one = new_session(q, "conversation one", WHO)
+    two = new_session(q, "conversation two", WHO)
+    ok("annotate", "dm-0003", "A gap here.", "--as", AGENT, cwd=q)
+    gap = last_id(q)
+    look(q, "--session", one)
+    look(q, "--session", two)
+    old = marker_path(q, AGENT, two)
+    data = json.loads(old.read_text())
+    data["when"] = (now() - timedelta(days=HOLD_DAYS, hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    old.write_text(json.dumps(data))
+    ok("annotate", "--delete", gap, "--as", WHO, cwd=q)
+    assert [a["id"] for a in look(q, "--session", one)["acts"]] == [gap]
+    assert [e for e in deletions(q) if e.get("to") == AGENT] == []
+
+
+def test_a_session_an_agent_opened_aside_and_a_person_made_active_opens_the_look_at_its_opening(q: Path) -> None:
+    """`session new --no-use` makes nothing active, so the session stands where no other stood: made active later by a person, it is any active session, and a first look opens at its opening."""
+    ok("annotate", "dm-0003", "Before the agent's session.", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds
+    made = json_of("session", "new", "--name", "aside", "--no-use", "--as", AGENT, "--json", cwd=q)
+    ok("session", "use", made["session"], "--as", WHO, cwd=q)
+    got = look(q)
+    assert got["first"] is True and got["annotations"] == []
+
+
+def test_an_agent_that_opens_a_session_and_then_looks_sees_what_came_before(q: Path) -> None:
+    """In a shell: `session new` makes the agent's session active, and its first look still opens where it would have, had it come first."""
+    ok("annotate", "dm-0003", "Please look at this first.", "--as", WHO, cwd=q)
+    time.sleep(1.1)  # the clock counts seconds: a session made in the annotation's own second would see it either way
+    ok("session", "new", "--name", "working on dm-0003", "--as", AGENT, cwd=q)
+    got = look(q)
+    assert got["first"] is True and [a["body"] for a in got["annotations"]] == ["Please look at this first."]

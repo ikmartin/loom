@@ -554,25 +554,50 @@ def check_engine(quilt: Any) -> Item:
 
 
 def check_permissions(root: Path) -> Item:
-    """`.claude/settings.json` and `.codex/rules/loom.rules` byte for byte what this loom's table renders (`vendor_files`), in the variant the first says."""
-    from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, SHELL, quilt_config, variant, vendor_files
+    """The permission files of the apps the quilt is set up for (`.claude/settings.json`, `.codex/rules/loom.rules`) byte for byte what this loom's table renders into the quilt (`vendor_files`, the person's own settings in Claude Code's kept), in the variant the quilt's files say. One loom leaves alone warns at every run, saying why."""
+    from loom.ai.clients import PROJECT, chosen
+    from loom.ai.layout import (
+        CLAUDE_SETTINGS,
+        SHELL,
+        blocker,
+        quilt_config,
+        read_plain,
+        settings_left,
+        variant,
+        vendor_files,
+    )
 
-    wanted = (CLAUDE_SETTINGS, CODEX_RULES)
-    present = [rel for rel in wanted if (root / rel).is_file()]
-    layer = (root / AI).is_dir()
-    if not layer and not present:
-        return Item("permissions", OK, QUILT, f"no {AI}/ (loom ai init writes it and them)")
     shell = variant(root) == SHELL
-    shipped = vendor_files(quilt_config(root), shell=shell)
-    stale = [rel for rel in present if (root / rel).read_text(encoding="utf-8") != shipped[rel]]
-    absent = [rel for rel in wanted if rel not in present] if layer else []
-    if not stale and not absent:
+    config = quilt_config(root)
+    apps = chosen(root, None)
+    shipped = vendor_files(config, shell=shell, apps=apps, root=root)
+    wanted = tuple(shipped)
+    layer = (root / AI).is_dir()
+    # a file of the person's that loom leaves alone holds none of its rules, which is said at every run
+    left = settings_left(root, config) if CLAUDE_SETTINGS in vendor_files(config, shell=shell, apps=apps) else ""
+    # the other permission files loom leaves alone, a link among them, said at every run with why
+    held = {rel: why for rel in wanted if rel != CLAUDE_SETTINGS and (why := blocker(root, rel))} if layer else {}
+    present = [rel for rel in wanted if rel not in held and (root / rel).is_file()]
+    if not layer and not present and not left:
+        return Item("permissions", OK, QUILT, f"no {AI}/ (loom ai init writes it and them)")
+    stale = [rel for rel in present if read_plain(root, rel) != shipped[rel]]
+    absent = [rel for rel in wanted if rel not in present and rel not in held] if layer else []
+    if not stale and not absent and not left and not held:
         how = "agents here run loom in a shell" if shell else "agents here attach over MCP"
         return Item(
             "permissions", OK, QUILT, f"{', '.join(present)}: {how}", extra={"variant": SHELL if shell else "mcp"}
         )
     said = [f"{rel} missing: an agent here runs without loom's table" for rel in absent]
     said += [f"{rel}: not what this loom lets agents run" for rel in stale]
+    if left:
+        said.append(
+            f"{CLAUDE_SETTINGS}: none of loom's rules is in force for Claude Code, since {left}; make it a JSON object in a file of the quilt's own, and loom upgrade writes them in"
+        )
+    label = {c.permissions: c.label for c in PROJECT if c.permissions}
+    said += [
+        f"{rel}: loom leaves it alone, since {why}, so what {label.get(rel, 'the app')} reads there is not loom's table; make it a file of the quilt's own, and loom upgrade writes it"
+        for rel, why in held.items()
+    ]
     # beside an .loom/ai/, `loom upgrade` writes both; without one, `loom ai init` does
     return Item("permissions", WARN, QUILT, "; ".join(said), "loom upgrade" if layer else "loom ai init")
 
@@ -629,13 +654,23 @@ def check_mcp(root: Path) -> list[Item]:
 
 
 def check_ai_files(root: Path) -> Item:
-    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above."""
-    from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, read_versions, sha, tracked_docs, upgrade_layer
+    """The mode files and the orientation against what `loom upgrade` would write, by its own dry run; the permission files are the item above, and the skills, made whole from the modes at every upgrade, are no file of the author's to fall behind. A `.loom/ai` that is not a directory of the quilt's own (`blocker`) warns, since loom writes nothing there."""
+    from loom.ai.layout import CLAUDE_SETTINGS, CODEX_RULES, blocker, read_versions, sha, tracked_docs, upgrade_layer
+    from loom.ai.skills import is_skill
 
+    why = blocker(root, AI, folder=True)
+    if why:
+        return Item(
+            "ai files",
+            WARN,
+            QUILT,
+            f"{why}, so loom writes nothing of the agent layer there",
+            f"make {AI} a directory of the quilt's own",
+        )
     if not (root / AI).is_dir():
         return Item("ai files", OK, QUILT, f"no {AI}/ (loom ai init writes it)")
     rep = upgrade_layer(root, write=False)
-    stale = [rel for rel in rep.written if rel not in (CLAUDE_SETTINGS, CODEX_RULES)]
+    stale = [rel for rel in rep.written if rel not in (CLAUDE_SETTINGS, CODEX_RULES) and not is_skill(rel)]
     shipped, recorded = tracked_docs(), read_versions(root)
 
     def unseen(rel: str) -> bool:

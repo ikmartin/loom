@@ -30,7 +30,8 @@ def first_cells(text: str) -> list[str]:
 def test_no_reserved_write_operation_is_served() -> None:
     """An operation that is served belongs in specs/write-api.md, whose rows are the served endpoints, and its row here is deleted by the change that serves it."""
     reserved = first_cells(section("Write operations"))
-    assert len(reserved) >= 10 and all(re.fullmatch(r"[a-z]+(-[a-z]+)+", name) for name in reserved), reserved
+    assert reserved, "the table of reserved write operations parsed to nothing"
+    assert all(re.fullmatch(r"[a-z]+(-[a-z]+)+", name) for name in reserved), reserved
     served = sorted(set(reserved) & (set(CAPABILITIES) | set(HANDLERS)))
     assert served == [], f"served, and still on the page of reserved names: {served}"
 
@@ -39,7 +40,7 @@ def test_every_reserved_path_is_named_once_and_kept_from_agents() -> None:
     """A reserved path is a constant in `loom.paths` already, so that two pieces of work do not spell it twice, and no agent may write it, so that the permission files a quilt has today already say so."""
     named = {v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str)}
     reserved = [name for name in first_cells(section("Paths in a quilt")) if name.startswith(".loom/")]
-    assert len(reserved) >= 4, reserved
+    assert reserved, "the table of reserved paths parsed to nothing"
     for path in reserved:
         rel = path.rstrip("/")
         assert rel in named, f"{path} is reserved and loom.paths does not name it"

@@ -80,10 +80,10 @@ def types_text(types: Types) -> str:
 
 def modes_using(root: Path) -> dict[str, list[str]]:
     """Which modes name each type, by type id, read from the placeholders in the quilt's mode files (else the shipped ones)."""
-    from loom.ai.layout import MODES
+    from loom.ai.layout import modes
 
     out: dict[str, list[str]] = {}
-    for name in MODES:
+    for name in modes(root):
         p = root / AI / "modes" / f"{name}.md"
         text = (
             p.read_text(encoding="utf-8")
@@ -96,7 +96,7 @@ def modes_using(root: Path) -> dict[str, list[str]]:
 
 
 def mode_text(root: Path, name: str) -> str:
-    """Mode `name`'s file, the quilt's own copy where it has one, else the shipped one, with its types named as the quilt names them; `name` is one of `MODES`."""
+    """Mode `name`'s file, the quilt's own copy where it has one, else the shipped one, with its types named as the quilt names them; `name` is one of the quilt's `modes`."""
     p = root / AI / "modes" / f"{name}.md"
     if p.is_file():
         text = p.read_text(encoding="utf-8")
@@ -120,12 +120,12 @@ def fits(root: Path, name: str) -> str:
 def mode_index(root: Path) -> str:
     """The modes, one line each, from each file's `When it fits:` line: what `loom ai orient` prints after the documents, and the server's instructions after it.
 
-    Drawn from `MODES` rather than the directory, so a file loom no longer ships is not offered; a quilt copy edited to drop the line shows the mode with no description rather than none.
+    Drawn from the quilt's `modes` rather than the directory, so a file loom no longer ships is not offered; a quilt copy edited to drop the line shows the mode with no description rather than none.
     """
-    from loom.ai.layout import MODES
+    from loom.ai.layout import modes
 
     lines = ["", "---", "", "# Modes", "", "`loom ai mode NAME` prints one in full.", ""]
-    for name in MODES:
+    for name in modes(root):
         line = fits(root, name)
         lines.append(f"- **{name}**: {line}" if line else f"- **{name}**")
     return "\n".join(lines) + "\n"

@@ -13,7 +13,6 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 | path | holds | owner |
 |---|---|---|
 | `.loom/format` | the quilt's format number, which a loom older than the quilt reads to say so | the safe write path |
-| `.loom/live/`, one `<pid>.json` each | a record for each agent server process attached to the quilt | attaching an agent |
 | `.loom/digests/suggested.jsonl` | the works an agent suggested | the library |
 | `.loom/formal/`, with `evidence.jsonl` and `attest.toml` | formal evidence, and the person's attestations | formalization |
 
@@ -30,7 +29,6 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | `formal-enable` | turns formalization on for the quilt, on this machine | formalization |
 | `formal-check` | runs loom's own check of a formal proof again | formalization |
 | `formal-attest` | records the person's attestation that a formal statement is theirs | formalization |
-| `agents-setup` | writes the files an agent's app needs to work in the quilt | attaching an agent |
 | `quilt-import` | brings a dropped paper, folder or archive into the quilt | install and launch; the window's drop target calls it |
 | `sync-pair` | pairs the quilt with an Overleaf project from its link | Overleaf |
 | `sync-fetch` | fetches what changed there | Overleaf |
@@ -66,7 +64,7 @@ Loom writes none of these, so `manifest.md`, which says loom writes every top-le
 | `formal`, and `keys[K].formal` | the formal proposals, and each key's formal state | formalization; Review's list of proposals reads it |
 | `diagnostics[*].class` | whose problem a code is, so that a person is shown only problems in their own text | Review; every part that adds a code gives its class |
 
-With one owner and no name fixed: the list of what changed and an AI document's state (Review, which may reshape `changes` and `changes_since`); who is connected and what agents may read and change (attaching an agent, sent over the stream and read at `/_api`); a work's state word and its page text (the library).
+With one owner and no name fixed: the list of what changed and an AI document's state (Review, which may reshape `changes` and `changes_since`); a work's state word and its page text (the library).
 
 ## Commands and modes
 

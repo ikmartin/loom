@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -14,7 +16,7 @@ from pathlib import Path
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
 
-#: The modes loom ships, in the order the index lists them. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/ai/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
+#: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/ai/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
 MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "ingest"]
 RULES = "rules.md"  # `.loom/ai/rules.md`: not a mode, and no longer filed among them
 # The one list: every loom command an agent may run, by its full path in the command tree. Everything else loom offers is the author's, so a command added later is denied until it is named here -- which an enumeration of forbidden commands could never promise, and did not: twelve mutating commands were missing from it (DR-173).
@@ -61,8 +63,8 @@ ACTS: dict[str, str] = {
 AUTHOR_OPTIONS: dict[str, frozenset[str]] = {
     "changes": frozenset({"--keep", "--discard", "--keep-all", "--discard-all", "--why"}),
 }
-#: Agent commands that are no MCP tool: the server itself, and `serve`, which runs until stopped.
-NOT_TOOLS = frozenset({"mcp", "serve"})
+#: Agent commands that are no MCP tool: the server itself, `serve`, which runs until stopped, and `library relate`, which no agent was found to use and which the rules no longer ask for; a shell still runs it.
+NOT_TOOLS = frozenset({"mcp", "serve", "library relate"})
 #: The one agent command that may reach the network, when the quilt's config allows it.
 NETWORK = frozenset({"library update"})
 #: The line loom puts in each agent's root file, one per variant: an agent attached over MCP starts from the server's tool, and one working through a shell from the command.
@@ -78,6 +80,8 @@ OLD_LINES = (
 #: The two variants of the agent layer: the MCP server's tools with `loom` in a shell beside them, the default, or the shell alone, for an agent with no MCP.
 MCP, SHELL = "mcp", "shell"
 VERSION_FILE = ".loom-modes-version"
+#: The agent apps the quilt is set up for, one key a line (`clients.apps_in`), written with the layer; a quilt without it is set up for every app.
+APPS_FILE = ".loom-apps"
 
 
 def _asset(*parts: str) -> str:
@@ -121,8 +125,16 @@ def help_commands() -> list[str]:
     return sorted(f"{group} {flag}".strip() for group in ("", *groups) for flag in ("--help", "-h"))
 
 
-def tracked_docs() -> dict[str, str]:
-    """Quilt-relative path -> shipped text for every file whose edits `loom upgrade` preserves.
+def modes(root: Path | None = None) -> list[str]:
+    """The modes of the quilt at `root`, in the order its agents are shown them; with no quilt, the ones loom ships.
+
+    Every listing of the modes asks here: the orientation's index, the MCP prompts and the check of a prompt's name, `loom ai mode`, which types each mode names, the manifest's `agents.modes`, and the mode files the agent layer writes. Today a quilt's modes are loom's (`MODES`) whatever its `.loom/ai/modes/` holds, so a quilt's own set is a change to this function and not to its callers.
+    """
+    return list(MODES)
+
+
+def tracked_docs(root: Path | None = None) -> dict[str, str]:
+    """Quilt-relative path -> shipped text for every file whose edits `loom upgrade` preserves, the files of the quilt's modes among them (`modes`).
 
     The orientation is here because it is the first thing an author tailors -- a standing rule about this quilt, a mode the agent should not reach for -- and `loom upgrade` overwrote it without a word until it was.
     """
@@ -132,7 +144,7 @@ def tracked_docs() -> dict[str, str]:
         f"{AI}/orientation.md": _asset("orientation.md"),
         f"{AI}/formatting.md": _asset("formatting.md"),
     }
-    out.update({f"{AI}/modes/{m}.md": _asset("modes", f"{m}.md") for m in MODES})
+    out.update({f"{AI}/modes/{m}.md": _asset("modes", f"{m}.md") for m in modes(root)})
     return out
 
 
@@ -187,12 +199,205 @@ def permissions_json(config: QuiltConfig, *, shell: bool = False) -> str:
     deny = [f"Edit({d})" for d in claude_denies(config)]
     deny += [f"Bash(loom {c}*)" for c in author_commands()]
     deny.append("Bash(rm *)")
-    return json.dumps({"permissions": {"allow": allow, "deny": deny}}, indent=2) + "\n"
+    return json.dumps({"permissions": {"allow": allow, "deny": deny}}, indent=2, ensure_ascii=False) + "\n"
 
 
 #: Where each agent tool reads the quilt's rules for its agents: one policy, loom's own, rendered per tool (DR-283-ikmartin).
 CLAUDE_SETTINGS = ".claude/settings.json"
 CODEX_RULES = ".codex/rules/loom.rules"
+#: The rules loom last put in Claude Code's permission file, in `.loom/ai/`: `allow` or `deny`, a tab and the rule, a line each, so that a rule loom no longer writes is told from one of the person's.
+RULES_FILE = ".loom-rules"
+
+
+def blocker(root: Path, rel: str, *, folder: bool = False) -> str:
+    """Why loom may not read or write quilt-relative `rel` as a file of the quilt's own, or '' where it may: some part of the path is a link, which may lead out of the quilt, or is not a directory, or the last is not a regular file (a directory with `folder`), which a FIFO would make a read wait on for ever. An absent path is no blocker."""
+    p = root
+    parts = rel.split("/")
+    for i, part in enumerate(parts):
+        p = p / part
+        try:
+            mode = os.lstat(p).st_mode
+        except FileNotFoundError:
+            return ""
+        except OSError as exc:
+            return f"`{p.relative_to(root).as_posix()}` cannot be read ({exc.strerror})"
+        here = p.relative_to(root).as_posix()
+        if stat.S_ISLNK(mode):
+            return f"`{here}` is a link, and loom reads and writes nothing through one"
+        last = i == len(parts) - 1 and not folder
+        if not (stat.S_ISREG(mode) if last else stat.S_ISDIR(mode)):
+            return f"`{here}` is not a {'file' if last else 'directory'}"
+    return ""
+
+
+def read_plain(root: Path, rel: str) -> str | None:
+    """The text of quilt-relative `rel` where it is a regular file reached through no link (`blocker`), read so that nothing can make it wait; None where it is absent, blocked or not UTF-8."""
+    if blocker(root, rel):
+        return None
+    try:
+        fd = os.open(
+            root / rel, os.O_RDONLY | os.O_CLOEXEC | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        )
+    except OSError:
+        return None
+    try:
+        if not stat.S_ISREG(os.fstat(fd).st_mode):
+            return None
+        with os.fdopen(os.dup(fd), "rb") as fh:
+            return fh.read().decode("utf-8")
+    except (OSError, UnicodeDecodeError):
+        return None
+    finally:
+        os.close(fd)
+
+
+def refuse_layer(root: Path) -> None:
+    """Refuse (`WriteRefused`) to write the agent layer where `.loom/ai/` is there and not a directory of the quilt's own (`blocker`): what is written there through a link lands outside the quilt."""
+    from loom.writes import WriteRefused
+
+    why = blocker(root, AI, folder=True)
+    if why:
+        raise WriteRefused(
+            "not-writable", f"loom writes nothing into {AI}/, since {why}; make it a directory of the quilt's own"
+        )
+
+
+def _rules_wrote(root: Path) -> dict[str, set[str]] | None:
+    """The rules loom last wrote into Claude Code's permission file, by list, as `RULES_FILE` records them; None where there is no record, or none that can be read (`read_plain`)."""
+    text = read_plain(root, f"{AI}/{RULES_FILE}")
+    if text is None:
+        return None
+    out: dict[str, set[str]] = {"allow": set(), "deny": set()}
+    for line in text.splitlines():
+        kind, _, rule = line.partition("\t")
+        if kind in out and rule:
+            out[kind].add(rule)
+    return out
+
+
+def record_rules(root: Path, generated: str, *, before: list[str] | None = None) -> None:
+    """Record loom's rules in `generated`, Claude Code's permission file as loom renders it, as the ones it wrote, once that file is written; nothing where the quilt has no `.loom/ai/`.
+
+    With `before`, called ahead of writing that file: the record keeps every rule it held, and each of `before` (`Settings.dropped`, loom's rules in the file as it stands), beside what `generated` renders, so a write that fails at any point leaves a record naming every rule of loom's in the file.
+    """
+    ours = json.loads(generated)["permissions"]
+    rules = {kind: list(ours[kind]) for kind in ("allow", "deny")}
+    if before is not None:
+        held = _rules_wrote(root) or {"allow": set(), "deny": set()}
+        for d in before:
+            kind, _, rule = d.partition(" ")
+            held[kind].add(rule)
+        for kind in rules:
+            rules[kind] += sorted(held[kind] - set(rules[kind]))
+    said = "".join(f"{kind}\t{rule}\n" for kind in ("allow", "deny") for rule in rules[kind])
+    if (root / AI).is_dir() and read_plain(root, f"{AI}/{RULES_FILE}") != said:
+        _write(root, f"{AI}/{RULES_FILE}", said)
+
+
+def _write(root: Path, rel: str, text: str) -> None:
+    """Write one file of the agent layer whole or not at all, or refuse in a sentence where it cannot be written.
+
+    Written beside and moved into place, keeping the file's mode, so a write cut short (a full disk, a size limit) leaves the person's file as it was; a file without write permission is refused, as writing it in place would be.
+    """
+    import errno
+    import secrets
+
+    from loom.writes import WriteRefused
+
+    p = root / rel
+    tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}.tmp")
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            mode: int | None = stat.S_IMODE(os.stat(p).st_mode)
+        except FileNotFoundError:
+            mode = None
+        if mode is not None and not os.access(p, os.W_OK):
+            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(p))
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o666 if mode is None else mode)
+        with os.fdopen(fd, "wb") as fh:
+            if mode is not None:
+                os.fchmod(fh.fileno(), mode)
+            fh.write(text.encode("utf-8"))
+        os.replace(tmp, p)
+    except OSError as exc:
+        raise WriteRefused(
+            "not-writable",
+            f"loom could not write {rel} ({exc.strerror}); nothing after it was written, so run this again once it can be",
+        ) from exc
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+@dataclass
+class Settings:
+    """What loom makes of Claude Code's permission file in one quilt.
+
+    `text` is what loom writes, None where it leaves the file alone, and `why` says for what; `dropped` is each rule of loom's own it takes out, `allow RULE` or `deny RULE`, since it no longer renders it.
+    """
+
+    text: str | None
+    why: str = ""
+    dropped: list[str] = field(default_factory=list)
+
+
+def settings_for(root: Path, generated: str) -> Settings:
+    """Claude Code's permission file as loom writes it into the quilt at `root`: `generated`, loom's rules, merged into whatever the file there holds, which is the person's.
+
+    A rule is loom's where loom renders it now or `RULES_FILE` records loom writing it; with no record, an `allow` naming a loom command or tool is taken for an older loom's too. Every other rule is the person's, allow or deny, and kept after loom's, with every other key in its place and its text as written, a byte-order mark included. A file that is a link, not a regular file, empty, not UTF-8 or not a JSON object whose `permissions` holds `allow` and `deny` lists is left alone, and `why` says which.
+    """
+    why = blocker(root, CLAUDE_SETTINGS)
+    if why:
+        return Settings(None, why)
+    p = root / CLAUDE_SETTINGS
+    if not p.exists():
+        return Settings(generated)
+    text = read_plain(root, CLAUDE_SETTINGS)
+    if text is None:
+        return Settings(None, f"`{CLAUDE_SETTINGS}` cannot be read as UTF-8")
+    bom = "\ufeff" if text.startswith("\ufeff") else ""
+    body = text[len(bom) :]
+    if not body.strip():
+        return Settings(None, f"`{CLAUDE_SETTINGS}` is empty")
+    try:
+        there = json.loads(body)
+    except ValueError:
+        return Settings(None, f"`{CLAUDE_SETTINGS}` is not JSON")
+    perms = there.get("permissions", {}) if isinstance(there, dict) else None
+    if not isinstance(perms, dict) or not all(isinstance(perms.get(k, []), list) for k in ("allow", "deny")):
+        return Settings(
+            None, f"`{CLAUDE_SETTINGS}` is not a JSON object whose `permissions` holds `allow` and `deny` lists"
+        )
+    ours = json.loads(generated)["permissions"]
+    wrote = _rules_wrote(root)
+
+    def loom_s(kind: str, rule: object) -> bool:
+        if not isinstance(rule, str):
+            return False
+        if rule in ours[kind]:
+            return True
+        if wrote is not None:
+            return rule in wrote[kind]
+        return kind == "allow" and rule.startswith(("Bash(loom ", "mcp__loom__"))
+
+    lists = {kind: ours[kind] + [r for r in perms.get(kind, []) if not loom_s(kind, r)] for kind in ("allow", "deny")}
+    dropped = [
+        f"{kind} {r}"
+        for kind in ("allow", "deny")
+        for r in perms.get(kind, [])
+        if loom_s(kind, r) and r not in ours[kind]
+    ]
+    merged = {k: lists.get(k, v) for k, v in perms.items()}
+    for kind in ("allow", "deny"):
+        merged.setdefault(kind, lists[kind])
+    out = dict(there)
+    out["permissions"] = merged
+    return Settings(bom + json.dumps(out, indent=2, ensure_ascii=False) + "\n", dropped=dropped)
+
+
+def settings_left(root: Path, config: QuiltConfig | None = None) -> str:
+    """Why loom leaves Claude Code's permission file in the quilt at `root` alone, so that none of its rules is in force there, or '' where it writes it."""
+    return settings_for(root, permissions_json(config or quilt_config(root))).why
 
 
 def codex_rules() -> str:
@@ -216,21 +421,90 @@ def codex_rules() -> str:
     return "\n".join(head + body) + "\n"
 
 
-def vendor_files(config: QuiltConfig, *, shell: bool = False) -> dict[str, str]:
-    """Quilt-relative path -> text for the permission files loom owns whole in a quilt with `config`, in one variant; the agent root files are not among them (see `ensure_root_line`), nor the untracked MCP client files (`ai.clients`)."""
-    return {CLAUDE_SETTINGS: permissions_json(config, shell=shell), CODEX_RULES: codex_rules()}
+def vendor_files(
+    config: QuiltConfig,
+    *,
+    shell: bool = False,
+    apps: list[str] | tuple[str, ...] | None = None,
+    root: Path | None = None,
+) -> dict[str, str]:
+    """Quilt-relative path -> text for the permission files loom writes in a quilt with `config`, in one variant, of `apps` (by key, default every app); the agent root files are not among them (see `ensure_root_line`), nor the untracked MCP client files (`ai.clients`).
+
+    With `root`, Claude Code's is what loom writes into that quilt, merged with the person's own settings there (`settings_for`), and left out where loom leaves that file alone.
+    """
+    from loom.ai.clients import PROJECT
+
+    wanted = {c.permissions for c in PROJECT if c.permissions and (apps is None or c.key in apps)}
+    made = {CLAUDE_SETTINGS: lambda: permissions_json(config, shell=shell), CODEX_RULES: codex_rules}
+    out = {rel: make() for rel, make in made.items() if rel in wanted}
+    if root is not None and CLAUDE_SETTINGS in out:
+        merged = settings_for(root, out[CLAUDE_SETTINGS]).text
+        if merged is None:
+            del out[CLAUDE_SETTINGS]
+        else:
+            out[CLAUDE_SETTINGS] = merged
+    return out
+
+
+@dataclass
+class Permissions:
+    """What loom writes of the permission files into one quilt: `texts` by quilt-relative path; `merged`, those that keep settings of the person's beside loom's rules; `theirs`, those loom leaves alone; `dropped`, loom's own rules it takes out, `FILE: allow RULE` or `FILE: deny RULE`."""
+
+    texts: dict[str, str]
+    merged: list[str] = field(default_factory=list)
+    theirs: list[str] = field(default_factory=list)
+    dropped: list[str] = field(default_factory=list)
+    #: Claude Code's `Settings.dropped`, as `record_rules` takes it.
+    rules_out: list[str] = field(default_factory=list)
+
+
+def permission_files(
+    root: Path, config: QuiltConfig, *, shell: bool, apps: list[str] | tuple[str, ...] | None
+) -> Permissions:
+    """What loom writes of `apps`' permission files into the quilt at `root`, in one variant (`Permissions`)."""
+    bare = vendor_files(config, shell=shell, apps=apps)
+    out = Permissions(
+        texts={rel: text for rel, text in bare.items() if rel == CLAUDE_SETTINGS or not blocker(root, rel)}
+    )
+    out.theirs = [rel for rel in bare if rel not in out.texts]
+    if CLAUDE_SETTINGS in bare:
+        got = settings_for(root, bare[CLAUDE_SETTINGS])
+        if got.text is None:
+            del out.texts[CLAUDE_SETTINGS]
+            out.theirs.append(CLAUDE_SETTINGS)
+        else:
+            out.texts[CLAUDE_SETTINGS] = got.text
+            if got.text != bare[CLAUDE_SETTINGS]:
+                out.merged.append(CLAUDE_SETTINGS)
+            out.dropped = [f"{CLAUDE_SETTINGS}: {d}" for d in got.dropped]
+            out.rules_out = got.dropped
+    return out
 
 
 def variant(root: Path) -> str | None:
-    """Which way the quilt's agents reach loom, read off its permission file: `MCP` when it allows the loom server's tools, else `SHELL` when it allows `loom` commands, None with no file. Never recorded anywhere else, so it cannot disagree with what the file says."""
-    p = root / CLAUDE_SETTINGS
+    """Which way the quilt's agents reach loom, read off its committed files: Claude Code's permission file says `MCP` when it allows the loom server's tools, else `SHELL` when it allows `loom` commands; without one, the line loom put in an app's root file says which (`MCP_LINE`, `SHELL_LINE`), and failing that a file that starts the loom server says `MCP`; None with none of them. Codex's permission file is the same in either variant, and its server file is never committed, so neither says which. Never recorded anywhere else, so it cannot disagree with what the files say. Each file is read only where it is a regular file reached through no link (`read_plain`), so nothing in a copied quilt can make this wait."""
+    from loom.ai.clients import PROJECT, names_loom
+
     try:
-        allow = json.loads(p.read_text(encoding="utf-8"))["permissions"]["allow"]
-    except (OSError, ValueError, KeyError, TypeError):
-        return None
-    if "mcp__loom__*" in allow:
-        return MCP
-    return SHELL if any(str(r).startswith("Bash(loom ") for r in allow) else None
+        allow = json.loads((read_plain(root, CLAUDE_SETTINGS) or "").removeprefix("\ufeff"))["permissions"]["allow"]
+    except (ValueError, KeyError, TypeError):
+        allow = None
+    if allow is not None:
+        if "mcp__loom__*" in allow:
+            return MCP
+        if any(str(r).startswith("Bash(loom ") for r in allow):
+            return SHELL
+    for name in ROOT_FILES:
+        lines = (read_plain(root, name) or "").splitlines()
+        if MCP_LINE in lines:
+            return MCP
+        if SHELL_LINE in lines:
+            return SHELL
+    for c in PROJECT:
+        text = read_plain(root, c.file) if c.file else None
+        if text is not None and names_loom(c, text):
+            return MCP
+    return None
 
 
 @dataclass
@@ -239,22 +513,43 @@ class LayerReport:
     kept: list[str] = field(default_factory=list)  # edited mode files left alone
     new_beside: list[str] = field(default_factory=list)  # <mode>.md.new written
     unchanged: list[str] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)  # loom's own, unedited, of a mode the quilt no longer has
+    theirs: list[str] = field(default_factory=list)  # a file of the person's at a path loom writes, left alone
+    merged: list[str] = field(default_factory=list)  # the person's, loom's part written into it, theirs kept
+    dropped: list[str] = field(
+        default_factory=list
+    )  # loom's own rules taken out of a permission file: `FILE: allow RULE`
 
 
 ROOT_FILES = ("CLAUDE.md", "AGENTS.md", "GEMINI.md")
 
 
-def ensure_root_line(root: Path, write: bool = True, *, shell: bool = False) -> list[str]:
-    """Put loom's one line, the variant's, into each agent's root file without taking the files over; returns what was written, or with `write` false what would be.
+def ensure_root_line(
+    root: Path,
+    write: bool = True,
+    *,
+    shell: bool = False,
+    apps: list[str] | tuple[str, ...] | None = None,
+    report: LayerReport | None = None,
+) -> list[str]:
+    """Put loom's one line, the variant's, into the root file of each of `apps` (by key, default every app) without taking the files over; returns what was written, or with `write` false what would be.
 
-    These are the files an agent reads before anything else, and they are also where an author writes what is true of *their* project — so loom contributes a line and owns nothing else. The other variant's line, and any line an older loom wrote (`OLD_LINES`), is replaced where it stands; everything around it is left exactly as the author left it. Loom writing the whole file is what clobbered hand-written instructions on every upgrade (DR-151).
+    These are the files an agent reads before anything else, and they are also where an author writes what is true of *their* project — so loom contributes a line and owns nothing else. The other variant's line, and any line an older loom wrote (`OLD_LINES`), is replaced where it stands; everything around it is left exactly as the author left it. Loom writing the whole file is what clobbered hand-written instructions on every upgrade (DR-151). A root file that is a link, not a regular file or not UTF-8 is left alone and, with `report`, named in its `theirs`.
     """
+    from loom.ai.clients import PROJECT
+
     line, other = (SHELL_LINE, MCP_LINE) if shell else (MCP_LINE, SHELL_LINE)
     replaced = (other, *OLD_LINES)
+    read = {c.root_file for c in PROJECT if apps is None or c.key in apps}
     written: list[str] = []
-    for name in ROOT_FILES:
+    for name in (n for n in ROOT_FILES if n in read):
         p = root / name
-        existing = p.read_text(encoding="utf-8") if p.is_file() else ""
+        there = read_plain(root, name)
+        if there is None and os.path.lexists(p):
+            if report is not None:
+                report.theirs.append(name)
+            continue
+        existing = there or ""
         lines = existing.splitlines()
         if line in lines:
             continue
@@ -265,52 +560,73 @@ def ensure_root_line(root: Path, write: bool = True, *, shell: bool = False) -> 
             kept = [line if x in replaced else x for x in lines]
             # two old lines become one: the first keeps its place
             kept = [x for i, x in enumerate(kept) if x != line or kept.index(line) == i]
-            p.write_text("\n".join(kept) + "\n", encoding="utf-8")
+            _write(root, name, "\n".join(kept) + "\n")
             continue
-        p.write_text(existing.rstrip("\n") + ("\n\n" if existing.strip() else "") + line + "\n", encoding="utf-8")
+        _write(root, name, existing.rstrip("\n") + ("\n\n" if existing.strip() else "") + line + "\n")
     return written
 
 
-def init_layer(root: Path, *, shell: bool = False) -> LayerReport:
-    """Write `.loom/ai/` and the vendor files into a quilt that has no `.loom/ai/` yet, the permission files for every tool among them in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
+def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, ...] | None = None) -> LayerReport:
+    """Write `.loom/ai/` into a quilt that has no `.loom/ai/` yet, with the permission files, root lines and skills of `apps` (by key, default every app) in one variant: what agents may run is loom's, and the same whichever tool runs them (DR-283)."""
+    from loom.ai.clients import chosen
+    from loom.ai.skills import RECORD as SKILLS_RECORD
+    from loom.ai.skills import write_skills
+
     ai = root / AI
     if ai.exists():
         raise FileExistsError(str(ai))
     rep = LayerReport()
     (ai / "modes").mkdir(parents=True)
-    texts = tracked_docs()
+    texts = tracked_docs(root)
     for rel, text in texts.items():
-        p = root / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+        _write(root, rel, text)
         rep.written.append(rel)
     for name in ("README.md",):
         (ai / name).write_text(_asset(name), encoding="utf-8")
         rep.written.append(f"{AI}/{name}")
     write_versions(root, texts)
     rep.written.append(f"{AI}/{VERSION_FILE}")
-    for rel, text in vendor_files(quilt_config(root), shell=shell).items():
-        p = root / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(text, encoding="utf-8")
+    config = quilt_config(root)
+    made = permission_files(root, config, shell=shell, apps=apps)
+    rep.merged, rep.theirs, rep.dropped = made.merged, made.theirs, made.dropped
+    generated = permissions_json(config, shell=shell)
+    for rel, text in made.texts.items():
+        if rel == CLAUDE_SETTINGS:
+            record_rules(root, generated, before=made.rules_out)
+        _write(root, rel, text)
         rep.written.append(rel)
-    rep.written.extend(ensure_root_line(root, shell=shell))
+    if CLAUDE_SETTINGS in made.texts:
+        # before the file and after it, so a write that fails at any point leaves the record naming every rule of loom's there
+        record_rules(root, generated)
+        rep.written.append(f"{AI}/{RULES_FILE}")
+    rep.written.extend(ensure_root_line(root, shell=shell, apps=apps, report=rep))
+    skills = write_skills(root, chosen(root, apps))
+    rep.written += skills.written
+    rep.theirs += skills.theirs
+    if (ai / SKILLS_RECORD).is_file():
+        rep.written.append(f"{AI}/{SKILLS_RECORD}")
     return rep
 
 
-def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) -> LayerReport:
-    """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them.
+def upgrade_layer(
+    root: Path, write: bool = True, *, shell: bool | None = None, apps: list[str] | tuple[str, ...] | None = None
+) -> LayerReport:
+    """Refresh the generated files of an existing `.loom/ai/`; keep edited mode files and write `.new` beside them. Nothing where `.loom/ai/` is absent or not a directory of the quilt's own (`blocker`).
 
-    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
+    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. A skill of the person's at one of loom's paths is left alone (`theirs`), and loom's own of a mode that is gone is taken away (`removed`). With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
     """
+    from loom.ai.clients import chosen
+    from loom.ai.skills import write_skills
+
     if shell is None:
         shell = variant(root) == SHELL
+    apps = chosen(root, apps)
     ai = root / AI
     rep = LayerReport()
-    if not ai.is_dir():
+    if not ai.is_dir() or blocker(root, AI, folder=True):
         return rep
     recorded = read_versions(root)
-    texts = tracked_docs()
+    texts = tracked_docs(root)
     wrote_beside: dict[
         str, str
     ] = {}  # each .new as loom wrote it, so a later upgrade can tell the author's merge from it
@@ -319,8 +635,7 @@ def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) 
         name = Path(rel).name
         if not p.is_file():
             if write:
-                p.parent.mkdir(parents=True, exist_ok=True)
-                p.write_text(shipped, encoding="utf-8")
+                _write(root, rel, shipped)
             rep.written.append(rel)
             continue
         current = p.read_text(encoding="utf-8")
@@ -329,7 +644,7 @@ def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) 
             continue
         if recorded.get(name) == sha(current):
             if write:
-                p.write_text(shipped, encoding="utf-8")  # untouched since it was shipped: refresh
+                _write(root, rel, shipped)  # untouched since it was shipped: refresh
             rep.written.append(rel)
         else:
             beside = p.with_name(name + ".new")
@@ -343,7 +658,7 @@ def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) 
             # a .new as loom wrote it is brought up to date; one the author has begun merging into is theirs (K4)
             if there is None or (sha(there) == last and there != shipped):
                 if write:
-                    beside.write_text(shipped, encoding="utf-8")
+                    _write(root, f"{rel}.new", shipped)
                 wrote_beside[name + ".new"] = sha(shipped)
             elif last:
                 wrote_beside[name + ".new"] = last
@@ -363,44 +678,69 @@ def upgrade_layer(root: Path, write: bool = True, *, shell: bool | None = None) 
         text = _asset(name)
         if not p.is_file() or p.read_text(encoding="utf-8") != text:
             if write:
-                p.write_text(text, encoding="utf-8")
+                _write(root, f"{AI}/{name}", text)
             rep.written.append(f"{AI}/{name}")
         else:
             rep.unchanged.append(f"{AI}/{name}")
-    written, unchanged = write_permissions(root, quilt_config(root), shell=shell, write=write)
+    written, unchanged = write_permissions(root, quilt_config(root), shell=shell, write=write, apps=apps, report=rep)
     rep.written += written
     rep.unchanged += unchanged
-    rep.written.extend(ensure_root_line(root, write, shell=shell))
+    rep.written.extend(ensure_root_line(root, write, shell=shell, apps=apps, report=rep))
+    skills = write_skills(root, apps, write=write)
+    rep.written += skills.written
+    rep.unchanged += skills.unchanged
+    rep.removed += skills.removed
+    rep.theirs += skills.theirs
     return rep
 
 
 def write_permissions(
-    root: Path, config: QuiltConfig, *, shell: bool, write: bool = True
+    root: Path,
+    config: QuiltConfig,
+    *,
+    shell: bool,
+    write: bool = True,
+    apps: list[str] | tuple[str, ...] | None = None,
+    report: LayerReport | None = None,
 ) -> tuple[list[str], list[str]]:
-    """(written, unchanged): the permission files rewritten to what `config` and this loom make them, in one variant.
+    """(written, unchanged): the permission files of `apps` (by default the apps the quilt is set up for, `clients.chosen`) rewritten to what `config` and this loom make them, in one variant, the person's own settings in Claude Code's kept (`settings_for`); a file that cannot be written is refused (`WriteRefused`), the record of loom's rules naming every one in the file whatever failed (`record_rules`), and so is every write where `.loom/ai/` is not the quilt's own (`refuse_layer`).
 
-    A quilt with `.loom/ai/` has both, so a missing one is written like a stale one; `upgrade_layer` and the viewer's Update Claude Code both come here.
+    A missing one of those apps is written like a stale one; `upgrade_layer` and the viewer's Update Claude Code both come here. `report`, where given, gains the files that keep settings of the person's (`merged`), those left alone (`theirs`) and loom's own rules taken out (`dropped`).
     """
+    from loom.ai.clients import chosen
+
+    if write:
+        refuse_layer(root)
     written: list[str] = []
     unchanged: list[str] = []
-    for rel, text in vendor_files(config, shell=shell).items():
-        p = root / rel
-        if p.is_file() and p.read_text(encoding="utf-8") == text:
+    made = permission_files(root, config, shell=shell, apps=chosen(root, apps))
+    if report is not None:
+        report.merged += made.merged
+        report.theirs += made.theirs
+        report.dropped += made.dropped
+    generated = permissions_json(config, shell=shell)
+    for rel, text in made.texts.items():
+        if read_plain(root, rel) == text:
             unchanged.append(rel)
             continue
         if write:
-            p.parent.mkdir(parents=True, exist_ok=True)
-            p.write_text(text, encoding="utf-8")
+            if rel == CLAUDE_SETTINGS:
+                record_rules(root, generated, before=made.rules_out)
+            _write(root, rel, text)
         written.append(rel)
+    if write and CLAUDE_SETTINGS in made.texts:
+        # before the file and after it, so a write that fails at any point leaves the record naming every rule of loom's there
+        record_rules(root, generated)
     return written, unchanged
 
 
 def permissions_stale(root: Path, config: QuiltConfig) -> bool:
-    """Whether Claude Code's permission file is there and not what `config` and this loom make it, in the variant it is in."""
-    path = root / CLAUDE_SETTINGS
-    if not path.is_file():
+    """Whether Claude Code's permission file is there and not what `config` and this loom make it, in the variant it is in, the person's own settings in it kept (`settings_for`); a file loom leaves alone is not stale, and `settings_left` says why."""
+    there = read_plain(root, CLAUDE_SETTINGS)
+    if there is None:
         return False
-    return path.read_text(encoding="utf-8") != vendor_files(config, shell=variant(root) == SHELL)[CLAUDE_SETTINGS]
+    want = vendor_files(config, shell=variant(root) == SHELL, root=root).get(CLAUDE_SETTINGS)
+    return want is not None and there != want
 
 
 def settings_deny_paths(config: QuiltConfig, *, shell: bool = False) -> list[str]:

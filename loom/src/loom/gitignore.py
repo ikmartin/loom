@@ -8,7 +8,19 @@ from __future__ import annotations
 from pathlib import Path
 
 from loom.ai.clients import PROJECT_FILES
-from loom.paths import BUILD, HISTORY, INCOMING, LAST_SEEN, LOOM, LOOM_GITIGNORE, SERVE_JSON, SESSIONS, SINCE, STORAGE
+from loom.paths import (
+    BUILD,
+    HISTORY,
+    INCOMING,
+    LAST_SEEN,
+    LIVE,
+    LOOM,
+    LOOM_GITIGNORE,
+    SERVE_JSON,
+    SESSIONS,
+    SINCE,
+    STORAGE,
+)
 from loom.writes import INDEX, JOURNAL, LOCK, TEMP
 
 
@@ -22,6 +34,8 @@ LOOM_LINES = (
     f"{_inside(BUILD)}/",
     _inside(SERVE_JSON),
     f"{_inside(SINCE)}/",
+    # a record of each agent server running here, which a copied quilt must not carry
+    f"{_inside(LIVE)}/",
     _inside(LAST_SEEN),
     f"{_inside(SESSIONS)}/*/attached.json",
     f"{_inside(SESSIONS)}/*/cursors/",

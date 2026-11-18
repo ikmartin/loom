@@ -1,6 +1,6 @@
-"""`loom since`: what people did since an agent last looked, read off the records against one marker per agent name.
+"""`loom since`: what people did since an agent last looked, read off the records against one marker per agent name, and one per session that names it.
 
-The marker (`.loom/since/<slug>.json`) is the second the agent last looked, the records that carry that second, the keys stale then and the research state as it read then. A record is new when it is later than the marker, or of the marker's second and not among those it carries, so the clock's one-second resolution neither repeats nor drops one. Nothing here is committed or watched: the marker is this machine's note of where an agent got to, and moving it rebuilds nothing.
+A session's marker (`.loom/since/<slug>.<session>.json`) is one conversation's own, so two conversations of one app each see what came since they last looked; its first look starts where the name's marker stands, the latest look of any, and where the name has none, where a look with no session starts, never at the session's own opening, which is the first look itself over MCP. The marker (`.loom/since/<slug>.json`) is the second the agent last looked, the records that carry that second, the keys stale then and the research state as it read then. A record is new when it is later than the marker, or of the marker's second and not among those it carries, so the clock's one-second resolution neither repeats nor drops one. Nothing here is committed or watched: the marker is this machine's note of where an agent got to, and moving it rebuilds nothing.
 """
 
 from __future__ import annotations
@@ -8,14 +8,19 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loom.clock import stamp
 from loom.paths import DELETED, SINCE
 from loom.scan.scan import ScanResult
 
+if TYPE_CHECKING:
+    from loom.sessions import Session
+
 #: Where the markers live, one file per agent name.
 MARKERS = SINCE
+#: How long an open session that has not looked still holds a deletion notice for its name, in days: a conversation that ends leaves its session open, and would hold one for ever. An agent's scratch is kept as long.
+HOLD_DAYS = 14
 
 
 @dataclass
@@ -39,6 +44,10 @@ class Since:
     name: str
     start: str
     first: bool
+    #: The session looking, whose marker this is; None for the name's own.
+    session: str | None = None
+    #: Where a first look's window opened: `name` (where the name's marker stands), `session` (when the quilt's active session was last opened), or '' (the start of the quilt); '' on a later look too.
+    opened: str = ""
     annotations: list[dict[str, Any]] = field(default_factory=list)
     acts: list[dict[str, Any]] = field(default_factory=list)
     edits: list[dict[str, Any]] = field(default_factory=list)
@@ -65,6 +74,7 @@ class Since:
     def to_json(self) -> dict[str, Any]:
         return {
             "as": self.name,
+            "session": self.session,
             "from": self.start,
             "first": self.first,
             "to": self.marker.when if self.marker else self.start,
@@ -84,14 +94,15 @@ def slug(name: str) -> str:
     return "".join(c if c.isalnum() or c in "-_" else "-" for c in name.lower()).strip("-") or "reader"
 
 
-def marker_path(root: Path, name: str) -> Path:
-    return root / MARKERS / f"{slug(name)}.json"
+def marker_path(root: Path, name: str, session: str | None = None) -> Path:
+    """The marker of `name`, or with `session` that session's own."""
+    return root / MARKERS / (f"{slug(name)}.{session}.json" if session else f"{slug(name)}.json")
 
 
-def read_marker(root: Path, name: str) -> Marker | None:
-    """The agent's marker, or None before its first look (or when the file does not parse, which is the same thing)."""
+def read_marker(root: Path, name: str, session: str | None = None) -> Marker | None:
+    """The agent's marker, or its marker in `session`; None before its first look (or when the file does not parse, which is the same thing)."""
     try:
-        d = json.loads(marker_path(root, name).read_text(encoding="utf-8"))
+        d = json.loads(marker_path(root, name, session).read_text(encoding="utf-8"))
         stale = d.get("stale")
         return Marker(
             when=str(d["when"]),
@@ -103,9 +114,8 @@ def read_marker(root: Path, name: str) -> Marker | None:
         return None
 
 
-def write_marker(root: Path, name: str, marker: Marker) -> None:
-    p = marker_path(root, name)
-    p.parent.mkdir(parents=True, exist_ok=True)
+def write_marker(root: Path, name: str, marker: Marker, session: str | None = None) -> None:
+    """Move the name's marker to `marker`, and with `session` that session's too, so a later conversation's first look starts here."""
     d = {
         "as": name,
         "when": marker.when,
@@ -113,12 +123,38 @@ def write_marker(root: Path, name: str, marker: Marker) -> None:
         "stale": sorted(marker.stale or ()),
         "state": marker.state,
     }
-    p.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-    # a deletion said to this agent has been said once now, so it goes
-    left = [e for e in deletions(root) if not (e.get("to") == name and str(e.get("when", "")) <= marker.when)]
+    for p in [marker_path(root, name), *([marker_path(root, name, session)] if session else [])]:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    # a deletion goes once every look of this name still to come starts after it: an open session that has looked within HOLD_DAYS has a window of its own
+    looks = [marker, *_open_looks(root, name)]
+
+    def told(e: dict[str, Any]) -> bool:
+        return not any(m.new(str(e.get("when", "")), f"deleted:{e.get('id')}") for m in looks)
+
+    left = [e for e in deletions(root) if not (e.get("to") == name and told(e))]
     if left != deletions(root):
         dp = root / DELETED
         dp.write_text("".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n" for e in left), encoding="utf-8")
+
+
+def _open_looks(root: Path, name: str) -> list[Marker]:
+    """Each open session's own marker for `name` set within `HOLD_DAYS`: the windows a deletion must still reach before it goes."""
+    from datetime import timedelta
+
+    from loom.clock import now
+    from loom.sessions import sessions
+
+    stem = slug(name) + "."
+    found = sessions(root)
+    held = (now() - timedelta(days=HOLD_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out: list[Marker] = []
+    for p in (root / MARKERS).glob(f"{stem}*.json"):
+        sid = p.name[len(stem) : -len(".json")]
+        s = found.get(sid)
+        if s is not None and s.state == "open" and (m := read_marker(root, name, sid)) is not None and m.when >= held:
+            out.append(m)
+    return out
 
 
 def deletions(root: Path) -> list[dict[str, Any]]:
@@ -166,10 +202,10 @@ def note_deletion(root: Path, removed: list[dict[str, Any]], by: str) -> None:
                 fh.write(json.dumps(x, ensure_ascii=False, sort_keys=True) + "\n")
 
 
-def since(result: ScanResult, name: str) -> Since:
-    """What people did since `name` last looked, and the marker that would close the window; nothing is written.
+def since(result: ScanResult, name: str, session: Session | None = None) -> Since:
+    """What people did since `name` last looked, or `name` in `session`, and the marker that would close the window; nothing is written.
 
-    With no marker the window opens when the active session was last opened, or at the start of the quilt with none. "People" are the records whose kind is human, and for a message or a page write the names `is_agent` does not call an agent.
+    With no marker the window opens when the active session was last opened, or at the start of the quilt with none; where `name` itself opened the active session and opening it made it active, the window opens where the session it replaced would have opened it, so an agent that opens a session and then looks sees what a person did before. A session with no marker of its own opens where the name's marker stands, else as with no session: never when the session itself opened, since over MCP a conversation's session is made at its first look and what a person did before it is what that look is for. "People" are the records whose kind is human, and for a message or a page write the names `is_agent` does not call an agent.
 
     Parameters
     ----------
@@ -177,6 +213,8 @@ def since(result: ScanResult, name: str) -> Since:
         The quilt, scanned.
     name : str
         The agent, by the name it declared; its marker is its own.
+    session : Session, optional
+        The session looking, one conversation's: its marker is its own, and its first look starts where the name's stands.
 
     Returns
     -------
@@ -187,15 +225,24 @@ def since(result: ScanResult, name: str) -> Since:
 
     root = result.quilt.root
     now = stamp()
-    kept = read_marker(root, name)
-    if kept is None:
-        here = active(root)
-        found = sessions(root).get(here) if here else None
-        start = found.last_opened if found else ""
-        window = Marker(when=start)
-    else:
+    kept = read_marker(root, name, session.id if session else None)
+    opened = ""
+    if kept is not None:
         start, window = kept.when, kept
-    out = Since(name=name, start=start, first=kept is None)
+    elif session is not None and (named := read_marker(root, name)) is not None:
+        start, window, opened = named.when, named, "name"
+    else:
+        standing = sessions(root)
+        here = active(root)
+        found = standing.get(here) if here else None
+        # a session this agent opened, opening it making it active, stands where the one it replaced stood: the look opens as it would have, had it come first
+        for _ in range(len(standing)):
+            if found is None or found.who != name or found.replaced is None:
+                break
+            found = standing.get(found.replaced) if found.replaced else None
+        start = found.last_opened if found else ""
+        window, opened = Marker(when=start), "session" if found else ""
+    out = Since(name=name, start=start, first=kept is None, session=session.id if session else None, opened=opened)
     marks: set[str] = set()
 
     def new(when: str, mark: str) -> bool:

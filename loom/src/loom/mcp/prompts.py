@@ -22,11 +22,11 @@ class PromptSpec:
 
 
 def prompts(root: Path) -> list[PromptSpec]:
-    """A prompt per mode, in `MODES` order, each described by the quilt's own copy of the mode."""
-    from loom.ai.layout import MODES
+    """A prompt per mode of the quilt (`modes`), in its order, each described by the quilt's own copy of the mode."""
+    from loom.ai.layout import modes
     from loom.ai.orient import fits
 
-    return [PromptSpec(name, fits(root, name)) for name in MODES]
+    return [PromptSpec(name, fits(root, name)) for name in modes(root)]
 
 
 def link_argv(target: str) -> list[str]:

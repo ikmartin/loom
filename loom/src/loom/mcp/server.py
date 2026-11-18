@@ -5,6 +5,7 @@ Every call is a `loom` subprocess in the quilt's root, under `AI_AGENT=1`, so th
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import shlex
@@ -16,12 +17,13 @@ from typing import Any
 
 import mcp.types as types
 
-from loom.ai.layout import ACTS, MODES
+from loom.ai.layout import ACTS, modes
 from loom.mcp.prompts import TARGET, TARGET_SAID, link_argv, message, mode_argv, prompts
 from loom.mcp.resources import TEMPLATES, NotAResource, reading
 from loom.mcp.resources import listed as resources_listed
 from loom.mcp.tools import CallRefused, ToolSpec, argv, hints, schema, tools
 from loom.paths import BUILD
+from loom.sessions import ID as SESSION_ID
 
 #: A result longer than this many characters goes to a file the agent reads with its own tools: about ten thousand tokens, where Claude Code starts warning, and well under every client's own limit.
 LARGE = 40_000
@@ -31,16 +33,32 @@ WHOLE = frozenset({"ai orient"})
 MAX_IMAGES = 8
 
 
+#: What a command does that makes the server bind its conversation's session first: its first look (`since`, a `write`) or any other write.
+BINDS = frozenset({"write", "replace"})
+#: The commands that write into a session, or look as one, and are given the bound session where a call names none.
+INTO = frozenset({"session say", "library propose", "since"})
+#: The requests that are an agent's use of loom, and what the record's `last` calls each.
+CALLS = {"tools/call": "tool", "prompts/get": "prompt", "resources/read": "resource"}
+#: Where a client that sends no `initialize` puts who it is and the protocol it speaks: every request's `_meta`.
+CLIENT_INFO = "io.modelcontextprotocol/clientInfo"
+PROTOCOL = "io.modelcontextprotocol/protocolVersion"
+
+
 def serve(root: Path, name: str) -> None:
-    """Serve the quilt at `root` to the agent `name` until the client closes stdin."""
+    """Serve the quilt at `root` to the agent `name` until the client closes stdin or stops the server with a signal, keeping this process's presence record (`loom.presence`) meanwhile."""
     import anyio
     from mcp.server import Server
     from mcp.server.stdio import stdio_server
     from mcp.shared.exceptions import MCPError
 
     from loom.ai.orient import instructions
+    from loom.presence import Presence, prune
     from loom.version import __version__
 
+    with contextlib.suppress(Exception):  # the records are the viewer's; none of them may stop the server
+        prune(root)
+    here = Presence(root, name)
+    _end_on_signals(here)
     specs = {s.name: s for s in tools()}
     listed = [
         types.Tool(
@@ -56,24 +74,54 @@ def serve(root: Path, name: str) -> None:
     async def on_list_tools(ctx: Any, params: Any) -> types.ListToolsResult:
         return types.ListToolsResult(tools=listed)
 
+    def bind() -> str:
+        """The session this conversation writes into: the one bound already while it stands open, else the conversation's own, found or made now."""
+        from loom.clock import now
+        from loom.sessions import for_conversation, sessions
+
+        bound = here.data["session"]
+        found = sessions(root).get(bound) if bound else None
+        if found is None or found.state != "open":
+            title = f"{name} · {now().astimezone():%Y-%m-%d %H:%M}"
+            found = for_conversation(root, here.data["conversation"], name, title)
+            here.bound(found.id)
+        return found.id
+
     async def on_call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
         spec = specs.get(params.name)
         if spec is None:
             raise MCPError(code=types.INVALID_PARAMS, message=f"no tool {params.name}; tools/list names them")
         arguments = dict(params.arguments or {})
         try:
+            if not arguments.get("session") and ACTS[spec.path] in BINDS and spec.path != "session new":
+                bound = await anyio.to_thread.run_sync(bind)
+                if spec.path in INTO:
+                    arguments["session"] = bound
             words = argv(spec, arguments, as_name=name)
         except CallRefused as exc:
             return _error(str(exc), "")
+        except Exception as exc:  # a session that cannot be made is said, not a protocol error
+            return _error(f"loom could not open this conversation's session: {exc}", "")
         command = "loom " + shlex.join(words)
+        opening = spec.path == "session new"
         try:
+            if not opening:
+                # logged before it runs: a write the app stops the server during still lands, and so does its line
+                _log(root, arguments.get("session") or here.data["session"], command)
             if ACTS[spec.path] == "read":
                 done = await _run(root, words)
             else:
                 async with lock:
                     done = await _run(root, words)
-            _log(root, arguments.get("session"), command)
-            return _result(root, spec, arguments, command, done)
+            if opening and done.returncode == 0 and not arguments.get("no_use") and not arguments.get("dry_run"):
+                # the agent opened a session to work in: its later calls write there
+                made = _made(done.stdout.decode("utf-8", errors="replace"))
+                if made:
+                    here.bound(made)
+            session = arguments.get("session") or here.data["session"]
+            if opening:
+                _log(root, session, command)
+            return _result(root, spec, {**arguments, "session": session}, command, done)
         except Exception as exc:  # the SDK turns anything uncaught into a protocol error, which says nothing useful
             return _error(f"loom could not run {command}: {exc}", command)
 
@@ -81,7 +129,7 @@ def serve(root: Path, name: str) -> None:
         """Run a reading command for a prompt or a resource and log it with `why`; (stdout, stderr, exit), or MCPError when it refused or failed."""
         command = "loom " + shlex.join(words)
         done = await _run(root, words)
-        _log(root, None, command, why)
+        _log(root, here.data["session"], command, why)
         out = done.stdout.decode("utf-8", errors="replace")
         err = done.stderr.decode("utf-8", errors="replace").strip()
         if done.returncode == 2 or (done.returncode != 0 and not out.strip()):
@@ -99,7 +147,7 @@ def serve(root: Path, name: str) -> None:
         )
 
     async def on_get_prompt(ctx: Any, params: types.GetPromptRequestParams) -> types.GetPromptResult:
-        if params.name not in MODES:
+        if params.name not in modes(root):
             raise MCPError(code=types.INVALID_PARAMS, message=f"no prompt {params.name}; prompts/list names them")
         given = dict(params.arguments or {})
         if set(given) - {TARGET}:
@@ -168,7 +216,7 @@ def serve(root: Path, name: str) -> None:
             text = out if not err else out.rstrip("\n") + "\n\n" + err + "\n"
         meta: dict[str, Any] = {"loom/command": command, "loom/exit": code}
         if len(text) > LARGE:
-            path = _keep(root, None, (how.argv or ("state",))[0], text)
+            path = _keep(root, here.data["session"], (how.argv or ("state",))[0], text)
             text = f"The whole text is {len(text):,} characters, so it is in {path}; read or search that file.\n"
             meta["loom/file"] = path
         return types.ReadResourceResult(
@@ -188,11 +236,56 @@ def serve(root: Path, name: str) -> None:
         on_read_resource=on_read_resource,
     )
 
+    async def noted(ctx: Any, call_next: Any) -> Any:
+        """Write the presence record at the first request of either kind, and note each call."""
+        if ctx.request_id is not None:
+            if not here.begun:
+                here.begin(*_client(ctx))
+            kind = CALLS.get(ctx.method)
+            if kind is not None:
+                params = ctx.params or {}
+                here.called(kind, str(params.get("uri" if kind == "resource" else "name") or ""))
+        return await call_next(ctx)
+
+    server.middleware.append(noted)
+
     async def main() -> None:
         async with stdio_server() as (read, write):
             await server.run(read, write, server.create_initialization_options())
 
-    anyio.run(main)
+    try:
+        anyio.run(main)
+    finally:
+        here.end()
+
+
+def _client(ctx: Any) -> tuple[dict[str, str] | None, str | None]:
+    """Who the client says it is and the protocol it speaks, from `initialize`'s own fields or, for a client that sends none, any request's `_meta`."""
+    params = ctx.params or {}
+    if ctx.method == "initialize":
+        info, protocol = params.get("clientInfo"), params.get("protocolVersion")
+    else:
+        meta = ctx.meta or {}
+        info, protocol = meta.get(CLIENT_INFO), meta.get(PROTOCOL) or ctx.protocol_version
+    said = {k: str(info[k]) for k in ("name", "title", "version") if isinstance(info, dict) and info.get(k)}
+    return said or None, str(protocol) if protocol else None
+
+
+def _end_on_signals(here: Any) -> None:
+    """Remove the presence record when the app stops the server, then end as the signal's default does: Claude Code sends SIGINT, then SIGTERM, and never closes stdin, so nothing else would remove it.
+
+    SIGINT ends the process too, where Python's own handler would leave it waiting on standard input's reader thread. A `loom` command running for a call is a process of its own and finishes its write. A signal already ignored stays ignored.
+    """
+    import signal
+
+    def handler(signum: int, frame: Any) -> None:
+        here.end()
+        signal.signal(signum, signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        if signal.getsignal(sig) != signal.SIG_IGN:
+            signal.signal(sig, handler)
 
 
 async def _run(root: Path, words: list[str]) -> subprocess.CompletedProcess[bytes]:
@@ -305,12 +398,24 @@ def _error(text: str, command: str, code: int = 2) -> types.CallToolResult:
     )
 
 
+def _made(out: str) -> str | None:
+    """The id of the session `loom session new` reports it opened, as text or as JSON."""
+    try:
+        said = json.loads(out)
+        made = str(said.get("session", "")) if isinstance(said, dict) else ""
+    except json.JSONDecodeError:
+        made = (out.split() or [""])[0]
+    return made if SESSION_ID.match(made) else None
+
+
 def _session(root: Path, given: object) -> str | None:
-    """The session a call names, or the active one; None when neither names one."""
+    """The id of the session `given` names, the call's own or the conversation's bound one; None when it names none. Never the quilt's active session, which another conversation or the person may have chosen."""
     from loom.cli._common import find_session
 
+    if not given:
+        return None
     try:
-        return str(find_session(root, str(given) if given else None).id)
+        return str(find_session(root, str(given)).id)
     except Exception:
         return None
 
@@ -332,7 +437,7 @@ def _keep(root: Path, session: object, what: str, text: str) -> str:
 
 
 def _log(root: Path, given: object, command: str, why: str = "") -> None:
-    """One line per call in the session's run.log, the command a person would rerun, and `why` when a prompt or a resource read ran it; the commands' own logging steps aside under the server."""
+    """One line per call in the session's run.log, the command a person would rerun, and `why` when a prompt or a resource read ran it; the commands' own logging steps aside under the server. A tool call is logged as it starts, `session new` once it has opened the session it is logged in."""
     from loom.clock import stamp
     from loom.sessions import files_dir
 

@@ -17,7 +17,7 @@ from loom.records.types import default_text
 def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     """Refresh .loom/.gitignore, write .loom/annotation-types.toml where a quilt has none, and, where .loom/ai/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones."""
     from loom.ai.clients import write_clients
-    from loom.ai.layout import SHELL, upgrade_layer, variant
+    from loom.ai.layout import SHELL, blocker, upgrade_layer, variant
     from loom.cli.ai import NO_SERVER, sdk_groups
     from loom.gitignore import ensure, missing, write_loom_ignore
 
@@ -26,6 +26,9 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     written: list[str] = []
     kept: list[str] = []
     beside: list[str] = []
+    removed: list[str] = []
+    theirs: list[str] = []
+    dropped: list[str] = []
     if write_loom_ignore(root, write=not dry_run):
         written.append(LOOM_GITIGNORE)
     if not (root / ANNOTATION_TYPES).exists():
@@ -35,7 +38,9 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
         written.append(ANNOTATION_TYPES)
     added: list[str] = []
     sdk: list[Group] = []
-    has_ai = (root / AI).is_dir()
+    # a `.loom/ai` that is not the quilt's own leads elsewhere, so nothing of the agent layer is written there
+    blocked = blocker(root, AI, folder=True)
+    has_ai = (root / AI).is_dir() and not blocked
     if has_ai:
         shell = variant(root) == SHELL
         rep = upgrade_layer(root, write=not dry_run, shell=shell)
@@ -48,6 +53,7 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             written.append(".gitignore")
         kept += [str(rel) for rel in rep.kept]
         beside = [rel for rel in kept if f"{rel}.new" in rep.new_beside]
+        removed, theirs, dropped = rep.removed, rep.theirs, rep.dropped
     groups = [
         Group(
             "would write" if dry_run else "wrote",
@@ -78,10 +84,23 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
             limit=None,
             problem=True,
         ),
+        Group(
+            "would remove" if dry_run else "removed",
+            [Item("loom's own, for a mode the quilt no longer has", key=rel) for rel in removed],
+            limit=None,
+        ),
+        Group("yours, at a path loom writes, so left alone", [Item("", key=rel) for rel in theirs], limit=None),
+        Group(
+            "would take out" if dry_run else "took out",
+            [Item("loom's own rule, which it no longer writes", key=rule) for rule in dropped],
+            limit=None,
+        ),
     ]
-    if written or kept:
-        parts = ([f"{'would write' if dry_run else 'wrote'} {counted(len(written), 'file')}"] if written else []) + (
-            [f"{'would keep' if dry_run else 'kept'} {counted(len(kept), 'edited file')}"] if kept else []
+    if written or kept or removed:
+        parts = (
+            ([f"{'would write' if dry_run else 'wrote'} {counted(len(written), 'file')}"] if written else [])
+            + ([f"{'would keep' if dry_run else 'kept'} {counted(len(kept), 'edited file')}"] if kept else [])
+            + ([f"{'would remove' if dry_run else 'removed'} {counted(len(removed), 'file')}"] if removed else [])
         )
         # one file kept with its new version beside it is one file, said once (T5)
         merge = (
@@ -103,13 +122,22 @@ def upgrade(dry_run: bool, as_json: bool, quilt_path: str | None) -> None:
     Report(
         verdict,
         dry_run=dry_run,
-        ok=not beside and not sdk,
+        ok=not beside and not sdk and not blocked,
         groups=[*(g for g in groups if g.items), *sdk],
-        lines=[] if has_ai else [f"no {AI}/ to upgrade; loom ai init creates it"],
+        lines=[]
+        if has_ai
+        else [
+            f"left {AI}/ alone, since {blocked}; make it a directory of the quilt's own"
+            if blocked
+            else f"no {AI}/ to upgrade; loom ai init creates it"
+        ],
         data={
             "written": written,
             "kept": kept,
             "beside": beside,
+            "removed": removed,
+            "theirs": theirs,
+            "dropped": dropped,
             "gitignore": added,
             "ai": has_ai,
         },
