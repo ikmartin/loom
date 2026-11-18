@@ -100,6 +100,8 @@ COMPILES = f"{LOCAL}/compiles.json"
 SINCE = f"{LOCAL}/since"
 #: Annotations a person deleted, one line each for the agent that wrote it, until that agent's `loom since` has reported it.
 DELETED = f"{SINCE}/deleted.jsonl"
+#: The files the viewer shows as the last look by any agent found them, and what was added, changed or removed at each look since, one record for the quilt, which `loom since` reads.
+SHOWN_SEEN = f"{SINCE}/files/shown.json"
 #: A record for each agent server process attached to the quilt.
 LIVE = f"{LOCAL}/live"
 #: What a person adds to the library, one directory a drop, while it waits and while its intake can be undone (`refs/intake.py`).
