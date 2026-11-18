@@ -37,6 +37,8 @@ from loom.scan.scan import scan
 def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json: bool, quilt_path: str | None) -> None:
     """Scan, derive, render, and publish .loom/cache/site/, what the viewer is served. Exit 1 if any error-severity diagnostic exists outside the works nothing cites (the build is still published).
 
+    A whole build then removes what loom keeps for no purpose any more: from .loom/cache/ what this build does not name and nothing has written in the last hour, an agent's scratch fourteen days after its session last wrote, and a saved preview fourteen days after it was written; a build of --keys removes nothing.
+
     A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a digest, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
     """
     quilt = open_quilt(quilt_path)

@@ -1,8 +1,8 @@
 """How long loom keeps each kind of thing under `.loom/`, and the sweep that removes what has outlived its use.
 
-Records are never deleted by loom, and the library only when the person removes a work. What is derived, in `.loom/cache/`, is kept while the build as it stands names it (`built`, the one reader of the build's index) or while the folder's own rule says what it is still for (`_Rules`); the rest goes in the sweep that follows a build that succeeds. An agent's scratch goes `KEEP_DAYS` after its session's last write, and a saved preview `KEEP_DAYS` after it was written. Nothing written in the last `FRESH` seconds is removed, whatever names it, since whatever wrote it may not have named it yet: another process's build, or a step whose page a viewer is about to fetch.
+Records are never deleted by loom, and the library only when the person removes a work. What is derived, in `.loom/cache/`, is kept while the build as it stands names it (`built`, the one reader of the build's index) or while the folder's own rule says what it is still for (`_Rules`); the rest goes in the sweep that follows a build that published, and only while the index on disk is the one that build wrote. An agent's scratch goes `KEEP_DAYS` after its session's last write, and a saved preview `KEEP_DAYS` after it was written. Nothing written in the last `FRESH` seconds is removed, whatever names it, since whatever wrote it may not have named it yet: a step whose page a viewer is about to fetch, or a build in another process, unless that build has run for longer.
 
-Every removal is of a path resolved and shown to lie in one of `SWEPT`, never through a link; a failure to remove one file stops nothing.
+The sweep removes only in the folders of `SWEPT`, found by `_own` without a link on the way, and never in one that is or holds the history. Each file goes by its name in its folder, opened from that home one step at a time without following a link (`_remove_in`), so a folder swapped for a link while the sweep works is never entered; what changed since the sweep looked is left; a failure to remove one file stops nothing; and a system that cannot remove that way removes nothing (`CAN_REMOVE`).
 """
 
 from __future__ import annotations
@@ -784,7 +784,7 @@ def condemn(root: Path, result: Any, *, index: str, now: float | None = None) ->
 
     Notes
     -----
-    It only reads, so a server finds outside its publication lock and removes under it, only when no build ran in between (`render.serve`). A build in another process is kept safe by `FRESH`.
+    It only reads, so a server finds outside its publication lock and removes under it, only while no build has begun since (`render.serve`). A build in another process that wrote the index since makes the cache wait (`Doomed.stale`); one still running is kept safe by `FRESH` for its first hour, and no further.
     """
     now = time.time() if now is None else now
     doomed = Doomed()
