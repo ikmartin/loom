@@ -37,9 +37,11 @@ def tex_env() -> dict[str, str]:
     Returns
     -------
     dict of str to str
-        `os.environ` with what the TeX in use takes (`private.tex_vars`), `tex_date` and `LIMITS`.
+        `os.environ` with what the TeX in use takes (`private.tex_vars`), `tex_date`, `LIMITS`, and `PAR_GLOBAL_TMPDIR`, the machine's one folder for `biber` to unpack into (`machine.unpacked`), whatever `TMPDIR` says: TeX Live's `biber` unpacks about 200 MB into its temporary folder on its first run there.
     """
-    return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS}
+    from loom.machine import unpacked
+
+    return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS, "PAR_GLOBAL_TMPDIR": str(unpacked())}
 
 
 @dataclass

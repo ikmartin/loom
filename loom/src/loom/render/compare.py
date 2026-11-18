@@ -5,7 +5,9 @@ A pair is two nodes with one plain key (`zk-0001` and `zk-0001-ai`, or a key in 
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -146,6 +148,10 @@ def _cached(
     if not path.is_file():
         later = _render(renderer, result, context, text, preamble, spans)
         renderer.previews.on_made(later, lambda html: write_atomic(path, html))
+    else:
+        # named again: kept for as long again (`lifetimes.ON_REQUEST`)
+        with contextlib.suppress(OSError):
+            os.utime(path)
     return rel
 
 

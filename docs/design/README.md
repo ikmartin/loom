@@ -62,7 +62,6 @@ Two markers keep the text honest:
 - **Open problems as nodes,** with the attempts, claims and dead ends about them attached as notes.
 - **A reader-first library.** Works that are read but not cited are first-class; the bibliography, fetching and the graph stop assuming a draft. See `docs/specs/digests.md`.
 - **The viewer's Library.** A Library view of the works; the frame it stands in, and Review as the quilt's management, are built. See `model.md` and plan 0.20.
-- **What `.loom/` keeps, and for how long.** Every entry lies in the folder of its kind (`loom/src/loom/paths.py`), and `.loom/format` holds the layout's number. Not built: the sweep of derived files after each build, one `biber` for the machine, the expiry of an agent's scratch, and `loom doctor`'s report of size by kind. See `docs/plans/0.32-v0.1.md`, decision 18.
 - **Later:** running code to test claims (not in the next weeks).
 
 ## Where things live

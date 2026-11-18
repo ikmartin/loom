@@ -9,6 +9,7 @@ from loom.cli.diagnostics import groups as diagnostic_groups
 from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Progress, Report, counted
 from loom.errors import EXIT_CONTENT
+from loom.lifetimes import sweep
 from loom.paths import SITE
 from loom.render.build import build
 from loom.scan.scan import scan
@@ -36,6 +37,8 @@ from loom.scan.scan import scan
 def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json: bool, quilt_path: str | None) -> None:
     """Scan, derive, render, and publish .loom/cache/site/, what the viewer is served. Exit 1 if any error-severity diagnostic exists outside the works nothing cites (the build is still published).
 
+    A whole build then removes what loom keeps for no purpose any more: from .loom/cache/ what this build does not name and nothing has written in the last hour, an agent's scratch fourteen days after its session last wrote, and a saved preview fourteen days after it was written; a build of --keys removes nothing.
+
     A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a digest, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
     """
     quilt = open_quilt(quilt_path)
@@ -44,9 +47,13 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
         result = scan(quilt) if keys else None
         wanted = [resolve_key(result, k) for k in keys] if result is not None else None
         report = build(quilt, wanted, force=force, reuse=result, progress=progress.told, tex=not no_compile)
+    # a whole build names everything the quilt holds now, so what it does not name goes; one limited to keys sweeps nothing
+    swept = sweep(quilt.root, report.result, index=report.index) if not keys else None
     errors = [d for d in report.diagnostics if d.severity == "error"]
     bad = has_errors(errors, report.result)
     done = f"published {SITE}/: {counted(len(report.rendered), 'block')} rendered, {len(report.skipped)} unchanged"
+    if swept is not None and swept.said():
+        done += f"; swept .loom/: {swept.said()}"
     Report(
         done + (f"; {tally(errors, report.result)}" if bad else ""),
         ok=not bad,
@@ -58,5 +65,6 @@ def build_command(keys: tuple[str, ...], force: bool, no_compile: bool, as_json:
             "nodes": len(report.manifest["nodes"]),
             "keys": len(report.manifest["keys"]),
             "diagnostics": [d.to_dict() for d in report.diagnostics],
+            "swept": {"files": swept.files, "bytes": swept.freed, "failed": swept.failed} if swept else None,
         },
     ).emit(as_json)

@@ -271,8 +271,24 @@ def render_snippets(
     for i, k in enumerate(keys):
         if k in first and first[k] != i:
             out.made[i] = out.made[first[k]]
+    _note(cache_dir, keys, out.made)
     out.seconds = time.monotonic() - began
     return out
+
+
+_PICTURE = re.compile(rf"""src=['"]({PICTURES}/[^'"]+)['"]""")
+
+
+def _note(cache_dir: Path, keys: list[str], made: list[Snippet]) -> None:
+    """Note each text's cached file, made or refused, and the pictures its HTML names (`uses.used`), so the build's index names them."""
+    from loom.render.uses import used
+
+    for k in set(keys):
+        for kept in (cache_dir / f"{k}.html", cache_dir / f"{k}.failed"):
+            if kept.is_file():
+                used(kept)
+                break
+    used(*(cache_dir / src for s in made if s.html for src in _PICTURE.findall(s.html)))
 
 
 def _one_run(

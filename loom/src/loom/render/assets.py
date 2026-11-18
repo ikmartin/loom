@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -38,9 +39,12 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
         out = svg_dir / f"{stamp}{src.suffix.lower()}"
         if not out.exists():
             shutil.copy(src, out)
+        else:
+            _named_again(out)
         return f"svg/{out.name}", None
     out = svg_dir / f"{stamp}.svg"
     if out.exists():
+        _named_again(out)
         return f"svg/{out.name}", None
     pdftocairo = shutil.which("pdftocairo")
     if pdftocairo:
@@ -70,4 +74,14 @@ def publish_picture(picture: Path, svg_dir: Path) -> str:
     out = svg_dir / f"{_digest(picture)}{picture.suffix.lower()}"
     if not out.exists():
         shutil.copy(picture, out)
+    else:
+        _named_again(out)
     return f"svg/{out.name}"
+
+
+def _named_again(picture: Path) -> None:
+    """Touch a picture a page names again, so a sweep that looked at it before leaves it (`lifetimes.Doom`)."""
+    try:
+        os.utime(picture)
+    except OSError:
+        pass

@@ -133,9 +133,10 @@ DRAFT_PREVIEWS = f"{SITE}/draft-previews"
 TEX = f"{CACHE}/tex"
 #: The address the viewer reaches `TEX` at, under the site's: a manifest's `pdf` is written in it.
 TEX_ADDRESS = "tex"
-#: Rendered blocks, by key: the fragment index, the snippets, the previews and the spans; a render plan may be given another folder (`render.fragments.RenderPlan.cache`), which holds the same names.
+#: What the build as it stands names under `CACHE`: each fragment's input hash and the cache files it was made from, what the build read or wrote beside its fragments, and every file of the site it published (`loom.lifetimes`).
+BUILD_INDEX = f"{CACHE}/index.json"
+#: Rendered blocks, by key: the snippets, the previews and the spans; a render plan may be given another folder (`render.fragments.RenderPlan.cache`), which holds the same names.
 BLOCKS = f"{CACHE}/blocks"
-FRAGMENT_INDEX = f"{BLOCKS}/fragments.json"
 SNIPPETS = f"{BLOCKS}/snippets"
 BLOCK_PREVIEWS = f"{BLOCKS}/previews"
 BLOCK_SPANS = f"{BLOCKS}/spans"

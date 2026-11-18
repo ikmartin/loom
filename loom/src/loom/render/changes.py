@@ -46,6 +46,9 @@ def preview_html(r: FragmentRenderer, group: Sequence[Later]) -> list[str]:
         for p in group
     ]
     cache = r.plan.cache / within(BLOCKS, BLOCK_PREVIEWS)
+    from loom.render.uses import used
+
+    used(*(cache / f"{k}.html" for k in keys))
     out: list[str | None] = [
         (cache / f"{k}.html").read_text(encoding="utf-8") if (cache / f"{k}.html").is_file() else None for k in keys
     ]

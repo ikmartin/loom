@@ -11,6 +11,8 @@ import os
 import posixpath
 import re
 import secrets
+import stat
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -538,15 +540,49 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
     return said
 
 
-def recover(root: Path, history: Path) -> list[str]:
-    """Settle what a crash left, holding the lock: what `loom serve` runs as it starts, and every act runs first. Returns what was done, in words."""
+#: Seconds after which a temporary file in the history's `texts/` is one a crash left, not one a store in another process is writing: `store` writes one and renames it within a moment.
+LEFT = 3600.0
+
+
+def recover(root: Path, history: Path, *, now: float | None = None) -> list[str]:
+    """Settle what a crash left, holding the lock: the acts it cut short, and the temporary files a crash in `store` left in the history's `texts/` (`LEFT`). What `loom serve` runs as it starts; every act settles the acts first. Returns what was done, in words."""
     with locked(root / WRITES_LOCK):
+        said = _left_temps(history, time.time() if now is None else now)
         j = read_journal(root)
         if not j.begun:
-            return []
-        said = _settle(root, history, j)
+            return said
+        said += _settle(root, history, j)
         _save_index(root, j)
         return said
+
+
+def _left_temps(history: Path, now: float) -> list[str]:
+    """Remove each temporary file `store` names `.<hex>.<ext>.<token>.loom-tmp` in the history's `texts/` that is older than `LEFT`, and say so."""
+    texts = history / "texts"
+    gone = 0
+    try:
+        entries = list(os.scandir(texts)) if texts.is_dir() and not texts.is_symlink() else []
+    except OSError:
+        entries = []
+    for entry in entries:
+        if not _STORE_TEMP.match(entry.name):
+            continue
+        try:
+            st = entry.stat(follow_symlinks=False)
+            if stat.S_ISREG(st.st_mode) and now - st.st_mtime > LEFT:
+                os.unlink(entry.path)
+                gone += 1
+        except OSError:
+            continue
+    return (
+        [f"removed {gone} temporary file{'s' if gone != 1 else ''} a crash left in the history's texts/"]
+        if gone
+        else []
+    )
+
+
+#: The name `store` gives the temporary file it writes a text through.
+_STORE_TEMP = re.compile(r"^\.[0-9a-f]{64}\.(md|bin)\.[0-9a-f]{12}" + re.escape(TEMP) + "$")
 
 
 # ---- an act ---------------------------------------------------------------------------------------------------------

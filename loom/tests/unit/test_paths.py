@@ -201,7 +201,7 @@ KIND = {
     ),
     **dict.fromkeys(
         (
-            "SITE", "MANIFEST", "SITE_SVG", "DRAFT_PREVIEWS", "TEX", "BLOCKS", "FRAGMENT_INDEX", "SNIPPETS",
+            "SITE", "MANIFEST", "SITE_SVG", "DRAFT_PREVIEWS", "TEX", "BLOCKS", "BUILD_INDEX", "SNIPPETS",
             "BLOCK_PREVIEWS", "BLOCK_SPANS", "LIBRARY_CACHE", "STORE_BOXES", "RESOLVED", "MARKS", "MARK_BOXES",
             "REFOUND", "CROPS", "CLOSURES",
         ),

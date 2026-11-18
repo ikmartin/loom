@@ -16,11 +16,11 @@ from typing import Any
 from urllib.parse import quote
 
 from loom.history.ledger import load_history
+from loom.lifetimes import BuildIndex, in_cache, read_index, write_index
 from loom.paths import (
     BLOCK_PREVIEWS,
     BLOCK_SPANS,
     BLOCKS,
-    FRAGMENT_INDEX,
     SITE,
     SITE_SVG,
     SNIPPETS,
@@ -37,6 +37,7 @@ from loom.render.keys import aux_bytes, code_hash
 from loom.render.manifest import build_manifest
 from loom.render.marks import MarkEntry, place_marks
 from loom.render.publish import publish, write_atomic
+from loom.render.uses import noting, used
 from loom.render.versions import Gone, attach_versions, gone_annotations, gone_marks
 from loom.scan.memo import reading
 from loom.scan.model import Diagnostic
@@ -53,6 +54,8 @@ class BuildReport:
     rendered: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    #: The digest of the index this build wrote (`lifetimes.write_index`): a sweep after it sweeps the cache only while that index is the one on disk.
+    index: str = ""
 
     def kept(self) -> BuildReport:
         """This report without its manifest, which is on disk once published: what a server holds between builds, where a large quilt's manifest runs to tens of megabytes as objects."""
@@ -152,6 +155,7 @@ def _attach_spans(root: Path, manifest: dict[str, Any], files: dict[str, Any]) -
             ).encode()
         ).hexdigest()[:32]
         kept = root / BLOCK_SPANS / f"{key}.json"
+        used(kept)
         if kept.is_file():
             body = kept.read_text(encoding="utf-8")
             if body:
@@ -437,8 +441,8 @@ def build(
     -----
     A build is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file of the quilt's and keeps what the last build derived, letting go only what it made itself.
     """
-    with reading(keep=reuse is not None):
-        return _build(quilt, keys, records, force, reuse, progress, tex)
+    with reading(keep=reuse is not None), noting() as beside:
+        return _build(quilt, keys, records, force, reuse, progress, tex, beside)
 
 
 def _build(
@@ -449,6 +453,7 @@ def _build(
     reuse: ScanResult | None,
     progress: Callable[[str, str, int, int | None], None] | None,
     tex: bool,
+    beside: set[str],
 ) -> BuildReport:
     root = quilt.root
     build_dir = root / SITE
@@ -490,13 +495,10 @@ def _build(
         for failed in [*(root / SNIPPETS).glob("*.failed"), *(root / BLOCK_PREVIEWS).glob("*.html")]:
             failed.unlink()
     renderer = FragmentRenderer(plan)
-    index_path = root / FRAGMENT_INDEX
-    index: dict[str, str] = {}
-    if index_path.exists() and not force:
-        try:
-            index = json.loads(index_path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            index = {}
+    before = read_index(root)
+    # each fragment's input hash, and what it was made from, as the last build left them; a fragment rendered here replaces both, and `force` only stops a wanted one being skipped as unchanged, so a forced build of some keys leaves the rest as they were
+    index: dict[str, str] = dict(before.fragments)
+    uses: dict[str, list[str]] = dict(before.uses)
     fragments: dict[str, str] = {}
     files: dict[str, str | bytes] = {}
     report = BuildReport(result=result, manifest={})
@@ -549,7 +551,7 @@ def _build(
             hashes[key] = _input_hash(result, key, aux, texts, pages)
         digest = hashes[key] + _marks_hash(marks, key, result)
         existing = build_dir / rel
-        if (wanted is not None and key not in wanted) or (index.get(rel) == digest and existing.exists()):
+        if (wanted is not None and key not in wanted) or (not force and index.get(rel) == digest and existing.exists()):
             report.skipped.append(key)
             continue
         jobs.append((key, kind, rel, digest))
@@ -563,7 +565,7 @@ def _build(
     for doc in canon_docs:
         rel = canon_fragment_path(doc)
         digest = _canon_hash(doc, root)
-        if (wanted is not None) or (index.get(rel) == digest and (build_dir / rel).exists()):
+        if (wanted is not None) or (not force and index.get(rel) == digest and (build_dir / rel).exists()):
             report.skipped.append(f"canon:{doc.path}")
         else:
             canon_jobs.append((doc, rel, digest))
@@ -579,28 +581,31 @@ def _build(
     tasks = [partial(canon_renderer.fragment, doc) for doc, _rel, _digest in canon_jobs]
     tasks += [partial(render_one, key, kind) for key, kind, _rel, _digest in jobs]
 
-    def render_job(task: Any) -> tuple[str, list[Any]]:
-        with renderer.collecting() as diags:
-            return task(), diags
+    def render_job(task: Any) -> tuple[str, list[Any], set[str]]:
+        # what the job read and made in the cache, which the index keeps as what its fragment was made from
+        with renderer.collecting() as diags, noting() as noted:
+            return task(), diags, noted
 
     names = [doc.path for doc, _rel, _digest in canon_jobs] + [key for key, _kind, _rel, _digest in jobs]
     told("rendering", "", 0, len(tasks))
-    done: list[tuple[str, list[Any]]] = []
+    done: list[tuple[str, list[Any], set[str]]] = []
     with ThreadPoolExecutor(max_workers=max(1, os.cpu_count() or 1)) as pool:
         for n, out in enumerate(pool.map(render_job, tasks), 1):
             done.append(out)
             told("rendering", names[n - 1], n, len(tasks))
     canon_done, node_done = done[: len(canon_jobs)], done[len(canon_jobs) :]
     # every job's diagnostics, nodes then landmarks, each in job order: the order a single thread would have produced, whatever order they finished
-    for _, diags in node_done + canon_done:
+    for _, diags, _noted in node_done + canon_done:
         plan.diagnostics.extend(diags)
-    for (key, _kind, rel, digest), (html_out, _) in zip(jobs, node_done, strict=True):
+    for (key, _kind, rel, digest), (html_out, _, noted) in zip(jobs, node_done, strict=True):
         files[rel] = html_out
         index[rel] = digest
+        uses[rel] = in_cache(root, noted)
         report.rendered.append(key)
-    for (doc, rel, digest), (html_out, _) in zip(canon_jobs, canon_done, strict=True):
+    for (doc, rel, digest), (html_out, _, noted) in zip(canon_jobs, canon_done, strict=True):
         files[rel] = html_out
         index[rel] = digest
+        uses[rel] = in_cache(root, noted)
         report.rendered.append(f"canon:{doc.path}")
     report.diagnostics = list(result.lint) + plan.diagnostics
     manifest = build_manifest(
@@ -666,5 +671,12 @@ def _build(
     keep = {rel for rel in fragments.values() if rel not in files} | transcripts
     publish(build_dir, files, manifest, prune, keep=keep)
     cache_dir.mkdir(parents=True, exist_ok=True)
-    index_path.write_text(json.dumps(index, indent=0, sort_keys=True), encoding="utf-8")
+    uses = {rel: uses.get(rel, []) for rel in index}
+    read_beside = in_cache(root, beside)
+    shared = {n[1:] for said in [*uses.values(), read_beside] for n in said if n.startswith("@")}
+    # a group made in this build is as this build made it; one no fragment rendered here took from is as the build that made it left it
+    groups = {
+        g: in_cache(root, renderer.groups[g]) if g in renderer.groups else before.groups.get(g, []) for g in shared
+    }
+    report.index = write_index(root, BuildIndex(index, uses, groups, read_beside, sorted({*files, *keep})))
     return report

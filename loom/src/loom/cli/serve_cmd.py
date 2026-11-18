@@ -33,7 +33,7 @@ from loom.render.serve import BUILD_URL, DEFAULT_PORT, ServeSession, locate_bund
 def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, quilt_path: str | None) -> None:
     """Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
-    The viewer is at /, and what it reads at /build/. One server runs per quilt. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
+    The viewer is at /, and what it reads at /build/. One server runs per quilt. At rest after a build, at most once an hour, it removes what loom keeps for no purpose any more, as a whole loom build does: from .loom/cache/ what its last build does not name and nothing has written in the last hour, expired scratch and old saved previews. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
     """
     from loom.arras_bundle import BundleEnvError
 
