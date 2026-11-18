@@ -423,11 +423,19 @@ class Doomed:
             yield Doomed(self.paths[i : i + size])
 
 
+def _holds(home: Path | None, result: Any) -> bool:
+    """Whether `home`, a folder the sweep removes in, is or holds the quilt's history, which the loader refuses (`scan.quilt.removed_in`) and the sweep keeps clear of whatever the loader did."""
+    if home is None:
+        return False
+    history = Path(os.path.realpath(result.quilt.history_dir))
+    return history == home or history.is_relative_to(home)
+
+
 def _cache(root: Path, result: Any, now: float, doomed: Doomed) -> None:
     """Every file under `.loom/cache/` that neither the build as it stands nor its folder's rule keeps, then each folder that leaves empty but those loom writes into by name."""
     home = _own(root, CACHE)
     index = read_index(root)
-    if home is None or not index.fragments and not index.site:
+    if home is None or _holds(home, result) or not index.fragments and not index.site:
         # no build has said what it names, so nothing here is known to be unnamed
         return
     rules = _Rules(root, result, built(root, index), now)
@@ -457,10 +465,10 @@ def _written_since(root: Path, session: str, since: float) -> bool:
     return False
 
 
-def _scratch(root: Path, now: float, doomed: Doomed) -> None:
+def _scratch(root: Path, result: Any, now: float, doomed: Doomed) -> None:
     """Each session's scratch `KEEP_DAYS` after its session's last write, and each file of `none/` `KEEP_DAYS` after it was written, with the folders that leaves empty."""
     home = _own(root, SCRATCH)
-    if home is None:
+    if home is None or _holds(home, result):
         return
     since = now - KEEP_DAYS * DAY
     try:
@@ -477,12 +485,12 @@ def _scratch(root: Path, now: float, doomed: Doomed) -> None:
         doomed.add(home, [*(p for p, _st, _d in _walk(path)), path])
 
 
-def _previews(root: Path, now: float, doomed: Doomed) -> None:
+def _previews(root: Path, result: Any, now: float, doomed: Doomed) -> None:
     """Each saved preview of an adoption or an incorporation `KEEP_DAYS` after it was written; one applied is removed then (`drop_preview`)."""
     since = now - KEEP_DAYS * DAY
     for rel in (ADOPTION_PREVIEWS, INCORPORATION_PREVIEWS):
         home = _own(root, rel)
-        if home is not None:
+        if home is not None and not _holds(home, result):
             doomed.add(home, [p for p, st, is_dir in _walk(home) if not is_dir and st.st_mtime <= since])
 
 
@@ -521,8 +529,8 @@ def condemn(root: Path, result: Any, *, now: float | None = None) -> Doomed:
     now = time.time() if now is None else now
     doomed = Doomed()
     _cache(root, result, now, doomed)
-    _scratch(root, now, doomed)
-    _previews(root, now, doomed)
+    _scratch(root, result, now, doomed)
+    _previews(root, result, now, doomed)
     return doomed
 
 

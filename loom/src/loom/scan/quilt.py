@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.paths import HISTORY, LOOM
+from loom.paths import CACHE, HISTORY, LOCAL, LOOM, SCRATCH, SOURCE_SYNC
 
 NO_AUTHOR_MESSAGE = (
     'no author name: add name = "Your Name" under [author] in ~/.config/loom/config.toml, or pass --as NAME'
@@ -42,6 +42,10 @@ class NoQuiltError(Exception):
 
 class LayoutError(NoQuiltError):
     """Raised for a quilt whose `.loom/` is not in this loom's layout (`loom.layout`); str(exc) says what was found and what this loom reads."""
+
+
+class SettingError(NoQuiltError):
+    """Raised for a quilt one of whose path settings lies where loom removes files (`removed_in`); str(exc) names the setting, where it points and why."""
 
 
 class NoAuthorError(Exception):
@@ -216,7 +220,44 @@ def load_quilt(root: Path) -> Quilt:
     why = layout.refusal(root)
     if why is not None:
         raise LayoutError(why)
-    return Quilt(root=root, config=QuiltConfig.from_dict(data, load_user_config()))
+    config = QuiltConfig.from_dict(data, load_user_config())
+    why = removed_in(root, config)
+    if why is not None:
+        raise SettingError(why)
+    return Quilt(root=root, config=config)
+
+
+#: The folders of `.loom/` loom removes files from and git ignores: no setting of the quilt may point into one.
+REMOVED_IN = (CACHE, LOCAL, SCRATCH)
+
+
+def removed_in(root: Path, config: QuiltConfig) -> str | None:
+    """Why a path setting of the quilt at `root` cannot stand, or None: one that lies in a folder of `REMOVED_IN`, by its path or through a link.
+
+    The settings: `[quilt] history`, `research_state`, `main` and `home`, and the sync directory `loom sync init` records. Each names where the person's or loom's kept files go, and the sweep would remove them there.
+    """
+    named = [
+        ("[quilt] history", config.history),
+        ("[quilt] research_state", config.research_state),
+        ("[quilt] main", config.main),
+        ("[quilt] home", config.home),
+    ]
+    try:
+        synced = json.loads((root / SOURCE_SYNC).read_text(encoding="utf-8")).get("directory")
+    except (OSError, ValueError, AttributeError):
+        synced = None
+    if isinstance(synced, str) and synced:
+        named.append(("the sync directory", synced))
+    real_root = Path(os.path.realpath(root))
+    for setting, value in named:
+        if not value:
+            continue
+        lexical = Path(os.path.normpath(value))
+        real = Path(os.path.realpath(root / value))
+        for folder in REMOVED_IN:
+            if lexical.is_relative_to(folder) or real.is_relative_to(real_root / folder):
+                return f"{setting} is {value}, inside {folder}/, where loom removes files; set it outside {', '.join(f + '/' for f in REMOVED_IN)}"
+    return None
 
 
 def user_config_path() -> Path:

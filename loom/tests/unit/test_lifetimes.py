@@ -6,6 +6,7 @@ import json
 import os
 import re
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -407,3 +408,87 @@ def test_a_diff_the_manifest_names_is_kept_by_its_name_and_one_it_does_not_goes(
     sweep(q, scan(load_quilt(q)), now=time.time() + FRESH + 60)
     assert all((q / CACHE / "site" / rel).is_file() for rel in named)
     assert not stale.exists()
+
+
+# ---- no setting points where loom removes files -----------------------------------------------------------------------
+
+
+def _setting(q: Path, key: str, value: str) -> None:
+    """`[quilt] key = value` in `q`'s config, replacing the line that sets it if there is one."""
+    text = (q / "config.toml").read_text(encoding="utf-8")
+    line = f'{key} = "{value}"'
+    text, n = re.subn(rf"(?m)^{key}\s*=.*$", line, text, count=1)
+    if not n:
+        text = text.replace("[quilt]\n", f"[quilt]\n{line}\n", 1)
+    (q / "config.toml").write_text(text, encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("history", ".loom/cache/history"),
+        ("research_state", ".loom/local/state.md"),
+        ("main", ".loom/agents/scratch/s-1/main.tex"),
+        ("home", ".loom/cache/../cache/front.md"),
+    ],
+)
+def test_a_path_setting_inside_a_folder_loom_removes_from_is_refused(tmp_path: Path, key: str, value: str) -> None:
+    from loom.scan.quilt import SettingError
+
+    q = demo(tmp_path)
+    _setting(q, key, value)
+    with pytest.raises(
+        SettingError, match=rf"\[quilt\] {key} is {re.escape(value)}, inside \.loom/.*where loom removes files"
+    ):
+        load_quilt(q)
+    assert run("build", cwd=q).exit_code == 2
+
+
+def test_the_reviewers_history_in_the_cache_is_refused_and_kept(tmp_path: Path) -> None:
+    """A history moved into `.loom/cache/`, the one ignored folder, so as not to commit it: the build refuses and nothing of it goes, and doctor names the setting and still runs."""
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    (q / RECORDS / "history").rename(q / CACHE / "history")
+    _setting(q, "history", ".loom/cache/history")
+    before = _files(q / CACHE / "history")
+    _age(q / CACHE)
+    r = run("build", cwd=q)
+    assert r.exit_code == 2 and "[quilt] history is .loom/cache/history, inside .loom/cache/" in flat(r.output)
+    assert _files(q / CACHE / "history") == before
+    got = json.loads(run("doctor", "--json", cwd=q).stdout)
+    item = next(i for i in got["items"] if i["name"] == "paths")
+    assert item["status"] == "fail" and "where loom removes files" in item["detail"]
+    assert any(i["name"] == "tex" for i in got["items"])
+
+
+def test_a_setting_reached_through_a_link_and_the_sync_directory_are_refused(tmp_path: Path) -> None:
+    from loom.paths import SOURCE_SYNC
+    from loom.scan.quilt import SettingError
+
+    q = demo(tmp_path)
+    (q / CACHE / "kept").mkdir(parents=True)
+    (q / "hist").symlink_to(q / CACHE / "kept", target_is_directory=True)
+    config = (q / "config.toml").read_text(encoding="utf-8")
+    (q / "config.toml").write_text(config.replace("[quilt]\n", '[quilt]\nhistory = "hist"\n', 1), encoding="utf-8")
+    with pytest.raises(SettingError, match="history is hist, inside .loom/cache/"):
+        load_quilt(q)
+    (q / "config.toml").write_text(config, encoding="utf-8")
+    (q / SOURCE_SYNC).write_text(json.dumps({"directory": ".loom/local/overleaf"}), encoding="utf-8")
+    with pytest.raises(SettingError, match="the sync directory is .loom/local/overleaf, inside .loom/local/"):
+        load_quilt(q)
+
+
+def test_the_sweep_keeps_clear_of_a_folder_that_holds_the_history_whatever_the_loader_did(tmp_path: Path) -> None:
+    from loom.scan.quilt import Quilt
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    result = scan(load_quilt(q))
+    stray = _plant(q / CACHE / "blocks/snippets/0123.html")
+    ledger = _plant(q / CACHE / "history/ledger.jsonl", b"{}\n")
+    scratched = _plant(q / SCRATCH / "s-old/history/texts/a.md", b"x", time.time() - 30 * DAY)
+    for history, kept in ((".loom/cache/history", ledger), (".loom/agents/scratch/s-old/history", scratched)):
+        result.quilt = Quilt(q, replace(result.quilt.config, history=history))
+        doomed = condemn(q, result, now=time.time() + 30 * DAY)
+        assert kept.resolve() not in {p for p, _home in doomed.paths}
+    assert stray in {p for p, _home in condemn(q, scan(load_quilt(q)), now=time.time() + DAY).paths}
