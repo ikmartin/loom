@@ -206,12 +206,73 @@ def test_each_name_has_its_own_marker_and_a_dry_run_leaves_it(q: Path) -> None:
 
 def test_the_marker_is_neither_committed_nor_watched(q: Path) -> None:
     from loom.gitignore import LOOM_LINES
+    from loom.paths import SHOWN_SEEN
     from loom.render.watch import snapshot
 
     look(q)
     assert marker_path(q, AGENT).relative_to(q).as_posix().startswith(".loom/local/") and "/local/" in LOOM_LINES
     assert "\n/local/\n" in (q / ".loom" / ".gitignore").read_text()
     assert marker_path(q, AGENT) not in snapshot(q), "a look would rebuild the site"
+    assert (q / SHOWN_SEEN).is_file() and q / SHOWN_SEEN not in snapshot(q)
+
+
+def test_a_file_the_viewer_shows_added_changed_or_removed_is_named_once_by_its_path(q: Path) -> None:
+    """QF-3: after a person appended to a Markdown file and deleted an HTML page, `loom since` said "nothing". Every file the viewer shows but a `.tex` source, which is reported by key, is named once, with no diff; LaTeX's auxiliary files are not, and a first look, which has seen no files, names none."""
+    notes = q / "notes"
+    notes.mkdir()
+    (notes / "lesson.md").write_text("# Lesson\n", encoding="utf-8")
+    (notes / "page.html").write_text("<p>A page</p>\n", encoding="utf-8")
+    first = look(q)
+    assert first["first"] is True and first["files"] == []
+    with (notes / "lesson.md").open("a", encoding="utf-8") as fh:
+        fh.write("One more line.\n")
+    (notes / "page.html").unlink()
+    (notes / "new.md").write_text("New.\n", encoding="utf-8")
+    (notes / "gone-again.md").write_text("Made and deleted between two looks.\n", encoding="utf-8")
+    (notes / "main.aux").write_text("\\relax\n", encoding="utf-8")
+    node = q / "drafting" / "nodes" / "dm-0002.tex"
+    node.write_text(node.read_text(encoding="utf-8") + "%\n", encoding="utf-8")
+    assert look(q, who="Tutor Agent")["files"] == [], "a first look has seen no files"
+    (notes / "gone-again.md").unlink()
+    got = look(q, "--dry-run")
+    assert got["files"] == [
+        {"path": "notes/lesson.md", "act": "changed"},
+        {"path": "notes/new.md", "act": "added"},
+        {"path": "notes/page.html", "act": "removed"},
+    ]
+    assert "3 files changed" in got["verdict"]
+    said = ok("since", "--as", AGENT, cwd=q).stdout
+    assert "files (3)" in said and "  changed  notes/lesson.md" in said and "  removed  notes/page.html" in said
+    assert look(q)["files"] == []
+    # the other agent's window opened at its own first look, which the deletion came after
+    assert look(q, who="Tutor Agent")["files"] == [{"path": "notes/gone-again.md", "act": "removed"}]
+
+
+def test_a_change_to_a_file_is_kept_until_every_look_to_come_has_passed_it(q: Path) -> None:
+    """One record serves every agent and session: a change stays while a name's marker, or an open session's, has not passed it, and goes once all have, so the record holds the files and the changes still due, not a copy for each look."""
+    from loom.since import read_shown
+
+    one = new_session(q, "conversation one", WHO)
+    look(q, "--session", one)
+    look(q, who="Tutor Agent")
+    (q / "notes.md").write_text("A note.\n", encoding="utf-8")
+    assert look(q, "--session", one)["files"] == [{"path": "notes.md", "act": "added"}]
+    held = read_shown(q)
+    assert held is not None and "notes.md" in held[0] and [e["act"] for e in held[1]] == ["added"]
+    assert look(q, who="Tutor Agent")["files"] == [{"path": "notes.md", "act": "added"}]
+    assert read_shown(q)[1] == []  # type: ignore[index]
+
+
+def test_a_change_in_the_markers_own_second_is_named_once(q: Path) -> None:
+    """Under one fixed clock every look has one second, so only what the marker carries tells a change seen from one not yet seen."""
+    fixed = {"LOOM_FIXED_TIME": "2099-01-01T00:00:00Z"}
+    look(q, env=fixed)
+    (q / "notes.md").write_text("A note.\n", encoding="utf-8")
+    assert look(q, env=fixed)["files"] == [{"path": "notes.md", "act": "added"}]
+    assert look(q, env=fixed)["files"] == []
+    with (q / "notes.md").open("a", encoding="utf-8") as fh:
+        fh.write("More.\n")
+    assert look(q, env=fixed)["files"] == [{"path": "notes.md", "act": "changed"}]
 
 
 @pytest.mark.poppler

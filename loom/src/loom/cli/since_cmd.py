@@ -29,10 +29,10 @@ def since_command(
 ) -> None:
     """Report what people did since you last looked, and move your marker past it.
 
-    People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; and the boxes they set in the viewer, each as it last stood. Your first look reports what happened since the active session was last opened. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
+    People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
     """
     from loom.cli._common import find_session
-    from loom.since import since, write_marker
+    from loom.since import since, write_marker, write_shown
 
     result = open_scan(quilt_path)
     root = result.quilt.root
@@ -41,6 +41,7 @@ def since_command(
     got = since(result, name, found)
     if not dry_run and got.marker is not None:
         write_marker(root, name, got.marker, got.session)
+        write_shown(root, got.shown)
     Report(_verdict(got), lines=_lines(got), dry_run=dry_run, data=got.to_json()).emit(as_json)
 
 
@@ -68,6 +69,7 @@ def _verdict(got: Any) -> str:
         "the research state changed" if got.state else "",
         counted(len(got.said), "message") if got.said else "",
         counted(len(got.ticks), "box set", "boxes set") if got.ticks else "",
+        counted(len(got.files), "file changed", "files changed") if got.files else "",
     ]
     return f"{window}: " + ", ".join(s for s in said if s)
 
@@ -124,4 +126,5 @@ def _lines(got: Any) -> list[str]:
             for t in got.ticks
         ],
     )
+    block("files", len(got.files), [f"  {f['act']:<8} {f['path']}" for f in got.files])
     return out
