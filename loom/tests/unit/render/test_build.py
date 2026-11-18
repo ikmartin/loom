@@ -640,3 +640,27 @@ def test_a_published_file_removed_from_disk_is_written_again(tmp_path: Path) -> 
     publish(out, {"source/a.tex": "A."}, {"v": 1}, ("source/",))
     publish(out, {"source/b.tex": "B."}, {"v": 1}, ("source/",))
     assert sorted(p.name for p in (out / "source").iterdir()) == ["b.tex"]
+
+
+def test_a_section_shows_what_an_included_file_holds_after_its_node(tmp_path: Path) -> None:
+    """A section's text runs through the files it includes, the text they hold around their nodes too, so a sentence added after an included node is in the section's next fragment."""
+    from loom.render.build import build
+    from loom.scan.quilt import load_quilt
+    from tests.unit.scan.helpers import PREAMBLE, make_quilt
+
+    make_quilt(
+        tmp_path,
+        {
+            "drafting/main.tex": PREAMBLE
+            + "\\begin{document}\n\\section{Setup}\\label{ab-0100}\nIntro.\n\\input{nodes/ab-0002}\n\\section{Next}\\label{ab-0101}\nMore.\n\\end{document}\n",
+            "drafting/nodes/ab-0002.tex": "\\begin{lemma}\\label{ab-0002}\nA lemma.\n\\end{lemma}\n",
+        },
+    )
+    root = tmp_path / "quilt"
+    section = root / ".loom/build/fragments/nodes/ab-0100.html"
+    build(load_quilt(root), tex=False)
+    node = root / "drafting/nodes/ab-0002.tex"
+    for word in ("Firstword", "Secondword"):
+        node.write_text(node.read_text(encoding="utf-8") + f"\nA saved sentence, {word}.\n", encoding="utf-8")
+        build(load_quilt(root), tex=False)
+        assert word in section.read_text(encoding="utf-8")

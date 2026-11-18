@@ -240,7 +240,7 @@ def fragment_path(result: ScanResult, key: str) -> str:
 def _input_hash(
     result: ScanResult, key: str, aux: bytes, texts: dict[str, str] | None = None, pages: dict[str, Any] | None = None
 ) -> str:
-    """The cache key of a node, master or digest fragment: loom's version and code, the text of every file it draws on, `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
+    """The cache key of a node, master or digest fragment: loom's version and code, the text of every file it draws on (its own, its claimants', and every file a section's span runs through), `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
 
     `texts` holds each file's text hash, filled as files are met, so a file every digest node draws on is hashed once per scan rather than once per node; `pages` maps each document to its current page, or None.
     """
@@ -256,6 +256,11 @@ def _input_hash(
                 files |= set(exp.reached)
     for ck in n.claimants:
         files.add(result.nodes[ck].file)
+    # a section's text runs through the files it includes, the text they hold around their own nodes too
+    for master, (a, b) in n.exp_ranges.items():
+        expansion = result.expansions.get(master)
+        if expansion is not None:
+            files.update(seg.file for seg in expansion.segments if seg.exp_start < b and seg.exp_end > a)
     for f in sorted(files):
         if f not in texts:
             texts[f] = hashlib.sha256(result.files[f].text.encode("utf-8", errors="replace")).hexdigest()
