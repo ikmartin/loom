@@ -813,6 +813,8 @@ def _relief() -> Any:
 class ServeSession:
     #: Seconds after the last rebuild before the server, at rest, gives back what its builds left (`give_back`): long enough that a burst of saves settles once and a write that follows a write does not meet the collection, which holds the interpreter for tens of milliseconds.
     SETTLE_AFTER = 5.0
+    #: Seconds between two sweeps at rest: nothing younger than `lifetimes.FRESH` is removed, so a sweep after every build buys nothing.
+    SWEEP_EVERY = 3600.0
 
     def __init__(
         self,
@@ -838,6 +840,8 @@ class ServeSession:
         #: Whether the last build succeeded and nothing has been swept since (`lifetimes`), which the server does once at rest; and how many builds have begun, so a sweep can tell that one began while it looked.
         self._sweep_due = False
         self._begun = 0
+        #: When the last sweep began, by the clock; None before the first.
+        self._swept_at: float | None = None
         self.httpd: ThreadingHTTPServer | None = None
         self.frames: ThreadingHTTPServer | None = None
         self.shown = Shown.of(quilt)
@@ -931,13 +935,17 @@ class ServeSession:
         give_back()
 
     def sweep(self) -> None:
-        """Sweep the quilt once after the last build that succeeded (`lifetimes`): what goes is found outside the publication lock, which a save waits on, and removed under it only when no build ran in between, so none is in flight; a build that failed since sweeps nothing."""
+        """Sweep the quilt at rest after a build that succeeded, at most once in `SWEEP_EVERY` (`lifetimes`): what goes is found outside the publication lock, which a save waits on, and removed under it only when no build began in between, so none is in flight; a build that raised since sweeps nothing, and after another process's build the cache waits for this server's next one."""
         from loom.lifetimes import Swept, condemn
 
         with self.lock:
             if not self._sweep_due or self.last_report is None:
                 return
+            if self._swept_at is not None and time.time() - self._swept_at < self.SWEEP_EVERY:
+                # left due: the first time the server is at rest after the hour, it sweeps
+                return
             self._sweep_due = False
+            self._swept_at = time.time()
             begun, result, index = self._begun, self.last_report.result, self.last_report.index
         swept = Swept()
         try:

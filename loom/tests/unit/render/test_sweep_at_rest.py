@@ -30,6 +30,7 @@ def test_the_server_sweeps_once_at_rest_and_not_after_a_build_that_failed(
 ) -> None:
     q = demo(tmp_path)
     s = serve(q, watch=False)
+    s.SWEEP_EVERY = 0
     planted = _plant(q / CACHE / "blocks/snippets/0123.html")
     from loom.render import serve as serve_mod
 
@@ -53,6 +54,7 @@ def test_the_server_removes_nothing_when_a_build_began_while_it_looked(
     """What the sweep found is judged against the build it followed; one that began since names what it names, so nothing found is removed."""
     q = demo(tmp_path)
     s = serve(q, watch=False)
+    s.SWEEP_EVERY = 0
     planted = _plant(q / CACHE / "blocks/snippets/0123.html")
     real = lifetimes.condemn
 
@@ -76,6 +78,7 @@ def test_the_server_sweeps_nothing_in_the_cache_after_another_process_built(
 
     q = demo(tmp_path)
     s = serve(q, watch=False)
+    s.SWEEP_EVERY = 0
     planted = _plant(q / CACHE / "blocks/snippets/0123.html")
     result = scan(load_quilt(q))
     key = next(k for k, n in result.nodes.items() if n.kind == "environment")
@@ -88,3 +91,19 @@ def test_the_server_sweeps_nothing_in_the_cache_after_another_process_built(
     s.rebuild()
     s.sweep()
     assert not planted.exists()
+
+
+def test_the_server_sweeps_at_most_once_an_hour(tmp_path: Path, serve: Callable[..., ServeSession]) -> None:
+    """Nothing younger than an hour is removed anyway: a build within the hour leaves the sweep due."""
+    q = demo(tmp_path)
+    s = serve(q, watch=False)
+    first = _plant(q / CACHE / "blocks/snippets/0123.html")
+    s.sweep()
+    assert not first.exists()
+    second = _plant(q / CACHE / "blocks/snippets/4567.html")
+    s.rebuild()
+    s.sweep()
+    assert second.is_file() and s._sweep_due
+    s._swept_at = time.time() - s.SWEEP_EVERY - 1
+    s.sweep()
+    assert not second.exists()

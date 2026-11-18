@@ -125,11 +125,13 @@ def test_a_build_removes_what_it_does_not_name_keeps_what_it_does_and_touches_no
     assert all(rel in after for rel in kept)
     assert all((q / rel).is_file() for rel in elsewhere)
     named = built(q)
-    # every file the build names is there, and every file that was there and is named still is
-    on_disk = {rel for rel in named if not rel.startswith("@") and (cache / rel).is_file()}
-    assert {rel for rel in before if rel in named} <= on_disk
-    assert {"index.json", "site/manifest.json"} <= on_disk
-    assert any(rel.startswith("site/fragments/") for rel in on_disk)
+    # every file that was there and is named still is, and the build named what it published
+    assert {rel for rel in before if rel in named} <= after
+    assert {"index.json", "site/manifest.json"} <= after and all(
+        rel in named for rel in ("index.json", "site/manifest.json")
+    )
+    published = [rel for rel in after if rel.startswith("site/fragments/")]
+    assert published and all(rel in named for rel in published)
 
 
 def test_a_build_that_fails_sweeps_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -587,3 +589,16 @@ def test_a_forced_build_of_some_keys_leaves_the_rest_of_the_index_as_it_was(tmp_
     after = read_index(q)
     assert got["rendered"] >= 1
     assert after.fragments == before.fragments and after.uses.keys() == before.uses.keys()
+
+
+def test_what_the_index_names_is_read_off_its_strings_whatever_their_letters(tmp_path: Path) -> None:
+    from loom.lifetimes import BuildIndex, write_index
+
+    digest = write_index(
+        tmp_path,
+        BuildIndex({"fragments/a.html": "0" * 64}, beside=["blocks/snippets/é-1.html"], site=["fragments/a.html"]),
+    )
+    named = built(tmp_path)
+    assert digest == on_disk(tmp_path)
+    assert "blocks/snippets/é-1.html" in named and "site/fragments/a.html" in named and "index.json" in named
+    assert "blocks/snippets/e-1.html" not in named and "site/fragments/b.html" not in named

@@ -22,6 +22,7 @@ from typing import Any
 
 from loom.paths import (
     ADOPTION_PREVIEWS,
+    ANNOTATION_LOG,
     BLOCK_PREVIEWS,
     BLOCK_SPANS,
     BLOCKS,
@@ -134,10 +135,14 @@ def _digest(raw: bytes) -> str:
 
 def on_disk(root: Path) -> str:
     """The digest of the build's index as it is on disk now, '' when there is none: what a sweep by hand passes as `index`, having no build of its own."""
+    digest = hashlib.sha256()
     try:
-        return _digest((root / BUILD_INDEX).read_bytes())
+        with (root / BUILD_INDEX).open("rb") as f:
+            while piece := f.read(_PIECE):
+                digest.update(piece)
     except OSError:
         return ""
+    return digest.hexdigest()
 
 
 def in_cache(root: Path, notes: Iterable[str]) -> list[str]:
@@ -153,24 +158,99 @@ def in_cache(root: Path, notes: Iterable[str]) -> list[str]:
     return sorted(out)
 
 
-def built(root: Path, index: BuildIndex | None = None) -> set[str]:
-    """What the build as it stands names under `.loom/cache/`, relative to it: the index itself, the manifest and every file the publish wrote or kept, and every cache file or folder its fragments were made from or it read beside them.
+class Named:
+    """What the build's index names, held as a Bloom filter: membership only, a few hundred kilobytes whatever the index holds, made without a Python object for each name, and wrong only by naming what it does not, which keeps a file a sweep would have removed.
 
-    The one reader of the build's index for what it names: an index that changes its shape changes this, and nothing else in the sweep.
+    Each sweep salts it afresh, so a file wrongly kept once is not kept by the same mistake again.
     """
-    index = read_index(root) if index is None else index
-    out = {BUILD_INDEX.removeprefix(f"{CACHE}/"), "site/manifest.json"}
-    out.update(f"site/{rel}" for rel in index.site)
-    groups: set[str] = set()
-    for said in [*(index.uses.get(rel, []) for rel in index.fragments), index.beside]:
-        for n in said:
-            if n.startswith("@"):
-                groups.add(n[1:])
-            else:
-                out.add(n)
-    for g in groups:
-        out.update(index.groups.get(g, []))
-    return out
+
+    #: Bits for each name and probes for each lookup: about one false naming in 1,500.
+    BITS, PROBES = 16, 10
+
+    def __init__(self, count: int) -> None:
+        self.size = max(1 << 13, count * self.BITS)
+        self.bits = bytearray((self.size + 7) // 8)
+        self.salt = int.from_bytes(os.urandom(8), "little")
+
+    def _probes(self, word: bytes) -> list[int]:
+        a, b = hash((self.salt, word)), hash((word, self.salt)) | 1
+        return [(a + i * b) % self.size for i in range(self.PROBES)]
+
+    def add(self, word: bytes) -> None:
+        bits = self.bits
+        for at in self._probes(word):
+            bits[at >> 3] |= 1 << (at & 7)
+
+    def has(self, word: bytes) -> bool:
+        bits = self.bits
+        for at in self._probes(word):
+            if not bits[at >> 3] >> (at & 7) & 1:
+                return False
+        return True
+
+    def __contains__(self, rel: object) -> bool:
+        """Whether `rel`, a path relative to `.loom/cache/`, is named: by itself, or for a file of the site by its path in the site, as the publish names it."""
+        if not isinstance(rel, str):
+            return False
+        word = rel.encode("utf-8")
+        return self.has(word) or (rel.startswith("site/") and self.has(word[5:]))
+
+
+#: A string of the index as JSON writes it.
+_STRING = re.compile(rb'"((?:[^"\\]|\\.)*)"')
+
+
+def built(root: Path) -> Named:
+    """What the build as it stands names under `.loom/cache/`: the index itself, the manifest, every file the publish wrote or kept, and every cache file or folder its fragments were made from or it read or wrote beside them.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt's root.
+
+    Returns
+    -------
+    Named
+        Membership by a path relative to `.loom/cache/`; naming nothing but the index and the manifest when there is no index.
+
+    Notes
+    -----
+    The one reader of the build's index for what it names (`_read_named`): an index that changes its shape changes it, and nothing else in the sweep.
+    """
+    found = _read_named(root)
+    return found[0] if found is not None else _read_named_from([], 0)[0]
+
+
+def _read_named(root: Path) -> tuple[Named, str, bool] | None:
+    """The index on disk read once, a line at a time: what it names, the digest of its bytes (`on_disk`), and whether it is this loom's; None when there is none.
+
+    Every string in it is taken as a name: the paths are what the index holds, a group is written only while a fragment names it, and the hashes and group names besides name no file. JSON written with an indent puts each string of a list or a key on a line of its own, so no line is long.
+    """
+    path = root / BUILD_INDEX
+    try:
+        size = path.stat().st_size
+        f = path.open("rb")
+    except OSError:
+        return None
+    with f:
+        return _read_named_from(f, size)
+
+
+def _read_named_from(lines: Iterable[bytes], size: int) -> tuple[Named, str, bool]:
+    named = Named(size // 16 + 2)
+    digest = hashlib.sha256()
+    ours = False
+    for word in (BUILD_INDEX.removeprefix(f"{CACHE}/").encode(), b"site/manifest.json"):
+        named.add(word)
+    for line in lines:
+        digest.update(line)
+        ours = ours or b'"fragments":' in line
+        for m in _STRING.finditer(line):
+            word = m.group(1)
+            if b"\\" in word:
+                word = json.loads(b'"' + word + b'"').encode("utf-8")
+            named.add(word.removeprefix(b"@"))
+    return named, digest.hexdigest(), ours
 
 
 # ---- removing ----------------------------------------------------------------------------------------------------------
@@ -310,18 +390,20 @@ def _walk(folder: Path) -> Iterator[tuple[Path, os.stat_result, bool]]:
     try:
         if folder.is_symlink():
             return
-        entries = list(os.scandir(folder))
+        entries = os.scandir(folder)
     except OSError:
         return
-    for entry in entries:
-        try:
-            st = entry.stat(follow_symlinks=False)
-        except OSError:
-            continue
-        is_dir = stat.S_ISDIR(st.st_mode)
-        if is_dir:
-            yield from _walk(Path(entry.path))
-        yield Path(entry.path), st, is_dir
+    # one entry at a time: a folder of the cache can hold a hundred thousand
+    with entries:
+        for entry in entries:
+            try:
+                st = entry.stat(follow_symlinks=False)
+            except OSError:
+                continue
+            is_dir = stat.S_ISDIR(st.st_mode)
+            if is_dir:
+                yield from _walk(Path(entry.path))
+            yield Path(entry.path), st, is_dir
 
 
 # ---- the cache ---------------------------------------------------------------------------------------------------------
@@ -346,7 +428,7 @@ _FOLDERS = (
 class _Rules:
     """What keeps a file under `.loom/cache/` that the build does not name: each folder's own rule of what it is still for."""
 
-    def __init__(self, root: Path, result: Any, named: set[str], now: float) -> None:
+    def __init__(self, root: Path, result: Any, named: Named, now: float) -> None:
         self.root = root
         self.result = result
         self.named = named
@@ -385,14 +467,17 @@ class _Rules:
         return False
 
     def _is_named(self, rel: str) -> bool:
-        """`rel` or a folder holding it is named by the build."""
+        """`rel` is named by the build, or, under `marks/`, where the build names a folder of word boxes whole, a folder holding it is."""
+        if rel in self.named:
+            return True
         p = rel
-        while True:
-            if p in self.named:
-                return True
+        while rel.startswith("marks/"):
             p, sep, _ = p.rpartition("/")
             if not sep:
                 return False
+            if p in self.named:
+                return True
+        return False
 
     def _site(self, first: str, name: str, rest: str, mtime: float) -> bool:
         if first == "svg":
@@ -425,15 +510,7 @@ class _Rules:
     def marks(self) -> set[tuple[str, int]]:
         """Each page of each copy of a PDF an annotation was written on: its hash's first sixteen digits, and the page."""
         if self._marks is None:
-            from loom.records.annotations import load_records
-
-            self._marks = set()
-            for record in load_records(self.root)[0]:
-                for a in record.annotations:
-                    written = a.artifact or (a.anchor.sha256 if a.anchor else "")
-                    page = a.page or (a.anchor.page if a.anchor else None)
-                    if written and page:
-                        self._marks.add((written[:16], int(page)))
+            self._marks = _marked_pages(self.root)
         return self._marks
 
     @property
@@ -453,21 +530,61 @@ class _Rules:
         """Every picture under `site/svg/` that a page the site serves or keeps names."""
         if self._pictures is None:
             site = self.root / SITE
-            pages = [site / rel.removeprefix("site/") for rel in self.named if rel.startswith("site/")]
-            for folder in ("compare", "incorporation-review"):
-                for path, st, is_dir in _walk(site / folder):
-                    if not is_dir and self._site(folder, path.name, "", st.st_mtime):
-                        pages.append(path)
             self._pictures = set()
-            for page in pages:
-                if page.suffix not in (".html", ".json"):
+            for path, st, is_dir in _walk(site):
+                if is_dir or path.suffix not in (".html", ".json"):
                     continue
-                with contextlib.suppress(OSError):
-                    self._pictures.update(_SVG.findall(page.read_text(encoding="utf-8", errors="replace")))
+                rel = path.relative_to(site).as_posix()
+                first, _, name = rel.partition("/")
+                if f"site/{rel}" in self.named or (
+                    first in ("compare", "incorporation-review") and self._site(first, name, "", st.st_mtime)
+                ):
+                    _pictures_in(path, self._pictures)
         return self._pictures
 
 
-_SVG = re.compile(r"svg/([0-9a-f]{16}\.[A-Za-z0-9]+)")
+_SVG = re.compile(rb"svg/([0-9a-f]{16}\.[A-Za-z0-9]+)")
+#: How much of a page is read at once for the pictures it names, and how much of each piece is read again with the next, longer than any picture's name.
+_PIECE, _OVERLAP = 1 << 16, 64
+
+
+def _pictures_in(page: Path, into: set[str]) -> None:
+    """Add to `into` each picture `page` names, reading it in pieces, so a page of any size costs one piece of memory."""
+    try:
+        with page.open("rb") as f:
+            tail = b""
+            while piece := f.read(_PIECE):
+                into.update(m.decode("ascii") for m in _SVG.findall(tail + piece))
+                tail = piece[-_OVERLAP:]
+    except OSError:
+        pass
+
+
+def _marked_pages(root: Path) -> set[tuple[str, int]]:
+    """Each page of each copy of a PDF an annotation in the log was written or moved onto, by its hash's first sixteen digits and the page, read a line at a time."""
+    out: set[tuple[str, int]] = set()
+    pages: dict[str, int] = {}
+    try:
+        log = (root / ANNOTATION_LOG).open(encoding="utf-8")
+    except OSError:
+        return out
+    with log:
+        for line in log:
+            try:
+                event = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(event, dict):
+                continue
+            given = event.get("anchor")
+            anchor: dict[str, Any] = given if isinstance(given, dict) else {}
+            page = event.get("page") or anchor.get("page") or pages.get(str(event.get("id")))
+            written = event.get("artifact") or anchor.get("sha256")
+            if isinstance(page, int) and not isinstance(page, bool):
+                pages.setdefault(str(event.get("id")), page)
+                if isinstance(written, str) and written:
+                    out.add((written[:16], page))
+    return out
 
 
 def _doomed(
@@ -477,27 +594,31 @@ def _doomed(
     out: list[tuple[Path, os.stat_result]] = []
     whole = True
     try:
-        entries = [] if folder.is_symlink() else list(os.scandir(folder))
+        if folder.is_symlink():
+            return out, False
+        entries = os.scandir(folder)
     except OSError:
         return out, False
-    for entry in entries:
-        here = f"{rel}/{entry.name}" if rel else entry.name
-        try:
-            st = entry.stat(follow_symlinks=False)
-        except OSError:
-            whole = False
-            continue
-        if stat.S_ISDIR(st.st_mode):
-            under, all_of_it = _doomed(Path(entry.path), here, goes)
-            out += under
-            if all_of_it and goes(here, st, True):
+    # one entry at a time: a folder of the cache can hold a hundred thousand
+    with entries:
+        for entry in entries:
+            here = f"{rel}/{entry.name}" if rel else entry.name
+            try:
+                st = entry.stat(follow_symlinks=False)
+            except OSError:
+                whole = False
+                continue
+            if stat.S_ISDIR(st.st_mode):
+                under, all_of_it = _doomed(Path(entry.path), here, goes)
+                out += under
+                if all_of_it and goes(here, st, True):
+                    out.append((Path(entry.path), st))
+                else:
+                    whole = False
+            elif goes(here, st, False):
                 out.append((Path(entry.path), st))
             else:
                 whole = False
-        elif goes(here, st, False):
-            out.append((Path(entry.path), st))
-        else:
-            whole = False
     return out, whole
 
 
@@ -550,19 +671,18 @@ def _holds(home: Home | None, result: Any) -> bool:
 def _cache(root: Path, result: Any, built_index: str, now: float, doomed: Doomed) -> None:
     """Every file under `.loom/cache/` that neither the build as it stands nor its folder's rule keeps, then each folder that leaves empty but those loom writes into by name; nothing, and `doomed.stale`, when the index on disk is not `built_index`, the one the caller's build wrote."""
     home = _own(root, CACHE)
-    try:
-        raw = (root / BUILD_INDEX).read_bytes()
-    except OSError:
-        raw = b""
-    if raw and _digest(raw) != built_index:
+    found = _read_named(root)
+    if found is None:
+        # no build has said what it names, so nothing here is known to be unnamed
+        return
+    named, digest, ours = found
+    if digest != built_index:
         # another build wrote the index since, at another state of the quilt or of some keys only: its own sweep follows it
         doomed.stale = True
         return
-    index = _parse_index(raw)
-    if home is None or _holds(home, result) or not index.fragments and not index.site:
-        # no build has said what it names, so nothing here is known to be unnamed
+    if home is None or _holds(home, result) or not ours:
         return
-    rules = _Rules(root, result, built(root, index), now)
+    rules = _Rules(root, result, named, now)
 
     def goes(rel: str, st: os.stat_result, folder: bool) -> bool:
         if folder:
