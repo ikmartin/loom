@@ -53,6 +53,19 @@ def find_quote(own_text: str, quote: str) -> list[tuple[int, int]]:
     return list(_find(own_text, quote))
 
 
+def find_written(own_text: str, quote: str) -> list[tuple[int, int]]:
+    """Every occurrence of `quote` in `own_text` as written, whitespace compared normalised and never as the page prints it.
+
+    How a suggested edit's recorded quote, the source's own words (`make_selector`), is found again (`records/edits.py`): read as the page prints it, `\\emph{term}` would stand wherever the plain word does, and an edit would go there. A reader's selection is found with `find_quote`.
+    """
+    return list(_find_written(own_text, quote))
+
+
+@lru_cache(maxsize=4096)
+def _find_written(own_text: str, quote: str) -> tuple[tuple[int, int], ...]:
+    return tuple(_find_normalised(own_text, quote))
+
+
 @lru_cache(maxsize=4096)
 def _find(own_text: str, quote: str) -> tuple[tuple[int, int], ...]:
     """`find_quote`, remembered: every build places every annotation again, and a served quilt builds after each write."""

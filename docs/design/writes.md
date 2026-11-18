@@ -15,7 +15,7 @@ Each of those acts used to read the file, decide and write by itself. The v0.1 s
 
 Each of these is the same fault: no lock across processes, no record before the write, and no exact copy of what was replaced. The door is the one place those three things are done (P4), so that every act gets them and none can forget one.
 
-The door does not make loom read text better. Faults in which loom misjudges what someone else wrote (whether text the person typed is already the suggested edit, which block a key named by place means) are placement's, not the door's, and are handled where edits are placed (`records/edits.py`).
+The door does not make loom read text better. Faults in which loom misjudges what someone else wrote (whether text the person typed is already the suggested edit, which block a key named by place means) are placement's, not the door's, and are handled where edits are placed (`records/edits.py`, "Where an edit goes" below).
 
 ## What counts as a person's file
 
@@ -123,6 +123,32 @@ Writes from the viewer are to answer before the rebuild that publishes them (not
 
 The write API answers each with status 409 (`docs/specs/write-api.md`).
 
+## Where an edit goes
+
+The door makes sure loom never writes an edit twice by its own hand: the journal says what it wrote. It cannot say what someone else wrote. Text the person typed in, or an agent wrote in place, while an edit was open leaves no record, and the only evidence is the text. So where a suggested edit goes is decided by rules about the text at its place, in `records/edits.py`, which the door then writes.
+
+**The words beside its place.** An insertion is written against the words beside its place when it was suggested: a quote's selector records up to 32 characters either side of the quote (`suffix` after it, `prefix` before it), and an insertion at the head or foot of a body records the body's first or last 32 characters (`edge`, written by `loom suggest`; `''` for a body that was empty), or, for a key with no text of its own (a file whose text all belongs to the blocks in it, which Keep writes at the file's end or start), the file's own. An insertion is placed only while those words still stand right beside its place, compared with whitespace normalised (`place`); a neighbour recorded as only whitespace says the block's own text ended there, and holds while nothing but whitespace lies between the quote and that end; otherwise it is unplaced, said in the person's words, and Keep writes nothing. Text the person wrote in at the place since, and then touched, cannot be told from the edit by any reading of the text, and refusing is what keeps it from being written beside again. An edit that recorded no `edge` is placed as before.
+
+A replacement whose new text holds its quote adds words either side of the quote, and is judged as an insertion on each side it adds to. A replacement of a whole body is placed only while the body reads as it did when it was suggested (`_same_body`): its words, whitespace normalised, against the body of the text the edit was written against, which `loom suggest` keeps in the history's `texts/`; a title or a label changed since leaves it placed, and where that text is not kept the whole block must be unchanged. The agent suggests it again against the body as it now reads.
+
+**An edit's quote is found as written.** `loom suggest` finds the words an agent quotes as the page prints them when the source has them otherwise (`selectors.find_quote`), and records the source's own words (`make_selector`). From then on the quote is found only as written, whitespace compared normalised (`selectors.find_written`), by placement and by the taken test alike: read as the page prints it, `\emph{term}` stands wherever the plain word does, and an edit would be written over that word.
+
+**Taken is judged at the place.** Whether an edit's text is in already (`taken_how`) is asked at the very point Keep would write it, found as `place` finds it, never anywhere in its block. An insertion, and a replacement whose new text holds its quote, read as taken only when the new text stands right at the place, in the file's text so that text which opened a section or landed past an `\end{…}` is seen, and when the words recorded beside the place stand right beyond the new text or are gone from beside the place. A phrase that already stood where an edit goes reads with its neighbour where it always was, and is not the edit. A `\uses{…}` taken in at a body's head is read as the head, the body starting after it with the words it started with. A long text the person took in and worked inside (twenty words or more, nine in ten still in order) reads as taken, `edited`, as before. Any other replacement has not been taken while its quote still stands whole in the block, whatever else stands there (a replacement that trims its quote leaves its new text standing inside the quote); once the quote is gone it is taken when its text stands in the block. A deletion is taken when its quote is gone.
+
+**A key named by place.** A key like `FILE#proof:3` names whichever block is third in its file, so an edit on one records the line above its block (`near`) beside the hash of the text it was suggested on (`against`), and goes only where those say (`records/store.py`, `filed_on`): to the one block of the file that still holds that text, or among several, the one under that line. Once the block's text has changed, an edit that quotes words goes to the block now at its place only while the line above it is the recorded one and no other block of the file holds the quoted words too (`place`); an edit on the body goes nowhere. It is never written into whatever block happens to hold the place.
+
+`loom suggest` keeps two guards from before these rules, for what they still say:
+
+| guard | what it refuses | why it stays |
+|---|---|---|
+| a quote that reaches the block's `\begin` or `\end`, or runs across a block inside it (`misplaced`) | the edit, at filing and at Keep | text beside a `\begin` or `\end` lands in the block around the one the edit names, and words in two pieces of the file cannot be replaced in one. It is no longer what stops a second write: an edit filed before the guard and written in by hand is read as taken where it stands |
+| a block named by place that reads the same as another under the same line (`alike`) | the edit, at filing | nothing could tell the edit's block from the other afterwards (`filed_on`), so it would be unplaced from the moment it was filed |
+
+A body is what lies inside an environment's head and before its `\end`, or below a section's heading and its labels (`body_span`), so a suggestion on a section's body never replaces its heading; a body replacement whose body runs across a block inside it, or holds a line that brings in another file (`\input`), is refused at filing and at Keep (`whole_body`), since those would go with it.
+
+**Open.** Two insertions beside the same quote or body edge: once the first is kept, the second's recorded neighbour is gone and it is unplaced, rather than put in ahead of the first, out of the order they were suggested in; the agent suggests it again. Once its text has changed, a key named by place has only the line above its block and its quote to go by; the neighbours on both sides and the quote's count across the quilt are the context record of `docs/reports/v0.1-study/raw/check-labels.md` (KEY-13), not built yet. An edit whose new text is the very words already beside its place (a body's own last words suggested at its foot) can read either way, since written and not written look alike there; nothing is lost whichever it reads as.
+
+
 ## Where it stands
 
 The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.md` (DOOR-18).
@@ -135,6 +161,6 @@ The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.
 | undo of a Keep in one step, and a restore or put-back that reopens what it takes out | 5 | not built yet |
 | taking in an agent's copy, a pull, `loom mv`, atomize, import, `init --from`, the agent layer, pages, new files; then a test that nothing else writes a person's file | 6 | not built yet |
 
-Step 4 is placement, not the door: an insertion judged taken only at its own place, an edit refused when the words beside its place changed since it was filed, and a key named by place carrying the line above its block.
+Step 4 is placement, not the door ("Where an edit goes").
 
 **Open.** The follow-ups run under the lock, so Keep holds it through two scans. Moving them out (making what they compute part of the plan) would shorten the hold for the rebuild; it waits until the rebuild's lock is measured.

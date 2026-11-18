@@ -434,7 +434,7 @@ def keep(
     from loom.history.acts import KEEP, keep_versions
     from loom.history.ledger import append_entry
     from loom.records.carry import carry_all
-    from loom.records.edits import home
+    from loom.records.edits import home, where_taken
 
     chosen = _chosen(result, who, ids)
     refused = [{"id": p.id, "why": p.why or p.state} for p in chosen if p.state in ("unplaced", "on-a-copy")]
@@ -468,7 +468,7 @@ def keep(
                 for edit in kept.taken if kept else []:
                     node = home(after, edit)
                     if node is not None:
-                        spans.setdefault(node.file, []).extend(_where_taken(after, edit))
+                        spans.setdefault(node.file, []).extend(where_taken(after, edit))
                 for path, s in spans.items():
                     absorb(after, who, path, s)
                 after = _rescan(after)
@@ -819,21 +819,6 @@ def absorb(result: ScanResult, who: str, path: str, spans: list[tuple[int, int]]
     ]
     if changes:
         _into_look(result, who, path, changes)
-
-
-def _where_taken(result: ScanResult, edit: Edit) -> list[tuple[int, int]]:
-    """Where a suggested edit's new text stands in its file, when its key reads as it taken already.
-
-    Looked for in the key's whole text, as `is_taken` does: new text that opens a section is the key's child once it is in.
-    """
-    from loom.records.edits import home
-    from loom.records.selectors import find_quote
-
-    node = home(result, edit)
-    if node is None or node.file not in result.files or not edit.with_text.strip():
-        return []
-    whole = result.files[node.file].text[node.start : node.end]
-    return [(node.start + a, node.start + b) for a, b in find_quote(whole, edit.with_text)]
 
 
 def keep_accepted(result: ScanResult, who: str, keys: list[str]) -> list[str]:

@@ -8,7 +8,18 @@ from typing import Any
 
 import pytest
 
-from loom.records.edits import Edit, Unplaced, body_span, find, is_taken, patch, place, replay, taken_how
+from loom.records.edits import (
+    Edit,
+    Unplaced,
+    body_span,
+    find,
+    is_taken,
+    patch,
+    place,
+    replay,
+    taken_how,
+    where_taken,
+)
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import copy, edit, exits, flat, json_of, ok, refused, run
@@ -554,7 +565,7 @@ def filed(q: Path, key: str, new: str, quote: str | None = None, placement: str 
 
 
 def test_words_that_reach_a_blocks_begin_or_end_are_no_place_for_an_edit(tmp_path: Path) -> None:
-    """Text put beside a block's `\\end{…}` lands outside the block, where nothing afterwards reads it as the edit taken, and Keep wrote it again each time it was pressed (SAFE-1 of the v0.1 study)."""
+    """Text put beside a block's `\\end{…}` lands in the block around it, though the edit names this one; the v0.1 study found Keep writing it there again each time it was pressed (SAFE-1)."""
     q = demo(tmp_path)
     for quote, where in (
         ("\\end{lemma}", "--after"),
@@ -590,6 +601,25 @@ def test_words_that_run_across_a_block_inside_are_no_place_for_an_edit(tmp_path:
         place(*placed(q, old))
 
 
+def test_a_sections_body_is_below_its_heading_and_one_across_a_block_inside_is_not_replaced(tmp_path: Path) -> None:
+    """CUT-14 of the v0.1 study: a section's own text is its heading and the words under it, and a suggestion on its body replaced the heading and its label with them. With its proofs cut out, its body is several pieces of the file, and only the first would be replaced."""
+    q = sheet(tmp_path)
+    two = f"{SHEET}#section:2"
+    refused("suggest", two, "--with", "Asked.", "--as", "Tom", cwd=q, code=2, match="runs across a block inside")
+    head = suggest(q, "--with", "Read this first.", "--before", key=two)
+    assert place(*placed(q, head)).taken.startswith("\\section*{Two}\nRead this first.\nWhat is asked second.")
+    old = filed(q, two, "Asked.")
+    with pytest.raises(Unplaced, match="runs across a block inside"):
+        place(*placed(q, old))
+    one = suggest(q, "--with", "What is asked at first.", key=f"{SHEET}#section:1")
+    ok("changes", "--keep", one, cwd=q)
+    assert "\\section*{One}\nWhat is asked at first.\n\\begin{proof}[Answer]" in (q / SHEET).read_text()
+    assert body_span("\\section{Results}\\label{r}\\label{s}\n\nThe results.\n") == (
+        len("\\section{Results}\\label{r}\\label{s}\n\n"),
+        len("\\section{Results}\\label{r}\\label{s}\n\nThe results."),
+    )
+
+
 def test_blocks_that_read_the_same_are_told_apart_by_the_line_above(tmp_path: Path) -> None:
     """An answer suggested on the second of two empty answers stays on it when a third is put in above and every key after it is renumbered (SAFE-4): the line above the block was recorded with the edit."""
     q = sheet(tmp_path)
@@ -622,6 +652,195 @@ def test_blocks_that_read_the_same_under_the_same_line_take_no_edit(tmp_path: Pa
     assert suggest(q, "--with", "A remark.", "--after", key=f"{SHEET}#remark:1")
 
 
+def test_a_phrase_suggested_beside_the_very_words_that_already_stand_there_is_not_read_as_taken(tmp_path: Path) -> None:
+    """Harness seed 3077 of the door's spike: a phrase suggested where the same phrase already stood read as taken, and Keep wrote nothing (SAFE-8). An insertion is taken only when its text stands at its place with the words recorded beside the place beyond it, or gone."""
+    q = demo(tmp_path)
+    after = suggest(q, "--quote", "Every orbit", "--with", "of a widget", "--after")
+    foot = suggest(q, "--with", "the one-point orbits.", "--after")
+    for a in (after, foot):
+        assert taken_how(*placed(q, a)) is None
+    ok("changes", "--keep", after, cwd=q)
+    ok("changes", "--keep", foot, cwd=q)
+    text = (q / LEMMA).read_text()
+    assert "Every orbit of a widget of a widget has" in text and text.count("the one-point orbits.") == 2
+
+
+def test_a_replacement_whose_new_text_holds_its_quote_is_judged_beside_the_quote(tmp_path: Path) -> None:
+    """Harness seed 3019: a replacement that adds words after its quote, where those very words already followed it, read as taken and was never written."""
+    q = demo(tmp_path)
+    a = suggest(q, "--quote", "$\\Fix(\\sigma)$ is", "--with", "$\\Fix(\\sigma)$ is the union")
+    assert taken_how(*placed(q, a)) is None
+    b = suggest(q, "--quote", "one or two points", "--with", "one or two points (never more)")
+    edit(q / LEMMA, "one or two points", "one or two points (never more)")
+    assert taken_how(*placed(q, b)) == "as-written"
+    # touched once written in, it is placed nowhere, never written beside itself
+    edit(q / LEMMA, "(never more)", "(never more than two)")
+    assert taken_how(*placed(q, b)) is None
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, b))
+
+
+def test_a_uses_written_in_by_hand_at_the_head_of_the_body_reads_as_taken(tmp_path: Path) -> None:
+    """A `\\uses{…}` taken in is read as the block's head, so the body starts after it with the words it started with."""
+    q = demo(tmp_path)
+    a = suggest(q, "--with", "\\uses{dm-0001}", "--before")
+    edit(q / LEMMA, "\\label{lem:orbits}\n", "\\label{lem:orbits}\n\\uses{dm-0001}\n")
+    assert taken_how(*placed(q, a)) == "as-written"
+    (span,) = where_taken(*placed(q, a))
+    assert (q / LEMMA).read_text()[span[0] : span[1]] == "\\uses{dm-0001}"
+
+
+def test_an_insertion_is_placed_only_while_the_words_beside_its_place_stand(tmp_path: Path) -> None:
+    """Text the person wrote beside an insertion's place since it was suggested is not something Keep can tell from the edit touched (SAFE-1 of the v0.1 study), so the edit is unplaced rather than written beside it."""
+    q = demo(tmp_path)
+    after = suggest(q, "--quote", "one or two points", "--with", "(and never more)", "--after")
+    before = suggest(q, "--quote", "Every orbit", "--with", "Plainly,", "--before")
+    foot = suggest(q, "--with", "Hence orbits are small.", "--after")
+    head = suggest(q, "--with", "\\uses{dm-0001}", "--before")
+    assert find(q, foot).edge.endswith("the one-point orbits.") and find(q, head).edge.startswith("Every orbit")  # type: ignore[union-attr]
+    old = filed(q, "dm-0002", "Hence.", None, "after")  # one filed before the body's foot was recorded
+    # words changed away from every place leave each where it was
+    edit(q / LEMMA, "[Orbits]", "[Orbits of a widget]")
+    for a in (after, before, foot, head):
+        assert place(*placed(q, a)).moved
+    edit(q / LEMMA, "the one-point orbits.", "the orbits of one point.")
+    with pytest.raises(Unplaced, match="end of the body"):
+        place(*placed(q, foot))
+    assert "Hence." in place(*placed(q, old)).taken
+    edit(q / LEMMA, "one or two points, and", "one or two points (at most), and")
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, after))
+    edit(q / LEMMA, "\\label{lem:orbits}\nEvery orbit", "\\label{lem:orbits}\nSo Every orbit")
+    with pytest.raises(Unplaced, match="right before the text"):
+        place(*placed(q, before))
+    with pytest.raises(Unplaced, match="head of the body"):
+        place(*placed(q, head))
+    # Keep writes nothing for one unplaced
+    text = (q / LEMMA).read_text()
+    ok("changes", "--keep", after, cwd=q)
+    assert (q / LEMMA).read_text() == text and find(q, after).status == "open"  # type: ignore[union-attr]
+
+
+def test_an_insertion_beside_a_quote_that_ends_or_starts_its_blocks_text_holds_to_that_end(tmp_path: Path) -> None:
+    """The integrator's review of step 4: a quote that ends a section's own text records only whitespace after it, which said nothing, so a suggestion typed in after it by hand and reworded was written in ahead of the person's sentence. Only whitespace recorded says the text ended there."""
+    q = sheet(tmp_path)
+    two = f"{SHEET}#section:2"
+    after = suggest(
+        q, "--quote", "What follows the second answer.", "--with", "Zebra remark at the end.", "--after", key=two
+    )
+    assert log(q)[-1]["anchor"]["suffix"].strip() == ""
+    before = suggest(q, "--quote", "\\documentclass{amsart}", "--with", "% Zebra line on top.", "--before", key=SHEET)
+    assert log(q)[-1]["anchor"]["prefix"] == ""
+    for a in (after, before):
+        assert place(*placed(q, a))
+    edit(
+        q / SHEET, "What follows the second answer.", "What follows the second answer. Zebra remark, reworded by hand."
+    )
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, after))
+    edit(q / SHEET, "\\documentclass{amsart}", "\\PassOptionsToPackage{draft}{graphicx}\n\\documentclass{amsart}")
+    with pytest.raises(Unplaced, match="right before the text"):
+        place(*placed(q, before))
+    text = (q / SHEET).read_text()
+    ok("changes", "--keep", after, cwd=q)
+    assert (q / SHEET).read_text() == text
+    # typed in exactly as suggested, it is taken where it stands
+    exact = suggest(q, "--quote", "Zebra remark, reworded by hand.", "--with", "Zebra coda.", "--after", key=two)
+    edit(q / SHEET, "Zebra remark, reworded by hand.", "Zebra remark, reworded by hand. Zebra coda.")
+    assert taken_how(*placed(q, exact)) == "as-written"
+
+
+def test_a_heading_is_read_as_the_scan_reads_one() -> None:
+    """The integrator's review of step 4: `\\part` in `\\partial` was read as a heading, and a heading's titles were read only with no space before them."""
+    for text in (
+        "\\partial_t u = \\Delta u",
+        "\\paragraphmark{x} y",
+        "\\sectionmark{x} y",
+        "\\partname y",
+        "\\chaptername y",
+    ):
+        assert body_span(text) == (0, len(text)), text
+    spaced = "\\subsection [short] {Long title}\\label {x}\nThe text.\n"
+    a, b = body_span(spaced)
+    assert spaced[a:b] == "The text."
+    assert body_span("\\section*{T}") == (len("\\section*{T}"), len("\\section*{T}"))
+
+
+def test_a_replacement_typed_in_by_hand_is_taken_though_its_quote_reads_like_a_plain_word_further_on(
+    tmp_path: Path,
+) -> None:
+    """The integrator's review of step 4: read as the page prints it, `\\emph{orbit}` stands wherever the plain word does, so once the person typed the replacement in by hand the quote "still stood" in `orbits` further on, and Keep wrote the replacement over that word. An edit's quote is the source's own words, found again only as written."""
+    q = demo(tmp_path)
+    edit(q / LEMMA, "Every orbit of a widget", "Every \\emph{orbit} of a widget")
+    a = suggest(q, "--quote", "\\emph{orbit}", "--with", "\\emph{cycle}")
+    edit(q / LEMMA, "\\emph{orbit}", "\\emph{cycle}")  # typed in by hand, exactly
+    assert taken_how(*placed(q, a)) == "as-written"
+    text = (q / LEMMA).read_text()
+    ok("changes", "--keep", a, cwd=q)
+    assert (q / LEMMA).read_text() == text and "the one-point orbits." in text
+
+
+def test_a_replacement_whose_quote_was_rewritten_goes_nowhere_though_it_reads_like_a_plain_word_further_on(
+    tmp_path: Path,
+) -> None:
+    """The same, with the person's own words in place of the quote: on `main` as well, `place` followed the reading as printed to the plain word, and Keep wrote the replacement there."""
+    q = demo(tmp_path)
+    edit(q / LEMMA, "Every orbit of a widget", "Every \\emph{orbit} of a widget")
+    a = suggest(q, "--quote", "\\emph{orbit}", "--with", "\\emph{cycle}")
+    edit(q / LEMMA, "\\emph{orbit}", "\\emph{class}")
+    with pytest.raises(Unplaced, match="no longer stands"):
+        place(*placed(q, a))
+    text = (q / LEMMA).read_text()
+    ok("changes", "--keep", a, cwd=q)
+    assert (q / LEMMA).read_text() == text and "the one-point orbits." in text
+
+
+def test_a_whole_body_replacement_is_judged_by_the_body_alone(tmp_path: Path) -> None:
+    """The body's own words are compared with those the replacement was suggested on: a title changed since leaves it placed, a word of the body changed refuses it."""
+    q = demo(tmp_path)
+    a = suggest(q, "--with", "Each orbit has one or two points.")
+    edit(q / LEMMA, "[Orbits]", "[Orbits of a widget]")
+    assert place(*placed(q, a)).moved
+    edit(q / LEMMA, "the union of", "the set of")
+    with pytest.raises(Unplaced, match="has changed since"):
+        place(*placed(q, a))
+    # one whose text was not kept goes by the whole block's text
+    old = filed(q, "dm-0002", "Each orbit is small.")
+    assert place(*placed(q, old))
+    edit(q / LEMMA, "[Orbits of a widget]", "[Orbits]")
+    with pytest.raises(Unplaced, match="has changed since"):
+        place(*placed(q, old))
+
+
+def test_whitespace_moved_beside_an_insertion_leaves_it_placed(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    after = suggest(q, "--quote", "one or two points,", "--with", "never more,", "--after")
+    edit(q / LEMMA, "one or two points, and $\\Fix(\\sigma)$ is", "one or two points,\n  and $\\Fix(\\sigma)$\nis")
+    assert "one or two points, never more,\n  and" in place(*placed(q, after)).taken
+
+
+def test_an_insertion_in_an_empty_body_is_unplaced_once_the_body_has_words(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    body = "Every orbit of a widget has one or two points, and $\\Fix(\\sigma)$ is the union of the one-point orbits.\n"
+    edit(q / LEMMA, body, "")
+    a = suggest(q, "--with", "Two points.", "--after")
+    assert log(q)[-1]["edge"] == "" and "Two points." in place(*placed(q, a)).taken
+    edit(q / LEMMA, "\\label{lem:orbits}\n", "\\label{lem:orbits}\nMine.\n")
+    with pytest.raises(Unplaced, match="was empty when it was suggested"):
+        place(*placed(q, a))
+
+
+def test_the_second_of_two_insertions_after_one_quote_is_unplaced_once_the_first_is_kept(tmp_path: Path) -> None:
+    """The first, kept, stands where the second's recorded neighbour stood: the second is not put in ahead of it, out of the order they were suggested in."""
+    q = demo(tmp_path)
+    first = suggest(q, "--quote", "one or two points", "--with", "(never more)", "--after")
+    second = suggest(q, "--quote", "one or two points", "--with", "(as counted)", "--after")
+    ok("changes", "--keep", first, cwd=q)
+    with pytest.raises(Unplaced, match="right after the text"):
+        place(*placed(q, second))
+    assert "(as counted)" not in (q / LEMMA).read_text()
+
+
 def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_its_quote(tmp_path: Path) -> None:
     """Once the block's text has changed, no block holds what the edit was filed on. An edit that quotes words still goes on the block at its place while the line above stands, where `place` needs its quote; one on the body has nothing to say the block is the one, and is unplaced."""
     q = sheet(tmp_path)
@@ -636,6 +855,18 @@ def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_i
         with pytest.raises(Unplaced, match="named by its place"):
             place(*placed(q, unplaced))
     # a remark put in under the same line takes the key; the quote is not in it, so the edit is unplaced, never written there
-    edit(q / SHEET, "\\begin{remark}", "\\begin{remark}\nAnother remark altogether.\n\\end{remark}\n\\begin{remark}")
+    edit(
+        q / SHEET,
+        "\\begin{remark}",
+        "\\begin{remark}\nAnother remark altogether.\n\\end{remark}\n\\begin{remark}",
+        count=1,
+    )
     with pytest.raises(Unplaced, match="no longer stands"):
         place(*placed(q, quoted))
+    # nor when it does hold the quote: the remark the edit was suggested on holds it too, and the line above no longer says which
+    edit(q / SHEET, "Another remark altogether.", "Another remark, and every orbit is small.")
+    with pytest.raises(Unplaced, match="stand in another block"):
+        place(*placed(q, quoted))
+    text = (q / SHEET).read_text()
+    ok("changes", "--keep", quoted, cwd=q)
+    assert (q / SHEET).read_text() == text

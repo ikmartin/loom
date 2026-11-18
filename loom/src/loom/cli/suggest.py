@@ -70,7 +70,7 @@ def suggest_command(
     from loom.cli.review import _annotator, _version
     from loom.clock import stamp, today
     from loom.records.annotations import find_annotation, load_records
-    from loom.records.edits import append_new, misplaced
+    from loom.records.edits import append_new, edge_of, misplaced, whole_body
     from loom.records.selectors import find_quote, make_selector
     from loom.records.store import Records, alike, line_before, named_by_place
     from loom.scan.owntext import key_hash
@@ -112,6 +112,10 @@ def suggest_command(
         raise EnvError(
             "an empty --with deletes the quoted words, so it needs --quote; with none, it would empty the body"
         )
+    elif placement == "replace" and (whole := whole_body(result, node)) is not None:
+        raise EnvError(
+            f"the body of {target} {whole}, so it is not replaced whole; quote the words to replace, or suggest on a block inside"
+        )
     if not with_text and placement != "replace":
         raise EnvError("an empty --with deletes the quoted words, so it goes with neither --before nor --after")
     # a key named by place names another block once one is put in before it: the line above the block is recorded, to find it again by, and a block no line tells from its like is refused now rather than written into the wrong one later
@@ -141,6 +145,9 @@ def suggest_command(
     }
     if near:
         event["near"] = near
+    if selector is None and placement != "replace":
+        # the body's foot or head as it reads now, so that text written there since is never written beside again
+        event["edge"] = edge_of(result, node, placement)
     if comment:
         event["comment"] = comment
     if answers:
