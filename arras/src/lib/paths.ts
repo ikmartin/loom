@@ -32,6 +32,11 @@ export function dataUrl(path: string): string {
 	return dataRoot() + path.replace(/^\/+/, '');
 }
 
+/** A document's compiled PDF, by the address its manifest entry gives and the compile it is, so each compile is a new file to PDF.js and the browser; '' where there is none. */
+export function compiledUrl(d: { pdf?: string; compiled?: string }): string {
+	return d.pdf ? `${dataUrl(d.pdf)}?v=${encodeURIComponent(d.compiled ?? '')}` : '';
+}
+
 /** A file the publisher serves beside the build directory, such as a fetched paper under `refs/`. */
 export function artifactUrl(dir: string): string {
 	return dataRoot().replace(/build\/$/, '') + dir.replace(/^\/+|\/+$/g, '') + '/paper.pdf';
