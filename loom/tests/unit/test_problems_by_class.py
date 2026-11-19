@@ -321,3 +321,29 @@ def test_a_person_is_still_told_of_a_circle_in_their_reasoning_and_of_a_document
     ]
     assert (unended["severity"], unended["class"]) == ("error", "latex")
     assert unended["message"] == "\\begin{document} is never closed in this file"
+
+
+def test_a_reference_to_a_block_the_document_does_not_read_is_graded_by_what_tex_prints(tmp_path: Path) -> None:
+    """A `\\ref` from the document to a block only another document defines prints ?? in its PDF: an error of class latex. A `\\uses` of it prints nothing: a warning of loom's model. Between two files no document reads: an info."""
+    q = demo(tmp_path)
+    (q / "drafting" / "other.tex").write_text(
+        (q / DOC).read_text().split("\\begin{document}")[0]
+        + "\\begin{document}\n\\begin{lemma}\\label{dm-0095}\nElsewhere.\n\\end{lemma}\n\\end{document}\n"
+    )
+    uses = "\\begin{lemma}\\label{dm-0096}\n\\uses{dm-0095}\nUses it.\n\\end{lemma}\n"
+    refs = "\\begin{lemma}\\label{dm-0097}\nBy Lemma~\\ref{dm-0095}.\n\\end{lemma}\n"
+    edit(q / DOC, "\\end{document}", uses + refs + "\\end{document}")
+    (q / "drafting" / "nodes" / "loose-a.tex").write_text(
+        "\\begin{lemma}\\label{dm-0098}\nSee \\ref{dm-0099}.\n\\end{lemma}\n"
+    )
+    (q / "drafting" / "nodes" / "loose-b.tex").write_text("\\begin{lemma}\\label{dm-0099}\nLoose.\n\\end{lemma}\n")
+    graded = {
+        tuple(d["keys"][:1]): (d["severity"], d["class"])
+        for d in json_of("lint", "--json", cwd=q, code=1)["diagnostics"]
+        if d["code"] == "loom:reference-to-loose"
+    }
+    assert graded == {
+        ("dm-0096",): ("warning", "model"),
+        ("dm-0097",): ("error", "latex"),
+        ("dm-0098",): ("info", "model"),
+    }

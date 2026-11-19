@@ -265,3 +265,44 @@ def test_never_modifies_author_files(quilt: Path, tmp_path: Path) -> None:
     # everything loom writes goes into nodes/, the drafting directory it was told to write in, or its own record, where a landmark's text is kept
     allowed = ("drafting/nodes/", f"{drafting}/", ".loom/")
     assert all(rel.startswith(allowed) for rel in new_files), new_files
+
+
+SPEC = REPO.parent / "docs" / "specs" / "diagnostics.md"
+
+
+def test_the_specification_gives_every_code_the_registry_s_grade_and_class() -> None:
+    """`docs/specs/diagnostics.md` says each code's severity and class as `scan/diagnostics.py` holds them, so a wrong class or grade on any code fails here: a reserved code in its table's row, a loom code in its entry's parentheses, `fixed` there exactly when the registry has it; a code whose instances differ names its registry grade and class among what it says."""
+    import re
+
+    from loom.scan.diagnostics import LOOM, RESERVED, VARIES
+
+    text = SPEC.read_text(encoding="utf-8")
+    wrong: list[str] = []
+    for code, entry in RESERVED.items():
+        row = re.search(rf"^\| `{re.escape(code)}` \| ([^|]+) \| ([^|]+) \|", text, re.M)
+        if row is None:
+            wrong.append(f"{code}: no row")
+            continue
+        severity, cls = (x.strip() for x in row.groups())
+        if code in VARIES:
+            ok_ = entry.severity in severity and entry.cls in cls
+        else:
+            ok_ = (severity, cls) == (entry.severity, entry.cls)
+        if not ok_:
+            wrong.append(f"{code}: says {severity}, {cls}; the registry {entry.severity}, {entry.cls}")
+    said = {m.group(1): m.group(0) for m in re.finditer(r"`(loom:[a-z0-9-]+)` \(([^)]*)\)[^\n]*", text)}
+    for code, entry in LOOM.items():
+        line = next((ln for ln in text.splitlines() if ln.startswith(f"- `{code}`")), None)
+        if line is None:
+            line = said.get(code)
+        if line is None:
+            wrong.append(f"{code}: no entry")
+            continue
+        paren = re.match(r"[^(]*\(([^)]*)\)", line)
+        parts = [p.strip() for p in paren.group(1).split(",")] if paren else []
+        if code in VARIES:
+            if not (entry.severity in line and entry.cls in line):
+                wrong.append(f"{code}: says neither {entry.severity} nor {entry.cls}")
+        elif parts[:2] != [entry.severity, entry.cls] or ("fixed" in parts) != entry.fixed:
+            wrong.append(f"{code}: says ({', '.join(parts)}); the registry {entry}")
+    assert wrong == []

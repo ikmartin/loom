@@ -82,10 +82,11 @@ def test_a_run_that_makes_no_pdf_is_told_as_one_that_failed() -> None:
 def test_a_compile_the_server_runs_and_that_fails_is_published_on_its_document_until_it_compiles(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The server's own compile of a document fails: the manifest names the document as one that did not compile, in the person's LaTeX; once a save compiles it, the problem is gone."""
+    """The server's own compile of a document fails: the manifest names the document as one that did not compile, in the person's LaTeX; once a save compiles it, the problem is gone. The quilt holds that one document, so no other compile's rebuild publishes the failure in its stead."""
     monkeypatch.setattr(serve_mod, "ThreadingHTTPServer", QuickServer)
     monkeypatch.setenv("FAKE_TEX_FAIL_MATCH", "main.tex")
     q = demo(tmp_path)
+    (q / "drafting" / "outline.tex").unlink()
     s = ServeSession(load_quilt(q), fake_bundle(tmp_path), port=0, compile_masters=True, interval=0.2)
     try:
         s.start()
