@@ -158,7 +158,7 @@ class Compiles:
     made : callable, optional
         Called with a document whose run made a PDF, from the worker that ran it.
     failed : callable, optional
-        Called with a document whose run made none, from the worker that ran it.
+        Called with a document whose run ended and made none, from the worker that ran it. A run that was stopped is told as neither, and changes nothing of how its document stands.
     """
 
     def __init__(
@@ -280,17 +280,25 @@ class Compiles:
             except Exception as exc:  # noqa: BLE001 -- one document's compile must not end the server's
                 res = None
                 last = Last("failed", stamp(), f"{type(exc).__name__}: {exc}"[:300])
+            # a run cut short says nothing of the document, and once the queue is stopped nothing more is told
+            cut = res is not None and res.stopped
             with self._cond:
                 del self._running[doc]
-                self._last[doc] = last
-                if doc in self._again and not self._stopped:
+                stopped = self._stopped
+                if not cut:
+                    self._last[doc] = last
+                if doc in self._again and not stopped:
                     self._again.discard(doc)
                     self._due[doc] = time.monotonic() + self.delay
                 self._cond.notify_all()
+            if stopped:
+                return
             self._told()
-            if res is not None and res.pdf is not None:
+            if res is None or cut:
+                continue
+            if res.pdf is not None:
                 self._made(doc)
-            elif res is not None:
+            else:
                 self._failed(doc)
 
 

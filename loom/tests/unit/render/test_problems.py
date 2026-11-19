@@ -101,3 +101,79 @@ def test_a_compile_the_server_runs_and_that_fails_is_published_on_its_document_u
         _until(lambda: not failed())
     finally:
         s.stop()
+
+
+#: A latexmk that writes the start of a log where it is told to write and then runs on, as a long compile does: what a run cut short leaves behind.
+SLOW = """import sys, time
+from pathlib import Path
+out = next(a.split("=", 1)[1] for a in sys.argv if a.startswith("-outdir="))
+Path(out, Path(sys.argv[-1]).stem + ".log").write_text("This is a run cut short\\n", encoding="utf-8")
+time.sleep(60)
+"""
+
+
+def _slow_latexmk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+    import sys
+
+    bin_dir = tmp_path / "slow-bin"
+    bin_dir.mkdir()
+    (bin_dir / "latexmk").write_text(f"#!{sys.executable}\n{SLOW}", encoding="utf-8")
+    (bin_dir / "latexmk").chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+
+def test_a_run_stopped_mid_compile_leaves_the_last_whole_compile_s_word(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A document that did not compile, and the server stopped while it compiles again: its log is the last whole compile's still, so lint still says it did not compile, and nothing is published once the server is stopping."""
+    from loom.render.compiles import compile_problems
+    from loom.scan.scan import scan
+
+    monkeypatch.setattr(serve_mod, "ThreadingHTTPServer", QuickServer)
+    q = demo(tmp_path)
+    (q / "drafting" / "outline.tex").unlink()
+    out = q / document_build(DOC)
+    out.mkdir(parents=True)
+    failed = "(./main.tex\n! Undefined control sequence.\nl.9 \\slowerror\n"
+    (out / "main.log").write_text(failed, encoding="utf-8")
+    _slow_latexmk(tmp_path, monkeypatch)
+    s = ServeSession(load_quilt(q), fake_bundle(tmp_path), port=0, compile_masters=True, interval=0.2)
+    s.start()
+    try:
+        assert s.compiles is not None
+        _until(lambda: any(p is not None for p in s.compiles._running.values()))
+        _until(lambda: any(out.parent.glob(".main-*.run-*/main.log")))  # the run has written the start of its log
+    finally:
+        s.stop()
+    stopped = time.time()
+    time.sleep(1)
+    assert (out / "main.log").read_text(encoding="utf-8") == failed
+    assert [d.code for d in compile_problems(scan(load_quilt(q)))] == ["loom:compile-failed"]
+    assert (q / MANIFEST).stat().st_mtime < stopped, "published after the server was stopped"
+    assert DOC not in s.compiles.state()  # the run cut short is no verdict
+
+
+def test_a_compile_stopped_by_hand_moves_nothing_into_its_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`stop_run` on a compile in flight: the run is said to be stopped, and the compile folder keeps what it held."""
+    import threading
+
+    from loom.tex.runner import compile_document, stop_run
+
+    q = demo(tmp_path)
+    out = q / document_build(DOC)
+    out.mkdir(parents=True)
+    (out / "main.log").write_text("the last whole compile\n", encoding="utf-8")
+    _slow_latexmk(tmp_path, monkeypatch)
+    procs: list = []  # type: ignore[type-arg]
+    results: list[CompileResult] = []
+    t = threading.Thread(target=lambda: results.append(compile_document(q, "drafting", DOC, out, started=procs.append)))
+    t.start()
+    _until(lambda: bool(procs) and any(out.parent.glob(".main-*.run-*/main.log")))
+    stop_run(procs[0])
+    t.join(PATIENCE)
+    (res,) = results
+    assert res.stopped and res.pdf is None and res.log is None
+    assert (out / "main.log").read_text(encoding="utf-8") == "the last whole compile\n"
