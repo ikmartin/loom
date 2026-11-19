@@ -536,11 +536,11 @@ export interface Location {
   column?: number;
 }
 
-/** A command that would resolve a diagnostic, offered to be copied. Nothing in the viewer runs anything. */
+/** What an agent does to resolve a diagnostic: a command, or an edit said in words. Nothing in the viewer runs anything, and a person's problems show none. */
 export interface Fix {
   label: string;
   command: string;
-  /** A fix a viewer may do itself: the write-API endpoint and the body to send it. Without one, the fix is a command to copy. */
+  /** A fix a viewer may do itself, as a button: the write-API endpoint and the body to send it. */
   act?: { endpoint: string; body: Record<string, unknown> };
 }
 

@@ -36,7 +36,7 @@
 	const isOpen = (id: string, fallback: boolean) => folds[id] ?? (fallback || !!code);
 	const toggled = (id: string) => (e: Event) => (folds[id] = (e.currentTarget as HTMLDetailsElement).open);
 
-	// the acts this publisher serves; a static build serves none, and every fix is then a command to copy
+	// the acts this publisher serves; a static build serves none, and the page then offers no fix
 	let served = $state<Record<string, boolean>>({});
 	$effect(() => {
 		void Promise.all(['library-update', 'agents-update'].map((e) => can(e))).then(([library, agents]) => (served = { 'library-update': library, 'agents-update': agents }));

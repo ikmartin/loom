@@ -44,7 +44,7 @@ def _until(check: Callable[[], bool]) -> None:
 def test_the_start_line_counts_no_error_of_loom_s_model_and_a_failed_compile_as_one(
     tmp_path: Path, serve: Callable[..., ServeSession], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """A proof after `\\item` compiles: once an error, it made the start line say so on a quilt with nothing wrong in its LaTeX; a document whose last compile failed is an error there."""
+    """A proof after `\\item` compiles, so the start line of a quilt with nothing else wrong names no error; a document whose last compile failed is one there."""
     model = _demo(tmp_path, "model")
     edit(model / DOC, "\\end{document}", UNATTACHED + "\\end{document}")
     serve(model, watch=False)

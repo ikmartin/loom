@@ -67,7 +67,7 @@ describe('Problems', () => {
 		expect(byWork(m, [keyed, again, keyed]).map((w) => [w.work, w.items.length])).toEqual([['Kre99', 2], ['Man12', 1]]);
 	});
 
-	it('offers a fix with an act as a button and every other as a command to copy', () => {
+	it("tells a fix a viewer may do as a button from every other, which is an agent's command", () => {
 		const { acts, commands } = splitFixes(d('loom:undigested-citekey', { fixes: [{ label: 'digest it', command: 'a', act: { endpoint: 'library-update', body: { works: ['Har77'] } } }, { label: 'by hand', command: 'b' }] }));
 		expect([acts.map((f) => f.command), commands.map((f) => f.command)]).toEqual([['a'], ['b']]);
 	});
