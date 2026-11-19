@@ -74,16 +74,40 @@ export function pdfName(masters: readonly { path: string }[], path: string): str
 export function keyName(m: Named, key: string): string {
 	if (m.masters.some((x) => x.path === key)) return documentLabel(m.masters, key);
 	if (m.nodes[key]) return nodeName(m, key);
-	const region = m.regions?.[key];
-	if (region) {
-		const main = m.masters.find((x) => x.default)?.path ?? '';
-		const number = region.numbers[main]?.number;
-		return `${number ? `(${number})` : region.label} in ${nodeName(m, region.container)}`;
-	}
+	const region = regionName(m, key);
+	if (region) return `${region.number} in ${region.within}`;
 	const owner = m.keys?.[key]?.node;
 	if (owner && owner !== key) return `proof of ${nodeName(m, owner)}`;
 	const work = Object.values(m.references ?? {}).find((r) => r.work === key || r.works?.includes(key));
 	return work ? work.citekey : key;
+}
+
+/**
+ * A region of a node, a labelled equation, as a reader names it, in two parts: its number and what it stands in.
+ *
+ * The number is the default document's, else that of the document that numbers it, as `nodeName` takes a result's.
+ *
+ * Parameters
+ * ----------
+ * m : Named
+ * key : str
+ *     A region's key, `KEY#label`.
+ *
+ * Returns
+ * -------
+ * {number: str, within: str} | null
+ *     `number` in brackets, `(4)`, or the label where no document numbers it; `within` by `keyName`, so an equation in a proof is in `proof of Lemma 1.2`. Null for a key that is no region.
+ *
+ * See Also
+ * --------
+ * keyName : the two parts as one name, `(4) in Theorem 2.1`.
+ */
+export function regionName(m: Named, key: string): { number: string; within: string } | null {
+	const region = m.regions?.[key];
+	if (!region) return null;
+	const main = m.masters.find((x) => x.default)?.path;
+	const number = (main ? region.numbers[main]?.number : undefined) ?? Object.values(region.numbers).find((x) => x?.number)?.number;
+	return { number: number ? `(${number})` : region.label, within: keyName(m, region.container) };
 }
 
 /** What a link names, for a `quilt:` or `cited:` link written with no text of its own (plan 0.14): the name a reader uses, which stays right when the document is renumbered. */

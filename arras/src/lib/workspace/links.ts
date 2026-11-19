@@ -58,9 +58,7 @@ export function itemForHref(m: Manifest, href: string): Item | null {
  * An annotation opens what it is on, with its box open (`note`); a session its transcript; a document path its document, at the place after `#`; any other key its node, at the place in it.
  */
 export function itemForQuilt(m: Manifest, body: string): Item | null {
-	const cut = body.indexOf('#');
-	const key = decodeURIComponent(cut < 0 ? body : body.slice(0, cut));
-	const place = cut < 0 ? '' : decodeURIComponent(body.slice(cut + 1));
+	const { key, place } = quiltParts(body);
 	if (!key) return null;
 	const note = m.annotations[key];
 	if (note) return noteItem(m, threadOf(m, note.id), note.target);
@@ -77,6 +75,70 @@ export function itemForQuilt(m: Manifest, body: string): Item | null {
 	// a place in a node is a region of it (`KEY#label`) or another key it holds, such as its proof
 	const region = m.regions?.[`${key}#${place}`];
 	return { ...at, anchor: anchorId(region ? `${key}#${place}` : place) };
+}
+
+/** A `quilt:` link's body cut at its first `#` into the key and the place, each decoded; a region's key holds a `#` of its own, so a document's place may be one. */
+function quiltParts(body: string): { key: string; place: string } {
+	const cut = body.indexOf('#');
+	return { key: decodeURIComponent(cut < 0 ? body : body.slice(0, cut)), place: cut < 0 ? '' : decodeURIComponent(body.slice(cut + 1)) };
+}
+
+/**
+ * What a hover card shows for a key: the node that holds it, at the display's anchor where the key is a region of it.
+ *
+ * **A digest node previews the paper, not the digest**: a result read off a cited work is a transcription of a page, and a reader hovering a citation wants the page, the one a click opens (`paperAt`). With no paper to open at a page, the transcription is the best there is.
+ *
+ * Parameters
+ * ----------
+ * m : Manifest
+ * key : str
+ *     A node's key, any key it holds (a proof), or a region's (`KEY#label`).
+ *
+ * Returns
+ * -------
+ * Item | null
+ *     A node item, or a work at a page; null where the manifest holds no node for the key.
+ *
+ * See Also
+ * --------
+ * previewOfHref : what a link previews, for a link that names no key.
+ */
+export function previewOfKey(m: Manifest, key: string): Item | null {
+	const region = m.regions?.[key];
+	const k = region ? region.container : key;
+	const n = m.keys[k]?.node ?? k;
+	if (!m.nodes[n]) return null;
+	return paperAt(m, n) ?? { kind: 'node', id: n, ...(region ? { anchor: anchorId(key) } : {}) };
+}
+
+/**
+ * What a hover card shows for a link to `href`, before the card's own checks; a kind with no small render still previews nothing.
+ *
+ * A document at a place previews what is at the place, as `previewOfKey` has it, and nothing where the place is no key the manifest knows; a document alone previews nothing. A node at one of its regions (`quilt:KEY#label`) previews the region, any other node the node; anything else is the item the link names. A click goes where `itemForHref` says, so a document at a place opens the document there.
+ *
+ * Parameters
+ * ----------
+ * m : Manifest
+ * href : str
+ *     A `quilt:` or `cited:` link, or a viewer path.
+ *
+ * Returns
+ * -------
+ * Item | null
+ *     The item the card renders, or null for a link that previews nothing.
+ *
+ * See Also
+ * --------
+ * previewOfKey : what a reference that names its key (`data-target`) previews.
+ */
+export function previewOfHref(m: Manifest, href: string): Item | null {
+	if (href.startsWith('quilt:')) {
+		const { key, place } = quiltParts(href.slice('quilt:'.length));
+		if (key && isDocument(m, key)) return place ? previewOfKey(m, place) : null;
+		if (key && place && m.regions?.[`${key}#${place}`]) return previewOfKey(m, `${key}#${place}`);
+	}
+	const item = itemForHref(m, href);
+	return item?.kind === 'node' ? previewOfKey(m, item.id) : item;
 }
 
 /**

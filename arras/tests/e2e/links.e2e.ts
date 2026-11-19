@@ -297,4 +297,85 @@ test.describe('previews', () => {
 		// the card is the paper, not text about it; its one line is the `open here` every card carries, and the renderer's own load notice is not text about the work
 		await expect(page.getByTestId('link-preview').locator('p:not(.opens):not(.problem)')).toHaveCount(0);
 	});
+
+	test("a link to a document at a result previews the result, in a transcript and in a Markdown file, and `open here` opens the document there", async ({ page }) => {
+		// the second is an agent's copy at one of its own results, as an agent writes it
+		await saying(page, '<p><a href="quilt:drafting/main.tex#sy-0003">the parity theorem</a> and <a href="quilt:.loom/agents/copies/aidoc.tex#sy-0001-ai">the copy’s widget</a>.</p>');
+		await page.goto('/session/' + REFEREE);
+		const links = page.getByTestId('message-1').locator('a');
+		const card = page.getByTestId('link-preview');
+		await links.nth(1).hover();
+		await expect(card.locator('.env[data-id="sy-0001-ai"]').first()).toBeVisible();
+		await expect(card.locator('.fragment mjx-container').first()).toBeVisible();
+		await page.keyboard.press('Escape');
+		await expect(card).toHaveCount(0);
+		// the card a `quilt:sy-0003` link shows
+		await links.nth(0).hover();
+		await expect(card.locator('.env[data-id="sy-0003"]').first()).toBeVisible();
+		await expect(card).toContainText('sy-0003');
+		// a click opens the document at the place, beside; `open here` opens the same in the link's own pane
+		await card.getByTestId('preview-open-here').click();
+		await expect(pane(page, 0).getByTestId('item-tab').filter({ hasText: 'main.tex' })).toHaveCount(1);
+		await expect(pane(page, 0).locator('[id="sy-0003"]')).toBeInViewport();
+
+		await page.route(/\/files\/notes\/intro\.md\.html/, async (route) => {
+			const res = await route.fetch();
+			await route.fulfill({ response: res, body: (await res.text()) + '<p>Its theorem is <a href="quilt:drafting/main.tex#sy-0003">the parity theorem</a>.</p>' });
+		});
+		await page.goto('/file/notes/intro.md');
+		const link = pane(page, 0).getByTestId('file-item').getByRole('link', { name: 'the parity theorem' });
+		await link.hover();
+		await expect(card.locator('.env[data-id="sy-0003"]').first()).toBeVisible();
+	});
+
+	test('a link to a document alone previews nothing', async ({ page }) => {
+		// the card's delay runs on the page's clock, so the absence is asserted after moving that clock past it
+		await page.clock.install();
+		await page.goto('/file/notes/intro.md');
+		const body = pane(page, 0).getByTestId('file-item');
+		await body.getByRole('link', { name: 'the paper' }).hover();
+		await page.clock.runFor(600);
+		await expect(page.getByTestId('link-preview')).toHaveCount(0);
+		// a link to a result in the same file does preview, so the absence above is the document's
+		await body.locator('a[href="quilt:sy-0002"]').hover();
+		await page.clock.runFor(600);
+		await expect(page.getByTestId('link-preview')).toBeVisible();
+	});
+
+	test('a reference to an equation previews the display, numbered as the page numbers it, and says what it stands in', async ({ page }) => {
+		await page.goto('/master/drafting/main');
+		await page.waitForSelector('.fragment mjx-container'); // typesetting reflows the text, which would move the link out from under the pointer
+		const card = page.getByTestId('link-preview');
+		const display = card.getByTestId('preview-display');
+		// an equation in a section's prose: the section's card would be its heading and a count
+		await pane(page, 0).locator('a.ref[data-target="sy-0100#eq:prose"]').first().hover();
+		await expect(display.locator('.math.display')).toHaveCount(1);
+		await expect(display.locator('.math.display')).toHaveAttribute('id', 'sy-0100-eq-prose');
+		// typeset with its tag, the number the page shows
+		await expect(display.locator('mjx-container [data-mml-node="mlabeledtr"]')).toHaveCount(1);
+		await expect(card).toContainText('(1)');
+		await expect(card).toContainText('in Section 1');
+		await expect(card).toContainText('sy-0100#eq:prose');
+		await expect(card).not.toContainText('in this section');
+		await page.keyboard.press('Escape');
+		await expect(card).toHaveCount(0);
+		// an equation in a proof is in the proof of its result
+		await pane(page, 0).locator('a.ref[data-target="sy-0002/proof#eq:step"]').first().hover();
+		await expect(display.locator('.math.display')).toHaveAttribute('id', 'sy-0002-proof-eq-step');
+		await expect(card).toContainText('(3)');
+		await expect(card).toContainText('in proof of Lemma 1.2');
+	});
+
+	test("a reference to an equation its node's fragment does not hold previews the node, as before", async ({ page }) => {
+		await page.route('**/fragments/nodes/sy-0100.html', async (route) => {
+			const res = await route.fetch();
+			await route.fulfill({ response: res, body: (await res.text()).replace(/<div class="math display"[^>]*id="sy-0100-eq-prose"[^>]*>.*?<\/div>/s, '') });
+		});
+		await page.goto('/master/drafting/main');
+		await page.waitForSelector('.fragment mjx-container');
+		await pane(page, 0).locator('a.ref[data-target="sy-0100#eq:prose"]').first().hover();
+		const card = page.getByTestId('link-preview');
+		await expect(card).toContainText('1 entry in this section');
+		await expect(card.getByTestId('preview-display')).toHaveCount(0);
+	});
 });
