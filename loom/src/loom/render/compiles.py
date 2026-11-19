@@ -11,11 +11,11 @@ import threading
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from loom.scan.model import Diagnostic, Location
-from loom.tex.runner import CompileResult, stop_run
+from loom.tex.runner import CompileResult, stop_run, tex_errors
 
 #: The line of the log that says where TeX was when it stopped: `l.12 \hlind{...}`.
 _AT = re.compile(r"^l\.\d+ .*$", re.M)
@@ -26,8 +26,6 @@ _STOPPED = re.compile(r"^l\.(\d+) (.*)$", re.M)
 _MACRO = re.compile(r"\\(?:[A-Za-z@]+|.)")
 #: What TeX writes when it made a PDF or DVI, whatever went wrong before it.
 _WRITTEN = re.compile(r"^Output written on ", re.M)
-#: An error line of the log, which TeX starts with `!`.
-_ERROR = re.compile(r"^!.*$", re.M)
 #: The codes `compile_problems` reports.
 COMPILE_CODES = frozenset({"loom:compile-failed", "loom:compile-errors"})
 
@@ -58,10 +56,26 @@ def last_of(res: CompileResult, ended: str) -> Last:
     return Last("errors" if res.pdf is not None else "failed", ended, res.first_error[:300], at)
 
 
-def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
-    """Where the log's first error is: the file TeX had open, the line it stopped at, and for an undefined control sequence the macro.
+def _unwrapped(text: str) -> str:
+    """The log with the lines TeX broke at its 79th byte joined again, so that a long path reads whole."""
+    out: list[str] = []
+    held = ""
+    for line in text.split("\n"):
+        held += line
+        if len(line.encode("utf-8")) != WRAP:
+            out.append(held)
+            held = ""
+    return "\n".join([*out, held] if held else out)
 
-    Read from the log, whose `(file` and `)` mark what TeX opened and closed; a log that says less gives None, or the fields it does say.
+
+#: Where TeX breaks a log line, `max_print_line`.
+WRAP = 79
+
+
+def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
+    """Where the log's first error is: the file TeX was reading, the line of that file it stopped at, and for an undefined control sequence the macro.
+
+    The file is the innermost one the log's `(file` and `)` leave open, whatever its kind, a package's or the bibliography's as much as an input's: TeX's line is a line of that file. A file is quilt-relative where it lies in the quilt, else absolute; where the log leaves an opening it cannot read innermost, neither the file nor a line is said. A log that says less gives None, or the fields it does say.
     """
     if res.log is None or not res.errors:
         return None
@@ -70,23 +84,23 @@ def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
     except OSError:
         return None
     at = text.find(res.errors[0])
-    if at < 0:
+    whole = _unwrapped(text)
+    upto = whole.find(res.errors[0])
+    if at < 0 or upto < 0:
         return None
     stack: list[str | None] = []
-    i = 0
-    while i < at:
-        c = text[i]
+    for i in range(upto):
+        c = whole[i]
         if c == "(":
-            m = _OPENED.match(text, i)
+            m = _OPENED.match(whole, i)
             stack.append(m.group(1) if m else None)
         elif c == ")" and stack:
             stack.pop()
-        i += 1
-    opened = next((f for f in reversed(stack) if f and f.endswith(".tex")), None)
+    reading = stack[-1] if stack else None
     out: dict[str, Any] = {"file": None, "line": None, "macro": None}
-    if opened:
+    if reading:
         # the log names files from where latexmk ran, the document's own directory (P12)
-        p = Path(opened) if Path(opened).is_absolute() or res.cwd is None else res.cwd / opened
+        p = Path(reading) if Path(reading).is_absolute() or res.cwd is None else res.cwd / reading
         rel = (
             p.resolve().relative_to(root.resolve())
             if p.is_absolute() and p.resolve().is_relative_to(root.resolve())
@@ -95,17 +109,39 @@ def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
         out["file"] = rel.as_posix().removeprefix("./")
     stopped = _STOPPED.search(text, at)
     if stopped is not None and text.count("\n", at, stopped.start()) <= 8:
-        out["line"] = int(stopped.group(1))
+        if reading:
+            out["line"] = int(stopped.group(1))
         if "Undefined control sequence" in res.errors[0]:
             macros = _MACRO.findall(stopped.group(2))
             out["macro"] = macros[-1] if macros else None
     return out if any(out.values()) else None
 
 
+def _openable(result: Any, path: str | None) -> str | None:
+    """`path` when it is a file of the quilt the viewer shows the person, their own `.tex`, `.sty`, `.cls` or `.bib`; None for TeX's own files, loom's and the compile's."""
+    from loom.files import Shown
+
+    if not path or path.startswith("/") or not (result.quilt.root / path).is_file():
+        return None
+    return path if Shown.of(result.quilt).is_shown(path) else None
+
+
+def _changed_since(result: Any, doc: str, made: float) -> str | None:
+    """The first file `doc` reads, itself, what it inputs and its local styles, that changed after `made`, the time its log was written; None when none did."""
+    root = result.quilt.root
+    for rel in sorted(_reads(result, doc)):
+        try:
+            if (root / rel).stat().st_mtime > made:
+                return str(rel)
+        except OSError:
+            continue
+    return None
+
+
 def compile_problems(result: Any) -> list[Diagnostic]:
     """`loom:compile-failed` for each document whose last compile stopped on a TeX error and made no PDF, `loom:compile-errors` for one that made its PDF though TeX reported errors; none where its log reports no error, or where it has none.
 
-    Read from the log in the document's compile folder, which every compile of it leaves, so the problem goes when a compile succeeds. Each is on the document's key, at the file and line TeX names when it names a file of the quilt, else at the document's first line; its message gives TeX's first error.
+    Read from the log in the document's compile folder, which every compile of it leaves, so the problem goes when a compile succeeds. Each is on the document's key; its location is the file TeX was reading and its line where that file is one the person can open, and none otherwise, the message naming the file. It is an error while the log is newer than every file the document reads, and a warning saying so once one has changed since, until the next compile: what it says may be mended already.
     """
     from loom.paths import document_build
 
@@ -115,29 +151,35 @@ def compile_problems(result: Any) -> list[Diagnostic]:
         log = root / document_build(doc) / f"{Path(doc).stem}.log"
         try:
             text = log.read_text(encoding="utf-8", errors="replace")
+            made = log.stat().st_mtime
         except OSError:
             continue
-        errors = _ERROR.findall(text)
+        errors = tex_errors(text)
         if not errors:
             continue
         res = CompileResult(False, "", log.parent, 1, errors=errors, log=log, cwd=root / result.base_of(doc))
         place = error_place(res, root) or {}
-        said = errors[0].removeprefix("!").strip().rstrip(".")
+        said = errors[0].removeprefix("!").strip().rstrip(".").rstrip()
         if place.get("macro"):
             said += f" {place['macro']}"
-        named = place.get("file")
-        # a line counts only in a file of the quilt, or where the log names none and TeX was reading the document itself
-        where = str(named) if named in result.files else doc
-        line = place.get("line") if named in result.files or named is None else None
+        reading, line = place.get("file"), place.get("line")
+        own = _openable(result, reading)
+        if reading and own != doc:
+            # TeX's line is a line of the file it was reading, never of the document
+            name = own or PurePosixPath(str(reading)).name
+            said += f", in {name}" + (f", line {line}" if line and not own else "")
+            if name.endswith(".bbl"):
+                said += " (the bibliography BibTeX made from the .bib)"
+        locations = [Location(own, line)] if own and line else []
+        changed = _changed_since(result, doc, made)
+        when = f" when last compiled, before {changed} changed" if changed else ""
         if _WRITTEN.search(text):
             n = len(errors)
-            code, message = (
-                "loom:compile-errors",
-                f"{doc} compiled with {n} error{'s' if n != 1 else ''}, the first: {said}",
-            )
+            code = "loom:compile-errors"
+            message = f"{doc} compiled with {n} error{'s' if n != 1 else ''}{when}, the first: {said}"
         else:
-            code, message = "loom:compile-failed", f"{doc} did not compile: {said}"
-        out.append(Diagnostic("error", code, message, [Location(where, line or 1)], [doc]))
+            code, message = "loom:compile-failed", f"{doc} did not compile{when}: {said}"
+        out.append(Diagnostic("warning" if changed else "error", code, message, locations, [doc]))
     return out
 
 

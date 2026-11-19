@@ -108,13 +108,15 @@ LOOM: dict[str, Code] = {
     "loom:no-readable-copy": Code("warning", INTERNAL),
 }
 
-#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, else a warning of class `MODEL` (an info for a reference between two files no document reads); `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case.
+#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case.
 VARIES = frozenset(
     {
         "duplicate-id",
         "loom:duplicate-label",
         "dangling-link",
         "loom:reference-to-loose",
+        "loom:compile-failed",
+        "loom:compile-errors",
         "loom:no-readable-copy",
         "loom:annotation-types",
     }

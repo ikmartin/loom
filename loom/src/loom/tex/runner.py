@@ -44,6 +44,28 @@ def tex_env() -> dict[str, str]:
     return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS, "PAR_GLOBAL_TMPDIR": str(unpacked())}
 
 
+#: A line of the context TeX prints after every error it reports: the line it stopped at (`l.12 …`), or what it was reading instead (`<*> main.tex`, `<argument> …`).
+_CONTEXT = re.compile(
+    r"^(l\.\d+ |<(\*|insert|read [*\d]+|argument|template|recently read|to be read again|inserted text|output|every\w+|mark|write)> )"
+)
+#: How many lines after an error's own line TeX's context may begin: a LaTeX error's message runs over several.
+_CONTEXT_WITHIN = 15
+
+
+def tex_errors(text: str) -> list[str]:
+    """The errors a TeX log reports, in order: each line beginning `!` that TeX follows with its context, which it prints after every error, and pdfTeX's closing `!  ==> Fatal error occurred`; a line a document writes that only begins with `!` (`\\typeout{! …}`) is no error."""
+    lines = text.splitlines()
+    return [
+        ln
+        for i, ln in enumerate(lines)
+        if ln.startswith("!")
+        and (
+            ln.startswith("!  ==> Fatal error")
+            or any(_CONTEXT.match(x) for x in lines[i + 1 : i + 1 + _CONTEXT_WITHIN])
+        )
+    ]
+
+
 @dataclass
 class CompileResult:
     ok: bool
@@ -358,7 +380,7 @@ def _compile_once(
     warnings: list[str] = []
     if log.exists():
         text = log.read_text(encoding="utf-8", errors="replace")
-        errors = re.findall(r"^!.*$", text, re.M)
+        errors = tex_errors(text)
         warnings = re.findall(r"^(?:LaTeX|Package \w+|Class \w+) Warning: .*$", text, re.M)
     pdf = outdir / f"{stem}.pdf"
     aux = outdir / f"{stem}.aux"

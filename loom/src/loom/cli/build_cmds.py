@@ -16,7 +16,7 @@ from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.clock import stamp
 from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
-from loom.paths import CLOSURES, document_build, document_page
+from loom.paths import CLOSURES, LOOM, document_build, document_page
 from loom.render.compiles import COMPILE_CODES, error_place
 from loom.reshape.linearize import flatten
 from loom.scan.model import Diagnostic
@@ -295,7 +295,11 @@ def failure(res: CompileResult, root: Path) -> tuple[str, dict[str, Any] | None,
     said = res.first_error.rstrip(".")
     if place:
         said += f" {place['macro']}" if place["macro"] else ""
-        where = f"{place['file']}:{place['line']}" if place["file"] and place["line"] else place["file"] or ""
+        # a file of TeX's own, or one the compile wrote in a folder since gone, is named by its name alone
+        file = place["file"]
+        if file and (file.startswith("/") or Path(file).parts[0] == LOOM):
+            file = Path(file).name
+        where = f"{file}:{place['line']}" if file and place["line"] else file or ""
         said += f" at {where}" if where else ""
     log = None
     if res.log is not None:

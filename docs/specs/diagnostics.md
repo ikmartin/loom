@@ -118,8 +118,8 @@ References and digests:
 
 Compiles:
 
-- `loom:compile-failed` (error, latex, fixed): a document's last compile made no PDF, stopped by a TeX error. Read from the log its compile folder holds, which every compile of it leaves, the server's and `loom compile`'s, so it goes when the document next compiles. On the document's key, at the file and line TeX names when it names a file of the quilt, else at the document's first line; the message gives TeX's first error, with the macro an undefined control sequence names.
-- `loom:compile-errors` (error, latex, fixed): a document's last compile made its PDF though TeX reported errors; said as `loom:compile-failed` is, with how many.
+- `loom:compile-failed` (error, latex, fixed): a document's last compile made no PDF, stopped by a TeX error. Read from the log its compile folder holds, which every whole compile of it leaves, the server's and `loom compile`'s, so it goes when the document next compiles; a compile cut short leaves no log there. An error is a `!` line TeX follows with its context, which it does after every error it reports. On the document's key; TeX's line belongs to the file it was reading, so the location is that file and line where the file is one the person can open in the viewer, their own `.tex`, `.sty`, `.cls` or `.bib`, and there is none where it is TeX's own, loom's or the compile's (a `.bbl`, an `.aux`). The message gives TeX's first error, with the macro an undefined control sequence names and, where it is not the document, the file TeX was reading. It is an error while the log is newer than every file the document reads (the document, what it inputs, its local styles), and a warning once one of them has changed since, its message saying it is from the last compile, before that change: until the next compile, what it says may be mended already.
+- `loom:compile-errors` (error, latex, fixed): a document's last compile made its PDF though TeX reported errors; said, placed and aged as `loom:compile-failed` is, with how many.
 
 Interface:
 

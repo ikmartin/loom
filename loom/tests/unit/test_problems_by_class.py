@@ -43,7 +43,7 @@ def test_a_failed_compile_is_a_problem_in_the_person_s_latex_on_its_document_unt
         "code": "loom:compile-failed",
         "class": "latex",
         "message": "drafting/main.tex did not compile: LaTeX Error: fake failure requested by FAKE_TEX_FAIL",
-        "locations": [{"file": DOC, "line": 1}],
+        "locations": [],  # the log opens no file, so TeX's line belongs to none the person can open
         "keys": [DOC],
         "owner": "person",
     }
@@ -65,14 +65,86 @@ def test_a_compile_with_errors_is_a_problem_at_the_file_and_line_tex_names(tmp_p
     )
     (d,) = _linted(q, code=1)
     assert (d["code"], d["class"], d["severity"]) == ("loom:compile-errors", "latex", "error")
-    assert d["message"] == "drafting/main.tex compiled with 2 errors, the first: Undefined control sequence \\Orbit"
+    assert d["message"] == (
+        "drafting/main.tex compiled with 2 errors, the first: Undefined control sequence \\Orbit, in drafting/nodes/dm-0002.tex"
+    )
     assert d["locations"] == [{"file": "drafting/nodes/dm-0002.tex", "line": 7}] and d["keys"] == [DOC]
-    # a log whose errors are in a file not of the quilt says the document, not a line of another file
-    _log(q, "(./main.tex (/usr/share/texmf/tex/latex/x/x.tex\n! Undefined control sequence.\nl.3 \\y\n)")
-    (d,) = _linted(q, code=1)
-    assert (d["code"], d["locations"]) == ("loom:compile-failed", [{"file": DOC, "line": 1}])
     _log(q, "(./main.tex\nLaTeX Warning: Reference `x' on page 1 undefined.\nOutput written on main.pdf (1 page).\n")
     assert _linted(q) == []  # a warning is no error
+
+
+def test_tex_s_line_is_a_line_of_the_file_it_was_reading_never_of_the_document(tmp_path: Path) -> None:
+    """TeX's line belongs to the innermost file it was reading, whatever its kind: the person's own package is a place they can open; TeX's own file, the bibliography BibTeX wrote and the compile's aux are not, so the problem is on the document with no line, its message naming the file."""
+    q = demo(tmp_path)
+    (q / "drafting" / "mine.sty").write_text(
+        "\\ProvidesPackage{mine}\n\\newcommand{\\R}{R}\n\\newcommand{\\R}{S}\n", encoding="utf-8"
+    )
+    _log(
+        q,
+        "(./main.tex (./mine.sty\n! LaTeX Error: Command \\R already defined.\n\nl.3 \\newcommand{\\R}\n                 {S}\n)\n",
+    )
+    (d,) = _linted(q, code=1)
+    assert d["locations"] == [{"file": "drafting/mine.sty", "line": 3}]
+    assert d["message"].endswith("Command \\R already defined, in drafting/mine.sty")
+    _log(q, "(./main.tex (/usr/share/texmf/tex/latex/x/x.tex\n! Undefined control sequence.\nl.3 \\y\n)")
+    (d,) = _linted(q, code=1)
+    assert (d["code"], d["locations"]) == ("loom:compile-failed", [])
+    assert d["message"] == "drafting/main.tex did not compile: Undefined control sequence \\y, in x.tex, line 3"
+    # the bibliography, in the run's folder, whose path TeX breaks at its 79th byte
+    run = "(./main.tex (" + str(q / ".loom/cache/tex/.main-0a1b2c3d.run-x1y2z3") + "/" + "b" * 40
+    # a last piece of 79 bytes would join the error's line to it
+    line = run + ("b/main.bbl" if len(run + "/main.bbl") % 79 == 0 else "/main.bbl")
+    wrapped = "\n".join(line[i : i + 79] for i in range(0, len(line), 79))
+    _log(
+        q,
+        f"{wrapped}\n! Misplaced alignment tab character &.\nl.5 \\newblock Rings &\n                      modules.\n",
+    )
+    (d,) = _linted(q, code=1)
+    assert d["locations"] == []
+    assert d["message"] == (
+        "drafting/main.tex did not compile: Misplaced alignment tab character &, in main.bbl, line 5 (the bibliography BibTeX made from the .bib)"
+    )
+    _log(
+        q, "(./main.tex (./main.aux\n! Paragraph ended before \\@newl@bel was complete.\n<to be read again> \n\nl.4 \n)"
+    )
+    (d,) = _linted(q, code=1)
+    assert d["locations"] == [] and d["message"].endswith(", in main.aux, line 4")
+
+
+def test_a_line_a_document_writes_beginning_with_a_bang_is_no_error_and_a_runaway_s_message_ends_clean(
+    tmp_path: Path,
+) -> None:
+    """TeX follows every error with its context; a `\\typeout{! …}` has none, so a document that compiles cleanly has no problem. A runaway argument's message keeps no trailing blank."""
+    q = demo(tmp_path)
+    _log(
+        q,
+        "(./main.tex\n! not an error, just a message\n\n\n[1\n\n{pdftex.map}]\n)\nOutput written on main.pdf (1 page).\n",
+    )
+    assert _linted(q) == []
+    _log(
+        q,
+        "(./main.tex\n! File ended while scanning use of \\textbf .\n<inserted text> \n                \\par \n<*> main.tex\n",
+    )
+    (d,) = _linted(q, code=1)
+    assert d["message"] == "drafting/main.tex did not compile: File ended while scanning use of \\textbf"
+
+
+def test_a_problem_from_before_a_later_change_says_so_and_is_no_error(tmp_path: Path) -> None:
+    """A log older than a file its document reads says what the last compile found, before that change: still listed, as a warning that names the change, which no exit counts; the next compile settles it."""
+    import os
+    import time
+
+    q = demo(tmp_path)
+    _log(q, "(./main.tex\n! Undefined control sequence.\nl.9 \\oops\n")
+    assert [d["severity"] for d in _linted(q, code=1)] == ["error"]
+    later = time.time() + 5
+    os.utime(q / "drafting" / "nodes" / "dm-0002.tex", (later, later))
+    (d,) = _linted(q)
+    assert (d["severity"], d["class"]) == ("warning", "latex")
+    assert d["message"] == (
+        "drafting/main.tex did not compile when last compiled, before drafting/nodes/dm-0002.tex changed: Undefined control sequence \\oops"
+    )
+    ok("build", "--no-compile", cwd=q)
 
 
 def test_loom_s_model_is_no_error_in_lint_s_exit_or_an_agent_s_first_look_and_a_failed_compile_is(
