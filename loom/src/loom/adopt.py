@@ -17,6 +17,7 @@ from loom.history.ledger import History, append_entry, load_history
 from loom.history.steps import free_name, plan_freeze, slug, stamp_document, text_hash, write_step
 from loom.paths import ADOPTION_DECISIONS, ADOPTION_PREVIEWS, REVIEW_ORIGINS, documents_named, under
 from loom.reshape.linearize import flatten
+from loom.scan.diagnostics import gates
 from loom.scan.hashing import pair_hash
 from loom.scan.labels import next_local, plain_key, rename_labels
 from loom.scan.owntext import own_text
@@ -588,11 +589,10 @@ def prepare(
         projection_spine = split_preamble(spine)[0] + full_body
     overlay = _project(result, data["source"], projection_bodies, projection_spine)
     after = scan(result.quilt, overlay=overlay)
-    before_errors = {(d.code, d.message) for d in result.diagnostics + result.lint if d.severity == "error"}
+    # what a gate refuses is by code (`gates`), so a regrade never lets in what it refused
+    before_errors = {(d.code, d.message) for d in result.diagnostics + result.lint if gates(d)}
     errors = [
-        d.message
-        for d in after.diagnostics + after.lint
-        if d.severity == "error" and (d.code, d.message) not in before_errors
+        d.message for d in after.diagnostics + after.lint if gates(d) and (d.code, d.message) not in before_errors
     ]
     # References to an unselected new proposal are never satisfied by the agent document.
     for edge in after.edges.edges:

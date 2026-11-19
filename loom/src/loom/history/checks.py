@@ -47,7 +47,7 @@ def quick_checks(result: ScanResult, history: History) -> list[Diagnostic]:
         else:
             out.append(
                 Diagnostic(
-                    "error",
+                    "warning",
                     "loom:id-reused",
                     f"{key} was removed at step {step:04d} and is defined again with a text the history never recorded; an id names one node forever",
                     loc,

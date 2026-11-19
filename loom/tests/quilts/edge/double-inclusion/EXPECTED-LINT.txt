@@ -1,1 +1,1 @@
-error double-inclusion
+error double-inclusion latex

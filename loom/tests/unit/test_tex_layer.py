@@ -12,7 +12,7 @@ from loom.scan.scan import scan
 from loom.tex.assemble import assemble, shift_sectioning
 from loom.tex.aux import parse_aux
 from loom.tex.bundle import apply_unified_diff, build_bundle
-from tests.helpers import exits, json_of, ok, refused, run
+from tests.helpers import edit, exits, json_of, ok, refused, run
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -162,7 +162,9 @@ def test_check_lints_and_compiles(tmp_path: Path) -> None:
     closures = json_of("check", "--closures", "all", "--json", cwd=d)["closures"]
     assert {"key": "dm-0003", "ok": True, "error": None} in closures
     (d / "drafting" / "nodes" / "dup.tex").write_text("\\begin{lemma}\\label{dm-0001}\n\\end{lemma}\n")
-    assert "duplicate-id" in exits(1, "check", cwd=d).output
+    assert "warning duplicate-id (model)" in ok("check", cwd=d).output  # a file no document reads: loom's model
+    edit(d / "drafting" / "main.tex", "\\end{document}", "\\input{nodes/dup}\n\\end{document}")
+    assert "error duplicate-id (latex)" in exits(1, "check", cwd=d).output  # the document's compile reads both
 
 
 def test_compile_refuses_an_engine_it_does_not_know(tmp_path: Path) -> None:

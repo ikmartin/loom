@@ -20,9 +20,9 @@
 		},
 		problems: {
 			title: 'What the problems page shows',
-			body: "What the publisher found wrong, by whose it is to put right. Your files come first, and are what Review counts; an agent's copy is the agent's, or yours to leave out when you take it back; a cited work's digest is loom's reading of the paper, mended by digesting the work again.",
+			body: "What is wrong in your own LaTeX, a document that did not compile among it, by whose it is to put right. Your files come first, and are what Review counts; an agent's copy is the agent's, or yours to leave out when you take it back. What loom notices about its own picture of the quilt is your agent's to keep, and is not shown here.",
 			states: [
-				['error', 'a reader would notice it: a reference to nothing, an id defined twice'],
+				['error', 'a reader would notice it: a document that did not compile, a reference to nothing'],
 				['warning', 'probably a mistake, though the document still reads'],
 				['remark', 'worth knowing, and not wrong']
 			],

@@ -6,6 +6,7 @@
 	// **Absences are omitted, not reported.** A node no document reaches shows no `in` heading, and one nothing depends on shows no `depends on`: nobody asks whether a thing is in nothing, and a heading over "nothing" is the system answering a question the reader has not got.
 	import { store } from '$lib/manifest/client.svelte';
 	import Diagnostics from '$lib/components/Diagnostics.svelte';
+	import { forPerson } from '$lib/diagnostics';
 	import RailList from '$lib/components/RailList.svelte';
 	import LocalGraphPanel from '$lib/graph/LocalGraphPanel.svelte';
 	import { keyUrl, nodeUrl, readUrl, tagUrl, threadUrl, workUrl } from '$lib/nav';
@@ -52,8 +53,8 @@
 		(m.keys[k]?.acceptances ?? []).map((acceptance) => ({ ...acceptance, key: k, label: index === 0 ? 'Statement' : (node?.proofs.length ?? 0) > 1 ? `Proof ${index}` : 'Proof' }))));
 	const deps = $derived(collapse(m.edges.filter((e) => e.from === key || node?.proofs.includes(e.from)), 'to'));
 	const usedBy = $derived(collapse(m.edges.filter((e) => e.to === key || (node?.proofs ?? []).includes(e.to)), 'from'));
-	// `unreachable` is "in no document" in the system's words: the problems page's business, and an absence here (C2)
-	const diagnostics = $derived(m.diagnostics.filter((d) => d.keys.includes(key) && !/(^|:)unreachable$/.test(d.code)));
+	// what a person is shown of the node's diagnostics, the problems in its LaTeX; `unreachable`, "in no document" in the system's words, is loom's model's, and an absence here (C2)
+	const diagnostics = $derived(forPerson(m.diagnostics).filter((d) => d.keys.includes(key)));
 	const detached = $derived(onAny(m, [key, ...(node?.proofs ?? [])]).filter((a) => a.detached));
 	const threads = $derived(Object.values(m.threads).filter((t) => t.targets.includes(key) && !t.discarded));
 	const closure = $derived(stmt?.closure.filter((k) => k !== key) ?? []);

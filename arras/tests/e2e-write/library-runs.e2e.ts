@@ -26,23 +26,20 @@ test("a run over every work starts from the library's page and gathers the bibli
 	await expect(run.locator('[data-step="gather"]')).toHaveAttribute('data-state', 'done');
 });
 
-test("a cited work's problem offers digesting the work again, which starts a run and answers with its verdict", async ({ page, served }) => {
+test("a cited work's problem is loom's own: Problems shows the person none of it, and the manifest keeps it with the fix that digests the work again", async ({ page, served }) => {
 	const fs = await import('node:fs');
 	const { join } = await import('node:path');
 	const digest = join(served.root, '.loom/library/Kre99.tex');
 	// a reference to nothing inside one of Kre99's results, as a fault in the digest writer leaves one
 	fs.writeFileSync(digest, fs.readFileSync(digest, 'utf8').replace('\\end{theorem}', 'See \\ref{nowhere-at-all}.\n\\end{theorem}'));
+	type D = { code: string; class: string; owner: string; message: string; fixes?: { act?: { endpoint: string; body: { works?: string[] } } }[] };
+	const published = async () => ((await (await page.request.get(`${served.url}/build/manifest.json`)).json()).diagnostics as D[]).find((d) => d.message.includes('nowhere-at-all'));
+	await expect.poll(published).toBeTruthy();
+	const d = (await published())!;
+	expect([d.code, d.class, d.owner]).toEqual(['dangling-link', 'internal', 'work']);
+	expect(d.fixes?.map((f) => f.act?.endpoint)).toContain('library-update');
 	await page.goto('/review/problems');
-	const works = page.getByTestId('problems-works');
-	await expect(works).toBeVisible();
-	await expect(page.getByTestId('problems-yours')).not.toContainText('nowhere-at-all');
-	await works.locator('summary').first().click();
-	const work = page.locator('[data-testid="problem-work"][data-work="Kre99"]');
-	await expect(work).toContainText('A reference points nowhere');
-	await work.getByTestId('digest-again').click();
-	const said = work.getByTestId('digest-said');
-	await expect(said).toContainText('Digesting Kre99 again');
-	// the fixture's digest of Kre99 was made by hand and has no paper to read again, so the run ends with nothing new, and says so
-	await expect(said).toContainText('Done.');
-	await expect(said).toContainText('digested');
+	await expect(page.getByTestId('problems-yours')).toBeVisible();
+	await expect(page.locator('main')).not.toContainText('nowhere-at-all');
+	await expect(page.getByTestId('problems-works')).toHaveCount(0);
 });

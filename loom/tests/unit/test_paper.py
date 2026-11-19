@@ -530,10 +530,12 @@ def test_atomize_one_key_writes_the_node_and_leaves_the_source_to_the_author(tmp
     again = ok("atomize", "--key", key, cwd=q)
     assert "already written" in said(again) and again.output.split("\n\n", 1)[-1] == r.output.split("\n\n", 1)[-1]
     assert sorted((q / "main" / "nodes").glob("*.tex")) == files  # and writes nothing more
-    # until it is applied, `status` and `lint` name that rerun, not a fork that would leave both copies (T3)
-    assert json_of("status", "--json", cwd=q)["keys"][key]["fixes"] == [f"loom atomize main/main.tex --key {key}"]
+    # until it is applied, `status` and `lint` name the patch's own change, or undoing the move; not a fresh id that would leave both copies (T3)
+    finish = f"\\input{{nodes/{key}}} in main/main.tex in place of its text there, or remove main/nodes/{key}.tex"
+    assert json_of("status", "--json", cwd=q)["keys"][key]["fixes"] == [finish]
     dup = the(json_of("lint", "--json", cwd=q, code=1)["diagnostics"], lambda d: d["code"] == "duplicate-id", "dup")
-    assert [f["command"] for f in dup["fixes"]] == [f"loom atomize main/main.tex --key {key}"]
+    assert [f["command"] for f in dup["fixes"]] == [finish]
+    assert (dup["severity"], dup["class"]) == ("warning", "model")  # TeX reads one copy: the node file is read by none
 
     # applying the patch is the author's act; afterwards the quilt holds one definition and every state is where it was
     patched = before.replace(node_file.read_text().rstrip("\n"), f"\\input{{nodes/{key}}}")

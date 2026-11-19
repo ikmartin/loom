@@ -607,7 +607,10 @@ def _build(
         index[rel] = digest
         uses[rel] = in_cache(root, noted)
         report.rendered.append(f"canon:{doc.path}")
-    report.diagnostics = list(result.lint) + plan.diagnostics
+    from loom.render.compiles import compile_problems
+
+    # what the documents' last compiles say, read from their logs, beside what the scan and the rendering found
+    report.diagnostics = list(result.lint) + plan.diagnostics + compile_problems(result)
     manifest = build_manifest(
         result, numbers, fragments, report.diagnostics, canon=canon_docs, canon_entries=canon_entries, history=history
     )

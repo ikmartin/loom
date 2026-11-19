@@ -835,6 +835,8 @@ class ServeSession:
         # reentrant: a write through the API publishes under the hold that wrote it (`LoomHandler.do_POST`)
         self.lock = threading.RLock()
         self.builds = 0
+        #: Set as `stop` begins: from then nothing rebuilds, so a compile cut short or a late save publishes nothing.
+        self._stopping = False
         self._settling: threading.Timer | None = None
         self._settling_lock = threading.Lock()
         #: Whether the last build succeeded and nothing has been swept since (`lifetimes`), which the server does once at rest; and how many builds have begun, so a sweep can tell that one began while it looked.
@@ -857,7 +859,14 @@ class ServeSession:
 
         self.jobs = Jobs(self._run_job)
         self.compiles = (
-            Compiles(self._compile, first=self._reading, told=self._compiles_told, made=lambda doc: self.rebuild())
+            Compiles(
+                self._compile,
+                first=self._reading,
+                told=self._compiles_told,
+                made=lambda doc: self.rebuild(),
+                # the log a failed run left is the problem the manifest names on the document
+                failed=lambda doc: self.rebuild(),
+            )
             if compile_masters
             else None
         )
@@ -873,7 +882,11 @@ class ServeSession:
         The files are read just before the build, and that reading is what the publication answers for: the watcher is set to it, so a write the API has published is not built again when the watcher sees it, and a change made during a build is seen afterwards. A call from the watcher (`changed` given) builds nothing when everything it saw is already published. A change the scan does not read (`records`, or a watcher's change that `scan_unread` judges so: a record, or a Markdown file) builds from the last scan. Every file changed since the last publication, whoever wrote it, asks for the compiles it reaches; the first publication leaves that to `first_build`.
         """
         root = self.quilt.root
+        if self._stopping:
+            return
         with self.lock:
+            if self._stopping:
+                return
             if not records:
                 self._reload()
             seen = snapshot(root, self.shown)
@@ -922,15 +935,19 @@ class ServeSession:
         self._settle()
 
     def _settle(self) -> None:
-        """Sweep what the last build no longer names (`sweep`) and give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it."""
+        """Sweep what the last build no longer names (`sweep`) and give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it; nothing is set once the server is stopping, so a build that ends after `stop` leaves no timer behind."""
         with self._settling_lock:
             if self._settling is not None:
                 self._settling.cancel()
+            if self._stopping:
+                return
             self._settling = threading.Timer(self.SETTLE_AFTER, self._at_rest)
             self._settling.daemon = True
             self._settling.start()
 
     def _at_rest(self) -> None:
+        if self._stopping:
+            return
         self.sweep()
         give_back()
 
@@ -1030,6 +1047,8 @@ class ServeSession:
         res = compile_document(
             self.quilt.root, result.base_of(doc), doc, build, engine, halt_on_error=False, started=started
         )
+        if res.stopped:
+            return res
         said = "ok" if res.pdf is not None and not res.errors else ("with errors" if res.pdf else "FAILED")
         print(f"loom serve: compiled {doc}: {said}{'' if said == 'ok' else ': ' + res.first_error}", file=sys.stderr)
         if res.pdf is not None and shutil.which("make4ht"):
@@ -1164,8 +1183,10 @@ class ServeSession:
         )
 
     def stop(self) -> None:
-        if self._settling is not None:
-            self._settling.cancel()
+        self._stopping = True
+        with self._settling_lock:
+            if self._settling is not None:
+                self._settling.cancel()
 
         if self.compiles is not None:
             self.compiles.stop()

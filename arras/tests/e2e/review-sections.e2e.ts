@@ -15,7 +15,8 @@ test('Review\'s column lists its sections, each counting what waits there, the c
 	await expect(page.getByTestId('section-count-proposed')).toHaveText('1');
 	// an open session waits for no one: it is said on hover, never counted
 	await expect(page.getByTestId('section-record')).toHaveAttribute('title', /1 open session/);
-	const problems = manifest.diagnostics.filter((d: { severity: string; owner?: string }) => (d.owner ?? 'person') === 'person' && (d.severity === 'error' || d.severity === 'warning')).length;
+	// the errors and warnings in the person's own LaTeX: loom's model and its own difficulties are an agent's
+	const problems = manifest.diagnostics.filter((d: { severity: string; owner?: string; class?: string }) => (d.class ?? 'latex') === 'latex' && (d.owner ?? 'person') === 'person' && (d.severity === 'error' || d.severity === 'warning')).length;
 	await expect(page.getByTestId('section-count-problems')).toHaveText(String(problems));
 	// every landmark leads to a live draft, so The Record waits for nothing
 	await expect(page.getByTestId('section-count-record')).toHaveCount(0);

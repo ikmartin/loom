@@ -349,7 +349,7 @@ def test_requires_missing_package_named_first_on_bundle_failure(tmp_path: Path) 
     verdict, missing = r.stdout.split("\n\n")[:2]  # the verdict, wrapped, then the missing packages
     verdict = " ".join(verdict.split())
     assert verdict.startswith("dm-0002's closure did not compile") and "requires a package that is missing" in verdict
-    assert missing.startswith("warning loom:missing-package (1)") and "digest Ref20 requires xy" in missing
+    assert missing.startswith("warning loom:missing-package (internal) (1)") and "digest Ref20 requires xy" in missing
 
 
 def test_unverified_locators_when_the_artifact_and_the_cited_work_differ(tmp_path: Path) -> None:

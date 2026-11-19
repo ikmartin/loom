@@ -14,10 +14,14 @@ from tests.unit._quilts import demo
 
 
 def test_lint_exit_codes(tmp_path: Path) -> None:
+    """An id defined twice in a file no document reads is loom's model's, a warning, and lint exits 0; read twice by the document's compile, it is the person's LaTeX, an error, and lint exits 1."""
     q = demo(tmp_path)
     (q / "drafting" / "nodes" / "bad.tex").write_text("\\begin{lemma}\\label{dm-0001}\ndup\n\\end{lemma}\n")
+    r = ok("lint", cwd=q)
+    assert "warning duplicate-id (model)" in r.output and r.output.splitlines()[0].startswith("2 warnings")
+    edit(q / "drafting" / "main.tex", "\\end{document}", "\\input{nodes/bad}\n\\end{document}")
     r = exits(1, "lint", cwd=q)
-    assert "duplicate-id" in r.output and r.output.splitlines()[0].startswith("1 error")
+    assert "error duplicate-id (latex)" in r.output and r.output.splitlines()[0].startswith("1 error")
 
 
 def _unset_main(q: Path) -> None:
@@ -101,7 +105,7 @@ _DANGLING = "\\ref{nowhere-at-all}"
 
 
 def _uncited_digest(q: Path) -> None:
-    """A digest of `Har77`, which the demo's bibliography holds and nothing cites, with one dangling reference (an error)."""
+    """A digest of `Har77`, which the demo's bibliography holds and nothing cites, with one dangling reference (a warning: no document's compile reads a digest)."""
     (q / ".loom/library" / "Har77.tex").write_text(
         "% !LOOM digest: Har77\n% !LOOM prefix: Har77\n\n"
         "\\begin{theorem}[{\\cite[Theorem 1.1]{Har77}}]\\label{Har77-thm-1.1}\n"
@@ -141,25 +145,26 @@ def test_an_uncited_digest_counts_toward_nothing_and_library_check_lists_it(tmp_
     out = ok("library", "check", "Har77", cwd=q).output.splitlines()  # listed, and not a failure
     assert out[0].endswith("; 1 work nothing cites with lint diagnostics"), out[0]
     heading = the(out, lambda ln: ln.startswith("works nothing cites that lint finds wrong"), "check's group")
-    assert out[out.index(heading) + 1].strip().startswith("lint finds 1 error, ")
+    assert out[out.index(heading) + 1].strip().startswith("lint finds 2 warnings, ")
     assert out[out.index(heading) + 1].strip().endswith("Har77")
 
 
 def test_a_cited_digest_keeps_the_cited_works_heading(tmp_path: Path) -> None:
     q = demo(tmp_path)
     _dangle_in(q, "Calloway14-prop-3.3")  # no postnote names Proposition 3.3
-    r = exits(1, "lint", cwd=q)
-    assert "1 error in cited works" in r.output.splitlines()[0]
+    r = ok("lint", cwd=q)  # a digest is loom's reading of a paper, which no document's compile reads
+    assert "1 warning in cited works" in r.output.splitlines()[0]
     assert "in cited works (1)" in r.output.splitlines()
+    assert "1 warning  dangling-link (internal)" in [ln.strip() for ln in r.output.splitlines()]
     assert "nothing cites" not in r.output
 
 
 def test_a_diagnostic_on_a_result_the_author_reaches_is_the_authors(tmp_path: Path) -> None:
     q = demo(tmp_path)
     _dangle_in(q, "Calloway14-prop-3.2")  # dm-0003 cites [Proposition 3.2]{Calloway14}
-    r = exits(1, "lint", cwd=q)
-    assert r.output.splitlines()[0].startswith("1 error, ")  # the demo's own warning and infos follow it
-    assert "error dangling-link (1)" in r.output.splitlines()
+    r = ok("lint", cwd=q)
+    assert r.output.splitlines()[0].startswith("2 warnings, ")  # the demo's own warning and infos follow it
+    assert "warning dangling-link (internal) (1)" in r.output.splitlines()
     assert "in cited works" not in r.output
 
 
@@ -182,7 +187,7 @@ def test_one_sentence_about_several_things_is_said_once_with_what_varies_under_i
 
     ds = [_diag(f"1 annotation(s) on rl-000{n} no longer match its text", n, f"rl-000{n}") for n in (1, 2, 3)]
     (g,) = groups(ds, None)
-    assert g.heading == "info loom:detached-annotation: 1 annotation(s) on … no longer match its text"
+    assert g.heading == "info loom:detached-annotation (model): 1 annotation(s) on … no longer match its text"
     assert [i.text for i in g.items] == [f"drafting/main.tex:{n}  rl-000{n}" for n in (1, 2, 3)]
     assert all(i.key is None for i in g.items)  # the text names the key, so it is not said again after it
     assert [i.data["diagnostic"]["message"] for i in g.items] == [d.message for d in ds]  # the JSON keeps each whole
@@ -206,7 +211,7 @@ def test_different_sentences_that_begin_alike_are_not_folded_and_a_repeat_is_sai
     a = _diag("the history ledger cannot be read in full: line 3 is not JSON", 3)
     b = _diag("the history ledger cannot be read in full: line 4: step 1 does not follow step 2", 4)
     (g,) = groups([a, b, a], None)  # `a` reported twice, as two passes over one file can
-    assert g.heading == "info loom:detached-annotation" and [i.text.split("  ", 1)[1] for i in g.items] == [
+    assert g.heading == "info loom:detached-annotation (model)" and [i.text.split("  ", 1)[1] for i in g.items] == [
         a.message,
         b.message,
     ]
@@ -259,12 +264,16 @@ def test_every_finding_names_what_resolves_it_and_the_command_works(tmp_path: Pa
     ok("library", "update", "Har77", "--dry-run", cwd=q)
     ok("annotate", "--resolve", a, "The orbit is still there, reworded.", "--as", "Tester", cwd=q)
     assert _fixes(q, "loom:detached-annotation") == []
-    # a fork whose patch was never applied: its node file is unreachable, and running it again prints the patch
+    # a fork whose patch was never applied: its node file is unreachable, and the fix says what the patch would do, with no command the cut list removes
     (q / "drafting" / "nodes" / "stray.tex").unlink()
     ok("fork", "dm-0001", "--in", "drafting/main.tex", cwd=q)
     (orphan,) = _fixes(q, "unreachable")[:1]
-    assert orphan == "loom fork dm-0001 --in drafting/main.tex"
-    assert "already forked" in " ".join(ok(*orphan.split()[1:], cwd=q).output.split())
+    diags = json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"]
+    assert (
+        orphan.startswith("\\input{nodes/dm-")
+        and " in drafting/main.tex in place of dm-0001, whose references there become dm-" in orphan
+    )
+    assert "loom fork" not in json.dumps(diags)
 
 
 def _rows(q: Path, code: str) -> list[dict]:  # type: ignore[type-arg]

@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom.scan.diagnostics import class_of
+
 
 @dataclass(frozen=True, order=True)
 class Span:
@@ -80,6 +82,12 @@ class Diagnostic:
     subject: str | None = None  # "source" (the default when absent) or "record": what the diagnostic is about
     # "person", "copy" (an agent's copy) or "work" (a cited work's digest): whose it is to fix (`scan.owners`)
     owner: str | None = None
+    # "latex", "model" or "internal": what kind of problem it is (`scan.diagnostics`); its code's class unless the emitter says
+    class_: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.class_:
+            self.class_ = class_of(self.code)
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> Diagnostic:
@@ -93,12 +101,14 @@ class Diagnostic:
             [Fix(str(f["label"]), str(f["command"]), f.get("act")) for f in d.get("fixes") or []],
             d.get("subject"),
             d.get("owner"),
+            str(d.get("class") or ""),
         )
 
     def to_dict(self) -> dict[str, object]:
         out: dict[str, object] = {
             "severity": self.severity,
             "code": self.code,
+            "class": self.class_,
             "message": self.message,
             "locations": [
                 {"file": loc.file, "line": loc.line, **({"column": loc.column} if loc.column is not None else {})}

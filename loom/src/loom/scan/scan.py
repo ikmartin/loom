@@ -13,6 +13,7 @@ from pathlib import Path, PurePosixPath
 from loom.history.ledger import History, load_history
 from loom.paths import COPIES, document_dir
 from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib
+from loom.scan.diagnostics import LATEX, MODEL
 from loom.scan.edges import EdgeResult, find_edges
 from loom.scan.expand import Expansion, expand_master
 from loom.scan.graph import Graph
@@ -25,6 +26,9 @@ from loom.scan.relations import RelationRec, find_relations
 from loom.scan.source import SKIP_DIRS, discover_files, read_source
 
 _DOCCLASS = re.compile(r"\\documentclass\b")
+
+#: A document's end, wherever its inputs put it.
+_END_DOCUMENT = re.compile(r"\\end\s*\{document\}")
 
 
 #: `\externaldocument[prefix]{path}`, the argument a path to another document's `.aux` without its extension.
@@ -355,8 +359,21 @@ def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | 
                 if kind == "unclosed"
                 else f"\\end{{{env}}} has no matching \\begin in this file"
             )
+            # a document no file it reads closes is the fault TeX stops on at its end; any other environment across files is loom's model's alone
+            unended = (
+                kind == "unclosed"
+                and env == "document"
+                and path in result.expansions
+                and not _END_DOCUMENT.search(result.expansions[path].text)
+            )
             result.diagnostics.append(
-                Diagnostic("error", "loom:environment-spans-files", msg, [Location(path, src.line_of(off))])
+                Diagnostic(
+                    "error" if unended else "warning",
+                    "loom:environment-spans-files",
+                    msg,
+                    [Location(path, src.line_of(off))],
+                    class_=LATEX if unended else MODEL,
+                )
             )
     from loom.refs.scan import other_versions
 
