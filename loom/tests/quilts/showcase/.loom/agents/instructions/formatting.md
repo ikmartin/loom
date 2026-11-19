@@ -18,6 +18,7 @@ Link to the thing, not to a description of where it is. A reader clicks a link a
 ## Mathematics
 
 - Write inline mathematics as `$…$` and display mathematics as `$$…$$`. It is typeset by MathJax with this quilt's own macros, so `\Hom`, `\mathcal{O}` and the rest mean what they mean in the source.
+- Put no space just inside the dollars of `$…$`, and no digit right after the closing one: `$ x $` and `$x$5` stay text, as do the prices in "costs $5 or $7". `\$` is always a dollar sign.
 - `\ref`, `\eqref` and `\cite` are not resolved in a message or an annotation's body; they would show as raw TeX. Link instead: `loom link eq:rank` prints a link to the equation, which the viewer names as the document numbers it.
 - Keep notation inside the dollars. A letter written as plain text is not the same symbol to a reader.
 - Define a symbol where you introduce it, or link the node that defines it: a link reads as that node's name and shows its statement on hover, so the reader never scrolls back to learn what $W_\chi$ is.
