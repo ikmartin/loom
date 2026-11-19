@@ -184,3 +184,23 @@ def test_check_compiles_every_document_itself_and_reads_no_log_an_earlier_compil
     r = ok("check", cwd=q)
     assert r.output.startswith("check passed:") and "compile-failed" not in r.output
     assert _linted(q) == []
+
+
+def test_a_person_is_still_told_of_a_circle_in_their_reasoning_and_of_a_document_never_closed(tmp_path: Path) -> None:
+    """Two of the person's statements resting on each other is theirs to see, a warning of class latex as no block says it yet; a document whose `\\begin{document}` nothing closes is the fault TeX stops on, an error of class latex, where a theorem across two files stays loom's model's."""
+    q = demo(tmp_path)
+    circle = (
+        "\\begin{lemma}\\label{dm-0090}\nBy Lemma~\\ref{dm-0091}.\n\\end{lemma}\n"
+        "\\begin{lemma}\\label{dm-0091}\nBy Lemma~\\ref{dm-0090}.\n\\end{lemma}\n"
+    )
+    edit(q / DOC, "\\end{document}", circle + "\\end{document}")
+    (cycle,) = [d for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] == "loom:dependency-cycle"]
+    assert (cycle["severity"], cycle["class"], cycle["owner"]) == ("warning", "latex", "person")
+    edit(q / DOC, "\\end{document}", "")
+    (unended,) = [
+        d
+        for d in json_of("lint", "--json", cwd=q, code=1)["diagnostics"]
+        if d["code"] == "loom:environment-spans-files"
+    ]
+    assert (unended["severity"], unended["class"]) == ("error", "latex")
+    assert unended["message"] == "\\begin{document} is never closed in this file"

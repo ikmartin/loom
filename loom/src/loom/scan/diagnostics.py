@@ -55,7 +55,7 @@ LOOM: dict[str, Code] = {
     "loom:uses-missing": Code("info", MODEL),
     "loom:uses-unused": Code("info", MODEL),
     "loom:see-redundant": Code("info", MODEL),
-    "loom:dependency-cycle": Code("warning", MODEL),
+    "loom:dependency-cycle": Code("warning", LATEX),
     "loom:snippet-failed": Code("warning", INTERNAL),
     "loom:closure-failed": Code("error", INTERNAL),
     "loom:atomize-target-exists": Code("warning", MODEL, fixed=True),
@@ -108,13 +108,14 @@ LOOM: dict[str, Code] = {
     "loom:no-readable-copy": Code("warning", INTERNAL),
 }
 
-#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case.
+#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case.
 VARIES = frozenset(
     {
         "duplicate-id",
         "loom:duplicate-label",
         "dangling-link",
         "loom:reference-to-loose",
+        "loom:environment-spans-files",
         "loom:compile-failed",
         "loom:compile-errors",
         "loom:no-readable-copy",
