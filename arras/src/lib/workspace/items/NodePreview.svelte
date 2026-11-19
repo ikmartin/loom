@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A node, rendered small for a hover card (plan 0.13.3 H1–H3): its label, number, id and state, and its statement typeset — proofs hidden, the text clamped by a fade rather than cut. A section says how many entries it holds and no more: its fragment is the whole section, too much to fetch and typeset for a glance.
+	// A node item at one of its regions (`regionAt`), a labelled equation, is drawn as that display alone: its number and what it stands in, then the display cut from the node's fragment, a section's too, and typeset as the page sets it. Where the fragment holds no such display, the node's own card stands.
 	import { tick } from 'svelte';
 	import { displayNode } from '$lib/nodes/display';
 	import { store } from '$lib/manifest/client.svelte';
@@ -8,28 +9,55 @@
 	import { typeset } from '$lib/math/mathjax';
 	import { nodeBadge } from '$lib/badges';
 	import Badge from '$lib/components/Badge.svelte';
-	import type { Item } from '../item';
+	import { regionAt, type Item } from '../item';
+	import { regionName } from '../names';
 
 	let { item, onresize = () => {}, master = '', persistent = false }: { item: Item; onresize?: () => void; master?: string; persistent?: boolean } = $props();
 
 	const m = $derived(store.manifest!);
 	const node = $derived(m.nodes[item.id]);
 	const identity = $derived(displayNode(m, item.id, master));
+	const region = $derived(regionAt(m, item));
+	const named = $derived(region ? regionName(m, region) : null);
 	let html = $state('');
+	/** Whether the node's fragment holds the region's display: null until it is fetched. */
+	let found = $state<boolean | null>(null);
+	/** The card is the region's display from the first frame, so the card is placed at its size, until the fragment is found to hold none. */
+	const drawsDisplay = $derived(!!region && found !== false);
 	let body: HTMLElement | undefined = $state();
+
+	/** The display a region is, cut from its node's fragment: by its published id, else by its label; '' where the fragment has neither. */
+	function displayIn(fragment: string, id: string, label: string): string {
+		const t = document.createElement('template');
+		t.innerHTML = fragment;
+		const displays = [...t.content.querySelectorAll<HTMLElement>('div.math.display, figure.diagram')];
+		const at = displays.find((d) => d.id === id) ?? displays.find((d) => d.dataset.label === label);
+		return at?.outerHTML ?? '';
+	}
 
 	$effect(() => {
 		const current = node;
 		const manifest = m;
 		const hash = store.hash;
+		const key = region;
+		const anchor = item.anchor ?? '';
 		void master;
 		html = '';
+		found = null;
 		let gone = false;
 		void (async () => {
-			if (!current || current.kind === 'section') return;
-			const text = await fetchFragment(current.fragment, hash).catch(() => '<p>Statement preview unavailable.</p>');
+			if (!current || (!key && current.kind === 'section')) return;
+			const text = await fetchFragment(current.fragment, hash).catch(() => null);
 			if (gone) return;
-			html = text;
+			const display = key && text ? displayIn(text, anchor, manifest.regions[key].label) : '';
+			found = !!display;
+			if (!display && current.kind === 'section') {
+				// the section's own card, which fetches nothing, now stands in the display's place
+				await tick();
+				if (!gone) onresize();
+				return;
+			}
+			html = display || (text ?? '<p>Statement preview unavailable.</p>');
 			await tick();
 			if (!body || gone) return;
 			wire(body, manifest, () => {});
@@ -43,7 +71,14 @@
 	});
 </script>
 
-{#if node}
+{#if node && region && named && drawsDisplay}
+	<p class="head">
+		<span class="label">{named.number}</span>
+		<span class="title">in {named.within}</span>
+		<span class="id">{region}</span>
+	</p>
+	<div class="body fragment display" bind:this={body} data-testid="preview-display">{@html html}</div>
+{:else if node}
 	<p class="head">
 		<span class="label">{identity.name}</span>
 		{#if identity.context}<span class="title">{identity.context}</span>{/if}
@@ -102,6 +137,9 @@
 		mask-image: linear-gradient(to bottom, #000 9rem, transparent);
 		font-size: 12.5px;
 		text-align: left;
+	}
+	.body.display {
+		margin-top: var(--gap-hair);
 	}
 	.body.persistent { max-height: 28rem; overflow: auto; -webkit-mask-image: none; mask-image: none; }
 	.body :global(p) { text-align: left; }

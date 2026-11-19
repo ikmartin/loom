@@ -189,6 +189,30 @@ export function itemForFile(m: Manifest, path: string): Item {
 	return { kind: 'file', id: path };
 }
 
+/**
+ * The region of a node, a labelled equation, that a node item's anchor is at: what a link to the equation names, and what its hover card draws.
+ *
+ * A region's published id is its key's slug (`anchorId`), so it is found by that, among the regions the item's node holds; a proof's region is held by its statement's node.
+ *
+ * Parameters
+ * ----------
+ * m : Pick<Manifest, 'keys' | 'regions'>
+ * item : Item
+ *     Any item; only a node item with an anchor can be at a region.
+ *
+ * Returns
+ * -------
+ * str | null
+ *     The region's key (`KEY#label`), or null.
+ */
+export function regionAt(m: Pick<Manifest, 'keys' | 'regions'>, item: Item): string | null {
+	if (item.kind !== 'node' || !item.anchor) return null;
+	for (const [key, region] of Object.entries(m.regions ?? {})) {
+		if (anchorId(key) === item.anchor && (m.keys[region.container]?.node ?? region.container) === item.id) return key;
+	}
+	return null;
+}
+
 /** A project file's address in the viewer: `/file/` and its path, each segment encoded. */
 export function fileRoute(path: string): string {
 	return route('/file/' + path.split('/').map(encodeURIComponent).join('/'));

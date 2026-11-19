@@ -6,8 +6,8 @@
 	import { store } from '$lib/manifest/client.svelte';
 	import { keyUrl } from '$lib/nav';
 	import { pageOf } from '$lib/worklink';
-	import { itemForHref, paneOfElement, paperAt } from '$lib/workspace/links';
-	import { itemFromPath, itemKey, type Item } from '$lib/workspace/item';
+	import { itemForHref, paneOfElement, previewOfHref, previewOfKey } from '$lib/workspace/links';
+	import { itemFromPath, itemKey, regionAt, type Item } from '$lib/workspace/item';
 	import { kinds } from '$lib/workspace/registry';
 	import { workspace } from '$lib/workspace/store.svelte';
 
@@ -31,31 +31,18 @@
 	/**
 	 * The item a hovered link names, if it is one a card can show.
 	 *
-	 * Read through the item codec, which strips the app's base path, so a link built with `route()` resolves under any base. Two decisions are the hover's own and stay here: a digest result with a filed paper and a located page previews the paper at that result rather than the transcription; and a citation to a work that names no page by URL may name one in its postnote, and one that names a place nobody can find previews nothing (H5).
+	 * Read through the item codec, which strips the app's base path, so a link built with `route()` resolves under any base; what a key or a link previews is `previewOfKey`'s and `previewOfHref`'s. One decision is the hover's own and stays here: a citation to a work that names no page by URL may name one in its postnote, and one that names a place nobody can find previews nothing (H5).
 	 */
 	function hoverItem(a: Element): Item | null {
 		if (!m || a.closest('.link-preview, [data-no-preview]')) return null;
-		const owner = (key: string) => {
-			const region = m.regions[key];
-			const k = region ? region.container : key;
-			const n = m.keys[k]?.node ?? k;
-			return m.nodes[n] ? n : null;
-		};
-		/** **A digest node previews the paper, not the digest**: a result read off a cited work is a transcription of a page, and a reader hovering a citation wants the page, the one a click opens. With no paper to open at a page, the transcription is the best there is. */
-		const nodeOrPaper = (n: string): Item => paperAt(m, n) ?? { kind: 'node', id: n };
 		const named = a.getAttribute('data-preview-key') ?? (a.matches('a.ref[data-target]') ? a.getAttribute('data-target') : a.closest<HTMLElement>('span.cite[data-target]')?.dataset.target);
 		let item: Item | null = null;
-		if (named) {
-			const n = owner(named);
-			item = n ? nodeOrPaper(n) : null;
-		} else {
+		if (named) item = previewOfKey(m, named);
+		else {
 			const href = a.getAttribute('href');
 			if (!href) return null;
-			item = itemForHref(m, href);
-			if (item?.kind === 'node') {
-				const n = owner(item.id);
-				item = n ? nodeOrPaper(n) : null;
-			} else if (item?.kind === 'work') {
+			item = previewOfHref(m, href);
+			if (item?.kind === 'work') {
 				// the page itself when a copy is filed; otherwise nothing to show
 				if (!m.references[item.id]?.artifacts?.pdf) return null;
 				// A citation carrying a postnote names a place, not a work. Where the postnote is a digest node, `named` above already previewed it; here the postnote is all there is to go on, and one that names no page is a place unknown, whose honest preview is none. A bare citation names the work, so its front page stands.
@@ -68,10 +55,10 @@
 			}
 		}
 		if (!item || !kinds[item.kind].preview) return null;
-		// what the link's own pane is already showing, or the current item for a link in no pane, previews nothing a reader cannot already see
+		// what the link's own pane is already showing, or the current item for a link in no pane, previews nothing a reader cannot already see; a display in it is a place, which may be far from the link
 		const pane = paneOfElement(a);
 		const showing = pane >= 0 ? workspace.active(pane) : workspace.current;
-		if (showing && itemKey(showing) === itemKey(item)) return null;
+		if (showing && itemKey(showing) === itemKey(item) && !regionAt(m, item)) return null;
 		return item;
 	}
 
@@ -204,7 +191,7 @@
 {#if target && m && kind?.preview}
 	{@const Preview = kind.preview}
 	<div class="link-preview" class:bleeds={kind.bleeds} role="tooltip" bind:this={card} style="left: {left}px; top: {top}px" data-testid="link-preview">
-		{#key itemKey(target) + (target.place?.page ?? '') + (target.place?.result ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
+		{#key itemKey(target) + (target.place?.page ?? '') + (target.place?.result ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
 		{#if opens}
 			<!-- Drawn always, not revealed once the pointer is inside: a remedy most readers never find is no remedy (H6). A click opens the target in the other pane; this opens it in the link's own, or reveals it where it is already open. -->
 			<p class="opens">

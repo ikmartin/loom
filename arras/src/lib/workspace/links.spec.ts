@@ -3,10 +3,10 @@ import { goto } from '$app/navigation';
 import type { Manifest } from '$lib/manifest/types';
 import { pdf } from '$lib/pdf.svelte';
 import { sessionView } from '$lib/sessions/sessions.svelte';
-import { follow, holding, interceptLinks, itemForQuilt, openChat, soleSession } from './links';
-import { itemKey, type Item } from './item';
+import { follow, holding, interceptLinks, itemForQuilt, openChat, previewOfHref, previewOfKey, soleSession } from './links';
+import { itemKey, regionAt, type Item } from './item';
 import { workspace } from './store.svelte';
-import { linkName } from './names';
+import { linkName, regionName } from './names';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 
@@ -72,6 +72,75 @@ describe('an empty link', () => {
 		expect(linkName(m, 'quilt:state')).toBe('the research state');
 		expect(linkName(m, 'cited:arxiv:math/9810166v2?page=3')).toBe('Kre99 p. 3');
 		expect(linkName(m, 'quilt:sy-9999')).toBe('sy-9999');
+	});
+});
+
+describe('a hover card', () => {
+	// the manifest above, with a section holding an equation, a proof holding one, and an agent's copy whose equation only the copy numbers
+	const p = {
+		...m,
+		masters: [...m.masters, { path: '.loom/agents/copies/aidoc.tex' }],
+		nodes: {
+			...m.nodes,
+			'sy-0002': { kind: 'environment', taxon: 'Lemma', numbers: { 'drafting/main.tex': { number: '1.2' } }, reached_by: ['drafting/main.tex'] },
+			'sy-0100': { kind: 'section', taxon: 'Section', numbers: { 'drafting/main.tex': { number: '1' } }, reached_by: ['drafting/main.tex'] },
+			'sy-0001-ai': { kind: 'environment', taxon: 'Definition', numbers: { '.loom/agents/copies/aidoc.tex': { number: '1.1' } }, reached_by: ['.loom/agents/copies/aidoc.tex'] }
+		},
+		keys: { ...m.keys, 'sy-0002': { node: 'sy-0002' }, 'sy-0002/proof': { node: 'sy-0002' }, 'sy-0001-ai': { node: 'sy-0001-ai' } },
+		regions: {
+			...m.regions,
+			'sy-0100#eq:prose': { container: 'sy-0100', label: 'eq:prose', numbers: { 'drafting/main.tex': { number: '1' } } },
+			'sy-0002/proof#eq:step': { container: 'sy-0002/proof', label: 'eq:step', numbers: { 'drafting/main.tex': { number: '3' }, 'drafting/talk.tex': { number: '2' } } },
+			'sy-0001-ai#eq:fix-ai': { container: 'sy-0001-ai', label: 'eq:fix-ai', numbers: { '.loom/agents/copies/aidoc.tex': { number: '2' } } }
+		}
+	} as unknown as Manifest;
+
+	it('over a document at a result shows the card a link to the result shows', () => {
+		expect(previewOfHref(p, 'quilt:drafting/main.tex#sy-0003')).toEqual({ kind: 'node', id: 'sy-0003' });
+		expect(previewOfHref(p, 'quilt:drafting/main.tex#sy-0003')).toEqual(previewOfHref(p, 'quilt:sy-0003'));
+		// an agent's copy, as an agent writes it in a message
+		expect(previewOfHref(p, 'quilt:.loom/agents/copies/aidoc.tex#sy-0001-ai')).toEqual({ kind: 'node', id: 'sy-0001-ai' });
+		// a proof's key is read in its statement's card
+		expect(previewOfHref(p, 'quilt:drafting/main.tex#sy-0003/proof')).toEqual({ kind: 'node', id: 'sy-0003' });
+	});
+
+	it('over a document alone, or at a place the manifest does not know, shows nothing', () => {
+		expect(previewOfHref(p, 'quilt:drafting/main.tex')).toBeNull();
+		expect(previewOfHref(p, 'quilt:drafting/main.tex#sec-2')).toBeNull();
+		expect(previewOfHref(p, 'quilt:canon/main-v1.tex')).toBeNull();
+		// a click still opens the document at the place
+		expect(itemForQuilt(p, 'drafting/main.tex#sy-0003')).toEqual({ kind: 'document', id: 'drafting/main.tex', anchor: 'sy-0003' });
+	});
+
+	it('over an equation shows the node it stands in at the display, by a document, a node or a reference', () => {
+		const fix = { kind: 'node', id: 'sy-0003', anchor: 'sy-0003-eq-fix' };
+		expect(previewOfHref(p, 'quilt:drafting/main.tex#sy-0003#eq:fix')).toEqual(fix);
+		expect(previewOfHref(p, 'quilt:sy-0003#eq:fix')).toEqual(fix);
+		expect(previewOfKey(p, 'sy-0003#eq:fix')).toEqual(fix);
+		// in a section, and in a proof, which its statement's node holds
+		expect(previewOfKey(p, 'sy-0100#eq:prose')).toEqual({ kind: 'node', id: 'sy-0100', anchor: 'sy-0100-eq-prose' });
+		expect(previewOfKey(p, 'sy-0002/proof#eq:step')).toEqual({ kind: 'node', id: 'sy-0002', anchor: 'sy-0002-proof-eq-step' });
+		// any other place in a node is the node's own card
+		expect(previewOfHref(p, 'quilt:sy-0003#sy-0003/proof')).toEqual({ kind: 'node', id: 'sy-0003' });
+		expect(previewOfKey(p, 'sy-9999')).toBeNull();
+	});
+
+	it('finds the region an item is at, only in the node that holds it', () => {
+		expect(regionAt(p, { kind: 'node', id: 'sy-0100', anchor: 'sy-0100-eq-prose' })).toBe('sy-0100#eq:prose');
+		expect(regionAt(p, { kind: 'node', id: 'sy-0002', anchor: 'sy-0002-proof-eq-step' })).toBe('sy-0002/proof#eq:step');
+		expect(regionAt(p, { kind: 'node', id: 'sy-0003', anchor: 'sy-0100-eq-prose' })).toBeNull();
+		expect(regionAt(p, { kind: 'node', id: 'sy-0003', anchor: 'sy-0003-proof' })).toBeNull();
+		expect(regionAt(p, { kind: 'node', id: 'sy-0003' })).toBeNull();
+		expect(regionAt(p, { kind: 'document', id: 'drafting/main.tex', anchor: 'sy-0003-eq-fix' })).toBeNull();
+	});
+
+	it('names an equation by its number and what it stands in', () => {
+		expect(regionName(p, 'sy-0100#eq:prose')).toEqual({ number: '(1)', within: 'Section 1' });
+		expect(regionName(p, 'sy-0002/proof#eq:step')).toEqual({ number: '(3)', within: 'proof of Lemma 1.2' });
+		// numbered by the copy where only the copy numbers it
+		expect(regionName(p, 'sy-0001-ai#eq:fix-ai')).toEqual({ number: '(2)', within: 'Definition 1.1' });
+		expect(regionName(p, 'sy-0003')).toBeNull();
+		expect(linkName(p, 'quilt:sy-0002/proof#eq:step')).toBe('(3) in proof of Lemma 1.2');
 	});
 });
 

@@ -3,7 +3,7 @@
 import type { Component } from 'svelte';
 import type { Manifest } from '$lib/manifest/types';
 import { titleOf } from '$lib/sessions/sessions.svelte';
-import type { Item, ItemKind } from './item';
+import { regionAt, type Item, type ItemKind } from './item';
 import { landmarkName } from './history';
 import { documentLabel, pdfName, shortLocator } from './names';
 import { workViews, type View } from './views';
@@ -81,7 +81,8 @@ export const kinds: Record<ItemKind, Kind> = {
 		preview: NodePreview,
 		prefetch: (item, m) => {
 			const n = m.nodes[item.id];
-			if (n && n.kind !== 'section') void fetchFragment(n.fragment, store.hash).catch(() => '');
+			// a section's card fetches nothing, unless it is one display of the section
+			if (n && (n.kind !== 'section' || regionAt(m, item))) void fetchFragment(n.fragment, store.hash).catch(() => '');
 		}
 	},
 	context: { tab: (item, m) => nodeTab(item.id, m), marker: { icon: 'graph', says: 'context of' }, renderer: ContextItem, controls: PlainControls },
