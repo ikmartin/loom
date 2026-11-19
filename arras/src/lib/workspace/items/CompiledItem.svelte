@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A document's compiled PDF (plan 0.29.1), to read and to save (`CompiledControls`) and not to mark: marks go on the document's text, since every compile replaces these bytes. A new compile opens it again where the reader is; one that made no PDF leaves the last, and says why.
+	// A document's compiled PDF (plan 0.29.1), to read, to open in the browser and to save (`CompiledControls`), and not to mark: marks go on the document's text, since every compile replaces these bytes. A new compile opens it again where the reader is; one that made no PDF leaves the last, and says why.
 	import { store } from '$lib/manifest/client.svelte';
 	import { compileError, compiles } from '$lib/manifest/compiles.svelte';
 	import { compiledUrl } from '$lib/paths';

@@ -42,9 +42,19 @@ export function compileWord(c: Compile | undefined): string {
 	return '';
 }
 
-/** What a document's PDF control says beside `PDF`: how its compile stands (`compileWord`), or `not compiled yet` where there is no PDF and nothing under way; '' when the PDF is there and there is nothing to say. */
+/** What a document's `View PDF` says beside it: how its compile stands (`compileWord`), or `not compiled yet` where there is no PDF and nothing under way; '' when the PDF is there and there is nothing to say. */
 export function pdfWord(pdf: boolean, c: Compile | undefined): string {
 	return compileWord(c) || (pdf ? '' : 'not compiled yet');
+}
+
+/**
+ * The `View PDF` line of a document's *view* menu: its word (`pdfWord`); where there is no PDF to open, why, which greys it; and the last compile's error, as the line's title where it does open.
+ *
+ * Opens wherever a PDF is there, a failed compile's last one and one compiled with errors included.
+ */
+export function pdfLine(pdf: boolean, c: Compile | undefined): { word: string; off?: string; about?: string } {
+	const why = compileError(c) || undefined;
+	return { word: pdfWord(pdf, c), ...(pdf ? { about: why } : { off: why ?? 'There is no compiled PDF to open yet' }) };
 }
 
 /** The last run's error and where TeX stopped, for a title or a line under the paper. */
