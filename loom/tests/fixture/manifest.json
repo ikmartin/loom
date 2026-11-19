@@ -673,7 +673,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "0d58c62653077fbccaac9f6db2b1986fd9146dcccfbb41d2761d4d0231933abc",
+   "hash": "47de94a0bf65c0d5802f83b37bb3f34d131e8bde728d8635754164f941ee5fa4",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -688,7 +688,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "02d2fc01e14b6a3bc9737e7f5496c4560b55c1e8eecfa058fa7e9703e5e5590e",
+   "hash": "4375e3cf3ec2999441cca4204f0ec9b060cb911ddde16ee8c40b1f72e716fe30",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -703,7 +703,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "409f6d941bab25d6cd14fb65795c87c32018088329ea3ecd810b640e3744759a",
+   "hash": "c5c4516c4f34637be2c88ac96db6093ef867af11cd19e0853d51cf5c250c75c4",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -1207,6 +1207,7 @@
  },
  "diagnostics": [
   {
+   "class": "latex",
    "code": "dangling-link",
    "keys": [
     "sy-0100"
@@ -1223,22 +1224,7 @@
    "severity": "error"
   },
   {
-   "code": "dangling-link",
-   "keys": [
-    "sy-0008"
-   ],
-   "locations": [
-    {
-     "column": 1,
-     "file": "drafting/nodes/sy-0008.tex",
-     "line": 1
-    }
-   ],
-   "message": "% !LOOM see: sy-7777 refers to no node or label",
-   "owner": "person",
-   "severity": "error"
-  },
-  {
+   "class": "latex",
    "code": "double-inclusion",
    "keys": [
     "drafting/nodes/sy-0002.tex"
@@ -1254,19 +1240,47 @@
    "severity": "error"
   },
   {
+   "class": "latex",
+   "code": "missing-include",
+   "keys": [],
+   "locations": [
+    {
+     "file": "drafting/main.tex",
+     "line": 72
+    }
+   ],
+   "message": "\\input{nodes/missing} names no file",
+   "owner": "person",
+   "severity": "error"
+  },
+  {
+   "class": "model",
+   "code": "dangling-link",
+   "keys": [
+    "sy-0008"
+   ],
+   "locations": [
+    {
+     "column": 1,
+     "file": "drafting/nodes/sy-0008.tex",
+     "line": 1
+    }
+   ],
+   "message": "% !LOOM see: sy-7777 refers to no node or label",
+   "owner": "person",
+   "severity": "warning"
+  },
+  {
+   "class": "model",
    "code": "duplicate-id",
    "fixes": [
     {
-     "command": "loom fork sy-999B --in drafting/nodes/sy-999B.tex",
-     "label": "fork the copy in drafting/nodes/sy-999B.tex"
+     "command": "loom id --next, and put that id in place of sy-999B in drafting/nodes/sy-999B.tex, and in every reference to sy-999B in drafting/main.tex and the files it inputs",
+     "label": "give the definition in drafting/nodes/sy-999B.tex a fresh id"
     },
     {
-     "command": "loom fork sy-999B --in drafting/talk.tex",
-     "label": "fork the copy in drafting/talk.tex"
-    },
-    {
-     "command": "loom id --next",
-     "label": "give one copy a fresh id by hand"
+     "command": "loom id --next, and put that id in place of sy-999B in drafting/talk.tex, and in every reference to sy-999B in drafting/talk.tex and the files it inputs",
+     "label": "give the definition in drafting/talk.tex a fresh id"
     }
    ],
    "keys": [
@@ -1284,22 +1298,10 @@
    ],
    "message": "sy-999B is defined by drafting/nodes/sy-999B.tex and drafting/talk.tex; it has no text until one definition remains",
    "owner": "person",
-   "severity": "error"
+   "severity": "warning"
   },
   {
-   "code": "missing-include",
-   "keys": [],
-   "locations": [
-    {
-     "file": "drafting/main.tex",
-     "line": 72
-    }
-   ],
-   "message": "\\input{nodes/missing} names no file",
-   "owner": "person",
-   "severity": "error"
-  },
-  {
+   "class": "model",
    "code": "loom:equation-in-proof-referenced",
    "keys": [
     "sy-0005-ai",
@@ -1316,6 +1318,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:equation-in-proof-referenced",
    "keys": [
     "sy-0005",
@@ -1332,6 +1335,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:multi-target-proof",
    "keys": [],
    "locations": [
@@ -1345,6 +1349,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:multi-target-proof",
    "keys": [],
    "locations": [
@@ -1358,6 +1363,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:needs-classification",
    "keys": [
     "sy-000E-ai"
@@ -1373,6 +1379,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:needs-classification",
    "keys": [
     "sy-000B-ai"
@@ -1388,6 +1395,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:needs-classification",
    "keys": [
     "sy-000B"
@@ -1403,6 +1411,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:needs-classification",
    "keys": [
     "sy-000E"
@@ -1418,6 +1427,7 @@
    "severity": "warning"
   },
   {
+   "class": "internal",
    "code": "loom:no-readable-copy",
    "keys": [
     "Kre99"
@@ -1428,6 +1438,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:taxon-conflict",
    "keys": [],
    "locations": [],
@@ -1436,6 +1447,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:unknown-directive",
    "keys": [],
    "locations": [
@@ -1449,6 +1461,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:unknown-directive",
    "keys": [],
    "locations": [
@@ -1462,6 +1475,7 @@
    "severity": "warning"
   },
   {
+   "class": "internal",
    "code": "loom:unmatched-postnote",
    "fixes": [
     {
@@ -1483,6 +1497,7 @@
    "severity": "warning"
   },
   {
+   "class": "internal",
    "code": "loom:unmatched-postnote",
    "fixes": [
     {
@@ -1504,6 +1519,7 @@
    "severity": "warning"
   },
   {
+   "class": "model",
    "code": "loom:positional-proof-key",
    "keys": [
     "sy-0006-ai"
@@ -1514,6 +1530,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:positional-proof-key",
    "keys": [
     "sy-0006"
@@ -1524,6 +1541,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:see-redundant",
    "keys": [
     "sy-0008"
@@ -1540,6 +1558,7 @@
    "severity": "info"
   },
   {
+   "class": "internal",
    "code": "loom:undigested-citekey",
    "fixes": [
     {
@@ -1565,6 +1584,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:unlabelled-node",
    "keys": [
     ".loom/agents/copies/aidoc.tex#remark:2"
@@ -1580,6 +1600,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:unlabelled-node",
    "keys": [
     "drafting/sections/appendix.tex#remark:1"
@@ -1595,6 +1616,7 @@
    "severity": "info"
   },
   {
+   "class": "internal",
    "code": "loom:unresolved-work",
    "keys": [
     "Har77"
@@ -1605,6 +1627,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1626,6 +1649,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1647,6 +1671,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1668,6 +1693,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1689,6 +1715,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1710,6 +1737,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1731,6 +1759,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1752,6 +1781,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1773,6 +1803,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1794,6 +1825,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1815,6 +1847,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1836,6 +1869,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-missing",
    "fixes": [
     {
@@ -1857,6 +1891,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-unused",
    "keys": [
     "sy-0007-ai/proof"
@@ -1872,6 +1907,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-unused",
    "keys": [
     "sy-0009/proof"
@@ -1887,6 +1923,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:uses-unused",
    "keys": [
     "sy-0007/proof"
@@ -1902,6 +1939,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "unreachable",
    "fixes": [
     {
@@ -1923,6 +1961,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:detached-annotation",
    "fixes": [
     {
@@ -1939,6 +1978,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:retired-ledger-key",
    "keys": [
     "sy-000F"
@@ -1949,6 +1989,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:retired-ledger-key",
    "keys": [
     "sy-000F/proof"
@@ -1959,6 +2000,7 @@
    "severity": "info"
   },
   {
+   "class": "model",
    "code": "loom:previous-key-match",
    "keys": [
     "sy-0202/proof"
@@ -2463,7 +2505,7 @@
  ],
  "files": [
   {
-   "bytes": 1241,
+   "bytes": 1536,
    "denied": null,
    "kind": "text",
    "path": "EXPECTED-LINT.txt"

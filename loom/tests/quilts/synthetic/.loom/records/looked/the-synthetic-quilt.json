@@ -2,7 +2,7 @@
  "who": "The synthetic quilt",
  "when": "2026-09-16T11:30:00Z",
  "files": {
-  "EXPECTED-LINT.txt": "sha256:98efb400dd29a1f291fab5e42f83cbb332b82e708cc5a2b4a82db9f35553bc26",
+  "EXPECTED-LINT.txt": "sha256:70a3fb6d623af1b34920afa44f0a3053176ad95aedb0f63b89cedf17ab56982b",
   "README.md": "sha256:6deee635a4d9a26ac727e34a41dea422cf20de037b87d72b74cce480a84bc686",
   "config.toml": "sha256:2d96428200f2c361a41b06bbf5db387f06c60540824c184a1708fefb975c7e1d",
   "drafting/loom.sty": "sha256:c5eab6a24aeb9f46195ed8aef88628a99f2cbb84ca014177f152727174eab6ad",

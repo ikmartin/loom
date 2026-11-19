@@ -1145,7 +1145,7 @@
    "read_only_hint": true
   },
   "command": "loom lint",
-  "description": "Scan and print every diagnostic. Fast; no LaTeX runs.",
+  "description": "Scan and print every diagnostic, each with its class.\n\nA class says what kind of problem it is: latex, a problem in a document's LaTeX, a last compile that failed among them, and all the viewer shows a person; model, loom's model of the quilt (ids, \\uses, links, copies, records), an agent's to keep; internal, loom's own difficulty or the integrity of its records. An error is a fault in what TeX compiles, or in loom's records; exit 1 on one. Fast: no LaTeX runs, and a compile's problem is read from the log the document's last compile left.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {

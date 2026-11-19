@@ -1,46 +1,46 @@
-error dangling-link
-error dangling-link
-error double-inclusion
-error duplicate-id
-error missing-include
-info loom:detached-annotation
-info loom:positional-proof-key
-info loom:positional-proof-key
-info loom:previous-key-match
-info loom:retired-ledger-key
-info loom:retired-ledger-key
-info loom:see-redundant
-info loom:undigested-citekey
-info loom:unlabelled-node
-info loom:unlabelled-node
-info loom:unresolved-work
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-missing
-info loom:uses-unused
-info loom:uses-unused
-info loom:uses-unused
-info unreachable
-warning loom:equation-in-proof-referenced
-warning loom:equation-in-proof-referenced
-warning loom:multi-target-proof
-warning loom:multi-target-proof
-warning loom:needs-classification
-warning loom:needs-classification
-warning loom:needs-classification
-warning loom:needs-classification
-warning loom:no-readable-copy
-warning loom:taxon-conflict
-warning loom:unknown-directive
-warning loom:unknown-directive
-warning loom:unmatched-postnote
-warning loom:unmatched-postnote
+error dangling-link latex
+error double-inclusion latex
+error missing-include latex
+info loom:detached-annotation model
+info loom:positional-proof-key model
+info loom:positional-proof-key model
+info loom:previous-key-match model
+info loom:retired-ledger-key model
+info loom:retired-ledger-key model
+info loom:see-redundant model
+info loom:undigested-citekey internal
+info loom:unlabelled-node model
+info loom:unlabelled-node model
+info loom:unresolved-work internal
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-missing model
+info loom:uses-unused model
+info loom:uses-unused model
+info loom:uses-unused model
+info unreachable model
+warning dangling-link model
+warning duplicate-id model
+warning loom:equation-in-proof-referenced model
+warning loom:equation-in-proof-referenced model
+warning loom:multi-target-proof model
+warning loom:multi-target-proof model
+warning loom:needs-classification model
+warning loom:needs-classification model
+warning loom:needs-classification model
+warning loom:needs-classification model
+warning loom:no-readable-copy internal
+warning loom:taxon-conflict model
+warning loom:unknown-directive model
+warning loom:unknown-directive model
+warning loom:unmatched-postnote internal
+warning loom:unmatched-postnote internal
