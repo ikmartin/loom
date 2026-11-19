@@ -560,7 +560,10 @@ def test_restoring_a_landmark_whose_ids_are_still_live_adds_no_second_id(tmp_pat
     # the one safe way out gives the restored copy the fresh id: the live one keeps its records (T3)
     keys = json_of("status", "--json", cwd=q)["keys"]
     twice = [k for k, e in keys.items() if e["state"] == "conflicted"]
-    fresh = [f"loom id --next, and put that id in place of {k} in main/again.tex" for k in twice]
+    fresh = [
+        f"loom id --next, and put that id in place of {k} in main/again.tex, and in every reference to {k} in main/again.tex and the files it inputs"
+        for k in twice
+    ]
     assert twice and [keys[k]["fixes"] for k in twice] == [[f] for f in fresh], keys
     lint = [d for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] == "duplicate-id"]
     assert [f["command"] for d in lint for f in d["fixes"]] == fresh

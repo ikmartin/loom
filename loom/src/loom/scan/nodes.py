@@ -6,6 +6,7 @@ Ownership is a partition of each file: every character belongs to the innermost 
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 
 from loom.scan.bib import citekey_slug
@@ -208,14 +209,38 @@ def assemble(
 
 
 def _grade_definitions(asm: Assembly, expansions: dict[str, Expansion]) -> None:
-    """An id or label defined twice stays an error of the person's LaTeX where one document's compile reads two of its definitions, since TeX sees both there; defined in two documents, or where no document reads it, LaTeX accepts it, and it is a warning of loom's model."""
+    """An id or label defined twice stays an error of the person's LaTeX where one document's compile reads two of its definitions, since TeX sees both there; defined in two documents, or where no document reads it, LaTeX accepts it, and it is a warning of loom's model. An id of the person's defined twice is given its ways out here (`fresh_id_fix`)."""
     from loom.scan.diagnostics import MODEL
+    from loom.scan.model import Fix
 
     for d in asm.diagnostics:
         if d.code not in ("duplicate-id", "loom:duplicate-label"):
             continue
         if not any(sum(loc.file in e.reached for loc in d.locations) >= 2 for e in expansions.values()):
             d.severity, d.class_ = "warning", MODEL
+        rec = asm.nodes.get(d.keys[0]) if d.code == "duplicate-id" and len(d.keys) == 1 else None
+        if rec is not None and rec.kind == "conflict" and not any(p in asm.digest_files for p in rec.conflict):
+            paths = list(rec.conflict)
+            label = "give one of the two a fresh id" if len(paths) == 1 else "give the definition in {} a fresh id"
+            d.fixes = [Fix(label.format(p), fresh_id_fix(rec.key, p, paths, expansions)) for p in paths]
+
+
+def fresh_id_fix(node_id: str, path: str, paths: list[str], expansions: Mapping[str, Expansion]) -> str:
+    """How the definition of `node_id` in `path`, one of `paths`, takes a fresh id, said with the commands that stay, so that doing what it says leaves no new problem: `loom id --next` names the id, and every reference that means this definition takes it too.
+
+    Defined in two documents, a reference means the definition its own document reads, so the references are named by the documents that read `path`; read by one document twice, TeX cannot tell them apart, and the person says which references mean the one renamed.
+    """
+    fresh = f"loom id --next, and put that id in place of {node_id} in "
+    together = len(paths) == 1 or any(sum(p in e.reached for p in paths) >= 2 for e in expansions.values())
+    where = f"one of its definitions in {path}" if len(paths) == 1 else path
+    if together:
+        return f"{fresh}{where}, and in each reference to {node_id} meant for that definition"
+    readers = sorted(m for m, e in expansions.items() if path in e.reached)
+    if not readers:
+        return f"{fresh}{where}"
+    them = " and ".join(readers)
+    inputs = "the files it inputs" if len(readers) == 1 else "the files they input"
+    return f"{fresh}{where}, and in every reference to {node_id} in {them} and {inputs}"
 
 
 def _order(exp: Expansion | None, file: str, offset: int, files: dict[str, SourceFile]) -> float:
@@ -333,15 +358,8 @@ def _placeholders(asm: Assembly, files: dict[str, SourceFile], conflicted: dict[
             Location(d.file, files[d.file].line_of(d.start)) for d in sorted(demoted, key=lambda d: (d.file, d.start))
         ]
         locations = locations or [Location(path, 1) for path in paths]
-        # one definition keeps the id and what is recorded on it, and each other takes a fresh one; a digest is loom's to rewrite, not the author's
-        fresh = f"loom id --next, and put that id in place of {node_id} in"
-        fixes = (
-            []
-            if any(path in asm.digest_files for path in paths)
-            else [Fix(f"give the definition in {path} a fresh id", f"{fresh} {path}") for path in paths]
-            if len(paths) > 1
-            else [Fix("give one of the two a fresh id", f"{fresh} one of its definitions in {paths[0]}")]
-        )
+        # a digest is loom's to rewrite, not the author's; the person's ways out are given once the documents' reach is known (`_grade_definitions`)
+        fixes: list[Fix] = []
         asm.diagnostics.append(
             Diagnostic(
                 "error",

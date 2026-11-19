@@ -90,7 +90,7 @@ ROW = re.compile(r"^  (?!fix: |next: )\S")
 
 
 def status_rows(output: str) -> list[tuple[str, str]]:
-    """Each row of `loom status` as (its group's heading, its text), a wrapped row joined back into one line; every row ends with its key."""
+    """Each row of `loom status` as (its group's heading, its text), a wrapped row joined back into one line; every row ends with its key. A row's fix and what wraps of it, indented further, are no part of it."""
     rows: list[tuple[str, str]] = []
     heading = ""
     for ln in output.splitlines():
@@ -98,7 +98,12 @@ def status_rows(output: str) -> list[tuple[str, str]]:
             heading = ln
         elif ROW.match(ln):
             rows.append((heading, ln.strip()))
-        elif ln.startswith("    ") and not ln.lstrip().startswith(("fix: ", "next: ")) and rows:
+        elif (
+            ln.startswith("    ")
+            and not ln.startswith("      ")
+            and not ln.lstrip().startswith(("fix: ", "next: "))
+            and rows
+        ):
             rows[-1] = (rows[-1][0], rows[-1][1] + " " + ln.strip())
     return rows
 
@@ -1492,7 +1497,10 @@ def test_a_conflicted_id_is_a_row_of_its_own_and_its_definitions_are_not(tmp_pat
     assert keys["sy-999B"]["conflict"] == ["drafting/nodes/sy-999B.tex", "drafting/talk.tex"]
     assert not [k for k in keys if "#lemma:" in k and k.startswith(("drafting/talk.tex", "drafting/nodes/sy-999B.tex"))]
     said = ok("status", cwd=q).output
-    assert "loom id --next, and put that id in place of sy-999B in drafting/talk.tex" in flat(said)
+    assert (
+        "loom id --next, and put that id in place of sy-999B in drafting/talk.tex, and in every reference to sy-999B in drafting/talk.tex and the files it inputs"
+        in flat(said)
+    )
     assert ": 1 conflicted," in said.splitlines()[0]  # the verdict counts it, first
 
 

@@ -264,6 +264,45 @@ def test_a_gate_reads_codes_not_grades() -> None:
     assert not gates(Diagnostic("warning", "loom:dependency-cycle", "", []))
 
 
+def test_doing_what_an_id_defined_twice_says_leaves_no_new_problem(tmp_path: Path) -> None:
+    """An id two documents define: the fix names the fresh id's place and every reference that goes with it, and doing exactly that leaves the quilt with no problem it did not have, no reference pointing at the other document's node."""
+    import re
+
+    q = tmp_path / "q"
+    (q / "drafting" / "nodes").mkdir(parents=True)
+    (q / ".loom").mkdir()
+    (q / ".loom" / "format").write_text("1\n")
+    (q / "config.toml").write_text('[quilt]\nname = "fix"\nmain = "drafting/main.tex"\nprefix = "gr"\n')
+    (q / "drafting" / "loom.sty").write_text(
+        (QUILTS / "edge" / "double-inclusion" / "drafting" / "loom.sty").read_text()
+    )
+    head = "\\documentclass{amsart}\n\\usepackage{amsthm}\n\\usepackage{loom}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\n"
+    (q / DOC).write_text(head + "\\input{nodes/x}\n\\input{nodes/y}\n\\end{document}\n")
+    (q / "drafting" / "other.tex").write_text(
+        head + "\\begin{lemma}\\label{gr-0005}\nOther X.\n\\end{lemma}\n\\end{document}\n"
+    )
+    (q / "drafting" / "nodes" / "x.tex").write_text("\\begin{lemma}\\label{gr-0005}\nX.\n\\end{lemma}\n")
+    (q / "drafting" / "nodes" / "y.tex").write_text(
+        "\\begin{lemma}\\label{gr-0006}\nBy Lemma~\\ref{gr-0005}, Y.\n\\end{lemma}\n"
+    )
+    before = json_of("lint", "--json", cwd=q)["diagnostics"]
+    (dup,) = [d for d in before if d["code"] == "duplicate-id"]
+    fix = next(f["command"] for f in dup["fixes"] if " in drafting/nodes/x.tex" in f["command"])
+    assert fix == (
+        "loom id --next, and put that id in place of gr-0005 in drafting/nodes/x.tex, "
+        "and in every reference to gr-0005 in drafting/main.tex and the files it inputs"
+    )
+    fresh = ok("id", "--next", cwd=q).output.strip()
+    for name in ("main.tex", "nodes/x.tex", "nodes/y.tex"):  # drafting/main.tex and the files it inputs
+        f = q / "drafting" / name
+        f.write_text(re.sub(r"\{gr-0005\}", "{" + fresh + "}", f.read_text()))
+    after = json_of("lint", "--json", cwd=q)["diagnostics"]
+    assert not [d for d in after if d["code"] in ("duplicate-id", "loom:reference-to-loose", "dangling-link")], after
+    # what is new is the two lemmas, each a node of its own again, saying they have no proof
+    new = {(d["code"], d["message"]) for d in after} - {(d["code"], d["message"]) for d in before}
+    assert {code for code, _ in new} == {"loom:missing-proof"} and not [d for d in after if d["class"] == "latex"]
+
+
 def test_a_person_is_still_told_of_a_circle_in_their_reasoning_and_of_a_document_never_closed(tmp_path: Path) -> None:
     """Two of the person's statements resting on each other is theirs to see, a warning of class latex as no block says it yet; a document whose `\\begin{document}` nothing closes is the fault TeX stops on, an error of class latex, where a theorem across two files stays loom's model's."""
     q = demo(tmp_path)

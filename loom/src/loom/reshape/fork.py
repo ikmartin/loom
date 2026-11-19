@@ -15,7 +15,7 @@ from loom.reshape.atomize import _single_node_file, node_region
 from loom.reshape.ids import unified_diff
 from loom.scan.alloc import visible_locals
 from loom.scan.labels import LABEL_DEF, is_id_shaped, next_local, rename_labels, split_id
-from loom.scan.nodes import NodeRec
+from loom.scan.nodes import NodeRec, fresh_id_fix
 from loom.scan.scan import ScanResult
 
 _REF = re.compile(r"(\\(?:ref|eqref|cref|Cref|autoref|pageref|vref|Vref|uses)\*?\s*\{)([^}]*)(\})")
@@ -107,7 +107,7 @@ def unapplied_fork(result: ScanResult, history: History, node_id: str, doc: str)
 def conflict_fixes(result: ScanResult, history: History, key: str, paths: list[str]) -> list[str]:
     """What resolves `key`, defined by each of `paths`, and is safe in the state that left it so, each said with the commands that stay; `status` and `lint` both name it (T3).
 
-    A node file nothing reads whose text the one read file still holds is a node moved out and never put in its place: reading it there in place of the text finishes the move, and removing it undoes it. A document `history restore` wrote is the one to take a fresh id, so the live one keeps its acceptances and annotations. Otherwise either definition may take one; `loom id --next` names it.
+    A node file nothing reads whose text the one read file still holds is a node moved out and never put in its place: reading it there in place of the text finishes the move, and removing it undoes it. A document `history restore` wrote is the one to take a fresh id, so the live one keeps its acceptances and annotations. Otherwise either definition may take one (`scan.nodes.fresh_id_fix`, which names the references that go with it).
     """
     reached = set(result.masters) | {f for e in result.expansions.values() for f in e.reached}
     read = [p for p in paths if p in reached]
@@ -119,12 +119,9 @@ def conflict_fixes(result: ScanResult, history: History, key: str, paths: list[s
     restored = [
         p for p in paths if any(e.action == "restore" and (e.get("to") or {}).get("path") == p for e in history.entries)
     ]
-    fresh = "loom id --next, and put that id in place of " + key
     if len(restored) == 1:
-        return [f"{fresh} in {restored[0]}"]
-    return (
-        [f"{fresh} in {p}" for p in paths] if len(paths) > 1 else [f"{fresh} in one of its definitions in {paths[0]}"]
-    )
+        return [fresh_id_fix(key, restored[0], paths, result.expansions)]
+    return [fresh_id_fix(key, p, paths, result.expansions) for p in paths]
 
 
 def plan_fork(
