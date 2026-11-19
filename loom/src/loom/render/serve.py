@@ -935,15 +935,19 @@ class ServeSession:
         self._settle()
 
     def _settle(self) -> None:
-        """Sweep what the last build no longer names (`sweep`) and give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it."""
+        """Sweep what the last build no longer names (`sweep`) and give back what the builds left (`give_back`) once `SETTLE_AFTER` seconds pass with no rebuild, so neither a save nor a write through the API waits for it; nothing is set once the server is stopping, so a build that ends after `stop` leaves no timer behind."""
         with self._settling_lock:
             if self._settling is not None:
                 self._settling.cancel()
+            if self._stopping:
+                return
             self._settling = threading.Timer(self.SETTLE_AFTER, self._at_rest)
             self._settling.daemon = True
             self._settling.start()
 
     def _at_rest(self) -> None:
+        if self._stopping:
+            return
         self.sweep()
         give_back()
 
@@ -1180,8 +1184,9 @@ class ServeSession:
 
     def stop(self) -> None:
         self._stopping = True
-        if self._settling is not None:
-            self._settling.cancel()
+        with self._settling_lock:
+            if self._settling is not None:
+                self._settling.cancel()
 
         if self.compiles is not None:
             self.compiles.stop()
