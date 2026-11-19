@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from loom.paths import MANIFEST, document_build
 from tests.helpers import edit, exits, json_of, ok
 from tests.unit._quilts import demo
 
 DOC = "drafting/main.tex"
+QUILTS = Path(__file__).resolve().parents[1] / "quilts"
 #: A proof after `\item`, which LaTeX compiles and loom's model attaches to nothing.
 UNATTACHED = "\\begin{enumerate}\n\\item One.\n\\begin{proof}\nThe answer is short.\n\\end{proof}\n\\end{enumerate}\n"
 
@@ -184,6 +187,81 @@ def test_check_compiles_every_document_itself_and_reads_no_log_an_earlier_compil
     r = ok("check", cwd=q)
     assert r.output.startswith("check passed:") and "compile-failed" not in r.output
     assert _linted(q) == []
+
+
+#: An agent's copy of a document beside another document: what each change to the copy makes of adoption, as loom refused it before its model was graded by what TeX does.
+ADOPTED = {
+    # a \uses and a \ref of a node only the other document has: refused, whatever their grade now
+    "\\uses{zk-0050}\nFirst statement.": "zk-0001 refers to zk-0050, which its master does not reach",
+    "First statement, by \\ref{zk-0050}.": "zk-0001 refers to zk-0050, which its master does not reach",
+    # a \uses of nothing, and a stray proof: taken, then and now
+    "\\uses{zk-0999}\nFirst statement.": None,
+}
+
+
+@pytest.mark.parametrize("change", list(ADOPTED), ids=["uses-other-doc", "ref-other-doc", "uses-dangling"])
+def test_adoption_refuses_what_it_refused_before_any_regrade(tmp_path: Path, change: str) -> None:
+    """Adoption will not bring in a new problem of a code that was an error, at any grade but info: a `\\uses` of a node the document does not reach is a warning now, and is refused as it was."""
+    from loom.adopt import comparison, prepare
+    from loom.history.ledger import load_history
+    from loom.history.steps import write_step
+    from loom.layout import stamp
+    from loom.reshape.copy import plan_copy
+    from loom.scan.quilt import load_quilt, save_author
+    from loom.scan.scan import scan
+    from loom.sync import SyncError
+
+    save_author("Tester")  # the test's own HOME
+    root = tmp_path / "q"
+    (root / "drafting").mkdir(parents=True)
+    stamp(root)
+    (root / ".loom" / "agents" / "copies").mkdir(parents=True)
+    (root / "config.toml").write_text('[quilt]\nname = "gate"\nprefix = "zk"\nmain = "drafting/main.tex"\n')
+    (root / "drafting" / "loom.sty").write_text(
+        (QUILTS / "edge" / "double-inclusion" / "drafting" / "loom.sty").read_text()
+    )
+    (root / DOC).write_text(
+        "\\documentclass{article}\n\\usepackage{loom}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\nOriginal introduction.\n"
+        "\\begin{lemma}\\label{zk-0001}\nFirst statement.\n\\end{lemma}\n\\begin{lemma}\\label{zk-0002}\nSecond statement uses \\ref{zk-0001}.\n\\end{lemma}\n\\end{document}\n"
+    )
+    (root / "drafting" / "other.tex").write_text(
+        "\\documentclass{article}\n\\newtheorem{lemma}{Lemma}\n\\begin{document}\n\\begin{lemma}\\label{zk-0050}\nOf the other document.\n\\end{lemma}\n\\end{document}\n"
+    )
+    copy = ".loom/agents/copies/proposal.tex"
+    q = load_quilt(root)
+    history = load_history(q.history_dir)
+    cp = plan_copy(scan(q), history, DOC, copy)
+    (root / copy).write_text(cp.text.replace("First statement.", change, 1))
+    write_step(
+        history,
+        "copy",
+        "copy-proposal",
+        cp.freeze,
+        "Tester",
+        {"from": DOC, "to": copy, "bases": cp.bases},
+        cp.source_text,
+        "main.tex",
+    )
+    result = scan(q)
+    keys = [r["key"] for r in comparison(result, copy)["changes"] if r.get("offered")]
+    refused = ADOPTED[change]
+    if refused is None:
+        prepare(scan(q), copy, keys, True)
+    else:
+        with pytest.raises(SyncError, match=refused):
+            prepare(scan(q), copy, keys, True)
+
+
+def test_a_gate_reads_codes_not_grades() -> None:
+    """A code that was an error before the regrades gates at any grade but info; a code added since gates nothing."""
+    from loom.scan.diagnostics import gates
+    from loom.scan.model import Diagnostic
+
+    assert gates(Diagnostic("warning", "duplicate-id", "", []))
+    assert gates(Diagnostic("warning", "loom:reference-to-loose", "", []))
+    assert not gates(Diagnostic("info", "loom:reference-to-loose", "", []))
+    assert not gates(Diagnostic("error", "loom:compile-failed", "", []))
+    assert not gates(Diagnostic("warning", "loom:dependency-cycle", "", []))
 
 
 def test_a_person_is_still_told_of_a_circle_in_their_reasoning_and_of_a_document_never_closed(tmp_path: Path) -> None:

@@ -7,7 +7,7 @@ A class says what kind of problem a code reports: `LATEX`, a problem in a docume
 
 from __future__ import annotations
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 #: The three classes, in the order a reader is shown them.
 LATEX, MODEL, INTERNAL = "latex", "model", "internal"
@@ -122,6 +122,42 @@ VARIES = frozenset(
         "loom:annotation-types",
     }
 )
+
+
+#: The codes a gate refuses to bring in, by code and not by grade: those that were errors wherever loom raised them before its model was graded by what TeX does. Adopting an agent's copy and linearizing a document will not go ahead over a new one, at any grade but info, so that a regrade changes what a person and an agent are told and never what loom lets through. A code added since is in no gate until one is meant to refuse it.
+GATED = frozenset(
+    {
+        "duplicate-id",
+        "dangling-link",
+        "missing-include",
+        "double-inclusion",
+        "inclusion-cycle",
+        "loom:environment-spans-files",
+        "loom:line-anchoring",
+        "loom:unknown-environment",
+        "loom:unattached-proof",
+        "loom:reference-to-loose",
+        "loom:duplicate-label",
+        "loom:macros-unloaded",
+        "loom:macros-missing",
+        "loom:closure-failed",
+        "loom:atomize-target-exists",
+        "loom:interface-version",
+        "loom:citekey-slug-collision",
+        "loom:history-missing",
+        "loom:history-edited",
+        "loom:history-corrupt",
+        "loom:id-reused",
+        "loom:derived-id-in-person-document",
+        "loom:agent-document-unrecorded",
+        "loom:plain-id-in-agent-document",
+    }
+)
+
+
+def gates(d: Any) -> bool:
+    """Whether a gate refuses to bring in diagnostic `d` (`GATED`): its code is one, and it is no info, as a reference between two files no document reads is."""
+    return d.code in GATED and d.severity != "info"
 
 
 def registered(name: str) -> Code | None:

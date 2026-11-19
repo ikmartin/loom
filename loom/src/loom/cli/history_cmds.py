@@ -47,6 +47,7 @@ from loom.reshape.ids import unified_diff
 from loom.reshape.importer import set_main_forced
 from loom.reshape.linearize import flatten, to_canon
 from loom.scan.alloc import visible_locals
+from loom.scan.diagnostics import gates
 from loom.scan.labels import next_local, rename_labels, split_id
 from loom.scan.quilt import Quilt, load_quilt
 from loom.scan.scan import ScanResult, scan, unread_dir
@@ -854,8 +855,9 @@ def _linearize(
     entry = append_entry(result.quilt.history_dir, "linearize", record, actor_for(root))
     main_moved = main in superseded and set_main_forced(result.quilt, to_rel)
     progress.next_stage(f"scanning with {to_rel}")
-    had = {(d.code, d.message) for d in result.lint if d.severity == "error"}
-    brought = [d for d in scan(load_quilt(root)).lint if d.severity == "error" and (d.code, d.message) not in had]
+    # what a linearize refuses to bring in is by code (`gates`), so a regrade never lets through what it refused
+    had = {(d.code, d.message) for d in result.lint if gates(d)}
+    brought = [d for d in scan(load_quilt(root)).lint if gates(d) and (d.code, d.message) not in had]
     if brought:
         groups.insert(
             0,
