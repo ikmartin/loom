@@ -91,7 +91,7 @@ test('the bar undoes a kept suggestion, which waits again', async ({ page }) => 
 	expect(sent['change-keep']).toEqual({ changes: [SUGGESTED] });
 	await expect(page.getByTestId('review-undo')).toHaveText('Undo keep');
 	await page.getByTestId('review-undo').click();
-	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED] });
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED] });  // its publisher names no quilt, so none is sent
 	await expect(card(page, SUGGESTED)).toHaveCount(1);
 	await expect(page.getByTestId('review-undo')).toHaveCount(0);
 });

@@ -6,7 +6,7 @@
 
 import { store } from '$lib/manifest/client.svelte';
 import type { Annotation, Look } from '$lib/manifest/types';
-import { capabilities, write, type WriteResult } from '$lib/write';
+import { capabilities, onCapabilities, write, type Capabilities, type WriteResult } from '$lib/write';
 import { plain, typeById } from './annotating.svelte';
 import { mark, prune, unmark } from './acted.svelte';
 import { changesIn, pending } from './changes';
@@ -26,6 +26,8 @@ interface Step {
 	deleted?: { id: string; said: string };
 	/** For the Keep of suggestions, their ids, kept in the tab's session storage so a reload keeps the step. */
 	keeps?: string[];
+	/** For the Keep of suggestions, the quilt it was made in, which its undo names so that no other quilt's server does it. */
+	quilt?: string;
 }
 
 /** A delete held at the foot of the window while it stands. */
@@ -84,18 +86,30 @@ function save(): void {
 	}
 }
 
-/** The Keep steps this tab kept in this quilt before a reload, put back on the history once the server has said which quilt it serves. */
+/** Follow the quilt the server says it serves: when it is another than the one the Keep steps were made in, as when the stream comes back from another quilt on the same port, those steps go from the history; and the steps this tab kept in the quilt now served come back. */
+function follow(caps: Capabilities | null): void {
+	const now = caps?.quilt;
+	if (now === serving) return;
+	if (serving !== undefined) {
+		history.done = history.done.filter((s) => !s.keeps);
+		history.undone = history.undone.filter((s) => !s.keeps);
+	}
+	serving = now;
+	if (!now) return;
+	const mine = stored()[now];
+	if (!Array.isArray(mine)) return;
+	const steps = mine.filter((ids) => Array.isArray(ids) && ids.length > 0 && ids.every((i) => typeof i === 'string')).map((ids) => kept(ids, now));
+	if (steps.length) history.done = [...steps, ...history.done];
+}
+
+/** Ask which quilt is served, and keep asking with the stream: the history follows it (`follow`). */
 async function load(): Promise<void> {
 	try {
-		serving = (await capabilities())?.quilt;
+		onCapabilities(follow);
+		follow(await capabilities());
 	} catch {
-		return; // no publisher to ask: nothing is kept, and nothing offered
+		// no publisher to ask: nothing is kept, and nothing offered
 	}
-	if (!serving) return;
-	const mine = stored()[serving];
-	if (!Array.isArray(mine)) return;
-	const steps = mine.filter((ids) => Array.isArray(ids) && ids.length > 0 && ids.every((i) => typeof i === 'string')).map((ids) => kept(ids));
-	if (steps.length) history.done = [...steps, ...history.done];
 }
 
 /** The id loom gave a new annotation or reply: the first word of its answer. */
@@ -224,7 +238,7 @@ async function act(endpoint: 'change-keep' | 'change-discard', which: Which, ext
 }
 
 /** The refusals after which a change's undo or redo can never succeed: it is not kept, loom wrote nothing to undo, its words changed where they were written, or the quilt has no such suggestion. A file that moved while loom worked (`changed`) may succeed when pressed again. */
-const FINAL = new Set(['not-kept', 'not-written', 'changed-since', 'not-open', 'no-such-change']);
+const FINAL = new Set(['not-kept', 'not-written', 'changed-since', 'not-open', 'no-such-change', 'other-quilt']);
 
 /** `res` as a step of the history takes it: loom having done none of the changes it was asked for is a refusal, with the first one's why, and final when every refusal is; when it did some, those refused are said under `title`. */
 function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
@@ -241,12 +255,13 @@ function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
 }
 
 /** The Keep of suggestions `ids`, which loom wrote in: undone by `change-undo`, which takes their words out again and opens them, and done again by keeping them again. */
-function kept(ids: string[]): Step {
+function kept(ids: string[], quilt?: string): Step {
 	const step: Step = {
 		label: ids.length === 1 ? 'keep' : `keep of ${ids.length} suggestions`,
 		keeps: ids,
+		quilt,
 		undo: async () => {
-			const res = asStep((await run('change-undo', { changes: step.keeps })) as ChangeAnswer, 'Not all undone');
+			const res = asStep((await run('change-undo', { changes: step.keeps, ...(step.quilt ? { quilt: step.quilt } : {}) })) as ChangeAnswer, 'Not all undone');
 			if (res.ok) {
 				step.keeps = res.done ?? step.keeps;
 				unmark(step.keeps ?? []);
@@ -281,7 +296,7 @@ export async function keepChanges(which: Which): Promise<ChangeAnswer> {
 	const writes = new Set(pending(store.manifest).filter((c) => c.kind === 'suggested' && c.state === 'ready').map((c) => c.id));
 	const { res, suggested } = await act('change-keep', which);
 	const wrote = suggested.filter((id) => writes.has(id));
-	if (wrote.length) push(kept(wrote));
+	if (wrote.length) push(kept(wrote, serving));
 	return res;
 }
 

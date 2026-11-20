@@ -102,7 +102,7 @@ test("a change's popup says what it is and what is on its words, and Keep takes 
 	// the toolbar's Undo takes it out again, and it waits as it did
 	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
 	await pane(page, 0).getByTestId('annotate-undo').click();
-	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED] });
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED], quilt: 'q-test' });
 	await expect(words(page, SUGGESTED, 'old')).toBeVisible();
 	expect(await css(words(page, SUGGESTED, 'new'), 'color')).toBe(TEAL);
 	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('3');

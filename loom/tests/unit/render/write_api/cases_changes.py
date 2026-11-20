@@ -127,7 +127,13 @@ def _change_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     refuses(s, "change-undo", {"changes": [edit], "author": "Claude Agent"}, 403, "author-only", "only the author")
     refuses(s, "change-undo", {"changes": ["e-2026-01-01-nothere"]}, 404, "no-such-change", "not in this quilt")
     refuses(s, "change-undo", {}, 400, "missing-field", "changes is the list")
-    said = succeeds(s, "change-undo", {"changes": [edit]})
+    # an undo named for another quilt, as from a tab that followed its port to a copy, changes nothing here
+    other = {"changes": [edit], "quilt": "0000000000000000"}
+    refuses(s, "change-undo", other, 409, "other-quilt", "another quilt")
+    assert "at most two points" in lemma.read_text()
+    from loom.machine import quilt_id
+
+    said = succeeds(s, "change-undo", {"changes": [edit], "quilt": quilt_id(q)})
     assert said["done"] == [edit] and said["refused"] == [] and said["result"].startswith("undid the keep of 1 ")
     assert lemma.read_bytes() == before
     # undone, it is open again and waits to be kept, so it has no Keep left to undo

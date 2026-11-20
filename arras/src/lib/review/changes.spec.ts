@@ -4,9 +4,11 @@ import type { Manifest, PendingChange } from '$lib/manifest/types';
 const calls: [string, Record<string, unknown>][] = [];
 let answer: Record<string, unknown> = { ok: true, result: 'done' };
 let quilt = 'q-one';
+const watchers: ((caps: { quilt?: string } | null) => void)[] = [];
 vi.mock('$lib/write', () => ({
 	can: async () => true,
 	capabilities: async () => ({ write_api: 1, capabilities: [], quilt }),
+	onCapabilities: (watch: (caps: { quilt?: string } | null) => void) => watchers.push(watch),
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
 		return answer;
@@ -160,7 +162,7 @@ describe('Keep and Discard', () => {
 		expect(history.done[0].label).toBe('keep');
 		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
 		expect(await undo()).toBe('');
-		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'] }]);
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'], quilt: 'q-one' }]);
 		expect(acted.map['e-1']).toBeUndefined();
 		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
 		expect(await redo()).toBe('');
@@ -207,9 +209,27 @@ describe('Keep and Discard', () => {
 		await vi.waitFor(() => expect(h.history.done.map((s) => s.label)).toEqual(['keep']));
 		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
 		expect(await h.undo()).toBe('');
-		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'] }]);
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'], quilt: 'q-one' }]);
 		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [] });
 		vi.unstubAllGlobals();
+	});
+
+	it('lets the Keep steps go when the stream comes back from another quilt, and the server refuses one sent anyway', async () => {
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		expect(history.done.map((s) => s.label)).toEqual(['keep']);
+		// a renamed copy served on the port, no reload: the probe after the reconnect names it
+		watchers[0]({ quilt: 'q-copy' });
+		expect(history.done).toEqual([]);
+		// back to the quilt it was made in: the step is offered again, from where the tab kept it
+		watchers[0]({ quilt: 'q-one' });
+		// and a step that does reach another quilt's server is refused there, for good
+		history.done = [];
+		await keepChanges({ changes: ['e-1'] });
+		answer = { ok: false, error: { code: 'other-quilt', message: 'that Keep was made in another quilt, so nothing was undone' } };
+		expect(await undo()).toBe('that Keep was made in another quilt, so nothing was undone');
+		expect(history.done).toHaveLength(0);
 	});
 
 	it('lets a step go whose suggestion the quilt does not have, saying so without an id', async () => {

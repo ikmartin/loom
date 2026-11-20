@@ -66,7 +66,7 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _undo(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """`change-undo`: the person undoes the Keep of the suggested edits it names, each in one step (`pending.unkeep`); the author's act, refused to a declared agent."""
+    """`change-undo`: the person undoes the Keep of the suggested edits it names, each in one step (`pending.unkeep`); the author's act, refused to a declared agent, and refused whole (`other-quilt`) when it names a quilt other than this one."""
     from loom.cli._quilt import open_scan
     from loom.pending import PendingRefused, unkeep
     from loom.writes import WriteRefused
@@ -75,6 +75,13 @@ def _undo(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     given = body.get("changes")
     if not (isinstance(given, list) and given and all(isinstance(i, str) for i in given)):
         raise ApiError("missing-field", "changes is the list of the kept suggested edits' ids")
+    # a tab may have followed the port to another quilt: an undo made in one is never done in another
+    named = body.get("quilt")
+    if named is not None:
+        from loom.machine import quilt_id
+
+        if named != quilt_id(root):
+            raise ApiError("other-quilt", "that Keep was made in another quilt, so nothing was undone", status=409)
     versions: list[str] = []
     try:
         done, refused = unkeep(open_scan(str(root)), who, list(given), writer, versions)

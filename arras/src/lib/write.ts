@@ -53,9 +53,18 @@ export function capabilities(): Promise<Capabilities | null> {
 	})().then((caps) => {
 		settled = caps;
 		judge(caps);
+		for (const watch of watchers) watch(caps);
 		return caps;
 	});
 	return probe;
+}
+
+/** Those told each time the publisher answers a probe: the first, and each after the stream comes back. */
+const watchers: ((caps: Capabilities | null) => void)[] = [];
+
+/** Be told each time the publisher answers `GET /_api`, the first answer and every one after a reconnect, which may come from another quilt served on the same port. */
+export function onCapabilities(watch: (caps: Capabilities | null) => void): void {
+	watchers.push(watch);
 }
 
 /** What the probe answered, once it has; `undefined` until then. Kept so a component mounted after the answer is known does not have to blink while it asks again. */

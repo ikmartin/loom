@@ -1098,9 +1098,11 @@ class ServeSession:
         offer_jobs(self.quilt.root, self.jobs)
         self.httpd = ThreadingHTTPServer(("127.0.0.1", self.port), handler)
         self.port = self.httpd.server_address[1]
+        from loom.machine import quilt_id
+
         handler.token = write_serve_json(self.quilt.root, self.port)  # type: ignore[attr-defined]
         # which quilt this is, for a viewer that keeps something per quilt; a digest of where it lies, not the place
-        handler.quilt_id = hashlib.sha256(str(self.quilt.root.resolve()).encode()).hexdigest()[:16]  # type: ignore[attr-defined]
+        handler.quilt_id = quilt_id(self.quilt.root)  # type: ignore[attr-defined]
         shown = self.shown
         frames = type(
             "Frames",

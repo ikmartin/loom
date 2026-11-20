@@ -41,6 +41,11 @@ def unpacked() -> Path:
     return p
 
 
+def quilt_id(root: Path) -> str:
+    """Which quilt this is on this machine, as the server names it to a viewer (`GET /_api`'s `quilt`): a digest of where it lies, never the place, so a folder copy is another quilt."""
+    return hashlib.sha256(str(root.resolve()).encode()).hexdigest()[:16]
+
+
 def token_file(root: Path) -> Path:
     """Where the write token of the server on the quilt at `root` is kept: `tokens/<key>.json` in `data_dir`, keyed by the quilt's resolved path."""
     key = hashlib.sha256(str(Path(root).resolve()).encode("utf-8")).hexdigest()[:24]
