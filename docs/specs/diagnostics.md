@@ -105,7 +105,7 @@ Review:
 
 References and digests:
 
-- `loom:unmatched-postnote` (warning, internal): a `\cite[postnote]` that matched no digest node, when a digest for the citekey exists; a digest node's own locator title is exempt (DR-66).
+- `loom:unmatched-postnote` (warning, internal): a `\cite[postnote]` that matched no digest node, when a digest for the citekey exists; a digest node's own locator title is exempt (DR-66), and so is a postnote that names a page alone. The citation's element carries `data-unmatched` ([dialect.md §2.8](dialect.md#28-references-and-citations)), which is where a person meets it.
 - `loom:cites-proposed-node` (warning, model): a citation, `\ref` or `\uses` names a proposal from outside its own file, which makes no edge until the result is verified (`digests.md` §5).
 - `loom:undigested-citekey` (info, internal): a cited key with no digest; the ingest trigger.
 - `loom:postnote-from-another-version` (info, internal): a `\cite[postnote]{key}` that `key`'s own digest does not answer, answered by the digest of another version of the work (an entry filed as another document of it, `loom-copy-of`); the edge goes to that version's node. A key counts as digested for `loom:undigested-citekey` when a version of it is.

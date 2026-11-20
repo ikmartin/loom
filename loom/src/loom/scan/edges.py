@@ -66,6 +66,8 @@ class EdgeResult:
     refs_in: dict[str, list[str]] = field(default_factory=dict)  # key -> labels referenced by \ref family
     uses_in: dict[str, list[str]] = field(default_factory=dict)  # key -> labels listed in \uses
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    #: `(citekey, postnote)` of each citation whose postnote names a result its work's digest does not hold, the ones `loom:unmatched-postnote` reports; the publisher marks each on the citation it draws
+    unmatched: set[tuple[str, str]] = field(default_factory=set)
 
 
 def _kind_of(kind: str) -> str:

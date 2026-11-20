@@ -122,6 +122,47 @@ def test_postnote_match_edge_unmatched_and_no_postnote(tmp_path: Path) -> None:
     )  # \cite{Calloway14} without a postnote is neither an edge nor a diagnostic
 
 
+def test_a_citation_of_a_result_its_digest_lacks_is_marked_where_it_is_drawn_and_no_other(tmp_path: Path) -> None:
+    """The citation `loom:unmatched-postnote` reports carries `data-unmatched`, the result as the person wrote it; one that resolves, one of a work with no digest, a bare one and one naming a page alone carry none, and the page alone raises nothing. A quilt that silences the code is shown no mark."""
+    from loom.render.fragments import FragmentRenderer, RenderPlan
+    from loom.render.fromhtml import DocumentHtml, Page
+    from tests.unit._quilts import demo as plain
+
+    q = plain(tmp_path)
+    node = q / "drafting" / "nodes" / "dm-0002.tex"
+    said = "See \\cite[Lemma~99]{Calloway14}, \\cite[Prop.~3.2]{Calloway14}, \\cite[p.~4]{Calloway14}, \\cite[Theorem 1]{Man12} and \\cite{Calloway14}."
+    node.write_text(node.read_text().replace("\\end{lemma}", said + "\n\\end{lemma}", 1))
+    line = node.read_text().split("\n").index(said) + 1
+
+    def cite(key: str, label: str) -> str:
+        return f'<span class="cite" data-made="">[<span class="cite-label" data-citekey="{key}" data-made="">{label}</span>]</span>'
+
+    # the paragraph as TeX4ht prints it, normalised
+    page = f'<p data-at="nodes/dm-0002.tex:{line}">See {cite("Calloway14", "1, Lemma 99")}, {cite("Calloway14", "1, Prop. 3.2")}, {cite("Calloway14", "1, p. 4")}, {cite("Man12", "2, Theorem 1")} and {cite("Calloway14", "1")}.</p>'
+
+    def drawn() -> dict[str, dict[str, str]]:
+        result = scan(load_quilt(q))
+        renderer = FragmentRenderer(RenderPlan(result=result, numbers={}, cache=tmp_path / "c", svg_out=tmp_path / "s"))
+        html = DocumentHtml(
+            renderer, renderer.owner("drafting/main.tex"), Page(page, {}, "", normalised=True)
+        ).master_html()
+        spans = [dict(re.findall(r'([a-z-]+)="([^"]*)"', s)) for s in re.findall(r'<span class="cite"[^>]*>', html)]
+        return {s.get("data-postnote", s["data-tex"]): s for s in spans}
+
+    spans = drawn()
+    assert spans["Lemma~99"]["data-unmatched"] == "Lemma 99"
+    assert spans["Prop.~3.2"]["data-target"] == "Calloway14-prop-3.2"
+    assert [p for p, s in spans.items() if "data-unmatched" in s] == ["Lemma~99"]
+    assert set(spans) == {"Lemma~99", "Prop.~3.2", "p.~4", "Theorem 1", "\\cite{Calloway14}"}
+    unmatched = [
+        d["message"] for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] == "loom:unmatched-postnote"
+    ]
+    assert len(unmatched) == 1 and "Lemma~99" in unmatched[0]
+    config = q / "config.toml"
+    config.write_text(config.read_text().replace("disable = []", 'disable = ["loom:unmatched-postnote"]'))
+    assert [p for p, s in drawn().items() if "data-unmatched" in s] == []
+
+
 def test_version_mismatch_and_missing_package_and_undigested(tmp_path: Path) -> None:
     q = demo(tmp_path)
     # A digest whose source is a preprint, against a bibliography that now cites a later one: the demo's own cited work

@@ -201,6 +201,12 @@ class FragmentRenderer:
                 return e.to
         return None
 
+    def _cite_unmatched(self, citekey: str, postnote: str) -> bool:
+        """Whether the citation names a result its work's digest does not hold, as `loom:unmatched-postnote` reports it; never where the quilt silences that code."""
+        return (citekey, postnote) in self.result.edges.unmatched and (
+            "loom:unmatched-postnote" not in self.result.quilt.config.lint_disable
+        )
+
     def _pair_attrs(self, node: NodeRec) -> list[str]:
         """`data-pair` and `data-hash`, what compare pairs a node by; none for a node whose key names no id.
 

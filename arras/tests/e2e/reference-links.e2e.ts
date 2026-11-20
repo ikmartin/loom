@@ -98,6 +98,63 @@ test.describe('a citation', () => {
 	});
 });
 
+/** The colour the viewer gives a problem, as the page computes it. */
+function problemColour(page: Page): Promise<string> {
+	return page.evaluate(() => {
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--state-incomplete)';
+		document.body.appendChild(probe);
+		const colour = getComputedStyle(probe).color;
+		probe.remove();
+		return colour;
+	});
+}
+
+test.describe("a citation of a result loom's reading of the paper lacks", () => {
+	test('keeps its words, is underlined as a problem, says so on hover, and opens the paper on a click', async ({ page }) => {
+		await filed(page);
+		await page.goto('/node/sy-0100');
+		// the publisher marks `\cite[Lemma 9]{Kre99}` alone: the citation beside it, of a result the digest holds, is not marked
+		const cite = pane(page, 0).locator('span.cite[data-unmatched]');
+		await expect(cite).toHaveCount(1);
+		await expect(cite).toHaveAttribute('data-postnote', 'Lemma 9');
+		await expect(cite).toHaveText('[2, Lemma 9]');
+		await expect(pane(page, 0).locator(`span.cite[data-target="${RESULT}"]`).first()).not.toHaveAttribute('data-unmatched');
+		const problem = await problemColour(page);
+		const line = await cite.evaluate((c) => [getComputedStyle(c).borderBottomStyle, getComputedStyle(c).borderBottomColor]);
+		expect(line).toEqual(['dotted', problem]);
+		await cite.locator('a').hover();
+		const said = page.getByTestId('cite-unmatched');
+		await expect(said).toHaveText("loom's reading of this paper has no Lemma 9");
+		expect(await said.evaluate((p) => getComputedStyle(p).color)).toBe(problem);
+		// its own line, not the work's card: a postnote naming no page names no place to show
+		await expect(page.getByTestId('link-preview').getByTestId('pdf-doc')).toHaveCount(0);
+		await page.mouse.move(0, 0);
+		await expect(said).toHaveCount(0);
+		await expect(cite.locator('a')).toHaveAttribute('href', '/library/Kre99');
+		await cite.locator('a').click();
+		await onPage(page, 1, 1);
+	});
+
+	test('says so above the card where one also shows', async ({ page }) => {
+		await filed(page);
+		// the same citation naming a page as well, whose card shows that page
+		await page.route('**/fragments/nodes/sy-0100.html', async (route) => {
+			const res = await route.fetch();
+			const body = (await res.text()).replace('data-postnote="Lemma 9"', 'data-postnote="Lemma 9, p.~3"').replace('data-unmatched="Lemma 9"', 'data-unmatched="Lemma 9, p. 3"');
+			await route.fulfill({ response: res, body });
+		});
+		await page.goto('/node/sy-0100');
+		const cite = pane(page, 0).locator('span.cite[data-unmatched] a');
+		await cite.hover();
+		const card = page.getByTestId('link-preview');
+		await expect(card.getByTestId('cite-unmatched')).toHaveText("loom's reading of this paper has no Lemma 9, p. 3");
+		await expect(card.getByTestId('pdf-doc')).toBeVisible();
+		const [said, doc] = await Promise.all([card.getByTestId('cite-unmatched').boundingBox(), card.getByTestId('pdf-doc').boundingBox()]);
+		expect(said!.y + said!.height).toBeLessThanOrEqual(doc!.y);
+	});
+});
+
 test.describe('a link to a result', () => {
 	test('in a `\\ref` goes where its citation goes', async ({ page }) => {
 		await filed(page);
