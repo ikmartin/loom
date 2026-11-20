@@ -82,6 +82,8 @@ export function pdfFileName(masters: readonly { path: string }[], path: string):
  * Callers keep the key itself as the name's title, so nothing is hidden by the shortening.
  */
 export function keyName(m: Named, key: string): string {
+	// '' names no block (a note on none), and must never match a reference with no identifier, whose `work` is '' too
+	if (!key) return '';
 	if (m.masters.some((x) => x.path === key)) return documentLabel(m.masters, key);
 	if (m.nodes[key]) return nodeName(m, key);
 	const region = regionName(m, key);
@@ -148,7 +150,7 @@ export function linkName(m: Linked, href: string): string {
 	const key = cut < 0 ? body : body.slice(0, cut);
 	const place = cut < 0 ? '' : body.slice(cut + 1);
 	const note = m.annotations[key];
-	if (note) return `${note.in_reply_to ? 'reply' : ((note.type && m.annotation_types?.find((t) => t.id === note.type)?.name) || 'annotation')} on ${keyName(m, note.target.key)}`;
+	if (note) return `${note.in_reply_to ? 'reply' : ((note.type && m.annotation_types?.find((t) => t.id === note.type)?.name) || 'annotation')} ${note.target.key ? `on ${keyName(m, note.target.key)}` : 'on no block'}`;
 	const session = (m.sessions ?? []).find((s) => s.id === key);
 	if (session) return session.title;
 	if (key === 'state' && m.research_state) return 'the research state';

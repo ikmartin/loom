@@ -11,6 +11,7 @@
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
 	import { placeUrl, workUrl } from '$lib/nav';
+	import { noteUrl } from '$lib/review/annotating.svelte';
 	import { route } from '$lib/paths';
 	import ContributionReview from '$lib/review/ContributionReview.svelte';
 	import Empty from '$lib/review/Empty.svelte';
@@ -61,7 +62,9 @@
 
 {#snippet editHead(e: SuggestedEdit)}
 	{@const where = documentOf(m, e)}
-	<a class="name" href={placeUrl(m, e.target.key)} data-testid="suggestion-open">{name(e)}</a>
+	{@const placed = changeById(m, e.id)}
+	<!-- an edit on no block links to none, never to the block that took the key it was suggested on -->
+	<a class="name" href={placed && !placed.key ? undefined : placeUrl(m, e.target.key)} data-testid="suggestion-open">{name(e)}</a>
 	{#if where?.words}<span class="of" data-testid="suggestion-document">{where.words}</span>{/if}
 	<span class="of" data-testid="suggestion-writer">· {writerOf(m, e)}</span>
 {/snippet}
@@ -74,7 +77,7 @@
 		<span class="tag">a suggested edit</span>
 		{@render editHead(e)}
 	</div>
-	{#if answers}<p class="why" data-testid="edit-answers">It answers <a href={placeUrl(m, answers.target.key, answers.id, answers.in)}>{linkName(m, `quilt:${answers.id}`)}</a>.</p>{/if}
+	{#if answers}<p class="why" data-testid="edit-answers">It answers <a href={noteUrl(m, answers)}>{linkName(m, `quilt:${answers.id}`)}</a>.</p>{/if}
 	{#if e.quote}<q class="quoted" data-testid="suggestion-quote"><TexProse text={e.quote} /></q>{/if}
 	{#if e.comment_html}<Prose html={e.comment_html} />{/if}
 	{#if change?.diff}<DiffView path={change.diff} />{/if}

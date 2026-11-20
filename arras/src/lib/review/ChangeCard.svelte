@@ -7,6 +7,7 @@
 	import { store } from '$lib/manifest/client.svelte';
 	import type { PendingChange } from '$lib/manifest/types';
 	import { placeUrl } from '$lib/nav';
+	import { noteUrl } from './annotating.svelte';
 	import { keyName, linkName } from '$lib/workspace/names';
 	import { can } from '$lib/write';
 	import { actSays, kindName, ready, refusal, whoMade } from './changes';
@@ -80,7 +81,7 @@
 		{:else if c.new}<span class="ins"><TexProse text={c.new} /></span>{/if}
 	</div>
 	{#if c.comment_html}<div class="ct"><Prose html={c.comment_html} /></div>{/if}
-	{#if answers && m}<div class="ct none" data-testid="change-card-answers">It answers <a href={placeUrl(m, answers.target.key, answers.id, answers.in)} onclick={(e) => e.stopPropagation()}>{linkName(m, `quilt:${answers.id}`)}</a>.</div>{/if}
+	{#if answers && m}<div class="ct none" data-testid="change-card-answers">It answers <a href={noteUrl(m, answers)} onclick={(e) => e.stopPropagation()}>{linkName(m, `quilt:${answers.id}`)}</a>.</div>{/if}
 	{#if why}<div class="ct none" data-testid="change-card-why">{why}</div>{/if}
 	<div class="acts">
 		<button type="button" class="btn small primary" disabled={!ready(c) || !allowed.keep} title={says.keep} data-testid="card-keep" onclick={(e) => void act('keep', e)}><Icon name="check" size={12} />Keep</button>

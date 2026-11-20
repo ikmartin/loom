@@ -56,13 +56,6 @@
 	// what a person is shown of the node's diagnostics, the problems in its LaTeX; `unreachable`, "in no document" in the system's words, is loom's model's, and an absence here (C2)
 	const diagnostics = $derived(forPerson(m.diagnostics).filter((d) => d.keys.includes(key)));
 	const detached = $derived(onAny(m, [key, ...(node?.proofs ?? [])]).filter((a) => a.detached));
-	// a note on no block now, written on this block's key or one of its proofs: listed here with where it was written, never drawn on the block that took that key (the words are the author's to judge)
-	const unplaced = $derived(
-		(m.unplaced ?? [])
-			.filter((u) => [key, ...(node?.proofs ?? [])].includes(u.key))
-			.map((u) => ({ a: m.annotations?.[u.id], key: u.key }))
-			.filter((u): u is { a: NonNullable<typeof u.a>; key: string } => !!u.a)
-	);
 	const threads = $derived(Object.values(m.threads).filter((t) => t.targets.includes(key) && !t.discarded));
 	const closure = $derived(stmt?.closure.filter((k) => k !== key) ?? []);
 	let restsOpen = $state(false);
@@ -181,14 +174,11 @@
 			</RailList>
 		{/if}
 
-		{#if detached.length || unplaced.length}
+		{#if detached.length}
 			<RailList label="detached annotations">
 				<ul class="plain" data-testid="detached-list">
 					{#each detached as a (a.id)}
 						<li class="ann-row"><span class="ann-dot" style={lookVars(a.look)} role="img" aria-label={typeName(m, a)} title={typeName(m, a)}></span><a href="quilt:{a.id}" title={a.id}>{preview(a)}</a></li>
-					{/each}
-					{#each unplaced as u (u.a.id)}
-						<li class="ann-row" data-testid="unplaced-row"><span class="ann-dot" style={lookVars(u.a.look)} role="img" aria-label={typeName(m, u.a)} title={typeName(m, u.a)}></span><a href="quilt:{u.a.id}" title={u.a.id}>{preview(u.a)}</a> · on no block now, written on <code>{u.key}</code></li>
 					{/each}
 				</ul>
 			</RailList>
