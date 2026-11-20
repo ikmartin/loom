@@ -801,6 +801,9 @@ a.heading-link:focus {
 	border-bottom: 1px dotted var(--state-incomplete);
 }
 .fragment a.ref-dangling { color: var(--state-incomplete); cursor: not-allowed; }
+/* A citation of a result loom's reading of the paper lacks (`data-unmatched`): the person's words kept, marked as a problem is, and said on hover (`LinkPreview`). */
+.fragment span.cite[data-unmatched] { border-bottom: 1px dotted var(--state-incomplete); }
+.fragment span.cite[data-unmatched] a:hover { text-decoration: none; }
 
 .fragment div.include {
 	margin: var(--gap-tight) 0;

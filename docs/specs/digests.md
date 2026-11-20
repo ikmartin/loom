@@ -79,7 +79,7 @@ Both sides are normalised first, by the word lists in `loom/src/loom/scan/postno
 
 1. Citations inside a work's own digest, whose titles all cite it, are never matched and raise nothing.
 2. A postnote the work's digest does not answer is tried against its other versions' digests (§10); `loom:postnote-from-another-version` (info) names the one that answered.
-3. No match while a digest exists is `loom:unmatched-postnote` (warning). A citekey cited with a postnote and no digest, its own or a version's, is `loom:undigested-citekey` (info).
+3. No match while a digest exists is `loom:unmatched-postnote` (warning), and the citation's element says so (`data-unmatched`, [dialect.md §2.8](dialect.md#28-references-and-citations)). A postnote that names a page alone (`p.~12`) names no result and raises nothing. A citekey cited with a postnote and no digest, its own or a version's, is `loom:undigested-citekey` (info).
 4. Proposals are matched, but a match makes no edge: `loom:cites-proposed-node` (warning) says the result is unverified, and verifying it makes the citation a dependency. The same holds for a `\ref` or `\uses` naming a proposal from outside its own file.
 
 ## 6. Which version the numbers belong to

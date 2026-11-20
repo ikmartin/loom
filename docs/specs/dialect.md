@@ -101,10 +101,11 @@ The label is the proof's optional argument, as `amsthm` prints it: `\begin{proof
 <a class="ref" data-target="rl-0004" href="#rl-0004">Lemma 3.4</a>
 <a class="ref ref-eq" data-target="rl-0004#eq:main" href="#rl-0004-eq-main">(3.2)</a>
 <span class="cite" data-citekey="Man12" data-postnote="Theorem 4.1" data-target="Man12-thm-4.1">[Man12, Theorem 4.1]</span>
+<span class="cite" data-citekey="Man12" data-postnote="Lemma~9" data-unmatched="Lemma 9">[Man12, Lemma 9]</span>
 <a class="ref ref-dangling" data-target="rl-0099">??</a>
 ```
 
-`href` values are hints for in-page anchors; the viewer resolves `data-target` through the manifest. `data-target` on `cite` is present only when a postnote resolved. A `cite`'s text is the label the compiled document prints for the key (`[GP99]` for `graber-pandharipande_LocalizationVirtualClasses1999` under an alphabetic style), or the citekey when no compile records one; `data-citekey` is always the key. A reference or citation also carries `data-tex`, the command as the source writes it, and `data-at`, that command's offset in its file, by which a quote copies the command, once however many elements it is drawn as.
+`href` values are hints for in-page anchors; the viewer resolves `data-target` through the manifest. `data-target` on `cite` is present only when a postnote resolved. `data-unmatched` on `cite` is present only when its postnote names a result the work's digest does not hold, the citation `loom:unmatched-postnote` reports, and never where the quilt silences that code: its value is the postnote, a tie read as a no-break space. A viewer keeps the citation's text as it is, underlines it dotted in the colour it gives a problem, and on hover says in that colour that loom's reading of the paper has no such result, naming it by this value; a click opens the work as a citation with no result behind it does. A `cite`'s text is the label the compiled document prints for the key (`[GP99]` for `graber-pandharipande_LocalizationVirtualClasses1999` under an alphabetic style), or the citekey when no compile records one; `data-citekey` is always the key. A reference or citation also carries `data-tex`, the command as the source writes it, and `data-at`, that command's offset in its file, by which a quote copies the command, once however many elements it is drawn as.
 
 ### 2.9 Marks
 

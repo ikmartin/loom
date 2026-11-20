@@ -921,8 +921,10 @@ class Records:
     def _gone_documents(self, result: ScanResult, states: dict[str, KeyState]) -> list[Diagnostic]:
         """One `loom:document-gone` per vanished document: the rows stale with `document-gone` and the live annotations whose `in` or whole-document target leads nowhere.
 
-        A document is named by the last path its trail reached, which is where `loom mv` records it went.
+        A document is named by the last path its trail reached, which is where `loom mv` records it went. One that annotations are on is class `latex`, so a person is shown it among their problems, the one place it is said to them; one only acceptance rows name is `model`. A warning either way, in no exit.
         """
+        from loom.scan.diagnostics import LATEX, MODEL
+
         rows: dict[str, list[str]] = {}
         notes: dict[str, set[str]] = {}
         for key, ks in states.items():
@@ -942,23 +944,22 @@ class Records:
         out: list[Diagnostic] = []
         for path in sorted(set(rows) | set(notes)):
             n_rows, n_notes = len(rows.get(path, [])), len(notes.get(path, set()))
-            named_by = " and ".join(
-                part
-                for part in (
-                    f"{n_rows} acceptance row{'s' if n_rows != 1 else ''}" if n_rows else "",
-                    f"{n_notes} annotation{'s' if n_notes != 1 else ''}" if n_notes else "",
-                )
-                if part
-            )
+            accepted = f"{n_rows} acceptance row{'s' if n_rows != 1 else ''} name{'s' if n_rows == 1 else ''} it"
+            if n_notes:
+                message = f"{n_notes} annotation{'s are' if n_notes != 1 else ' is'} on {path}, which is gone; the history does not say where it went"
+                message += f", and {accepted} too" if n_rows else ""
+            else:
+                message = f"{path} is gone and the history does not say where it went; {accepted}"
             out.append(
                 Diagnostic(
                     "warning",
                     "loom:document-gone",
-                    f"{path} is gone and the history does not say where it went; {named_by} name{'s' if n_rows + n_notes == 1 else ''} it",
+                    message,
                     [],
                     sorted(rows.get(path, [])),
                     [Fix("record where it went, NEW being its path now", f"loom mv {path} NEW")],
                     subject="record",
+                    class_=LATEX if n_notes else MODEL,
                 )
             )
         return out

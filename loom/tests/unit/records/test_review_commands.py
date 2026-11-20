@@ -1417,8 +1417,8 @@ def test_a_document_deleted_by_hand_is_gone_not_changed(tmp_path: Path) -> None:
         {
             "severity": "warning",
             "code": "loom:document-gone",
-            "class": "model",
-            "message": "drafting/main.tex is gone and the history does not say where it went; 2 acceptance rows and 1 annotation name it",
+            "class": "latex",
+            "message": "1 annotation is on drafting/main.tex, which is gone; the history does not say where it went, and 2 acceptance rows name it too",
             "locations": [],
             "keys": ["dm-0001", "dm-0002"],
             "fixes": [
@@ -1434,6 +1434,33 @@ def test_a_document_deleted_by_hand_is_gone_not_changed(tmp_path: Path) -> None:
         in (d / ".loom" / "records" / "state.toml").read_text().split("[[accept]]")[-1]
     )
     assert status_json(d)["keys"]["dm-0001"]["acceptance"]["fresh"] is True
+
+
+def test_a_document_gone_with_annotations_on_it_is_the_persons_problem_and_one_without_is_not(tmp_path: Path) -> None:
+    """A gone document that annotations are on is published as the person's (class latex), saying how many, so Problems shows it, and counts in no exit; one only acceptance rows name stays loom's model."""
+    d = demo(tmp_path)
+    ok("annotate", "dm-0002", "Read here.", "--in", "drafting/outline.tex", *AS, cwd=d)
+    ok("annotate", "dm-0006", "And here.", "--in", "drafting/outline.tex", *AS, cwd=d)
+    (d / "drafting" / "outline.tex").unlink()
+    ok("lint", cwd=d)  # a warning: the exit is 0
+    ok("build", "--no-compile", cwd=d)
+    m = json.loads((d / ".loom/cache/site/manifest.json").read_text())
+    gone = [(x["class"], x["severity"], x["message"]) for x in m["diagnostics"] if x["code"] == "loom:document-gone"]
+    assert gone == [
+        (
+            "latex",
+            "warning",
+            "2 annotations are on drafting/outline.tex, which is gone; the history does not say where it went",
+        )
+    ]
+    (tmp_path / "b").mkdir()
+    d = demo(tmp_path / "b")
+    ok("accept", "dm-0001", "--force", *AS, cwd=d)
+    (d / "drafting" / "main.tex").unlink()
+    gone = [x for x in json_of("lint", "--json", cwd=d)["diagnostics"] if x["code"] == "loom:document-gone"]
+    assert [(x["class"], x["message"]) for x in gone] == [
+        ("model", "drafting/main.tex is gone and the history does not say where it went; 1 acceptance row names it")
+    ]
 
 
 def test_an_annotation_in_a_linearized_document_is_drawn_in_what_it_became(tmp_path: Path) -> None:

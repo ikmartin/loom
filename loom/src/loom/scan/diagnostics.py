@@ -2,7 +2,7 @@
 
 Reserved codes have no namespace and cannot be silenced; loom codes are namespaced and can be, except those marked fixed. Every code emitted anywhere must appear here with a class; the coverage and registry tests check both.
 
-A class says what kind of problem a code reports: `LATEX`, a problem in a document's LaTeX that an author would recognise, a failed compile among them; `MODEL`, loom's model of the quilt, the hygiene of keys, links, copies and records an agent keeps; `INTERNAL`, loom's own difficulty or the integrity of its records. The viewer shows a person `LATEX` alone; `loom lint` shows every class. An entry is its code's plainest instance: `VARIES` names the codes whose emitter grades each instance, and `scan.owners.stamped` makes whatever a digest holds `INTERNAL`.
+A class says what kind of problem a code reports: `LATEX`, a problem in a document's LaTeX that an author would recognise, a failed compile among them, and what else the person is to be shown with no other place to say it; `MODEL`, loom's model of the quilt, the hygiene of keys, links, copies and records an agent keeps; `INTERNAL`, loom's own difficulty or the integrity of its records. The viewer shows a person `LATEX` alone; `loom lint` shows every class. An entry is its code's plainest instance: `VARIES` names the codes whose emitter grades each instance, and `scan.owners.stamped` makes whatever a digest holds `INTERNAL`.
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ LOOM: dict[str, Code] = {
     "loom:no-readable-copy": Code("warning", INTERNAL),
 }
 
-#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case.
+#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case; `loom:document-gone` of class `LATEX` where annotations are on the document, which the person is shown nowhere else.
 VARIES = frozenset(
     {
         "duplicate-id",
@@ -120,6 +120,7 @@ VARIES = frozenset(
         "loom:compile-errors",
         "loom:no-readable-copy",
         "loom:annotation-types",
+        "loom:document-gone",
     }
 )
 

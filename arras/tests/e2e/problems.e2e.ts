@@ -68,6 +68,33 @@ test("a person is shown the problems in their own LaTeX alone, and the manifest 
 	await expect(page.getByTestId('section-count-problems')).toHaveText(String(yours.length + 1));
 });
 
+/** A document gone with annotations on it, as the publisher says it: the person's to be shown, a warning, with the command an agent runs. */
+const goneWithNotes = {
+	severity: 'warning',
+	code: 'loom:document-gone',
+	class: 'latex',
+	message: '3 annotations are on drafting/old.tex, which is gone; the history does not say where it went',
+	locations: [],
+	keys: [],
+	owner: 'person',
+	subject: 'record',
+	fixes: [{ label: 'record where it went, NEW being its path now', command: 'loom mv drafting/old.tex NEW' }]
+};
+/** A document gone that only acceptance rows name: loom's model, an agent's. */
+const goneRowsOnly = { ...goneWithNotes, class: 'model', message: 'drafting/older.tex is gone and the history does not say where it went; 2 acceptance rows name it', keys: ['sy-0002', 'sy-0003'], fixes: [{ label: 'record where it went, NEW being its path now', command: 'loom mv drafting/older.tex NEW' }] };
+
+test('a document gone with annotations on it is one row saying how many, and one with none is not shown', async ({ page }) => {
+	await serve(page, (m) => void m.diagnostics.push(goneWithNotes as never, goneRowsOnly as never));
+	await page.goto('/review/problems');
+	const group = page.locator('[data-testid="problems-yours"] [data-testid="problem-group"][data-codes="loom:document-gone"]');
+	await expect(group.locator('.title')).toHaveText('A document is gone');
+	await expect(group.getByTestId('problem')).toHaveCount(1);
+	await expect(group.getByTestId('problem')).toContainText('3 annotations are on drafting/old.tex, which is gone');
+	await expect(page.locator('main')).not.toContainText('drafting/older.tex');
+	await expect(page.locator('main')).not.toContainText('loom mv');
+	await expect(page.getByTestId('problems-yours-count')).toHaveText(String(yours.length + 1));
+});
+
 test('a problem is titled by what is wrong, with its code beside it', async ({ page }) => {
 	await page.goto('/review/problems');
 	const mine = page.getByTestId('problems-yours');
