@@ -93,6 +93,9 @@ const TITLES: Record<string, string> = {
 	'plain-id-in-agent-document': "A plain id in an agent's copy",
 	'agent-permissions-stale': "Claude Code's permissions are out of date",
 	'home-missing': 'The home page is missing',
+	'link-target-missing': 'A link to something that is not there',
+	'link-place-missing': 'A link to a heading or place that is not there',
+	'link-work-unknown': 'A link to a work the library does not hold',
 	'document-gone': 'A document is gone',
 	'compile-failed': 'A document did not compile',
 	'compile-errors': 'A document compiled with errors'

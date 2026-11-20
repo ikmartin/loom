@@ -649,8 +649,11 @@ def _build(
     transcripts = _write_transcripts(result.quilt.root, files)
     from loom.files import BODIES, attach_files
     from loom.render.pending import DIFFS
+    from loom.scan.lint import markdown_links
 
-    attach_files(result, manifest, files)
+    # a Markdown file's links are judged on the page just drawn of it
+    drawn = attach_files(result, manifest, files)
+    manifest["diagnostics"] += [d.to_dict() for d in markdown_links(result, drawn)]
     from loom.render.threads import last_active
 
     for s in manifest.get("sessions", []):

@@ -46,8 +46,9 @@ def _sorted(diags: list[Diagnostic]) -> list[Diagnostic]:
 
 
 def all_diagnostics(result: ScanResult) -> list[Diagnostic]:
-    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history and the documents' last compiles, in the scanner's order, each with whose it is to fix (`scan.owners`), as the manifest has them."""
+    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history, the documents' last compiles and the Markdown files' links, in the scanner's order, each with whose it is to fix (`scan.owners`), as the manifest has them."""
     from loom.render.compiles import compile_problems
+    from loom.scan.lint import markdown_links
     from loom.scan.owners import stamped
 
     records = Records(result.quilt.root, result.quilt.history_dir)
@@ -55,7 +56,7 @@ def all_diagnostics(result: ScanResult) -> list[Diagnostic]:
     seen = {(d.code, d.message) for d in result.lint}
     history = load_history(result.quilt.history_dir)
     walk = [d for d in verify(result, history) if (d.code, d.message) not in seen]
-    compiled = compile_problems(result)
+    compiled = compile_problems(result) + markdown_links(result)
     return _sorted(stamped(result, [_safe(result, history, d) for d in result.lint] + extra + walk + compiled))
 
 

@@ -180,3 +180,29 @@ def clean(raw: str, resolve: Callable[[str, str], str], words: Callable[[str], s
     cleaner.feed(raw)
     cleaner.close()
     return "".join(cleaner.out)
+
+
+class _Linked(_Cleaner):
+    """`_Cleaner` noting each `href` and `src` it keeps: its line within the piece, from 0, the value as written, and as written out."""
+
+    def __init__(self, resolve: Callable[[str, str], str]) -> None:
+        super().__init__(resolve, lambda value: value)
+        self.found: list[tuple[int, str, str, bool]] = []
+
+    def _attributes(self, tag: str, attrs: list[tuple[str, str | None]]) -> dict[str, str] | None:
+        kept = super()._attributes(tag, attrs)
+        written: dict[str, str | None] = {}
+        for name, value in attrs:
+            written.setdefault(name, value)  # the first of a repeated attribute is the one kept
+        for name in ("href", "src"):
+            if kept is not None and name in kept and tag != "iframe":
+                self.found.append((self.getpos()[0] - 1, written.get(name) or "", kept[name], name == "src"))
+        return kept
+
+
+def links(raw: str, resolve: Callable[[str, str], str]) -> list[tuple[int, str, str, bool]]:
+    """Each link and source `clean` keeps in `raw`, a frame's address aside: `(line, written, drawn, is_src)`, its line counted from 0 within `raw`; what `clean` refuses is no link on the page, so it is none here."""
+    linked = _Linked(resolve)
+    linked.feed(raw)
+    linked.close()
+    return linked.found

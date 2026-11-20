@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from loom.paths import COPIES
 from loom.refs.identity import declared
@@ -22,6 +23,9 @@ from loom.scan.model import Diagnostic, Fix, Location
 from loom.scan.nodes import Assembly, NodeRec
 from loom.scan.preamble import LOOM_PACKAGE, loom_sty_missing
 from loom.scan.scan import ScanResult
+
+if TYPE_CHECKING:
+    from loom.files import Drawn, Link
 
 COMMON_THEOREM_ENVS = {
     "theorem",
@@ -600,6 +604,111 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
         )
     )
     return diags
+
+
+#: An address with a scheme: another site's, an application's, or one of the two link forms.
+_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+
+
+def markdown_links(result: ScanResult, drawn: Drawn | None = None) -> list[Diagnostic]:
+    """`loom:link-target-missing`, `loom:link-place-missing` and `loom:link-work-unknown`: each link or source in a shown Markdown file that its page leaves reaching nothing, on the line that wrote it.
+
+    Parameters
+    ----------
+    result : ScanResult
+        The quilt as scanned.
+    drawn : Drawn, optional
+        The pages' links as a build drew them (`files.attach_files`); drawn here when not given.
+
+    Returns
+    -------
+    list of Diagnostic
+        One warning per link, `[lint] disable` applied.
+
+    Notes
+    -----
+    Read off the page's own drawing (`files.render_file_markdown`), so a link in code is none, and judged by the resolver every `quilt:` and `cited:` link answers to (`links.resolve`), so lint and the page agree on what a link reaches. Kept out of `lint`, which every command's scan runs, because it draws every Markdown file: `loom lint`, a build and an agent's first look add it. In the research state a link whose result is gone since the page was written through loom goes nowhere too, as its page says (`pages.published`).
+    """
+    from urllib.parse import unquote
+
+    from loom.files import drawn_links, headings_of
+    from loom.links import LinkError, resolve
+    from loom.records.annotations import load_records
+
+    drawn = drawn if drawn is not None else drawn_links(result)
+    root = result.quilt.root
+    records = load_records(root)[0] if any(drawn.links.values()) else []
+    state = result.quilt.config.research_state
+    recorded = _written_links(result) if state in drawn.links else {}
+    out: list[Diagnostic] = []
+    for rel, found in sorted(drawn.links.items()):
+        for link in found:
+            href = link.drawn
+            try:
+                if href.startswith(("quilt:", "cited:")):
+                    target = resolve(result, root, href, records)
+                    if rel == state and target.kind == "node" and target.key not in result.nodes:
+                        if recorded.get(unquote(href)):
+                            named = unquote(href[len("quilt:") :].split("#", 1)[0])
+                            raise LinkError(f"{href}: {named} was a result when the page was written, and is gone")
+                elif href.startswith("#"):
+                    place = unquote(href[1:])
+                    if place and place not in headings_of(root, rel, "markdown"):
+                        raise LinkError(f"{href}: {rel} has no heading {place}", "place")
+                elif href and not href.startswith(("/", "?")) and not _SCHEME.match(href):
+                    raise LinkError(f"{href}: {_unreached(root, rel, link, drawn.kinds)}")
+            except LinkError as exc:
+                why = str(exc).removeprefix(f"{href}: ")
+                if exc.part == "work" and href.startswith("cited:work:"):
+                    why += "; where a work states no identifier and was not filed from its PDF, its work: id is made from its authors, title and year, and correcting those changes it"
+                out.append(
+                    Diagnostic(
+                        "warning",
+                        "loom:link-work-unknown"
+                        if exc.part == "work"
+                        else "loom:link-place-missing"
+                        if exc.part == "place"
+                        else "loom:link-target-missing",
+                        f"a link goes nowhere: {why}",
+                        [Location(rel, link.line)],
+                        fixes=[Fix("link the work as it is named now", "loom link CITEKEY")]
+                        if exc.part == "work"
+                        else [],
+                    )
+                )
+    disabled = set(result.quilt.config.lint_disable)
+    return [d for d in out if not (d.code in disabled and can_disable(d.code))]
+
+
+def _unreached(root: Path, rel: str, link: Link, kinds: dict[str, str]) -> str:
+    """Why the page left a relative address of `rel` as written: what it names is missing, hidden, a folder, outside the quilt, a LaTeX file, or no image."""
+    import posixpath
+    from urllib.parse import unquote
+
+    path = unquote(link.drawn.split("#", 1)[0].split("?", 1)[0])
+    joined = posixpath.normpath(posixpath.join(posixpath.dirname(rel), path))
+    if joined == ".." or joined.startswith("../"):
+        return f"{path} leads out of the quilt"
+    if joined in kinds:
+        return (
+            f"{joined} is not an image" if link.src else f"{joined} is a LaTeX file, linked by its document or its keys"
+        )
+    if (root / joined).is_dir():
+        return f"{joined} is a folder, which the viewer does not open"
+    if (root / joined).exists():
+        return f"{joined} is hidden from the viewer"
+    return f"{joined} does not exist"
+
+
+def _written_links(result: ScanResult) -> dict[str, bool]:
+    """The research state's links that named a result when it was last written through loom, by their address decoded: what `pages.published` reads to say a result has gone since."""
+    from urllib.parse import unquote
+
+    from loom.pages import state_page, writes
+
+    done = writes(result.quilt.root, result.quilt.history_dir, state_page(result.quilt.config))
+    links = (done[-1].get("links") or {}) if done else {}
+    return {unquote(href): bool(entry.get("hash")) for href, entry in links.items()}
 
 
 def _holds_document(root: Path, entry: BibEntry) -> bool:

@@ -46,7 +46,7 @@ To ask for one, write a {type:suggestion} on the thing concerned with your reaso
 ## 4. Where to look
 
 - `loom status`, first: every key, its state, its open annotations. It is the to-do list.
-- `loom lint`: every diagnostic, each with its class. The author's Problems page lists only `latex`, the problems in a document's LaTeX, one that did not compile among them; `model`, loom's model of the quilt (ids, `\uses`, links, copies, records), and `internal`, loom's own, are yours to read.
+- `loom lint`: every diagnostic, each with its class. The author's Problems page lists only `latex`, the problems in a document's LaTeX, one that did not compile among them, and a link in a Markdown file that goes nowhere; `model`, loom's model of the quilt (ids, `\uses`, links, copies, records), and `internal`, loom's own, are yours to read.
 - `loom search QUERY --json`: ids by title, alias, tag or citekey. When the author names a result by number — "Theorem 3.4" — resolve it here before reading anything.
 - `loom source KEY --closure`: a key's text and exactly the statements it rests on. A document's path instead prints it flattened. Read this, not the directories.
 - `loom library WORK`, `loom library search`, `loom library read WORK N`: the literature. Ask the digest before the paper, and quote only what `library read` printed.
