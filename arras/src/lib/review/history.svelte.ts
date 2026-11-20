@@ -1,6 +1,6 @@
 // The person's own annotation writes in this page's life, each kept with the write that undoes it and the write that does it again: Undo and Redo on the toolbar, ⌘Z and ⇧⌘Z. A new annotation or reply is undone by deleting it and done again by restoring what the delete took out; a delete by restoring and deleting again; an edit by an edit back to its type, look and words before; a resolve by reopening. Every annotation write in the viewer goes through here, so there is one record of what can be undone.
 //
-// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
+// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step is kept in the tab's session storage, so a reload still offers its undo; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
 
@@ -14,13 +14,18 @@ import { say } from './toasts.svelte';
 
 type Events = Record<string, unknown>[];
 
+/** What a step's undo or redo answers: loom's answer, and whether the step can never be taken again, so it leaves the history. */
+type StepResult = WriteResult & { final?: boolean };
+
 interface Step {
 	/** What it did, as a reader names it: `delete`, `edit`, `resolve`, `new annotation`. */
 	label: string;
-	undo: () => Promise<WriteResult>;
-	redo: () => Promise<WriteResult>;
+	undo: () => Promise<StepResult>;
+	redo: () => Promise<StepResult>;
 	/** For a delete, the annotation and the words naming what went, so the foot of the window can offer it. */
 	deleted?: { id: string; said: string };
+	/** For the Keep of suggestions, their ids, kept in the tab's session storage so a reload keeps the step. */
+	keeps?: string[];
 }
 
 /** A delete held at the foot of the window while it stands. */
@@ -49,6 +54,32 @@ function push(step: Step): void {
 	history.done = [...history.done, step];
 	history.undone = [];
 	if (step.deleted) history.deletions = [...history.deletions, step.deleted];
+	save();
+}
+
+/** Where the Keep steps still to be undone are kept for this tab: the ids of each, oldest first. */
+const KEEPS = 'arras.keeps';
+
+/** Keep this tab's Keep steps still to be undone; a browser that cannot store them loses them on a reload. */
+function save(): void {
+	try {
+		globalThis.sessionStorage?.setItem(KEEPS, JSON.stringify(history.done.filter((s) => s.keeps).map((s) => s.keeps)));
+	} catch {
+		// storage refused: the history still holds them until the page goes
+	}
+}
+
+/** The Keep steps this tab kept before a reload, put back on the history. */
+function load(): void {
+	try {
+		const raw = globalThis.sessionStorage?.getItem(KEEPS);
+		const all: unknown = raw ? JSON.parse(raw) : [];
+		if (!Array.isArray(all)) return;
+		const steps = all.filter((ids): ids is string[] => Array.isArray(ids) && ids.length > 0 && ids.every((i) => typeof i === 'string')).map((ids) => kept(ids));
+		if (steps.length) history.done = [...history.done, ...steps];
+	} catch {
+		// nothing stored, or not readable: nothing to put back
+	}
 }
 
 /** The id loom gave a new annotation or reply: the first word of its answer. */
@@ -176,35 +207,42 @@ async function act(endpoint: 'change-keep' | 'change-discard', which: Which, ext
 	return { res, done, suggested: done.filter((id) => kinds.get(id) === 'suggested') };
 }
 
-/** `res` as a step of the history takes it: loom having done none of the changes it was asked for is a refusal, with the first one's why; when it did some, those refused are said under `title`. */
-function asStep(res: ChangeAnswer, title: string): ChangeAnswer {
+/** The refusals after which a change's undo or redo can never succeed: it is not kept, loom wrote nothing to undo, or its words changed where they were written. A file that moved while loom worked (`changed`) may succeed when pressed again. */
+const FINAL = new Set(['not-kept', 'not-written', 'changed-since', 'not-open']);
+
+/** `res` as a step of the history takes it: loom having done none of the changes it was asked for is a refusal, with the first one's why, and final when every refusal is; when it did some, those refused are said under `title`. */
+function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
 	const refused = res.refused ?? [];
 	if (!res.ok || !refused.length) return res;
-	if (!(res.done ?? []).length) return { ...res, ok: false, error: { code: refused[0].code ?? 'refused', message: refused[0].why } };
+	if (!(res.done ?? []).length) {
+		const final = refused.every((r) => FINAL.has(r.code ?? ''));
+		return { ...res, ok: false, final, error: { code: refused[0].code ?? 'refused', message: refused[0].why } };
+	}
 	say({ title, lines: refused.slice(0, 3).map((r) => r.why) });
 	return res;
 }
 
 /** The Keep of suggestions `ids`, which loom wrote in: undone by `change-undo`, which takes their words out again and opens them, and done again by keeping them again. */
 function kept(ids: string[]): Step {
-	let these = ids;
-	return {
+	const step: Step = {
 		label: ids.length === 1 ? 'keep' : `keep of ${ids.length} suggestions`,
+		keeps: ids,
 		undo: async () => {
-			const res = asStep((await run('change-undo', { changes: these })) as ChangeAnswer, 'Not all undone');
+			const res = asStep((await run('change-undo', { changes: step.keeps })) as ChangeAnswer, 'Not all undone');
 			if (res.ok) {
-				these = res.done ?? these;
-				unmark(these);
+				step.keeps = res.done ?? step.keeps;
+				unmark(step.keeps ?? []);
 			}
 			return res;
 		},
 		redo: async () => {
-			const { res, done } = await act('change-keep', { changes: these });
-			const step = asStep({ ...res, done }, 'Not all kept again');
-			if (step.ok && done.length) these = done;
-			return step;
+			const { res, done } = await act('change-keep', { changes: step.keeps ?? [] });
+			const again = asStep({ ...res, done }, 'Not all kept again');
+			if (again.ok && done.length) step.keeps = done;
+			return again;
 		}
 	};
+	return step;
 }
 
 /**
@@ -268,7 +306,16 @@ async function move(from: 'done' | 'undone', step: Step): Promise<string> {
 	history.busy = true;
 	const res = from === 'done' ? await step.undo() : await step.redo();
 	history.busy = false;
-	if (!res.ok) return res.error?.message ?? 'the publisher refused it';
+	if (!res.ok) {
+		// a step loom says can never be taken leaves the history, so what is beneath it can be reached again
+		if (res.final) {
+			history.done = history.done.filter((s) => s !== step);
+			history.undone = history.undone.filter((s) => s !== step);
+			if (step.deleted) history.deletions = history.deletions.filter((d) => d !== step.deleted);
+			save();
+		}
+		return res.error?.message ?? 'the publisher refused it';
+	}
 	if (from === 'done') {
 		history.done = history.done.filter((s) => s !== step);
 		history.undone = [...history.undone, step];
@@ -278,6 +325,7 @@ async function move(from: 'done' | 'undone', step: Step): Promise<string> {
 		history.done = [...history.done, step];
 		if (step.deleted) history.deletions = [...history.deletions, step.deleted];
 	}
+	save();
 	return '';
 }
 
@@ -311,3 +359,5 @@ export function nextUndo(): string {
 export function nextRedo(): string {
 	return history.undone.at(-1)?.label ?? '';
 }
+
+load();

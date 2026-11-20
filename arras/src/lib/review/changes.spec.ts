@@ -165,13 +165,38 @@ describe('Keep and Discard', () => {
 		expect(calls.at(-1)).toEqual(['change-keep', { changes: ['e-1'] }]);
 	});
 
-	it('says why an undo of a keep was refused, and leaves the keep to be undone', async () => {
+	it('says why an undo of a keep was refused; one that can never be undone leaves the history, uncovering what is beneath it', async () => {
+		live.changes = [suggestion];
+		history.done = [{ label: 'resolve', undo: async () => ({ ok: true }), redo: async () => ({ ok: true }) }];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		expect(history.done.map((s) => s.label)).toEqual(['resolve', 'keep']);
+		// a file that moved while loom worked: pressed again it may be undone, so the step stays
+		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'a file changed while loom was undoing a Keep', code: 'changed' }] };
+		expect(await undo()).toBe('a file changed while loom was undoing a Keep');
+		expect(history.done.map((s) => s.label)).toEqual(['resolve', 'keep']);
+		// its words changed where they were written: never, so it goes, and Undo reaches the resolve beneath
+		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'the suggestion “plural” has changed where it was written', code: 'changed-since' }] };
+		expect(await undo()).toBe('the suggestion “plural” has changed where it was written');
+		expect(history.done.map((s) => s.label)).toEqual(['resolve']);
+	});
+
+	it('keeps a Keep step in the tab across a reload, and nothing else', async () => {
+		const kept: Record<string, string> = {};
+		vi.stubGlobal('sessionStorage', { getItem: (k: string) => kept[k] ?? null, setItem: (k: string, v: string) => (kept[k] = v) });
 		live.changes = [suggestion];
 		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
 		await keepChanges({ changes: ['e-1'] });
-		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'its words have changed', code: 'changed-since' }] };
-		expect(await undo()).toBe('its words have changed');
-		expect(history.done).toHaveLength(1);
+		expect(JSON.parse(kept['arras.keeps'])).toEqual([['e-1']]);
+		// the page goes and comes back: the module is loaded again, and the step with it
+		vi.resetModules();
+		const again = await import('./history.svelte');
+		expect(again.history.done.map((s) => s.label)).toEqual(['keep']);
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await again.undo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'] }]);
+		expect(JSON.parse(kept['arras.keeps'])).toEqual([]);
+		vi.unstubAllGlobals();
 	});
 
 	it('shows a change refused, or an act refused whole, pending again', async () => {
