@@ -101,3 +101,26 @@ def test_an_edit_follows_its_text_into_a_renamed_file_and_is_written_there_once(
     assert call(root, "change-keep", {"changes": [eid]})["done"] == [eid]
     text = (root / "drafting/sections/later.tex").read_text()
     assert text.count("no gadget has odd order") == 1 and "gadgets never have odd order" not in text
+
+
+def test_a_note_on_an_id_stays_on_its_rewritten_block_and_under_verify_is_detached(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.records import locate
+
+    whole = note(q, "dm-0002")
+    quoted = note(q, "dm-0002", "--quote", "is the union of the one-point orbits")
+    lemma = q / "drafting/nodes/dm-0002.tex"
+    edit(lemma, "has one or two points", "has one or at most two points")
+    # a word put in: it reads as it was written, so either way it is read there
+    monkeypatch.setattr(locate, "VERIFY", True)
+    assert row(q, whole)["detached"] is False and row(q, quoted)["detached"] is False
+    edit(
+        lemma,
+        "Every orbit of a widget has one or at most two points, and $\\Fix(\\sigma)$ is the union of the one-point orbits.",
+        "No widget is large.",
+    )
+    # rewritten past recognition: the id keeps it, unless records are read against their text
+    assert row(q, whole)["detached"] is True and row(q, quoted)["detached"] is True
+    monkeypatch.setattr(locate, "VERIFY", False)
+    assert row(q, whole)["detached"] is False and row(q, whole)["target"]["key"] == "dm-0002"

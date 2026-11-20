@@ -2,6 +2,8 @@
 
 Usage: uv run python tests/tools/anchoring/run.py OUT [PAPER ...] [--only SCENARIO ...]
 
+With `--verify`, records are read as the Safe gate reads them: a record on a stable key (an id) keeps its block only while that block still reads as the record was written, and is detached otherwise (`records.locate.VERIFY`); without it, as loom reads them.
+
 OUT is a scratch directory; each paper's copies and its results (`<name>.json`, which `aggregate.py` sums) go under it. With no PAPER, the papers are the two quilt sources the repository commits (`tests/quilts/sources/showcase` and `synthetic`) and, when `LOOM_PAPER_FIXTURES` is set, every directory under it.
 
 A PAPER that holds a `config.toml` is a quilt and is used as it is. Any other is a paper's source tree, as its author wrote it, and is made the smallest quilt there is, a `config.toml` naming its main file, which is what a mirror of someone's Overleaf project would be. The main file is the one `.tex` at the top with a `\\documentclass`; where there are several, name it as `DIR:MAIN.tex`.
@@ -74,6 +76,11 @@ def run(out: Path, named: list[str], only: list[str] | None = None) -> dict[str,
 
 if __name__ == "__main__":
     args = sys.argv[1:]
+    if "--verify" in args:
+        args.remove("--verify")
+        from loom.records import locate
+
+        locate.VERIFY = True
     only: list[str] | None = None
     if "--only" in args:
         at = args.index("--only")

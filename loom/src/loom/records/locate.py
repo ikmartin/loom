@@ -16,6 +16,9 @@ from loom.scan.scan import ScanResult
 #: How alike, word for word, the block at a record's place must read to the text the record was written on to be taken for it, with no other block of its file reading as alike.
 LIKE = 0.6
 
+#: Whether a record on a stable key (an id or a label) is read against its text: True, it keeps its block only while that block holds the text it was written on, or its quote, or reads `LIKE` alike, and is detached otherwise; False, the key's block keeps it however the block was rewritten. Which loom does is the author's to decide; False is what loom has always done, and the anchoring harness's `--verify` reads with True, as the Safe gate measures.
+VERIFY = False
+
 #: A child's marker in a block's own text (`own_text`), which no person wrote and no likeness counts.
 _CHILD = re.compile(r"^% !LOOM child: .*$", re.MULTILINE)
 
@@ -75,6 +78,7 @@ def follow(
     edit: bool = False,
     near: str = "",
     quoted: bool = False,
+    quote: str = "",
 ) -> NodeRec | None:
     """The block a record on `key` was written on, or None when nothing says which block that is.
 
@@ -94,11 +98,13 @@ def follow(
         A suggested edit's `near`, the line above its block when it was filed (`line_before`); '' for an annotation, which records none, and for an edit filed before it was recorded.
     quoted : bool, default False
         Whether the suggested edit quotes words of its block; only such an edit is taken at its place once the block there has changed (`place` then asks for its quote once, and nowhere else in the file).
+    quote : str, default ''
+        The words the record quotes, which keep a stable key's block under `VERIFY` while they stand in it.
 
     Returns
     -------
     NodeRec or None
-        For a stable key, `node` always; for a region, or one whose label went, where the block it is in goes. For a key named by place, or a document's path once its file is gone: the one block that holds the record's text, in the key's file or, once that file is gone, in the quilt. Among several, the one under `near`; with no `near`, an annotation's block at its place while that holds its text, as it always has. Where none holds it, a quoted edit's block at its place while the line above is `near`, and an annotation's while that block reads like the text it was written on and no other block of its file does (`LIKE`). None otherwise: the block now at the place is never the answer for text it is not.
+        For a stable key, `node`, under `VERIFY` only while it still reads as the record was written; for a region, or one whose label went, where the block it is in goes. For a key named by place, or a document's path once its file is gone: the one block that holds the record's text, in the key's file or, once that file is gone, in the quilt. Among several, the one under `near`; with no `near`, an annotation's block at its place while that holds its text, as it always has. Where none holds it, a quoted edit's block at its place while the line above is `near`, and an annotation's while that block reads like the text it was written on and no other block of its file does (`LIKE`). None otherwise: the block now at the place is never the answer for text it is not.
 
     See Also
     --------
@@ -109,10 +115,12 @@ def follow(
     head = _container_key(result, key, node)
     if head:
         # a region goes where the block it is in goes, whose text the record holds; one whose label went is read there
-        return follow(result, head, result.nodes.get(head), want, edit=edit, near=near, quoted=quoted)
+        return follow(result, head, result.nodes.get(head), want, edit=edit, near=near, quoted=quoted, quote=quote)
     # a document's own text is named by its file's path, which a rename takes away as it does a key named by place
     gone_document = node is None and key.endswith(".tex") and not key.startswith("prose:")
     if not named_by_place(result, key, node) and not gone_document:
+        if VERIFY and node is not None and not _still(result, want, node, quote):
+            return None
         return node
     path = node.file if node is not None else key.split("#", 1)[0]
     same: list[NodeRec] = [n for n in result.nodes.values() if n.file == path and block_hash(result, n.key) == want]
@@ -178,6 +186,20 @@ def _likeness(a: list[str], b: list[str]) -> float:
     if m.real_quick_ratio() < LIKE or m.quick_ratio() < LIKE:
         return 0.0
     return m.ratio()
+
+
+def _still(result: ScanResult, want: str, node: NodeRec, quote: str) -> bool:
+    """Whether `node` still reads as a record on it was written (`VERIFY`): it holds the text frozen as `want`, or the record's quote, or reads `LIKE` alike that text."""
+    from loom.records.snapshots import read_snapshot
+    from loom.scan.owntext import own_text
+
+    if block_hash(result, node.key) == want:
+        return True
+    own = own_text(result, node)
+    if quote and quote in own:
+        return True
+    frozen = _words_of(result, want, read_snapshot(result.quilt.root, want, result.quilt.history_dir))
+    return _likeness(frozen, _words_of(result, node.key, own)) >= LIKE
 
 
 def _reads_like(result: ScanResult, want: str, node: NodeRec) -> bool:

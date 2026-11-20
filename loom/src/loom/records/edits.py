@@ -209,6 +209,7 @@ def home(result: ScanResult, edit: Edit) -> NodeRec | None:
         edit=True,
         near=edit.near,
         quoted=edit.selector is not None,
+        quote=edit.selector.exact if edit.selector else "",
     )
 
 
