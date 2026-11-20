@@ -9,7 +9,7 @@ from dataclasses import fields, replace
 
 import pytest
 
-from loom.render import marks
+from loom.render import marks, review_compare
 from loom.render.marks import MarkEntry, place_marks
 
 HTML = '<p data-src="f.tex:0:60">Let X be a finite widget. Then the count is even.</p>'
@@ -59,3 +59,33 @@ def test_a_placement_is_named_by_every_field_of_every_entry() -> None:
     named = marks._placing(HTML, [ENTRY])[1][0]
     assert len(named) == len(fields(MarkEntry))
     assert marks._placing(HTML, [ENTRY]) != marks._placing(HTML, [replace(ENTRY, in_doc="d.tex")])
+
+
+BEFORE, AFTER = "Every finite widget is even.", "Every finite gadget is even."
+
+
+@pytest.fixture
+def comparing(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    made: list[int] = []
+    changes = review_compare.word_changes
+    monkeypatch.setattr(review_compare, "word_changes", lambda *a: made.append(1) or changes(*a))
+    review_compare._compared.clear()
+    return made
+
+
+@pytest.mark.parametrize("side", ["before", "after"])
+def test_a_word_comparison_is_made_once_and_again_when_either_text_changes(side: str, comparing: list[int]) -> None:
+    first = review_compare._changed(BEFORE, AFTER)
+    assert review_compare._changed(BEFORE, AFTER) == first and len(comparing) == 1
+    before, after = (BEFORE + " Indeed.", AFTER) if side == "before" else (BEFORE, AFTER + " Indeed.")
+    again = review_compare._changed(before, after)
+    assert again == review_compare.word_changes(before, after, lambda word: word) != first
+    assert len(comparing) == 3
+
+
+def test_a_remembered_comparison_is_handed_out_as_a_copy(comparing: list[int]) -> None:
+    """A caller that changes the spans it was given changes nothing the next caller is given."""
+    left, _ = review_compare._changed(BEFORE, AFTER)
+    left.append([0, 1])
+    left[0].append(99)
+    assert review_compare._changed(BEFORE, AFTER) == review_compare.word_changes(BEFORE, AFTER, lambda word: word)

@@ -20,8 +20,9 @@ from loom.reshape.linearize import flatten
 from loom.scan.diagnostics import gates
 from loom.scan.hashing import pair_hash
 from loom.scan.labels import next_local, plain_key, rename_labels
+from loom.scan.memo import Memo
 from loom.scan.owntext import own_text
-from loom.scan.quilt import Quilt, resolve_author
+from loom.scan.quilt import Quilt, QuiltConfig, resolve_author
 from loom.scan.scan import ScanResult, scan
 from loom.sync import SyncError
 
@@ -98,23 +99,48 @@ def _shape(result: ScanResult, document: str) -> tuple[dict[str, str], dict[str,
 
 
 def _flat_shape(result: ScanResult, text: str, base: str) -> tuple[dict[str, str], str]:
-    """`text` scanned as a document in `base`, the directory its source compiles from, beside the styles and bibliographies the quilt's documents load; its node bodies and skeleton."""
+    """`text` scanned as a document in `base`, the directory its source compiles from, beside the styles and bibliographies the quilt's documents load; its node bodies and skeleton.
+
+    Made once for each input in use (`_shapes`): an agent copy is compared on every build, and its sides seldom change from one to the next.
+    """
+    # Local theorem declarations must remain visible to the scanner: every file a preamble loads, read from disk, since the scan reads a local .sty on demand and never lists it in `files`.
+    loaded = {f for c in result.closures.values() for f in c.files if f not in result.masters}
+    beside = {
+        name: (result.quilt.root / name).read_text()
+        for name in sorted(loaded | {n for n in result.files if n.endswith(".bib")})
+        if (result.quilt.root / name).is_file()
+    }
+    key = (
+        _text_digest(text),
+        base,
+        tuple((name, _text_digest(content)) for name, content in beside.items()),
+        repr(result.quilt.config),
+    )
+    bodies, skeleton = _shapes.get(key, lambda: _flat_shape_made(result.quilt.config, text, base, beside))
+    return dict(bodies), skeleton
+
+
+def _flat_shape_made(config: QuiltConfig, text: str, base: str, beside: dict[str, str]) -> tuple[dict[str, str], str]:
     with tempfile.TemporaryDirectory(prefix="loom-adopt-shape-") as temporary:
         root = Path(temporary)
         doc = under(base, "adoption-snapshot.tex")
         (root / doc).parent.mkdir(parents=True, exist_ok=True)
         (root / doc).write_text(rename_labels(text, plain=True))
-        # Local theorem declarations must remain visible to the scanner: every file a preamble loads, read from disk, since the scan reads a local .sty on demand and never lists it in `files`.
-        loaded = {f for c in result.closures.values() for f in c.files if f not in result.masters}
-        for name in sorted(loaded | {n for n in result.files if n.endswith(".bib")}):
-            source = result.quilt.root / name
-            if source.is_file():
-                target = root / name
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_text(source.read_text())
-        snap = scan(Quilt(root, result.quilt.config), copy=True)
+        for name, content in beside.items():
+            target = root / name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(content)
+        snap = scan(Quilt(root, config), copy=True)
         bodies, _, skeletons = _shape(snap, doc)
         return bodies, skeletons[doc]
+
+
+def _text_digest(text: str) -> bytes:
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=16).digest()
+
+
+#: Each shape in use, by what `_flat_shape` makes it from: the text, its base, each file copied beside it by its contents, and the quilt's config.
+_shapes: Memo[tuple[bytes, str, tuple[tuple[str, bytes], ...], str], tuple[dict[str, str], str]] = Memo(built=True)
 
 
 def _baseline(result: ScanResult, copy: str) -> dict[str, Any]:

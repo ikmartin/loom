@@ -14,6 +14,7 @@ from loom.records.store import Records
 from loom.render.fragments import FragmentRenderer, Later
 from loom.scan.hashing import normalize
 from loom.scan.macros import parse_macros, to_mathjax
+from loom.scan.memo import Memo
 from loom.scan.model import Macro
 from loom.scan.scan import ScanResult
 from loom.scan.source import blank_comments
@@ -24,8 +25,22 @@ def _tokens(text: str) -> list[tuple[str, int, int]]:
 
 
 def _changed(before: str, after: str) -> tuple[list[list[int]], list[list[int]]]:
-    """The spans of `before` and of `after` whose words differ: `word_changes` with every word read as written."""
-    return word_changes(before, after, lambda word: word)
+    """The spans of `before` and of `after` whose words differ: `word_changes` with every word read as written.
+
+    Made once for each pair of texts in use (`_compared`): a served quilt compares every agent copy's rows and Review's changed causes on every build, most of them unchanged since the last.
+    """
+    left, right = _compared.get(
+        (_text_digest(before), _text_digest(after)), lambda: word_changes(before, after, lambda word: word)
+    )
+    return [list(s) for s in left], [list(s) for s in right]
+
+
+def _text_digest(text: str) -> bytes:
+    return hashlib.blake2b(text.encode("utf-8"), digest_size=16).digest()
+
+
+#: Each comparison in use, by the digests of its two texts, which are not held.
+_compared: Memo[tuple[bytes, bytes], tuple[list[list[int]], list[list[int]]]] = Memo(built=True)
 
 
 def word_changes(before: str, after: str, read: Callable[[str], str]) -> tuple[list[list[int]], list[list[int]]]:
