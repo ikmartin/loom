@@ -212,6 +212,25 @@ def test_an_undo_after_typing_at_a_files_start_within_its_neighbours_refuses(q: 
     assert call(q, "change-undo", {"changes": [edit]})["done"] == [edit] and p.read_text() == orig
 
 
+def test_words_put_back_take_the_files_line_ending_at_their_place(q: Path) -> None:
+    """The second review's R2-6: a mostly-LF file with a CRLF inside the replaced words and one elsewhere, made all LF since: no CR comes back. Where the file is still as the Keep left it, the bytes before come back exactly, CR and all."""
+    p = q / "drafting/nodes/sy-000B.tex"
+    p.write_bytes(
+        p.read_bytes()
+        .replace(
+            b"Every finite widget of odd order has a fixed point, and the fixed locus is functorial.",
+            b"Every finite widget of odd order, however large it may be, has a fixed point,\r\nand the fixed locus is functorial in every sense one could want.",
+        )
+        .replace(b"\\end{proof}\n", b"\\end{proof}\r\n")
+    )
+    call(q, "change-keep", {"changes": [x.id for x in waiting(q) if x.kind == "edit"]})
+    edit = suggest(q, "sy-000B", "has a fixed point; moreover", "--quote", "has a fixed point,\nand")
+    assert edit is not None and call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    p.write_bytes(p.read_bytes().replace(b"\r\n", b"\n"))
+    assert call(q, "change-undo", {"changes": [edit]})["done"] == [edit]
+    assert b"\r" not in p.read_bytes() and b"has a fixed point,\nand" in p.read_bytes()
+
+
 def test_an_undo_never_takes_out_another_keeps_like_words(q: Path) -> None:
     """The review's case v: two Keeps put the same sentence after two proofs alike; the first is reworded, then undone."""
     f = twins(q)

@@ -640,6 +640,18 @@ def _changed_since(edit: Edit, how: str = "changed") -> str:
     return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
 
 
+def _ending_at(raw: str, a: int, b: int) -> str:
+    """The file's own line ending at a place: that of the nearest line break before it, else after it, else the file's most common."""
+    from loom import writes
+
+    k = raw.rfind("\n", 0, a)
+    if k < 0:
+        k = raw.find("\n", b)
+    if k >= 0:
+        return "\r\n" if k > 0 and raw[k - 1] == "\r" else "\n"
+    return writes.newline_of(raw)
+
+
 def keep_of(wrote: dict[str, int], edit: Edit) -> str | None:
     """The `<id>:<generation>` of the Keep whose words `edit`'s record stands on, by the journal's `wrote`; None when loom wrote none.
 
@@ -894,17 +906,16 @@ def _undo_in(
             bad.setdefault(j, "changed")
     if bad:
         return bad
-    nl = writes.newline_of(raw)
     out: list[str] = []
     made: list[dict[str, Any]] = []
     spans: list[tuple[int, int]] = []
     last = shift = 0
     for a, b, m, gen, _ in places:
-        # the words it replaced, in the file's own line ending when that changed since the Keep
+        # the words it replaced: its own bytes where the file is as the Keep left it, else in the file's own line ending there
         old = (
             m.old
-            if nl == writes.newline_of(m.was)
-            else m.old.replace("\r\n", "\n").replace("\r", "\n").replace("\n", nl)
+            if now == m.after
+            else m.old.replace("\r\n", "\n").replace("\r", "\n").replace("\n", _ending_at(raw, a, b))
         )
         out += [raw[last:a], old]
         made.append({"edit": gen, "at": a + shift, "old": raw[a:b], "new": old})
