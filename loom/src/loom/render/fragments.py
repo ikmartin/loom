@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 from loom.paths import BLOCKS, SNIPPETS, document_build, within
 from loom.render.assets import publish_picture
 from loom.render.mathset import EQUATION_ENVS
-from loom.render.uses import noting, used
+from loom.render.uses import noting, passing, used
 from loom.scan.hashing import pair_hash
 from loom.scan.labels import plain_key
 from loom.scan.model import Diagnostic, Env, Macro, SourceFile
@@ -81,6 +81,10 @@ def bare_preamble(taxa: dict[str, Any]) -> str:
         if env != "proof" and re.fullmatch(r"[A-Za-z@*]+", env):
             lines.append(f"\\newtheorem{{{env}}}{{{getattr(t, 'name', env)}}}")
     return "\n".join(lines)
+
+
+#: How a text's failure begins when TeX never read it: no TeX run here, no TeX4ht, a run that stopped with nothing said against any text (`snippets.render_snippets`).
+_THE_MACHINES = ("TeX is not run", "make4ht is not", "TeX4ht made no page")
 
 
 class FragmentRenderer:
@@ -253,8 +257,13 @@ class FragmentRenderer:
         return out
 
     def _refused(self, where: str, text: str, error: str, cached: bool) -> None:
-        """A warning for a text TeX refused, once, where the build made it: a machine that runs no TeX refuses nothing."""
-        if cached or not error or error.startswith(("TeX is not run", "make4ht is not", "TeX4ht made no page")):
+        """A warning for a text TeX refused, once, where the build made it: a machine that runs no TeX refuses nothing.
+
+        A failure of the machine's, which the snippet cache does not remember (no TeX run here, no TeX4ht, a run that stopped saying nothing against any text, one out of time), is noted as passing (`uses.passing`), so that nothing made with it outlives the build.
+        """
+        if not cached and (error.startswith(_THE_MACHINES) or "timed out" in error):
+            passing()
+        if cached or not error or error.startswith(_THE_MACHINES):
             return
         first = " ".join(text.split())[:60]
         self._sink.append(
