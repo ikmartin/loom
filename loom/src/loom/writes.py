@@ -428,10 +428,15 @@ def place_in(w: Written, text: str, *, side: str = "after") -> tuple[int, int] |
         The file changed too much around the place since the act to compare the texts.
     """
     src, at, words = (w.now, w.at, w.new) if side == "after" else (w.was, w.back, w.old)
+    return carry(src, text, at, at + len(words))
+
+
+def carry(src: str, text: str, at: int, end: int) -> tuple[int, int] | None:
+    """Where the stretch `src[at:end]` stands in `text`, carried over by `place_in`'s rule: itself and `BESIDE` characters either side, a file's edge among them, standing once in each text and unchanged at its place; None when not established. Raises TooChanged as `_shift` does."""
     if text == src:
-        return at, at + len(words)
+        return at, end
     a, b = _lf(src), _lf(text)
-    p0, p1 = reading_offset(src, at), reading_offset(src, at + len(words))
+    p0, p1 = reading_offset(src, at), reading_offset(src, end)
     lo, hi = max(0, p0 - BESIDE), min(len(a), p1 + BESIDE)
     # a region that stands twice cannot be told from its twin by any alignment, a shared end included: no place
     if not _once(a, a[lo:hi]) or not _once(b, a[lo:hi]):

@@ -89,34 +89,19 @@ class PendingRefused(Exception):
 def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
     """The changes between two texts, by words: `(o0, o1, n0, n1)` each, the stretch of `old` and of `new` it replaces, from the end of the last word the two share before it to the start of the first they share after it.
 
-    The diff runs over the words alone, so a change of spacing between words that stand is none. Lines the two texts share, paired by lines that stand once in both (`writes.paired`), hold the same words, so only the words between paired lines are diffed: a long file with a few changes costs little. Two changes fewer than `NEAR` words apart are one, unless a blank line stands between them. Each stretch carries the space around its words, so putting one stretch in place of the other gives exactly either text.
+    The diff runs over the words alone, so a change of spacing between words that stand is none. Two changes fewer than `NEAR` words apart are one, unless a blank line stands between them. Each stretch carries the space around its words, so putting one stretch in place of the other gives exactly either text.
     """
     import difflib
-    from bisect import bisect_left
-
-    from loom.writes import paired
 
     left = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(old)]
     right = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(new)]
-    lw, rw = [t[0] for t in left], [t[0] for t in right]
-    # lines the two share, paired by lines that stand once in both, hold the same words; only the words between are compared
-    al, bl = old.splitlines(keepends=True), new.splitlines(keepends=True)
-    ast, bst = [0], [0]
-    for line in al:
-        ast.append(ast[-1] + len(line))
-    for line in bl:
-        bst.append(bst[-1] + len(line))
-    lstart, rstart = [t[1] for t in left], [t[1] for t in right]
-    ops: list[tuple[str, int, int, int, int]] = []
-    a = c = 0  # the words compared up to
-    for i, j in [*paired(al, bl), (len(al), len(bl))]:
-        a1, c1 = bisect_left(lstart, ast[i]), bisect_left(rstart, bst[j])
-        if a1 > a or c1 > c:
-            gap = difflib.SequenceMatcher(None, lw[a:a1], rw[c:c1], autojunk=False)
-            ops += [(tag, x + a, y + a, z + c, u + c) for tag, x, y, z, u in gap.get_opcodes() if tag != "equal"]
-        # the paired line's words, equal on both sides, and on past them
-        a = bisect_left(lstart, ast[min(i + 1, len(al))]) if i < len(al) else a1
-        c = bisect_left(rstart, bst[min(j + 1, len(bl))]) if j < len(bl) else c1
+    ops = [
+        op
+        for op in difflib.SequenceMatcher(
+            None, [t[0] for t in left], [t[0] for t in right], autojunk=False
+        ).get_opcodes()
+        if op[0] != "equal"
+    ]
     groups: list[list[int]] = []
     for _tag, a, b, c, d in ops:
         if groups:
@@ -762,6 +747,7 @@ class _Unkept:
     spans: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     changes: list[Pending] = field(default_factory=list)
     before: dict[str, str] = field(default_factory=dict)
+    wrote: dict[str, tuple[str, str, list[tuple[int, int, str]]]] = field(default_factory=dict)
 
 
 def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said: list[str] | None) -> None:
@@ -807,7 +793,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
             continue
         items += [(e, gen, m) for m in made]
     # where each edit's words stand in each file now; an edit refused in one file is undone in none, so plan again without it
-    plans: dict[str, tuple[bytes, bytes, list[dict[str, Any]], list[tuple[int, int]]]] = {}
+    plans: dict[str, tuple[bytes, bytes, list[dict[str, Any]], list[tuple[int, int]], list[tuple[int, int, str]]]] = {}
     named = {e.id: e for e, *_ in items}
     while items:
         failed: dict[str, dict[str, str]] = {}
@@ -876,9 +862,10 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
             "changed", "a file changed while loom was undoing a Keep; nothing was written, look at it again"
         )
     for rel in files:
-        _, new, splices, spans = plans[rel]
+        data, new, splices, spans, done = plans[rel]
         w.replace(rel, new, splices)
         out.spans[rel] = spans
+        out.wrote[rel] = (data.decode("utf-8"), new.decode("utf-8"), done)
     answered: set[str] = set()
     for e, gen, _ in items:
         if e.id in out.ids:
@@ -896,7 +883,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
 
 def _undo_in(
     hist: Path, raw: str, data: bytes, items: list[tuple[Edit, str, Any]]
-) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]]] | dict[str, str]:
+) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]], list[tuple[int, int, str]]] | dict[str, str]:
     """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or, by id, why a place is not established (`changed`, or `too-much` when the file changed too much around it to compare).
 
     Each Keep's words are taken out only at the place that Keep wrote them (`writes.place_in`), never wherever like words stand. The words put back are the Keep's own bytes where the file is as that Keep left it, and otherwise take the file's own line ending at their place. Where the file holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
@@ -953,7 +940,8 @@ def _undo_in(
         back = writes.fetch(hist, first.before)
         if back is not None and back.decode("utf-8", "replace") == text:
             new = back
-    return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans]
+    done = [(a, b, str(made_one["new"])) for (a, b, _, _, _), made_one in zip(places, made, strict=True)]
+    return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans], done
 
 
 def _moves(made: list[Any], was: str, now: str, cut: tuple[int, int, int]) -> bool:
@@ -1084,15 +1072,54 @@ def relook(root: Path, look: dict[str, Any]) -> None:
 
 
 def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:
-    """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file, and the annotations on the words taken out are carried onto the words put back."""
+    """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file (`_undo_into_look`, with no listing of the person's changes where the look can be given the undo's own change), and where an annotation stands on the blocks, the annotations on the words taken out are carried onto the words put back."""
     from loom.records.carry import carry_all
 
-    after = _rescan(out.result)
-    for path, spans in out.spans.items():
-        absorb(after, who, path, spans)
+    after = None
+    for path, (was, now, done) in out.wrote.items():
+        if who and not _undo_into_look(out.result.quilt, who, path, was, now, done):
+            after = after or _rescan(out.result)
+            absorb(after, who, path, out.spans[path])
     if out.before:
-        after = _rescan(after)
-        carry_all(after, out.before, out.changes, writer)
+        carry_all(_rescan(after or out.result), out.before, out.changes, writer)
+
+
+def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:
+    """Give `who`'s look of `path` the undo's own change, with no listing of the person's changes: where the look held the file as it was before the undo, it holds the file now; else each stretch the undo wrote over is carried to its place in the look (`writes.carry`) and the same words put there. False when a stretch's place in the look is not established, for `absorb` to do it by listing."""
+    from loom import writes
+    from loom.looks import _write, read_look
+    from loom.records.snapshots import read_raw, write_raw
+    from loom.scan.hashing import sha256
+
+    if not quilt.config.track_edits:
+        return True
+    look = read_look(quilt.root, who)
+    if look is None:
+        return True
+    held = look.files.get(path)
+    if held is None:
+        return False
+    if held == sha256(was):
+        text = now
+    else:
+        seen = read_raw(quilt.root, held, quilt.history_dir)
+        if seen is None:
+            return False
+        try:
+            spans = [writes.carry(was, seen, a, b) for a, b, _ in done]
+        except writes.TooChanged:
+            return False
+        if any(s is None for s in spans):
+            return False
+        placed = sorted(((s[0], s[1], words) for s, (_, _, words) in zip(spans, done, strict=True) if s), reverse=True)
+        if any(x1 > y0 for (y0, _, _), (_, x1, _) in zip(placed, placed[1:], strict=False)):
+            return False
+        text = seen
+        for x0, x1, words in placed:
+            text = text[:x0] + words + text[x1:]
+    look.files[path] = write_raw(quilt.root, text, quilt.history_dir)
+    _write(quilt.root, look)
+    return True
 
 
 def _annotated(root: Path, keys: set[str]) -> bool:

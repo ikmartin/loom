@@ -324,6 +324,17 @@ def test_an_undo_is_not_listed_as_an_edit_in_the_file(q: Path) -> None:
     assert [p.id for p in waiting(q) if p.kind == "edit"] == []
 
 
+def test_an_undo_leaves_the_persons_own_pending_change_listed_and_lists_nothing_of_its_own(q: Path) -> None:
+    """The look takes the undo's own change, carried to its place, while the person's change elsewhere in the file still waits, as it was."""
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    p.write_text(p.read_text().replace("by \\eqref{eq:prose}.", "by \\eqref{eq:prose}, as claimed."))
+    mine = [(x.id, x.old, x.new) for x in waiting(q) if x.kind == "edit"]
+    assert len(mine) == 1
+    assert call(q, "change-undo", {"changes": [FIXED]})["done"] == [FIXED]
+    assert [(x.id, x.old, x.new) for x in waiting(q) if x.kind == "edit"] == mine
+
+
 def test_an_annotation_on_the_words_a_keep_wrote_goes_back_onto_the_words_it_replaced(q: Path) -> None:
     from loom.records.annotations import find_annotation, load_records
 
