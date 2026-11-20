@@ -154,3 +154,11 @@ def test_a_text_is_hashed_once_and_again_when_it_changes(hashing: list[int]) -> 
     assert hash_text(text) == first == sha256(normalize(text)) and len(hashing) == 2
     changed = text.replace("$x$", "$y$")
     assert hash_text(changed) == sha256(normalize(changed)) != first and len(hashing) == 4
+
+
+def test_a_text_with_a_lone_surrogate_in_a_comment_is_hashed_as_before(hashing: list[int]) -> None:
+    """`normalize` drops a comment line, so a surrogate there never reached the hash; the memo's key takes it too."""
+    from loom.scan.hashing import hash_text, normalize, sha256
+
+    text = "% a comment with a lone surrogate \udc80\nx\n"
+    assert hash_text(text) == sha256(normalize(text))

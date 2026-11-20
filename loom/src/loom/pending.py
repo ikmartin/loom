@@ -126,7 +126,7 @@ def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
     return out
 
 
-#: A range whose difflib search would look at more than this many places per word of the two ranges is searched by window instead (`_longest_by_window`).
+#: A range is searched by window (`_longest_by_window`) where its old words occur, counted over the whole of the new text, more than this many times per word of the two ranges: a bound above what difflib's search would look at, which stops at the range's end. Both searches answer the same, so it decides time alone.
 _CHEAP = 8
 #: The window hash: a polynomial in the words' numbers, modulo a Mersenne prime, its base drawn once a process above every word's number, so that no text can be written to collide and send the listing down `_cut_by_difflib`'s path.
 _HASH_MOD = (1 << 61) - 1
