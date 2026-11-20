@@ -403,6 +403,16 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** DR-244-ikmartin
 
+### A served quilt publishes what a cold build of the same files publishes
+
+**Rule.** Whatever `loom serve` keeps from one build for the next, on disk or in memory, is looked up by everything it is made from, so after any sequence of saves, writes through the viewer and compiles the server's site is the one a build from cold makes of the same files. The only difference allowed is the blank space two runs of TeX over one text may leave in a page (plan 0.32, the author's queue, 44). What the server keeps in memory is `scan/memo.py`'s: what a scan derives from a file's text, and what a build makes from its scan, each named in the memo's key and let go once no build asks for it.
+
+**Why.** A key that leaves out one input serves an old result with no error. A section's fragment key left out the text an included file holds after its node, so a save showed the section without the new words (2026-11-17), and the speed spike found keys without page numbers safe only for the commands it listed.
+
+**Guard.** `loom/tests/unit/render/test_served_is_cold.py::test_a_server_after_saves_notes_an_acceptance_and_a_compile_publishes_what_a_cold_build_does`, and for each memo a test that changes each input alone: `loom/tests/unit/render/test_memos.py`, `loom/tests/unit/test_adopt.py::test_a_side_of_a_comparison_is_shaped_once_and_again_when_any_input_changes`, `loom/tests/unit/test_section_drafts.py::test_a_section_draft_is_rendered_once_and_again_when_any_input_changes`
+
+**Record.** Plan 0.32, Speed's row; `docs/reports/v0.1-study/raw/spike-speed.md`, FAST-9 and FAST-10
+
 ### Every write to the viewer's server carries a token
 
 **Rule.** `loom serve` refuses a POST unless it is `application/json`, carries the `X-Loom-Token` the server keeps outside the quilt and serves to the viewer, and names no Origin but this server. This is CSRF protection, not a login.
