@@ -201,13 +201,14 @@ def quote_in(result: Any, node: Any, rng: random.Random) -> str | None:
     return None
 
 
-def step(run: Run) -> None:
-    """One act drawn from the run's generator."""
+def step(run: Run, undo: bool = False) -> None:
+    """One act drawn from the run's generator; with `undo`, the undo of a Keep among them."""
     rng, root = run.rng, run.root
-    op = rng.choices(
-        ["suggest", "section", "type", "edit", "keep", "keep_all", "discard", "undo_discard", "tick", "setting"],
-        [6, 2, 2, 4, 6, 2, 2, 1, 1, 1],
-    )[0]
+    ops = ["suggest", "section", "type", "edit", "keep", "keep_all", "discard", "undo_discard", "tick", "setting"]
+    weights = [6, 2, 2, 4, 6, 2, 2, 1, 1, 1]
+    if undo:
+        ops, weights = [*ops, "undo_keep"], [*weights, 3]
+    op = rng.choices(ops, weights)[0]
     run.trail.append(op)
     if (
         run.typed
@@ -280,6 +281,21 @@ def step(run: Run) -> None:
             before = files(root)
             call(root, "change-discard", {"changes": [rng.choice(gone)], "undo": True})
             run.check("undo of a discard", before, set())
+    elif op == "undo_keep":
+        from loom.records.edits import find, home
+
+        kept = [e for eid in run.markers if (e := find(root, eid)) and e.status == "kept"]
+        if kept:
+            e = rng.choice(kept)
+            node = home(scan(root), e)
+            # a key named by its place names its file; once its quote is replaced, no block of it is found by quote
+            where = {node.file} if node is not None else {e.target_key.split("#")[0]} if "#" in e.target_key else set()
+            run.trail[-1] += f" {e.id}"
+            run.press("change-undo", {"changes": [e.id]}, where)
+            if find(root, e.id).status == "open" and run.markers[e.id] in b"\n".join(files(root).values()).decode(
+                "utf-8", "replace"
+            ):
+                run.problems.append(f"undo of {e.id}: open again with its text still in the file")
     elif op == "tick":
         from loom.tasks import items
 
@@ -305,6 +321,14 @@ def test_a_seeded_sequence_of_writes_keeps_the_persons_text(q: Path, seed: int) 
     run = Run(q, seed)
     for _ in range(16):
         step(run)
+        assert not run.problems, (run.problems, run.trail)
+
+
+@pytest.mark.parametrize("seed", range(4))
+def test_a_seeded_sequence_with_the_undo_of_keeps_among_its_writes_keeps_the_persons_text(q: Path, seed: int) -> None:
+    run = Run(q, 100 + seed)
+    for _ in range(16):
+        step(run, undo=True)
         assert not run.problems, (run.problems, run.trail)
 
 
