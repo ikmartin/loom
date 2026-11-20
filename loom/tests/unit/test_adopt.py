@@ -778,3 +778,52 @@ def test_a_conflicted_merge_reads_the_same_every_time():
     merged, conflicted = _merge(base, ours, theirs)
     assert conflicted and _merge(base, ours, theirs) == (merged, True)
     assert "<<<<<<< working\n" in merged and ">>>>>>> proposal\n" in merged
+
+
+CLAIMED = TEXT.replace("\\newtheorem{lemma}{Lemma}", "\\usepackage{thm}\n\\newtheorem{lemma}{Lemma}").replace(
+    "\\end{document}", "\\begin{claim}\\label{zk-0003}\nA claim.\n\\end{claim}\n\\end{document}"
+)
+
+
+@pytest.fixture
+def shaping(quilt, monkeypatch):
+    """The quilt with a local style its document loads, an empty memo of shapes, and a count of the shapes actually made."""
+    import loom.adopt as adopt
+
+    (quilt.root / "drafting" / "thm.sty").write_text("\\newtheorem{claim}{Claim}\n")
+    (quilt.root / DOC).write_text(CLAIMED)
+    made = []
+    real = adopt._flat_shape_made
+    monkeypatch.setattr(adopt, "_flat_shape_made", lambda *a: made.append(1) or real(*a))
+    adopt._shapes.clear()
+    return made
+
+
+@pytest.mark.parametrize("changed", ["the text", "its base", "a file beside it", "the config"])
+def test_a_side_of_a_comparison_is_shaped_once_and_again_when_any_input_changes(quilt, shaping, changed):
+    """An agent copy is compared on every build; each side's shape is made once for its text, the directory it compiles from, every style and bibliography copied beside it, and the config."""
+    import dataclasses
+
+    import loom.adopt as adopt
+    from loom.adopt import _flat_shape
+
+    result = scan(quilt)
+    first = _flat_shape(result, CLAIMED, "drafting")
+    assert "zk-0003" in first[0]
+    assert _flat_shape(result, CLAIMED, "drafting") == first and len(shaping) == 1
+    text, base = CLAIMED, "drafting"
+    if changed == "the text":
+        text = CLAIMED.replace("A claim.", "Another claim.")
+    elif changed == "its base":
+        base = ""
+    elif changed == "a file beside it":
+        (quilt.root / "drafting" / "thm.sty").write_text("% nothing declared\n")
+    else:
+        config = dataclasses.replace(quilt.config, basis={"claim": "proved"})
+        result = dataclasses.replace(result, quilt=dataclasses.replace(quilt, config=config))
+    again = _flat_shape(result, text, base)
+    assert len(shaping) == 2
+    adopt._shapes.clear()
+    assert again == _flat_shape(result, text, base)
+    # no setting changes a shape today, but the scan reads the config, so it is made again
+    assert again != first or changed == "the config"

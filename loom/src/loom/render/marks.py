@@ -7,12 +7,15 @@ An annotation whose quoted words are gone draws an empty `<mark class="annotatio
 
 from __future__ import annotations
 
+import hashlib
 import html as htmllib
 import re
-from dataclasses import dataclass
+from dataclasses import astuple, dataclass
 from html.parser import HTMLParser
+from typing import Any
 
 from loom.records.selectors import project
+from loom.scan.memo import Memo
 
 
 @dataclass
@@ -85,9 +88,25 @@ def _norm(s: str) -> str:
 
 
 def place_marks(html: str, entries: list[MarkEntry]) -> str:
-    """Return the fragment with marks inserted; entries whose block cannot be found are left unmarked (the manifest still lists them)."""
+    """Return the fragment with marks inserted; entries whose block cannot be found are left unmarked (the manifest still lists them).
+
+    Made once for each fragment and entries in use (`_placed`): a served quilt marks the same version previews and fragments on every build.
+    """
     if not entries:
         return html
+    return _placed.get(_placing(html, entries), lambda: _place(html, entries))
+
+
+def _placing(html: str, entries: list[MarkEntry]) -> tuple[bytes, tuple[tuple[Any, ...], ...]]:
+    """What a placement is made from: the fragment, by its digest, and every field of every entry, in order."""
+    return hashlib.blake2b(html.encode("utf-8"), digest_size=16).digest(), tuple(astuple(e) for e in entries)
+
+
+#: Each placement in use, by `_placing`: a long fragment is named by its digest and not held as the key.
+_placed: Memo[tuple[bytes, tuple[tuple[Any, ...], ...]], str] = Memo(built=True)
+
+
+def _place(html: str, entries: list[MarkEntry]) -> str:
     idx = _Index(html)
     idx.feed(html)
     edits: list[tuple[int, int, str]] = []

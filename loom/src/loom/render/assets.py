@@ -9,6 +9,7 @@ import subprocess
 from pathlib import Path
 
 from loom.paths import under
+from loom.render.uses import passing
 from loom.tex.runner import tex_env
 
 
@@ -65,6 +66,8 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
         )
         if proc.returncode == 0 and out.exists():
             return f"svg/{out.name}", None
+    # the machine's: a converter installed later converts it
+    passing()
     return None, f"could not convert {name} to SVG (pdftocairo or dvisvgm --pdf needed)"
 
 

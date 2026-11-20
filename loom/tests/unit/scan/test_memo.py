@@ -188,3 +188,85 @@ def test_a_reading_that_ends_before_an_older_one_forgets_nothing() -> None:
     assert "before" in m
     older.__exit__(None, None, None)
     assert "before" not in m
+
+
+def test_a_scan_of_its_own_forgets_nothing_a_build_made() -> None:
+    """A request's scan between two builds asks for nothing a build makes from its scan (a version's marks, an agent copy's comparison): what the last build made outlives it, and the next build that does not ask for it lets it go."""
+    m = Memo(str.upper, built=True)
+    with reading(build=True):
+        m("made by the build")
+    with reading():
+        pass
+    assert "made by the build" in m
+    with reading(build=True):
+        pass
+    assert "made by the build" not in m
+
+
+def test_a_value_that_does_not_hold_is_handed_out_and_not_kept() -> None:
+    """A rendering made while TeX failed for the machine's sake serves the build that made it, and the next asks for it again."""
+    made: list[str] = []
+    m: Memo[str, str] = Memo(built=True)
+
+    def make() -> str:
+        made.append("passing")
+        return "passing"
+
+    assert m.get("draft", make, lambda v: v != "passing") == "passing"
+    assert "draft" not in m
+    m.get("draft", make, lambda v: v != "passing")
+    assert len(made) == 2
+
+
+def test_a_kept_value_that_no_longer_holds_is_made_again() -> None:
+    """A rendering whose files are gone from disk is made again, and kept again once they are back."""
+    there = {"picture"}
+    made: list[str] = []
+    m: Memo[str, str] = Memo(built=True)
+
+    def make() -> str:
+        made.append("picture")
+        return "picture"
+
+    def holds(v: str) -> bool:
+        return v in there
+
+    m.get("draft", make, holds)
+    m.get("draft", make, holds)
+    assert len(made) == 1
+    there.clear()
+    m.get("draft", make, holds)
+    assert len(made) == 2 and "draft" not in m
+    there.add("picture")
+    m.get("draft", make, holds)
+    m.get("draft", make, holds)
+    assert len(made) == 3 and "draft" in m
+
+
+def test_a_build_empties_every_memo_when_another_process_built_since(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A build in another process, a `loom build --force` in a terminal, shows as a build index this process did not write, or none: the next build here forgets all it remembers, and a build after its own forgets nothing."""
+    import os
+    import shutil
+
+    import loom.render.build as building
+    from loom.paths import BUILD_INDEX
+
+    root = a_quilt(tmp_path)
+    quilt = load_quilt(root)
+    forgot: list[int] = []
+    monkeypatch.setattr(building, "forget", lambda: forgot.append(1))
+    build(quilt, tex=False)
+    build(quilt, tex=False)
+    assert forgot == []
+    # written again whole, as another process writes it: the same bytes, a new file
+    shutil.copy(root / BUILD_INDEX, root / "index.json")
+    os.replace(root / "index.json", root / BUILD_INDEX)
+    build(quilt, tex=False)
+    assert forgot == [1]
+    build(quilt, tex=False)
+    assert forgot == [1]
+    (root / BUILD_INDEX).unlink()
+    build(quilt, tex=False)
+    assert forgot == [1, 1]

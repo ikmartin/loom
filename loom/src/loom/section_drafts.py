@@ -7,13 +7,18 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from loom.history.ledger import History, load_history
 from loom.paths import BLOCKS, DRAFT_PREVIEWS, LOOM, SITE, SITE_SVG, document_dir, under
 from loom.scan.expand import Expansion, Segment
 from loom.scan.labels import LABEL_DEF, derived_of, is_id_shaped, plain_key
+from loom.scan.memo import Memo
 from loom.scan.model import SourceFile
 from loom.scan.scan import ScanResult
 from loom.scan.sections import SectionUnit, body_range, find_sections
@@ -218,8 +223,8 @@ def pinned_inputs(result: ScanResult, copy: str) -> ScanResult:
     return replace(result, quilt=Quilt(result.quilt.root / context["path"], result.quilt.config)) if context else result
 
 
-def pinned_scan(result: ScanResult, copy: str) -> ScanResult:
-    """Scan the draft against its saved local inputs without making that context live."""
+def pinned_scan(result: ScanResult, copy: str, text: str | None = None) -> ScanResult:
+    """Scan the draft against its saved local inputs without making that context live; `text` is the draft's, where the caller has read it, else it is read here."""
     from loom.scan.quilt import Quilt
     from loom.scan.scan import scan
 
@@ -230,7 +235,7 @@ def pinned_scan(result: ScanResult, copy: str) -> ScanResult:
     # the saved context has no history to say the copy compiles from its source's directory, so it is told (P12)
     return scan(
         Quilt(root, result.quilt.config),
-        {copy: (result.quilt.root / copy).read_text()},
+        {copy: text if text is not None else (result.quilt.root / copy).read_text()},
         bases={copy: document_dir(context.get("source", metadata(result, copy)["source"]))},
         copy=True,
     )
@@ -291,29 +296,29 @@ def attach_context(
 ) -> None:
     """Render scoped copies and external references from the same pinned input set.
 
-    `marks` is the build's own `build._marks_by_node`, so the annotations are resolved and re-anchored once per build and from one read of the log; without it they are worked out here.
+    `marks` is the build's own `build._marks_by_node`, so the annotations are resolved and re-anchored once per build and from one read of the log; without it they are worked out here. What a draft renders in its saved context is made once for its inputs (`_drafted`), so a build after a change elsewhere, or after a note, remakes none of it; the marks are placed on it at every build.
     """
-    from loom.render.fragments import FragmentRenderer, RenderPlan
+    from loom.render.marks import place_marks
     from loom.render.markup import slug
-    from loom.scan.macros import to_mathjax
+    from loom.render.uses import used
 
     for master in list(manifest["masters"]):
         copy = master["path"]
         if master.get("scope", {}).get("kind") != "section" or master.get("closed"):
             continue
         meta = metadata(result, copy)
-        snap = pinned_scan(result, copy)
-        context_source = meta["context"].get("source", meta["source"])
         context_id = "context/paper-" + Path(meta["context"]["path"]).name + "-" + Path(meta["source"]).stem + ".tex"
-        renderer = FragmentRenderer(RenderPlan(snap, {}, result.quilt.root / BLOCKS, result.quilt.root / SITE_SVG))
-        # a section draft is compiled by no one: its document is made by TeX as snippets, in its saved context
-        renderer.prepare_document(copy)
+        # read once, so the rendering is of the text its key names
+        text = (result.quilt.root / copy).read_text()
+        drafted = _drafted.get(_drafting(result, copy, meta, text), partial(_draft, result, copy, meta, text), _holds)
+        used(*drafted.noted)
+        local = drafted.local
         macro_name = "draft:" + copy
-        manifest["macros"]["sets"][macro_name] = to_mathjax(snap.closures[copy].macros)
+        # the manifest's own, so nothing done to it reaches what the memo hands the next build; an entry is flat (`macros._published`), so a new dict of it is a whole copy
+        manifest["macros"]["sets"][macro_name] = [dict(m) for m in drafted.macros]
         master.update(macros=macro_name, context_document=context_id)
-        local = {k for k, n in snap.nodes.items() if copy in n.reached_by}
 
-        def pin(fragment: str, local: set[str] = local, context_id: str = context_id) -> str:
+        def pin(fragment: str, local: frozenset[str] = local, context_id: str = context_id) -> str:
             def ref(match: re.Match[str]) -> str:
                 key = match[1]
                 if key in local:
@@ -323,8 +328,6 @@ def attach_context(
             return re.sub(r'data-target="([^"]+)"', ref, fragment)
 
         # Preserve annotation marks placed by the ordinary renderer; only the underlying context differs.
-        from loom.render.marks import place_marks
-
         if marks is None:
             from loom.records.store import Records
             from loom.render.build import _marks_by_node
@@ -332,24 +335,22 @@ def attach_context(
             marks = _marks_by_node(result, Records(result.quilt.root, result.quilt.history_dir))
         files[master["fragment"]] = pin(
             place_marks(
-                renderer.master_fragment(copy),
-                [m for k, ms in marks.items() for m in ms if k in local and m.in_doc in (None, copy)],
+                drafted.document, [m for k, ms in marks.items() for m in ms if k in local and m.in_doc in (None, copy)]
             )
         )
-        for key in local:
+        for key in sorted(local):
             node = manifest["nodes"].get(key)
-            if node and key != copy:
+            if node and key != copy and key in drafted.nodes:
                 files[node["fragment"]] = pin(
-                    place_marks(renderer.node_fragment(key), [m for m in marks.get(key, []) if m.in_doc is None])
+                    place_marks(drafted.nodes[key], [m for m in marks.get(key, []) if m.in_doc is None])
                 )
                 node["draft_macros"] = macro_name
         if any(m["path"] == context_id for m in manifest["masters"]):
             continue
         fragment = "fragments/contexts/" + hashlib.sha256(context_id.encode()).hexdigest() + ".html"
-        renderer.prepare_document(context_source)
-        files[fragment] = renderer.master_fragment(context_source)
+        files[fragment] = drafted.context
         context_macros = "context:" + context_id
-        manifest["macros"]["sets"][context_macros] = to_mathjax(snap.closures[context_source].macros)
+        manifest["macros"]["sets"][context_macros] = [dict(m) for m in drafted.context_macros]
         manifest["masters"].append(
             {
                 "path": context_id,
@@ -360,3 +361,82 @@ def attach_context(
                 "macros": context_macros,
             }
         )
+
+
+@dataclass(frozen=True)
+class _Drafted:
+    """What a section draft renders in its saved context, before the build's marks: its keys, its document and nodes, its macros, the saved paper's document and macros, every cache file it was made from, every picture it names in the site, and whether it met something of the machine's that no cache remembers (`uses.passing`)."""
+
+    local: frozenset[str]
+    document: str
+    nodes: Mapping[str, str]
+    macros: list[dict[str, object]]
+    context: str
+    context_macros: list[dict[str, object]]
+    noted: frozenset[str]
+    pictures: frozenset[str]
+    passing: bool
+
+
+def _holds(drafted: _Drafted) -> bool:
+    """Whether a rendering may stand for its key at a later build: not one made while TeX failed for the machine's sake or a figure went unconverted, which the next build tries again, nor one whose cache files or pictures are gone from disk, which a rendering made again makes and publishes again."""
+    return not drafted.passing and all(os.path.exists(f) for f in (*drafted.noted, *drafted.pictures) if f[:1] != "@")
+
+
+#: A picture a fragment names, by its path in the site.
+_PICTURE = re.compile(r'src="(svg/[^"]+)"')
+
+
+def _drafting(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> tuple[Any, ...]:
+    """What a draft's rendering is made from: the draft's text, its ledger entry, every file of its saved context by its contents, the quilt's config and the cache it renders into, and whether TeX4ht is here to make what the cache lacks."""
+    import shutil
+
+    root = result.quilt.root
+    saved = root / meta["context"]["path"]
+
+    def digest(path: Path) -> bytes:
+        return hashlib.blake2b(path.read_bytes(), digest_size=16).digest()
+
+    return (
+        str(root),
+        copy,
+        hashlib.blake2b(text.encode("utf-8"), digest_size=16).digest(),
+        json.dumps(meta, sort_keys=True, default=str),
+        tuple(sorted((p.relative_to(saved).as_posix(), digest(p)) for p in saved.rglob("*") if p.is_file())),
+        repr(result.quilt.config),
+        shutil.which("make4ht"),
+    )
+
+
+def _draft(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> _Drafted:
+    from loom.render.fragments import FragmentRenderer, RenderPlan
+    from loom.render.uses import PASSING, noting
+    from loom.scan.macros import to_mathjax
+
+    with noting() as noted:
+        snap = pinned_scan(result, copy, text)
+        context_source = meta["context"].get("source", meta["source"])
+        renderer = FragmentRenderer(RenderPlan(snap, {}, result.quilt.root / BLOCKS, result.quilt.root / SITE_SVG))
+        # a section draft is compiled by no one: its document is made by TeX as snippets, in its saved context
+        renderer.prepare_document(copy)
+        local = frozenset(k for k, n in snap.nodes.items() if copy in n.reached_by)
+        document = renderer.master_fragment(copy)
+        nodes = {key: renderer.node_fragment(key) for key in sorted(local) if key != copy}
+        renderer.prepare_document(context_source)
+        context = renderer.master_fragment(context_source)
+    site = result.quilt.root / SITE
+    return _Drafted(
+        local,
+        document,
+        MappingProxyType(nodes),
+        to_mathjax(snap.closures[copy].macros),
+        context,
+        to_mathjax(snap.closures[context_source].macros),
+        frozenset(noted - {PASSING}),
+        frozenset(str(site / rel) for html in (document, context, *nodes.values()) for rel in _PICTURE.findall(html)),
+        PASSING in noted,
+    )
+
+
+#: Each draft's rendering in use, by `_drafting`.
+_drafted: Memo[tuple[Any, ...], _Drafted] = Memo(built=True)
