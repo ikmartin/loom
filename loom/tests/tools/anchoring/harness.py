@@ -46,6 +46,9 @@ def near_of(result, key: str, node) -> dict:
 #: Whether the records are read as a loom before `context` filed them (`run.py --old`).
 OLD = False
 
+#: Whether each statement targeted has a verbatim twin at the end of its file before any record is filed (`run.py --pretwin`): every record then had an exact twin when it was written.
+PRETWIN = False
+
 WORD = re.compile(r"^[A-Za-z][A-Za-z,.;:'-]*$")
 
 
@@ -899,6 +902,10 @@ def classify(root: Path, targets: list[Target], recs: list[dict], ws: WS) -> lis
     R = Records(root)
     res_by_id = {r.annotation.id: r for r in R.resolved(result)}
     edits = {e.id: e for e in E.replay(root)[0]}
+    from loom.pending import suggested
+
+    # where each unplaced edit is listed (`loom changes`, Review's cards): a block names it only while it is placed there
+    listed = {p.id: p.key for p in suggested(result) if p.state == "unplaced"}
     tmap = {t.tid: t for t in targets}
     out = []
     for rec in recs:
@@ -949,10 +956,14 @@ def classify(root: Path, targets: list[Target], recs: list[dict], ws: WS) -> lis
                 row["now"] = placed.key
             except E.Unplaced:
                 row["outcome"] = "lost" if node is None else "detached"
+                if listed.get(rec["id"]) and (truth is None or listed[rec["id"]] != truth.key):
+                    # unplaced, and still listed on a block, which is not its own
+                    row["outcome"] = "wrong"
+                    row["detail"] = "unplaced-listed-on-a-block"
         now_block = result.nodes.get(row["now"]) if row.get("now") else None
         if now_block is None and row.get("now") in result.assembly.regions:
             now_block = result.nodes.get(result.assembly.regions[row["now"]].container)
-        if row["outcome"] == "detached" and truth is not None and now_block is not None and now_block.key != truth.key:
+        if row["outcome"] == "detached" and now_block is not None and (truth is None or now_block.key != truth.key):
             # detached, and still named on a block that is not its own: shown on the wrong block
             row["outcome"] = "wrong"
             row["detail"] = "detached-on-another-block"
@@ -979,6 +990,19 @@ def main(paper: Path, out: Path, results: Path, only: list[str] | None = None) -
     (base / ".loom" / "local" / "serve.json").unlink(missing_ok=True)
     result = scan(load_quilt(base))
     targets = pick_targets(result)
+    if PRETWIN:
+        # a verbatim copy of each targeted statement at the end of its file, made before any record is filed
+        for t in targets:
+            if not t.kind.startswith("stmt"):
+                continue
+            f = base / t.file
+            text = f.read_text(encoding="utf-8", errors="surrogateescape")
+            # a restatement: the same words without the labels, which LaTeX and loom refuse twice
+            copy = re.sub(r"\\label\{[^}]*\}", "", text[t.start : _stmt_end(text, t.start)])
+            end = text.rfind("\\end{document}")
+            at = end if end >= 0 else len(text)
+            f.write_text(text[:at] + "\n" + copy + "\n\n" + text[at:], encoding="utf-8", errors="surrogateescape")
+        result = scan(load_quilt(base))
     recs = file_records(base, targets)
     if OLD:
         # records as a loom before `context` wrote them: every created event without it
