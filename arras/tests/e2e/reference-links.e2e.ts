@@ -74,6 +74,18 @@ test.describe('a citation', () => {
 		await expect(pane(page, 1).getByTestId(`mark-${RESULT}`)).toBeInViewport();
 	});
 
+	test('opened at a page and left before a frame has followed the scroll, it is kept at that page for the next visit', async ({ page }) => {
+		await filed(page);
+		// the column's scroll never reaches the renderer's follower, which is what a page left within a frame of the scroll is: nothing but the opening itself has said where the paper stands
+		await page.addInitScript(() => window.addEventListener('scroll', (e) => { if (e.target instanceof Element && e.target.classList.contains('column')) e.stopPropagation(); }, true));
+		await page.goto('/node/' + RESULT);
+		await pane(page, 0).locator('span.cite[data-postnote="Theorem 2.1, p.~4"] a').first().click();
+		await onPage(page, 1, 4);
+		await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+		const kept = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('arras.places') ?? '{}')));
+		expect(kept).toEqual([expect.objectContaining({ page: 4 })]);
+	});
+
 	test('with no result behind it opens the page its postnote names, or the work as a plain link opens it where it names none', async ({ page }) => {
 		await filed(page);
 		// `\cite[Lemma 9]{Kre99}` names no page and no result the digest holds, so it is a plain link to the work: at its front, for a work never read

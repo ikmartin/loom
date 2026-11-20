@@ -257,12 +257,14 @@
 		putBack(holder);
 	});
 
-	/** Put the column where `keep` says, on `holder`, its page, as that page is laid out now. */
+	/** Put the column where `keep` says, on `holder`, its page, as that page is laid out now, and say it is the reader's place. */
 	function putBack(holder: HTMLElement): void {
 		if (!column || !keep) return;
 		const next = holder.nextElementSibling as HTMLElement | null;
 		column.scrollTop = holder.offsetTop + keep.share * ((next?.offsetTop ?? column.scrollHeight) - holder.offsetTop);
 		keep = { ...keep, top: column.scrollTop };
+		// said at once, not when the scroll event's frame comes: a paper left before that frame would otherwise keep nothing of the place it was just sent to
+		v.place = { page: keep.page, share: keep.share };
 	}
 
 	/** What last set the paper moving: told a place, landing on a mark, or the reader's own hand, by a gesture or by asking for a page, which is a place told once the paper is there; a scroll that follows the hand is theirs. */
