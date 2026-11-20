@@ -420,7 +420,15 @@ def drafted(q, path):
 
 
 @pytest.mark.parametrize(
-    "changed", ["the draft", "its ledger entry", "a file of its saved context", "the config", "whether TeX4ht is here"]
+    "changed",
+    [
+        "the draft",
+        "its ledger entry",
+        "a file of its saved context",
+        "the config",
+        "whether TeX4ht is here",
+        "which figure converters are here",
+    ],
 )
 def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt, drafting, changed, monkeypatch):
     """A section draft is rendered in its saved context by TeX; a build renders it once for the draft's text, its ledger entry, the saved context's files, the config and whether TeX4ht is here, and again when any of them changes."""
@@ -454,14 +462,15 @@ def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt
         (quilt.root / "config.toml").write_text((quilt.root / "config.toml").read_text() + 'home = "README.md"\n')
         q = load_quilt(quilt.root)
     else:
+        gone = "make4ht" if changed == "whether TeX4ht is here" else "pdftocairo"
         which = shutil.which
-        monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == "make4ht" else which(name, *a, **k))
+        monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == gone else which(name, *a, **k))
     again = drafted(q, a)
     assert len(drafting) == 2
     drafts._drafted.clear()
     assert again == drafted(q, a)
-    # no setting changes a draft's rendering today, and what TeX made of the draft is in the snippet cache, so neither changes what is published; each is read in the rendering, so it is made again
-    assert again != first or changed in ("the config", "whether TeX4ht is here")
+    # no setting changes a draft's rendering today, what TeX made of the draft is in the snippet cache, and this draft holds no figure, so none of the three changes what is published; each is read in the rendering, so it is made again
+    assert again != first or changed in ("the config", "whether TeX4ht is here", "which figure converters are here")
 
 
 def test_a_section_draft_is_not_rendered_again_after_an_edit_elsewhere_or_a_note(quilt, drafting):
@@ -636,3 +645,22 @@ def test_what_a_remembered_section_draft_hands_out_is_the_builds_own(quilt, draf
     fresh = build(quilt).manifest["macros"]["sets"]
     assert len(drafting) == 2
     assert {k: again[k] for k in published} == {k: fresh[k] for k in published}
+
+
+def test_a_section_draft_whose_figure_no_tool_here_converts_is_rendered_once(quilt, drafting, monkeypatch):
+    """A machine with no converter for a PDF figure is in that state for good, as the draft's key says: the draft is rendered once while it lasts, not at every build."""
+    import shutil
+
+    edit(quilt, DOC, "First prose.", "First prose. \\includegraphics{fig}")
+    (quilt.root / "drafting" / "fig.pdf").write_bytes(b"%PDF-1.4 a figure\n")
+    a = copy(quilt)
+    which = shutil.which
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda name, *args, **kw: None if name in ("pdftocairo", "dvisvgm") else which(name, *args, **kw),
+    )
+    first = drafted(quilt, a)
+    edit(quilt, DOC, "Second prose.", "Second prose, changed.")
+    assert drafted(quilt, a) == first and 'src="fig.pdf"' in first[0]
+    assert len(drafting) == 1

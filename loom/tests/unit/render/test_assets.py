@@ -62,18 +62,41 @@ def test_without_pdftocairo_dvisvgm_converts_and_without_either_it_is_an_error(
     )
 
 
-def test_only_a_figure_no_tool_here_converts_is_noted_as_passing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+#: Each machine a figure meets, as (the converters here, whether `dvisvgm` has a Ghostscript), and whether an unconverted figure is noted passing: only where a converter here ran and failed, which it may not do again; a converter missing is a state of the machine a key names (`converters`).
+MACHINES = {
+    "a converter that works": (("pdftocairo",), True, False),
+    "no converter": ((), True, False),
+    "dvisvgm without a Ghostscript, which fails": (("dvisvgm-failing",), False, False),
+    "pdftocairo, failing": (("pdftocairo-failing",), True, True),
+    "dvisvgm with a Ghostscript, failing": (("dvisvgm-failing",), True, True),
+}
+
+
+@pytest.mark.parametrize("machine", sorted(MACHINES))
+def test_an_unconverted_figure_is_passing_only_when_a_converter_here_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, machine: str
 ) -> None:
-    """A figure no tool on the machine converts is the machine's, noted `uses.PASSING` so that nothing made with it outlives the build; one converted, or one the quilt does not hold, is not."""
     from loom.render.uses import PASSING, noting
+    from loom.tex import private
 
     (tmp_path / "cone.pdf").write_bytes(b"%PDF-1.4\n%FAKE-LOOM\nx\n")
-    with noting() as converted:
-        publish_graphic(tmp_path, "cone", tmp_path / "svg1")
-    with noting() as absent:
-        publish_graphic(tmp_path, "nothing", tmp_path / "svg2")
-    monkeypatch.setattr(shutil, "which", lambda tool: None)
-    with noting() as unconverted:
-        publish_graphic(tmp_path, "cone", tmp_path / "svg3")
-    assert PASSING not in converted | absent and PASSING in unconverted
+    failing = tmp_path / "failing"
+    failing.write_text("#!/bin/sh\nexit 1\n")
+    failing.chmod(0o755)
+    tools, ghostscript, passing = MACHINES[machine]
+    real = shutil.which
+    here = {t.removesuffix("-failing"): str(failing) if t.endswith("-failing") else real(t) for t in tools}
+    monkeypatch.setattr(shutil, "which", lambda tool: here.get(tool))
+    monkeypatch.setattr(private, "ghostscript_available", lambda: ghostscript)
+    with noting() as noted:
+        rel, _ = publish_graphic(tmp_path, "cone", tmp_path / "svg")
+    assert (rel is not None) == (machine == "a converter that works")
+    assert (PASSING in noted) == passing
+
+
+def test_a_graphic_the_quilt_does_not_hold_is_not_passing(tmp_path: Path) -> None:
+    from loom.render.uses import PASSING, noting
+
+    with noting() as noted:
+        assert publish_graphic(tmp_path, "nothing", tmp_path / "svg")[0] is None
+    assert PASSING not in noted

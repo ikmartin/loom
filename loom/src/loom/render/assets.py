@@ -10,6 +10,7 @@ from pathlib import Path
 
 from loom.paths import under
 from loom.render.uses import passing
+from loom.tex import private
 from loom.tex.runner import tex_env
 
 
@@ -66,9 +67,15 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
         )
         if proc.returncode == 0 and out.exists():
             return f"svg/{out.name}", None
-    # the machine's: a converter installed later converts it
-    passing()
+    if pdftocairo or (dvisvgm and private.ghostscript_available()):
+        # a converter the machine has failed, and may not fail again; one it lacks is a state of the machine a key names (`converters`)
+        passing()
     return None, f"could not convert {name} to SVG (pdftocairo or dvisvgm --pdf needed)"
+
+
+def converters() -> tuple[str | None, str | None, bool]:
+    """What decides whether a PDF figure converts here, for a key to name: where `pdftocairo` and `dvisvgm` are, and whether `dvisvgm` has a Ghostscript, without which it converts no PDF."""
+    return shutil.which("pdftocairo"), shutil.which("dvisvgm"), private.ghostscript_available()
 
 
 def publish_picture(picture: Path, svg_dir: Path) -> str:

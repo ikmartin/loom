@@ -379,7 +379,7 @@ class _Drafted:
 
 
 def _holds(drafted: _Drafted) -> bool:
-    """Whether a rendering may stand for its key at a later build: not one made while TeX failed for the machine's sake or a figure went unconverted, which the next build tries again, nor one whose cache files or pictures are gone from disk, which a rendering made again makes and publishes again."""
+    """Whether a rendering may stand for its key at a later build: not one made while TeX failed for the machine's sake or a converter here failed on a figure, which the next build tries again, nor one whose cache files or pictures are gone from disk, which a rendering made again makes and publishes again."""
     return not drafted.passing and all(os.path.exists(f) for f in (*drafted.noted, *drafted.pictures) if f[:1] != "@")
 
 
@@ -388,8 +388,10 @@ _PICTURE = re.compile(r'src="(svg/[^"]+)"')
 
 
 def _drafting(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> tuple[Any, ...]:
-    """What a draft's rendering is made from: the draft's text, its ledger entry, every file of its saved context by its contents, the quilt's config and the cache it renders into, and whether TeX4ht is here to make what the cache lacks."""
+    """What a draft's rendering is made from: the draft's text, its ledger entry, every file of its saved context by its contents, the quilt's config and the cache it renders into, whether TeX4ht is here to make what the cache lacks, and which converters are here for a PDF figure (`assets.converters`)."""
     import shutil
+
+    from loom.render.assets import converters
 
     root = result.quilt.root
     saved = root / meta["context"]["path"]
@@ -405,6 +407,7 @@ def _drafting(result: ScanResult, copy: str, meta: dict[str, Any], text: str) ->
         tuple(sorted((p.relative_to(saved).as_posix(), digest(p)) for p in saved.rglob("*") if p.is_file())),
         repr(result.quilt.config),
         shutil.which("make4ht"),
+        converters(),
     )
 
 
