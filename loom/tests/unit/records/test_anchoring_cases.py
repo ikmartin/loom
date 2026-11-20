@@ -303,7 +303,7 @@ def test_a_record_on_no_block_names_none_and_no_mark_is_drawn_in_another(out: Pa
     assert gone[q].node is None and gone[q].entry is None
     manifest: dict = {"nodes": {}, "keys": {}, "diagnostics": []}  # type: ignore[type-arg]
     records.apply(result, manifest)
-    assert manifest["annotations"][q]["target"]["key"] is None
+    assert manifest["annotations"][q]["target"]["key"] == ""
     assert {u["id"]: u["key"] for u in manifest["unplaced"]} == {
         q: "drafting/s1.tex#lemma:2",
         w: "drafting/s1.tex#lemma:2",
@@ -450,3 +450,147 @@ def test_the_words_beside_an_insertion_hold_no_comment(out: Path, monkeypatch: p
         )  # fmt: skip
     (e,) = E.replay(out)[0]
     assert e.context is not None and "referee" not in e.context["beside"] and "private" not in e.context["beside"]
+
+
+def _unrecorded(out: Path) -> None:
+    """Take `context` off every record in both logs: what a record written before it was recorded is."""
+    import json
+
+    for log in (out / ".loom/records/annotations/log.jsonl", out / ".loom/records/edits/log.jsonl"):
+        if log.exists():
+            lines = [json.loads(line) for line in log.read_text().splitlines() if line]
+            log.write_text("".join(json.dumps({k: v for k, v in e.items() if k != "context"}) + "\n" for e in lines))
+
+
+def test_an_ids_empty_answer_being_filled_in_keeps_its_records(out: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """B-1, `id_empty_answers`: the author begins tq-0003's empty answer; its note stays on it, and the agent's whole answer is written into no other empty answer."""
+    E1 = env("lemma", "Exercise: show that every tree is bipartite.", "tq-0001")
+    E3 = env("lemma", "Exercise: show that K5 is not planar.", "tq-0003")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": E1 + proof() + E3 + proof()})
+    a = note(out, "tq-0003/proof", "use Euler's formula")
+    e = suggest(out, monkeypatch, "tq-0003/proof", "By Euler's formula, e <= 3v - 6 fails for K5.")
+    write(
+        out,
+        {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": E1 + proof() + E3 + proof("Suppose K5 were planar.")},
+    )
+    assert shown(out, a) == proof("Suppose K5 were planar.").strip()
+    assert keeps_into(out, e) in (None, proof("Suppose K5 were planar.").strip())
+
+
+@pytest.mark.parametrize("restated", ["before", "after"])
+def test_a_note_on_an_id_stays_with_it_when_rewritten_beside_a_restatement(out: Path, restated: str) -> None:
+    """B-2, `id_rewritten_copy_elsewhere`: the id never moved, so its note stays on it, rewritten under it, and never goes to a verbatim restatement."""
+    intro = sec("Introduction", "We state our main theorem.")
+    Tr = env("theorem", "Every compact orientable surface is a sphere with handles.")
+    T = env("theorem", "Every compact orientable surface is a sphere with handles.", "tq-0007")
+    T2 = env("theorem", "A closed orientable two-manifold of Euler characteristic chi is homeomorphic to the connected sum of 1 - chi/2 tori.", "tq-0007")  # fmt: skip
+    S = sec("Proofs", "We prove the main theorem.")
+    write(
+        out,
+        {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": intro + (Tr if restated == "before" else "") + S + T},
+    )
+    a = note(out, "tq-0007", "cite the classification")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": intro + Tr + S + T2})
+    assert shown(out, a) == T2.strip()
+
+
+@pytest.mark.parametrize("second", ["alike", "different"])
+def test_a_deleted_first_proofs_note_goes_to_no_second_proof(out: Path, second: str) -> None:
+    """B-3, `id_second_proof_takes_key`: an id's proofs are numbered by place, and the second takes `ID/proof` once the first is deleted; the note goes to none."""
+    T = env("theorem", "Every planar graph is five colourable.", "tq-0007")
+    P1 = proof("Induct on vertices: a vertex of degree at most five exists, remove it, colour the rest, and recolour along a Kempe chain.")  # fmt: skip
+    P2 = {
+        "alike": proof(
+            "Induct on vertices: a vertex of degree at most five exists, delete it, colour the rest, and swap colours along a Kempe chain."
+        ),  # fmt: skip
+        "different": proof("Use the discharging method with charges six minus degree on every vertex."),
+    }[second]
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": T + P1 + P2})
+    a = note(out, "tq-0007/proof", "which Kempe chain?")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": T + P2})
+    assert shown(out, a) is None
+
+
+def test_a_label_moved_to_a_look_alike_leaves_the_note_on_its_old_block(out: Path) -> None:
+    """B-4, `label_moved_to_like_block`: the old section, unlabelled now, holds the note's text word for word, and keeps it."""
+    S0 = sec("Preliminaries", "Background on simplicial complexes and their homology.", "sec:pre")
+    S1 = sec("Main results", "We prove the classification of compact surfaces by cutting along curves.", "sec:main")
+    S1b = sec("Main results", "We prove the classification of compact surfaces by cutting along curves.")
+    S2 = sec(
+        "Main results, revisited", "We prove the classification of compact surfaces by cutting along arcs.", "sec:main"
+    )
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": S0 + S1})
+    a = note(out, "drafting/s1.tex#sec:main", "cite Zeeman's proof")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": S0 + S1b + S2})
+    got = shown(out, a)
+    assert got is not None and got.startswith("\\section{Main results}\n")
+
+
+@pytest.mark.parametrize("words", ["By induction on n.", "By induction, clearly."])
+def test_a_short_proofs_note_follows_its_words_to_no_unrelated_proof(out: Path, words: str) -> None:
+    """B-5, `four_words_elsewhere`: L1 deleted with its proof, and an unrelated proof shortened to the same words; a recorded neighbour says it is not the note's block."""
+    L1 = env("lemma", "The sum of the first n odd numbers is a square.")
+    L2 = env("lemma", "Every tree on n vertices has n-1 edges.")
+    L5 = env("lemma", "Every connected graph has a spanning tree.")
+    L6 = env("lemma", "A graph is bipartite iff it has no odd cycle.")
+    P2 = proof("Remove a leaf and use induction on the number of vertices.")
+    P6 = proof("Two-colour by parity of distance.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": L1 + proof(words) + L2 + P2 + L5 + proof("Take a minimal connected spanning subgraph; it has no cycle.") + L6 + P6})  # fmt: skip
+    a = note(out, "drafting/s1.tex#lemma:1/proof", "which induction?")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": L2 + P2 + L5 + proof(words) + L6 + P6})
+    assert shown(out, a) is None
+
+
+def test_an_old_note_in_a_renamed_file_follows_no_copy_while_its_edited_block_reads_like_it(out: Path) -> None:
+    """B-6, `old_rename`: a note written before `context` on the second of two identical theorems; the file renamed and that theorem edited. The copy holds its very text, the edited one reads like it: either could be meant."""
+    T = env("theorem", "Every compact orientable surface is a sphere with handles.")
+    T2 = env("theorem", "Every compact orientable surface is a sphere with some handles attached.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": T + T})
+    a = note(out, "drafting/s1.tex#theorem:2", "cite the classification")
+    _unrecorded(out)
+    write(out, {"drafting/main.tex": main_with("graphs"), "drafting/graphs.tex": T + T2})
+    assert shown(out, a) is None
+
+
+def test_a_replacement_is_written_only_where_its_quote_stands_among_the_words_it_was_suggested_among(
+    out: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second review's replacement edit: its quote now stands once in its block, but among other words; the words recorded either side say it is not the place."""
+    X = env("lemma", "First we take the closure of A in the plane. Later we take its interior in the line.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": X})
+    e = suggest(out, monkeypatch, "drafting/s1.tex#lemma:1", "form the closure", "take the closure")
+    X2 = env("lemma", "First we compute the closure of A in the plane. Later we take the closure of B in the line.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": X2})
+    assert keeps_into(out, e) is None
+
+
+def test_an_unplaced_edit_is_listed_on_no_block(out: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """B-8, `places.py`: an edit on a deleted lemma is unplaced, and listed on no block, never on the lemma that took its key (`drafting/s1.tex#lemma:1`, Y now)."""
+    from loom.pending import suggested
+
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    Y = env("lemma", "Every bounded sequence of reals has a convergent subsequence.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": X + Y})
+    e = suggest(out, monkeypatch, "drafting/s1.tex#lemma:1", "an even cycle, by Erdos", "an even cycle")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": Y})
+    (p,) = [c for c in suggested(scanned(out)) if c.id == e]
+    assert p.state == "unplaced" and p.key is None
+
+
+def test_where_a_listing_names_a_note_is_read_again_after_a_write_to_the_log(out: Path) -> None:
+    """B-12: a placement remembered for a scan is read again once the annotation log changes, as a served quilt's does when a note is restated with no new scan."""
+    from loom.cli.review import edit_annotation
+    from loom.records.store import Records, placed_key
+
+    A = env("lemma", "Every compact group admits a Haar measure.")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    N = env("lemma", "Every planar graph is five colourable, by a counting argument.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X})
+    q = note(out, "drafting/s1.tex#lemma:2", "say which cycle", "contains an even cycle")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + N + X})
+    result = scanned(out)
+    ann = next(r.annotation for r in Records(out).resolved(result) if r.annotation.id == q)
+    assert placed_key(result, ann) == "drafting/s1.tex#lemma:3"
+    edit_annotation(result, q, ("human", "Tester"), body="another word")
+    ann = next(r.annotation for r in Records(out).resolved(result) if r.annotation.id == q)
+    assert placed_key(result, ann) == "drafting/s1.tex#lemma:3"

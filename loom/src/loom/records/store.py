@@ -108,27 +108,34 @@ def is_document_path(result: ScanResult, path: str) -> bool:
     return path.endswith(".tex") and not path.startswith("prose:")
 
 
-#: Each scan's placements by annotation id (`placed_key`); one scan at a time.
-_PLACED: tuple[ScanResult, dict[str, str | None]] | None = None
+#: Each scan's placements by annotation id (`placed_key`), with the annotation log's size and time they were read at; one scan at a time.
+_PLACED: tuple[ScanResult, tuple[int, int], dict[str, str | None]] | None = None
 
 
 def placed_key(result: ScanResult, ann: Annotation) -> str | None:
     """The key of the block `ann` is shown on now, as `Records.resolved` places it, which may not be the key it was written on; None for one on no block. What a listing names a note by.
 
-    A note the scan does not know (written since) is named by the key it was written on.
+    A note the scan does not know (written since) is named by the key it was written on. What is remembered is kept for one scan and one state of the annotation log, so a note restated by a write since is placed again.
     """
     global _PLACED
+    log = result.quilt.root / ANNOTATION_LOG
+    try:
+        st = log.stat()
+        stamp_ = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        stamp_ = (0, 0)
     held = _PLACED
-    if held is None or held[0] is not result:
+    if held is None or held[0] is not result or held[1] != stamp_:
         records = Records(result.quilt.root, result.quilt.history_dir)
         held = _PLACED = (
             result,
+            stamp_,
             {
                 r.annotation.id: None if r.unplaced else (r.target or r.annotation.target_key)
                 for r in records.resolved(result)
             },
         )
-    return held[1].get(ann.id, ann.target_key)
+    return held[2].get(ann.id, ann.target_key)
 
 
 #: Acceptance states by (reviewer, the ledger as read), each kept for the one scan it was computed against; see `Records.key_states`.
@@ -1039,7 +1046,8 @@ class Records:
                 "created": a.created,
                 # an annotation on a cited work names the work by identifier; the citekey and the page travel beside it so a viewer needs no lookup to say where it is (plan 0.13 item 2)
                 "target": {
-                    "key": res.target or None,
+                    # '' for one on no block: no block is named so, and nothing that reads a key throws on it
+                    "key": res.target,
                     "hash": a.target_hash,
                     "work": res.work or None,
                     # where it stands now: the page it was found again on, on a changed PDF

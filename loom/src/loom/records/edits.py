@@ -381,6 +381,17 @@ def uncommented(text: str) -> str:
     return _COMMENT.sub(lambda m: " " * len(m.group(0)), text)
 
 
+def _one_side_stands(selector: Selector, own: str, span: tuple[int, int]) -> bool:
+    """Whether the words recorded right before (`prefix`) or right after (`suffix`) a replacement's quote still stand beside it at `span`, the two nearest of either side at least: the quote found there is the one it was suggested on. True where neither side recorded a word."""
+    a, b = span
+    before, after = selector.prefix.split()[-2:], selector.suffix.split()[:2]
+    if not before and not after:
+        return True
+    if before and own[:a].split()[-len(before) :] == before:
+        return True
+    return bool(after) and own[b:].split()[: len(after)] == after
+
+
 def _file_beside(edit: Edit, text: str, at: int) -> str | None:
     """Why the file's words recorded beside an insertion's place (`context["beside"]`) no longer stand there in `text`, its file, at `at`; None when they do, or none was recorded. Words recorded as only whitespace say the file ended there."""
     beside = (edit.context or {}).get("beside")
@@ -554,6 +565,10 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         changed = _beside(edit, own, (a, b))
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
+        if edit.placement == "replace" and not _one_side_stands(edit.selector, own, (a, b)):
+            raise Unplaced(
+                f"the words either side of the text {edit.id} quotes have both changed since it was suggested, in {node.key}, so where it goes is not known"
+            )
         if edit.placement == "after":
             span, text = (b, b), _joined(own, b, new, before=False) if new else ""
         elif edit.placement == "before":

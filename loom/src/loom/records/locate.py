@@ -139,7 +139,7 @@ def follow(
     # a document's own text is named by its file's path, which a rename takes away as it does a key named by place
     gone_document = node is None and key.endswith(".tex") and not key.startswith("prose:")
     if not named_by_place(result, key, node) and not gone_document:
-        return _stable(result, node, want, quote)
+        return _stable(result, key, node, want, quote, context or {})
     return _by_place(result, key, node, want, edit=edit, near=near, quote=quote, context=context or {})
 
 
@@ -148,8 +148,13 @@ def rewritten(result: ScanResult, node: NodeRec, want: str, quote: str = "") -> 
     return bool(want) and not _still(result, want, node, quote)
 
 
-def _stable(result: ScanResult, node: NodeRec | None, want: str, quote: str) -> NodeRec | None:
-    """A stable key's record: on its block while that block still reads like it; else where its text, labels aside, stands once among the documents' blocks, its label having moved; else on its block, rewritten under it, or none under `VERIFY`. An id two blocks define places none; one whose block is in no document goes to the one block of the documents that reads like it, where there is one."""
+def _stable(
+    result: ScanResult, key: str, node: NodeRec | None, want: str, quote: str, context: dict[str, Any]
+) -> NodeRec | None:
+    """A stable key's record: on the block that carries its id or label, unless that label moved, or, for an id's proof (`ID/proof`, numbered by its place among the proofs), unless the proof at the key no longer holds its text and stands apart from its recorded neighbours.
+
+    The label moved only where the block carrying it now stands away from the record's recorded neighbours and the record's text, labels aside, stands once in another block, a text long enough to be someone's and not a twin its context recorded: the record follows it. Otherwise the record stays on the key's block, marked rewritten where that block no longer reads like it (`rewritten`), or detached under `VERIFY`. A record with no context stays on the key's block, as loom always read it. An id two blocks define places none; one whose block is in no document goes to the one block of the documents that reads like it, where there is one.
+    """
     if node is None:
         return None
     documents = _pool(result, node.file)
@@ -162,13 +167,32 @@ def _stable(result: ScanResult, node: NodeRec | None, want: str, quote: str) -> 
         mine = [n for n in documents if _still(result, want, n, quote)]
         if len(mine) == 1:
             return mine[0]
-    if _still(result, want, node, quote):
-        return node
+    still = _still(result, want, node, quote)
+    if (
+        context
+        and block_hash(result, node.key) != want
+        and _PROOF_OF_ID.match(key)
+        and _sides(result, node, context)[1]
+    ):
+        # an id's proofs are numbered by their place among its proofs: a proof standing apart from the record's neighbours is another one, which took the key of one deleted
+        return None
+    if context and _sides(result, node, context)[0] < 2 and block_hash(result, node.key) != want:
+        moved = _moved(result, want, node, documents, context)
+        if moved is not None:
+            return moved
+    return node if still or not VERIFY else None
+
+
+def _moved(
+    result: ScanResult, want: str, node: NodeRec, documents: list[NodeRec], context: dict[str, Any]
+) -> NodeRec | None:
+    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, when that text is long enough to be someone's and its context recorded no twin; else None. Its neighbours may have changed, since a label moves when blocks are rearranged."""
+    words = _own_words(_frozen(result, want))
+    if len(words) < TRIVIAL or context.get("twin") or int(context.get("copies") or 1) > 1:
+        return None
     bare = _bare_frozen(result, want)
-    moved = [n for n in documents if n is not node and bare and _bare_of(result, n) == bare]
-    if len(moved) == 1:
-        return moved[0]
-    return None if VERIFY else node
+    found = [n for n in documents if n is not node and bare and _bare_of(result, n) == bare]
+    return found[0] if len(found) == 1 else None
 
 
 def _by_place(
@@ -196,11 +220,15 @@ def _by_place(
     documents = _pool(result, path)
     if node is not None and block_hash(result, node.key) == want:
         others = [n for n in documents if n is not node and block_hash(result, n.key) == want]
-        if not others and copies == 1 and not trivial:
+        if not others:
+            # its very text stands once, at its own key: its block
             return node
-        # its very text stands in another block too, or stood in two: the one with both neighbours beside it
+        # its very text stands in another block too: the one with both neighbours beside it
         both = [n for n in [node, *others] if _sides(result, n, context)[0] == 2]
         return both[0] if len(both) == 1 else None
+    if node is not None and trivial and _sides(result, node, context)[0] == 2:
+        # a text with nothing of its own, its block being filled in where it stands between both its neighbours
+        return node
     if node is not None and not trivial and _like(result, want, node) >= LIKE and not _sides(result, node, context)[1]:
         if not twin:
             # edited where it stands: never left for another block, however exact a copy made since
@@ -208,10 +236,8 @@ def _by_place(
         # its block had a twin when it was written, and the block at its place may be that twin: only with both its neighbours beside it, no block holding its very text, and reading closer to it than any other by `AHEAD`
         mine = _like(result, want, node)
         rivals = [n for n in documents if n is not node and _like(result, want, n) >= LIKE]
-        if (
-            _sides(result, node, context)[0] == 2
-            and not any(block_hash(result, n.key) == want for n in rivals)
-            and all(mine - _like(result, want, n) >= AHEAD for n in rivals)
+        if not any(block_hash(result, n.key) == want for n in rivals) and all(
+            mine - _like(result, want, n) >= AHEAD for n in rivals
         ):
             return node
         return None
@@ -220,8 +246,9 @@ def _by_place(
         # nothing of its own to recognise: only the one block of its very text that stands between both its neighbours
         both = [n for n in exact if _sides(result, n, context)[0] == 2]
         return both[0] if len(both) == 1 else None
+    short = len(_own_words(frozen)) < SHORT
     if exact:
-        if len(exact) == 1 and not twin:
+        if len(exact) == 1 and not twin and not (short and _sides(result, exact[0], context)[1]):
             return exact[0]
         both = [n for n in exact if _sides(result, n, context)[0] == 2]
         return both[0] if len(both) == 1 else None
@@ -229,6 +256,8 @@ def _by_place(
     best = _closest(result, want, pool)
     if best is not None:
         if (twin or _sort(best) != context.get("kind")) and _sides(result, best, context)[0] != 2:
+            return None
+        if short and _sides(result, best, context)[1]:
             return None
         return best
     if quote and len(quote.split()) >= QUOTE_WORDS and context.get("quote") == 1:
@@ -257,11 +286,16 @@ def _unrecorded(
     if trivial:
         return None
     path = node.file if node is not None else ""
-    exact = [n for n in _pool(result, path) if n is not node and block_hash(result, n.key) == want]
+    pool = _pool(result, path)
+    exact = [n for n in pool if n is not node and block_hash(result, n.key) == want]
     if edit and near and len(exact) > 1:
         under = [n for n in exact if line_before(result, n) == near]
         return under[0] if len(under) == 1 else None
-    return exact[0] if len(exact) == 1 else None
+    if len(exact) != 1:
+        return None
+    # its very text standing once, but another block reading like it may be the record's own, edited: none can be told
+    rivals = [n for n in pool if n is not node and n is not exact[0] and _like(result, want, n) >= LIKE]
+    return None if rivals else exact[0]
 
 
 def _container_key(result: ScanResult, key: str, node: NodeRec | None) -> str:
@@ -282,6 +316,12 @@ def _container_key(result: ScanResult, key: str, node: NodeRec | None) -> str:
 
 #: A text with fewer words of its own than this (an empty proof, "Obvious.") has nothing to recognise it by, and a record on it is followed nowhere but its own key.
 TRIVIAL = 4
+
+#: A text with fewer words of its own than this is too short to follow by its words alone where a recorded neighbour says the block holding them is not its own.
+SHORT = 6
+
+#: The key of a proof under an id (`ID/proof`, `ID/proof/2`), named by its place among the statement's proofs.
+_PROOF_OF_ID = re.compile(r"^[^#]+/proof(/\d+)?$")
 
 #: How far ahead of the next block the closest must read for likeness alone to place a record (`_closest`).
 AHEAD = 0.1

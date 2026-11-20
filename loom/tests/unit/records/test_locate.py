@@ -64,7 +64,7 @@ def test_a_note_on_a_key_named_by_place_is_never_read_on_the_block_put_in_at_its
             assert got["detached"] is False and got["target"]["key"] == "drafting/outline.tex#section:3", got
         else:
             # nothing says where its block went: detached on no block, so the section put in at its place is never named
-            assert got["detached"] is True and got["target"]["key"] is None, got
+            assert got["detached"] is True and got["target"]["key"] == "", got
 
 
 @pytest.mark.parametrize("context", [True, False])
