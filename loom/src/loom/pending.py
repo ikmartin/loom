@@ -988,9 +988,20 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
 
 
 def relook(root: Path, look: dict[str, Any]) -> None:
-    """For a Keep or an undo that recovery finished, what its follow-up does to the person's look: the words loom wrote at `look["spans"]` go into the look of `look["who"]`, as `absorb` puts them, so they are not listed as the person's own edit.
+    """For a Keep or an undo that recovery finished, do what its follow-up does to the person's look.
 
-    A journal travels with a copied quilt, so only the quilt's own reviewer's look is touched, and only at places in files the scan reads.
+    The words loom wrote go into the reviewer's look, as `absorb` puts them, so they are not listed as the person's own edit. A journal travels with a copied quilt, so only the quilt's own reviewer's look is touched, and only at places in files the scan reads.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    look : dict
+        The act's `look` from its `begin` line: `who`, whose look, and `spans`, by file the `[start, end]` places in the scan's reading after the act of the words loom wrote.
+
+    See Also
+    --------
+    absorb : what puts in-place changes on loom's words into the look.
     """
     from loom.scan.quilt import load_quilt, reviewer_identity
     from loom.scan.scan import scan

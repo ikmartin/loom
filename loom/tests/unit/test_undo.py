@@ -262,6 +262,28 @@ def test_an_annotation_on_the_words_a_keep_wrote_goes_back_onto_the_words_it_rep
     assert found is not None and "compare" in (found[1].anchor or found[1].selector).exact
 
 
+def test_a_save_made_while_the_undo_keeps_its_version_survives_and_nothing_is_undone(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's finding 10: between the undo's plan and its write, the person's editor saves; the undo refuses and the save stands."""
+    import loom.history.acts as acts
+
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    real = acts.keep_versions
+
+    def saving(*args: object, **kw: object) -> object:
+        p.write_text(p.read_text() + "% saved while the undo ran\n")
+        return real(*args, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(acts, "keep_versions", saving)
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert res["done"] == [] and [r["code"] for r in res["refused"]] == ["changed"]
+    text = p.read_text()
+    assert text.endswith("% saved while the undo ran\n") and "the fixed points are those of" in text
+    assert status(q, FIXED) == "kept"
+
+
 def test_a_keep_that_wrote_nothing_is_not_undone(q: Path) -> None:
     p = q / LEMMA
     p.write_text(

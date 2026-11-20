@@ -207,7 +207,7 @@ def step(run: Run, undo: bool = False) -> None:
     ops = ["suggest", "section", "type", "edit", "keep", "keep_all", "discard", "undo_discard", "tick", "setting"]
     weights = [6, 2, 2, 4, 6, 2, 2, 1, 1, 1]
     if undo:
-        ops, weights = [*ops, "undo_keep"], [*weights, 3]
+        ops, weights = [*ops, "undo_keep"], [*weights, 8]
     op = rng.choices(ops, weights)[0]
     run.trail.append(op)
     if (
@@ -290,11 +290,45 @@ def step(run: Run, undo: bool = False) -> None:
             node = home(scan(root), e)
             # a key named by its place names its file; once its quote is replaced, no block of it is found by quote
             where = {node.file} if node is not None else {e.target_key.split("#")[0]} if "#" in e.target_key else set()
-            run.trail[-1] += f" {e.id}"
-            run.press("change-undo", {"changes": [e.id]}, where)
-            if find(root, e.id).status == "open" and run.markers[e.id] in b"\n".join(files(root).values()).decode(
-                "utf-8", "replace"
-            ):
+            mk = run.markers[e.id]
+            hold = next((f for f in sorted(where) if mk in (root / f).read_text(encoding="utf-8")), None)
+            how = rng.choice(["plain", "inside", "save"]) if hold else "plain"
+            run.trail[-1] += f" {e.id} ({how})"
+            if how == "inside":
+                # the person works inside the kept words first: an undo must find its place changed, and write nothing
+                mine = run.word("pt")
+                f = root / hold
+                f.write_text(f.read_text(encoding="utf-8").replace(mk, f"{mk} {mine}", 1), encoding="utf-8")
+                run.typed.add(mine)
+                before = files(root)
+                call(root, "change-undo", {"changes": [e.id]})
+                if files(root) != before:
+                    run.problems.append(f"undo of {e.id} wrote after the person worked inside its words")
+            elif how == "save":
+                # the person's editor saves the file while the undo keeps its version: the save survives
+                import loom.history.acts as acts
+
+                mine, f, real, saved = run.word("pt"), root / hold, acts.keep_versions, []
+
+                def saving(*args: Any, **kw: Any) -> Any:
+                    f.write_text(f.read_text(encoding="utf-8") + f"\n% {mine}\n", encoding="utf-8")
+                    saved.append(mine)
+                    return real(*args, **kw)
+
+                acts.keep_versions = saving  # type: ignore[assignment]
+                try:
+                    before = files(root)
+                    call(root, "change-undo", {"changes": [e.id]})
+                finally:
+                    acts.keep_versions = real  # type: ignore[assignment]
+                run.typed.update(saved)
+                run.trail[-1] += " saved" if saved else " refused before its version"
+                run.check("undo during a save", before, set(where))
+                if saved and find(root, e.id).status != "kept":
+                    run.problems.append(f"undo of {e.id} went ahead over a save made while it ran")
+            else:
+                run.press("change-undo", {"changes": [e.id]}, where)
+            if find(root, e.id).status == "open" and mk in b"\n".join(files(root).values()).decode("utf-8", "replace"):
                 run.problems.append(f"undo of {e.id}: open again with its text still in the file")
     elif op == "tick":
         from loom.tasks import items
@@ -324,7 +358,7 @@ def test_a_seeded_sequence_of_writes_keeps_the_persons_text(q: Path, seed: int) 
         assert not run.problems, (run.problems, run.trail)
 
 
-@pytest.mark.parametrize("seed", range(4))
+@pytest.mark.parametrize("seed", range(6))
 def test_a_seeded_sequence_with_the_undo_of_keeps_among_its_writes_keeps_the_persons_text(q: Path, seed: int) -> None:
     run = Run(q, 100 + seed)
     for _ in range(16):
