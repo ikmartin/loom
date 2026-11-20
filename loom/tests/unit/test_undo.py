@@ -402,6 +402,29 @@ def test_an_agent_cannot_undo_a_keep(q: Path) -> None:
     assert status(q, FIXED) == "kept"
 
 
+@pytest.mark.parametrize("act", ["keep", "undo"])
+def test_a_keep_or_undo_recovery_finished_is_not_listed_as_the_persons_edit(
+    q: Path, monkeypatch: pytest.MonkeyPatch, act: str
+) -> None:
+    """The review's finding 8: recovery finishes the files and records, and the look as the act's follow-up would have."""
+    from loom import writes
+
+    if act == "undo":
+        call(q, "change-keep", {"changes": [FIXED]})
+    real = writes._append_records
+
+    def crash(root: Path, records: list, **kw: object) -> None:
+        raise SystemExit("killed after the rename")
+
+    monkeypatch.setattr(writes, "_append_records", crash)
+    with pytest.raises(SystemExit):
+        call(q, f"change-{act}", {"changes": [FIXED]})
+    monkeypatch.setattr(writes, "_append_records", real)
+    said = writes.recover(q, scan(q).quilt.history_dir)
+    assert said and said[0].startswith("finished ")
+    assert [x.id for x in waiting(q) if x.kind == "edit"] == []
+
+
 def test_an_undo_cut_short_after_its_write_is_finished_once_by_the_next_act(
     q: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

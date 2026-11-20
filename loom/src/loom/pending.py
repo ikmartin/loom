@@ -463,6 +463,9 @@ def keep(
                 kept = _keep_suggested(w, result, [p.id for p in asked], writer, said)
                 refused += kept.refused
                 done += kept.ids
+                if who and kept.spans:
+                    # what the follow-up does to the look, for recovery to do if a crash comes first (`relook`)
+                    w.look = {"who": who, "spans": {f: [list(s) for s in v] for f, v in kept.spans.items()}}
 
             def follow() -> None:
                 after = _rescan(kept.result if kept else result)
@@ -703,6 +706,8 @@ def unkeep(
     try:
         with writes.act(root, hist, "undo", writer[1]) as w:
             _unkeep(w, out, ids, writer, said)
+            if who and out.spans:
+                w.look = {"who": who, "spans": {f: [list(s) for s in v] for f, v in out.spans.items()}}
 
             def follow() -> None:
                 if out.ids:
@@ -980,6 +985,28 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
                 line = answered_event(root, e, writer)
                 if line is not None:
                     w.log(annotation_log(root), line)
+
+
+def relook(root: Path, look: dict[str, Any]) -> None:
+    """For a Keep or an undo that recovery finished, what its follow-up does to the person's look: the words loom wrote at `look["spans"]` go into the look of `look["who"]`, as `absorb` puts them, so they are not listed as the person's own edit.
+
+    A journal travels with a copied quilt, so only the quilt's own reviewer's look is touched, and only at places in files the scan reads.
+    """
+    from loom.scan.quilt import load_quilt, reviewer_identity
+    from loom.scan.scan import scan
+
+    who = look.get("who") if isinstance(look, dict) else None
+    spans = look.get("spans") if isinstance(look, dict) else None
+    if not isinstance(who, str) or not who or not isinstance(spans, dict) or who != (reviewer_identity(root)[0] or ""):
+        return
+    result = scan(load_quilt(root))
+    for path, places in spans.items():
+        if path not in result.files or not isinstance(places, list):
+            continue
+        at = [
+            (s[0], s[1]) for s in places if isinstance(s, list) and len(s) == 2 and all(isinstance(x, int) for x in s)
+        ]
+        absorb(result, who, path, at)
 
 
 def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:

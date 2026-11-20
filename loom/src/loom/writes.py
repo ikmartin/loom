@@ -675,14 +675,14 @@ def _append_records(root: Path, records: list[dict[str, str]], *, unless_there: 
 
 
 def _settle(root: Path, history: Path, j: Journal) -> list[str]:
-    """Settle each act `j` holds begun: finished when every file holds its after bytes, undone when each holds its before or its after, left when someone changed one since, and left untouched when anything it names fails `untrusted`. Returns what was done, in words. Call holding the lock."""
+    """Settle each act `j` holds begun, and say what was done, in words: finished when every file holds its after bytes (with what its follow-up would have done to the person's look, `_relook`); undone when each holds its before or its after and the store holds every text it needs; otherwise left as it is, and said, naming which files are as loom wrote them and which as they were. Never puts some files back and leaves others without saying so. Call holding the lock."""
     from loom.clock import stamp
 
     said: list[str] = []
     for act_id, (_, e) in list(j.begun.items()):
         why = untrusted(root, history, e)
         if why:
-            said.append(f"left {act_id}: {why}")
+            said.append(f"left {act_id}: {why}; recovery changed nothing")
             continue
         files: dict[str, list[str | None]] = e.get("files") or {}
         for rel in files:
@@ -693,19 +693,61 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             _append_records(root, e.get("records") or [], unless_there=True)
             j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
             said.append(f"finished {act_id}")
-        elif all(before or after for before, after in holds.values()):
-            back = [
-                _undo_file(root, history, rel, files[rel])
-                for rel, (before, after) in holds.items()
-                if after and not before
-            ]
-            if all(back):
-                j.append(
-                    root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True}
-                )
-                said.append(f"undid {act_id}")
-            # a file changed while it was being put back is the person's: the act stays, reported
+            said += _relook(root, act_id, e)
+            continue
+        changed = [rel for rel, (before, after) in holds.items() if not before and not after]
+        if changed:
+            said.append(
+                f"left {act_id}: a file of it changed since loom began writing it, so recovery changed nothing: {_where(holds)}"
+            )
+            continue
+        todo = [rel for rel, (before, after) in holds.items() if after and not before]
+        texts = {rel: [fetch(history, d) if d else None for d in files[rel]] for rel in todo}
+        lacking = [rel for rel in todo if any(d and x is None for d, x in zip(files[rel], texts[rel], strict=True))]
+        if lacking:
+            said.append(
+                f"left {act_id}: the history lacks a text of {_named(lacking)}, so recovery changed nothing: {_where(holds)}"
+            )
+            continue
+        failed = [rel for rel in todo if not _put_back(root, rel, *texts[rel])]
+        if failed:
+            now = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
+            said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now)}")
+            continue
+        j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
+        said.append(f"undid {act_id}")
     return said
+
+
+def _named(rels: list[str]) -> str:
+    return ", ".join(rels)
+
+
+def _where(holds: dict[str, tuple[bool, bool]]) -> str:
+    """Which files of a left act are as loom wrote them, as they were before it, or neither, in words; both texts of each are in the history."""
+    groups = {
+        "as loom wrote": [rel for rel, (_, a) in holds.items() if a],
+        "as before it": [rel for rel, (b, a) in holds.items() if b and not a],
+        "changed since loom began writing it": [rel for rel, (b, a) in holds.items() if not a and not b],
+    }
+    parts = [f"{_named(rels)} {label}" for label, rels in groups.items() if rels]
+    return "; ".join(parts) + "; the texts before and after are kept in the history"
+
+
+def _relook(root: Path, act_id: str, entry: dict[str, Any]) -> list[str]:
+    """For an act recovery finished, what its follow-up would have done to the person's look (`pending.relook`): words loom wrote are the person's, not their edit. Returns what to say when that could not be done."""
+    look = entry.get("look")
+    if not look:
+        return []
+    try:
+        from loom.pending import relook
+
+        relook(root, look)
+    except Exception as exc:  # noqa: BLE001 -- the act is finished; its look is a convenience, said when it fails
+        return [
+            f"finished {act_id}, but its words did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
+        ]
+    return []
 
 
 #: Seconds after which a temporary file in the history's `texts/` is one a crash left, not one a store in another process is writing: `store` writes one and renames it within a moment.
@@ -771,6 +813,7 @@ class Act:
         self.splices: dict[str, list[dict[str, Any]]] = {}
         self.edits: list[str] = []
         self.undone: list[str] = []
+        self.look: dict[str, Any] | None = None
         self.records: list[dict[str, str]] = []
         self.follow: list[Callable[[], None]] = []
 
@@ -875,6 +918,8 @@ class Act:
         }
         if self.undone:
             begin["undid"] = self.undone
+        if self.look:
+            begin["look"] = self.look
         self.journal.append(self.root, begin, full=True)
         done: list[str] = []
         try:
