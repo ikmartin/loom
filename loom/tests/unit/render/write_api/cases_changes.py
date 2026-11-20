@@ -114,6 +114,7 @@ def _change_discard(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
 
 @case("change-undo")
 def _change_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.machine import quilt_id
     from loom.scan.quilt import save_author
 
     s, q, _sid = on_demo(serve, tmp_path)
@@ -124,22 +125,31 @@ def _change_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s.rebuild()
     succeeds(s, "change-keep", {"changes": [edit]})
     assert "at most two points" in lemma.read_text()
+    here = quilt_id(q)
     refuses(s, "change-undo", {"changes": [edit], "author": "Claude Agent"}, 403, "author-only", "only the author")
-    refuses(s, "change-undo", {"changes": ["e-2026-01-01-nothere"]}, 404, "no-such-change", "not in this quilt")
+    refuses(
+        s,
+        "change-undo",
+        {"changes": ["e-2026-01-01-nothere"], "quilt": here},
+        404,
+        "no-such-change",
+        "not in this quilt",
+    )
     refuses(s, "change-undo", {}, 400, "missing-field", "changes is the list")
-    # an undo named for another quilt, as from a tab that followed its port to a copy, changes nothing here
+    # an undo named for another quilt, as from a tab that followed its port to a copy, changes nothing here; nor does one that names none
     other = {"changes": [edit], "quilt": "0000000000000000"}
     refuses(s, "change-undo", other, 409, "other-quilt", "another quilt")
+    refuses(s, "change-undo", {"changes": [edit]}, 409, "other-quilt", "a quilt the undo does not name")
+    refuses(s, "change-undo", {"changes": [edit], "quilt": None}, 409, "other-quilt", "a quilt the undo does not name")
     assert "at most two points" in lemma.read_text()
-    from loom.machine import quilt_id
 
-    said = succeeds(s, "change-undo", {"changes": [edit], "quilt": quilt_id(q)})
+    said = succeeds(s, "change-undo", {"changes": [edit], "quilt": here})
     assert said["done"] == [edit] and said["refused"] == [] and said["result"].startswith("undid the keep of 1 ")
     assert lemma.read_bytes() == before
     # undone, it is open again and waits to be kept, so it has no Keep left to undo
     s.rebuild()
     assert edit in [c["id"] for c in json.loads(get(s.url + "build/manifest.json")[2])["changes"]]
-    again = succeeds(s, "change-undo", {"changes": [edit]})
+    again = succeeds(s, "change-undo", {"changes": [edit], "quilt": here})
     assert again["done"] == [] and [r["code"] for r in again["refused"]] == ["not-kept"]
 
 

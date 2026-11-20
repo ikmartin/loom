@@ -21,7 +21,7 @@ const withChanges = (page: Page) => serve(page, (m) => (m.changes = rows));
 /** A publisher serving the acts; what it was sent, by endpoint, the last body each. */
 async function serving(page: Page, caps = ['change-keep', 'change-discard', 'review-accept']): Promise<Record<string, Record<string, unknown>>> {
 	const sent: Record<string, Record<string, unknown>> = {};
-	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: caps, token: 't' } }));
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: caps, token: 't', quilt: 'q-test' } }));
 	await page.route('**/_api/*', async (route) => {
 		const endpoint = new URL(route.request().url()).pathname.split('/').pop() ?? '';
 		const body = route.request().postDataJSON();
@@ -91,7 +91,7 @@ test('the bar undoes a kept suggestion, which waits again', async ({ page }) => 
 	expect(sent['change-keep']).toEqual({ changes: [SUGGESTED] });
 	await expect(page.getByTestId('review-undo')).toHaveText('Undo keep');
 	await page.getByTestId('review-undo').click();
-	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED] });  // its publisher names no quilt, so none is sent
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED], quilt: 'q-test' });
 	await expect(card(page, SUGGESTED)).toHaveCount(1);
 	await expect(page.getByTestId('review-undo')).toHaveCount(0);
 });

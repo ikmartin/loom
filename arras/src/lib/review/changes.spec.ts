@@ -3,11 +3,15 @@ import type { Manifest, PendingChange } from '$lib/manifest/types';
 
 const calls: [string, Record<string, unknown>][] = [];
 let answer: Record<string, unknown> = { ok: true, result: 'done' };
-let quilt = 'q-one';
+let quilt: string | undefined = 'q-one';
+let probed: Promise<void> = Promise.resolve();
 const watchers: ((caps: { quilt?: string } | null) => void)[] = [];
 vi.mock('$lib/write', () => ({
 	can: async () => true,
-	capabilities: async () => ({ write_api: 1, capabilities: [], quilt }),
+	capabilities: async () => {
+		await probed;
+		return { write_api: 1, capabilities: [], quilt };
+	},
 	onCapabilities: (watch: (caps: { quilt?: string } | null) => void) => watchers.push(watch),
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
@@ -230,6 +234,29 @@ describe('Keep and Discard', () => {
 		answer = { ok: false, error: { code: 'other-quilt', message: 'that Keep was made in another quilt, so nothing was undone' } };
 		expect(await undo()).toBe('that Keep was made in another quilt, so nothing was undone');
 		expect(history.done).toHaveLength(0);
+	});
+
+	it('makes a Keep step only once the server has said which quilt it serves, and none where it names none', async () => {
+		let answered = () => {};
+		probed = new Promise((r) => (answered = r));
+		vi.resetModules();
+		let h = await import('./history.svelte');
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		// kept before the server has answered which quilt it serves: the step waits for it, and names it
+		const keeping = h.keepChanges({ changes: ['e-1'] });
+		await new Promise((r) => setTimeout(r));
+		expect(h.history.done).toEqual([]);
+		answered();
+		await keeping;
+		expect(h.history.done.map((s) => [s.label, s.quilt])).toEqual([['keep', 'q-one']]);
+		// a server that names no quilt: no step, so no undo is ever sent without one
+		quilt = undefined;
+		vi.resetModules();
+		h = await import('./history.svelte');
+		await h.keepChanges({ changes: ['e-1'] });
+		expect(h.history.done).toEqual([]);
+		quilt = 'q-one';
 	});
 
 	it('lets a step go whose suggestion the quilt does not have, saying so without an id', async () => {

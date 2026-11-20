@@ -697,7 +697,7 @@ def unkeep(
     writer : (str, str)
         Who undoes them, as `_annotator` gives it.
     said : list of str, optional
-        Where to say which versions were kept.
+        Where to say which versions were kept, and any step after the write that could not be done.
 
     Returns
     -------
@@ -730,7 +730,9 @@ def unkeep(
 
             def follow() -> None:
                 if out.ids:
-                    _after_unkeep(out, who, writer)
+                    after = _after_unkeep(out, who, writer)
+                    if said is not None:
+                        said.extend(after)
 
             w.then(follow)
     except writes.WriteRefused as exc:
@@ -1076,17 +1078,38 @@ def relook(root: Path, look: dict[str, Any]) -> None:
         absorb(result, who, path, at)
 
 
-def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:
-    """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file (`_undo_into_look`, with no listing of the person's changes where the look can be given the undo's own change), and where an annotation stands on the blocks, the annotations on the words taken out are carried onto the words put back."""
+def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
+    """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file (`_undo_into_look`, with no listing of the person's changes where the look can be given the undo's own change), and where an annotation stands on the blocks, the annotations on the words taken out are carried onto the words put back.
+
+    The files are written, so the undo is done whatever happens here: a failure of the look's shortcut falls back to the listing (`absorb`), and one of a step itself is returned in words, for the answer to say.
+    """
     from loom.records.carry import carry_all
 
+    said: list[str] = []
     after = None
     for path, (was, now, done) in out.wrote.items():
-        if who and not _undo_into_look(out.result.quilt, who, path, was, now, done):
+        if not who:
+            continue
+        try:
+            if _undo_into_look(out.result.quilt, who, path, was, now, done):
+                continue
+        except Exception:  # noqa: BLE001 -- the shortcut's failure is not the person's news: the listing does what it would have
+            pass
+        try:
             after = after or _rescan(out.result)
             absorb(after, who, path, out.spans[path])
+        except Exception as exc:  # noqa: BLE001 -- the undo is done; its look is a convenience, said when it fails
+            said.append(
+                f"the words put back in {path} did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
+            )
     if out.before:
-        carry_all(_rescan(after or out.result), out.before, out.changes, writer)
+        try:
+            carry_all(_rescan(after or out.result), out.before, out.changes, writer)
+        except Exception as exc:  # noqa: BLE001 -- the undo is done; the annotations stay on the words taken out, said
+            said.append(
+                f"the annotations on the words taken out were not carried onto the words put back ({type(exc).__name__})"
+            )
+    return said
 
 
 def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:

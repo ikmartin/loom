@@ -321,6 +321,63 @@ def test_keep_all_across_files_is_undone_by_one_request(q: Path) -> None:
     assert files(q) == before
 
 
+def _both_kept_and_mine_beside(q: Path) -> None:
+    """FIXED and ANSWER kept, in two files, and an edit of the person's own pending in each, so the look differs from both files."""
+    call(q, "change-keep", {"changes": [FIXED, ANSWER]})
+    for rel, a, b in (
+        (LEMMA, "orbits, setup", "orbits, setup, mine"),
+        (THEOREM, "Count fixed points", "Count the fixed points"),
+    ):
+        p = q / rel
+        p.write_text(p.read_text().replace(a, b))
+
+
+def mine(q: Path) -> list[tuple[str, str, str]]:
+    """The edits in the files listed as the person's, by path and words."""
+    return sorted((p.path, p.old, p.new) for p in waiting(q) if p.kind == "edit")
+
+
+def test_an_undo_whose_look_fails_partway_is_answered_undone_and_lists_only_the_persons_edits(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom import pending
+
+    _both_kept_and_mine_beside(q)
+    real, seen = pending._undo_into_look, []
+
+    def halfway(quilt: object, who: str, path: str, *rest: object) -> bool:
+        seen.append(path)
+        if len(seen) == 2:
+            raise RuntimeError("the look could not be written")
+        return real(quilt, who, path, *rest)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(pending, "_undo_into_look", halfway)
+    res = call(q, "change-undo", {"changes": [FIXED, ANSWER]})
+    assert sorted(res["done"]) == sorted([FIXED, ANSWER]) and res["refused"] == []
+    assert len(seen) == 2 and "your look" not in res["result"]
+    assert status(q, FIXED) == status(q, ANSWER) == "open"
+    # the second file's undo went into the look by the listing, so it is not the person's edit
+    assert mine(q) == [(LEMMA, "setup", "setup, mine"), (THEOREM, "", "the")]
+
+
+def test_an_undo_is_answered_undone_when_its_look_cannot_be_given_it_at_all(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom import pending
+
+    _both_kept_and_mine_beside(q)
+
+    def broken(*_: object) -> bool:
+        raise RuntimeError("the look could not be written")
+
+    monkeypatch.setattr(pending, "_undo_into_look", broken)
+    monkeypatch.setattr(pending, "absorb", broken)
+    res = call(q, "change-undo", {"changes": [FIXED, ANSWER]})
+    assert sorted(res["done"]) == sorted([FIXED, ANSWER]) and res["refused"] == []
+    assert status(q, FIXED) == status(q, ANSWER) == "open"
+    assert f"the words put back in {THEOREM} did not go into your look (RuntimeError)" in res["result"]
+
+
 def test_an_undo_opens_again_the_annotation_its_keep_resolved(q: Path) -> None:
     from loom.records.annotations import find_annotation, load_records
 

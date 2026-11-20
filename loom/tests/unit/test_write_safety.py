@@ -56,8 +56,12 @@ def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def call(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Send `body` to `endpoint` as the viewer does, an undo naming this quilt unless `body` names one; a refusal comes back as `{"error": code}`."""
+    from loom.machine import quilt_id
     from loom.render.api import ApiError, handle
 
+    if endpoint == "change-undo" and "quilt" not in body:
+        body = {**body, "quilt": quilt_id(root)}
     try:
         return handle(root, endpoint, dict(body))
     except ApiError as exc:
