@@ -47,6 +47,18 @@ describe("the quilt's To do", () => {
 		expect(ids).not.toContain('a-2026-09-16-bns3an');
 		expect(todo.every((g) => g.label && g.annotations.length)).toBe(true);
 	});
+
+	it('lists an open note on no block under the document it was written in, rather than throwing on it', () => {
+		const x = structuredClone(m);
+		const a = x.annotations['a-2026-09-16-ecnav2'];
+		const written = a.target.key;
+		a.target = { ...a.target, key: '' };
+		a.detached = true;
+		x.unplaced = [{ id: a.id, key: written, why: 'its key names no block now' }];
+		const todo = todoOf(x);
+		expect(todo.flatMap((g) => g.annotations.map((n) => n.id))).toContain(a.id);
+		expect(todo.every((g) => g.label)).toBe(true);
+	});
 });
 
 describe('what Review counts', () => {

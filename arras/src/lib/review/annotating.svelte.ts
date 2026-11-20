@@ -348,6 +348,12 @@ export function documentOf(m: Manifest, a: Annotation): string {
 	if (a.target.file) return a.target.file;
 	if (a.target.work) return a.target.work;
 	const key = a.target.key;
+	// a note on no block names none: the document it was written in is the one its written key is in, where that key still names a block
+	if (!key) {
+		const written = m.unplaced?.find((u) => u.id === a.id)?.key ?? '';
+		const owner = m.regions?.[written]?.container ?? m.keys?.[written]?.node ?? written;
+		return m.nodes?.[owner]?.reached_by?.[0] ?? written.split('#')[0];
+	}
 	if (m.masters.some((x) => x.path === key)) return key;
 	const owner = m.regions?.[key]?.container ?? m.keys[key]?.node ?? key;
 	return m.nodes[owner]?.reached_by?.[0] ?? key;

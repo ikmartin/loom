@@ -737,7 +737,7 @@ export interface Manifest {
   inclusion: Record<string, InclusionNode>;
   states: States;
   annotations: Record<string, Annotation>;
-  /** The annotations placed on no block, each by id with the key it was written on and why; each stays in `annotations`, detached, and is counted on no key (specs/manifest.md §9). */
+  /** The annotations placed on no block, each by id with the key it was written on and why; each stays in `annotations`, detached, with `target.key` '', and is counted on no key (specs/manifest.md §9). */
   unplaced?: { id: string; key: string; why: string }[];
   /** Every suggested edit, by id (specs/manifest.md §9.2). */
   suggested_edits?: Record<string, SuggestedEdit>;
