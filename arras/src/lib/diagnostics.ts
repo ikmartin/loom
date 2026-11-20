@@ -81,6 +81,7 @@ const TITLES: Record<string, string> = {
 	'plain-id-in-agent-document': "A plain id in an agent's copy",
 	'agent-permissions-stale': "Claude Code's permissions are out of date",
 	'home-missing': 'The home page is missing',
+	'write-left': 'A write loom could neither finish nor undo',
 	'document-gone': 'A document is gone'
 };
 
