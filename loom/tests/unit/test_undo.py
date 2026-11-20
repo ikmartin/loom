@@ -624,10 +624,53 @@ def test_a_write_recovery_leaves_is_listed_as_a_problem_in_the_persons_file(
     found = [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
     assert len(found) == 1 and found[0]["message"].startswith("loom could neither finish nor undo an undo of a Keep")
     assert f"{first} changed since loom began writing it" in found[0]["message"]
+    # what the person can do, in plain words, with no command and no id
+    assert "Look at the file: if it reads as you want, there is nothing to do" in found[0]["message"]
+    assert (
+        "`" not in found[0]["message"]
+        and "loom lint" not in found[0]["message"]
+        and "loom doctor" not in found[0]["message"]
+    )
+    assert "undo:" not in found[0]["message"] and "keep:" not in found[0]["message"]
     # once the act is settled it is no problem any more: here, the person puts the file back as loom wrote it
     (q / first).write_text((q / first).read_text().replace("% the person's line\n", ""))
     res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
     assert not [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+
+
+def test_a_record_recovery_cannot_trust_or_bear_out_is_said_with_no_path_and_no_false_claim(q: Path) -> None:
+    """The third review's R3-4: a journal that came with a copied folder names a file outside the quilt, or texts the store lacks."""
+    from click.testing import CliRunner
+
+    from loom.cli import main
+    from loom.paths import JOURNAL, JOURNAL_INDEX
+
+    def problems() -> list[dict]:
+        res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
+        return [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+
+    def plant(rel: str, digests: list[str]) -> None:
+        line = {
+            "event": "begin",
+            "act": "keep:feedfacefeedface",
+            "kind": "keep",
+            "actor": "Pat",
+            "when": "x",
+            "files": {rel: digests},
+            "splices": {},
+            "edits": [],
+            "records": [],
+        }
+        (q / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
+        (q / JOURNAL).write_text(json.dumps(line) + "\n")
+        (q / JOURNAL_INDEX).unlink(missing_ok=True)
+
+    plant("../outside.tex", ["sha256:" + "1" * 64, "sha256:" + "2" * 64])
+    (found,) = problems()
+    assert "outside" not in found["message"] and not found.get("locations") and "cannot trust" in found["message"]
+    plant("drafting/main.tex", ["sha256:" + "1" * 64, "sha256:" + "2" * 64])
+    (found,) = problems()
+    assert "lacks a text of drafting/main.tex" in found["message"] and "kept in the history" not in found["message"]
 
 
 def test_an_undo_cut_short_after_its_write_is_finished_once_by_the_next_act(

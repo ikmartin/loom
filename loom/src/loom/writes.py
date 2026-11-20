@@ -811,39 +811,40 @@ def _append_records(root: Path, records: list[dict[str, str]], *, unless_there: 
 
 @dataclass
 class _Verdict:
-    """What recovery would do with an act begun and not settled: `finish` it, `undo` it (with each file's texts to put back), or leave it, with why in words and the state of its files."""
+    """What recovery would do with an act begun and not settled: `finish` it, `undo` it (with each file's texts to put back), or leave it, with why in words and the state of its files. `trusted` is False for a line `untrusted` refuses, whose paths are never repeated to a person."""
 
     how: str
     why: str = ""
     holds: dict[str, tuple[bool, bool]] = field(default_factory=dict)
     texts: dict[str, list[bytes | None]] = field(default_factory=dict)
+    trusted: bool = True
 
 
 def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
     """Recovery's judgement of one begun act, by its files' bytes now and the store; reads, never writes."""
     why = untrusted(root, history, entry)
     if why:
-        return _Verdict("left", f"{why}; recovery changed nothing")
+        return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
     files: dict[str, list[str | None]] = entry.get("files") or {}
     holds = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
     if all(after for _, after in holds.values()):
         return _Verdict("finish", holds=holds)
+    texts = {rel: [fetch(history, d) if d else None for d in ab] for rel, ab in files.items()}
+    lacking = [rel for rel, ab in files.items() if any(d and x is None for d, x in zip(ab, texts[rel], strict=True))]
+    if lacking:
+        # with a text missing, loom cannot tell what the act did, nor put anything back blind
+        return _Verdict(
+            "left",
+            f"the history lacks a text of {_named(lacking)}, so loom cannot tell what it did and changed nothing: {_where(holds)}",
+            holds,
+        )
     if any(not before and not after for before, after in holds.values()):
         return _Verdict(
             "left",
-            f"a file of it changed since loom began writing it, so recovery changed nothing: {_where(holds)}",
+            f"a file of it changed since loom began writing it, so recovery changed nothing: {_where(holds, kept=True)}",
             holds,
         )
-    todo = [rel for rel, (before, after) in holds.items() if after and not before]
-    texts = {rel: [fetch(history, d) if d else None for d in files[rel]] for rel in todo}
-    lacking = [rel for rel in todo if any(d and x is None for d, x in zip(files[rel], texts[rel], strict=True))]
-    if lacking:
-        return _Verdict(
-            "left",
-            f"the history lacks a text of {_named(lacking)}, so recovery changed nothing: {_where(holds)}",
-            holds,
-        )
-    return _Verdict("undo", holds=holds, texts=texts)
+    return _Verdict("undo", holds=holds, texts={rel: texts[rel] for rel, (b, a) in holds.items() if a and not b})
 
 
 def _settle(root: Path, history: Path, j: Journal) -> list[str]:
@@ -869,7 +870,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
         if failed:
             files: dict[str, list[str | None]] = e.get("files") or {}
             now = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
-            said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now)}")
+            said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now, kept=True)}")
             continue
         j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
         said.append(f"undid {act_id}")
@@ -901,7 +902,7 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str]]:
     Returns
     -------
     list of (str, list of str, str)
-        For each such act: its kind as a person names it (`KINDS`), the files it names, and why recovery leaves it with each file's state. An act recovery would finish or undo is not among them, nor an act in progress, which is one of those until it ends.
+        For each such act: its kind as a person names it (`KINDS`), the files it names, and why recovery leaves it with each file's state. A line `untrusted` refuses, such as one that came with a copied folder, names no file, since its paths are not believed. An act recovery would finish or undo is not among them, nor an act in progress, which is one of those until it ends.
 
     See Also
     --------
@@ -910,9 +911,18 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str]]:
     out: list[tuple[str, list[str], str]] = []
     for _, e in read_journal(root).begun.values():
         v = _judge(root, history, e)
-        if v.how == "left":
-            files = [str(f) for f in (e.get("files") or {})] if isinstance(e.get("files"), dict) else []
-            out.append((KINDS.get(str(e.get("kind")), "a write"), files, v.why))
+        if v.how != "left":
+            continue
+        if not v.trusted:
+            out.append(
+                (
+                    "a write",
+                    [],
+                    "the journal holds a record of a write that loom cannot trust, perhaps one that came with a copied folder, so loom changed nothing for it",
+                )
+            )
+        else:
+            out.append((KINDS.get(str(e.get("kind")), "a write"), sorted(v.holds), v.why))
     return out
 
 
@@ -920,15 +930,15 @@ def _named(rels: list[str]) -> str:
     return ", ".join(rels)
 
 
-def _where(holds: dict[str, tuple[bool, bool]]) -> str:
-    """Which files of a left act are as loom wrote them, as they were before it, or neither, in words; both texts of each are in the history."""
+def _where(holds: dict[str, tuple[bool, bool]], *, kept: bool = False) -> str:
+    """Which files of a left act are as loom wrote them, as they were before it, or neither, in words; and, with `kept`, that both texts of each are in the history, said only when the store was looked at and holds them."""
     groups = {
         "as loom wrote": [rel for rel, (_, a) in holds.items() if a],
         "as before it": [rel for rel, (b, a) in holds.items() if b and not a],
         "changed since loom began writing it": [rel for rel, (b, a) in holds.items() if not a and not b],
     }
     parts = [f"{_named(rels)} {label}" for label, rels in groups.items() if rels]
-    return "; ".join(parts) + "; the texts before and after are kept in the history"
+    return "; ".join(parts) + ("; the texts before and after are kept in the history" if kept else "")
 
 
 def _relook(root: Path, act_id: str, entry: dict[str, Any]) -> list[str]:

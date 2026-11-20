@@ -179,19 +179,36 @@ def _home(result: ScanResult) -> list[Diagnostic]:
 
 
 def _writes_left(result: ScanResult) -> list[Diagnostic]:
-    """`loom:write-left`: a write loom began on the person's files that recovery could neither finish nor undo, one per act, at its first file; both texts of each file are in the history."""
+    """`loom:write-left`: a write loom began on the person's files that recovery could neither finish nor undo, one per act at its first file, with what the person can do, in plain words; a record recovery cannot trust is said with no file."""
     from loom.writes import left
 
-    return [
-        Diagnostic(
-            "warning",
-            "loom:write-left",
-            f"loom could neither finish nor undo {kind} it began on {', '.join(files)}: {why}",
-            [Location(files[0], 1)] if files else [],
-            owner="person",
+    out = []
+    for kind, files, why in left(result.quilt.root, result.quilt.history_dir):
+        if not files:
+            out.append(
+                Diagnostic(
+                    "warning",
+                    "loom:write-left",
+                    f"{why[0].upper()}{why[1:]}. No file of yours was touched.",
+                    [],
+                    owner="person",
+                )
+            )
+            continue
+        # the advice to the person is the author's to judge (handover): no command, no id
+        advice = "Nothing of yours was lost. Look at the file: if it reads as you want, there is nothing to do; if it does not, edit it, or put back a version from The Record."
+        if kind == "a Keep":
+            advice += " Until this is settled, loom will not keep again the suggestions it was writing."
+        out.append(
+            Diagnostic(
+                "warning",
+                "loom:write-left",
+                f"loom could neither finish nor undo {kind} it began on {', '.join(files)}: {why}. {advice}",
+                [Location(files[0], 1)],
+                owner="person",
+            )
         )
-        for kind, files, why in left(result.quilt.root, result.quilt.history_dir)
-    ]
+    return out
 
 
 def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic]:
