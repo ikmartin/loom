@@ -208,7 +208,7 @@ def _by_place(
 ) -> NodeRec | None:
     """A record on a key named by place (or a document's path whose file is gone).
 
-    Its own key's block first: while it holds the record's text, or reads like it with no neighbour saying otherwise, it is the record's, however exact a copy elsewhere. Otherwise only a block nothing else could be: the one holding its very text among the documents' blocks, where no other did when it was written, else the one of those its neighbours stand beside on both sides; for a record with context, the one block reading `LIKE` alike, under the same conditions; its quote, standing in one block alone. A text with nothing of its own to recognise (`TRIVIAL`) is followed only to the one block of its very text standing between both its recorded neighbours. A record with no context follows only its very text standing once.
+    Its own key's block first: while it holds the record's text, or reads like it with no neighbour saying otherwise, it is the record's, however exact a copy elsewhere. Where the record's context recorded a twin or two copies, a block holding its very text is taken only with no recorded neighbour against it (of several such, the one with both beside it), and one reading alike only with both beside it. Otherwise only a block nothing else could be: the one holding its very text among the documents' blocks, where no other did when it was written; where every block holding it has a recorded neighbour against it, or none holds it, the one block reading `LIKE` alike, with both neighbours beside it for a record that had a twin or a block of another kind; its quote, standing in one block alone. A text with nothing of its own to recognise (`TRIVIAL`) is followed only to the one block of its very text standing between both its recorded neighbours. A record with no context follows only its very text standing once.
     """
     frozen = _frozen(result, want)
     trivial = len(_own_words(frozen)) < TRIVIAL
@@ -220,12 +220,12 @@ def _by_place(
     documents = _pool(result, path)
     if node is not None and block_hash(result, node.key) == want:
         others = [n for n in documents if n is not node and block_hash(result, n.key) == want]
-        if not others:
-            # its very text stands once, at its own key: its block
+        if not others and not twin:
+            # its very text stands once, at its own key, and stood once: its block
             return node
-        # its very text stands in another block too: the one with both neighbours beside it
-        both = [n for n in [node, *others] if _sides(result, n, context)[0] == 2]
-        return both[0] if len(both) == 1 else None
+        told = _told(result, [node, *others], context, twin)
+        if told is not None or not _all_against(result, [node, *others], context, twin):
+            return told
     if node is not None and trivial and _sides(result, node, context)[0] == 2:
         # a text with nothing of its own, its block being filled in where it stands between both its neighbours
         return node
@@ -236,8 +236,10 @@ def _by_place(
         # its block had a twin when it was written, and the block at its place may be that twin: only with both its neighbours beside it, no block holding its very text, and reading closer to it than any other by `AHEAD`
         mine = _like(result, want, node)
         rivals = [n for n in documents if n is not node and _like(result, want, n) >= LIKE]
-        if not any(block_hash(result, n.key) == want for n in rivals) and all(
-            mine - _like(result, want, n) >= AHEAD for n in rivals
+        if (
+            _sides(result, node, context)[0] == 2
+            and not any(block_hash(result, n.key) == want for n in rivals)
+            and all(mine - _like(result, want, n) >= AHEAD for n in rivals)
         ):
             return node
         return None
@@ -250,9 +252,14 @@ def _by_place(
     if exact:
         if len(exact) == 1 and not twin and not (short and _sides(result, exact[0], context)[1]):
             return exact[0]
-        both = [n for n in exact if _sides(result, n, context)[0] == 2]
-        return both[0] if len(both) == 1 else None
-    pool = [n for n in documents if n is not node and (n.file == path or path not in result.files)]
+        told = _told(result, exact, context, twin)
+        if told is not None or not _all_against(result, exact, context, twin):
+            return told
+    # every block holding its very text, where any does, has a recorded neighbour against it: its own block may stand edited, which reads like it
+    taken = {id(n) for n in exact}
+    pool = [
+        n for n in documents if n is not node and id(n) not in taken and (n.file == path or path not in result.files)
+    ]
     best = _closest(result, want, pool)
     if best is not None:
         if (twin or _sort(best) != context.get("kind")) and _sides(result, best, context)[0] != 2:
@@ -560,6 +567,22 @@ def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any]) -> tuple
             elif any(_mark(result, n) == rec["hash"] for n in order):
                 against += 1
     return held, against
+
+
+def _all_against(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any], twin: bool) -> bool:
+    """Whether every one of `blocks`, holding the very text of a record whose context recorded a twin, has a recorded neighbour standing against it: none of them is its block, and one that reads like it between both its neighbours may be."""
+    return twin and all(_sides(result, n, context)[1] for n in blocks)
+
+
+def _told(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any], twin: bool) -> NodeRec | None:
+    """Among blocks holding a record's very text, the one that is its: where its context recorded a twin or two copies, only one no recorded neighbour stands against, and among several such the one with both neighbours beside it; where it recorded none, the one with both neighbours beside it."""
+    if twin:
+        clear = [n for n in blocks if not _sides(result, n, context)[1]]
+        if len(clear) <= 1:
+            return clear[0] if clear else None
+        blocks = clear
+    both = [n for n in blocks if _sides(result, n, context)[0] == 2]
+    return both[0] if len(both) == 1 else None
 
 
 def _closest(result: ScanResult, want: str, blocks: list[NodeRec]) -> NodeRec | None:

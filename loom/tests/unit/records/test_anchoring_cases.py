@@ -594,3 +594,41 @@ def test_where_a_listing_names_a_note_is_read_again_after_a_write_to_the_log(out
     edit_annotation(result, q, ("human", "Tester"), body="another word")
     ann = next(r.annotation for r in Records(out).resolved(result) if r.annotation.id == q)
     assert placed_key(result, ann) == "drafting/s1.tex#lemma:3"
+
+
+def test_a_deleted_blocks_note_goes_to_no_copy_that_takes_its_key(out: Path) -> None:
+    """C-1, `twin_inherits_key`: a lemma stated twice, two remarks between; the first, with the note, is deleted and the restatement takes its key. Its context recorded two copies, and its neighbours stand against the restatement."""
+    L = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    R = env("remark", "This is used in Section 4.")
+    S = env("remark", "We now turn to colourings.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": L + R + S + L})
+    a = note(out, "drafting/s1.tex#lemma:1", "the first statement needs 2-connectivity")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": R + S + L})
+    assert shown(out, a) is None
+
+
+def test_a_lemma_deleted_with_its_proof_leaves_its_note_on_no_sibling(out: Path) -> None:
+    """C-1, `parallel_with_proof`: the injective lemma, recorded with a twin, is deleted with its proof; its surjective sibling takes its key and reads alike, without both its neighbours."""
+    A = env("remark", "We fix a field k throughout.")
+    X = env("lemma", "Let f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is injective then f is an isomorphism.")  # fmt: skip
+    Y = env("lemma", "Let f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is surjective then f is an isomorphism.")  # fmt: skip
+    B = env("remark", "Both fail in infinite dimension.")
+    P = proof("By rank-nullity the image has full dimension.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + P + Y + B})
+    a = note(out, "drafting/s1.tex#lemma:1", "the injective case needs rank-nullity; cite it")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Y + B})
+    assert shown(out, a) is None
+
+
+def test_a_statement_changed_in_kind_keeps_its_note_from_a_copy_that_takes_its_key(out: Path) -> None:
+    """C-1, the generator's kind-change: a proposition stated twice becomes a remark where it stands, and the copy further down takes `proposition:1` with both recorded neighbours against it; the remark, between both, reads like the note's text."""
+    A = env("lemma", "Every compact group admits a Haar measure.")
+    X = env("proposition", "Every planar graph has a vertex of degree at most five.")
+    Xr = env("remark", "Every planar graph has a vertex of degree at most five.")
+    B = env("lemma", "Every bounded sequence of reals has a convergent subsequence.")
+    C = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    D = env("lemma", "Every tree on n vertices has n-1 edges.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B + C + X + D})
+    a = note(out, "drafting/s1.tex#proposition:1", "cite Euler's formula")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Xr + B + C + X + D})
+    assert shown(out, a) == Xr.strip()
