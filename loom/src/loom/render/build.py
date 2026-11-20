@@ -39,7 +39,7 @@ from loom.render.marks import MarkEntry, place_marks
 from loom.render.publish import publish, write_atomic
 from loom.render.uses import noting, used
 from loom.render.versions import Gone, attach_versions, gone_annotations, gone_marks
-from loom.scan.memo import reading
+from loom.scan.memo import forget, reading
 from loom.scan.model import Diagnostic
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult, scan
@@ -441,7 +441,7 @@ def build(
     -----
     A build is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file of the quilt's and keeps what the last build derived, letting go only what it made itself.
     """
-    with reading(keep=reuse is not None), noting() as beside:
+    with reading(keep=reuse is not None, build=True), noting() as beside:
         return _build(quilt, keys, records, force, reuse, progress, tex, beside)
 
 
@@ -491,9 +491,10 @@ def _build(
         tex=tex,
     )
     if force:
-        # a text TeX refused may have been refused for the machine's sake, a package since installed; --force tries each once more
+        # a text TeX refused may have been refused for the machine's sake, a package since installed; --force tries each once more, and nothing this process remembers stands in for it
         for failed in [*(root / SNIPPETS).glob("*.failed"), *(root / BLOCK_PREVIEWS).glob("*.html")]:
             failed.unlink()
+        forget()
     renderer = FragmentRenderer(plan)
     before = read_index(root)
     # each fragment's input hash, and what it was made from, as the last build left them; a fragment rendered here replaces both, and `force` only stops a wanted one being skipped as unchanged, so a forced build of some keys leaves the rest as they were

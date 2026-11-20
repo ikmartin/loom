@@ -188,3 +188,16 @@ def test_a_reading_that_ends_before_an_older_one_forgets_nothing() -> None:
     assert "before" in m
     older.__exit__(None, None, None)
     assert "before" not in m
+
+
+def test_a_scan_of_its_own_forgets_nothing_a_build_made() -> None:
+    """A request's scan between two builds asks for nothing a build makes from its scan (a version's marks, an agent copy's comparison): what the last build made outlives it, and the next build that does not ask for it lets it go."""
+    m = Memo(str.upper, built=True)
+    with reading(build=True):
+        m("made by the build")
+    with reading():
+        pass
+    assert "made by the build" in m
+    with reading(build=True):
+        pass
+    assert "made by the build" not in m
