@@ -673,7 +673,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "19fdf64698267e14f5fd77767d48b71fc27866bba28bb75b1b4776e903080e0a",
+   "hash": "e42ed1a7172cbc16e20ff11b644d1379d894aed5fe8926991664947f0fd558c5",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -688,7 +688,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "40f0a121cace0c96f09c380c83c3a7f5dbe2253b02dc6f8d243c1fe388071e26",
+   "hash": "f9ba68f818a4c8587088737088f45d8ac059a2816314a4ffbd9ae0569dac4d04",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -703,7 +703,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "b6446e8da76e77ef231142b388610f49e627ad7807258a5f9068e9d481a274ea",
+   "hash": "fcc67bfe45ebc7147bb17f4325237f2b05e80ccb196f6ab46acd81cc2e545647",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -926,6 +926,9 @@
     "loom:id-reused",
     "loom:import-outside-tree",
     "loom:invalid-name",
+    "loom:link-place-missing",
+    "loom:link-target-missing",
+    "loom:link-work-unknown",
     "loom:macro-shadowed",
     "loom:macros-missing",
     "loom:macros-unloaded",
@@ -2009,6 +2012,20 @@
    "message": "acceptance recorded under sy-000F/proof matches the text of sy-0202/proof; re-accept to confirm",
    "owner": "person",
    "severity": "info"
+  },
+  {
+   "class": "latex",
+   "code": "loom:link-target-missing",
+   "keys": [],
+   "locations": [
+    {
+     "file": "notes/embeds.md",
+     "line": 26
+    }
+   ],
+   "message": "a link goes nowhere: notes/no-such-image.png does not exist",
+   "owner": "person",
+   "severity": "warning"
   }
  ],
  "edges": [
@@ -2505,7 +2522,7 @@
  ],
  "files": [
   {
-   "bytes": 1536,
+   "bytes": 1575,
    "denied": null,
    "kind": "text",
    "path": "EXPECTED-LINT.txt"

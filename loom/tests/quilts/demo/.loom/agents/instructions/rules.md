@@ -26,7 +26,7 @@ How to work in a quilt, whatever you have been asked to do. `orientation.md` say
 
 ## Inputs
 
-Inputs come from loom commands, never from reading directories unless asked. `loom source KEY --closure` prints a key with exactly the statements it depends on, in dependency order; it is the complete context, and you may assume nothing outside it. If you need a dependency's *proof* rather than its statement, read `loom source DEP/proof --closure` and say in your report that the argument rests on something inside another proof: that is a candidate for a statement of its own. A section's key prints the section whole. Further reads the modes use:
+A LaTeX document's inputs come from loom commands, never from reading its directories unless asked; a file with no keys, Markdown among them, you read directly. `loom source KEY --closure` prints a key with exactly the statements it depends on, in dependency order; it is the complete context, and you may assume nothing outside it. If you need a dependency's *proof* rather than its statement, read `loom source DEP/proof --closure` and say in your report that the argument rests on something inside another proof: that is a candidate for a statement of its own. A section's key prints the section whole. Further reads the modes use:
 
 - `loom downstream ID --proofs`: the proofs that cite ID, each with its statement;
 - `loom source KEY --at REF --diff`: what changed in KEY since an annotation was written (`REF` its id), since it was accepted (`accepted`), or since a stamped version (`KEY@N`);
