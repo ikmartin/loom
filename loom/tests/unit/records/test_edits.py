@@ -862,10 +862,9 @@ def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_i
         count=1,
     )
     assert place(*placed(q, quoted)).key == f"{SHEET}#remark:2"
-    # nor when it does hold the quote: the remark the edit was suggested on holds it too, and the line above no longer says which
+    # nor when it holds the quote too: the edit's context says which remark it was suggested on, and Keep writes there alone
     edit(q / SHEET, "Another remark altogether.", "Another remark, and every orbit is small.")
-    with pytest.raises(Unplaced, match="stand in another block"):
-        place(*placed(q, quoted))
-    text = (q / SHEET).read_text()
+    assert place(*placed(q, quoted)).key == f"{SHEET}#remark:2"
     ok("changes", "--keep", quoted, cwd=q)
-    assert (q / SHEET).read_text() == text
+    text = (q / SHEET).read_text()
+    assert "Another remark, and every orbit is small." in text and text.count("every orbit has at most two points") == 1

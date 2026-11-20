@@ -267,9 +267,13 @@ def replay(root: Path) -> tuple[list[Record], list[str]]:
                 ann.own_look = _look(event["look"])
             if "drawn" in event:
                 ann.drawn = _look(event["drawn"])
-            # a restated finding is about the text it was restated against
+            # a restated finding is about the text it was restated against, on the block it was restated on
             if event.get("against"):
                 ann.target_hash = str(event["against"])
+            if event.get("target"):
+                ann.target_key = str(event["target"])
+            if isinstance(event.get("context"), dict):
+                ann.context = dict(event["context"])
         elif kind == "resolved":
             # a resolution is reversed by appending its undo, never by removing the event that made it (DR-174)
             undo = bool(event.get("undo"))

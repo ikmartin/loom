@@ -17,7 +17,7 @@ from loom.scan.scan import ScanResult
 #: How alike, word for word, the block at a record's place must read to the text the record was written on to be taken for it, with no other block of its file reading as alike.
 LIKE = 0.6
 
-#: Whether a record on a stable key (an id or a label) is read against its text: True, it keeps its block only while that block holds the text it was written on, or its quote, or reads `LIKE` alike, and is detached otherwise; False, the key's block keeps it however the block was rewritten. Which loom does is the author's to decide; False is what loom has always done, and the anchoring harness's `--verify` reads with True, as the Safe gate measures.
+#: How a record on a stable key (an id or a label) whose block no longer reads like it, and whose text stands in no other block, is read: False, it stays on its key, rewritten under it (`Found.rewritten`); True, it is detached. Which loom does is the author's to decide; the anchoring harness's `--verify` reads with True. Either way, a record whose text stands once in another block follows it there: its label moved.
 VERIFY = False
 
 #: A child's marker in a block's own text (`own_text`), which no person wrote and no likeness counts.
@@ -82,7 +82,9 @@ def follow(
     quote: str = "",
     context: dict[str, Any] | None = None,
 ) -> NodeRec | None:
-    """The block a record on `key` was written on, or None when nothing says which block that is.
+    """The block a record on `key` was written on, or None where two answers are possible or none is.
+
+    A record goes to a block other than the one at its own key only when nothing else could be meant (`docs/design/writes.md`, "Where a record goes"); wherever two blocks could be meant, it is on none, and says so.
 
     Parameters
     ----------
@@ -93,22 +95,22 @@ def follow(
     node : NodeRec or None
         The block `key` names now (a region's container); None when it names none.
     want : str
-        The record's `against`: the hash of its block's own text when it was written; '' is no evidence, and `node` is answered.
+        The record's `against`: the hash of its block's own text when it was written, frozen in the store; '' is no evidence, and `node` is answered.
     edit : bool, default False
-        Whether the record is a suggested edit, which Keep writes: one is never placed among blocks that read the same unless `near` says which.
+        Whether the record is a suggested edit, which Keep writes.
     near : str, default ''
-        A suggested edit's `near`, the line above its block when it was filed (`line_before`); '' for an annotation, which records none, and for an edit filed before it was recorded.
+        A suggested edit's `near`, the line above its block when it was filed; it tells apart blocks of the very same text for an edit filed before `context` was recorded.
     quoted : bool, default False
-        Whether the suggested edit quotes words of its block; only such an edit is taken at its place once the block there has changed (`place` then asks for its quote once, and nowhere else in the file).
+        Whether the suggested edit quotes words of its block.
     quote : str, default ''
-        The words the record quotes, which keep a stable key's block under `VERIFY` while they stand in it.
+        The words the record quotes.
     context : dict, optional
-        The record's `context` (`context_of`), for one written since it was recorded: what tells its block from the block put in at its place, from a twin, and from a restatement.
+        The record's `context` (`context_of`), for one written since it was recorded.
 
     Returns
     -------
     NodeRec or None
-        For a stable key, `node`, under `VERIFY` only while it still reads as the record was written; for a region, or one whose label went, where the block it is in goes. For a key named by place, or a document's path once its file is gone: the one block that holds the record's text, in the key's file or, once that file is gone, in the quilt. Among several, the one under `near`; with no `near`, an annotation's block at its place while that holds its text, as it always has. Where none holds it, a quoted edit's block at its place while the line above is `near`, and an annotation's while that block reads like the text it was written on and no other block of its file does (`LIKE`). None otherwise: the block now at the place is never the answer for text it is not. A record with `context` is placed by it instead (`_by_context`).
+        For a stable key, its block, unless that block no longer reads like the record and the record's text stands once in another block (the label moved: that block), or, under `VERIFY`, stands nowhere (None). For a region, where the block it is in goes. For a key named by place, `_by_place`.
 
     See Also
     --------
@@ -118,6 +120,10 @@ def follow(
         return node
     head = _container_key(result, key, node)
     if head:
+        container: NodeRec | None = result.nodes.get(head)
+        if not context and container is not None and block_hash(result, container.key) == want:
+            # unchanged, a region with no context is read in its block as loom always read it
+            return container
         # a region goes where the block it is in goes, whose text the record holds; one whose label went is read there
         return follow(
             result,
@@ -133,35 +139,129 @@ def follow(
     # a document's own text is named by its file's path, which a rename takes away as it does a key named by place
     gone_document = node is None and key.endswith(".tex") and not key.startswith("prose:")
     if not named_by_place(result, key, node) and not gone_document:
-        if VERIFY and node is not None and not _still(result, want, node, quote):
-            return None
-        return node
-    path = node.file if node is not None else key.split("#", 1)[0]
-    same: list[NodeRec] = [n for n in result.nodes.values() if n.file == path and block_hash(result, n.key) == want]
-    if not same and path.endswith(".tex") and path not in result.files:
-        # its file is gone, renamed or taken apart: the text is followed wherever in the person's files it stands, never into an agent's copy under `.loom/`
-        same = [
-            n for n in result.nodes.values() if not n.file.startswith(f"{LOOM}/") and block_hash(result, n.key) == want
-        ]
-    if context:
-        found = _by_context(result, node, want, same, path, context, quote)
-        if found is not None or not edit:
-            return found
-    if len(same) == 1:
-        return same[0] if int((context or {}).get("copies") or 1) == 1 else None
-    if same:
-        if near:
-            under = [n for n in same if line_before(result, n) == near]
-            return under[0] if len(under) == 1 else None
-        # blocks that read the same, and nothing recorded to tell them apart: an annotation stays at its place while that holds its text, as it always has; an edit is not written into one of them blind
-        return node if not edit and any(n is node for n in same) else None
+        return _stable(result, node, want, quote)
+    return _by_place(result, key, node, want, edit=edit, near=near, quote=quote, context=context or {})
+
+
+def rewritten(result: ScanResult, node: NodeRec, want: str, quote: str = "") -> bool:
+    """Whether a record on a stable key that stays on `node` was written on a text `node` no longer reads like: its block was rewritten under its key, which a reader is told."""
+    return bool(want) and not _still(result, want, node, quote)
+
+
+def _stable(result: ScanResult, node: NodeRec | None, want: str, quote: str) -> NodeRec | None:
+    """A stable key's record: on its block while that block still reads like it; else where its text, labels aside, stands once among the documents' blocks, its label having moved; else on its block, rewritten under it, or none under `VERIFY`. An id two blocks define places none; one whose block is in no document goes to the one block of the documents that reads like it, where there is one."""
     if node is None:
         return None
-    if edit:
-        # its block has changed: only an edit that quotes words, under the line it was filed under, is taken at its place
-        return node if quoted and near and line_before(result, node) == near else None
-    # its block edited where it stands: an annotation stays while the block still reads like what it was written on, and no other block of its file does
-    return node if _reads_like(result, want, node) else None
+    documents = _pool(result, node.file)
+    if node.kind == "conflict":
+        # an id two blocks define: the one of the documents that reads like the record, where only one does; else either could be meant
+        mine = [n for n in documents if _still(result, want, n, quote)]
+        return mine[0] if len(mine) == 1 else None
+    if not any(n is node for n in documents):
+        # the key's block is in no document (a backup that claims the id): the one block of the documents that reads like the record, where there is one
+        mine = [n for n in documents if _still(result, want, n, quote)]
+        if len(mine) == 1:
+            return mine[0]
+    if _still(result, want, node, quote):
+        return node
+    bare = _bare_frozen(result, want)
+    moved = [n for n in documents if n is not node and bare and _bare_of(result, n) == bare]
+    if len(moved) == 1:
+        return moved[0]
+    return None if VERIFY else node
+
+
+def _by_place(
+    result: ScanResult,
+    key: str,
+    node: NodeRec | None,
+    want: str,
+    *,
+    edit: bool,
+    near: str,
+    quote: str,
+    context: dict[str, Any],
+) -> NodeRec | None:
+    """A record on a key named by place (or a document's path whose file is gone).
+
+    Its own key's block first: while it holds the record's text, or reads like it with no neighbour saying otherwise, it is the record's, however exact a copy elsewhere. Otherwise only a block nothing else could be: the one holding its very text among the documents' blocks, where no other did when it was written, else the one of those its neighbours stand beside on both sides; for a record with context, the one block reading `LIKE` alike, under the same conditions; its quote, standing in one block alone. A text with nothing of its own to recognise (`TRIVIAL`) is followed only to the one block of its very text standing between both its recorded neighbours. A record with no context follows only its very text standing once.
+    """
+    frozen = _frozen(result, want)
+    trivial = len(_own_words(frozen)) < TRIVIAL
+    if not context:
+        return _unrecorded(result, node, want, edit=edit, near=near, trivial=trivial)
+    copies = int(context.get("copies") or 1)
+    twin = bool(context.get("twin")) or copies > 1
+    path = node.file if node is not None else key.split("#", 1)[0]
+    documents = _pool(result, path)
+    if node is not None and block_hash(result, node.key) == want:
+        others = [n for n in documents if n is not node and block_hash(result, n.key) == want]
+        if not others and copies == 1 and not trivial:
+            return node
+        # its very text stands in another block too, or stood in two: the one with both neighbours beside it
+        both = [n for n in [node, *others] if _sides(result, n, context)[0] == 2]
+        return both[0] if len(both) == 1 else None
+    if node is not None and not trivial and _like(result, want, node) >= LIKE and not _sides(result, node, context)[1]:
+        if not twin:
+            # edited where it stands: never left for another block, however exact a copy made since
+            return node
+        # its block had a twin when it was written, and the block at its place may be that twin: only with both its neighbours beside it, no block holding its very text, and reading closer to it than any other by `AHEAD`
+        mine = _like(result, want, node)
+        rivals = [n for n in documents if n is not node and _like(result, want, n) >= LIKE]
+        if (
+            _sides(result, node, context)[0] == 2
+            and not any(block_hash(result, n.key) == want for n in rivals)
+            and all(mine - _like(result, want, n) >= AHEAD for n in rivals)
+        ):
+            return node
+        return None
+    exact = [n for n in documents if n is not node and block_hash(result, n.key) == want]
+    if trivial:
+        # nothing of its own to recognise: only the one block of its very text that stands between both its neighbours
+        both = [n for n in exact if _sides(result, n, context)[0] == 2]
+        return both[0] if len(both) == 1 else None
+    if exact:
+        if len(exact) == 1 and not twin:
+            return exact[0]
+        both = [n for n in exact if _sides(result, n, context)[0] == 2]
+        return both[0] if len(both) == 1 else None
+    pool = [n for n in documents if n is not node and (n.file == path or path not in result.files)]
+    best = _closest(result, want, pool)
+    if best is not None:
+        if (twin or _sort(best) != context.get("kind")) and _sides(result, best, context)[0] != 2:
+            return None
+        return best
+    if quote and len(quote.split()) >= QUOTE_WORDS and context.get("quote") == 1:
+        holders = [n for n in documents if quote in _own_text(result, n)]
+        if len(holders) == 1:
+            return holders[0]
+    return None
+
+
+def _unrecorded(
+    result: ScanResult, node: NodeRec | None, want: str, *, edit: bool, near: str, trivial: bool
+) -> NodeRec | None:
+    """A record on a key named by place written before `context` was recorded: where its key's block holds its text, as loom always read it (an annotation there; an edit there while no other block of its file holds that text, or under its `near`); an annotation also while that block reads `LIKE` alike and no other block of its file does, and while it reads alike neither leaves it for another; otherwise only its very text standing once among the documents' blocks, never a text with nothing of its own (`TRIVIAL`)."""
+    if node is not None and block_hash(result, node.key) == want:
+        if not edit:
+            return node
+        same = [n for n in result.nodes.values() if n.file == node.file and block_hash(result, n.key) == want]
+        if len(same) == 1:
+            return node
+        under = [n for n in same if near and line_before(result, n) == near]
+        return under[0] if len(under) == 1 else None
+    if node is not None and not trivial and _like(result, want, node) >= LIKE:
+        # edited where it stands: never left for another block; an annotation stays while no other block of its file reads as alike, and an edit, which the base never placed on a changed block, is on none
+        alike = any(_like(result, want, n) >= LIKE for n in _in_order(result, node.file) if n is not node)
+        return node if not edit and not alike else None
+    if trivial:
+        return None
+    path = node.file if node is not None else ""
+    exact = [n for n in _pool(result, path) if n is not node and block_hash(result, n.key) == want]
+    if edit and near and len(exact) > 1:
+        under = [n for n in exact if line_before(result, n) == near]
+        return under[0] if len(under) == 1 else None
+    return exact[0] if len(exact) == 1 else None
 
 
 def _container_key(result: ScanResult, key: str, node: NodeRec | None) -> str:
@@ -180,20 +280,69 @@ def _container_key(result: ScanResult, key: str, node: NodeRec | None) -> str:
     return ""
 
 
-#: Each scan's words, by block key and by the hash of a text frozen when a record was written; one scan at a time.
-_WORDS: tuple[ScanResult, dict[str, list[str]]] | None = None
+#: A text with fewer words of its own than this (an empty proof, "Obvious.") has nothing to recognise it by, and a record on it is followed nowhere but its own key.
+TRIVIAL = 4
+
+#: How far ahead of the next block the closest must read for likeness alone to place a record (`_closest`).
+AHEAD = 0.1
+
+#: The fewest words a quote must have to place a record on its own, where it stood in one block of the quilt when the record was written and stands in one now.
+QUOTE_WORDS = 4
+
+#: An environment's delimiters and a label, which are no words of a block's own.
+_DELIMITERS = re.compile(r"^\\(begin|end)\{[^}]*\}(\[[^\]]*\])?$|^\\label\{[^}]*\}$")
+
+#: A label, left out where a stable key's record asks whether its text stands elsewhere (`_bare_of`).
+_LABEL = re.compile(r"\\label\{[^}]*\}")
+
+#: Each scan's derived values, by name; one scan at a time.
+_SCAN: tuple[ScanResult, dict[Any, Any]] | None = None
+
+#: How alike a frozen text and a block's text read, by (frozen hash, block hash): the same two texts read alike in every scan, so a build after an edit compares only what changed.
+_LIKENESS: dict[tuple[str, str], float] = {}
 
 
-def _words_of(result: ScanResult, name: str, text: str | None) -> list[str]:
-    """The words of `text` with child markers left out, remembered under `name` for the scan `result`; [] for no text."""
-    global _WORDS
-    held = _WORDS
-    if held is None or held[0] is not result:
-        held = _WORDS = (result, {})
-    known = held[1].get(name)
-    if known is None:
-        known = held[1][name] = _CHILD.sub("", text).split() if text else []
-    return known
+def _held(result: ScanResult) -> dict[Any, Any]:
+    """The values remembered for the scan `result`."""
+    global _SCAN
+    if _SCAN is None or _SCAN[0] is not result:
+        _SCAN = (result, {})
+    return _SCAN[1]
+
+
+def _own_text(result: ScanResult, node: NodeRec) -> str:
+    from loom.scan.owntext import own_text
+
+    held = _held(result)
+    found = held.get(("text", node.key))
+    if found is None:
+        found = held[("text", node.key)] = own_text(result, node)
+    return str(found)
+
+
+def _frozen(result: ScanResult, want: str) -> list[str]:
+    """The words of the text frozen as `want` when a record was written (`cli.review._version`), child markers left out; [] when the store does not hold it."""
+    from loom.records.snapshots import read_snapshot
+
+    held = _held(result)
+    found = held.get(("frozen", want))
+    if found is None:
+        text = read_snapshot(result.quilt.root, want, result.quilt.history_dir)
+        found = held[("frozen", want)] = _CHILD.sub("", text).split() if text else []
+    return list(found)
+
+
+def _words(result: ScanResult, node: NodeRec) -> list[str]:
+    held = _held(result)
+    found = held.get(("words", node.key))
+    if found is None:
+        found = held[("words", node.key)] = _CHILD.sub("", _own_text(result, node)).split()
+    return list(found)
+
+
+def _own_words(words: list[str]) -> list[str]:
+    """The words a person wrote: an environment's delimiters and labels left out."""
+    return [w for w in words if not _DELIMITERS.match(w)]
 
 
 def _likeness(a: list[str], b: list[str]) -> float:
@@ -206,40 +355,84 @@ def _likeness(a: list[str], b: list[str]) -> float:
     return m.ratio()
 
 
-def _still(result: ScanResult, want: str, node: NodeRec, quote: str) -> bool:
-    """Whether `node` still reads as a record on it was written (`VERIFY`): it holds the text frozen as `want`, or the record's quote, or reads `LIKE` alike that text."""
-    from loom.records.snapshots import read_snapshot
-    from loom.scan.owntext import own_text
+def _like(result: ScanResult, want: str, node: NodeRec) -> float:
+    """How alike `node` reads to the text frozen as `want`, remembered across scans by the two texts' hashes (`_LIKENESS`)."""
+    pair = (want, block_hash(result, node.key))
+    found = _LIKENESS.get(pair)
+    if found is None:
+        if len(_LIKENESS) > 200_000:
+            _LIKENESS.clear()
+        found = _LIKENESS[pair] = _likeness(_frozen(result, want), _words(result, node))
+    return found
 
+
+def _still(result: ScanResult, want: str, node: NodeRec, quote: str) -> bool:
+    """Whether `node` still reads as a record on it was written: it holds the text frozen as `want`, or the record's quote, or reads `LIKE` alike that text."""
     if block_hash(result, node.key) == want:
         return True
-    own = own_text(result, node)
-    if quote and quote in own:
+    if quote and quote in _own_text(result, node):
         return True
-    frozen = _words_of(result, want, read_snapshot(result.quilt.root, want, result.quilt.history_dir))
-    return _likeness(frozen, _words_of(result, node.key, own)) >= LIKE
+    return _like(result, want, node) >= LIKE
 
 
-def _reads_like(result: ScanResult, want: str, node: NodeRec) -> bool:
-    """Whether `node` reads at least `LIKE` alike the text frozen as `want` when a record was written (`cli.review._version`), and no other block of its file does; False when that text is not in the store."""
+def _bare(text: str) -> str:
+    """`text` as the store keeps it (`normalize`), its labels and child markers left out and its spaces collapsed."""
+    from loom.scan.hashing import normalize
+
+    return " ".join(_CHILD.sub("", _LABEL.sub("", normalize(text))).split())
+
+
+def _bare_frozen(result: ScanResult, want: str) -> str:
     from loom.records.snapshots import read_snapshot
-    from loom.scan.owntext import own_text
 
-    frozen = _words_of(result, want, read_snapshot(result.quilt.root, want, result.quilt.history_dir))
-    if _likeness(frozen, _words_of(result, node.key, own_text(result, node))) < LIKE:
-        return False
-    return not any(
-        _likeness(frozen, _words_of(result, n.key, own_text(result, n))) >= LIKE
-        for n in result.nodes.values()
-        if n.file == node.file and n is not node and n.kind not in ("master", "file")
-    )
+    text = read_snapshot(result.quilt.root, want, result.quilt.history_dir)
+    return _bare(text) if text else ""
 
 
-#: How far ahead of the next block the closest must read for likeness alone to place a record (`_closest`).
-AHEAD = 0.1
+def _bare_of(result: ScanResult, node: NodeRec) -> str:
+    held = _held(result)
+    found = held.get(("bare", node.key))
+    if found is None:
+        found = held[("bare", node.key)] = _bare(_own_text(result, node))
+    return str(found)
 
-#: The fewest words a quote must have to place a record on its own, where it stood in one block of the quilt when the record was written and stands in one now.
-QUOTE_WORDS = 4
+
+def _pool(result: ScanResult, path: str) -> list[NodeRec]:
+    """Where a record whose key lies in `path` can be found: an agent's copy's blocks for one written in an agent's copy under `.loom/`, the documents' blocks for any other (`_documents`)."""
+    if not path.startswith(f"{LOOM}/"):
+        return _documents(result)
+    held = _held(result)
+    found = held.get("copies")
+    if found is None:
+        found = held["copies"] = [
+            n for n in result.nodes.values() if n.kind not in ("master", "file") and n.file.startswith(f"{LOOM}/")
+        ]
+    return list(found)
+
+
+def _documents(result: ScanResult) -> list[NodeRec]:
+    """The blocks a record can be found on: each document's own text and the blocks of the files a document reads, never an agent's copy under `.loom/` nor a file no document reads (a backup beside the paper)."""
+    held = _held(result)
+    found = held.get("documents")
+    if found is None:
+        found = held["documents"] = [
+            n
+            for n in result.nodes.values()
+            if (n.kind == "master" or (n.kind != "file" and n.reached_by)) and not n.file.startswith(f"{LOOM}/")
+        ]
+    return list(found)
+
+
+def _mark(result: ScanResult, node: NodeRec) -> str:
+    """What a block is recognised by as a neighbour: the hash of its own text with child markers left out, which a child renumbered by a block put in elsewhere does not change."""
+    import hashlib
+
+    held = _held(result)
+    found = held.get(("mark", node.key))
+    if found is None:
+        text = " ".join(_CHILD.sub("", _own_text(result, node)).split())
+        found = held[("mark", node.key)] = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
+    return str(found)
 
 
 def _sort(node: NodeRec) -> str:
@@ -251,10 +444,14 @@ def _sort(node: NodeRec) -> str:
 
 def _in_order(result: ScanResult, path: str) -> list[NodeRec]:
     """The blocks of `path` in file order, documents and files left out: what a record's neighbours are counted among."""
-    return sorted(
-        (n for n in result.nodes.values() if n.file == path and n.kind not in ("master", "file")),
-        key=lambda n: (n.start, -n.end),
-    )
+    held = _held(result)
+    found = held.get(("order", path))
+    if found is None:
+        found = held[("order", path)] = sorted(
+            (n for n in result.nodes.values() if n.file == path and n.kind not in ("master", "file")),
+            key=lambda n: (n.start, -n.end),
+        )
+    return list(found)
 
 
 def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, Any]:
@@ -272,40 +469,32 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
     Returns
     -------
     dict
-        `before` and `after`: the nearest block on each side whose text stands once in its file, as `{"hash", "gap"}` with `gap` 1 for the block beside it, or `{"edge": n}` where none does, `n` counting to the file's edge; `kind`, what `_sort` calls it; `copies`, how many blocks of its file held its very text; `twin`, whether another block of its file reads `LIKE` alike it; and with a quote, `quote`, how many blocks of the person's files it stands in.
+        `before` and `after`: the nearest block on each side whose text stands once in its file, as `{"hash", "gap"}` with `hash` its text without child markers (`_mark`) with `gap` 1 for the block beside it, or `{"edge": n}` where none does, `n` counting to the file's edge; `kind`, what `_sort` calls it; `copies`, how many blocks of the documents held its very text; `twin`, whether another block of its file reads `LIKE` alike it; and with a quote, `quote`, how many blocks of the documents it stands in.
     """
     if node.kind in ("master", "file"):
         return {}
-    from loom.scan.owntext import own_text
-
     order = _in_order(result, node.file)
     at = next((i for i, n in enumerate(order) if n is node), None)
     out: dict[str, Any] = {}
     if at is not None:
         counts: dict[str, int] = {}
         for n in order:
-            counts[block_hash(result, n.key)] = counts.get(block_hash(result, n.key), 0) + 1
+            counts[_mark(result, n)] = counts.get(_mark(result, n), 0) + 1
         for side, step in (("before", -1), ("after", 1)):
             i, gap = at + step, 1
-            while 0 <= i < len(order) and counts[block_hash(result, order[i].key)] != 1:
+            while 0 <= i < len(order) and counts[_mark(result, order[i])] != 1:
                 i, gap = i + step, gap + 1
-            out[side] = {"hash": block_hash(result, order[i].key), "gap": gap} if 0 <= i < len(order) else {"edge": gap}
+            out[side] = {"hash": _mark(result, order[i]), "gap": gap} if 0 <= i < len(order) else {"edge": gap}
     out["kind"] = _sort(node)
-    out["copies"] = sum(1 for n in order if block_hash(result, n.key) == block_hash(result, node.key)) or 1
-    own = _words_of(result, node.key, own_text(result, node))
+    own = block_hash(result, node.key)
+    out["copies"] = sum(1 for n in _documents(result) if block_hash(result, n.key) == own) or 1
+    words = _words(result, node)
     out["twin"] = any(
-        _likeness(own, _words_of(result, n.key, own_text(result, n))) >= LIKE
-        for n in result.nodes.values()
-        if n.file == node.file and n is not node and n.kind not in ("master", "file")
+        _likeness(words, _words(result, n)) >= LIKE for n in _in_order(result, node.file) if n is not node
     )
     if quote:
-        out["quote"] = sum(1 for n in _persons(result) if quote in own_text(result, n))
+        out["quote"] = sum(1 for n in _documents(result) if quote in _own_text(result, n))
     return out
-
-
-def _persons(result: ScanResult) -> list[NodeRec]:
-    """The blocks of the person's files: every block but documents, files, and an agent's copies under `.loom/`."""
-    return [n for n in result.nodes.values() if n.kind not in ("master", "file") and not n.file.startswith(f"{LOOM}/")]
 
 
 def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any]) -> tuple[int, int]:
@@ -326,64 +515,16 @@ def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any]) -> tuple
                 against += 1
         elif "hash" in rec:
             j = at + step * int(rec.get("gap") or 1)
-            if 0 <= j < len(order) and block_hash(result, order[j].key) == rec["hash"]:
+            if 0 <= j < len(order) and _mark(result, order[j]) == rec["hash"]:
                 held += 1
-            elif any(block_hash(result, n.key) == rec["hash"] for n in order):
+            elif any(_mark(result, n) == rec["hash"] for n in order):
                 against += 1
     return held, against
 
 
-def _told(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any]) -> NodeRec | None:
-    """Among `blocks`, the one whose recorded neighbours stand beside it on more sides than any other's, and on one at least; None on a tie."""
-    scored = sorted(((_sides(result, n, context)[0], n) for n in blocks), key=lambda s: -s[0])
-    if not scored or scored[0][0] == 0 or (len(scored) > 1 and scored[1][0] == scored[0][0]):
-        return None
-    return scored[0][1]
-
-
 def _closest(result: ScanResult, want: str, blocks: list[NodeRec]) -> NodeRec | None:
     """The one block of `blocks` reading at least `LIKE` alike the text frozen as `want`, ahead of every other by `AHEAD`; None when none is, or two read near alike."""
-    from loom.records.snapshots import read_snapshot
-    from loom.scan.owntext import own_text
-
-    frozen = _words_of(result, want, read_snapshot(result.quilt.root, want, result.quilt.history_dir))
-    scored = sorted(
-        ((_likeness(frozen, _words_of(result, n.key, own_text(result, n))), n) for n in blocks), key=lambda s: -s[0]
-    )
+    scored = sorted(((_like(result, want, n), n) for n in blocks), key=lambda s: -s[0])
     if not scored or scored[0][0] < LIKE or (len(scored) > 1 and scored[0][0] - scored[1][0] < AHEAD):
         return None
     return scored[0][1]
-
-
-def _by_context(
-    result: ScanResult,
-    node: NodeRec | None,
-    want: str,
-    same: list[NodeRec],
-    path: str,
-    context: dict[str, Any],
-    quote: str,
-) -> NodeRec | None:
-    """Where a record on a key named by place goes, by the `context` it was written with (KEY-7 of the study's `raw/check-labels.md`).
-
-    In order: the one block that holds its text, when no other block of its file held that text when it was written, else the one of those its neighbours tell; the block at its place while its neighbours stand on both sides (`_sides`); the one block of its kind that reads like it, when it had no twin or a neighbour still stands beside that block; its quote, of `QUOTE_WORDS` words or more, standing in the one block of the person's files where it stood in one alone. None otherwise.
-    """
-    from loom.scan.owntext import own_text
-
-    twin = bool(context.get("twin"))
-    if same:
-        if len(same) == 1 and int(context.get("copies") or 1) == 1:
-            return same[0]
-        return _told(result, same, context)
-    if node is not None and _sides(result, node, context)[0] == 2:
-        return node
-    pool = [n for n in _persons(result) if n.file == path] if path in result.files else _persons(result)
-    kind = context.get("kind")
-    best = _closest(result, want, [n for n in pool if not kind or _sort(n) == kind])
-    if best is not None and (not twin or _sides(result, best, context)[0] >= 1):
-        return best
-    if quote and len(quote.split()) >= QUOTE_WORDS and context.get("quote") == 1:
-        holders = [n for n in _persons(result) if quote in own_text(result, n)]
-        if len(holders) == 1:
-            return holders[0]
-    return None

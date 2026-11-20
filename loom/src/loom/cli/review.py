@@ -490,18 +490,25 @@ def _one_comment(
         if found is None:
             raise NotFoundError("annotation", f"no annotation {reply}")
         _, parent = found
+        # on the block the note it answers is on now, which its key may no longer name; on none, as the note is
+        placed = _placed(result, parent)
         ann_id = _append_new(
             root,
             {
                 **base,
                 "event": "replied",
-                "target": parent.target_key,
+                "target": placed or parent.target_key,
                 # the text the reply was written against, which may have moved on since the note it answers
-                "against": _version(result, parent.target_key, dry_run=dry_run) or parent.target_hash,
+                "against": (_version(result, placed, dry_run=dry_run) if placed else None) or parent.target_hash,
                 "anchor": parent.selector.to_dict() if parent.selector else None,
                 "in": parent.in_doc,
                 "body": message or "",
                 "reply_to": reply,
+                **(
+                    _context(result, _block_key(result, placed), parent.selector.exact if parent.selector else "")
+                    if placed
+                    else {}
+                ),
             },
             records,
             date,
@@ -566,6 +573,23 @@ def _one_comment(
         dry_run,
     )
     return f"{ann_id}  {key}  {type_id or 'untyped'}  ({aid})"
+
+
+def _placed(result: ScanResult, ann: Any) -> str | None:
+    """The key of the block annotation `ann` is on now (`Records.resolved`, `records.locate.follow`), which its own key may no longer name; None when it is on none."""
+    from loom.records.store import Records
+
+    for res in Records(result.quilt.root, result.quilt.history_dir).resolved(result):
+        if res.annotation.id == ann.id:
+            return None if res.unplaced or not res.target else res.target
+    return None
+
+
+def _block_key(result: ScanResult, key: str | None) -> str:
+    """The block `key` is in: a region's container, else `key`."""
+    if not key:
+        return ""
+    return result.assembly.regions[key].container if key in result.assembly.regions else key
 
 
 def _context(result: ScanResult, node_key: str, quote: str) -> dict[str, Any]:
@@ -912,9 +936,14 @@ def edit_annotation(
         raise EnvError(f"a {ann.mark} says something; delete it instead")
     akind, aid = writer
     event: dict[str, Any] = {"event": "edited", "id": ann_id, "when": stamp(), "author": aid, "kind": akind}
-    version = _version(result, found[1].target_key, dry_run=dry_run)
+    # restated against the text of the block it is on now, which its key may no longer name; one on no block is left as it was written
+    placed = _placed(result, ann)
+    version = _version(result, placed, dry_run=dry_run) if placed else None
     if version:
         event["against"] = version
+        if placed != ann.target_key:
+            event["target"] = placed
+            event.update(_context(result, _block_key(result, placed), ann.selector.exact if ann.selector else ""))
     _append(root, {**event, **restyled, **{k: v for k, v in fields.items() if v is not None}}, dry_run)
     return f"edited {ann_id}"
 
@@ -1333,6 +1362,7 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
     # Notes on a page of a cited work have no key, so they have no row and count toward nothing (plan 0.13 item 4):
     # they are additions to the text and open is their resting state. They are listed on their own, by work.
     reading: list[dict[str, Any]] = []
+    unplaced: list[dict[str, Any]] = []
     for res in records.resolved(result):
         a = res.annotation
         if a.anchor is not None or res.work:
@@ -1354,9 +1384,12 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
                 }
             )
             continue
-        live.setdefault(a.target_key, []).append(
-            {"id": a.id, "type": a.type, "status": a.status, "detached": res.detached}
-        )
+        row = {"id": a.id, "type": a.type, "status": a.status, "detached": res.detached}
+        if res.unplaced:
+            # on no block: listed apart, with the key it was written on, never under the block that took that key
+            unplaced.append({**row, "written_on": a.target_key})
+        else:
+            live.setdefault(res.target or a.target_key, []).append(row)
     # each live agent document's own rows, apart from the author's: what waits in it is the agent's work and the author's to look at, never the author's to-do list
     agent_rows: dict[str, dict[str, Any]] = {m: {} for m in result.masters if result.document_role(m) == "agent"}
     for key, ks in states.items():
@@ -1457,6 +1490,7 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
         "retired": retired,
         # a sort that keeps the log's order on one page, since an id says nothing of when
         "reading": sorted(reading, key=lambda r: (r["work"], r["page"] or 0)),
+        "unplaced": unplaced,
     }
 
 

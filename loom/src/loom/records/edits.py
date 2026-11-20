@@ -360,15 +360,25 @@ def edge_of(result: ScanResult, node: NodeRec, placement: str) -> str:
 
 
 def beside_of(result: ScanResult, node: NodeRec, span: tuple[int, int], placement: str) -> str | None:
-    """What `loom suggest` records of the file beside an insertion after (`after`) or before (`before`) the quote at `span` of `node`'s own text (`context["beside"]`): the file's next or last `CONTEXT` characters, a kept block's text among them, which the block's own text leaves out; None where the quote is not in one piece of the file."""
+    """What `loom suggest` records of the file beside an insertion after (`after`) or before (`before`) the quote at `span` of `node`'s own text (`context["beside"]`): the file's next or last `CONTEXT` characters, comments left out (`uncommented`), a kept block's text among them, which the block's own text leaves out; None where the quote is not in one piece of the file."""
     from loom.records.selectors import CONTEXT
 
     _, pieces = Records.own_pieces(result, node)
     at = Records.to_file_span(pieces, span)
     if at is None:
         return None
-    text = result.files[node.file].text
-    return text[at[1] : at[1] + CONTEXT] if placement == "after" else text[max(0, at[0] - CONTEXT) : at[0]]
+    text = uncommented(result.files[node.file].text)
+    found = text[at[1] : at[1] + CONTEXT] if placement == "after" else text[max(0, at[0] - CONTEXT) : at[0]]
+    return " ".join(found.split()) if found.split() else found
+
+
+#: A LaTeX comment: from an unescaped `%` to the end of its line.
+_COMMENT = re.compile(r"(?<!\\)%[^\n]*")
+
+
+def uncommented(text: str) -> str:
+    """`text` with every LaTeX comment blanked out character for character, so offsets still hold and no comment is ever recorded or compared (`beside_of`, `_file_beside`)."""
+    return _COMMENT.sub(lambda m: " " * len(m.group(0)), text)
 
 
 def _file_beside(edit: Edit, text: str, at: int) -> str | None:
@@ -557,18 +567,19 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         at = (x, x) if x is not None else None
     if at is None:
         raise Unplaced(f"the place {edit.id} names in {node.key} is not in one piece of its file")
-    if (moved := _file_beside(edit, result.files[node.file].text, at[0])) is not None:
+    if (moved := _file_beside(edit, uncommented(result.files[node.file].text), at[0])) is not None:
         raise Unplaced(f"{moved} in {node.key}, so it is not written in blind")
     return Placed(node.key, node.file, own, span, at, text, edit.target_hash != key_hash(result, node.key))
 
 
 def _by_place_alone(result: ScanResult, edit: Edit, node: NodeRec) -> bool:
-    """Whether `edit`'s block was found by its place and the line above alone: its key is named by place and the block no longer holds the text the edit was written against (`follow`'s last answer)."""
+    """Whether `edit`'s block was found by its place and the line above alone: one filed with no `context`, whose key is named by place, on a block that no longer holds the text it was written against. One with `context` was placed by what it recorded (`records.locate.follow`)."""
     from loom.records.locate import named_by_place
     from loom.scan.owntext import key_hash
 
     return (
         bool(edit.target_hash)
+        and not edit.context
         and named_by_place(result, edit.target_key, node_of(result, edit.target_key))
         and key_hash(result, node.key) != edit.target_hash
     )

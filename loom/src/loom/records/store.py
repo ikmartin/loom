@@ -99,13 +99,36 @@ class ResolvedAnnotation:
     on_changes: list[str] = field(default_factory=list)
     # taken in from a PDF's own annotation that is still in the file as it is now: that annotation's reference
     hides: str | None = None
-    # on no block: its key names one that no longer holds the text it was written on, or none, and nothing says where that text went (`records.locate.follow`); listed in the manifest's `unplaced`, never counted on the block at its key
+    # on no block: its key names one that no longer holds the text it was written on, or none, and nothing says where that text went (`records.locate.follow`); its `target` is '', so nothing downstream names a block for it, and the manifest lists it in `unplaced`
     unplaced: bool = False
 
 
 def is_document_path(result: ScanResult, path: str) -> bool:
     """Whether `path` names a document, live or not, rather than a key: a `.tex` path, which no key (`prose:` keys aside) is."""
     return path.endswith(".tex") and not path.startswith("prose:")
+
+
+#: Each scan's placements by annotation id (`placed_key`); one scan at a time.
+_PLACED: tuple[ScanResult, dict[str, str | None]] | None = None
+
+
+def placed_key(result: ScanResult, ann: Annotation) -> str | None:
+    """The key of the block `ann` is shown on now, as `Records.resolved` places it, which may not be the key it was written on; None for one on no block. What a listing names a note by.
+
+    A note the scan does not know (written since) is named by the key it was written on.
+    """
+    global _PLACED
+    held = _PLACED
+    if held is None or held[0] is not result:
+        records = Records(result.quilt.root, result.quilt.history_dir)
+        held = _PLACED = (
+            result,
+            {
+                r.annotation.id: None if r.unplaced else (r.target or r.annotation.target_key)
+                for r in records.resolved(result)
+            },
+        )
+    return held[1].get(ann.id, ann.target_key)
 
 
 #: Acceptance states by (reviewer, the ledger as read), each kept for the one scan it was computed against; see `Records.key_states`.
@@ -561,7 +584,7 @@ class Records:
                 if found is None and n is not None:
                     out.append(
                         ResolvedAnnotation(
-                            a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc, unplaced=True
+                            a, rec, None, True, self._recorded(a, None), target="", in_doc=in_doc, unplaced=True
                         )
                     )
                     continue
@@ -570,7 +593,7 @@ class Records:
                 if n is None:
                     out.append(
                         ResolvedAnnotation(
-                            a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc, unplaced=True
+                            a, rec, None, True, self._recorded(a, None), target="", in_doc=in_doc, unplaced=True
                         )
                     )
                     continue
@@ -795,7 +818,7 @@ class Records:
         opening: set[str] = set()
         for res in self.resolved(result):
             # one resolved needs nothing more, so the finding counts the open ones its fix acts on
-            if res.detached and res.annotation.status == "open":
+            if res.detached and not res.unplaced and res.annotation.status == "open":
                 detached.setdefault(res.target, []).append(res.annotation.id)
                 if self.opens(res.annotation):
                     opening.add(res.annotation.id)
@@ -1016,7 +1039,7 @@ class Records:
                 "created": a.created,
                 # an annotation on a cited work names the work by identifier; the citekey and the page travel beside it so a viewer needs no lookup to say where it is (plan 0.13 item 2)
                 "target": {
-                    "key": res.target,
+                    "key": res.target or None,
                     "hash": a.target_hash,
                     "work": res.work or None,
                     # where it stands now: the page it was found again on, on a changed PDF
@@ -1063,9 +1086,9 @@ class Records:
         manifest["unplaced"] = [
             {
                 "id": res.annotation.id,
-                "key": res.target or res.annotation.target_key,
+                "key": res.annotation.target_key,
                 "why": "its key names a block that no longer holds the text it was written on, and nothing says which block does"
-                if (res.target or res.annotation.target_key) in result.nodes
+                if res.annotation.target_key in result.nodes or res.annotation.target_key in result.assembly.regions
                 else "its key names no block now",
             }
             for res in resolved

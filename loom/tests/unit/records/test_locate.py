@@ -63,8 +63,8 @@ def test_a_note_on_a_key_named_by_place_is_never_read_on_the_block_put_in_at_its
             # the one section that reads like the one it was written on, moved below the new one
             assert got["detached"] is False and got["target"]["key"] == "drafting/outline.tex#section:3", got
         else:
-            # nothing says where its block went: detached, and the section put in at its place does not take it
-            assert got["detached"] is True and got["target"]["key"] == CONSIDERED, got
+            # nothing says where its block went: detached on no block, so the section put in at its place is never named
+            assert got["detached"] is True and got["target"]["key"] is None, got
 
 
 @pytest.mark.parametrize("context", [True, False])
@@ -80,8 +80,8 @@ def test_a_note_on_a_block_rewritten_where_it_stands(q: Path, context: bool) -> 
         "Neither of these is proved. The conjecture owes a proof and appears among the blockers until it is proved or refuted; the question owes nothing at all.",
         "Two loose ends, recorded so they are not forgotten.",
     )
-    # rewritten past recognition: with the neighbours it recorded standing either side, it is the block it was written on; with none, the block at its place no longer reads like it
-    assert row(q, whole)["detached"] is (not context)
+    # rewritten past recognition: the block at its place no longer reads like it, and neighbours alone never place a record
+    assert row(q, whole)["detached"] is True
 
 
 def test_a_note_follows_its_text_into_a_renamed_file(q: Path) -> None:
