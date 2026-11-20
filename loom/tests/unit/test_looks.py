@@ -178,6 +178,30 @@ def test_latexs_auxiliary_files_are_in_no_look_and_an_old_look_holding_one_repor
     assert changes(q) == {}
 
 
+def test_a_save_after_the_scan_is_the_next_scans_change(q: Path) -> None:
+    """A build's changes and their patches are cut from the texts its scan read: a file saved while the build runs waits for the next scan, so no change is drawn against a reading of its file that the scan never saw."""
+    from loom.pending import in_place, patch_of
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+
+    def edit(old: str, new: str) -> None:
+        node.write_text(node.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
+
+    ok("changes", "--keep-all", cwd=q)
+    path = "drafting/nodes/dm-0002.tex"
+    node = q / path
+    edit("one or two points", "one or two points, never three")
+    result = scan(load_quilt(q))
+    edit("never three", "never more")
+    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
+    edits = {c.path: c for c in in_place(result, "Tester")}
+    mine = edits[path]
+    assert mine.new == "never three," and result.files[path].text[mine.at[0] : mine.at[1]] == "never three,"
+    assert "+Every orbit of a widget has one or two points, never three," in patch_of(result, mine, "Tester")
+    assert edits["notes/a.md"].new == "second"
+    assert {c.path: c.new for c in in_place(scan(load_quilt(q)), "Tester")}[path] == "never more,"
+
+
 def test_turning_tracking_on_in_settings_takes_the_look_then(q: Path) -> None:
     from loom.looks import read_look
     from loom.render.api import handle
