@@ -154,7 +154,6 @@ def isolated_env(
 
     expand._FOUND.clear()
     expand._MISSING.clear()
-    expand._searched.cache_clear()
     return home
 
 
