@@ -153,7 +153,7 @@ def _stable(
 ) -> NodeRec | None:
     """A stable key's record: on the block that carries its id or label, unless that label moved, or, for an id's proof (`ID/proof`, numbered by its place among the proofs), unless the proof at the key no longer holds its text and stands apart from its recorded neighbours.
 
-    The label moved only where the block carrying it now stands away from the record's recorded neighbours and the record's text, labels aside, stands once in another block, a text long enough to be someone's and not a twin its context recorded: the record follows it. Otherwise the record stays on the key's block, marked rewritten where that block no longer reads like it (`rewritten`), or detached under `VERIFY`. A record with no context stays on the key's block, as loom always read it. An id two blocks define places none; one whose block is in no document goes to the one block of the documents that reads like it, where there is one.
+    The label moved only where the record's text, labels aside, stands in one other block between the record's recorded neighbours on both sides (the block now carrying the label left out of the count), a text long enough to be someone's and not a twin its context recorded: the record follows it there, never to a copy standing elsewhere. Otherwise the record stays on the key's block, marked rewritten where that block no longer reads like it (`rewritten`), or detached under `VERIFY`. A record with no context stays on the key's block, as loom always read it. An id two blocks define places none. A key whose block is in a file no document reads now is on no block until one reads it again, unless the record was written while none read it (`unread`), never looked for elsewhere.
     """
     if node is None:
         return None
@@ -163,10 +163,8 @@ def _stable(
         mine = [n for n in documents if _still(result, want, n, quote)]
         return mine[0] if len(mine) == 1 else None
     if not any(n is node for n in documents):
-        # the key's block is in no document (a backup that claims the id): the one block of the documents that reads like the record, where there is one
-        mine = [n for n in documents if _still(result, want, n, quote)]
-        if len(mine) == 1:
-            return mine[0]
+        # its file stands but no document reads it now (an `\\input` commented out): on no block until one reads it again, never sent looking elsewhere; a record written while none read it (a scratch file) is on its block
+        return node if not context or context.get("unread") else None
     still = _still(result, want, node, quote)
     if (
         context
@@ -176,7 +174,7 @@ def _stable(
     ):
         # an id's proofs are numbered by their place among its proofs: a proof standing apart from the record's neighbours is another one, which took the key of one deleted
         return None
-    if context and _sides(result, node, context)[0] < 2 and block_hash(result, node.key) != want:
+    if context and block_hash(result, node.key) != want:
         moved = _moved(result, want, node, documents, context)
         if moved is not None:
             return moved
@@ -186,12 +184,16 @@ def _stable(
 def _moved(
     result: ScanResult, want: str, node: NodeRec, documents: list[NodeRec], context: dict[str, Any]
 ) -> NodeRec | None:
-    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, when that text is long enough to be someone's and its context recorded no twin; else None. Its neighbours may have changed, since a label moves when blocks are rearranged."""
+    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, and standing between the record's recorded neighbours on both sides, `node` (the block that now carries the label) left out of the count; when that text is long enough to be someone's and its context recorded no twin. When an author moves a label, the block that lost it is still where it was; a copy standing elsewhere is never it."""
     words = _own_words(_frozen(result, want))
     if len(words) < TRIVIAL or context.get("twin") or int(context.get("copies") or 1) > 1:
         return None
     bare = _bare_frozen(result, want)
-    found = [n for n in documents if n is not node and bare and _bare_of(result, n) == bare]
+    found = [
+        n
+        for n in documents
+        if n is not node and bare and _bare_of(result, n) == bare and _sides(result, n, context, skip=node)[0] == 2
+    ]
     return found[0] if len(found) == 1 else None
 
 
@@ -516,7 +518,7 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
     Returns
     -------
     dict
-        `before` and `after`: the nearest block on each side whose text stands once in its file, as `{"hash", "gap"}` with `hash` its text without child markers (`_mark`) with `gap` 1 for the block beside it, or `{"edge": n}` where none does, `n` counting to the file's edge; `kind`, what `_sort` calls it; `copies`, how many blocks of the documents held its very text; `twin`, whether another block of its file reads `LIKE` alike it; and with a quote, `quote`, how many blocks of the documents it stands in.
+        `before` and `after`: the nearest block on each side whose text stands once in its file, as `{"hash", "gap"}` with `hash` its text without child markers (`_mark`) with `gap` 1 for the block beside it, or `{"edge": n}` where none does, `n` counting to the file's edge; `kind`, what `_sort` calls it; `copies`, how many blocks of the documents held its very text; `twin`, whether another block of its file reads `LIKE` alike it; `unread`, present and true where no document reads its file; and with a quote, `quote`, how many blocks of the documents it stands in.
     """
     if node.kind in ("master", "file"):
         return {}
@@ -533,6 +535,8 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
                 i, gap = i + step, gap + 1
             out[side] = {"hash": _mark(result, order[i]), "gap": gap} if 0 <= i < len(order) else {"edge": gap}
     out["kind"] = _sort(node)
+    if not any(n is node for n in _pool(result, node.file)):
+        out["unread"] = True
     own = block_hash(result, node.key)
     out["copies"] = sum(1 for n in _documents(result) if block_hash(result, n.key) == own) or 1
     words = _words(result, node)
@@ -544,9 +548,9 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
     return out
 
 
-def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any]) -> tuple[int, int]:
+def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any], skip: NodeRec | None = None) -> tuple[int, int]:
     """Of the neighbours `context` recorded, how many still stand at their recorded distance from `block`, and how many say it is not the block: a neighbour standing elsewhere in its file, or a file's edge at another distance. A neighbour that stands nowhere, edited since, says neither."""
-    order = _in_order(result, block.file)
+    order = [n for n in _in_order(result, block.file) if n is not skip]
     at = next((i for i, n in enumerate(order) if n is block), None)
     if at is None:
         return 0, 0

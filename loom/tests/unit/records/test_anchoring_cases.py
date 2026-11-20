@@ -620,6 +620,63 @@ def test_a_lemma_deleted_with_its_proof_leaves_its_note_on_no_sibling(out: Path)
     assert shown(out, a) is None
 
 
+def test_a_four_word_text_follows_no_moved_id_to_a_block_elsewhere(out: Path) -> None:
+    """C-3, `id_moved_short_text`: the remark deleted, its id given to another, and a remark reading the same four words written since at the end. The id never followed its text there: the note stays on the id's block, rewritten under it."""
+    from loom.records.locate import rewritten
+
+    A = env("lemma", "Every compact group admits a Haar measure.")
+    R = env("remark", "This is well known.", "tq-0005")
+    B = env("lemma", "Every bounded sequence of reals has a convergent subsequence.")
+    C = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    R2 = env("remark", "This is well known.")
+    N = env("remark", "A different remark that took the id.", "tq-0005")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + R + B + C})
+    a = note(out, "tq-0005", "give a reference")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + B + N + C + R2})
+    assert shown(out, a) == N.strip()
+    from loom.records.store import Records
+
+    result = scanned(out)
+    ann = next(r.annotation for r in Records(out).resolved(result) if r.annotation.id == a)
+    assert rewritten(result, result.nodes["tq-0005"], ann.target_hash)
+
+
+@pytest.mark.parametrize("put_in_above", [False, True])
+def test_a_note_stays_with_its_rewritten_id_when_its_old_words_are_pasted_elsewhere(
+    out: Path, put_in_above: bool
+) -> None:
+    """C-4, `id_rewritten_old_text_pasted`: in one edit tq-0007 is rewritten and its old words pasted, unlabelled, in the introduction, with or without a remark put in above it; the pasted copy stands between none of the note's neighbours."""
+    intro = sec("Introduction", "We state our main theorem.")
+    T = env("theorem", "Every compact orientable surface is a sphere with handles.", "tq-0007")
+    T2 = env("theorem", "A closed orientable two-manifold of Euler characteristic chi is homeomorphic to the connected sum of 1 - chi/2 tori.", "tq-0007")  # fmt: skip
+    Tr = env("theorem", "Every compact orientable surface is a sphere with handles.")
+    S = sec("Proofs", "We prove the main theorem.")
+    Z = env("remark", "The next theorem is classical.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": intro + S + T})
+    a = note(out, "tq-0007", "cite the classification")
+    write(
+        out,
+        {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": intro + Tr + S + (Z if put_in_above else "") + T2},
+    )
+    assert shown(out, a) == T2.strip()
+
+
+def test_an_ids_note_is_on_no_block_while_its_file_is_read_by_no_document(out: Path) -> None:
+    """C-5, `input_commented_out`: `\\input{appendix}` commented out; the note on tq-0007 is on no block, never on the restatement in the introduction, and is on tq-0007 again once the appendix is read again."""
+    Tr = env("theorem", "Every compact orientable surface is a sphere with handles.")
+    intro = sec("Introduction", "We state our main theorem.")
+    T = env("theorem", "Every compact orientable surface is a sphere with handles.", "tq-0007")
+    app = sec("Appendix", "The proof of the main theorem.") + T + proof("Triangulate and cut along curves.")
+    on = main_with("intro", "appendix")
+    files = {"drafting/main.tex": on, "drafting/intro.tex": intro + Tr, "drafting/appendix.tex": app}
+    write(out, files)
+    a = note(out, "tq-0007", "cite the classification")
+    write(out, {**files, "drafting/main.tex": on.replace("\\input{appendix}", "% \\input{appendix}")})
+    assert shown(out, a) is None
+    write(out, files)
+    assert shown(out, a) == T.strip()
+
+
 def test_a_statement_changed_in_kind_keeps_its_note_from_a_copy_that_takes_its_key(out: Path) -> None:
     """C-1, the generator's kind-change: a proposition stated twice becomes a remark where it stands, and the copy further down takes `proposition:1` with both recorded neighbours against it; the remark, between both, reads like the note's text."""
     A = env("lemma", "Every compact group admits a Haar measure.")
