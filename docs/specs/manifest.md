@@ -25,6 +25,7 @@ Field names are fixed; unknown fields must be ignored by viewers. All timestamps
   "inclusion": { "drafting/main.tex": { ... } },
   "states": { "labels": { ... } },
   "annotations": { "a-2026-09-16-xgtcve": { ... } },
+  "unplaced": [ { "id": "a-2026-09-16-xgtcve", "key": "drafting/main.tex#proof:3", "why": "..." } ],
   "annotation_types": [ { "id": "revision", ... } ],
   "annotation_plain": { "color": "yellow", ... },
   "suggested_edits": { "e-2026-09-16-q4hd2r": { ... } },
@@ -336,6 +337,8 @@ Reserved colour classes: `neutral`, `positive`, `positive-strong`, `warning`, `n
 `hash` is `target.hash`. `fragment` is that version of the key's own text, made by TeX as the document makes it, its children's places left out, with every annotation quoted from that version drawn as `mark.annotation` (specs/dialect.md §2.9); it is under `fragments/versions/`, named by the hash's first sixteen hex characters, one per hash, so annotations written on one version share it. `at` is whether loom could say where the annotation's words were in the text now, by aligning the version's words with the current text's: where its words were replaced, at the start of what replaced them; where they were cut, before the word that followed. When it can, the key's fragment and each document's fragment that holds the key carry an empty `<mark class="annotation gone" data-annotation="ID"></mark>` at that place, within the paragraph, never inside another mark, and before a displayed formula rather than inside it; `at` is false when no word of the two aligns. An annotation whose key is gone has a version and no place. A reply, an annotation on a PDF page or a whole work, and one detached because its document no longer holds its key, which keeps its words, have no version.
 
 `resolved_why` is the text given when the annotation was resolved, or null; one resolved by keeping a suggested edit that answers it says so (§9.2).
+
+**[decided]** `unplaced` lists the annotations placed on no block: their key names a block that no longer holds the text they were written on, or no block, and nothing says where that text went (`records.locate.follow`; `docs/design/writes.md`, "Where a record goes"). Each is `{id, key, why}`: its id in `annotations`, the key it was written on, and why in words. Such an annotation stays in `annotations`, detached, with `target.key` the key it was written on, and is counted in no key's `reviews`, so the block now at that key is never said to hold it. A reply follows the annotation it answers and is not listed. A suggested edit placed on no block is listed among the changes, unplaced, with its why (§9.2).
 
 ## 9.1 Sessions
 

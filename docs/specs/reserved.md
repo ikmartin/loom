@@ -55,7 +55,6 @@ Loom writes none of these, so `manifest.md`, which says loom writes every top-le
 | field | holds | owner |
 |---|---|---|
 | `published` | the number of this publication | the speed work |
-| `unplaced` | the records that could be placed on no block | the safe write path makes it; Review and the page of notes draw it |
 | `suggested_works` | the works an agent suggested and nobody has added or dismissed | the library |
 | `formal`, and `keys[K].formal` | the formal proposals, and each key's formal state | formalization; Review's list of proposals reads it |
 | `diagnostics[*].class` | whose problem a code is, so that a person is shown only problems in their own text | Review; every part that adds a code gives its class |

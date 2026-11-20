@@ -99,6 +99,8 @@ class ResolvedAnnotation:
     on_changes: list[str] = field(default_factory=list)
     # taken in from a PDF's own annotation that is still in the file as it is now: that annotation's reference
     hides: str | None = None
+    # on no block: its key names one that no longer holds the text it was written on, or none, and nothing says where that text went (`records.locate.follow`); listed in the manifest's `unplaced`, never counted on the block at its key
+    unplaced: bool = False
 
 
 def is_document_path(result: ScanResult, path: str) -> bool:
@@ -430,7 +432,7 @@ class Records:
         for res in self.resolved(result):
             a = res.annotation
             ks = states.get(res.target or a.target_key)
-            if ks is None:
+            if ks is None or res.unplaced:
                 continue
             # what awaits an answer, which is what a count is for: an untyped annotation, or one of a type that only informs, asks nothing
             if a.in_reply_to is None and a.status == "open" and self.opens(a):
@@ -558,14 +560,18 @@ class Records:
                 )
                 if found is None and n is not None:
                     out.append(
-                        ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc)
+                        ResolvedAnnotation(
+                            a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc, unplaced=True
+                        )
                     )
                     continue
                 if found is not None and found is not n:
                     n, target = found, found.key
                 if n is None:
                     out.append(
-                        ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc)
+                        ResolvedAnnotation(
+                            a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc, unplaced=True
+                        )
                     )
                     continue
                 if in_doc and in_doc not in n.reached_by:
@@ -1001,7 +1007,8 @@ class Records:
                 entry["derived"] = derived[key]
         anns: dict[str, Any] = {}
         # oldest first, whichever clone wrote it: published in this order (`publish.WRITTEN_IN_ORDER`)
-        for res in sorted(self.resolved(result), key=lambda r: r.annotation.created):
+        resolved = sorted(self.resolved(result), key=lambda r: r.annotation.created)
+        for res in resolved:
             a = res.annotation
             anns[a.id] = {
                 "id": a.id,
@@ -1052,6 +1059,18 @@ class Records:
                 "version": None,
             }
         manifest["annotations"] = anns
+        # the notes placed on no block, which a reader is shown apart from every block (§9, `unplaced`)
+        manifest["unplaced"] = [
+            {
+                "id": res.annotation.id,
+                "key": res.target or res.annotation.target_key,
+                "why": "its key names a block that no longer holds the text it was written on, and nothing says which block does"
+                if (res.target or res.annotation.target_key) in result.nodes
+                else "its key names no block now",
+            }
+            for res in resolved
+            if res.unplaced and res.annotation.in_reply_to is None
+        ]
         manifest["diagnostics"].extend(d.to_dict() for d in self.diagnostics(result, states))
 
 

@@ -223,3 +223,26 @@ def test_an_acceptance_goes_with_its_statement_once_one_is_put_in_above_it(
     assert keys[remark]["state"] == "draft"
     moved = keys["drafting/sections/appendix.tex#remark:2"]
     assert moved["state"] == "accepted" and moved["acceptance"]["fresh"]
+
+
+def test_a_note_placed_on_no_block_is_listed_apart_and_counted_on_none(q: Path) -> None:
+    """The manifest's `unplaced`: a note whose block nothing can say is listed there, by its id, the key it names and why, and is not counted among the notes of the block that now holds its place."""
+    from loom.cli._quilt import open_scan
+    from loom.records.store import Records
+
+    whole = note(q, CONSIDERED)
+    unrecorded(q)
+    edit(
+        q / OUTLINE,
+        "\\section{What is being considered}",
+        "\\section{Notation}\nA word on notation.\n\n\\section{What is being considered}",
+    )
+    edit(q / OUTLINE, "the question owes nothing.", "the question owes nothing at all.")
+    result = open_scan(str(q))
+    manifest: dict[str, Any] = {"nodes": {}, "keys": {}, "diagnostics": []}
+    records = Records(q, result.quilt.history_dir)
+    records.apply(result, manifest)
+    (listed,) = manifest["unplaced"]
+    assert listed["id"] == whole and listed["key"] == CONSIDERED and "no longer holds" in listed["why"]
+    states = records.key_states(result)
+    assert states[CONSIDERED].open == {} and states[CONSIDERED].detached == 0
