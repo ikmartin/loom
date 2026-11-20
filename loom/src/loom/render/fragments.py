@@ -83,7 +83,7 @@ def bare_preamble(taxa: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-#: How a text's failure begins when TeX never read it: no TeX run here, no TeX4ht, a run that stopped with nothing said against any text (`snippets.render_snippets`).
+#: How a text's failure begins when it is the machine's, not the text's: no TeX run here, no TeX4ht, a run that stopped with nothing said against any text (`snippets.render_snippets`). A run out of time says `timed out`.
 _THE_MACHINES = ("TeX is not run", "make4ht is not", "TeX4ht made no page")
 
 

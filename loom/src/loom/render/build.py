@@ -454,6 +454,7 @@ _INDEXED: dict[Path, tuple[int, int, int] | None] = {}
 
 
 def _index_stamp(root: Path) -> tuple[int, int, int] | None:
+    """The build index's inode, modification time and size as it is on disk; None when there is none."""
     try:
         st = (root / BUILD_INDEX).stat()
     except OSError:
