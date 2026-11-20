@@ -241,3 +241,32 @@ def test_a_kept_value_that_no_longer_holds_is_made_again() -> None:
     m.get("draft", make, holds)
     m.get("draft", make, holds)
     assert len(made) == 3 and "draft" in m
+
+
+def test_a_build_empties_every_memo_when_another_process_built_since(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A build in another process, a `loom build --force` in a terminal, shows as a build index this process did not write, or none: the next build here forgets all it remembers, and a build after its own forgets nothing."""
+    import os
+    import shutil
+
+    import loom.render.build as building
+    from loom.paths import BUILD_INDEX
+
+    root = a_quilt(tmp_path)
+    quilt = load_quilt(root)
+    forgot: list[int] = []
+    monkeypatch.setattr(building, "forget", lambda: forgot.append(1))
+    build(quilt, tex=False)
+    build(quilt, tex=False)
+    assert forgot == []
+    # written again whole, as another process writes it: the same bytes, a new file
+    shutil.copy(root / BUILD_INDEX, root / "index.json")
+    os.replace(root / "index.json", root / BUILD_INDEX)
+    build(quilt, tex=False)
+    assert forgot == [1]
+    build(quilt, tex=False)
+    assert forgot == [1]
+    (root / BUILD_INDEX).unlink()
+    build(quilt, tex=False)
+    assert forgot == [1, 1]

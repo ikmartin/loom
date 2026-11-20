@@ -531,3 +531,49 @@ def test_a_figure_no_tool_converted_in_a_section_draft_is_converted_at_the_next_
     assert re.search(r'src="svg/[0-9a-f]{16}\.svg"', again[0])
     drafts._drafted.clear()
     assert again == drafted(quilt, a)
+
+
+def test_a_forced_build_in_another_process_is_not_undone_by_a_rendering_from_before_it(quilt, drafting, monkeypatch):
+    """`loom build --force` in a terminal tries again every text TeX refused, here for a package installed since; the next build here, after a note on the draft, renders the draft again rather than putting back the refusal it remembers."""
+    import subprocess
+    import sys
+
+    import loom.render.snippets as snippets
+    from loom.render.snippets import Snippet, _Run
+    from tests.helpers import ok
+
+    def refusing(*args):
+        made = typeset(*args)
+        return _Run(
+            {
+                i: Snippet(None, "File `reviewpkg.sty' not found.") if "reviewpkg" in t else made.pieces[i]
+                for i, t in args[3]
+            },
+            None,
+            True,
+        )
+
+    edit(quilt, DOC, "First prose.", "First prose. \\reviewpkg")
+    a = copy(quilt)
+    monkeypatch.setattr(snippets, "_one_run", refusing)
+    assert not re.search(r"Typeset: [^<]*First prose", drafted(quilt, a)[0])
+    # the package installed: TeX would make the text now, and the refusal stays remembered until a forced build
+    monkeypatch.setattr(snippets, "_one_run", typeset)
+    forced = subprocess.run(
+        [sys.executable, "-m", "loom", "build", "--force"], cwd=quilt.root, capture_output=True, text=True, timeout=300
+    )
+    assert forced.returncode in (0, 1), forced.stdout + forced.stderr
+    ok(
+        "annotate",
+        "zk-0001-ai-01",
+        "Which?",
+        "--quote",
+        "First statement",
+        "--type",
+        "note",
+        "--as",
+        "A. Author",
+        cwd=quilt.root,
+    )
+    marked = drafted(quilt, a)[0]
+    assert re.search(r"Typeset: [^<]*First prose", marked) and 'class="annotation"' in marked

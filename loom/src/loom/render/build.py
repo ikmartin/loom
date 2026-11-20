@@ -21,6 +21,7 @@ from loom.paths import (
     BLOCK_PREVIEWS,
     BLOCK_SPANS,
     BLOCKS,
+    BUILD_INDEX,
     SITE,
     SITE_SVG,
     SNIPPETS,
@@ -439,10 +440,25 @@ def build(
 
     Notes
     -----
-    A build is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file of the quilt's and keeps what the last build derived, letting go only what it made itself.
+    A build is one `memo.reading`, so what the scan and the rendering after it derive from a file's text is kept for the next build while the file is unchanged, and let go once it has changed. A build from `reuse` reads no file of the quilt's and keeps what the last build derived, letting go only what it made itself. Every memo is emptied first when the index on disk is not the one this process last wrote: another process has built the quilt since, and a forced build there made again what the memos stand in for.
     """
+    if quilt.root in _INDEXED and _index_stamp(quilt.root) != _INDEXED[quilt.root]:
+        # another process built this quilt since this one last did, a `--force` in a terminal among them: what it made again is not what this process remembers
+        forget()
     with reading(keep=reuse is not None, build=True), noting() as beside:
         return _build(quilt, keys, records, force, reuse, progress, tex, beside)
+
+
+#: The build's index as this process last wrote it, by quilt: its inode, modification time and size. One that differs was written by a build in another process, or is gone.
+_INDEXED: dict[Path, tuple[int, int, int] | None] = {}
+
+
+def _index_stamp(root: Path) -> tuple[int, int, int] | None:
+    try:
+        st = (root / BUILD_INDEX).stat()
+    except OSError:
+        return None
+    return st.st_ino, st.st_mtime_ns, st.st_size
 
 
 def _build(
@@ -683,4 +699,5 @@ def _build(
         g: in_cache(root, renderer.groups[g]) if g in renderer.groups else before.groups.get(g, []) for g in shared
     }
     report.index = write_index(root, BuildIndex(index, uses, groups, read_beside, sorted({*files, *keep})))
+    _INDEXED[root] = _index_stamp(root)
     return report
