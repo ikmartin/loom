@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from loom.scan.diagnostics import LATEX, MODEL
 from loom.scan.envtree import norm_label
 from loom.scan.model import Diagnostic, Location, SourceFile
 from loom.scan.nodes import Assembly
@@ -65,6 +66,8 @@ class EdgeResult:
     refs_in: dict[str, list[str]] = field(default_factory=dict)  # key -> labels referenced by \ref family
     uses_in: dict[str, list[str]] = field(default_factory=dict)  # key -> labels listed in \uses
     diagnostics: list[Diagnostic] = field(default_factory=list)
+    #: `(citekey, postnote)` of each citation whose postnote names a result its work's digest does not hold, the ones `loom:unmatched-postnote` reports; the publisher marks each on the citation it draws
+    unmatched: set[tuple[str, str]] = field(default_factory=set)
 
 
 def _kind_of(kind: str) -> str:
@@ -139,14 +142,18 @@ def _resolve(
     column: int | None = None,
 ) -> None:
     target = asm.labels.get(label)
+    src_node = asm.nodes.get(from_key)
     if target is None:
+        # a reference a document's compile reads prints ?? there; `\uses` prints nothing, and a file no document reads meets no TeX
+        read = via != "uses" and src_node is not None and bool(src_node.reached_by)
         res.diagnostics.append(
             Diagnostic(
-                "error",
+                "error" if read else "warning",
                 "dangling-link",
                 f"\\{via}{{{label}}} refers to no node or label",
                 [Location(file, line, column)],
                 [from_key],
+                class_=LATEX if read else MODEL,
             )
         )
         return
@@ -154,7 +161,6 @@ def _resolve(
     to = region.container if region is not None else target
     if to == from_key:
         return
-    src_node = asm.nodes.get(from_key)
     if src_node is not None and src_node.kind == "proof" and src_node.of == to:
         return
     to_node = asm.nodes.get(to)

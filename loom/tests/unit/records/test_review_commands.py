@@ -90,7 +90,7 @@ ROW = re.compile(r"^  (?!fix: |next: )\S")
 
 
 def status_rows(output: str) -> list[tuple[str, str]]:
-    """Each row of `loom status` as (its group's heading, its text), a wrapped row joined back into one line; every row ends with its key."""
+    """Each row of `loom status` as (its group's heading, its text), a wrapped row joined back into one line; every row ends with its key. A row's fix and what wraps of it, indented further, are no part of it."""
     rows: list[tuple[str, str]] = []
     heading = ""
     for ln in output.splitlines():
@@ -98,7 +98,12 @@ def status_rows(output: str) -> list[tuple[str, str]]:
             heading = ln
         elif ROW.match(ln):
             rows.append((heading, ln.strip()))
-        elif ln.startswith("    ") and not ln.lstrip().startswith(("fix: ", "next: ")) and rows:
+        elif (
+            ln.startswith("    ")
+            and not ln.startswith("      ")
+            and not ln.lstrip().startswith(("fix: ", "next: "))
+            and rows
+        ):
             rows[-1] = (rows[-1][0], rows[-1][1] + " " + ln.strip())
     return rows
 
@@ -1350,7 +1355,7 @@ def test_rewriting_one_unattached_proof_detaches_only_the_annotation_on_its_word
     rewritten = ok("annotate", first, "A hint.", "--quote", "The first answer is short", *AS, cwd=d).output.split()[0]
     kept = ok("annotate", second, "Another.", "--quote", "The second answer is unique", *AS, cwd=d).output.split()[0]
     edit(main, "The first answer is short.", "This answer has been rewritten at considerably greater length.")
-    exits(1, "build", cwd=d, match="unattached-proof")
+    ok("build", cwd=d)  # a proof after \item compiles: loom's model, a warning, and the build succeeds
     annotations = json.loads((d / ".loom/cache/site" / "manifest.json").read_text())["annotations"]
     assert annotations[rewritten]["detached"] is True
     assert annotations[kept]["detached"] is False
@@ -1412,7 +1417,8 @@ def test_a_document_deleted_by_hand_is_gone_not_changed(tmp_path: Path) -> None:
         {
             "severity": "warning",
             "code": "loom:document-gone",
-            "message": "drafting/main.tex is gone and the history does not say where it went; 2 acceptance rows and 1 annotation name it",
+            "class": "latex",
+            "message": "1 annotation is on drafting/main.tex, which is gone; the history does not say where it went, and 2 acceptance rows name it too",
             "locations": [],
             "keys": ["dm-0001", "dm-0002"],
             "fixes": [
@@ -1428,6 +1434,33 @@ def test_a_document_deleted_by_hand_is_gone_not_changed(tmp_path: Path) -> None:
         in (d / ".loom" / "records" / "state.toml").read_text().split("[[accept]]")[-1]
     )
     assert status_json(d)["keys"]["dm-0001"]["acceptance"]["fresh"] is True
+
+
+def test_a_document_gone_with_annotations_on_it_is_the_persons_problem_and_one_without_is_not(tmp_path: Path) -> None:
+    """A gone document that annotations are on is published as the person's (class latex), saying how many, so Problems shows it, and counts in no exit; one only acceptance rows name stays loom's model."""
+    d = demo(tmp_path)
+    ok("annotate", "dm-0002", "Read here.", "--in", "drafting/outline.tex", *AS, cwd=d)
+    ok("annotate", "dm-0006", "And here.", "--in", "drafting/outline.tex", *AS, cwd=d)
+    (d / "drafting" / "outline.tex").unlink()
+    ok("lint", cwd=d)  # a warning: the exit is 0
+    ok("build", "--no-compile", cwd=d)
+    m = json.loads((d / ".loom/cache/site/manifest.json").read_text())
+    gone = [(x["class"], x["severity"], x["message"]) for x in m["diagnostics"] if x["code"] == "loom:document-gone"]
+    assert gone == [
+        (
+            "latex",
+            "warning",
+            "2 annotations are on drafting/outline.tex, which is gone; the history does not say where it went",
+        )
+    ]
+    (tmp_path / "b").mkdir()
+    d = demo(tmp_path / "b")
+    ok("accept", "dm-0001", "--force", *AS, cwd=d)
+    (d / "drafting" / "main.tex").unlink()
+    gone = [x for x in json_of("lint", "--json", cwd=d)["diagnostics"] if x["code"] == "loom:document-gone"]
+    assert [(x["class"], x["message"]) for x in gone] == [
+        ("model", "drafting/main.tex is gone and the history does not say where it went; 1 acceptance row names it")
+    ]
 
 
 def test_an_annotation_in_a_linearized_document_is_drawn_in_what_it_became(tmp_path: Path) -> None:
@@ -1491,7 +1524,10 @@ def test_a_conflicted_id_is_a_row_of_its_own_and_its_definitions_are_not(tmp_pat
     assert keys["sy-999B"]["conflict"] == ["drafting/nodes/sy-999B.tex", "drafting/talk.tex"]
     assert not [k for k in keys if "#lemma:" in k and k.startswith(("drafting/talk.tex", "drafting/nodes/sy-999B.tex"))]
     said = ok("status", cwd=q).output
-    assert "loom fork sy-999B --in drafting/talk.tex" in said
+    assert (
+        "loom id --next, and put that id in place of sy-999B in drafting/talk.tex, and in every reference to sy-999B in drafting/talk.tex and the files it inputs"
+        in flat(said)
+    )
     assert ": 1 conflicted," in said.splitlines()[0]  # the verdict counts it, first
 
 

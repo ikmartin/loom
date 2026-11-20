@@ -21,7 +21,7 @@ run "$LOOM/.venv/bin/loom" compile drafting/main.tex --html --quilt "$Q"
 run "$LOOM/.venv/bin/loom" compile drafting/talk.tex --html --quilt "$Q"
 # the agent's copy is a document like any other, and `loom serve` compiles it too
 run "$LOOM/.venv/bin/loom" compile .loom/agents/copies/aidoc.tex --html --quilt "$Q"
-run "$LOOM/.venv/bin/loom" build --quilt "$Q" || true   # exit 1 is expected: the synthetic quilt carries four intentional errors
+run "$LOOM/.venv/bin/loom" build --quilt "$Q" || true   # exit 1 is expected: the synthetic quilt carries intentional errors
 rm -rf "$OUT"
 mkdir -p "$OUT"
 cp "$Q/.loom/cache/site/manifest.json" "$OUT/"

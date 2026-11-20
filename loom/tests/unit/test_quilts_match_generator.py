@@ -33,18 +33,23 @@ def test_the_checked_in_quilt_is_what_the_generator_writes(which: str) -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
+@pytest.mark.tree
 def test_the_synthetic_quilt_carries_the_intended_errors() -> None:
-    """Four errors on purpose, one per fault a source contract can carry: a reference to nothing, an inclusion of nothing, a file included twice, and an id defined twice."""
+    """Three errors of the person's LaTeX on purpose, one per fault a document's compile reads: a reference to nothing, an inclusion of nothing, a file included twice; and two faults of loom's model, warnings, an id defined in two documents and a relation to nothing."""
     lines = (REPO / "tests" / "quilts" / "synthetic" / "EXPECTED-LINT.txt").read_text(encoding="utf-8").splitlines()
-    errors = sorted(line.split()[1] for line in lines if line.startswith("error"))
-    assert errors == ["dangling-link", "dangling-link", "double-inclusion", "duplicate-id", "missing-include"]
+    errors = sorted(" ".join(line.split()[1:]) for line in lines if line.startswith("error"))
+    assert errors == ["dangling-link latex", "double-inclusion latex", "missing-include latex"]
+    warnings = [" ".join(line.split()[1:]) for line in lines if line.startswith("warning")]
+    assert "duplicate-id model" in warnings and "dangling-link model" in warnings
 
 
+@pytest.mark.tree
 def test_the_showcase_carries_the_faults_it_is_meant_to_show() -> None:
-    """One error on purpose -- a sketch made live again over the node file its own atomize wrote -- and the four facts about a lived-in quilt that the viewer has something to say about."""
+    """One fault on purpose -- a sketch made live again over the node file its own atomize wrote, an id two documents define, which LaTeX accepts, so a warning of loom's model -- and the four facts about a lived-in quilt that the viewer has something to say about; nothing in the person's LaTeX."""
     lines = (REPO / "tests" / "quilts" / "showcase" / "EXPECTED-LINT.txt").read_text(encoding="utf-8").splitlines()
     codes = sorted(line.split()[1] for line in lines)
-    assert [line.split()[1] for line in lines if line.startswith("error")] == ["duplicate-id"]
+    assert [line for line in lines if line.startswith("error") or line.endswith(" latex")] == []
+    assert "warning duplicate-id model" in lines
     for code in ("loom:detached-annotation", "loom:missing-proof", "loom:unmatched-postnote", "unreachable"):
         assert code in codes, code
 

@@ -420,20 +420,20 @@ The session's `seq` in `sessions` is the last event's number, so a viewer knows 
 **[decided]** See `diagnostics.md` for codes.
 
 ```json
-{"severity": "error", "code": "double-inclusion",
+{"severity": "error", "code": "double-inclusion", "class": "latex",
  "message": "rl-0011 is included twice in drafting/main.tex (via rl-0020 and via rl-0031)",
  "locations": [{"file": "nodes/rl-0020.tex", "line": 14}, {"file": "nodes/rl-0031.tex", "line": 3}],
  "keys": ["rl-0011", "rl-0020", "rl-0031"]}
 ```
 
-**[decided]** Three optional fields. `subject` says what the diagnostic is about: `"source"` (the default when absent) or `"record"`, the publisher's own account of the source. `owner` says whose it is to put right: `"person"` (the default when absent), `"copy"` for an agent's copy, or `"work"` for a cited work's digest (plan 0.25.3; `diagnostics.md` §1 says how each is decided, and governs). `fixes` is a list of commands that would resolve it, each `{"label": "...", "command": "..."}`, with `"act": {"endpoint", "body"}` on one a viewer may do itself through the write API; a viewer copies any other, and runs no command. Loom stamps `owner` once over the whole list, lint's, the renderer's and the records' alike, so `loom lint --json` says the same.
+**[decided]** `class` says what kind of problem it is: `"latex"`, a problem in a document's LaTeX, a failed compile among them; `"model"`, loom's model of the quilt; or `"internal"`, loom's own difficulty or its records' integrity (`diagnostics.md` §1 says what each is, and governs). Loom gives it on every diagnostic, and a viewer shows a person `latex` alone; the manifest keeps every diagnostic, and so does `loom lint`. Three optional fields. `subject` says what the diagnostic is about: `"source"` (the default when absent) or `"record"`, the publisher's own account of the source. `owner` says whose it is to put right: `"person"` (the default when absent), `"copy"` for an agent's copy, or `"work"` for a cited work's digest (plan 0.25.3; `diagnostics.md` §1 says how each is decided, and governs). `fixes` is a list of what would resolve it, each `{"label": "...", "command": "..."}`, a command or an edit an agent makes, with `"act": {"endpoint", "body"}` on one a viewer may do itself through the write API; a viewer runs no command, and among a person's problems shows no other. Loom stamps `owner` once over the whole list, lint's, the renderer's, the records' and the compiles' alike, so `loom lint --json` says the same.
 
 ```json
-{"severity": "error", "code": "duplicate-id",
+{"severity": "warning", "code": "duplicate-id", "class": "model",
  "message": "rl-0011 is defined by drafting/main.tex and drafting/talk.tex; it has no text until one definition remains",
  "locations": [{"file": "drafting/main.tex", "line": 88}, {"file": "drafting/talk.tex", "line": 12}],
  "keys": ["rl-0011"],
- "fixes": [{"label": "fork the copy in drafting/talk.tex", "command": "loom fork rl-0011 --in drafting/talk.tex"}]}
+ "fixes": [{"label": "give the definition in drafting/talk.tex a fresh id", "command": "loom id --next, and put that id in place of rl-0011 in drafting/talk.tex"}]}
 ```
 
 ## 12. Tags and taxa

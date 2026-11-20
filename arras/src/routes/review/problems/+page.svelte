@@ -1,12 +1,11 @@
 <script lang="ts">
-	// Review › Problems: what is wrong in the person's files first, open and counted; an agent's copy's, the cited works' and every remark below, each folded and said to be whose it is. Each problem is titled by what is wrong, opens at its place, and offers its fixes: one a viewer can do as a button, any other as a command to copy. The filters stand in the page; the severity and a code live in the URL, so a link can open it showing one of them.
+	// Review › Problems: the problems in a document's LaTeX, one that did not compile among them, filtered by class from the manifest, which keeps loom's model and its own difficulties for agents. The person's files first, open and counted; an agent's copy's, the cited works' and every remark below, each folded and said to be whose it is. Each problem is titled by what is wrong, opens at its place, and offers a fix only where the viewer can do it as a button: never a command. The filters stand in the page; the severity and a code live in the URL, so a link can open it showing one of them.
 	import { barShown } from '$lib/shell/scrollbars';
 	import { page } from '$app/state';
 	import HelpDot from '$lib/components/HelpDot.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import type { Diagnostic, Fix } from '$lib/manifest/types';
-	import { byWork, groupProblems, lineUrl, openUrl, partsOf, splitFixes, titleOf, type Group } from '$lib/diagnostics';
-	import { copyText } from '$lib/clipboard';
+	import { byWork, forPerson, groupProblems, lineUrl, openUrl, partsOf, splitFixes, titleOf, type Group } from '$lib/diagnostics';
 	import { keyTarget, placeUrl, workUrl } from '$lib/nav';
 	import { route } from '$lib/paths';
 	import { setQuery } from '$lib/query';
@@ -25,10 +24,11 @@
 	let search = $state('');
 	const words = $derived(search.trim().toLowerCase());
 	const matches = (d: Diagnostic) => (!severity || d.severity === severity) && (!code || d.code === code) && (!words || `${titleOf(d)} ${d.message} ${d.code}`.toLowerCase().includes(words));
-	const all = $derived(partsOf(m.diagnostics));
-	const parts = $derived(partsOf(m.diagnostics.filter(matches)));
+	const shown = $derived(forPerson(m.diagnostics));
+	const all = $derived(partsOf(shown));
+	const parts = $derived(partsOf(shown.filter(matches)));
 	const filtered = $derived(!!(severity || code || words));
-	const counts = $derived(Object.fromEntries(SEVERITIES.map((s) => [s, m.diagnostics.filter((d) => d.severity === s).length])));
+	const counts = $derived(Object.fromEntries(SEVERITIES.map((s) => [s, shown.filter((d) => d.severity === s).length])));
 	const works = $derived(byWork(m, parts.works));
 	const pick = (v: string) => void setQuery(page.url, 'severity', severity === v ? '' : v);
 	// what the person opened or folded, kept across the manifest drawn again after an act
@@ -36,7 +36,7 @@
 	const isOpen = (id: string, fallback: boolean) => folds[id] ?? (fallback || !!code);
 	const toggled = (id: string) => (e: Event) => (folds[id] = (e.currentTarget as HTMLDetailsElement).open);
 
-	// the acts this publisher serves; a static build serves none, and every fix is then a command to copy
+	// the acts this publisher serves; a static build serves none, and the page then offers no fix
 	let served = $state<Record<string, boolean>>({});
 	$effect(() => {
 		void Promise.all(['library-update', 'agents-update'].map((e) => can(e))).then(([library, agents]) => (served = { 'library-update': library, 'agents-update': agents }));
@@ -77,46 +77,29 @@
 	}
 	const running = (ck: string) => jobs.forWorks([ck])?.state === 'queued' || jobs.forWorks([ck])?.state === 'running';
 
-	let copied = $state('');
-	async function copy(command: string) {
-		if (await copyText(command)) {
-			copied = command;
-			setTimeout(() => (copied = copied === command ? '' : copied), 1600);
-		}
-	}
 	const workTitle = (ck: string) => bibText(m.references[ck]?.bib.title as string) || ck;
 	// a cited work's digest-again fix is offered once, beside the work, so its problems do not each repeat it
 	const again = (ck: string, f: Fix) => f.act?.endpoint === 'library-update' && (f.act.body as { works?: string[] }).works?.[0] === ck && !!(f.act.body as { redo?: boolean }).redo;
 	const workAct = (ck: string, items: Diagnostic[]) => items.flatMap((d) => d.fixes ?? []).find((f) => again(ck, f));
-	/** Where a work with no paper can be given one, or asked for no longer: its row in the library, by its key. */
-	const inLibrary = (d: Diagnostic) => (d.code.endsWith(':no-readable-copy') && d.keys[0] ? `${route('/review/library')}?q=${encodeURIComponent(d.keys[0])}` : '');
 </script>
 
 {#snippet problem(d: Diagnostic, id: string, ck: string)}
-	{@const { acts, commands } = splitFixes(d)}
+	{@const acts = splitFixes(d).acts.filter((f) => served[f.act!.endpoint] && !again(ck, f))}
 	{@const open = openUrl(m, d)}
 	<li data-testid="problem">
 		<span class="message">{d.message}</span>
 		<span class="where">
 			{#if open}<a class="open" href={open} data-testid="problem-open">Open</a>{/if}
-			{#if inLibrary(d)}<a class="open" href={inLibrary(d)} data-testid="problem-library">In the library</a>{/if}
 			{#each d.locations as l, j (j)}{#if m.files?.some((f) => f.path === l.file)}<a class="loc" href={lineUrl(m, l.file, l.line)} data-testid="problem-location">{l.file}:{l.line}</a>{:else}<code class="loc">{l.file}:{l.line}</code>{/if}{/each}
 			{#if d.keys.length > 1}{#each d.keys as k (k)}{#if keyTarget(m, k)}<a class="key" href={placeUrl(m, k)}>{k}</a>{:else}<code class="key">{k}</code>{/if}{/each}{/if}
 		</span>
-		{#if acts.some((f) => served[f.act!.endpoint] && !again(ck, f)) || commands.length}
+		{#if acts.length}
 			<ul class="fixes">
-				{#each acts.filter((f) => !again(ck, f)) as f, j (j)}
-					{#if served[f.act!.endpoint]}
-						<li class="act">
-							<button class="btn small" disabled={!!busy} onclick={() => act(`${id}:${j}`, f)} data-testid="fix-act">{f.label.replace(/^./, (c) => c.toUpperCase())}</button>
-							{#if said(`${id}:${j}`)}<Said text={said(`${id}:${j}`)!.text} refused={said(`${id}:${j}`)!.refused} testid="fix-said" />{/if}
-						</li>
-					{:else}
-						<li><button type="button" class="copy" data-testid="fix" onclick={() => copy(f.command)}>{copied === f.command ? 'copied' : 'copy'}</button><code class="command">{f.command}</code> <span class="muted">{f.label}</span></li>
-					{/if}
-				{/each}
-				{#each commands as f (f.command)}
-					<li><button type="button" class="copy" data-testid="fix" onclick={() => copy(f.command)}>{copied === f.command ? 'copied' : 'copy'}</button><code class="command">{f.command}</code> <span class="muted">{f.label}</span></li>
+				{#each acts as f, j (j)}
+					<li class="act">
+						<button class="btn small" disabled={!!busy} onclick={() => act(`${id}:${j}`, f)} data-testid="fix-act">{f.label.replace(/^./, (c) => c.toUpperCase())}</button>
+						{#if said(`${id}:${j}`)}<Said text={said(`${id}:${j}`)!.text} refused={said(`${id}:${j}`)!.refused} testid="fix-said" />{/if}
+					</li>
 				{/each}
 			</ul>
 		{/if}
@@ -141,7 +124,7 @@
 
 <main class="page" use:barShown>
 	<ReviewHeading title="Problems">{#snippet aside()}<HelpDot label="what the problems page shows" topic="problems" />{/snippet}</ReviewHeading>
-	<p class="lead">What is wrong in your files comes first, and is what Review counts. What is wrong in an agent's copy, or in the digests of the papers you cite, is below it, folded, and so are the remarks.</p>
+	<p class="lead">What is wrong in your LaTeX, a document that did not compile among it, comes first, and is what Review counts. What is wrong in the LaTeX of an agent's copy is below it, folded.</p>
 	<div class="filters" data-testid="problem-filters">
 		{#each SEVERITIES as s (s)}
 			<button class="chip" class:on={severity === s} aria-pressed={severity === s} onclick={() => pick(s)} data-testid="filter-{s}">{counts[s]} {NAMES[s][counts[s] === 1 ? 0 : 1]}</button>
@@ -155,7 +138,7 @@
 		{#if parts.yours.length}
 			{@render groups(parts.yours, 'yours', '')}
 		{:else}
-			<Empty text={filtered && all.yours.length ? 'None of yours matches these filters.' : 'Nothing is wrong in your files.'} testid="problems-none" />
+			<Empty text={filtered && all.yours.length ? 'None of yours matches these filters.' : 'Nothing is wrong in your LaTeX.'} testid="problems-none" />
 		{/if}
 	</section>
 
@@ -182,9 +165,6 @@
 						{/if}
 					</h3>
 					{#if said(`work:${w.work}`)}<Said text={said(`work:${w.work}`)!.text} refused={said(`work:${w.work}`)!.refused} testid="digest-said" />{/if}
-					{#if f && !served['library-update']}
-						<ul class="fixes"><li><button type="button" class="copy" data-testid="fix" onclick={() => copy(f.command)}>{copied === f.command ? 'copied' : 'copy'}</button><code class="command">{f.command}</code> <span class="muted">{f.label}</span></li></ul>
-					{/if}
 					{@render groups(w.items, 'works', w.work)}
 				</div>
 			{/each}
@@ -199,7 +179,7 @@
 		</details>
 	{/if}
 
-	{#if filtered && !parts.yours.length && !parts.copy.length && !parts.works.length && !parts.remarks.length && m.diagnostics.length}
+	{#if filtered && !parts.yours.length && !parts.copy.length && !parts.works.length && !parts.remarks.length && shown.length}
 		<p class="faint" data-testid="problems-unmatched">Nothing anywhere matches these filters.</p>
 	{/if}
 </main>
@@ -350,24 +330,5 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: var(--gap-tight);
-	}
-	.copy {
-		font-family: var(--sans);
-		font-size: 9px;
-		text-transform: uppercase;
-		color: var(--ink-faint);
-		background: var(--sheet);
-		border: 1px solid var(--rule);
-		border-radius: var(--rad-control);
-		padding: 0 4px;
-		margin-right: 4px;
-		cursor: pointer;
-	}
-	.copy:hover {
-		color: var(--link);
-		border-color: var(--link);
-	}
-	.command {
-		font-family: var(--mono);
 	}
 </style>

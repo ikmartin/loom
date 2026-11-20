@@ -186,7 +186,7 @@ def match(postnote: str, candidates: list[tuple[str, set[str]]]) -> list[str]:
 
 
 def postnote_edges(asm: Assembly, res: EdgeResult, versions: dict[str, list[str]] | None = None) -> None:
-    """Add a `postnote` edge for every `\\cite[postnote]{citekey}` that names a node of the citekey's digest; warn `loom:unmatched-postnote` when a digest exists but nothing matches.
+    """Add a `postnote` edge for every `\\cite[postnote]{citekey}` that names a node of the citekey's digest; warn `loom:unmatched-postnote` when a digest exists but nothing matches, and add the citation to `res.unmatched`. A postnote naming a page alone names no result and is passed over.
 
     `versions` maps a citekey to its work's other versions (`refs.scan.other_versions`): a postnote the key's own digest does not match is matched against theirs, in order, and `loom:postnote-from-another-version` says which one answered.
     """
@@ -203,8 +203,8 @@ def postnote_edges(asm: Assembly, res: EdgeResult, versions: dict[str, list[str]
             by_citekey.setdefault(ck, []).append((key, forms))
     for c in res.cites:
         others = [v for v in versions.get(c.citekey, []) if v in by_citekey]
-        if not c.postnote or (c.citekey not in by_citekey and not others):
-            continue
+        if not c.postnote or (c.citekey not in by_citekey and not others) or not parts(c.postnote):
+            continue  # a postnote naming a page alone names no result
         src_node = asm.nodes.get(c.src)
         if src_node is not None and asm.digest_files.get(src_node.file) in {c.citekey, *versions.get(c.citekey, [])}:
             continue  # a digest node's own locator title cites the paper it digests; that is not a dependency
@@ -246,6 +246,7 @@ def postnote_edges(asm: Assembly, res: EdgeResult, versions: dict[str, list[str]
                 )
         else:
             digests = [k for k in (c.citekey, *others) if k in by_citekey]
+            res.unmatched.add((c.citekey, c.postnote))
             res.diagnostics.append(
                 Diagnostic(
                     "warning",

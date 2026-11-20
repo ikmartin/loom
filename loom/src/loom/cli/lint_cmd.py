@@ -1,4 +1,4 @@
-"""`loom lint`: every diagnostic, one group per code with the author's before the cited works', and one line for works nothing cites; exit 1 on an error outside those works. `--nodes` groups by node id."""
+"""`loom lint`: every diagnostic, each code's class said, one group per code with the author's before the cited works', and one line for works nothing cites; exit 1 on an error outside those works. `--nodes` groups by node id."""
 
 from __future__ import annotations
 
@@ -46,26 +46,30 @@ def _sorted(diags: list[Diagnostic]) -> list[Diagnostic]:
 
 
 def all_diagnostics(result: ScanResult) -> list[Diagnostic]:
-    """Scanner diagnostics plus those derived from the ledger, the review records, and the full walk of the history, in the scanner's order, each with whose it is to fix (`scan.owners`), as the manifest has them."""
+    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history and the documents' last compiles, in the scanner's order, each with whose it is to fix (`scan.owners`), as the manifest has them."""
+    from loom.render.compiles import compile_problems
+    from loom.scan.owners import stamped
+
     records = Records(result.quilt.root, result.quilt.history_dir)
     extra = records.diagnostics(result, records.key_states(result))
     seen = {(d.code, d.message) for d in result.lint}
     history = load_history(result.quilt.history_dir)
     walk = [d for d in verify(result, history) if (d.code, d.message) not in seen]
-    from loom.scan.owners import stamped
-
-    return _sorted(stamped(result, [_safe(result, history, d) for d in result.lint] + extra + walk))
+    compiled = compile_problems(result)
+    return _sorted(stamped(result, [_safe(result, history, d) for d in result.lint] + extra + walk + compiled))
 
 
 def _safe(result: ScanResult, history: History, d: Diagnostic) -> Diagnostic:
-    """`d` with the fix that is safe in the state the history shows: the scan offers every way out of an id defined twice, and after `atomize --key` or `history restore` only one of them is right; a node file nothing reaches may be a fork whose patch was never applied."""
+    """`d` with the fix that is safe in the state the history shows: the scan offers every way out of an id defined twice, and after a node is moved out or `history restore` only one of them is right; a node file nothing reaches may be a fork whose patch was never applied, which reads it in its document in place of what it forks."""
     if d.code == "unreachable" and d.locations:
         path = d.locations[0].file
         fork = next((e for e in reversed(history.entries) if e.action == "fork" and e.get("to") == path), None)
         if fork is not None:
-            # a fork whose patch was never applied: running it again prints that patch
-            again = f"loom fork {(fork.get('from') or {}).get('id')} --in {fork.get('in')}"
-            return replace(d, fixes=[Fix("apply the fork's patch", again), *d.fixes])
+            doc, old, new = str(fork.get("in")), (fork.get("from") or {}).get("id"), fork.get("new")
+            base = result.base_of(doc)
+            stem = (path.removeprefix(f"{base}/") if base else path).removesuffix(".tex")
+            finish = f"\\input{{{stem}}} in {doc} in place of {old}, whose references there become {new}"
+            return replace(d, fixes=[Fix("finish the fork", finish), *d.fixes])
         return d
     n = result.nodes.get(d.keys[0]) if d.code == "duplicate-id" and len(d.keys) == 1 else None
     if n is None or n.kind != "conflict" or all(f in result.assembly.digest_files for f in n.conflict):
@@ -102,7 +106,10 @@ def by_node(result: ScanResult, diags: list[Diagnostic]) -> tuple[dict[str, list
 )
 @quilt_option
 def lint_command(as_json: bool, nodes: bool, run_dir: str | None, quilt_path: str | None) -> None:
-    """Scan and print every diagnostic. Fast; no LaTeX runs."""
+    """Scan and print every diagnostic, each with its class.
+
+    A class says what kind of problem it is: latex, a problem in a document's LaTeX, a last compile that failed among them, and all the viewer shows a person; model, loom's model of the quilt (ids, \\uses, links, copies, records), an agent's to keep; internal, loom's own difficulty or the integrity of its records. An error is a fault in what TeX compiles, or in loom's records; exit 1 on one. Fast: no LaTeX runs, and a compile's problem is read from the log the document's last compile left.
+    """
     result = open_scan(quilt_path)
     log_run(run_dir, "loom lint", result.quilt.root)
     diags = all_diagnostics(result)

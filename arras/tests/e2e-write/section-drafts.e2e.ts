@@ -45,6 +45,8 @@ for (const width of [736, 1100, 1440]) {
   await expect(shown).toContainText('Proposed');
   // the proposed text is new, so it is typeset where TeX is installed to make it and shown as its source where it is not, as on CI's runner
   await expect(shown.locator('mjx-container, pre.source').first()).toBeVisible();
+  // registered before the click that causes it: the manifest can be answered before a wait started after the decision's response begins
+  const manifest = page.waitForResponse(r => r.url().endsWith('/build/manifest.json') && r.status() === 200);
   const [decision] = await Promise.all([
    page.waitForResponse(r => r.url().endsWith('/_api/adopt-decision')),
    page.getByTestId('take-it').click()
@@ -53,7 +55,7 @@ for (const width of [736, 1100, 1440]) {
   // taking it steps on to the next change to decide, and the next manifest redraws nothing of what is now shown
   await expect(page.getByTestId('change-at')).not.toHaveText(/^1 of /);
   const drawn = await shown.locator('h2').elementHandle();
-  await page.waitForResponse(r => r.url().endsWith('/build/manifest.json') && r.status() === 200);
+  await manifest;
   expect(await drawn!.evaluate(node => node.isConnected)).toBe(true);
   await list();
   await expect(row).toHaveAttribute('data-state','taken');

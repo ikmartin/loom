@@ -40,16 +40,14 @@ async function onPage(page: Page, index: number, n: number): Promise<void> {
 	await expect.poll(() => shown(pane(page, index))).toBe(n);
 }
 
-/** Hover a link and read the page its card shows, then let the card go. */
-async function hovered(page: Page, link: Locator): Promise<number> {
+/** Hover a link and wait for its card to show page `n`, which it reaches by scrolling from the first, then let the card go. */
+async function hovered(page: Page, link: Locator, n: number): Promise<void> {
 	await link.hover();
 	const card = page.getByTestId('link-preview');
 	await expect(card.getByTestId('pdf-doc')).toBeVisible();
-	let at = 0;
-	await expect.poll(async () => (at = await shown(card))).toBeGreaterThan(0);
+	await expect.poll(() => shown(card)).toBe(n);
 	await page.mouse.move(0, 0);
 	await expect(card).toHaveCount(0);
-	return at;
 }
 
 test.describe('a citation', () => {
@@ -58,7 +56,7 @@ test.describe('a citation', () => {
 		await page.goto('/node/sy-000A');
 		const cite = pane(page, 0).locator(`span.cite[data-target="${RESULT}"] a`).first();
 		await expect(cite).toHaveAttribute('href', AT);
-		expect(await hovered(page, cite)).toBe(4);
+		await hovered(page, cite, 4);
 		await cite.click();
 		await onPage(page, 1, 4);
 	});
@@ -76,6 +74,18 @@ test.describe('a citation', () => {
 		await expect(pane(page, 1).getByTestId(`mark-${RESULT}`)).toBeInViewport();
 	});
 
+	test('opened at a page and left before a frame has followed the scroll, it is kept at that page for the next visit', async ({ page }) => {
+		await filed(page);
+		// the column's scroll never reaches the renderer's follower, which is what a page left within a frame of the scroll is: nothing but the opening itself has said where the paper stands
+		await page.addInitScript(() => window.addEventListener('scroll', (e) => { if (e.target instanceof Element && e.target.classList.contains('column')) e.stopPropagation(); }, true));
+		await page.goto('/node/' + RESULT);
+		await pane(page, 0).locator('span.cite[data-postnote="Theorem 2.1, p.~4"] a').first().click();
+		await onPage(page, 1, 4);
+		await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+		const kept = await page.evaluate(() => Object.values(JSON.parse(localStorage.getItem('arras.places') ?? '{}')));
+		expect(kept).toEqual([expect.objectContaining({ page: 4 })]);
+	});
+
 	test('with no result behind it opens the page its postnote names, or the work as a plain link opens it where it names none', async ({ page }) => {
 		await filed(page);
 		// `\cite[Lemma 9]{Kre99}` names no page and no result the digest holds, so it is a plain link to the work: at its front, for a work never read
@@ -88,13 +98,70 @@ test.describe('a citation', () => {
 		await page.goto('/node/' + RESULT);
 		const heading = pane(page, 0).locator('span.cite[data-postnote="Theorem 2.1, p.~4"] a').first();
 		await expect(heading).toHaveAttribute('href', '/library/Kre99?page=4');
-		expect(await hovered(page, heading)).toBe(4);
+		await hovered(page, heading, 4);
 		await heading.click();
 		await onPage(page, 1, 4);
 		// and the plain link then opens where that left the reader
 		await page.goto('/node/sy-0100');
 		await lemma().click();
 		await onPage(page, 1, 4);
+	});
+});
+
+/** The colour the viewer gives a problem, as the page computes it. */
+function problemColour(page: Page): Promise<string> {
+	return page.evaluate(() => {
+		const probe = document.createElement('span');
+		probe.style.color = 'var(--state-incomplete)';
+		document.body.appendChild(probe);
+		const colour = getComputedStyle(probe).color;
+		probe.remove();
+		return colour;
+	});
+}
+
+test.describe("a citation of a result loom's reading of the paper lacks", () => {
+	test('keeps its words, is underlined as a problem, says so on hover, and opens the paper on a click', async ({ page }) => {
+		await filed(page);
+		await page.goto('/node/sy-0100');
+		// the publisher marks `\cite[Lemma 9]{Kre99}` alone: the citation beside it, of a result the digest holds, is not marked
+		const cite = pane(page, 0).locator('span.cite[data-unmatched]');
+		await expect(cite).toHaveCount(1);
+		await expect(cite).toHaveAttribute('data-postnote', 'Lemma 9');
+		await expect(cite).toHaveText('[2, Lemma 9]');
+		await expect(pane(page, 0).locator(`span.cite[data-target="${RESULT}"]`).first()).not.toHaveAttribute('data-unmatched');
+		const problem = await problemColour(page);
+		const line = await cite.evaluate((c) => [getComputedStyle(c).borderBottomStyle, getComputedStyle(c).borderBottomColor]);
+		expect(line).toEqual(['dotted', problem]);
+		await cite.locator('a').hover();
+		const said = page.getByTestId('cite-unmatched');
+		await expect(said).toHaveText("loom's reading of this paper has no Lemma 9");
+		expect(await said.evaluate((p) => getComputedStyle(p).color)).toBe(problem);
+		// its own line, not the work's card: a postnote naming no page names no place to show
+		await expect(page.getByTestId('link-preview').getByTestId('pdf-doc')).toHaveCount(0);
+		await page.mouse.move(0, 0);
+		await expect(said).toHaveCount(0);
+		await expect(cite.locator('a')).toHaveAttribute('href', '/library/Kre99');
+		await cite.locator('a').click();
+		await onPage(page, 1, 1);
+	});
+
+	test('says so above the card where one also shows', async ({ page }) => {
+		await filed(page);
+		// the same citation naming a page as well, whose card shows that page
+		await page.route('**/fragments/nodes/sy-0100.html', async (route) => {
+			const res = await route.fetch();
+			const body = (await res.text()).replace('data-postnote="Lemma 9"', 'data-postnote="Lemma 9, p.~3"').replace('data-unmatched="Lemma 9"', 'data-unmatched="Lemma 9, p. 3"');
+			await route.fulfill({ response: res, body });
+		});
+		await page.goto('/node/sy-0100');
+		const cite = pane(page, 0).locator('span.cite[data-unmatched] a');
+		await cite.hover();
+		const card = page.getByTestId('link-preview');
+		await expect(card.getByTestId('cite-unmatched')).toHaveText("loom's reading of this paper has no Lemma 9, p. 3");
+		await expect(card.getByTestId('pdf-doc')).toBeVisible();
+		const [said, doc] = await Promise.all([card.getByTestId('cite-unmatched').boundingBox(), card.getByTestId('pdf-doc').boundingBox()]);
+		expect(said!.y + said!.height).toBeLessThanOrEqual(doc!.y);
 	});
 });
 

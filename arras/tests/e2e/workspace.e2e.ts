@@ -659,11 +659,11 @@ test.describe('the toolbar', () => {
 		const menu = page.getByTestId('toolbar-menu');
 		await expect(menu).toHaveAttribute('role', 'menu');
 		// each says what a click does, and neither has a key: a stray letter never hides what a reader is looking at
-		await expect(menu.getByRole('menuitem')).toHaveText(['show settled annotations', 'turn annotations off']);
+		await expect(menu.getByRole('menuitem')).toHaveText(['show settled annotations', 'view PDF', 'turn annotations off']);
 		await expect(menu.getByTestId('toggle-settled')).not.toHaveAttribute('aria-keyshortcuts');
 		await expect(menu.getByTestId('toggle-hide-notes')).not.toHaveAttribute('aria-keyshortcuts');
-		// its compiled PDF opens from its row in the tree, not from here
-		await expect(menu.getByTestId('open-pdf')).toHaveCount(0);
+		// its compiled PDF opens from here, as a cited work's does from its own
+		await expect(menu.getByTestId('view-pdf')).toHaveAccessibleName('view the PDF of main.tex');
 		// a mode inside it is on: the dot on view says so, and the menu closed on the choice
 		await expect(page.getByTestId('toolbar-view-on')).toHaveCount(0);
 		await page.getByTestId('toggle-settled').click();
@@ -673,6 +673,8 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('toggle-settled')).toHaveText('hide settled annotations');
 		// the keys move through the menu, and Escape hands focus back to view
 		await expect(page.getByTestId('toggle-settled')).toBeFocused();
+		await page.keyboard.press('ArrowDown');
+		await expect(page.getByTestId('view-pdf')).toBeFocused();
 		await page.keyboard.press('ArrowDown');
 		await expect(page.getByTestId('toggle-hide-notes')).toBeFocused();
 		await page.keyboard.press('Escape');

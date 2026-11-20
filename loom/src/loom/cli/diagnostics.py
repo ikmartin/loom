@@ -1,6 +1,6 @@
-"""Diagnostics as report groups (plan 0.18.3): one group per code with its count, the author's before the cited works', which are summarised under a heading of their own, and a single line for the works nothing cites.
+"""Diagnostics as report groups (plan 0.18.3): one group per code with its count and class, the author's before the cited works', which are summarised under a heading of their own, and a single line for the works nothing cites.
 
-Every command that reports diagnostics (`lint`, `build`, `check`, `library update`, `history verify`) builds its groups here, so a diagnostic reads the same wherever it is printed: its location, its message, the keys it names, and the commands that would resolve it as `fix:` lines.
+Every command that reports diagnostics (`lint`, `build`, `check`, `library update`, `history verify`) builds its groups here, so a diagnostic reads the same wherever it is printed: its location, its message, the keys it names, and the commands that would resolve it as `fix:` lines. A heading says the code's class in brackets after it (`scan.diagnostics`): `latex`, `model` or `internal`.
 """
 
 from __future__ import annotations
@@ -47,16 +47,16 @@ def _shared(messages: list[str]) -> tuple[int, int]:
     return (head, tail) if head + tail >= SHARED and all(0 < n <= VARIES for n in own) else (0, 0)
 
 
-def _code_group(severity: str, code: str, ds: list[Diagnostic]) -> Group:
-    """One code's diagnostics: when they all say one sentence about different things, the sentence is the heading's, once, and each line says only what varies (T2)."""
+def _code_group(severity: str, code: str, cls: str, ds: list[Diagnostic]) -> Group:
+    """One code's diagnostics of one class: when they all say one sentence about different things, the sentence is the heading's, once, and each line says only what varies (T2)."""
     head, tail = _shared([d.message for d in ds]) if len(ds) > 1 else (0, 0)
     if not head and not tail:
-        return Group(f"{severity} {code}", [item(d) for d in ds], problem=severity == "error", limit=20)
+        return Group(f"{severity} {code} ({cls})", [item(d) for d in ds], problem=severity == "error", limit=20)
     first = ds[0].message.split()
     gist = " ".join([*first[:head], "…", *(first[len(first) - tail :] if tail else [])])
     # what varies, without the comma that joined it to the shared words
     items = [item(d, " ".join(d.message.split()[head : len(d.message.split()) - tail]).rstrip(",;:")) for d in ds]
-    return Group(f"{severity} {code}: {gist}", items, problem=severity == "error", limit=20)
+    return Group(f"{severity} {code} ({cls}): {gist}", items, problem=severity == "error", limit=20)
 
 
 def groups(diags: list[Diagnostic], result: ScanResult | None, cited_next: str = "loom lint --json") -> list[Group]:
@@ -68,23 +68,26 @@ def groups(diags: list[Diagnostic], result: ScanResult | None, cited_next: str =
     split = owners.split(_once(diags))
     own, cited, uncited = split[AUTHOR], split[CITED], split[UNCITED]
     out: list[Group] = []
-    by_code: dict[tuple[int, str, str], list[Diagnostic]] = {}
+    by_code: dict[tuple[int, str, str, str], list[Diagnostic]] = {}
     for d in own:
-        by_code.setdefault((SEVERITY.get(d.severity, 3), d.code, d.severity), []).append(d)
-    for (_, code, severity), ds in sorted(by_code.items()):
+        by_code.setdefault((SEVERITY.get(d.severity, 3), d.code, d.severity, d.class_), []).append(d)
+    for (_, code, severity, cls), ds in sorted(by_code.items()):
         ds.sort(key=lambda d: (d.locations[0].file, d.locations[0].line) if d.locations else ("", 0))
-        out.append(_code_group(severity, code, ds))
+        out.append(_code_group(severity, code, cls, ds))
     if cited:
-        tally: dict[tuple[int, str, str], int] = {}
+        tally: dict[tuple[int, str, str, str], int] = {}
         for d in cited:
-            k = (SEVERITY.get(d.severity, 3), d.code, d.severity)
+            k = (SEVERITY.get(d.severity, 3), d.code, d.severity, d.class_)
             tally[k] = tally.get(k, 0) + 1
         out.append(
             Group(
                 "in cited works",
                 [
-                    Item(f"{counted(n, severity)}  {code}", data={"code": code, "severity": severity, "count": n})
-                    for (_, code, severity), n in sorted(tally.items())
+                    Item(
+                        f"{counted(n, severity)}  {code} ({cls})",
+                        data={"code": code, "severity": severity, "class": cls, "count": n},
+                    )
+                    for (_, code, severity, cls), n in sorted(tally.items())
                 ],
                 count=len(cited),
                 limit=None,

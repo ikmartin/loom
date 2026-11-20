@@ -1,8 +1,8 @@
 <script lang="ts">
 	// What a view that is about nodes shows when nothing is being worked on.
-	// The advice on how to start one is the publisher's and arrives as a diagnostic with its own commands, so this points at the diagnostics rather than inventing the advice, and only when there are any. The landmarks are still worth naming: a reader who arrives at an empty graph should be told where the mathematics is.
+	// It points at Problems when the person's own LaTeX has any. The landmarks are still worth naming: a reader who arrives at an empty graph should be told where the mathematics is.
 	import { store } from '$lib/manifest/client.svelte';
-	import { ownerOf } from '$lib/diagnostics';
+	import { forPerson, ownerOf } from '$lib/diagnostics';
 	import { canonUrl } from '$lib/nav';
 	import { route } from '$lib/paths';
 
@@ -13,8 +13,8 @@
 	// no documents is not a corpus between drafts, and telling its reader that nothing is being worked on describes a
 	// state it will never leave.
 	const never = $derived(m?.publishes.documents === false);
-	// the person's own diagnostics, the advice on starting a document among them; an agent's copy's or a cited work's says nothing about why none is open
-	const problems = $derived((m?.diagnostics ?? []).filter((d) => ownerOf(d) === 'person').length);
+	// the problems in the person's own LaTeX; an agent's copy's, a cited work's and loom's own say nothing about why none is open
+	const problems = $derived(forPerson(m?.diagnostics ?? []).filter((d) => ownerOf(d) === 'person').length);
 </script>
 
 <div class="empty" data-testid="no-drafts">
@@ -30,7 +30,7 @@
 			>{#if landmarks.length > 1}, and {landmarks.length - 1} older{/if}.
 		{/if}
 		{#if problems && !never}
-			<a href={route('/review/problems')}>Problems</a> says what the publisher reported.
+			<a href={route('/review/problems')}>Problems</a> says what is wrong in your LaTeX.
 		{/if}
 	</p>
 </div>

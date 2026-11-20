@@ -1,101 +1,186 @@
-"""The diagnostic code table (docs/specs/diagnostics.md plus the codes implementation added).
+"""The diagnostic code table (docs/specs/diagnostics.md): each code's severity, its class, and whether `[lint] disable` can silence it.
 
-Reserved codes have no namespace and cannot be silenced; loom codes are namespaced and can be, except those marked fixed. Every code emitted anywhere must appear here; the coverage test checks it.
+Reserved codes have no namespace and cannot be silenced; loom codes are namespaced and can be, except those marked fixed. Every code emitted anywhere must appear here with a class; the coverage and registry tests check both.
+
+A class says what kind of problem a code reports: `LATEX`, a problem in a document's LaTeX that an author would recognise, a failed compile among them, and what else the person is to be shown with no other place to say it; `MODEL`, loom's model of the quilt, the hygiene of keys, links, copies and records an agent keeps; `INTERNAL`, loom's own difficulty or the integrity of its records. The viewer shows a person `LATEX` alone; `loom lint` shows every class. An entry is its code's plainest instance: `VARIES` names the codes whose emitter grades each instance, and `scan.owners.stamped` makes whatever a digest holds `INTERNAL`.
 """
 
 from __future__ import annotations
 
-RESERVED: dict[str, str] = {
-    "duplicate-id": "error",
-    "dangling-link": "error",
-    "missing-include": "error",
-    "double-inclusion": "error",
-    "inclusion-cycle": "error",
-    "unreachable": "info",
+from typing import Any, NamedTuple
+
+#: The three classes, in the order a reader is shown them.
+LATEX, MODEL, INTERNAL = "latex", "model", "internal"
+CLASSES = (LATEX, MODEL, INTERNAL)
+
+
+class Code(NamedTuple):
+    severity: str
+    cls: str
+    fixed: bool = False
+
+
+RESERVED: dict[str, Code] = {
+    "duplicate-id": Code("error", LATEX),
+    "dangling-link": Code("error", LATEX),
+    "missing-include": Code("error", LATEX),
+    "double-inclusion": Code("error", LATEX),
+    "inclusion-cycle": Code("error", LATEX),
+    "unreachable": Code("info", MODEL),
 }
 
-LOOM: dict[str, tuple[str, bool]] = {  # code -> (severity, fixed)
-    "loom:environment-spans-files": ("error", False),
-    "loom:line-anchoring": ("error", True),
-    "loom:unknown-environment": ("error", False),
-    "loom:unattached-proof": ("error", False),
-    "loom:multi-target-proof": ("warning", False),
-    "loom:reference-to-loose": ("error", False),
-    "loom:duplicate-label": ("error", False),
-    "loom:macros-unloaded": ("error", False),
-    "loom:macros-missing": ("error", False),
-    "loom:macro-shadowed": ("warning", False),
-    "loom:taxon-conflict": ("warning", False),
-    "loom:prefix-is-citekey": ("warning", False),
-    "loom:unknown-directive": ("warning", False),
-    "loom:invalid-name": ("warning", False),
-    "loom:unknown-config-key": ("warning", False),
-    "loom:unlabelled-node": ("info", False),
-    "loom:positional-proof-key": ("info", False),
-    "loom:unexpected-proof": ("info", False),
-    "loom:missing-proof": ("warning", False),
-    "loom:needs-classification": ("warning", False),
-    "loom:misplaced-basis": ("warning", False),
-    "loom:equation-in-proof-referenced": ("warning", False),
-    "loom:uses-missing": ("info", False),
-    "loom:uses-unused": ("info", False),
-    "loom:see-redundant": ("info", False),
-    "loom:dependency-cycle": ("warning", False),
-    "loom:snippet-failed": ("warning", False),
-    "loom:closure-failed": ("error", False),
-    "loom:atomize-target-exists": ("error", True),
-    "loom:import-outside-tree": ("warning", False),
-    "loom:retired-ledger-key": ("info", False),
-    "loom:detached-annotation": ("info", False),
-    "loom:previous-key-match": ("info", False),
-    "loom:unmatched-postnote": ("warning", False),
-    "loom:cites-proposed-node": ("warning", False),
-    "loom:undigested-citekey": ("info", False),
-    "loom:postnote-from-another-version": ("info", False),
-    "loom:version-mismatch": ("warning", False),
-    "loom:unresolved-work": ("info", False),
-    "loom:unverified-locators": ("warning", False),
-    "loom:missing-package": ("warning", False),
-    "loom:digest-without-bib": ("warning", False),
-    "loom:interface-version": ("error", True),
-    # added by the implementation, beyond the original specification
-    "loom:non-utf8-source": ("warning", False),
-    "loom:unknown-theoremstyle": ("warning", False),
-    "loom:taxon-name-macro": ("info", False),
-    "loom:citekey-slug-collision": ("error", False),
-    "loom:main-not-found": ("warning", False),
-    "loom:main-unset": ("info", False),
-    "loom:foreign-annotations": ("warning", False),
-    "loom:repeated-id": ("warning", False),
-    "loom:annotation-types": ("warning", False),
+LOOM: dict[str, Code] = {
+    "loom:environment-spans-files": Code("warning", MODEL),
+    "loom:line-anchoring": Code("warning", MODEL, fixed=True),
+    "loom:unknown-environment": Code("warning", MODEL),
+    "loom:unattached-proof": Code("warning", MODEL),
+    "loom:multi-target-proof": Code("warning", MODEL),
+    "loom:reference-to-loose": Code("error", LATEX),
+    "loom:duplicate-label": Code("error", LATEX),
+    "loom:macros-unloaded": Code("error", MODEL),
+    "loom:macros-missing": Code("error", MODEL),
+    "loom:macro-shadowed": Code("warning", MODEL),
+    "loom:taxon-conflict": Code("warning", MODEL),
+    "loom:prefix-is-citekey": Code("warning", MODEL),
+    "loom:unknown-directive": Code("warning", MODEL),
+    "loom:invalid-name": Code("warning", MODEL),
+    "loom:unknown-config-key": Code("warning", MODEL),
+    "loom:unlabelled-node": Code("info", MODEL),
+    "loom:positional-proof-key": Code("info", MODEL),
+    "loom:unexpected-proof": Code("info", MODEL),
+    "loom:missing-proof": Code("warning", MODEL),
+    "loom:needs-classification": Code("warning", MODEL),
+    "loom:misplaced-basis": Code("warning", MODEL),
+    "loom:equation-in-proof-referenced": Code("warning", MODEL),
+    "loom:uses-missing": Code("info", MODEL),
+    "loom:uses-unused": Code("info", MODEL),
+    "loom:see-redundant": Code("info", MODEL),
+    "loom:dependency-cycle": Code("warning", LATEX),
+    "loom:snippet-failed": Code("warning", INTERNAL),
+    "loom:closure-failed": Code("error", INTERNAL),
+    "loom:atomize-target-exists": Code("warning", MODEL, fixed=True),
+    "loom:import-outside-tree": Code("warning", MODEL),
+    "loom:retired-ledger-key": Code("info", MODEL),
+    "loom:detached-annotation": Code("info", MODEL),
+    "loom:previous-key-match": Code("info", MODEL),
+    "loom:unmatched-postnote": Code("warning", INTERNAL),
+    "loom:cites-proposed-node": Code("warning", MODEL),
+    "loom:undigested-citekey": Code("info", INTERNAL),
+    "loom:postnote-from-another-version": Code("info", INTERNAL),
+    "loom:version-mismatch": Code("warning", INTERNAL),
+    "loom:unresolved-work": Code("info", INTERNAL),
+    "loom:unverified-locators": Code("warning", INTERNAL),
+    "loom:missing-package": Code("warning", INTERNAL),
+    "loom:digest-without-bib": Code("warning", INTERNAL),
+    "loom:interface-version": Code("error", INTERNAL, fixed=True),
+    "loom:non-utf8-source": Code("warning", LATEX),
+    "loom:unknown-theoremstyle": Code("warning", INTERNAL),
+    "loom:taxon-name-macro": Code("info", INTERNAL),
+    "loom:citekey-slug-collision": Code("warning", MODEL),
+    "loom:main-not-found": Code("warning", MODEL),
+    "loom:main-unset": Code("info", MODEL),
+    "loom:foreign-annotations": Code("warning", INTERNAL),
+    "loom:repeated-id": Code("warning", INTERNAL),
+    "loom:annotation-types": Code("warning", INTERNAL),
+    # a document's last compile, read from its log: TeX's word, which no setting silences
+    "loom:compile-failed": Code("error", LATEX, fixed=True),
+    "loom:compile-errors": Code("error", LATEX, fixed=True),
     # the workbench and the record (docs/specs/diagnostics.md §3)
-    "loom:superseded-file": ("info", False),
-    "loom:history-missing": ("error", False),
-    "loom:history-edited": ("error", False),
-    "loom:history-corrupt": ("error", False),
-    "loom:history-interrupted": ("warning", False),
-    "loom:dangling-ancestry": ("warning", False),
-    "loom:id-reused": ("error", False),
-    "loom:node-recovered": ("info", False),
-    "loom:no-live-document": ("info", False),
-    "loom:document-gone": ("warning", False),
-    # the documents an agent edits (plan 0.17.1)
-    "loom:derived-id-in-person-document": ("error", False),
-    "loom:agent-document-unrecorded": ("error", False),
-    "loom:plain-id-in-agent-document": ("error", False),
-    # the agents' boundary (plan 0.22.6): the permission file Claude Code reads lags `[agents] deny`
-    "loom:agent-permissions-stale": ("warning", False),
-    # the viewer's front door (plan 0.22.7): `[quilt] home` names no file the viewer shows
-    "loom:home-missing": ("warning", False),
-    # the one door (docs/design/writes.md, "Recovery"): a write to the person's file recovery could neither finish nor undo
-    "loom:write-left": ("warning", False),
-    # the PDF invariant (plan 0.13 §4): a warning and never an error, because loom cannot fetch without consent
-    "loom:no-readable-copy": ("warning", False),
+    "loom:superseded-file": Code("info", MODEL),
+    "loom:history-missing": Code("error", INTERNAL),
+    "loom:history-edited": Code("error", INTERNAL),
+    "loom:history-corrupt": Code("error", INTERNAL),
+    "loom:history-interrupted": Code("warning", INTERNAL),
+    "loom:dangling-ancestry": Code("warning", INTERNAL),
+    "loom:id-reused": Code("warning", MODEL),
+    "loom:node-recovered": Code("info", MODEL),
+    "loom:no-live-document": Code("info", MODEL),
+    "loom:document-gone": Code("warning", MODEL),
+    # the documents an agent edits
+    "loom:derived-id-in-person-document": Code("warning", MODEL),
+    "loom:agent-document-unrecorded": Code("warning", MODEL),
+    "loom:plain-id-in-agent-document": Code("warning", MODEL),
+    # the agents' boundary: the permission file Claude Code reads lags `[agents] deny`
+    "loom:agent-permissions-stale": Code("warning", INTERNAL),
+    # the viewer's front door: `[quilt] home` names no file the viewer shows
+    "loom:home-missing": Code("warning", MODEL),
+    # the one door (docs/design/writes.md, "Recovery"): a write to the person's file recovery could neither finish nor undo, which the person has no other place to be told of
+    "loom:write-left": Code("warning", LATEX),
+    # a warning and never an error, because loom cannot fetch without consent
+    "loom:no-readable-copy": Code("warning", INTERNAL),
 }
 
+#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case; `loom:document-gone` of class `LATEX` where annotations are on the document, which the person is shown nowhere else.
+VARIES = frozenset(
+    {
+        "duplicate-id",
+        "loom:duplicate-label",
+        "dangling-link",
+        "loom:reference-to-loose",
+        "loom:environment-spans-files",
+        "loom:compile-failed",
+        "loom:compile-errors",
+        "loom:no-readable-copy",
+        "loom:annotation-types",
+        "loom:document-gone",
+    }
+)
 
-def can_disable(code: str) -> bool:
-    return code in LOOM and not LOOM[code][1]
+
+#: The codes a gate refuses to bring in, by code and not by grade: those that were errors wherever loom raised them before its model was graded by what TeX does. Adopting an agent's copy and linearizing a document will not go ahead over a new one, at any grade but info, so that a regrade changes what a person and an agent are told and never what loom lets through. A code added since is in no gate until one is meant to refuse it.
+GATED = frozenset(
+    {
+        "duplicate-id",
+        "dangling-link",
+        "missing-include",
+        "double-inclusion",
+        "inclusion-cycle",
+        "loom:environment-spans-files",
+        "loom:line-anchoring",
+        "loom:unknown-environment",
+        "loom:unattached-proof",
+        "loom:reference-to-loose",
+        "loom:duplicate-label",
+        "loom:macros-unloaded",
+        "loom:macros-missing",
+        "loom:closure-failed",
+        "loom:atomize-target-exists",
+        "loom:interface-version",
+        "loom:citekey-slug-collision",
+        "loom:history-missing",
+        "loom:history-edited",
+        "loom:history-corrupt",
+        "loom:id-reused",
+        "loom:derived-id-in-person-document",
+        "loom:agent-document-unrecorded",
+        "loom:plain-id-in-agent-document",
+    }
+)
+
+
+def gates(d: Any) -> bool:
+    """Whether a gate refuses to bring in diagnostic `d` (`GATED`): its code is one, and it is no info, as a reference between two files no document reads is."""
+    return d.code in GATED and d.severity != "info"
+
+
+def registered(name: str) -> Code | None:
+    """The registry's entry for a code, None for one it does not hold."""
+    return RESERVED.get(name) or LOOM.get(name)
+
+
+def class_of(name: str) -> str:
+    """A code's class; one the registry does not hold, which only another publisher's can be, is the person's LaTeX, so a viewer that shows a person that class alone still shows it."""
+    found = registered(name)
+    return found.cls if found is not None else LATEX
+
+
+def unclassed() -> list[str]:
+    """The registered codes with no class among `CLASSES`, which the registry test requires to be none."""
+    return sorted(c for c, entry in {**RESERVED, **LOOM}.items() if entry.cls not in CLASSES)
+
+
+def can_disable(name: str) -> bool:
+    return name in LOOM and not LOOM[name].fixed
 
 
 def all_codes() -> list[str]:

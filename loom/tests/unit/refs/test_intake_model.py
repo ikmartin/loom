@@ -249,6 +249,8 @@ ACTS: list[tuple[str, int]] = [
 ]
 #: The acts a step stops midway, each of which writes.
 STOPPABLE = ("drop", "take", "answer", "unfile", "undo", "cli", "delete")
+#: One step in this many is stopped midway.
+STOP_EVERY = 20
 #: The acts that run two at once.
 PAIRED = ("take", "unfile", "undo", "cli", "gather", "answer", "drop")
 
@@ -406,7 +408,17 @@ def test_the_library_under_random_use_never_loses_a_document_or_damages_a_record
         gone: set[str] = set()
         before = _tree(q)
         out: list[str] = []
-        if m.rng.random() < 0.12:
+        if step % STOP_EVERY == STOP_EVERY // 2:
+            # a step that stops is scheduled and made to stop: the paired steps race, so which acts find something to do, and so which reach their n-th file operation, differs from run to run of one seed
+            for name, at in ((m.rng.choice(STOPPABLE), m.rng.randint(1, 12)), ("drop", 1)):
+                with _stopped_at(at):
+                    _run(getattr(m, name), m.rng, gone, out)
+                if " STOPPED, " in out[-1]:
+                    break
+            what = " ; ".join(out)
+            stops += " STOPPED, " in what
+            crashed = crashed or " STOPPED, " in what
+        elif m.rng.random() < 0.12:
             acts = [getattr(m, m.rng.choice(PAIRED)) for _ in range(2)]
             rs = [random.Random(m.rng.random()) for _ in acts]
             bar = threading.Barrier(2)
@@ -421,15 +433,8 @@ def test_the_library_under_random_use_never_loses_a_document_or_damages_a_record
         else:
             x = m.rng.uniform(0, total)
             name = next((n for n, w in ACTS if (x := x - w) <= 0), ACTS[-1][0])
-            if m.rng.random() < 0.05:
-                name = m.rng.choice(STOPPABLE)
-                with _stopped_at(m.rng.randint(1, 12)):
-                    _run(getattr(m, name), m.rng, gone, out)
-            else:
-                _run(getattr(m, name), m.rng, gone, out)
+            _run(getattr(m, name), m.rng, gone, out)
             what = out[0]
-            stops += " STOPPED, " in what
-            crashed = crashed or " STOPPED, " in what
             if " refused " in what:
                 assert _tree(q) == before, f"step {step}: {what}, and still changed the quilt"
         assert "FAILED" not in what, f"step {step}: {what}"
@@ -437,4 +442,4 @@ def test_the_library_under_random_use_never_loses_a_document_or_damages_a_record
             m.alive.pop(sha, None)
         bad = _faults(m, crashed)
         assert not bad, f"step {step} ({what}): {bad}"
-    assert stops or STEPS < 100, "no act was stopped midway"
+    assert stops or STEPS < STOP_EVERY, "no act was stopped midway"

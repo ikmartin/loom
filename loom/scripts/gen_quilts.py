@@ -1652,7 +1652,7 @@ def _write_expected_lint(g: Gen) -> None:
     finally:
         os.chdir(old)
     diags = json.loads(res.output)["diagnostics"]
-    lines = sorted(f"{d['severity']} {d['code']}" for d in diags)
+    lines = sorted(f"{d['severity']} {d['code']} {d['class']}" for d in diags)
     (g.root / "EXPECTED-LINT.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 

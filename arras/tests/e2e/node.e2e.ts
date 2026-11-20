@@ -40,9 +40,9 @@ test('a node can be read as it was written', async ({ page }) => {
 	await expect(page.locator('.fragment .env').first()).toBeVisible();
 });
 
-test('a missing proof is said where the proof would be, and its diagnostic is in the context', async ({ page }) => {
+test("a missing proof is said where the proof would be, and not again among the context's diagnostics, which are the LaTeX's", async ({ page }) => {
 	await serve(page, (m) => {
-		m.diagnostics.push({ severity: 'warning', code: 'loom:missing-proof', message: 'No proof attached', locations: [], keys: ['sy-0003'] });
+		m.diagnostics.push({ severity: 'warning', code: 'loom:missing-proof', class: 'model', message: 'No proof attached', locations: [], keys: ['sy-0003'] });
 	});
 	await page.goto('/node/sy-0003' + beside('/context/sy-0003'));
 	const said = pane(page, 0).getByTestId('missing-proof');
@@ -51,5 +51,7 @@ test('a missing proof is said where the proof would be, and its diagnostic is in
 	// after the statement, not above it: the statement leads
 	const statement = (await pane(page, 0).locator('.fragment .env[data-id="sy-0003"]').boundingBox())!;
 	expect((await said.boundingBox())!.y).toBeGreaterThan(statement.y);
-	await expect(pane(page, 1).getByTestId('context')).toContainText('No proof attached');
+	// loom's model, read where it matters: the block says it, and the context's list of diagnostics, a person's LaTeX problems, does not
+	await expect(pane(page, 1).getByTestId('context')).toBeVisible();
+	await expect(pane(page, 1).getByTestId('context')).not.toContainText('No proof attached');
 });

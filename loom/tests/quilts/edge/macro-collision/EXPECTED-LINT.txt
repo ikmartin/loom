@@ -1,3 +1,3 @@
-info loom:unresolved-work
-info loom:uses-unused
-warning loom:no-readable-copy
+info loom:unresolved-work internal
+info loom:uses-unused model
+warning loom:no-readable-copy internal

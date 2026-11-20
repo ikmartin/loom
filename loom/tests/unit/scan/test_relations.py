@@ -76,7 +76,7 @@ def test_see_dangling_link_with_location(tmp_path: Path) -> None:
         },
     )
     d = [x for x in r.diagnostics if x.code == "dangling-link"]
-    assert len(d) == 1 and d[0].severity == "error"
+    assert len(d) == 1 and (d[0].severity, d[0].class_) == ("warning", "model")  # TeX never reads a relation
     assert "ab-9999" in d[0].message
     assert d[0].locations[0].file == "drafting/nodes/ab-0002.tex" and d[0].locations[0].line == 2
     assert d[0].keys == ["ab-0002"]

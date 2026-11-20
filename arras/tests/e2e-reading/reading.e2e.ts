@@ -473,10 +473,26 @@ readOnly('a result is drawn only where a link lands, takes no pointer, and its w
 		await page.goto('/library/Bellamy19?page=2');
 		const mark = page.locator('.page .mark.result').first();
 		await expect(mark).toBeAttached();
-		await mark.scrollIntoViewIfNeeded();
+		// a press and a drag reach the words only once the page holding the result has its text layer, which is drawn after the marks and replaced when the page is drawn again; and the result is scrolled to once the pages above it have their sizes, which move it as they are drawn
+		const n = await mark.evaluate((el) => Number(el.closest('[data-testid^="pdf-page-"]')!.getAttribute('data-testid')!.slice('pdf-page-'.length)));
+		await drawn(page, n);
 		expect(alpha(await mark.evaluate((el) => getComputedStyle(el).backgroundColor)), `${scheme}: drawn at rest`).toBe(0);
-		const hit = await mark.evaluate((el) => { const r = el.getBoundingClientRect(); return document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.tagName; });
-		expect(hit, `${scheme}: a press on a result reaches the words`).toBe('SPAN');
+		// a landing scroll to the page can still be settling and moves the result out of the pane again, so it is brought into view on every look, and a press reaches the words once it stays where it is with the words under it
+		let last = '';
+		await expect
+			.poll(
+				async () => {
+					await mark.scrollIntoViewIfNeeded();
+					const now = await mark.evaluate((el) => { const r = el.getBoundingClientRect(); return `at ${Math.round(r.left)},${Math.round(r.top)}, under it ${document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.tagName}`; });
+					const held = now === last && now.endsWith('SPAN');
+					last = now;
+					return held ? 'SPAN' : now;
+				},
+				{ intervals: [200], message: `${scheme}: a press on a result reaches the words` }
+			)
+			.toBe('SPAN');
+		// the drag begins where the result is as it begins, not where it was a look ago
+		await mark.scrollIntoViewIfNeeded();
 		const box = (await mark.boundingBox())!;
 		await page.mouse.move(box.x + 4, box.y + box.height / 2);
 		await page.mouse.down();

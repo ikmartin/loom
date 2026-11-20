@@ -1694,8 +1694,8 @@ def test_the_sidecar_carries_the_notes_on_a_page_and_the_reference_counts_them(t
         *who,
         cwd=q,
     ).stdout.split()[0]
-    # exit 1 is a content problem, which the showcase carries on purpose (a duplicate id); the build still writes
-    exits(1, "build", cwd=q)
+    # the showcase's duplicate id is in two documents, which LaTeX accepts: a warning, and the build writes
+    ok("build", cwd=q)
     manifest = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())
     ref = manifest["references"]["Bellamy19"]
     assert ref["reading"]["total"] == before + 2 and ref["reading"]["open"] >= 1

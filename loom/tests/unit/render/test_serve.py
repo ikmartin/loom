@@ -405,12 +405,12 @@ def test_edit_between_initial_publish_and_watcher_start_is_not_lost(tmp_path, se
     deadline = time.monotonic() + PATIENCE
     while time.monotonic() < deadline:
         _, _, body = get(session.url + "build/manifest.json")
-        if json.loads(body)["nodes"]["dm-0002"]["title"] == "Edited at startup":
+        # the manifest is written inside the build and the build is counted after it, so the title and the count are waited for together
+        if json.loads(body)["nodes"]["dm-0002"]["title"] == "Edited at startup" and session.builds >= 2:
             break
         time.sleep(0.05)
     else:
         pytest.fail("The edit after initial publication was absorbed into the watcher's baseline")
-    assert session.builds >= 2
 
 
 class _Asked:
@@ -646,8 +646,11 @@ def test_a_server_at_rest_gives_back_what_its_builds_left_once_after_a_burst(
     from tests.unit.render._serve import fake_bundle
 
     given: list[float] = []
-    monkeypatch.setattr(served, "give_back", lambda: given.append(time.monotonic()))
     timers: list[threading.Timer] = []
+    # `give_back` is the module's, so a settle timer another test's server left running reaches it too: only a call from one of this server's own timers counts
+    monkeypatch.setattr(
+        served, "give_back", lambda: given.append(time.monotonic()) if threading.current_thread() in timers else None
+    )
 
     class Counted(threading.Timer):
         def __init__(self, *args: Any, **kwargs: Any) -> None:

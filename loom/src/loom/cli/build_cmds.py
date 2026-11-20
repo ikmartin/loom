@@ -16,7 +16,8 @@ from loom.cli.diagnostics import has_errors, tally
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.clock import stamp
 from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
-from loom.paths import CLOSURES, document_build, document_page
+from loom.paths import CLOSURES, LOOM, document_build, document_page
+from loom.render.compiles import COMPILE_CODES, error_place
 from loom.reshape.linearize import flatten
 from loom.scan.model import Diagnostic
 from loom.scan.scan import ScanResult
@@ -288,64 +289,17 @@ def substitution_for(result: ScanResult, key: str, with_file: str) -> str:
         raise ContentError(f"--with {with_file}: {exc}") from exc
 
 
-#: A file TeX opens, as its log shows it: `(` then a path with an extension.
-_OPENED = re.compile(r"\(([^\s()]+\.[A-Za-z]+)")
-#: The line TeX stopped at, after an error: `l.12 <the text up to the point>`.
-_STOPPED = re.compile(r"^l\.(\d+) (.*)$", re.M)
-_MACRO = re.compile(r"\\(?:[A-Za-z@]+|.)")
-
-
-def error_place(res: CompileResult, root: Path) -> dict[str, Any] | None:
-    """Where the log's first error is: the file TeX had open, the line it stopped at, and for an undefined control sequence the macro.
-
-    Read from the log, whose `(file` and `)` mark what TeX opened and closed; a log that says less gives None, or the fields it does say.
-    """
-    if res.log is None or not res.errors:
-        return None
-    try:
-        text = res.log.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return None
-    at = text.find(res.errors[0])
-    if at < 0:
-        return None
-    stack: list[str | None] = []
-    i = 0
-    while i < at:
-        c = text[i]
-        if c == "(":
-            m = _OPENED.match(text, i)
-            stack.append(m.group(1) if m else None)
-        elif c == ")" and stack:
-            stack.pop()
-        i += 1
-    opened = next((f for f in reversed(stack) if f and f.endswith(".tex")), None)
-    out: dict[str, Any] = {"file": None, "line": None, "macro": None}
-    if opened:
-        # the log names files from where latexmk ran, the document's own directory (P12)
-        p = Path(opened) if Path(opened).is_absolute() or res.cwd is None else res.cwd / opened
-        rel = (
-            p.resolve().relative_to(root.resolve())
-            if p.is_absolute() and p.resolve().is_relative_to(root.resolve())
-            else p
-        )
-        out["file"] = rel.as_posix().removeprefix("./")
-    stopped = _STOPPED.search(text, at)
-    if stopped is not None and text.count("\n", at, stopped.start()) <= 8:
-        out["line"] = int(stopped.group(1))
-        if "Undefined control sequence" in res.errors[0]:
-            macros = _MACRO.findall(stopped.group(2))
-            out["macro"] = macros[-1] if macros else None
-    return out if any(out.values()) else None
-
-
 def failure(res: CompileResult, root: Path) -> tuple[str, dict[str, Any] | None, str | None]:
     """(the first error with its macro and place, the place as data, the log's quilt-relative path): what a failed compile says, in `compile` and `check` alike."""
     place = error_place(res, root)
     said = res.first_error.rstrip(".")
     if place:
         said += f" {place['macro']}" if place["macro"] else ""
-        where = f"{place['file']}:{place['line']}" if place["file"] and place["line"] else place["file"] or ""
+        # a file of TeX's own, or one the compile wrote in a folder since gone, is named by its name alone
+        file = place["file"]
+        if file and (file.startswith("/") or Path(file).parts[0] == LOOM):
+            file = Path(file).name
+        where = f"{file}:{place['line']}" if file and place["line"] else file or ""
         said += f" at {where}" if where else ""
     log = None
     if res.log is not None:
@@ -439,7 +393,8 @@ def check(closures: str, as_json: bool, quilt_path: str | None) -> None:
         result = open_scan(quilt_path)
         root = result.quilt.root
         p.next_stage("linting")
-        diags = lint_cmd.all_diagnostics(result)
+        # every document is compiled below and reported by this run, so what its last compile left is not read here
+        diags = [d for d in lint_cmd.all_diagnostics(result) if d.code not in COMPILE_CODES]
         keys = (
             [k for k, n in result.nodes.items() if n.kind == "environment" and n.digest is None]
             if closures == "all"

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Manifest } from '$lib/manifest/types';
-import { compileError, compileWord, compiles, type Compile } from '$lib/manifest/compiles.svelte';
+import { compileError, compileWord, compiles, pdfLine, pdfWord, type Compile } from '$lib/manifest/compiles.svelte';
+import { compiledUrl } from '$lib/paths';
 import { itemFromPath, pathFor } from './item';
-import { pdfName } from './names';
+import { pdfFileName, pdfName } from './names';
 
 // A document's compiled PDF (plan 0.29.1): an item of its own, addressed by its document's name, and how its compile stands in a word.
 const m = { masters: [{ path: 'paper/main.tex' }, { path: 'notes/main.tex' }, { path: 'talk.tex' }] } as unknown as Manifest;
@@ -19,6 +20,19 @@ describe("a document's compiled PDF", () => {
 		expect(pdfName(m.masters, 'talk.tex')).toBe('talk.tex · PDF');
 		expect(pdfName(m.masters, 'paper/main.tex')).toBe('paper/main.tex · PDF');
 	});
+
+	it("is saved under its document's label, never as a hidden file or with a slash in its name", () => {
+		expect(pdfFileName(m.masters, 'talk.tex')).toBe('talk.pdf');
+		expect(pdfFileName(m.masters, 'paper/main.tex')).toBe('paper-main.pdf');
+		const agents = [{ path: 'drafting/main.tex' }, { path: '.hidden/main.tex' }, { path: '.hidden/aidoc.tex' }];
+		expect(pdfFileName(agents, '.hidden/aidoc.tex')).toBe('aidoc.pdf');
+		expect(pdfFileName(agents, '.hidden/main.tex')).toBe('hidden-main.pdf');
+	});
+
+	it('is fetched at the address its manifest entry gives, by the compile it is, and has none before a compile made one', () => {
+		expect(compiledUrl({ pdf: 'somewhere/main.pdf', compiled: '2026-11-17T10:00:00Z' })).toBe('/build/somewhere/main.pdf?v=2026-11-17T10%3A00%3A00Z');
+		expect(compiledUrl({})).toBe('');
+	});
 });
 
 describe('how a compile stands', () => {
@@ -34,6 +48,25 @@ describe('how a compile stands', () => {
 		expect(compileWord(c('idle', 'errors'))).toBe('compiled with errors');
 		expect(compileError(c('idle', 'failed'))).toBe('! Undefined control sequence. at l.12 \\hlind');
 		expect(compileError(c('idle', 'ok'))).toBe('');
+	});
+
+	it("says beside a document's view PDF that nothing is compiled yet where there is no PDF and nothing under way", () => {
+		expect(pdfWord(false, undefined)).toBe('not compiled yet');
+		expect(pdfWord(true, undefined)).toBe('');
+		expect(pdfWord(false, c('compiling'))).toBe('compiling');
+		expect(pdfWord(true, c('idle', 'failed'))).toBe('did not compile');
+		expect(pdfWord(false, c('idle', 'failed'))).toBe('did not compile');
+	});
+
+	it('greys view PDF only where there is no PDF to open, saying why, and opens the last PDF of a compile that failed or had errors', () => {
+		expect(pdfLine(true, undefined)).toEqual({ word: '', about: undefined });
+		expect(pdfLine(false, undefined)).toEqual({ word: 'not compiled yet', off: 'There is no compiled PDF to open yet' });
+		expect(pdfLine(false, c('compiling'))).toEqual({ word: 'compiling', off: 'There is no compiled PDF to open yet' });
+		expect(pdfLine(false, c('queued'))).toEqual({ word: 'waiting to compile', off: 'There is no compiled PDF to open yet' });
+		expect(pdfLine(false, c('idle', 'failed'))).toEqual({ word: 'did not compile', off: '! Undefined control sequence. at l.12 \\hlind' });
+		expect(pdfLine(true, c('idle', 'failed'))).toEqual({ word: 'did not compile', about: '! Undefined control sequence. at l.12 \\hlind' });
+		expect(pdfLine(true, c('idle', 'errors'))).toEqual({ word: 'compiled with errors', about: '! Undefined control sequence. at l.12 \\hlind' });
+		expect(pdfLine(true, c('compiling', 'ok'))).toEqual({ word: 'compiling', about: undefined });
 	});
 
 	it('takes what the stream says, and keeps what it had when the stream says nothing it can read', () => {

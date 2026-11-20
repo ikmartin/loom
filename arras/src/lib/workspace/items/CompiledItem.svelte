@@ -1,8 +1,8 @@
 <script lang="ts">
-	// A document's compiled PDF (plan 0.29.1), to read and not to mark: marks go on the document's text, since every compile replaces these bytes. A new compile opens it again where the reader is; one that made no PDF leaves the last, and says why.
+	// A document's compiled PDF (plan 0.29.1), to read, to open in the browser and to save (`CompiledControls`), and not to mark: marks go on the document's text, since every compile replaces these bytes. A new compile opens it again where the reader is; one that made no PDF leaves the last, and says why.
 	import { store } from '$lib/manifest/client.svelte';
 	import { compileError, compiles } from '$lib/manifest/compiles.svelte';
-	import { dataUrl } from '$lib/paths';
+	import { compiledUrl } from '$lib/paths';
 	import { forget } from '$lib/pdf/document';
 	import PdfDoc from '$lib/pdf/PdfDoc.svelte';
 	import PdfTools from '$lib/pdf/PdfTools.svelte';
@@ -16,8 +16,7 @@
 	const m = $derived(store.manifest!);
 	const master = $derived(m.masters.find((x) => x.path === item.id));
 	const name = $derived(master ? documentLabel(m.masters, master.path) : item.id);
-	// the address carries the compile it is, so each compile is a new document to PDF.js and the browser
-	const url = $derived(master?.pdf ? `${dataUrl(master.pdf)}?v=${encodeURIComponent(master.compiled ?? '')}` : '');
+	const url = $derived(master ? compiledUrl(master) : '');
 	const paper = $derived(fileState(item).pdf);
 	const pdfPage = $derived(Number(/^page=(\d+)$/.exec(item.anchor ?? '')?.[1] ?? 1));
 	const named = $derived(/^page=\d+$/.test(item.anchor ?? ''));

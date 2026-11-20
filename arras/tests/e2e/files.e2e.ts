@@ -171,13 +171,23 @@ test('a frame in a Markdown file is drawn inside the column at its own shape, an
 	expect(frame.width).toBeGreaterThan(560);
 	expect(frame.x).toBeCloseTo(column.x, 0);
 	expect(frame.height).toBeCloseTo((frame.width * 315) / 560, 0);
-	// in a pane narrower than it asked for, it scales rather than overflowing
+	// in a pane narrower than it asked for, it scales rather than overflowing: polled until the layout has settled at the new width, the frame and its column read in one go
 	await page.setViewportSize({ width: 500, height: 900 });
-	await expect.poll(async () => (await iframe.boundingBox())!.width).toBeLessThan(560);
-	const narrow = await shape();
-	expect(narrow.frame.x + narrow.frame.width).toBeLessThanOrEqual(narrow.column.x + narrow.column.width + 1);
-	expect(narrow.frame.height).toBeCloseTo((narrow.frame.width * 315) / 560, 0);
-	expect(await body.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
+	await expect
+		.poll(async () => {
+			const n = await iframe.evaluate((f) => {
+				const [fr, body] = [f.getBoundingClientRect(), f.closest('.file-body') as HTMLElement];
+				const c = body.getBoundingClientRect();
+				return { width: fr.width, height: fr.height, past: fr.x + fr.width - (c.x + c.width), over: body.scrollWidth - body.clientWidth };
+			});
+			const faults: string[] = [];
+			if (!(n.width < 560)) faults.push(`the frame is ${n.width} wide, no narrower than it asked for`);
+			if (n.past > 1) faults.push(`the frame ends ${n.past} past its column`);
+			if (Math.abs(n.height - (n.width * 315) / 560) >= 0.5) faults.push(`the frame is ${n.width} by ${n.height}, not its own shape`);
+			if (n.over > 0) faults.push(`the column scrolls ${n.over} sideways`);
+			return faults;
+		})
+		.toEqual([]);
 });
 
 test('nothing a Markdown file writes runs in the viewer: no script, no handler, no javascript: address', async ({ page }) => {

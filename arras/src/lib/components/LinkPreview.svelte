@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Hover previews (plan 0.13.3 H1–H7): resting on a link shows what is behind it, so a reader can check what a result rests on, or what uses it, without following it. **A card renders an item**: the link is read as the item it names and the registry's small render draws it, so this component owns only the card — its timing, its place against the window, its dismissal and `open here` — and knows no kind of its own. A kind with no small render previews nothing.
+	// Hover previews (plan 0.13.3 H1–H7): resting on a link shows what is behind it, so a reader can check what a result rests on, or what uses it, without following it. **A card renders an item**: the link is read as the item it names and the registry's small render draws it, so this component owns only the card — its timing, its place against the window, its dismissal and `open here` — and knows no kind of its own. A kind with no small render previews nothing. One line is the card's own: a citation of a result loom's reading of the paper lacks (`data-unmatched`) says so in a problem's colour, above what the card shows, or alone where it shows nothing.
 	// The timing is the author's site generator's: 300ms before showing, so crossing a paragraph of links does not flicker; 200ms of grace to move into the card, which stays while the pointer is inside it; Escape, a press elsewhere or a scroll outside the card dismisses it. There is no preview on a device that cannot hover.
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
@@ -16,6 +16,8 @@
 
 	// raw, so the identity check after an await compares the object that was hovered rather than a proxy of it
 	let target = $state.raw<Item | null>(null);
+	/** The hovered citation's own line, that loom's reading of its paper lacks the result it names; drawn above the card where one also shows, alone where none does. */
+	let note = $state<string | null>(null);
 	let card: HTMLElement | undefined = $state();
 	let left = $state(0);
 	let top = $state(0);
@@ -62,10 +64,18 @@
 		return item;
 	}
 
+	/** What a hovered citation says of itself: that loom's reading of the paper has no result by the name it gives (`data-unmatched`), whatever its card shows. */
+	function noteOf(a: Element): string | null {
+		if (a.closest('.link-preview, [data-no-preview]')) return null;
+		const named = a.closest<HTMLElement>('span.cite[data-unmatched]')?.dataset.unmatched;
+		return named ? `loom's reading of this paper has no ${named}` : null;
+	}
+
 	function hide() {
 		clearTimeout(showTimer);
 		clearTimeout(hideTimer);
 		target = null;
+		note = null;
 		anchor = null;
 		opens = null;
 	}
@@ -102,10 +112,16 @@
 		top = y;
 	}
 
-	function show(a: Element, t: Item) {
+	function show(a: Element, t: Item | null, n: string | null) {
 		if (!m) return;
 		anchor = a;
 		target = t;
+		note = n;
+		if (!t) {
+			opens = null;
+			void place();
+			return;
+		}
 		const pane = paneOfElement(a);
 		// `open here` opens what a click would, at the same place: the link's own item where it has an href, else the one the card shows
 		const href = a.getAttribute('href');
@@ -125,26 +141,28 @@
 				clearTimeout(hideTimer);
 				return;
 			}
-			const a = el?.closest?.('a') ?? null;
+			// a citation that is no link still says what loom's reading lacks
+			const a = el?.closest?.('a') ?? el?.closest?.('span.cite[data-unmatched]') ?? null;
 			if (!a || a === pending) return;
 			if (a === anchor) {
 				clearTimeout(hideTimer);
 				return;
 			}
 			const t = hoverItem(a);
-			if (!t) return;
+			const n = noteOf(a);
+			if (!t && !n) return;
 			pending = a;
-			if (m) kinds[t.kind].prefetch?.(t, m);
+			if (t && m) kinds[t.kind].prefetch?.(t, m);
 			clearTimeout(showTimer);
 			showTimer = setTimeout(() => {
 				pending = null;
-				void show(a, t);
+				void show(a, t, n);
 			}, SHOW_MS);
 		};
 		const out = (e: MouseEvent) => {
 			const from = e.target as Element | null;
 			const to = e.relatedTarget as Node | null;
-			const fromLink = from?.closest?.('a');
+			const fromLink = from?.closest?.('a') ?? from?.closest?.('span.cite[data-unmatched]');
 			if (pending && fromLink === pending && !(to && pending.contains(to))) {
 				clearTimeout(showTimer);
 				pending = null;
@@ -188,10 +206,13 @@
 	});
 </script>
 
-{#if target && m && kind?.preview}
-	{@const Preview = kind.preview}
-	<div class="link-preview" class:bleeds={kind.bleeds} role="tooltip" bind:this={card} style="left: {left}px; top: {top}px" data-testid="link-preview">
-		{#key itemKey(target) + (target.place?.page ?? '') + (target.place?.result ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
+{#if m && (note || (target && kind?.preview))}
+	<div class="link-preview" class:bleeds={!!target && kind?.bleeds} class:only-note={!target} role="tooltip" bind:this={card} style="left: {left}px; top: {top}px" data-testid="link-preview">
+		{#if note}<p class="unmatched" data-testid="cite-unmatched">{note}</p>{/if}
+		{#if target && kind?.preview}
+			{@const Preview = kind.preview}
+			{#key itemKey(target) + (target.place?.page ?? '') + (target.place?.result ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
+		{/if}
 		{#if opens}
 			<!-- Drawn always, not revealed once the pointer is inside: a remedy most readers never find is no remedy (H6). A click opens the target in the other pane; this opens it in the link's own, or reveals it where it is already open. -->
 			<p class="opens">
@@ -210,6 +231,24 @@
 {/if}
 
 <style>
+	.unmatched {
+		margin: 0;
+		color: var(--state-incomplete);
+	}
+	/* above a card's own render, the line is set off from it */
+	.link-preview:not(.only-note) .unmatched {
+		margin: 0 0 var(--gap-tight);
+		padding: 0 0 var(--gap-hair);
+		border-bottom: 1px solid var(--rule);
+	}
+	.link-preview.bleeds .unmatched {
+		margin: 0;
+		padding: var(--gap-hair) var(--gap);
+		background: var(--leaf);
+	}
+	.link-preview.only-note {
+		min-width: 0;
+	}
 	.opens {
 		display: flex;
 		align-items: baseline;

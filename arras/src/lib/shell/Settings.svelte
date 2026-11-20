@@ -13,7 +13,6 @@
 	import Documents from './settings/Documents.svelte';
 	import Agents from './settings/Agents.svelte';
 	import Library from './settings/Library.svelte';
-	import Problems from './settings/Problems.svelte';
 	import Overleaf from './settings/Overleaf.svelte';
 	import Annotations from './settings/Annotations.svelte';
 	import { settingsAsked } from './settings/opener.svelte';
@@ -128,7 +127,6 @@
 				{:else if shown === 'annotations'}<Annotations editable={canTypes} />
 				{:else if config && shown === 'agents'}<Agents {config} editable={canSave} {canUpdate} />
 				{:else if shown === 'library'}<Library editable={canSave} />
-				{:else if config && shown === 'problems'}<Problems {config} editable={canSave} />
 				{:else if config && shown === 'overleaf'}<Overleaf {config} />
 				{/if}
 			</div>

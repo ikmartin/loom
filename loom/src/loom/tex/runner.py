@@ -44,6 +44,28 @@ def tex_env() -> dict[str, str]:
     return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS, "PAR_GLOBAL_TMPDIR": str(unpacked())}
 
 
+#: A line of the context TeX prints after every error it reports: the line it stopped at (`l.12 …`), or what it was reading instead (`<*> main.tex`, `<argument> …`).
+_CONTEXT = re.compile(
+    r"^(l\.\d+ |<(\*|insert|read [*\d]+|argument|template|recently read|to be read again|inserted text|output|every\w+|mark|write)> )"
+)
+#: How many lines after an error's own line TeX's context may begin: a LaTeX error's message runs over several.
+_CONTEXT_WITHIN = 15
+
+
+def tex_errors(text: str) -> list[str]:
+    """The errors a TeX log reports, in order: each line beginning `!` that TeX follows with its context, which it prints after every error, and pdfTeX's closing `!  ==> Fatal error occurred`; a line a document writes that only begins with `!` (`\\typeout{! …}`) is no error."""
+    lines = text.splitlines()
+    return [
+        ln
+        for i, ln in enumerate(lines)
+        if ln.startswith("!")
+        and (
+            ln.startswith("!  ==> Fatal error")
+            or any(_CONTEXT.match(x) for x in lines[i + 1 : i + 1 + _CONTEXT_WITHIN])
+        )
+    ]
+
+
 @dataclass
 class CompileResult:
     ok: bool
@@ -60,6 +82,7 @@ class CompileResult:
     fetched: list[str] = field(default_factory=list)
     needed: list[str] = field(default_factory=list)
     note: str = ""  # what loom fetched for this compile and what it still needs, for the person
+    stopped: bool = False  # ended by `stop_run` or a signal before it finished: it says nothing of the document, and left nothing in `outdir`
 
     @property
     def first_error(self) -> str:
@@ -278,7 +301,7 @@ def compile_tex(
         rounds.fetch(missing.preflight(root, tex_rel))
     res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started)
     for _ in range(missing.ROUNDS):
-        if res.ok or not fetching or res.returncode == 124:
+        if res.ok or not fetching or res.returncode == 124 or res.stopped:
             break
         log = res.log.read_text(encoding="utf-8", errors="replace") if res.log is not None else ""
         if not rounds.fetch(missing.from_log(log, res.stdout)):
@@ -299,7 +322,7 @@ def _compile_once(
 ) -> CompileResult:
     """One latexmk run of `tex_rel` into `outdir`.
 
-    latexmk reads no rc file (`-norc`): one in a quilt is a Perl program, and one at home may turn on shell escape. The run writes into a scratch directory beside `outdir`, seeded with `outdir`'s files so latexmk still runs only the passes it needs, and its output replaces `outdir`'s only when it made a PDF: a failed run leaves the last good PDF and aux in place, and only its log is kept. The run is a process group of its own, killed whole on timeout or by `stop_run` on the process `started` is handed.
+    latexmk reads no rc file (`-norc`): one in a quilt is a Perl program, and one at home may turn on shell escape. The run writes into a scratch directory beside `outdir`, seeded with `outdir`'s files so latexmk still runs only the passes it needs, and its output replaces `outdir`'s only when it made a PDF: a failed run leaves the last good PDF and aux in place, and only its log is kept. The run is a process group of its own, killed whole on timeout or by `stop_run` on the process `started` is handed; a run that times out, is stopped or dies of a signal keeps nothing, so the last whole compile's log stays.
     """
     engine = normalise_engine(engine)
     exe = which_latexmk()
@@ -339,6 +362,11 @@ def _compile_once(
             stop_run(proc)
             proc.communicate()
             return CompileResult(False, engine, outdir, 124, errors=[f"latexmk timed out after {timeout}s"])
+        if proc.returncode < 0 or getattr(proc, "loom_stopped", False):
+            # cut short, its log is part of a run: what the last whole compile left stays
+            return CompileResult(
+                False, engine, outdir, proc.returncode, out + err, ["the compile was stopped"], stopped=True
+            )
         made_one = any((run / n).is_file() for n in made)
         for f in sorted(run.rglob("*")) if made_one else [run / f"{stem}.log"]:
             if f.is_file():
@@ -352,7 +380,7 @@ def _compile_once(
     warnings: list[str] = []
     if log.exists():
         text = log.read_text(encoding="utf-8", errors="replace")
-        errors = re.findall(r"^!.*$", text, re.M)
+        errors = tex_errors(text)
         warnings = re.findall(r"^(?:LaTeX|Package \w+|Class \w+) Warning: .*$", text, re.M)
     pdf = outdir / f"{stem}.pdf"
     aux = outdir / f"{stem}.aux"
@@ -372,7 +400,8 @@ def _compile_once(
 
 
 def stop_run(proc: subprocess.Popen[str]) -> None:
-    """End a compile `compile_tex` started, with every program latexmk ran: TERM to its process group, then KILL to what is left after two seconds."""
+    """End a compile `compile_tex` started, with every program latexmk ran: TERM to its process group, then KILL to what is left after two seconds. The run is marked, so it moves nothing into its compile folder, whatever latexmk exits with."""
+    setattr(proc, "loom_stopped", True)  # noqa: B010 -- a mark on the process object, read where the run ends
     try:
         os.killpg(proc.pid, signal.SIGTERM)
     except (ProcessLookupError, PermissionError):

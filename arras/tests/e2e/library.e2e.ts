@@ -173,8 +173,10 @@ test.describe('the ledger', () => {
 		await expect(page.getByTestId('digest-Kre99')).toHaveText('2');
 		await expect(page.getByTestId('cited-Kre99')).toHaveText(/^\d+$/);
 		await expect(page.getByTestId('cited-Man12')).toHaveText('not cited');
+		// a citation of a result the digest lacks is loom's reading of the paper, an agent's to look into: Problems never shows it
 		await page.goto('/review/problems');
-		await expect(page.getByTestId('problems-yours').getByText('names no result in the digest of Kre99').first()).toBeVisible();
+		await expect(page.getByTestId('problems-yours').getByTestId('problem').first()).toBeVisible();
+		await expect(page.getByText('names no result in the digest of Kre99')).toHaveCount(0);
 	});
 
 	test('the ledger links each work out by its identifier', async ({ page }) => {

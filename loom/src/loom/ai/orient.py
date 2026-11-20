@@ -217,8 +217,9 @@ def live_text(result: ScanResult, records: Records, run: Path | None, session_id
         f"- protected, which no agent writes: {', '.join(f'`{p}`' for p in always_protected(cfg))}; and what `[agents] deny` names: {deny}"
     )
     from loom.cli.diagnostics import tally
+    from loom.render.compiles import compile_problems
 
-    lines.append(f"- lint: {tally(result.lint, result)}; run `loom lint` for the list")
+    lines.append(f"- lint: {tally(result.lint + compile_problems(result), result)}; run `loom lint` for the list")
     und = payload["undigested"]
     lines.append("- undigested citekeys: " + (", ".join(und) if und else "none"))
     from loom.sessions import active

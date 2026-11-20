@@ -1,2 +1,2 @@
-error loom:unattached-proof
-warning loom:missing-proof
+warning loom:missing-proof model
+warning loom:unattached-proof model

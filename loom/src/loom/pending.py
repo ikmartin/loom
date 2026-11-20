@@ -154,7 +154,7 @@ _TEXTS: dict[tuple[str, str], tuple[Any, int, Any]] = {}
 
 
 def look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, str | None]] | None:
-    """`who`'s look as texts, `(look, now)` by path, for the files that changed since it; None before a first look, and when the quilt does not track edits (`[review] track_edits`). Read once for each scan and each state of the look."""
+    """`who`'s look as texts, `(look, now)` by path, for the files that changed since it; None before a first look, and when the quilt does not track edits (`[review] track_edits`). A file the scan read is its text in the scan, not on disk now. Read once for each scan and each state of the look."""
     from loom.looks import look_path
 
     if not result.quilt.config.track_edits:
@@ -183,6 +183,11 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     if look is None:
         return None
     current = open_texts(quilt)
+    # a file the scan read is as the scan read it: one saved since is the next build's, so a change is never cut from one reading of a file and drawn against another
+    for rel, src in result.files.items():
+        text = current.get(rel)
+        if text is not None and text != src.text and "\r" not in text and src.encoding == "utf-8":
+            current[rel] = src.text
     then: dict[str, str] = {}
     now: dict[str, str | None] = {}
     # a look taken before LaTeX's auxiliary files were left out of it may still hold them
@@ -1359,18 +1364,16 @@ def keep_accepted(result: ScanResult, who: str, keys: list[str]) -> list[str]:
 
 
 def patch_of(result: ScanResult, change: Pending, who: str | None = None) -> str:
-    """The change as a unified diff of its file against the quilt root: an in-place change from the file with its old words back, a suggested edit from the file now."""
+    """The change as a unified diff of its file against the quilt root: an in-place change from the text it was cut from with its old words back, a suggested edit from the file now."""
     from loom.records.edits import Placed, compose, patch
     from loom.reshape.ids import unified_diff
 
-    root = result.quilt.root
     if change.kind == "suggested":
         if change.edit is None:
             return ""
         placed = next((pl for e, pl in compose(result, [change.edit]) if isinstance(pl, Placed)), None)
         return patch(result, placed) if placed is not None else ""
     texts = look_texts(result, reviewer(result) if who is None else who)
-    then = texts[0].get(change.path, "") if texts else ""
-    now = (root / change.path).read_text(encoding="utf-8") if (root / change.path).is_file() else ""
+    then, now = (texts[0].get(change.path, ""), texts[1].get(change.path) or "") if texts else ("", "")
     back = now[: change.span[0]] + then[change.was[0] : change.was[1]] + now[change.span[1] :]
     return unified_diff(back, now, change.path)
