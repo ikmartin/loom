@@ -21,27 +21,85 @@ def _linted(q: Path) -> list[dict]:  # type: ignore[type-arg]
     return [d for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] in CODES]
 
 
-#: Each fault, the line that writes it, the code and words lint reports it with, and the same link written correctly.
+#: Each fault, the line that writes it, the code and class and words lint reports it with, and the same link written correctly.
 FAULTS = {
-    "a missing file": ("[the next lesson](lesson-3.md)", "loom:link-target-missing", "course/lesson-3.md does not exist", "[the next lesson](lesson-2.md)"),
-    "a missing anchor": ("[part two](lesson-2.md#part-3)", "loom:link-place-missing", "course/lesson-2.md has no heading part-3", "[part two](lesson-2.md#part-two)"),
-    "an unknown cited work": ("[the book](cited:work:deadbeef?page=4)", "loom:link-work-unknown", "no entry in the bibliography states work:deadbeef", "[the book](cited:doi:10.4171/demo/14-1?page=4)"),
+    "a missing file": ("[the next lesson](lesson-3.md)", "loom:link-target-missing", "latex", "course/lesson-3.md does not exist", "[the next lesson](lesson-2.md)"),
+    "a missing anchor": ("[part two](lesson-2.md#part-3)", "loom:link-place-missing", "latex", "course/lesson-2.md has no heading part-3", "[part two](lesson-2.md#part-two)"),
+    "an unknown cited work": ("[the book](cited:work:deadbeef?page=4)", "loom:link-work-unknown", "model", "no entry in the bibliography states work:deadbeef", "[the book](cited:doi:10.4171/demo/14-1?page=4)"),
 }  # fmt: skip
 
 
 @pytest.mark.parametrize("fault", sorted(FAULTS))
 def test_a_link_that_goes_nowhere_is_reported_on_the_line_that_wrote_it(tmp_path: Path, fault: str) -> None:
     q = demo(tmp_path)
-    wrong, code, words, right = FAULTS[fault]
+    wrong, code, cls, words, right = FAULTS[fault]
     (q / "course").mkdir()
     (q / "course" / "lesson-2.md").write_text(LESSON.format(link="Nothing linked."), encoding="utf-8")
     (q / "course" / "lesson-1.md").write_text(LESSON.format(link=wrong), encoding="utf-8")
     (found,) = _linted(q)
-    assert (found["code"], found["class"], found["severity"]) == (code, "latex", "warning")
+    assert (found["code"], found["class"], found["severity"]) == (code, cls, "warning")
     assert found["locations"] == [{"file": "course/lesson-1.md", "line": 7}] and words in found["message"], found
     assert found["owner"] == "person"
     (q / "course" / "lesson-1.md").write_text(LESSON.format(link=right), encoding="utf-8")
     assert _linted(q) == []
+
+
+def test_a_person_is_shown_a_missing_file_or_place_and_an_agent_a_work_loom_renamed() -> None:
+    """A file or a heading that is not there is something a person sees in their own text and puts right by hand, so its class is `latex`, which Problems shows; a `cited:work:` id that moved is loom's naming, mended by an agent with `loom link`, so it is `model`."""
+    from loom.scan.diagnostics import registered
+
+    assert [(c, registered(c).cls) for c in CODES] == [  # type: ignore[union-attr]
+        ("loom:link-target-missing", "latex"),
+        ("loom:link-place-missing", "latex"),
+        ("loom:link-work-unknown", "model"),
+    ]
+
+
+#: What a person reads on Problems for each kind of link that goes nowhere, after "a link goes nowhere: ": what is not there, in the file's terms, and never a command or loom's rule for writing a link.
+AS_SEEN = [
+    ("a relative path", "[t](lesson-9.md)", "course/lesson-9.md does not exist"),
+    ("a heading of its own", "[t](#nope)", "course/case-01.md has no heading nope"),
+    ("a relative path to a heading", "[t](lesson-2.md#nope)", "course/lesson-2.md has no heading nope"),
+    ("a quilt: link to a file", "[t](quilt:course/lesson-9.md)", "course/lesson-9.md does not exist"),
+    ("a quilt: link to a heading", "[t](quilt:course/lesson-2.md#nope)", "course/lesson-2.md has no heading nope"),
+    ("a quilt: link to a key", "[](quilt:dm-9999)", "nothing in the quilt is named dm-9999"),
+    ("a quilt: link to a key in a result", "[](quilt:dm-0003#dm-9999)", "nothing in the quilt is named dm-9999"),
+    ("a quilt: link to a place in a key with a dot", "[](quilt:Calloway14-prop-3.2#nope)", "nothing in the quilt is named nope"),
+    ("an image", "![f](plot.png)", "course/plot.png does not exist"),
+    ("an href in raw HTML", '<a href="lesson-2.md#nope">t</a>', "course/lesson-2.md has no heading nope"),
+    ("a src in raw HTML", '<img src="plot.png">', "course/plot.png does not exist"),
+    ("a hidden file", "[t](../.hidden.md)", ".hidden.md is hidden from the viewer"),
+    ("a folder", "[t](sub)", "course/sub is a folder, which the viewer does not open"),
+    ("a path out of the quilt", "[t](../../outside.md)", "../../outside.md leads out of the quilt"),
+    ("a LaTeX file by its path", "[t](../drafting/nodes/dm-0001.tex)", "drafting/nodes/dm-0001.tex is a LaTeX file, which the viewer does not open by its path"),
+    ("a quilt: link to a LaTeX file", "[t](quilt:drafting/nodes/dm-0001.tex)", "drafting/nodes/dm-0001.tex is a LaTeX file, which the viewer does not open by its path"),
+    ("a line past a text file's end", "[t](notes.txt#L9)", "course/notes.txt has 2 lines"),
+    ("a place in a text file", "[t](notes.txt#top)", "course/notes.txt has no place top"),
+    ("a place in a PDF", "[t](book.pdf#p3)", "course/book.pdf has no place p3"),
+    ("a place in the research state", "[](quilt:state#goals)", "the research state has no place goals"),
+    ("a page of a cited work", "[](cited:doi:10.4171/demo/14-1?page=0)", "there is no page 0"),
+    ("a quilt: link naming nothing", "[t](quilt:#nope)", "it names nothing"),
+]  # fmt: skip
+
+
+def test_what_a_person_is_shown_says_what_is_not_there(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    course = q / "course"
+    (course / "sub").mkdir(parents=True)
+    (course / "lesson-2.md").write_text("# Lesson 2\n", encoding="utf-8")
+    (course / "notes.txt").write_text("one\ntwo", encoding="utf-8")
+    (course / "book.pdf").write_bytes(b"%PDF-1.4\n")
+    (q / ".hidden.md").write_text("hidden\n", encoding="utf-8")
+    for n, (_, link, _) in enumerate(AS_SEEN):
+        (course / f"case-{n:02d}.md").write_text(f"# Case\n\n{link}\n", encoding="utf-8")
+    shown = {d["locations"][0]["file"]: d for d in _linted(q)}
+    said = []
+    for n, (what, _, _words) in enumerate(AS_SEEN):
+        d = shown.get(f"course/case-{n:02d}.md")
+        assert d is not None and d["class"] == "latex", what
+        said.append((what, d["message"]))
+    assert said == [(what, f"a link goes nowhere: {words}") for what, _, words in AS_SEEN]
+    assert not any("loom " in m or " key" in m or "id is made" in m for _, m in said)
 
 
 def test_a_work_named_by_a_hash_of_its_details_is_said_to_change_with_them(tmp_path: Path) -> None:
@@ -173,6 +231,6 @@ def test_the_research_state_has_a_row_for_a_result_gone_since_it_was_written(tmp
     assert "sh-0009 was a result when the page was written, and is gone" in rows[0]["message"]
     edit(q / "research-state.md", "[](quilt:sh-000C)", "[](quilt:sh-9999)")
     assert sorted(d["message"].split(": ", 1)[1] for d in _linted(q)) == [
-        "no key sh-9999 in this quilt",
+        "nothing in the quilt is named sh-9999",
         "sh-0009 was a result when the page was written, and is gone",
     ]

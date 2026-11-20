@@ -675,6 +675,8 @@ def markdown_links(result: ScanResult, drawn: Drawn | None = None) -> list[Diagn
                     raise LinkError(f"{href}: {_unreached(root, rel, link, drawn.kinds)}")
             except LinkError as exc:
                 why = str(exc).removeprefix(f"{href}: ")
+                if exc.part != "work":
+                    why = _as_seen(root, href, why)
                 if exc.part == "work" and href.startswith("cited:work:"):
                     why += "; where a work states no identifier and was not filed from its PDF, its work: id is made from its authors, title and year, and correcting those changes it"
                 out.append(
@@ -707,13 +709,43 @@ def _unreached(root: Path, rel: str, link: Link, kinds: dict[str, str]) -> str:
         return f"{path} leads out of the quilt"
     if joined in kinds:
         return (
-            f"{joined} is not an image" if link.src else f"{joined} is a LaTeX file, linked by its document or its keys"
+            f"{joined} is not an image"
+            if link.src
+            else f"{joined} is a LaTeX file, which the viewer does not open by its path"
         )
     if (root / joined).is_dir():
         return f"{joined} is a folder, which the viewer does not open"
     if (root / joined).exists():
         return f"{joined} is hidden from the viewer"
     return f"{joined} does not exist"
+
+
+def _as_seen(root: Path, href: str, why: str) -> str:
+    """Why a link a person is shown goes nowhere, as they would say it: what is not there, never loom's rule for writing a link nor a command.
+
+    The resolver's sentences are an agent's when a link it posts is refused (`links.resolve`); this rewords the few that state a rule or name a key, and keeps the rest as they are.
+    """
+    from urllib.parse import unquote
+
+    key, _, place = href.partition(":")[2].partition("#")
+    key, place = unquote(key), unquote(place)
+    if href.startswith("cited:"):
+        page = re.search(r"[?&#]page=([^&#]*)", href)
+        return f"there is no page {unquote(page.group(1))}" if page and why.startswith("page must be") else why
+    if not href.startswith("quilt:"):
+        return why
+    if not key:
+        return "it names nothing"
+    missing = re.fullmatch(r"no key (.+) in this quilt", why)
+    if missing and missing.group(1) == key and PurePosixPath(key).suffix and not (root / key).exists():
+        return f"{key} does not exist"  # a file's path, written as a link, names no key either
+    if missing:
+        return f"nothing in the quilt is named {missing.group(1)}"
+    if key.endswith(".tex") and ("file the documents include" in why or why.startswith("a LaTeX file")):
+        return f"{key} is a LaTeX file, which the viewer does not open by its path"
+    if why.endswith("is linked whole") or why.startswith(("a place in a PDF is", "a place in a text file is")):
+        return f"{'the research state' if key == 'state' else key} has no place {place}"
+    return why
 
 
 def _written_links(result: ScanResult) -> dict[str, bool]:

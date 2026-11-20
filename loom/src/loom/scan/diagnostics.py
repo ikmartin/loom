@@ -104,10 +104,10 @@ LOOM: dict[str, Code] = {
     "loom:agent-permissions-stale": Code("warning", INTERNAL),
     # the viewer's front door: `[quilt] home` names no file the viewer shows
     "loom:home-missing": Code("warning", MODEL),
-    # a link in a shown Markdown file that its page leaves going nowhere: the person's, as a reference to nothing in a document is
+    # a link in a shown Markdown file that its page leaves going nowhere: to a file or a place that is not there, the person's to see and put right by hand, as a reference to nothing in a document is; to a work by an id loom no longer gives it, an agent's to mend with `loom link`
     "loom:link-target-missing": Code("warning", LATEX),
     "loom:link-place-missing": Code("warning", LATEX),
-    "loom:link-work-unknown": Code("warning", LATEX),
+    "loom:link-work-unknown": Code("warning", MODEL),
     # a warning and never an error, because loom cannot fetch without consent
     "loom:no-readable-copy": Code("warning", INTERNAL),
 }
