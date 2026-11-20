@@ -288,7 +288,7 @@ def shared(a: str, b: str) -> tuple[int, int]:
     return pre, suf
 
 
-def _anchored(al: list[str], bl: list[str]) -> list[tuple[int, int]]:
+def paired(al: list[str], bl: list[str]) -> list[tuple[int, int]]:
     """The lines of `al` and `bl` a diff pairs as unchanged, in order: a line that stands once in each of two stretches anchors them (the longest run of such lines in order), and the stretches between anchors are paired again the same way, after their shared first and last lines. Near linear; a run of lines alike that no unique line anchors stays unpaired, so it is never taken for another."""
     from bisect import bisect_left
     from collections import Counter
@@ -369,7 +369,7 @@ def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
         raise TooChanged
     al, bl = a[m0:ma1].splitlines(keepends=True), b[m0:mb1].splitlines(keepends=True)
     ast, bst = [m0 + s for s in _starts(al)], [m0 + s for s in _starts(bl)]
-    pairs = dict(_anchored(al, bl))
+    pairs = dict(paired(al, bl))
     first, last = bisect_right(ast, max(lo, m0)) - 1, bisect_right(ast, min(hi, ma1) - 1) - 1
     region_lines = range(max(first, 0), min(last, len(al) - 1) + 1)
     if lo >= m0 and hi <= ma1 and all(i in pairs for i in region_lines):

@@ -53,6 +53,26 @@ def test_cut_gives_each_text_back_exactly_and_merges_near_words() -> None:
     assert len(cut("a b c\n\nd e", "a X c\n\nY e")) == 2
 
 
+def test_cut_finds_each_of_a_dozen_changes_scattered_through_a_long_file() -> None:
+    """Lines the two texts share are paired before words are diffed, so a long file with changes far apart is cut into exactly those changes, each giving its text back."""
+    import time
+
+    from loom.pending import cut
+
+    block = "\\begin{{lemma}}\\label{{sy-L{0:05d}}}\nClaim number {0} holds for every widget.\n\\end{{lemma}}\n\\begin{{proof}}\nImmediate.\n\\end{{proof}}\n\n"
+    old = "".join(block.format(i) for i in range(2000))
+    new = old
+    for i in range(0, 2000, 170):
+        new = new.replace(f"Claim number {i} holds", f"Claim number {i} plainly holds", 1)
+    began = time.perf_counter()
+    got = cut(old, new)
+    assert time.perf_counter() - began < 5
+    assert len(got) == 12
+    for o0, o1, n0, n1 in got:
+        assert "plainly" in new[n0:n1] and "plainly" not in old[o0:o1]
+        assert old[:o0] + new[n0:n1] + old[o1:] != old
+
+
 def test_two_fixes_on_one_line_are_two_changes(q: Path) -> None:
     edit(q / LEMMA, "Every orbit", "Each orbit")
     edit(q / LEMMA, "the union of", "the set of")

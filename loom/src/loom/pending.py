@@ -89,19 +89,34 @@ class PendingRefused(Exception):
 def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
     """The changes between two texts, by words: `(o0, o1, n0, n1)` each, the stretch of `old` and of `new` it replaces, from the end of the last word the two share before it to the start of the first they share after it.
 
-    The diff runs over the words alone, so a change of spacing between words that stand is none. Two changes fewer than `NEAR` words apart are one, unless a blank line stands between them. Each stretch carries the space around its words, so putting one stretch in place of the other gives exactly either text.
+    The diff runs over the words alone, so a change of spacing between words that stand is none. Lines the two texts share, paired by lines that stand once in both (`writes.paired`), hold the same words, so only the words between paired lines are diffed: a long file with a few changes costs little. Two changes fewer than `NEAR` words apart are one, unless a blank line stands between them. Each stretch carries the space around its words, so putting one stretch in place of the other gives exactly either text.
     """
     import difflib
+    from bisect import bisect_left
+
+    from loom.writes import paired
 
     left = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(old)]
     right = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(new)]
-    ops = [
-        op
-        for op in difflib.SequenceMatcher(
-            None, [t[0] for t in left], [t[0] for t in right], autojunk=False
-        ).get_opcodes()
-        if op[0] != "equal"
-    ]
+    lw, rw = [t[0] for t in left], [t[0] for t in right]
+    # lines the two share, paired by lines that stand once in both, hold the same words; only the words between are compared
+    al, bl = old.splitlines(keepends=True), new.splitlines(keepends=True)
+    ast, bst = [0], [0]
+    for line in al:
+        ast.append(ast[-1] + len(line))
+    for line in bl:
+        bst.append(bst[-1] + len(line))
+    lstart, rstart = [t[1] for t in left], [t[1] for t in right]
+    ops: list[tuple[str, int, int, int, int]] = []
+    a = c = 0  # the words compared up to
+    for i, j in [*paired(al, bl), (len(al), len(bl))]:
+        a1, c1 = bisect_left(lstart, ast[i]), bisect_left(rstart, bst[j])
+        if a1 > a or c1 > c:
+            gap = difflib.SequenceMatcher(None, lw[a:a1], rw[c:c1], autojunk=False)
+            ops += [(tag, x + a, y + a, z + c, u + c) for tag, x, y, z, u in gap.get_opcodes() if tag != "equal"]
+        # the paired line's words, equal on both sides, and on past them
+        a = bisect_left(lstart, ast[min(i + 1, len(al))]) if i < len(al) else a1
+        c = bisect_left(rstart, bst[min(j + 1, len(bl))]) if j < len(bl) else c1
     groups: list[list[int]] = []
     for _tag, a, b, c, d in ops:
         if groups:
@@ -851,7 +866,9 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
                     edit=e,
                 )
             )
-    out.before = _kept_texts(result, out.changes)
+    # carrying annotations back needs the blocks' text before; only worth reading when an annotation stands on one of them
+    if _annotated(root, {p.key for p in out.changes if p.key}):
+        out.before = _kept_texts(result, out.changes)
     _say(said, keep_versions(result, files, UNDO, "Before undoing a kept edit", writer[1]))
     # stamping takes a moment: what is written replaces the bytes the plan was made from, or nothing is
     if any(w.read(f) != plans[f][0] for f in files):
@@ -1073,8 +1090,20 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:
     after = _rescan(out.result)
     for path, spans in out.spans.items():
         absorb(after, who, path, spans)
-    after = _rescan(after)
-    carry_all(after, out.before, out.changes, writer)
+    if out.before:
+        after = _rescan(after)
+        carry_all(after, out.before, out.changes, writer)
+
+
+def _annotated(root: Path, keys: set[str]) -> bool:
+    """Whether an annotation on words stands on one of the blocks `keys`: the only case in which carrying annotations has anything to carry."""
+    from loom.records.annotations import load_records
+
+    return any(
+        a.target_key in keys and a.selector is not None and not a.in_reply_to
+        for r in load_records(root)[0]
+        for a in r.annotations
+    )
 
 
 def _not_utf8(path: str) -> str:
