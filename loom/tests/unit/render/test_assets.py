@@ -62,36 +62,68 @@ def test_without_pdftocairo_dvisvgm_converts_and_without_either_it_is_an_error(
     )
 
 
-#: Each machine a figure meets, as (the converters here, whether `dvisvgm` has a Ghostscript), and whether an unconverted figure is noted passing: only where a converter here ran and failed, which it may not do again; a converter missing is a state of the machine a key names (`converters`).
+#: Each machine a figure meets, as (the converters here, the Ghostscript `dvisvgm` is given), and whether an unconverted figure is noted passing: only where a converter that can read a PDF here ran and failed, which it may not do again; a converter missing, or a `dvisvgm` with neither `mutool` nor a Ghostscript it accepts, is a state of the machine a key names (`converters`). A tool marked `-failing` exits 1; `-refusing` is `dvisvgm` 3.2's answer to a Ghostscript from 10.01 on.
 MACHINES = {
-    "a converter that works": (("pdftocairo",), True, False),
-    "no converter": ((), True, False),
-    "dvisvgm without a Ghostscript, which fails": (("dvisvgm-failing",), False, False),
-    "pdftocairo, failing": (("pdftocairo-failing",), True, True),
-    "dvisvgm with a Ghostscript, failing": (("dvisvgm-failing",), True, True),
+    "a converter that works": (("pdftocairo",), None, False),
+    "no converter": ((), None, False),
+    "dvisvgm with neither mutool nor a Ghostscript": (("dvisvgm-failing",), None, False),
+    "dvisvgm refusing its Ghostscript, no mutool": (("dvisvgm-refusing",), ("/x/libgs.dylib", 1, 2), False),
+    "dvisvgm with a Ghostscript it accepts, failing": (("dvisvgm-failing",), ("/x/libgs.dylib", 1, 2), True),
+    "dvisvgm with mutool, failing": (("dvisvgm-failing", "mutool"), None, True),
+    "pdftocairo, failing": (("pdftocairo-failing",), None, True),
 }
 
 
 @pytest.mark.parametrize("machine", sorted(MACHINES))
-def test_an_unconverted_figure_is_passing_only_when_a_converter_here_failed(
+def test_an_unconverted_figure_is_passing_only_when_a_converter_that_reads_pdf_here_failed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, machine: str
 ) -> None:
+    from loom.render import assets
     from loom.render.uses import PASSING, noting
-    from loom.tex import private
 
     (tmp_path / "cone.pdf").write_bytes(b"%PDF-1.4\n%FAKE-LOOM\nx\n")
-    failing = tmp_path / "failing"
-    failing.write_text("#!/bin/sh\nexit 1\n")
-    failing.chmod(0o755)
+    scripts = {
+        "failing": "#!/bin/sh\necho 'ERROR: something went wrong' >&2\nexit 1\n",
+        "refusing": "#!/bin/sh\necho 'ERROR: To process PDF files, either Ghostscript < 10.01.0 or mutool is required.' >&2\nexit 252\n",
+    }
+    for how, body in scripts.items():
+        (tmp_path / how).write_text(body)
+        (tmp_path / how).chmod(0o755)
     tools, ghostscript, passing = MACHINES[machine]
     real = shutil.which
-    here = {t.removesuffix("-failing"): str(failing) if t.endswith("-failing") else real(t) for t in tools}
+    here = {}
+    for t in tools:
+        tool, _, how = t.partition("-")
+        here[tool] = str(tmp_path / how) if how else (real(tool) or str(tmp_path / "failing"))
     monkeypatch.setattr(shutil, "which", lambda tool: here.get(tool))
-    monkeypatch.setattr(private, "ghostscript_available", lambda: ghostscript)
+    monkeypatch.setattr(assets, "_ghostscript", lambda: ghostscript)
     with noting() as noted:
         rel, _ = publish_graphic(tmp_path, "cone", tmp_path / "svg")
     assert (rel is not None) == (machine == "a converter that works")
     assert (PASSING in noted) == passing
+
+
+def test_the_converters_name_the_ghostscript_dvisvgm_is_given_by_its_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Ghostscript of another version is another file: the key changes when loom's, or the one `LIBGS` names, is replaced."""
+    from loom.render import assets
+    from loom.tex import private
+
+    monkeypatch.setattr(private, "ghostscript_library", lambda: None)
+    monkeypatch.delenv("LIBGS", raising=False)
+    assert assets._ghostscript() is None
+    lib = tmp_path / "libgs.dylib"
+    lib.write_bytes(b"10.06")
+    monkeypatch.setenv("LIBGS", str(lib))
+    first = assets._ghostscript()
+    assert first is not None and first[0] == str(lib)
+    lib.write_bytes(b"10.00.0")
+    assert assets._ghostscript() != first
+    shipped = tmp_path / "loom-libgs.dylib"
+    shipped.write_bytes(b"10.05")
+    monkeypatch.setattr(private, "ghostscript_library", lambda: shipped)
+    assert assets._ghostscript() is not None and assets._ghostscript()[0] == str(shipped)
 
 
 def test_a_graphic_the_quilt_does_not_hold_is_not_passing(tmp_path: Path) -> None:

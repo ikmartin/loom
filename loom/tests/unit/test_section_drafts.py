@@ -428,6 +428,8 @@ def drafted(q, path):
         "the config",
         "whether TeX4ht is here",
         "which figure converters are here",
+        "whether mutool is here",
+        "which Ghostscript dvisvgm is given",
     ],
 )
 def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt, drafting, changed, monkeypatch):
@@ -461,6 +463,15 @@ def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt
     elif changed == "the config":
         (quilt.root / "config.toml").write_text((quilt.root / "config.toml").read_text() + 'home = "README.md"\n')
         q = load_quilt(quilt.root)
+    elif changed == "whether mutool is here":
+        which = shutil.which
+        monkeypatch.setattr(
+            shutil, "which", lambda name, *a, **k: "/usr/bin/mutool" if name == "mutool" else which(name, *a, **k)
+        )
+    elif changed == "which Ghostscript dvisvgm is given":
+        from loom.render import assets
+
+        monkeypatch.setattr(assets, "_ghostscript", lambda: ("/x/libgs.dylib", 1, 2))
     else:
         gone = "make4ht" if changed == "whether TeX4ht is here" else "pdftocairo"
         which = shutil.which
@@ -470,7 +481,13 @@ def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt
     drafts._drafted.clear()
     assert again == drafted(q, a)
     # no setting changes a draft's rendering today, what TeX made of the draft is in the snippet cache, and this draft holds no figure, so none of the three changes what is published; each is read in the rendering, so it is made again
-    assert again != first or changed in ("the config", "whether TeX4ht is here", "which figure converters are here")
+    assert again != first or changed in (
+        "the config",
+        "whether TeX4ht is here",
+        "which figure converters are here",
+        "whether mutool is here",
+        "which Ghostscript dvisvgm is given",
+    )
 
 
 def test_a_section_draft_is_not_rendered_again_after_an_edit_elsewhere_or_a_note(quilt, drafting):
