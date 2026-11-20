@@ -57,8 +57,9 @@ test('an edit in the file and a suggested edit are drawn in Markup and in Final,
 		await expect(words(page, id, 'old').first()).toBeVisible();
 		await expect(words(page, id, 'new').first()).toBeVisible();
 	}
-	expect(await words(page, edit, 'old').first().evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe('line-through');
-	expect(await words(page, edit, 'new').first().evaluate((el) => getComputedStyle(el).textDecorationLine)).toBe('underline');
+	// the style is polled, and the words found again each time: a block redrawn by a manifest leaves the element found a moment ago detached, whose computed style reads empty
+	await expect(words(page, edit, 'old').first()).toHaveCSS('text-decoration-line', 'line-through');
+	await expect(words(page, edit, 'new').first()).toHaveCSS('text-decoration-line', 'underline');
 	await expect(words(page, edit, 'new').first()).toContainText('at most');
 	await pane(page, 0).getByTestId('changes-toggle').click();
 	await page.getByTestId('changes-view-final').click();
