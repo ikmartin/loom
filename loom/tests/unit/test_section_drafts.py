@@ -375,3 +375,96 @@ def test_a_gone_annotation_is_re_anchored_once_per_build_and_again_when_its_bloc
     edit(quilt, a, "Initial claim.", "Some initial claim.")
     assert all(gone + "Some initial claim." in html for html in built())
     assert (len(resolved), len(placed)) == (3, 2)
+
+
+@pytest.fixture
+def drafting(monkeypatch):
+    """An empty memo of section drafts' renderings, and a count of the renderings actually made."""
+    import loom.section_drafts as drafts
+
+    made = []
+    real = drafts._draft
+    monkeypatch.setattr(drafts, "_draft", lambda *a: made.append(1) or real(*a))
+    drafts._drafted.clear()
+    return made
+
+
+def drafted(q, path):
+    """The published fragments of the section draft at `path` and of its saved paper, after a build of `q` as it is now."""
+    from loom.paths import SITE
+    from loom.render.build import build
+
+    manifest = build(q).manifest
+    master = next(m for m in manifest["masters"] if m["path"] == path)
+    context = next(m for m in manifest["masters"] if m["path"] == master["context_document"])
+    return tuple((q.root / SITE / m["fragment"]).read_text() for m in (master, context))
+
+
+@pytest.mark.parametrize(
+    "changed", ["the draft", "its ledger entry", "a file of its saved context", "the config", "whether TeX4ht is here"]
+)
+def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt, drafting, changed, monkeypatch):
+    """A section draft is rendered in its saved context by TeX; a build renders it once for the draft's text, its ledger entry, the saved context's files, the config and whether TeX4ht is here, and again when any of them changes."""
+    import shutil
+
+    import loom.section_drafts as drafts
+    from loom.section_drafts import metadata
+
+    if changed == "its ledger entry":
+        # a second paper in the draft's directory, saved with its context
+        (quilt.root / "drafting" / "other.tex").write_text(TEXT.replace("First prose.", "Another paper's prose."))
+    a = copy(quilt)
+    first = drafted(quilt, a)
+    assert drafted(quilt, a) == first and len(drafting) == 1
+    q = quilt
+    if changed == "the draft":
+        edit(quilt, a, "First statement.", "Initial claim.")
+    elif changed == "its ledger entry":
+        # the entry alone names another of the saved papers as the draft's context; no file changes
+        read = drafts.metadata
+
+        def other(result, copy):
+            meta = read(result, copy)
+            return {**meta, "context": {**meta["context"], "source": "drafting/other.tex"}}
+
+        monkeypatch.setattr(drafts, "metadata", other)
+    elif changed == "a file of its saved context":
+        saved = quilt.root / metadata(scan(quilt), a)["context"]["path"] / DOC
+        saved.write_text(saved.read_text().replace("Second prose.", "Second prose, changed."))
+    elif changed == "the config":
+        (quilt.root / "config.toml").write_text((quilt.root / "config.toml").read_text() + 'home = "README.md"\n')
+        q = load_quilt(quilt.root)
+    else:
+        which = shutil.which
+        monkeypatch.setattr(shutil, "which", lambda name, *a, **k: None if name == "make4ht" else which(name, *a, **k))
+    again = drafted(q, a)
+    assert len(drafting) == 2
+    drafts._drafted.clear()
+    assert again == drafted(q, a)
+    # no setting changes a draft's rendering today, and the test tier's TeX makes no snippet a draft shows, so neither changes what is published; each is read in the rendering, so it is made again
+    assert again != first or changed in ("the config", "whether TeX4ht is here")
+
+
+def test_a_section_draft_is_not_rendered_again_after_an_edit_elsewhere_or_a_note(quilt, drafting):
+    """A word changed in the paper outside the draft's saved context, or a note written on the draft, renders nothing of the draft again; the note's mark is placed on what was rendered."""
+    from tests.helpers import ok
+
+    a = copy(quilt)
+    first = drafted(quilt, a)
+    edit(quilt, DOC, "Second prose.", "Second prose, changed.")
+    assert drafted(quilt, a) == first
+    ok(
+        "annotate",
+        "zk-0001-ai-01",
+        "Which?",
+        "--quote",
+        "First statement",
+        "--type",
+        "note",
+        "--as",
+        "A. Author",
+        cwd=quilt.root,
+    )
+    marked = drafted(quilt, a)
+    assert 'class="annotation"' in marked[0] and 'class="annotation"' not in first[0]
+    assert len(drafting) == 1
