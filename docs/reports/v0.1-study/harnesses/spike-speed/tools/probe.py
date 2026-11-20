@@ -123,13 +123,14 @@ def stage_summary() -> list[tuple[str, float, float]]:
     return out, last
 
 
-PIN_CODE = "7bb8d97985fec8c8"
-PIN_SNIP = "0f39562ac7a34c268c68745d15eed12c7353021d3978939a20c90fc10a053429"
+#: The spike's pins were its unmodified code's values (`7bb8d97985fec8c8` and a snippet fingerprint); today each comes from the environment, and nothing is pinned without them.
+PIN_CODE = os.environ.get("PIN_CODE", "")
+PIN_SNIP = os.environ.get("PIN_SNIP", "")
 
 
 def pin_code() -> None:
-    """Spike harness: hold the rendering-code fingerprints at the unmodified code's values, so a code change does not re-render every cached fragment, snippet and preview (measures steady state, not the one-off invalidation)."""
-    if os.environ.get("NO_PIN"):
+    """Spike harness: hold the rendering-code fingerprints at the values `PIN_CODE` and `PIN_SNIP` give (the unmodified code's), so a code change does not re-render every cached fragment, snippet and preview (measures steady state, not the one-off invalidation)."""
+    if os.environ.get("NO_PIN") or not PIN_CODE:
         return
     import loom.render.build as B
     import loom.render.keys as K
@@ -138,7 +139,8 @@ def pin_code() -> None:
     f = lambda: PIN_CODE  # noqa: E731
     K.code_hash = f
     B.code_hash = f
-    SN._CODE[:] = [PIN_SNIP]
+    if PIN_SNIP:
+        SN._CODE[:] = [PIN_SNIP]
 
 
 def cache_git() -> None:
