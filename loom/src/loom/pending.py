@@ -10,6 +10,8 @@ from __future__ import annotations
 import hashlib
 import re
 import secrets
+from bisect import bisect_left
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -140,7 +142,7 @@ class _Inexact(Exception):
 def _matching(a: list[str], b: list[str]) -> list[tuple[int, int, int]]:
     """`difflib.SequenceMatcher(None, a, b, autojunk=False)`'s matching blocks, without its closing one, as triples in order.
 
-    Its own recursion, each step's longest shared run found by difflib where that is cheap and by `_longest_by_window` where its search would look at every recurrence of a frequent word, the cost that grows with the square of how often a word recurs. Both give the same run, so the blocks are difflib's; raises `_Inexact` where a hash collides.
+    Its own recursion, each step's longest shared run found by difflib where that is cheap and by `_longest_by_window` where its search would look at every recurrence of a frequent word, the cost that grows with the square of how often a word recurs; and after each, the runs as long that difflib would take one step at a time on what follows (`_runs_after`), the cost of an edit of one shape on every line, found in one pass. Each gives difflib's run, so the blocks are difflib's; raises `_Inexact` where a hash collides.
     """
     import difflib
     from collections import Counter
@@ -160,14 +162,65 @@ def _matching(a: list[str], b: list[str]) -> list[tuple[int, int, int]]:
             i, j, k = sm.find_longest_match(alo, ahi, blo, bhi)
         else:
             i, j, k = _longest_by_window(na, nb, alo, ahi, blo, bhi)
-        if k:
-            blocks.append((i, j, k))
-            if alo < i and blo < j:
-                queue.append((alo, i, blo, j))
-            if i + k < ahi and j + k < bhi:
-                queue.append((i + k, ahi, j + k, bhi))
+        if not k:
+            continue
+        blocks.append((i, j, k))
+        if alo < i and blo < j:
+            queue.append((alo, i, blo, j))
+        # the next steps difflib takes on what follows, while it holds a run as long, each the earliest after the one before: found in one pass
+        at_a, at_b = i + k, j + k
+        for x, y in _runs_after(na, nb, at_a, ahi, at_b, bhi, k):
+            blocks.append((x, y, k))
+            if at_a < x and at_b < y:
+                queue.append((at_a, x, at_b, y))
+            at_a, at_b = x + k, y + k
+        if at_a < ahi and at_b < bhi:
+            queue.append((at_a, ahi, at_b, bhi))
     blocks.sort()
     return blocks
+
+
+def _runs_after(
+    a: list[int], b: list[int], alo: int, ahi: int, blo: int, bhi: int, k: int
+) -> Iterator[tuple[int, int]]:
+    """The runs of `k` words, `k` the longest the range before held, that difflib takes one after another on what follows: each the earliest in `a`, then in `b`, of those after the one before, while there is one.
+
+    A range left after a longest run holds none longer, so while it holds one as long, that is the one difflib takes next; and none as long lies between two that follow each other, so the stretch between them is searched as any range is. Raises `_Inexact` where a hash collides.
+    """
+    if k > ahi - alo or k > bhi - blo:
+        return
+    mod, base = _HASH_MOD, _HASH_BASE
+    top = pow(base, k - 1, mod)
+    places: dict[int, list[int]] = {}
+    h = 0
+    for x in b[blo : blo + k]:
+        h = (h * base + x) % mod
+    places[h] = [blo]
+    for p in range(blo + k, bhi):
+        h = ((h - b[p - k] * top) * base + b[p]) % mod
+        places.setdefault(h, []).append(p - k + 1)
+    at_b = blo
+    x = alo
+    while x + k <= ahi:
+        h = 0
+        for w in a[x : x + k]:
+            h = (h * base + w) % mod
+        while True:
+            ys = places.get(h)
+            if ys is not None:
+                q = bisect_left(ys, at_b)
+                if q < len(ys):
+                    y = ys[q]
+                    if a[x : x + k] != b[y : y + k]:
+                        raise _Inexact
+                    yield x, y
+                    at_b = y + k
+                    x += k
+                    break
+            if x + k >= ahi:
+                return
+            h = ((h - a[x] * top) * base + a[x + k]) % mod
+            x += 1
 
 
 def _longest_by_window(a: list[int], b: list[int], alo: int, ahi: int, blo: int, bhi: int) -> tuple[int, int, int]:

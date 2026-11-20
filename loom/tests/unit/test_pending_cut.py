@@ -283,3 +283,88 @@ def test_the_window_hash_is_drawn_again_in_every_process() -> None:
         for _ in range(2)
     }
     assert len(said) == 2 and all(int(b) >= 1 << 32 for b in said)
+
+
+def _one_shape(r: random.Random) -> tuple[str, str]:
+    """An edit of one shape on every line: a word renamed on lines alike, a table's rows computed again, words alternating, or lines alike with some words changed."""
+    n = r.randint(2, 30)
+    kind = r.choice(["rename", "table", "alternating", "alike"])
+    if kind == "rename":
+        old = "".join(f"a{i % r.randint(1, 5)} \\foo b{i % 3}\n" for i in range(n))
+        return old, "".join(
+            line.replace("\\foo", "\\bar") if r.random() < 0.9 else line for line in old.splitlines(keepends=True)
+        )
+    if kind == "table":
+        old = "".join(f"{i}.1 & {i}.2 & {i}.3 \\\\ \\hline\n" for i in range(n))
+        return old, "".join(f"{i}.7 & {i}.8 & {i}.9 \\\\ \\hline\n" for i in range(n))
+    if kind == "alternating":
+        return "".join("u\n" if i % 2 == 0 else "w\n" for i in range(n)), "".join(
+            "w\n" if i % 2 == 0 else "z\n" for i in range(n)
+        )
+    words = r.sample(["the", "map", "is", "$x$", "&", "\\\\", "a", "widget"], r.randint(2, 4))
+    line = " ".join(r.choice(words) for _ in range(r.randint(1, 5))) + "\n"
+    old = line * n
+    return old, "".join(
+        " ".join(w if r.random() < 0.85 else r.choice([*words, "x"]) for w in ln.split()) + "\n"
+        for ln in old.splitlines()
+    )
+
+
+def test_the_listing_is_todays_on_edits_of_one_shape_on_every_line(by_window: None) -> None:
+    """Where every longest run is as long as the last, difflib takes them one step at a time and the listing takes them in one pass (`_runs_after`): the same changes and ids."""
+    r = random.Random(20261122)
+    pairs = []
+    for n in range(500):
+        old, new = _one_shape(r)
+        pairs += [(f"shape-{n}.tex", old, new), (f"shape-{n}.tex", new, old)]
+    assert _differ(pairs) == 0
+
+
+def test_a_table_with_every_row_changed_is_listed_in_one_pass_per_run(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A table computed again holds `\\\\ \\hline` on every row and nothing else in common: each run after the first is taken by `_runs_after`, not searched for again, and the listing is today's."""
+    old = "".join(f"{i}.1 & {i}.2 & {i}.3 \\\\ \\hline\n" for i in range(120))
+    new = "".join(f"{i}.7 & {i}.8 & {i}.9 \\\\ \\hline\n" for i in range(120))
+    taken: list[int] = []
+    after = pending._runs_after
+    monkeypatch.setattr(pending, "_runs_after", lambda *a: (taken.append(1) or x for x in after(*a)))
+    assert pending.cut(old, new) == pending._cut_by_difflib(old, new)
+    assert len(taken) >= 119
+
+
+def _merged(blocks: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
+    """Blocks with each run that follows another directly joined to it, as difflib joins them."""
+    out: list[tuple[int, int, int]] = []
+    for i, j, k in blocks:
+        if out and out[-1][0] + out[-1][2] == i and out[-1][1] + out[-1][2] == j:
+            out[-1] = (out[-1][0], out[-1][1], out[-1][2] + k)
+        elif k:
+            out.append((i, j, k))
+    return out
+
+
+def test_the_blocks_are_difflibs_on_lists_of_few_words(by_window: None) -> None:
+    """`_matching`'s blocks, not only the listing made of them, are difflib's: on word lists over one to ten words, edited, and on edits of one shape on every line, where `_runs_after` takes run after run."""
+    import difflib
+
+    r = random.Random(20261123)
+    differ = 0
+    for n in range(3000):
+        if n % 2:
+            old, new = _one_shape(r)
+            a, b = old.split(), new.split()
+        else:
+            alphabet = [f"w{x}" for x in range(r.choice([1, 2, 3, 5, 10]))]
+            a = [r.choice(alphabet) for _ in range(r.randint(0, r.choice([10, 60, 200])))]
+            b = list(a)
+            for _ in range(r.randint(0, 8)):
+                at = r.randint(0, len(b))
+                b[at:at] = [r.choice(alphabet)] if r.random() < 0.5 or not b else []
+                if b and r.random() < 0.5:
+                    del b[r.randrange(len(b))]
+        if r.random() < 0.5:
+            a, b = b, a
+        want = _merged(
+            [(m.a, m.b, m.size) for m in difflib.SequenceMatcher(None, a, b, autojunk=False).get_matching_blocks()]
+        )
+        differ += _merged(pending._matching(a, b)) != want
+    assert differ == 0
