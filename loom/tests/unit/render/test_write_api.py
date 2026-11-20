@@ -126,6 +126,9 @@ def test_a_write_without_the_token_is_refused_over_the_wire(session) -> None:  #
     # the token is served where the viewer reads it, and the same well-formed write carrying it is written
     _, _, discovery = get(s.url + "_api")
     assert json.loads(discovery)["token"]
+    # and which quilt it is, a digest of where it lies, never the place: what the viewer keeps per quilt is keyed by it
+    served = json.loads(discovery)["quilt"]
+    assert len(served) == 16 and str(d) not in discovery.decode() and str(d.resolve()) not in discovery.decode()
     status, said = post(s.url + "_api/annotate", body)
     assert status == 200, said
     assert len([e for e in log(d) if e.get("body") == "from somewhere else"]) == 1
