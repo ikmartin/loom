@@ -5,9 +5,11 @@ The writer emits every `[[accept]]` block in one fixed shape so git merges of co
 
 from __future__ import annotations
 
+import json
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from loom.paths import LEDGER
 
@@ -27,6 +29,8 @@ class AcceptRow:
     direct: dict[str, str] = field(default_factory=dict)  # direct statement dependencies at acceptance
 
     dependency_version: int = 0
+    #: What told the row's block from others when it was accepted (`records.locate.context_of`), written as one JSON string; {} in a row written before it was recorded.
+    context: dict[str, Any] = field(default_factory=dict)
 
     def to_toml(self) -> str:
         lines = [
@@ -42,6 +46,8 @@ class AcceptRow:
             lines.append(f"dependency_version = {self.dependency_version}")
         if self.basis:
             lines.append(f"basis = {_q(self.basis)}")
+        if self.context:
+            lines.append(f"context = {_q(json.dumps(self.context, sort_keys=True, separators=(',', ':')))}")
         lines.append("[accept.closure]")
         for k, v in self.closure.items():
             lines.append(f"{_q(k)} = {_q(v)}")
@@ -81,9 +87,19 @@ def read_ledger(root: Path) -> list[AcceptRow]:
                 basis=str(r.get("basis", "")),
                 direct={str(k): str(v) for k, v in dict(r.get("direct", {})).items()},
                 dependency_version=int(r.get("dependency_version", 0)),
+                context=_context(r.get("context")),
             )
         )
     return rows
+
+
+def _context(raw: object) -> dict[str, Any]:
+    """A row's `context` read back; {} for none, or for one that is not a JSON object, which then places the row as one written before it was recorded."""
+    try:
+        found = json.loads(raw) if isinstance(raw, str) and raw else {}
+    except ValueError:
+        return {}
+    return found if isinstance(found, dict) else {}
 
 
 def append_rows(root: Path, rows: list[AcceptRow]) -> None:

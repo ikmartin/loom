@@ -689,3 +689,65 @@ def test_a_statement_changed_in_kind_keeps_its_note_from_a_copy_that_takes_its_k
     a = note(out, "drafting/s1.tex#proposition:1", "cite Euler's formula")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Xr + B + C + X + D})
     assert shown(out, a) == Xr.strip()
+
+
+def accept(out: Path, keys: list[str]) -> None:
+    from loom.cli.review import write_acceptance
+
+    write_acceptance(scanned(out), keys, "Tester")
+
+
+def accepted(out: Path) -> dict[str, str]:
+    """Each block that reads accepted now, by its text, with the text its row was given on."""
+    from loom.records.store import Records
+
+    result = scanned(out)
+    states = Records(out, reviewer="Tester").key_states(result, observe=False)
+    return {
+        str(text_of(out, k)): str(text_of(out, s.row.key) if s.row.key in result.nodes else s.row.key)
+        for k, s in states.items()
+        if s.row is not None
+    }
+
+
+def test_an_acceptance_on_a_deleted_block_goes_to_no_copy_that_takes_its_key(out: Path) -> None:
+    """C-6, `ledger_twin_inherits`: a lemma stated twice and only the first accepted; the first deleted, the restatement takes its key and reads accepted by nobody."""
+    L = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    R = env("remark", "This is used in Section 4.")
+    S = env("remark", "We now turn to colourings.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": L + R + S + L})
+    accept(out, ["drafting/s1.tex#lemma:1"])
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": R + S + L})
+    assert accepted(out) == {}
+
+
+def test_an_ids_swapped_proofs_carry_no_acceptance_to_each_other(out: Path) -> None:
+    """C-6, `id_proofs` (b): both proofs of tq-0007 accepted, then swapped; neither reads accepted with the other's row."""
+    from loom.records.locate import block_hash
+    from loom.records.store import Records
+
+    T = env("theorem", "Every planar graph is five colourable.", "tq-0007")
+    P1 = proof("Induct on vertices: a vertex of degree at most five exists, remove it, colour the rest, and recolour along a Kempe chain.")  # fmt: skip
+    P2 = proof("Use the discharging method with charges six minus degree on every vertex, and reduce to unavoidable configurations.")  # fmt: skip
+    X = env("remark", "Four colours suffice, but that is much harder.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": T + P1 + P2 + X})
+    accept(out, ["tq-0007/proof", "tq-0007/proof/2"])
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": T + P2 + P1 + X})
+    result = scanned(out)
+    states = Records(out, reviewer="Tester").key_states(result, observe=False)
+    for key in ("tq-0007/proof", "tq-0007/proof/2"):
+        row = states[key].row
+        assert row is None or row.text == block_hash(result, key)
+
+
+def test_an_acceptance_follows_its_statement_when_its_label_moves_to_a_block_put_in_beside_it(out: Path) -> None:
+    """C-6, the generator's label-move: the accepted lemma's id given to a lemma put in after it; the row stays with the text it was given on, and the newcomer reads accepted by nobody."""
+    A = env("remark", "We fix notation.")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.", "tq-0009")
+    Xb = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    N = env("lemma", "Every finite graph with minimum degree three contains a cycle of length divisible by three.", "tq-0009")  # fmt: skip
+    B = env("remark", "The bound is sharp.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B})
+    accept(out, ["tq-0009"])
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Xb + N + B})
+    assert list(accepted(out)) == [Xb.strip()]

@@ -274,13 +274,13 @@ class Records:
         return states
 
     def placed(self, result: ScanResult) -> dict[str, AcceptRow]:
-        """The reviewer's latest rows by the key of the block each is on now: a row is a claim about exact text, so one on a key named by place goes with that text as a record does (`records.locate.follow`), and is on no block where nothing says which; one on a stable key stays on it.
+        """The reviewer's latest rows by the key of the block each is on now: a row is a claim about exact text, so it goes with that text as a record does (`records.locate.follow`, with the row's `context`), and is on no block where nothing says which; a row written before `context` was recorded stays on a stable key's block.
 
         Two rows that land on one block leave it to the one whose text it holds, or whose key it is; neither, and the block has none.
         """
         claims: dict[str, list[AcceptRow]] = {}
         for key, row in self.latest.items():
-            found = follow(result, key, result.nodes.get(key), row.text)
+            found = follow(result, key, result.nodes.get(key), row.text, context=row.context)
             if found is not None:
                 claims.setdefault(found.key, []).append(row)
         out: dict[str, AcceptRow] = {}

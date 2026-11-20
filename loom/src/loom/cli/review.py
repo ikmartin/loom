@@ -24,6 +24,7 @@ from loom.records.annotations import (
 )
 from loom.records.ids import ANNOTATION
 from loom.records.ledger import AcceptRow, append_rows
+from loom.records.locate import context_of
 from loom.records.log import append, append_new
 from loom.records.marks import MARKS
 from loom.records.selectors import find_quote, make_selector
@@ -142,6 +143,7 @@ def write_acceptance(
                 basis=result.nodes[key].basis if result.nodes[key].kind == "environment" else "",
                 dependency_version=1,
                 direct={dep: closure[dep] for dep in Records.direct_keys(result, key) if dep in closure},
+                context=context_of(result, result.nodes[key]),
             )
         )
     if not dry_run:
