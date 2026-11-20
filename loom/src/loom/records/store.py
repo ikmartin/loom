@@ -21,7 +21,7 @@ from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, EDIT_LOG, LINKS, REVIEW
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
-from loom.records.locate import follow
+from loom.records.locate import block_hash, follow
 from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used
@@ -241,6 +241,24 @@ class Records:
         self._previous_key_matches(result, states, current_hashes)
         return states
 
+    def placed(self, result: ScanResult) -> dict[str, AcceptRow]:
+        """The reviewer's latest rows by the key of the block each is on now: a row is a claim about exact text, so one on a key named by place goes with that text as a record does (`records.locate.follow`), and is on no block where nothing says which; one on a stable key stays on it.
+
+        Two rows that land on one block leave it to the one whose text it holds, or whose key it is; neither, and the block has none.
+        """
+        claims: dict[str, list[AcceptRow]] = {}
+        for key, row in self.latest.items():
+            found = follow(result, key, result.nodes.get(key), row.text)
+            if found is not None:
+                claims.setdefault(found.key, []).append(row)
+        out: dict[str, AcceptRow] = {}
+        for key, rows in claims.items():
+            if len(rows) > 1:
+                rows = [r for r in rows if r.text == block_hash(result, key)] or [r for r in rows if r.key == key]
+            if len(rows) == 1:
+                out[key] = rows[0]
+        return out
+
     def _acceptance_states(self, result: ScanResult) -> tuple[dict[str, KeyState], dict[str, str]]:
         """The states and their causes, from the ledger and the scan; and the current hash of every key, which the review facts compare against."""
         states: dict[str, KeyState] = {}
@@ -249,10 +267,11 @@ class Records:
             self._hash_cache = (result, {k: key_hash(result, k) for k, n in result.nodes.items() if n.kind in kinds})
         current_hashes = dict(self._hash_cache[1])
         current_hashes.update({k: hash_text(t) for k, t in result.dependencies.texts.items() if t is not None})
+        placed = self.placed(result)
         for key, n in result.nodes.items():
             if n.kind not in kinds:
                 continue
-            row = (self.shared_latest if n.external else self.latest).get(key)
+            row = (self.shared_latest if n.external else placed).get(key)
             ks = KeyState(key=key, state="draft", row=row)
             if n.kind == "section":
                 # A section is a container, not a claim: no state, and `loom accept` refuses one. It is carried here only so that its review facts are computed, because `loom annotate` accepts a section as a target and an annotation filed on one was stored and then shown nowhere (DR-172).
@@ -791,8 +810,9 @@ class Records:
                 )
             )
         diags.extend(self._gone_documents(result, states))
+        followed = {row.key for row in self.placed(result).values()}
         for key in sorted(self.latest):
-            if key not in result.nodes:
+            if key not in result.nodes and key not in followed:
                 diags.append(
                     Diagnostic(
                         "info",

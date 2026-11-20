@@ -201,3 +201,25 @@ def test_a_record_written_now_holds_its_context(q: Path) -> None:
     context = event["context"]
     assert {"before", "after", "kind", "copies", "twin", "quote"} <= set(context)
     assert context["kind"] == "section" and context["copies"] == 1 and context["quote"] == 1
+
+
+def test_an_acceptance_goes_with_its_statement_once_one_is_put_in_above_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """KEY-9 of the study: an acceptance on a key named by place stayed on the key, so the statement put in above read "accepted, stale" and the one accepted read draft. A row is a claim about exact text, and goes with it."""
+    from tests.helpers import json_of
+    from tests.unit.test_write_safety import synthetic
+
+    root = synthetic(tmp_path, monkeypatch)
+    remark = "drafting/sections/appendix.tex#remark:1"
+    ok("accept", remark, "--force", "--as", "Pat", cwd=root)
+    assert json_of("status", "--json", cwd=root)["keys"][remark]["state"] == "accepted"
+    edit(
+        root / "drafting/sections/appendix.tex",
+        "\\begin{remark}\nAn unlabelled remark",
+        "\\begin{remark}\nA remark a co-author put in above.\n\\end{remark}\n\\begin{remark}\nAn unlabelled remark",
+    )
+    keys = json_of("status", "--json", cwd=root)["keys"]
+    assert keys[remark]["state"] == "draft"
+    moved = keys["drafting/sections/appendix.tex#remark:2"]
+    assert moved["state"] == "accepted" and moved["acceptance"]["fresh"]

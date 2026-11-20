@@ -50,7 +50,7 @@ The history (`.loom/records/history/`) records what loom was told, at the moment
 
 Two kinds of record say what has been looked at, and they never mix.
 
-**Acceptance** is the author's claim that a key's mathematics is right. `loom accept` appends a row to the ledger (`.loom/records/state.toml`) holding hashes of the key's text, of every statement in its closure, and of the preamble, with snapshots of that text. Only the author accepts; an agent is refused whatever name it gives (`agents.md`). From the ledger and the current text, every key's state is **computed** (P3):
+**Acceptance** is the author's claim that a key's mathematics is right. `loom accept` appends a row to the ledger (`.loom/records/state.toml`) holding hashes of the key's text, of every statement in its closure, and of the preamble, with snapshots of that text. A row is a claim about exact text, so one on a key named by its place in its file goes with that text when a block put in before it renumbers the keys, as a record does (`writes.md`, "Where a record goes"), and is on no block where nothing says which. Only the author accepts; an agent is refused whatever name it gives (`agents.md`). From the ledger and the current text, every key's state is **computed** (P3):
 
 - `incomplete` when it contains `\incomplete`, whatever else is true;
 - `accepted` when the latest row's hashes still match;
