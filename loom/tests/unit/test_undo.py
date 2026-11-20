@@ -284,6 +284,39 @@ def test_a_save_made_while_the_undo_keeps_its_version_survives_and_nothing_is_un
     assert status(q, FIXED) == "kept"
 
 
+def test_a_save_made_between_the_undos_plan_and_its_version_survives(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The review's finding 10, its window: the plan read the file, the person saves, and the scan the version is stamped from reads the save."""
+    import loom.pending as pending
+
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    real = pending._undo_in
+
+    def then_save(*args: object, **kw: object) -> object:
+        plan = real(*args, **kw)  # type: ignore[arg-type]
+        p.write_text(p.read_text() + "% saved after the plan\n")
+        return plan
+
+    monkeypatch.setattr(pending, "_undo_in", then_save)
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert res["done"] == [] and [r["code"] for r in res["refused"]] == ["changed"]
+    assert p.read_text().endswith("% saved after the plan\n") and status(q, FIXED) == "kept"
+
+
+def test_a_restore_that_leaves_an_open_edits_words_where_they_stood_leaves_its_record(q: Path) -> None:
+    """The record moves only when the act moves the words: an edit undone and typed in again by hand stays open across a restore that keeps them."""
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    kept = p.read_text()
+    call(q, "change-undo", {"changes": [FIXED]})
+    p.write_text(kept.replace("by \\eqref{eq:prose}.", "by \\eqref{eq:prose}, as claimed."))
+    mine = record(q, "Mine")
+    p.write_text(kept)
+    assert status(q, FIXED) == "open"
+    restore(q, mine)
+    assert "as claimed" in p.read_text() and status(q, FIXED) == "open"
+
+
 def test_a_keep_that_wrote_nothing_is_not_undone(q: Path) -> None:
     p = q / LEMMA
     p.write_text(
