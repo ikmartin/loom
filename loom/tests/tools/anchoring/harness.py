@@ -1148,6 +1148,15 @@ def add_twins(root: Path, targets: list[Target]) -> None:
         if t.stmt_start is not None and t.stmt_end is not None:
             st = ws.anchors[f"stmt:{t.tid}"][1]
             t.stmt_start, t.stmt_end = st, t.stmt_end + (st - t.stmt_start)
+    # a twin put in before a block renumbers the keys named by place: each target is named by its block's key now
+    result = scan(load_quilt(root))
+    for t in targets:
+        if t.kind == "master":
+            continue
+        n = node_at(result, t.file, t.start, "")
+        if n is not None and n.key != t.block:
+            t.key = n.key + t.key[len(t.block) :] if t.key.startswith(t.block) else t.key
+            t.block = n.key
     TWINS.update({k: v for k, v in ws.anchors.items() if k.startswith("twin:")})
 
 
