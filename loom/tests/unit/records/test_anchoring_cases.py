@@ -754,3 +754,17 @@ def test_an_acceptance_follows_its_statement_when_its_label_moves_to_a_block_put
     accept(out, ["tq-0009"])
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Xb + N + B})
     assert list(accepted(out)) == [Xb.strip()]
+
+
+def test_a_note_follows_its_lemma_when_its_id_moves_onto_the_next_one(out: Path) -> None:
+    """The harness's label-moved: tq-0009 moved off its lemma onto the lemma after it, which stood there already; that neighbour is recognised by its text, labels aside, and the note follows its lemma."""
+    A = env("remark", "We fix notation throughout this section.")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.", "tq-0009")
+    Xb = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    Y = env("lemma", "Every bounded sequence of reals has a convergent subsequence.")
+    Yl = env("lemma", "Every bounded sequence of reals has a convergent subsequence.", "tq-0009")
+    B = env("remark", "The bound is sharp.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + Y + B})
+    a = note(out, "tq-0009", "cite Erdos")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Xb + Yl + B})
+    assert shown(out, a) == Xb.strip()

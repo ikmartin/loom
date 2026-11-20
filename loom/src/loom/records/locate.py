@@ -184,7 +184,7 @@ def _stable(
 def _moved(
     result: ScanResult, want: str, node: NodeRec, documents: list[NodeRec], context: dict[str, Any]
 ) -> NodeRec | None:
-    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, and standing between the record's recorded neighbours on both sides, `node` (the block that now carries the label) left out of the count; when that text is long enough to be someone's and its context recorded no twin. When an author moves a label, the block that lost it is still where it was; a copy standing elsewhere is never it."""
+    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, and standing between the record's recorded neighbours on both sides, `node` (the block that now carries the label) counted as the neighbour it was or left out, for a label moved onto the next block or onto one put in beside it; when that text is long enough to be someone's and its context recorded no twin. When an author moves a label, the block that lost it is still where it was; a copy standing elsewhere is never it."""
     words = _own_words(_frozen(result, want))
     if len(words) < TRIVIAL or context.get("twin") or int(context.get("copies") or 1) > 1:
         return None
@@ -192,7 +192,10 @@ def _moved(
     found = [
         n
         for n in documents
-        if n is not node and bare and _bare_of(result, n) == bare and _sides(result, n, context, skip=node)[0] == 2
+        if n is not node
+        and bare
+        and _bare_of(result, n) == bare
+        and max(_sides(result, n, context)[0], _sides(result, n, context, skip=node)[0]) == 2
     ]
     return found[0] if len(found) == 1 else None
 
@@ -476,13 +479,13 @@ def _documents(result: ScanResult) -> list[NodeRec]:
 
 
 def _mark(result: ScanResult, node: NodeRec) -> str:
-    """What a block is recognised by as a neighbour: the hash of its own text with child markers left out, which a child renumbered by a block put in elsewhere does not change."""
+    """What a block is recognised by as a neighbour: the hash of its own text with child markers and labels left out, which a child renumbered by a block put in elsewhere, or a label moved onto or off the block, does not change."""
     import hashlib
 
     held = _held(result)
     found = held.get(("mark", node.key))
     if found is None:
-        text = " ".join(_CHILD.sub("", _own_text(result, node)).split())
+        text = " ".join(_LABEL.sub("", _CHILD.sub("", _own_text(result, node))).split())
         found = held[("mark", node.key)] = "sha256:" + hashlib.sha256(text.encode()).hexdigest()
     return str(found)
 
