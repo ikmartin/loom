@@ -768,3 +768,27 @@ def test_a_note_follows_its_lemma_when_its_id_moves_onto_the_next_one(out: Path)
     a = note(out, "tq-0009", "cite Erdos")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + Xb + Yl + B})
     assert shown(out, a) == Xb.strip()
+
+
+def test_a_statements_note_stays_when_the_twin_beside_it_is_deleted(out: Path) -> None:
+    """B-10 with C-1's rule: a lemma restated right after itself, a note on the first; the restatement deleted. The neighbour recorded past the twin is now the nearest block standing once on that side, beside it."""
+    A = env("remark", "We fix notation throughout this section.")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    B = env("remark", "The bound is sharp.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + X + B})
+    a = note(out, "drafting/s1.tex#lemma:1", "cite Erdos")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B})
+    assert shown(out, a) == X.strip()
+
+
+def test_a_deleted_statements_note_goes_to_no_twin_where_its_neighbours_went_too(out: Path) -> None:
+    """C-1, the harness's delete-statement with a twin standing at the end: the lemma and both its neighbours deleted, so no recorded neighbour stands anywhere; the restatement far below has nothing for it and is not taken."""
+    A = env("remark", "We fix notation throughout this section.")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    B = env("remark", "The bound is sharp.")
+    C = env("lemma", "Every bounded sequence of reals has a convergent subsequence.")
+    D = env("remark", "This closes the section.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B + C + D + X})
+    a = note(out, "drafting/s1.tex#lemma:1", "cite Erdos")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": C + D + X})
+    assert shown(out, a) is None

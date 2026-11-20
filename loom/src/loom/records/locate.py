@@ -555,18 +555,30 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
 
 
 def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any], skip: NodeRec | None = None) -> tuple[int, int]:
-    """Of the neighbours `context` recorded, how many still stand at their recorded distance from `block`, and how many say it is not the block: a neighbour standing elsewhere in its file, or a file's edge at another distance. A neighbour that stands nowhere, edited since, says neither."""
+    """Of the neighbours `context` recorded, how many still stand beside `block`, and how many say it is not the block.
+
+    A neighbour stands beside it at its recorded distance, or as the nearest block on its side whose text stands once in the file now, as `context_of` would record it now: a twin deleted between them moves the neighbour nearer and is no evidence. One standing elsewhere in its file, or a file's edge at another distance with a block standing once between, says it is not the block. A neighbour that stands nowhere, edited since, says neither.
+    """
     order = [n for n in _in_order(result, block.file) if n is not skip]
     at = next((i for i, n in enumerate(order) if n is block), None)
     if at is None:
         return 0, 0
+    held_ = _held(result)
+    counts = held_.get(("counts", block.file, id(skip)))
+    if counts is None:
+        counts = held_[("counts", block.file, id(skip))] = {}
+        for n in order:
+            counts[_mark(result, n)] = counts.get(_mark(result, n), 0) + 1
     held = against = 0
     for side, step in (("before", -1), ("after", 1)):
         rec = context.get(side)
         if not isinstance(rec, dict):
             continue
+        near = at + step
+        while 0 <= near < len(order) and counts[_mark(result, order[near])] != 1:
+            near += step
         if "edge" in rec:
-            if (at + 1 if step < 0 else len(order) - at) == rec["edge"]:
+            if (at + 1 if step < 0 else len(order) - at) == rec["edge"] or not 0 <= near < len(order):
                 held += 1
             else:
                 against += 1
@@ -574,20 +586,22 @@ def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any], skip: No
             j = at + step * int(rec.get("gap") or 1)
             if 0 <= j < len(order) and _mark(result, order[j]) == rec["hash"]:
                 held += 1
+            elif 0 <= near < len(order) and _mark(result, order[near]) == rec["hash"]:
+                held += 1
             elif any(_mark(result, n) == rec["hash"] for n in order):
                 against += 1
     return held, against
 
 
 def _all_against(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any], twin: bool) -> bool:
-    """Whether every one of `blocks`, holding the very text of a record whose context recorded a twin, has a recorded neighbour standing against it: none of them is its block, and one that reads like it between both its neighbours may be."""
-    return twin and all(_sides(result, n, context)[1] for n in blocks)
+    """Whether none of `blocks`, holding the very text of a record whose context recorded a twin, has a recorded neighbour beside it and none against it: none of them is its block, and one that reads like it between both its neighbours may be."""
+    return twin and all(_sides(result, n, context)[1] or not _sides(result, n, context)[0] for n in blocks)
 
 
 def _told(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any], twin: bool) -> NodeRec | None:
-    """Among blocks holding a record's very text, the one that is its: where its context recorded a twin or two copies, only one no recorded neighbour stands against, and among several such the one with both neighbours beside it; where it recorded none, the one with both neighbours beside it."""
+    """Among blocks holding a record's very text, the one that is its: where its context recorded a twin or two copies, only one with a recorded neighbour beside it and none against it, and among several such the one with both beside it; where it recorded none, the one with both neighbours beside it."""
     if twin:
-        clear = [n for n in blocks if not _sides(result, n, context)[1]]
+        clear = [n for n in blocks if _sides(result, n, context)[0] and not _sides(result, n, context)[1]]
         if len(clear) <= 1:
             return clear[0] if clear else None
         blocks = clear
