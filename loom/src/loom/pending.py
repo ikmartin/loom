@@ -928,6 +928,19 @@ def _undo_in(
     return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans]
 
 
+def _moves(made: list[Any], was: str, now: str, cut: tuple[int, int, int]) -> bool:
+    """Whether an act that changed `was[cut[0]:cut[1]]` into `now[cut[0]:cut[2]]` (both read as the scan reads them) can have moved a Keep's words: whether the region of its words, or of the words they replaced, stands once in either text and overlaps what the act changed there. A region that stands twice is never placed, so it is never moved either."""
+    from loom import writes
+
+    for m in made:
+        for part in (writes.region(m), writes.region(m, side="before")):
+            for text, end in ((was, cut[1]), (now, cut[2])):
+                i = text.find(part)
+                if i >= 0 and text.find(part, i + 1) < 0 and i < end and cut[0] < i + len(part):
+                    return True
+    return False
+
+
 def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, writer: tuple[str, str]) -> None:
     """Stage in an act the records of the suggested edits whose words it moves in one file, by what the journal says loom wrote.
 
@@ -960,6 +973,10 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
         return
     root, hist = w.root, w.history
     flat = " ".join(now.split())
+    # what the act changes, read as the scan reads it: a Keep whose region it does not touch is passed over with no diff
+    was_lf, now_lf = (x.replace("\r\n", "\n").replace("\r", "\n") for x in (was, now))
+    pre, suf = writes.shared(was_lf, now_lf)
+    cut = (pre, len(was_lf) - suf, len(now_lf) - suf)
 
     def placed(m: Any, text: str, side: str = "after") -> bool:
         try:
@@ -976,6 +993,10 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
             continue
         made = [m for m in writes.splices_of(hist, entry, gen) or [] if m.rel == path]
         if not made:
+            continue
+        # the very bytes on the other side of that Keep, in the direction this edit could move
+        exact = writes.digest(after) == (made[0].before if e.status == "kept" else made[0].after)
+        if not exact and not _moves(made, was_lf, now_lf, cut):
             continue
         if e.status == "kept":
             out = writes.digest(after) == made[0].before or all(

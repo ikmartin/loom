@@ -674,6 +674,28 @@ def test_discarding_a_change_that_brings_a_kept_edits_words_back_records_it_kept
     assert status(q, FIXED) == "kept" and [x.id for x in waiting(q) if x.id == FIXED] == []
 
 
+def test_a_discard_of_a_change_away_from_a_kept_edit_does_not_look_for_its_place(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second review's R2-3: a Discard, a restore or a put-back looks at a Keep's place only when what it writes touches it, so a Discard elsewhere runs no diff."""
+    from loom import writes
+
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    p.write_text(p.read_text().replace("by \\eqref{eq:prose}.", "by \\eqref{eq:prose}, as claimed."))
+    (change,) = [x.id for x in waiting(q) if x.kind == "edit"]
+    looked: list[object] = []
+    real = writes.place_in
+
+    def placing(*args: object, **kw: object) -> object:
+        looked.append(args)
+        return real(*args, **kw)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(writes, "place_in", placing)
+    assert call(q, "change-discard", {"changes": [change]})["done"] == [change]
+    assert looked == [] and status(q, FIXED) == "kept"
+
+
 def test_putting_back_a_text_that_takes_a_kept_edit_out_opens_it_again(q: Path) -> None:
     from loom.history.ledger import load_history
     from loom.scan.quilt import load_quilt
