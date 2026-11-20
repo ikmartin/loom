@@ -164,6 +164,89 @@ def test_a_save_made_before_the_rename_undoes_the_act_and_keeps_the_save(
     assert events(history) == ["begin", "aborted"] and not temps(root)
 
 
+def test_a_commit_cut_short_puts_back_only_a_file_that_still_holds_what_loom_wrote(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, history = q
+    real = writes._rename
+    calls: list[Path] = []
+
+    def rename(tmp: Path, target: Path) -> None:
+        calls.append(target)
+        if len(calls) == 2:
+            # the person saves the first file in the instant after loom wrote it, then the disk fills
+            (root / "drafting/a.tex").write_bytes(b"the person saved over it\n")
+            raise OSError(28, "No space left on device")
+        real(tmp, target)
+
+    monkeypatch.setattr(writes, "_rename", rename)
+    b_before = (root / "drafting/b.tex").read_bytes()
+    with pytest.raises(OSError), writes.act(root, history, "keep") as w:
+        w.replace("drafting/a.tex", b"new a\n")
+        w.replace("drafting/b.tex", b"new b\n")
+        w.wrote("e-2026-01-01-aaaaaa:0")
+    monkeypatch.undo()
+    # the person's save stands, the second file was never written, and the act is not called undone
+    assert (root / "drafting/a.tex").read_bytes() == b"the person saved over it\n"
+    assert (root / "drafting/b.tex").read_bytes() == b_before
+    assert events(history) == ["begin"] and not temps(root)
+    # recovery leaves it for the person, says so, and its edit is not written until they have looked
+    said = writes.recover(root, history)
+    assert (
+        len(said) == 1
+        and said[0].startswith("left keep:")
+        and "drafting/a.tex neither as before the act nor as it left it" in said[0]
+    )
+    assert [e["act"] for e in writes.unsettled(root, history)] == [journal(history)[0]["act"]]
+    with writes.act(root, history, "keep") as w:
+        assert "e-2026-01-01-aaaaaa:0" in w.unsettled_edits()
+
+
+def test_recovery_never_deletes_a_file_whose_text_before_the_store_lacks(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, history = q
+    crash_at(monkeypatch, "_rename", after=1)
+    with pytest.raises(Crash):
+        two_file_act(root, history)
+    monkeypatch.undo()
+    before = journal(history)[0]["files"]["drafting/a.tex"][0]
+    for p in (history / "texts").glob(before.split(":")[1] + ".*"):
+        p.unlink()
+    writes.recover(root, history)
+    assert (root / "drafting/a.tex").read_bytes() == b"new a\r\n"
+    assert [e["kind"] for e in writes.unsettled(root, history)] == ["restore"]
+
+
+def test_recovery_puts_back_all_of_an_act_or_none_and_says_which(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's finding 9: three files, cut short after two renames, the second's text before missing from the store."""
+    root, history = q
+    (root / "drafting/c.tex").write_bytes(b"gamma\n")
+    crash_at(monkeypatch, "_rename", after=2)
+    with pytest.raises(Crash), writes.act(root, history, "restore", "Pat") as w:
+        w.replace("drafting/a.tex", b"new a\r\n")
+        w.replace("drafting/b.tex", b"new b\n")
+        w.replace("drafting/c.tex", b"new c\n")
+    monkeypatch.undo()
+    before = journal(history)[0]["files"]["drafting/b.tex"][0]
+    for p in (history / "texts").glob(before.split(":")[1] + ".*"):
+        p.unlink()
+    said = writes.recover(root, history)
+    assert len(said) == 1 and said[0].startswith("left restore:") and "lacks a text of drafting/b.tex" in said[0]
+    assert (
+        "drafting/a.tex, drafting/b.tex as the act left it" in said[0] and "drafting/c.tex as before the act" in said[0]
+    )
+    # none of it put back: the document is not made of files from two moments without a word
+    assert (root / "drafting/a.tex").read_bytes() == b"new a\r\n" and (
+        root / "drafting/b.tex"
+    ).read_bytes() == b"new b\n"
+    assert (root / "drafting/c.tex").read_bytes() == b"gamma\n"
+    # and the server says it again each time it starts, while the act stays
+    assert writes.recover(root, history) == said
+
+
 def test_a_record_line_that_cannot_be_written_leaves_the_act_for_recovery(
     q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -286,7 +369,14 @@ def test_recovery_leaves_an_act_whose_file_someone_changed_since(
         two_file_act(root, history)
     monkeypatch.undo()
     (root / "drafting/a.tex").write_bytes(b"the person typed here\n")
-    assert writes.recover(root, history) == []
+    said = writes.recover(root, history)
+    # left, and said, naming each file's state
+    assert (
+        len(said) == 1
+        and said[0].startswith("left restore:")
+        and "drafting/a.tex neither as before the act nor as it left it" in said[0]
+    )
+    assert "drafting/b.tex as before the act" in said[0]
     assert (root / "drafting/a.tex").read_bytes() == b"the person typed here\n"
     left = writes.unsettled(root, history)
     assert [e["kind"] for e in left] == ["restore"]

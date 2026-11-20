@@ -28,6 +28,11 @@ WORDS = "orbit group action finite widget lemma bound measure compact dense clos
 @pytest.fixture
 def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A copy of the synthetic quilt, edits tracked, with a Markdown task list; the person is `Pat`, and no agent marker is set."""
+    return synthetic(tmp_path, monkeypatch)
+
+
+def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The `q` fixture's quilt, for another test module's fixture."""
     for m in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
         monkeypatch.delenv(m, raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
@@ -51,8 +56,12 @@ def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 def call(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """Send `body` to `endpoint` as the viewer does, an undo naming this quilt unless `body` names one; a refusal comes back as `{"error": code}`."""
+    from loom.machine import quilt_id
     from loom.render.api import ApiError, handle
 
+    if endpoint == "change-undo" and "quilt" not in body:
+        body = {**body, "quilt": quilt_id(root)}
     try:
         return handle(root, endpoint, dict(body))
     except ApiError as exc:
@@ -196,13 +205,14 @@ def quote_in(result: Any, node: Any, rng: random.Random) -> str | None:
     return None
 
 
-def step(run: Run) -> None:
-    """One act drawn from the run's generator."""
+def step(run: Run, undo: bool = False) -> None:
+    """One act drawn from the run's generator; with `undo`, the undo of a Keep among them."""
     rng, root = run.rng, run.root
-    op = rng.choices(
-        ["suggest", "section", "type", "edit", "keep", "keep_all", "discard", "undo_discard", "tick", "setting"],
-        [6, 2, 2, 4, 6, 2, 2, 1, 1, 1],
-    )[0]
+    ops = ["suggest", "section", "type", "edit", "keep", "keep_all", "discard", "undo_discard", "tick", "setting"]
+    weights = [6, 2, 2, 4, 6, 2, 2, 1, 1, 1]
+    if undo:
+        ops, weights = [*ops, "undo_keep"], [*weights, 8]
+    op = rng.choices(ops, weights)[0]
     run.trail.append(op)
     if (
         run.typed
@@ -275,6 +285,55 @@ def step(run: Run) -> None:
             before = files(root)
             call(root, "change-discard", {"changes": [rng.choice(gone)], "undo": True})
             run.check("undo of a discard", before, set())
+    elif op == "undo_keep":
+        from loom.records.edits import find, home
+
+        kept = [e for eid in run.markers if (e := find(root, eid)) and e.status == "kept"]
+        if kept:
+            e = rng.choice(kept)
+            node = home(scan(root), e)
+            # a key named by its place names its file; once its quote is replaced, no block of it is found by quote
+            where = {node.file} if node is not None else {e.target_key.split("#")[0]} if "#" in e.target_key else set()
+            mk = run.markers[e.id]
+            hold = next((f for f in sorted(where) if mk in (root / f).read_text(encoding="utf-8")), None)
+            how = rng.choice(["plain", "inside", "save"]) if hold else "plain"
+            run.trail[-1] += f" {e.id} ({how})"
+            if how == "inside":
+                # the person works inside the kept words first: an undo must find its place changed, and write nothing
+                mine = run.word("pt")
+                f = root / hold
+                f.write_text(f.read_text(encoding="utf-8").replace(mk, f"{mk} {mine}", 1), encoding="utf-8")
+                run.typed.add(mine)
+                before = files(root)
+                call(root, "change-undo", {"changes": [e.id]})
+                if files(root) != before:
+                    run.problems.append(f"undo of {e.id} wrote after the person worked inside its words")
+            elif how == "save":
+                # the person's editor saves the file while the undo keeps its version: the save survives
+                import loom.history.acts as acts
+
+                mine, f, real, saved = run.word("pt"), root / hold, acts.keep_versions, []
+
+                def saving(*args: Any, **kw: Any) -> Any:
+                    f.write_text(f.read_text(encoding="utf-8") + f"\n% {mine}\n", encoding="utf-8")
+                    saved.append(mine)
+                    return real(*args, **kw)
+
+                acts.keep_versions = saving  # type: ignore[assignment]
+                try:
+                    before = files(root)
+                    call(root, "change-undo", {"changes": [e.id]})
+                finally:
+                    acts.keep_versions = real  # type: ignore[assignment]
+                run.typed.update(saved)
+                run.trail[-1] += " saved" if saved else " refused before its version"
+                run.check("undo during a save", before, set(where))
+                if saved and find(root, e.id).status != "kept":
+                    run.problems.append(f"undo of {e.id} went ahead over a save made while it ran")
+            else:
+                run.press("change-undo", {"changes": [e.id]}, where)
+            if find(root, e.id).status == "open" and mk in b"\n".join(files(root).values()).decode("utf-8", "replace"):
+                run.problems.append(f"undo of {e.id}: open again with its text still in the file")
     elif op == "tick":
         from loom.tasks import items
 
@@ -300,6 +359,14 @@ def test_a_seeded_sequence_of_writes_keeps_the_persons_text(q: Path, seed: int) 
     run = Run(q, seed)
     for _ in range(16):
         step(run)
+        assert not run.problems, (run.problems, run.trail)
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_a_seeded_sequence_with_the_undo_of_keeps_among_its_writes_keeps_the_persons_text(q: Path, seed: int) -> None:
+    run = Run(q, 100 + seed)
+    for _ in range(16):
+        step(run, undo=True)
         assert not run.problems, (run.problems, run.trail)
 
 

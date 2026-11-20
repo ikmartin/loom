@@ -108,6 +108,8 @@ LOOM: dict[str, Code] = {
     "loom:link-target-missing": Code("warning", LATEX),
     "loom:link-place-missing": Code("warning", LATEX),
     "loom:link-work-unknown": Code("warning", MODEL),
+    # the one door (docs/design/writes.md, "Recovery"): a write to the person's file recovery could neither finish nor undo, which the person has no other place to be told of
+    "loom:write-left": Code("warning", LATEX),
     # a warning and never an error, because loom cannot fetch without consent
     "loom:no-readable-copy": Code("warning", INTERNAL),
 }

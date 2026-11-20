@@ -26,7 +26,7 @@ async function withChanges(page: Page): Promise<Record<string, Record<string, un
 	});
 	await page.route(`**/${MERGED}`, (r) => r.fulfill({ contentType: 'text/html', body: merged }));
 	const sent: Record<string, Record<string, unknown>> = {};
-	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['annotate', 'edit', 'delete', 'restore', 'change-keep', 'change-discard'], token: 't' } }));
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['annotate', 'edit', 'delete', 'restore', 'change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
 	await page.route('**/_api/*', (r) => {
 		const endpoint = new URL(r.request().url()).pathname.split('/').pop() ?? '';
 		const body = r.request().postDataJSON();
@@ -99,6 +99,29 @@ test("a change's popup says what it is and what is on its words, and Keep takes 
 	expect(await css(words(page, SUGGESTED, 'new'), 'color')).not.toBe(TEAL);
 	expect(sent['change-keep']).toEqual({ changes: [SUGGESTED] });
 	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('2');
+	// the toolbar's Undo takes it out again, and it waits as it did
+	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
+	await pane(page, 0).getByTestId('annotate-undo').click();
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED], quilt: 'q-test' });
+	await expect(words(page, SUGGESTED, 'old')).toBeVisible();
+	expect(await css(words(page, SUGGESTED, 'new'), 'color')).toBe(TEAL);
+	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('3');
+});
+
+test('a Keep is still undone from the toolbar after the page reloads, and a step loom can no longer undo leaves it', async ({ page }) => {
+	const sent = await withChanges(page);
+	await words(page, SUGGESTED, 'new').click();
+	await page.getByTestId('change-popup').getByTestId('change-keep').click();
+	await expect.poll(() => sent['change-keep']).toEqual({ changes: [SUGGESTED] });
+	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
+	await page.reload();
+	await expect(words(page, EDIT, 'old')).toBeAttached();
+	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
+	// loom answers that it is open again, as after a restore: the step goes, and says why
+	await page.route('**/_api/change-undo', (r) => r.fulfill({ json: { ok: true, result: 'undid 0', done: [], refused: [{ id: SUGGESTED, why: 'the suggestion “Hence” is open, so there is no Keep of it to undo', code: 'not-kept' }] } }));
+	await pane(page, 0).getByTestId('annotate-undo').click();
+	await expect(page.getByText('the suggestion “Hence” is open, so there is no Keep of it to undo')).toBeVisible();
+	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo');
 });
 
 test("the annotations on a change's words are named in its popup and open their own", async ({ page }) => {

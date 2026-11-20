@@ -18,6 +18,8 @@ KEEP = "keep"
 RESTORE = "restore"
 #: The ledger's line for a suggested edit written into its file (`pending.keep`).
 APPLY = "apply"
+#: The ledger's line for the Keep of a suggested edit undone (`pending.unkeep`).
+UNAPPLY = "unapply"
 
 
 @dataclass
@@ -126,9 +128,10 @@ def cannot_restore(result: ScanResult, history: History, entry: Entry) -> str:
 def restore(result: ScanResult, doc: str, version: str, actor: str | None) -> dict[str, Any]:
     """Put `doc` back as the version `version` (a landmark's path or name) holds it, keeping its text now as a version first (P7), and record it.
 
-    Writes each file the version kept (`files`), byte for byte, or its flat text into a document of one file, through the door (`loom.writes`): one act for every file, so a crash between two files undoes the first, and the bytes of each file it replaces are kept whether or not the document still reaches it. Raises RestoreRefused for a version that is not `doc`'s or cannot be put back (`cannot_restore`), for a path outside the quilt (`outside-quilt`), and for a file that changed at the last moment (`changed`). Returns the paths written, the version's label, and the label of the version that holds the text it replaced (a new one, or the newest when nothing had changed since).
+    Writes each file the version kept (`files`), byte for byte, or its flat text into a document of one file, through the door (`loom.writes`): one act for every file, so a crash between two files undoes the first, and the bytes of each file it replaces are kept whether or not the document still reaches it. A suggested edit whose words it takes out or brings back is recorded so in the act (`pending.follow_words`). Raises RestoreRefused for a version that is not `doc`'s or cannot be put back (`cannot_restore`), for a path outside the quilt (`outside-quilt`), and for a file that changed at the last moment (`changed`). Returns the paths written, the version's label, and the label of the version that holds the text it replaced (a new one, or the newest when nothing had changed since).
     """
     from loom import writes
+    from loom.pending import follow_words
 
     root, hist = result.quilt.root, result.quilt.history_dir
     history = load_history(hist)
@@ -157,6 +160,7 @@ def restore(result: ScanResult, doc: str, version: str, actor: str | None) -> di
                 raise RestoreRefused("cannot-keep", f"its text now cannot be kept first: {kept.skipped[doc]}")
             written = [path for path, data in files.items() if w.read(path) != data]
             for path in written:
+                follow_words(w, path, w.before.get(path), files[path], ("human", actor or ""))
                 w.replace(path, files[path])
             w.log(
                 *ledger_line(
@@ -189,11 +193,12 @@ def _version(history: History, root: Path, ref: str) -> Entry | None:
 
 
 def put_back(root: Path, history_dir: Path, path: str, digest: str, actor: str | None, texts: dict[str, str]) -> str:
-    """Write back into `path` the bytes an undo set aside (`digest`), through the door (`loom.writes`), keeping the file's bytes now first; returns the hash it replaced, '' for a file that was gone.
+    """Write back into `path` the bytes an undo set aside (`digest`), through the door (`loom.writes`), keeping the file's bytes now first, a suggested edit whose words that takes out or brings back recorded so (`pending.follow_words`); returns the hash it replaced, '' for a file that was gone.
 
     `texts` is the open files' texts now (`looks.open_texts`); only a file loom shows may be put back. Raises RestoreRefused for a path outside the quilt (`outside-quilt`), a text the history does not hold, and a file that changed at the last moment (`changed`).
     """
     from loom import writes
+    from loom.pending import follow_words
 
     try:
         rel = writes.contained(root, path)
@@ -206,7 +211,9 @@ def put_back(root: Path, history_dir: Path, path: str, digest: str, actor: str |
         raise RestoreRefused("not-text", f"{rel} is no longer a text file loom keeps")
     try:
         with writes.act(root, history_dir, "put-back", actor) as w:
-            before = writes.digest(w.read(rel))
+            now = w.read(rel)
+            before = writes.digest(now)
+            follow_words(w, rel, now, data, ("human", actor or ""))
             w.replace(rel, data)
             w.log(*ledger_line(history_dir, RESTORE, {"path": rel, "from": before, "to": digest}, actor))
     except writes.WriteRefused as exc:

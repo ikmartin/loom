@@ -8,14 +8,11 @@ from typing import Any
 from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
 
 
-def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """`change-keep` and `change-discard`: the person keeps or discards changes waiting on them (`pending.py`), by id, or every one with `all`, of one document with `document`; the author's acts, refused to a declared agent. `change-discard` takes `why`, and with `undo` opens again the suggested edits it names, kept or discarded."""
+def _author(root: Path, body: dict[str, Any]) -> tuple[str, tuple[str, str]]:
+    """The reviewer name and the writer of a change act; `author-only` (403) for a declared agent."""
     from loom.cli.review import _annotator
     from loom.errors import ContentError, EnvError
     from loom.identity import is_agent
-    from loom.looks import keep_all, read_look
-    from loom.pending import PendingRefused, discard, keep, pending
-    from loom.writes import WriteRefused
 
     who = reviewer_identity_of(root)
     if is_agent(_str(body, "author") or who):
@@ -23,9 +20,18 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
             "author-only", "An agent suggests and annotates; only the author keeps or discards a change", status=403
         )
     try:
-        writer = _annotator(root, _str(body, "author"), sniff=False)
+        return who, _annotator(root, _str(body, "author"), sniff=False)
     except (EnvError, ContentError) as exc:
         raise ApiError("refused", str(exc)) from exc
+
+
+def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """`change-keep` and `change-discard`: the person keeps or discards changes waiting on them (`pending.py`), by id, or every one with `all`, of one document with `document`; the author's acts, refused to a declared agent. `change-discard` takes `why`, and with `undo` opens again the discarded suggested edits it names."""
+    from loom.looks import keep_all, read_look
+    from loom.pending import PendingRefused, discard, keep, pending
+    from loom.writes import WriteRefused
+
+    who, writer = _author(root, body)
     # a scan of the files as they are now: what waits is cut from them, and the publisher's may predate an edit
     from loom.cli._quilt import open_scan
 
@@ -59,6 +65,34 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "result": said, "done": done, "refused": refused}
 
 
+def _undo(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """`change-undo`: the person undoes the Keep of the suggested edits it names, each in one step (`pending.unkeep`); the author's act, refused to a declared agent, and refused whole (`other-quilt`) unless it names this quilt."""
+    from loom.cli._quilt import open_scan
+    from loom.pending import PendingRefused, unkeep
+    from loom.writes import WriteRefused
+
+    who, writer = _author(root, body)
+    given = body.get("changes")
+    if not (isinstance(given, list) and given and all(isinstance(i, str) for i in given)):
+        raise ApiError("missing-field", "changes is the list of the kept suggested edits' ids")
+    # a tab may have followed the port to another quilt: an undo is done only in the quilt it names
+    from loom.machine import quilt_id
+
+    named = body.get("quilt")
+    if named != quilt_id(root):
+        why = "another quilt" if named is not None else "a quilt the undo does not name"
+        raise ApiError("other-quilt", f"that Keep was made in {why}, so nothing was undone", status=409)
+    versions: list[str] = []
+    try:
+        done, refused = unkeep(open_scan(str(root)), who, list(given), writer, versions)
+    except (PendingRefused, WriteRefused) as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
+    parts = [f"undid the keep of {len(done)} suggested edit{'s' if len(done) != 1 else ''}"]
+    if refused:
+        parts.append(f"{len(refused)} could not be")
+    return {"ok": True, "result": "; ".join([*parts, *versions]), "done": done, "refused": refused}
+
+
 def reviewer_identity_of(root: Path) -> str:
     """The reviewer name Review resolves, whose look the changes are since; '' when there is none."""
     from loom.scan.quilt import reviewer_identity
@@ -67,7 +101,7 @@ def reviewer_identity_of(root: Path) -> str:
 
 
 def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, Any]:
-    """Open again the suggested edits `ids`, kept or discarded: the viewer's undo of a Keep or a Discard."""
+    """Open again the discarded suggested edits `ids`: the viewer's undo of a Discard. A kept one is refused (`records.edits.discard`); `change-undo` undoes its Keep."""
     from loom.records.edits import EditRefused, discard, find
 
     done: list[str] = []
@@ -84,7 +118,7 @@ def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, An
             discard(root, edit, writer, undo=True)
             done.append(i)
         except EditRefused as exc:
-            refused.append({"id": i, "why": exc.message})
+            refused.append({"id": i, "why": exc.message, "code": exc.code})
     return {"ok": True, "result": f"reopened {len(done)}", "done": done, "refused": refused}
 
 
@@ -164,6 +198,7 @@ def _compare(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 HANDLERS: dict[str, Handler] = {
     "change-keep": _change,
     "change-discard": _change,
+    "change-undo": _undo,
     "history-record": _history,
     "history-restore": _history,
     "compare": plain(_compare),

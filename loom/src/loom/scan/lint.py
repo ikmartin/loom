@@ -198,6 +198,42 @@ def _person_pages(result: ScanResult) -> bool:
     )
 
 
+def _writes_left(result: ScanResult) -> list[Diagnostic]:
+    """`loom:write-left`: a write the journal records on the person's files that recovery could neither finish nor undo, one per act at its first file, saying only what was checked and what makes it go, in plain words; a record recovery cannot trust is said with no file."""
+    from loom.writes import left
+
+    out = []
+    for kind, files, why, kept in left(result.quilt.root, result.quilt.history_dir):
+        if not files:
+            out.append(
+                Diagnostic(
+                    "warning",
+                    "loom:write-left",
+                    f"{why[0].upper()}{why[1:]}. No file of yours was touched.",
+                    [],
+                    owner="person",
+                )
+            )
+            continue
+        # the wording is the author's to judge (handover): no command, no id
+        if kept:
+            goes = "This stays until each file reads exactly as before the act or as the act left it. Putting back the version The Record kept just before the act, where it kept one, does that, and keeps your text as it is now first."
+        else:
+            goes = "This stays unless each file comes to read exactly as the act left it, since loom cannot undo an act whose texts the history lacks."
+        if kind == "a Keep":
+            goes += " Until it is settled, loom will not keep again the suggestions this act records."
+        out.append(
+            Diagnostic(
+                "warning",
+                "loom:write-left",
+                f"The journal records {kind} on {', '.join(files)} that loom could neither finish nor undo: {why}. {goes}",
+                [Location(files[0], 1)],
+                owner="person",
+            )
+        )
+    return out
+
+
 def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic]:
     asm = result.assembly
     files = result.files
@@ -243,6 +279,7 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
     diags.extend(_agent_documents(result))
     diags.extend(_agent_permissions(result))
     diags.extend(_home(result))
+    diags.extend(_writes_left(result))
     digest_keys = set(asm.digest_files.values())
     slugs = {citekey_slug(k) for k in result.bib} | {citekey_slug(k) for k in digest_keys}
     for path, directives in asm.directives.items():

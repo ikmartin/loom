@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from loom.records.edits import Edit, Placed
     from loom.scan.nodes import NodeRec
     from loom.scan.scan import ScanResult
@@ -466,6 +468,9 @@ def keep(
                 kept = _keep_suggested(w, result, [p.id for p in asked], writer, said)
                 refused += kept.refused
                 done += kept.ids
+                if who and kept.spans:
+                    # what the follow-up does to the look, for recovery to do if a crash comes first (`relook`)
+                    w.look = {"who": who, "spans": {f: [list(s) for s in v] for f, v in kept.spans.items()}}
 
             def follow() -> None:
                 after = _rescan(kept.result if kept else result)
@@ -620,6 +625,542 @@ def _place_kept(
     return taken, placed, refused
 
 
+# ---- undoing a Keep -------------------------------------------------------------------------------------------------
+
+
+def called(edit: Edit) -> str:
+    """A suggested edit as a person knows it, by its words: what it puts in, or for a deletion what it takes out; never its id."""
+    words = " ".join((edit.with_text or (edit.selector.exact if edit.selector else "")).split())
+    short = words if len(words) <= 48 else words[:47].rstrip() + "…"
+    return f"the suggestion “{short}”" if edit.with_text else f"the deletion of “{short}”"
+
+
+def _not_written(edit: Edit) -> str:
+    return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
+
+
+def _changed_since(edit: Edit, how: str = "changed") -> str:
+    if how == "too-much":
+        return f"the file has changed too much around {called(edit)} since it was kept to be sure where it was written, so its Keep is not undone; restore a version from The Record instead"
+    return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
+
+
+def _ending_at(raw: str, a: int, b: int) -> str:
+    """The file's own line ending at a place: that of the nearest line break before it, else after it, else the file's most common."""
+    from loom import writes
+
+    k = raw.rfind("\n", 0, a)
+    if k < 0:
+        k = raw.find("\n", b)
+    if k >= 0:
+        return "\r\n" if k > 0 and raw[k - 1] == "\r" else "\n"
+    return writes.newline_of(raw)
+
+
+def keep_of(wrote: dict[str, int], edit: Edit) -> str | None:
+    """The `<id>:<generation>` of the Keep whose words `edit`'s record stands on, by the journal's `wrote`; None when loom wrote none.
+
+    A kept edit stands on the Keep of its generation when that Keep wrote; one a restore recorded kept (`why: "restored"`) on the last Keep that wrote it; one whose Keep wrote nothing, its words being in already, on none. An open edit opened again stands on the last Keep that wrote it before.
+    """
+    from loom.records.edits import generation
+
+    g = generation(edit)
+    if edit.status == "kept":
+        if f"{edit.id}:{g}" in wrote:
+            return f"{edit.id}:{g}"
+        last = next((a for a in reversed(edit.acts) if a.get("event") == "kept"), {})
+        if last.get("why") != "restored":
+            return None
+        top = g
+    elif edit.status == "open":
+        top = g - 1
+    else:
+        return None
+    return next((f"{edit.id}:{k}" for k in range(top, -1, -1) if f"{edit.id}:{k}" in wrote), None)
+
+
+def unkeep(
+    result: ScanResult, who: str, ids: list[str], writer: tuple[str, str], said: list[str] | None = None
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Undo the Keep of each suggested edit `ids`, in one act through the door (`loom.writes`): the words its Keep wrote come out and the words they replaced go back, a version of each document it changes kept first, and the edit is open again.
+
+    Every decision is made under the door's lock (`_unkeep`). Each edit's Keep is found in this machine's journal by `<id>:<generation>`; its words are found by the bytes the Keep left, or with their neighbours as it wrote them; every other byte of the file is kept.
+
+    Parameters
+    ----------
+    result : ScanResult
+        The quilt as scanned now.
+    who : str
+        Whose look takes the words put back.
+    ids : list of str
+        The suggested edits, by id.
+    writer : (str, str)
+        Who undoes them, as `_annotator` gives it.
+    said : list of str, optional
+        Where to say which versions were kept, and any step after the write that could not be done.
+
+    Returns
+    -------
+    (list of str, list of dict)
+        The ids undone, and `{id, why, code}` for each that is not: one not kept (`not-kept`), one whose Keep loom has no write of here (`not-written`), one whose words have changed where it was written (`changed-since`), one in a file that is not UTF-8 (`not-utf8`) or that moved while it was being undone (`changed`).
+
+    Raises
+    ------
+    PendingRefused
+        `no-such-change` (404) for an id that names no suggested edit.
+
+    See Also
+    --------
+    keep : what this undoes.
+    """
+    from loom import writes
+    from loom.records.edits import find
+
+    root, hist = result.quilt.root, result.quilt.history_dir
+    ids = list(dict.fromkeys(ids))
+    gone = [i for i in ids if find(root, i) is None]
+    if gone:
+        raise PendingRefused("no-such-change", "a suggestion it names is not in this quilt", 404)
+    out = _Unkept(result)
+    try:
+        with writes.act(root, hist, "undo", writer[1]) as w:
+            _unkeep(w, out, ids, writer, said)
+            if who and out.spans:
+                w.look = {"who": who, "spans": {f: [list(s) for s in v] for f, v in out.spans.items()}}
+
+            def follow() -> None:
+                if out.ids:
+                    after = _after_unkeep(out, who, writer)
+                    if said is not None:
+                        said.extend(after)
+
+            w.then(follow)
+    except writes.WriteRefused as exc:
+        # the act was undone, its files and its records: no Keep of this request is undone
+        said_no = {r["id"] for r in out.refused}
+        tried = [i for i in [*out.ids, *out.trying] if i not in said_no]
+        return [], out.refused + [{"id": i, "why": exc.message, "code": exc.code} for i in dict.fromkeys(tried)]
+    return out.ids, out.refused
+
+
+@dataclass
+class _Unkept:
+    """What the undo of Keeps staged in an act: the scan it was planned with, the ids being undone and those undone, the refusals, where in each file (in the scan's reading, after the write) the words put back stand, and what carrying annotations back needs."""
+
+    result: ScanResult
+    trying: list[str] = field(default_factory=list)
+    ids: list[str] = field(default_factory=list)
+    refused: list[dict[str, str]] = field(default_factory=list)
+    spans: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    changes: list[Pending] = field(default_factory=list)
+    before: dict[str, str] = field(default_factory=dict)
+    wrote: dict[str, tuple[str, str, list[tuple[int, int, str]]]] = field(default_factory=dict)
+
+
+def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said: list[str] | None) -> None:
+    """Decide and stage in the act `w` the undo of the Keeps of `ids`, all under the door's lock, into `out`.
+
+    By record, each edit must be kept and its Keep in the journal; by the bytes now, its words must stand where the Keep left them (`_undo_in`); an edit refused in one file is undone in none. The versions are stamped from a scan that reads as the files do, taken again once when one moved; a file that moves after its undo was planned refuses the act (`changed`), which then writes nothing.
+    """
+    from loom import writes
+    from loom.history.acts import UNAPPLY, keep_versions, ledger_line
+    from loom.looks import UNDO
+    from loom.paths import EDIT_LOG
+    from loom.records.edits import home, reopened_event, replay, unanswered_event
+    from loom.records.log import log_path as annotation_log
+
+    result = out.result
+    root, hist = result.quilt.root, result.quilt.history_dir
+    fresh = {e.id: e for e in replay(root)[0]}
+    items: list[tuple[Edit, str, writes.Written]] = []
+    for i in ids:
+        e = fresh.get(i)
+        if e is None or e.status != "kept":
+            why = f"{called(e)} is {e.status}, so there is no Keep of it to undo" if e else f"{i} is gone"
+            out.refused.append({"id": i, "why": why, "code": "not-kept"})
+            continue
+        gen = keep_of(w.journal.wrote, e)
+        at = w.journal.wrote.get(gen) if gen else None
+        entry = writes.entry_at(root, at) if at is not None else None
+        if gen is None or entry is None or entry.get("event") != "begin" or gen not in (entry.get("edits") or []):
+            out.refused.append({"id": i, "why": _not_written(e), "code": "not-written"})
+            continue
+        # what recovery would not act on, an undo does not either: a file reached through a link out of the quilt among it
+        why = writes.untrusted(root, hist, entry)
+        made = None if why else writes.splices_of(hist, entry, gen)
+        if not made:
+            said_why = why or "the texts it names are missing from the history or do not bear it out"
+            out.refused.append(
+                {
+                    "id": i,
+                    "why": f"loom will not undo the Keep of {called(e)} from its record: {said_why}; restore a version from The Record instead",
+                    "code": "not-written",
+                }
+            )
+            continue
+        items += [(e, gen, m) for m in made]
+    # where each edit's words stand in each file now; an edit refused in one file is undone in none, so plan again without it
+    plans: dict[str, tuple[bytes, bytes, list[dict[str, Any]], list[tuple[int, int]], list[tuple[int, int, str]]]] = {}
+    named = {e.id: e for e, *_ in items}
+    while items:
+        failed: dict[str, dict[str, str]] = {}
+        plans = {}
+        for rel in sorted({m.rel for *_, m in items}):
+            mine = [(e, gen, m) for e, gen, m in items if m.rel == rel]
+            # the plan is made from one read of the file, the bytes the commit checks it still holds
+            data = w.read(rel)
+            try:
+                raw = w.text(rel, again=False)
+            except writes.WriteRefused as exc:
+                failed.update({e.id: {"why": exc.message, "code": exc.code} for e, *_ in mine})
+                continue
+            if raw is None or data is None:
+                failed.update({e.id: {"why": _changed_since(e), "code": "changed-since"} for e, *_ in mine})
+                continue
+            plan = _undo_in(hist, raw, data, mine)
+            if isinstance(plan, dict):
+                failed.update(
+                    {i: {"why": _changed_since(named[i], how), "code": "changed-since"} for i, how in plan.items()}
+                )
+            else:
+                plans[rel] = (data, *plan)
+        if not failed:
+            break
+        out.refused += [{"id": i, **f} for i, f in failed.items()]
+        items = [it for it in items if it[0].id not in failed]
+    if not items:
+        return
+    out.trying = list(dict.fromkeys(e.id for e, *_ in items))
+    files = sorted(plans)
+    # the versions are of the text the undo replaces: stamp them from a scan that reads as the files now do
+    for again in (False, True):
+        if again:
+            result = out.result = _rescan(result)
+        if all(f in result.files and w.reads_as(f, result.files[f].text) for f in files):
+            break
+    else:
+        raise writes.WriteRefused(
+            "changed", "a file changed while loom was undoing a Keep; nothing was written, look at it again"
+        )
+    for e, _, m in items:
+        node = home(result, e)
+        key = node.key if node is not None else e.target_key
+        if not any(p.id == e.id for p in out.changes):
+            out.changes.append(
+                Pending(
+                    id=e.id,
+                    kind="suggested",
+                    path=m.rel,
+                    key=key,
+                    documents=[],
+                    old=m.new.strip(),
+                    new=m.old.strip(),
+                    at=[0, 0],
+                    edit=e,
+                )
+            )
+    # carrying annotations back needs the blocks' text before; only worth reading when an annotation stands on one of them
+    if _annotated(root, {p.key for p in out.changes if p.key}):
+        out.before = _kept_texts(result, out.changes)
+    _say(said, keep_versions(result, files, UNDO, "Before undoing a kept edit", writer[1]))
+    # stamping takes a moment: what is written replaces the bytes the plan was made from, or nothing is
+    if any(w.read(f) != plans[f][0] for f in files):
+        raise writes.WriteRefused(
+            "changed", "a file changed while loom was undoing a Keep; nothing was written, look at it again"
+        )
+    for rel in files:
+        data, new, splices, spans, done = plans[rel]
+        w.replace(rel, new, splices)
+        out.spans[rel] = spans
+        out.wrote[rel] = (data.decode("utf-8"), new.decode("utf-8"), done)
+    answered: set[str] = set()
+    for e, gen, _ in items:
+        if e.id in out.ids:
+            continue
+        w.undid(gen)
+        w.log(root / EDIT_LOG, reopened_event(e, writer))
+        line = unanswered_event(root, e, writer)
+        if line is not None and line["id"] not in answered:
+            answered.add(line["id"])
+            w.log(annotation_log(root), line)
+        for rel in sorted({m.rel for f, _, m in items if f is e}):
+            w.log(*ledger_line(hist, UNAPPLY, {"edit": e.id, "path": rel}, writer[1]))
+        out.ids.append(e.id)
+
+
+def _undo_in(
+    hist: Path, raw: str, data: bytes, items: list[tuple[Edit, str, Any]]
+) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]], list[tuple[int, int, str]]] | dict[str, str]:
+    """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or, by id, why a place is not established (`changed`, or `too-much` when the file changed too much around it to compare).
+
+    Each Keep's words are taken out only at the place that Keep wrote them (`writes.place_in`), never wherever like words stand. The words put back are the Keep's own bytes where the file is as that Keep left it, and otherwise take the file's own line ending at their place. Where the file holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
+    """
+    from loom import writes
+
+    now = writes.digest(data)
+    places: list[tuple[int, int, Any, str, str]] = []
+    bad: dict[str, str] = {}
+    for e, gen, m in items:
+        try:
+            span = writes.place_in(m, raw)
+        except writes.TooChanged:
+            bad[e.id] = "too-much"
+            continue
+        if span is None:
+            bad[e.id] = "changed"
+        else:
+            places.append((*span, m, gen, e.id))
+    places.sort(key=lambda x: x[0])
+    for (_, b, _, _, i), (a, _, _, _, j) in zip(places, places[1:], strict=False):
+        if b > a:
+            bad.setdefault(i, "changed")
+            bad.setdefault(j, "changed")
+    if bad:
+        return bad
+    out: list[str] = []
+    made: list[dict[str, Any]] = []
+    spans: list[tuple[int, int]] = []
+    last = shift = 0
+    for a, b, m, gen, _ in places:
+        # the words it replaced: its own bytes where the file is as the Keep left it, else in the file's own line ending there
+        old = (
+            m.old
+            if now == m.after
+            else m.old.replace("\r\n", "\n").replace("\r", "\n").replace("\n", _ending_at(raw, a, b))
+        )
+        out += [raw[last:a], old]
+        made.append({"edit": gen, "at": a + shift, "old": raw[a:b], "new": old})
+        spans.append((a + shift, a + shift + len(old)))
+        shift += len(old) - (b - a)
+        last = b
+    out.append(raw[last:])
+    text = "".join(out)
+    new = text.encode("utf-8")
+    first = places[0][2]
+    if (
+        {m.act for _, _, m, _, _ in places} == {first.act}
+        and now == first.after
+        and set(first.edits) <= {g for *_, g, _ in places}
+        and first.before is not None
+    ):
+        # the file is as that one Keep left it and every edit it wrote here is undone: its bytes before come back whole
+        back = writes.fetch(hist, first.before)
+        if back is not None and back.decode("utf-8", "replace") == text:
+            new = back
+    done = [(a, b, str(made_one["new"])) for (a, b, _, _, _), made_one in zip(places, made, strict=True)]
+    return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans], done
+
+
+def _moves(made: list[Any], was: str, now: str, cut: tuple[int, int, int]) -> bool:
+    """Whether an act that changed `was[cut[0]:cut[1]]` into `now[cut[0]:cut[2]]` (both read as the scan reads them) can have moved a Keep's words: whether the region of its words, or of the words they replaced, stands once in either text and overlaps what the act changed there. A region that stands twice is never placed, so it is never moved either."""
+    from loom import writes
+
+    for m in made:
+        for part in (writes.region(m), writes.region(m, side="before")):
+            for text, end in ((was, cut[1]), (now, cut[2])):
+                i = text.find(part)
+                if i >= 0 and text.find(part, i + 1) < 0 and i < end and cut[0] < i + len(part):
+                    return True
+    return False
+
+
+def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, writer: tuple[str, str]) -> None:
+    """Stage in an act the records of the suggested edits whose words it moves in one file, by what the journal says loom wrote.
+
+    For an act that writes a file's text whole or puts words back (a restore, a put-back, a Discard). A kept edit is opened again (`reopened`, `why: "restored"`) when `after` is the very bytes its Keep replaced, or when its Keep's words stand at their place in `before` (`writes.place_in`), the words they replaced stand at their place in `after`, and its words stand nowhere in `after` at all. An edit open again is recorded kept (`kept`, `why: "restored"`) when `after` is the very bytes its last Keep wrote, or when that Keep's words stand at their place in `after` and did not in `before`. Anything else leaves the record as it is: an edit is left kept with its words gone rather than open with its words in the file, which a Keep could write a second time. The annotation a Keep resolved follows its edit.
+
+    Parameters
+    ----------
+    w : Act
+        The act, under the door's lock; its journal is read as recovery left it.
+    path : str
+        The file the act writes.
+    before, after : bytes or None
+        The file's bytes before and after the act; None for a file absent.
+    writer : (str, str)
+        Who acts, for the records.
+
+    See Also
+    --------
+    unkeep : the undo of a Keep, which updates its own edit's record.
+    """
+    from loom import writes
+    from loom.paths import EDIT_LOG
+    from loom.records.edits import answered_event, kept_event, reopened_event, replay, unanswered_event
+    from loom.records.log import log_path as annotation_log
+
+    try:
+        was = before.decode("utf-8") if before is not None else ""
+        now = after.decode("utf-8") if after is not None else ""
+    except UnicodeDecodeError:
+        return
+    root, hist = w.root, w.history
+    flat = " ".join(now.split())
+    # what the act changes, read as the scan reads it: a Keep whose region it does not touch is passed over with no diff
+    was_lf, now_lf = (x.replace("\r\n", "\n").replace("\r", "\n") for x in (was, now))
+    pre, suf = writes.shared(was_lf, now_lf)
+    cut = (pre, len(was_lf) - suf, len(now_lf) - suf)
+
+    def placed(m: Any, text: str, side: str = "after") -> bool:
+        try:
+            return writes.place_in(m, text, side=side) is not None
+        except writes.TooChanged:
+            return False
+
+    for e in replay(root)[0]:
+        gen = keep_of(w.journal.wrote, e)
+        at = w.journal.wrote.get(gen) if gen else None
+        entry = writes.entry_at(root, at) if at is not None else None
+        # only a Keep that wrote this file, so a restore of many files reads the store for the edits each holds
+        if entry is None or path not in (entry.get("splices") or {}) or writes.untrusted(root, hist, entry):
+            continue
+        made = [m for m in writes.splices_of(hist, entry, gen) or [] if m.rel == path]
+        if not made:
+            continue
+        # the very bytes on the other side of that Keep, in the direction this edit could move
+        exact = writes.digest(after) == (made[0].before if e.status == "kept" else made[0].after)
+        if not exact and not _moves(made, was_lf, now_lf, cut):
+            continue
+        if e.status == "kept":
+            out = writes.digest(after) == made[0].before or all(
+                placed(m, was)
+                and placed(m, now, "before")
+                and (not m.new.strip() or " ".join(m.new.split()) not in flat)
+                for m in made
+            )
+            if out:
+                w.log(root / EDIT_LOG, reopened_event(e, writer, "restored"))
+                line = unanswered_event(root, e, writer)
+                if line is not None:
+                    w.log(annotation_log(root), line)
+        elif e.status == "open":
+            back = writes.digest(after) == made[0].after or all(placed(m, now) and not placed(m, was) for m in made)
+            if back:
+                kept = next((a for a in reversed(e.acts) if a.get("event") == "kept"), {})
+                event = kept_event(e, writer, str(kept.get("hash") or ""))
+                event["why"] = "restored"
+                w.log(root / EDIT_LOG, event)
+                line = answered_event(root, e, writer)
+                if line is not None:
+                    w.log(annotation_log(root), line)
+
+
+def relook(root: Path, look: dict[str, Any]) -> None:
+    """For a Keep or an undo that recovery finished, do what its follow-up does to the person's look.
+
+    The words loom wrote go into the reviewer's look, as `absorb` puts them, so they are not listed as the person's own edit. A journal travels with a copied quilt, so only the quilt's own reviewer's look is touched, and only at places in files the scan reads.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    look : dict
+        The act's `look` from its `begin` line: `who`, whose look, and `spans`, by file the `[start, end]` places in the scan's reading after the act of the words loom wrote.
+
+    See Also
+    --------
+    absorb : what puts in-place changes on loom's words into the look.
+    """
+    from loom.scan.quilt import load_quilt, reviewer_identity
+    from loom.scan.scan import scan
+
+    who = look.get("who") if isinstance(look, dict) else None
+    spans = look.get("spans") if isinstance(look, dict) else None
+    if not isinstance(who, str) or not who or not isinstance(spans, dict) or who != (reviewer_identity(root)[0] or ""):
+        return
+    result = scan(load_quilt(root))
+    for path, places in spans.items():
+        if path not in result.files or not isinstance(places, list):
+            continue
+        at = [
+            (s[0], s[1]) for s in places if isinstance(s, list) and len(s) == 2 and all(isinstance(x, int) for x in s)
+        ]
+        absorb(result, who, path, at)
+
+
+def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
+    """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file (`_undo_into_look`, with no listing of the person's changes where the look can be given the undo's own change), and where an annotation stands on the blocks, the annotations on the words taken out are carried onto the words put back.
+
+    The files are written, so the undo is done whatever happens here: a failure of the look's shortcut falls back to the listing (`absorb`), and one of a step itself is returned in words, for the answer to say.
+    """
+    from loom.records.carry import carry_all
+
+    said: list[str] = []
+    after = None
+    for path, (was, now, done) in out.wrote.items():
+        if not who:
+            continue
+        try:
+            if _undo_into_look(out.result.quilt, who, path, was, now, done):
+                continue
+        except Exception:  # noqa: BLE001 -- the shortcut's failure is not the person's news: the listing does what it would have
+            pass
+        try:
+            after = after or _rescan(out.result)
+            absorb(after, who, path, out.spans[path])
+        except Exception as exc:  # noqa: BLE001 -- the undo is done; its look is a convenience, said when it fails
+            said.append(
+                f"the words put back in {path} did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
+            )
+    if out.before:
+        try:
+            carry_all(_rescan(after or out.result), out.before, out.changes, writer)
+        except Exception as exc:  # noqa: BLE001 -- the undo is done; the annotations stay on the words taken out, said
+            said.append(
+                f"the annotations on the words taken out were not carried onto the words put back ({type(exc).__name__})"
+            )
+    return said
+
+
+def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:
+    """Give `who`'s look of `path` the undo's own change, with no listing of the person's changes: where the look held the file as it was before the undo, it holds the file now; else each stretch the undo wrote over is carried to its place in the look (`writes.carry`) and the same words put there. False when a stretch's place in the look is not established, for `absorb` to do it by listing."""
+    from loom import writes
+    from loom.looks import _write, read_look
+    from loom.records.snapshots import read_raw, write_raw
+    from loom.scan.hashing import sha256
+
+    if not quilt.config.track_edits:
+        return True
+    look = read_look(quilt.root, who)
+    if look is None:
+        return True
+    held = look.files.get(path)
+    if held is None:
+        return False
+    if held == sha256(was):
+        text = now
+    else:
+        seen = read_raw(quilt.root, held, quilt.history_dir)
+        if seen is None:
+            return False
+        try:
+            spans = [writes.carry(was, seen, a, b) for a, b, _ in done]
+        except writes.TooChanged:
+            return False
+        if any(s is None for s in spans):
+            return False
+        placed = sorted(((s[0], s[1], words) for s, (_, _, words) in zip(spans, done, strict=True) if s), reverse=True)
+        if any(x1 > y0 for (y0, _, _), (_, x1, _) in zip(placed, placed[1:], strict=False)):
+            return False
+        text = seen
+        for x0, x1, words in placed:
+            text = text[:x0] + words + text[x1:]
+    look.files[path] = write_raw(quilt.root, text, quilt.history_dir)
+    _write(quilt.root, look)
+    return True
+
+
+def _annotated(root: Path, keys: set[str]) -> bool:
+    """Whether an annotation on words stands on one of the blocks `keys`: the only case in which carrying annotations has anything to carry."""
+    from loom.records.annotations import load_records
+
+    return any(
+        a.target_key in keys and a.selector is not None and not a.in_reply_to
+        for r in load_records(root)[0]
+        for a in r.annotations
+    )
+
+
 def _not_utf8(path: str) -> str:
     return f"{path} is not UTF-8 text, so loom does not write into it; save it as UTF-8 first"
 
@@ -746,6 +1287,8 @@ def _discard_in(
     for _cid, (o0, o1), (n0, n1) in mine:
         text = text[:n0] + old[o0:o1] + text[n1:]
     data = None if not text and not looked else text.encode("utf-8")
+    # words it puts back may be a suggested edit's: its record follows them
+    follow_words(w, path, w.before.get(path), data, writer)
     w.replace(path, data)
     entry: dict[str, Any] = {
         "who": who,

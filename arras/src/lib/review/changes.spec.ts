@@ -3,8 +3,16 @@ import type { Manifest, PendingChange } from '$lib/manifest/types';
 
 const calls: [string, Record<string, unknown>][] = [];
 let answer: Record<string, unknown> = { ok: true, result: 'done' };
+let quilt: string | undefined = 'q-one';
+let probed: Promise<void> = Promise.resolve();
+const watchers: ((caps: { quilt?: string } | null) => void)[] = [];
 vi.mock('$lib/write', () => ({
 	can: async () => true,
+	capabilities: async () => {
+		await probed;
+		return { write_api: 1, capabilities: [], quilt };
+	},
+	onCapabilities: (watch: (caps: { quilt?: string } | null) => void) => watchers.push(watch),
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
 		return answer;
@@ -147,6 +155,116 @@ describe('Keep and Discard', () => {
 		live.changes = [change({})];
 		answer = { ok: true, result: 'discarded 1', done: ['c-0001'], refused: [] };
 		await discardChanges({ changes: ['c-0001'] });
+		expect(history.done).toHaveLength(0);
+	});
+
+	it('puts a suggestion loom writes on the undo history, undone by change-undo and kept again by redo; one taken already is not', async () => {
+		live.changes = [change({}), suggestion, change({ id: 'e-2', kind: 'suggested', state: 'taken' })];
+		answer = { ok: true, result: 'kept 3', done: ['c-0001', 'e-1', 'e-2'], refused: [] };
+		await keepChanges({ all: true, document: MAIN });
+		expect(history.done).toHaveLength(1);
+		expect(history.done[0].label).toBe('keep');
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await undo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'], quilt: 'q-one' }]);
+		expect(acted.map['e-1']).toBeUndefined();
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		expect(await redo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-keep', { changes: ['e-1'] }]);
+	});
+
+	it('says why an undo of a keep was refused; one that can never be undone leaves the history, uncovering what is beneath it', async () => {
+		live.changes = [suggestion];
+		history.done = [{ label: 'resolve', undo: async () => ({ ok: true }), redo: async () => ({ ok: true }) }];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		expect(history.done.map((s) => s.label)).toEqual(['resolve', 'keep']);
+		// a file that moved while loom worked: pressed again it may be undone, so the step stays
+		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'a file changed while loom was undoing a Keep', code: 'changed' }] };
+		expect(await undo()).toBe('a file changed while loom was undoing a Keep');
+		expect(history.done.map((s) => s.label)).toEqual(['resolve', 'keep']);
+		// its words changed where they were written: never, so it goes, and Undo reaches the resolve beneath
+		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'the suggestion “plural” has changed where it was written', code: 'changed-since' }] };
+		expect(await undo()).toBe('the suggestion “plural” has changed where it was written');
+		expect(history.done.map((s) => s.label)).toEqual(['resolve']);
+	});
+
+	it('keeps a Keep step in the tab across a reload, offered only in the quilt it was made in', async () => {
+		const kept: Record<string, string> = {};
+		vi.stubGlobal('sessionStorage', { getItem: (k: string) => kept[k] ?? null, setItem: (k: string, v: string) => (kept[k] = v) });
+		vi.resetModules();
+		let h = await import('./history.svelte');
+		await vi.waitFor(() => expect(h.history.done).toEqual([]));
+		await new Promise((r) => setTimeout(r));
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await h.keepChanges({ changes: ['e-1'] });
+		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [['e-1']] });
+		// the same tab, another quilt served on the port: nothing of q-one is offered
+		quilt = 'q-two';
+		vi.resetModules();
+		h = await import('./history.svelte');
+		await new Promise((r) => setTimeout(r));
+		expect(h.history.done).toEqual([]);
+		// back in the quilt it was made in, the step is there, and undoes
+		quilt = 'q-one';
+		vi.resetModules();
+		h = await import('./history.svelte');
+		await vi.waitFor(() => expect(h.history.done.map((s) => s.label)).toEqual(['keep']));
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await h.undo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'], quilt: 'q-one' }]);
+		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [] });
+		vi.unstubAllGlobals();
+	});
+
+	it('lets the Keep steps go when the stream comes back from another quilt, and the server refuses one sent anyway', async () => {
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		expect(history.done.map((s) => s.label)).toEqual(['keep']);
+		// a renamed copy served on the port, no reload: the probe after the reconnect names it
+		watchers[0]({ quilt: 'q-copy' });
+		expect(history.done).toEqual([]);
+		// back to the quilt it was made in: the step is offered again, from where the tab kept it
+		watchers[0]({ quilt: 'q-one' });
+		// and a step that does reach another quilt's server is refused there, for good
+		history.done = [];
+		await keepChanges({ changes: ['e-1'] });
+		answer = { ok: false, error: { code: 'other-quilt', message: 'that Keep was made in another quilt, so nothing was undone' } };
+		expect(await undo()).toBe('that Keep was made in another quilt, so nothing was undone');
+		expect(history.done).toHaveLength(0);
+	});
+
+	it('makes a Keep step only once the server has said which quilt it serves, and none where it names none', async () => {
+		let answered = () => {};
+		probed = new Promise((r) => (answered = r));
+		vi.resetModules();
+		let h = await import('./history.svelte');
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		// kept before the server has answered which quilt it serves: the step waits for it, and names it
+		const keeping = h.keepChanges({ changes: ['e-1'] });
+		await new Promise((r) => setTimeout(r));
+		expect(h.history.done).toEqual([]);
+		answered();
+		await keeping;
+		expect(h.history.done.map((s) => [s.label, s.quilt])).toEqual([['keep', 'q-one']]);
+		// a server that names no quilt: no step, so no undo is ever sent without one
+		quilt = undefined;
+		vi.resetModules();
+		h = await import('./history.svelte');
+		await h.keepChanges({ changes: ['e-1'] });
+		expect(h.history.done).toEqual([]);
+		quilt = 'q-one';
+	});
+
+	it('lets a step go whose suggestion the quilt does not have, saying so without an id', async () => {
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		answer = { ok: false, error: { code: 'no-such-change', message: 'a suggestion it names is not in this quilt' } };
+		expect(await undo()).toBe('a suggestion it names is not in this quilt');
 		expect(history.done).toHaveLength(0);
 	});
 

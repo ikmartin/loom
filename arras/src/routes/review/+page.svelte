@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last discard is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar.
+	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar.
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount, tick } from 'svelte';
@@ -146,7 +146,7 @@
 		busy = '';
 	}
 
-	/** Undo the last discard, saying loom's refusal where there is one. */
+	/** Undo the last keep or discard, saying loom's refusal where there is one. */
 	async function back(): Promise<void> {
 		const why = await undo();
 		said = why ? { at: '*', text: why, refused: true } : null;
@@ -215,8 +215,8 @@
 			<span class="muted" data-testid="review-summary">{[part(changedCount, 'changed since you accepted'), part(takenCount, 'taken in'), part(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || 'Nothing waits'}</span>
 		{/snippet}
 		{#snippet actions()}
-			<!-- a discard, here or in a document, is undone as the document's toolbar undoes it -->
-			{#if nextUndo().startsWith('discard')}<button type="button" class="btn small quiet" disabled={history.busy} data-testid="review-undo" onclick={() => void back()}>Undo {nextUndo()}</button>{/if}
+			<!-- a keep or a discard, here or in a document, is undone as the document's toolbar undoes it -->
+			{#if nextUndo().startsWith('discard') || nextUndo().startsWith('keep')}<button type="button" class="btn small quiet" disabled={history.busy} data-testid="review-undo" onclick={() => void back()}>Undo {nextUndo()}</button>{/if}
 			<button type="button" class="btn small" class:on={todoOn} aria-pressed={todoOn} title="To do: the open annotations from others, beside the changes" data-testid="your-todo" onclick={() => (todoOn = !todoOn)}>To do <span class="badge">{changeCount + todoCount}</span></button>
 			{#if acts && picked.size}
 				<span data-testid="review-picked">{picked.size} selected</span>
