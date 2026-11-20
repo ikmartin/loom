@@ -345,6 +345,22 @@ def test_the_orientation_opens_with_what_must_not_be_missed(tmp_path: Path) -> N
     assert "server signs for you" in opening
 
 
+def test_what_agents_are_told_of_markdown_is_what_the_commands_do(tmp_path: Path) -> None:
+    """QF-4, QF-8: the orientation told an agent to plan from `loom status` and the rules to read nothing but loom's commands, true only of a LaTeX paper. They now say a Markdown file has no keys and is read directly, which is what `status` and `source` do with one."""
+    assets = Path(__file__).resolve().parents[2] / "src" / "loom" / "assets" / "ai"
+    orientation = flat((assets / "orientation.md").read_text(encoding="utf-8"))
+    rules = flat((assets / "rules.md").read_text(encoding="utf-8"))
+    assert "or from the files where the work is Markdown" in orientation
+    assert "a Markdown file has no keys and is not in it" in orientation
+    for text in (orientation, rules):
+        assert "a file with no keys, Markdown among them, you read directly" in text
+    q = tmp_path / "course"
+    ok("init", str(q), "--ai", "none", cwd=tmp_path)
+    (q / "lesson.md").write_text("# Lesson\n\nThe first one.\n", encoding="utf-8")
+    assert ok("status", cwd=q).stdout.strip() == "no keys of yours yet"
+    refused("source", "lesson.md", cwd=q, code=2, match="no such key")
+
+
 def test_session_new_opens_a_session_and_orient_prints_its_chat(tmp_path: Path) -> None:
     q = bare(tmp_path)
     r = ok("session", "new", "--name", "Referee of dm-0003", cwd=q, env=FIXED)

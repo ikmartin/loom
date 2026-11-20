@@ -6,7 +6,7 @@ Everything here reads the scan result and emits; nothing is stored. `[lint] disa
 from __future__ import annotations
 
 import re
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from loom.paths import COPIES
@@ -182,6 +182,22 @@ def _home(result: ScanResult) -> list[Diagnostic]:
     ]
 
 
+def _person_pages(result: ScanResult) -> bool:
+    """Whether the quilt shows a Markdown file, notebook or HTML page of the person's: one beyond the README.md and the agents' instruction files loom writes at its root.
+
+    `loom:no-live-document`'s advice to begin a document is for a quilt with nothing in it; a quilt of lessons or notes is being worked on in its files.
+    """
+    from loom.ai.layout import ROOT_FILES
+    from loom.files import SUFFIX_KINDS, Shown
+
+    loom_wrote = {"README.md", *ROOT_FILES}
+    pages = {"markdown", "notebook", "html"}
+    return any(
+        p not in loom_wrote and SUFFIX_KINDS.get(PurePosixPath(p).suffix.lower()) in pages
+        for p in Shown.of(result.quilt).walk()
+    )
+
+
 def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic]:
     asm = result.assembly
     files = result.files
@@ -200,7 +216,7 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
                 Diagnostic(
                     "info",
                     "loom:no-live-document",
-                    "nothing is being worked on: the quilt holds no document, so it defines no nodes",
+                    "the quilt holds no LaTeX document, so it defines no nodes",
                     [],
                     fixes=[
                         Fix(
@@ -210,12 +226,12 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
                     ],
                 )
             )
-        else:
+        elif not _person_pages(result):
             diags.append(
                 Diagnostic(
                     "info",
                     "loom:no-live-document",
-                    "nothing is being worked on: the quilt holds no document; write one anywhere in it with \\documentclass, or begin from a paper",
+                    "the quilt holds no LaTeX document; write one anywhere in it with \\documentclass, or begin from a paper",
                     [],
                     fixes=[
                         Fix("bring in a paper you are writing", "loom import FILE"),

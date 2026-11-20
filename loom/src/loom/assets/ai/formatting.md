@@ -31,4 +31,5 @@ Link to the thing, not to a description of where it is. A reader clicks a link a
 ## What renders what
 
 - Messages and annotation bodies are Markdown, rendered as CommonMark with raw HTML switched off: emphasis, lists, code and links work, and an HTML tag shows as text.
+- A Markdown file of the project is drawn with HTML of its own: the tags a README on GitHub keeps, `<details>` and `<figure>` among them, with `<audio>`, `<video>` and an `https:` `<iframe>`, and no `class` or `style`; any other tag, `<script>`, `<style>` and `<svg>` among them, shows as text.
 - Mathematics is MathJax, as above. Nothing else is typeset.

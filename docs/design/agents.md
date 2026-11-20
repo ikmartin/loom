@@ -4,7 +4,7 @@ How AI agents take part in a quilt: what they may do, what only the author may d
 
 ## What an agent may do
 
-An agent reads the quilt through loom, never by reading directories wholesale: `loom status` for what needs doing, `loom search` to resolve "Theorem 4.8" to its id, `loom source KEY --closure` for exactly the context a key rests on, `loom library search` and `loom library read` for the literature. Reading through loom means what it reads is what loom resolved, and what it quotes can be checked against the page it came from.
+An agent reads the quilt's LaTeX through loom, never by reading directories wholesale: `loom status` for what needs doing, `loom search` to resolve "Theorem 4.8" to its id, `loom source KEY --closure` for exactly the context a key rests on, `loom library search` and `loom library read` for the literature. Reading through loom means what it reads is what loom resolved, and what it quotes can be checked against the page it came from. A file loom keeps no keys for, a Markdown lesson or note among them, it reads directly, and where the work is in such files it plans from them.
 
 It writes the quilt's files where the quilt lets it (below), and everything else through loom's records and its own places:
 

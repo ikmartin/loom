@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 from html.parser import HTMLParser
+from pathlib import Path
 
 import pytest
 
@@ -320,3 +322,21 @@ def test_clean_keeps_a_tag_open_for_a_later_piece_to_close() -> None:
     assert clean("</script>", same, str) == "&lt;/script&gt;"
     assert clean("<br/>", same, str) == "<br>"
     assert clean("<b/>", same, str) == "<b></b>"
+
+
+def test_what_agents_are_told_a_files_html_may_hold_is_what_is_drawn() -> None:
+    """QF-38: the formatting document said only that a message's raw HTML is switched off, which read as true of a file; its line on a file's HTML names tags kept and refused, and each is as it says."""
+    text = (Path(__file__).resolve().parents[2] / "src" / "loom" / "assets" / "ai" / "formatting.md").read_text(
+        encoding="utf-8"
+    )
+    line = next(ln for ln in text.splitlines() if ln.startswith("- A Markdown file of the project"))
+    kept, refused = line.split("any other tag", 1)
+    named = [re.findall(r"`<([a-z0-9]+)>`", part) for part in (kept, refused)]
+    assert named == [["details", "figure", "audio", "video", "iframe"], ["script", "style", "svg"]], named
+    for tag in named[0]:
+        body = draw(f'<{tag} src="https://example.org/x" class="box" style="color: red">x</{tag}>')
+        attrs = next((a for t, a in written(body) if t == tag), None)
+        assert attrs is not None and not ({"class", "style"} & set(attrs)), body
+    for tag in named[1]:
+        assert f"&lt;{tag}&gt;" in draw(f"<{tag}>x</{tag}>")
+    assert "<iframe" not in draw('<iframe src="http://example.org/x"></iframe>')  # only an https: frame

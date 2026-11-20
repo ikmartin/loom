@@ -7,7 +7,7 @@
 - **The author reads the viewer, and what it does not show is never seen.** Your report is a `loom session say` message, and a finding is a `loom annotate` on what it concerns (`.loom/agents/instructions/rules.md`, Where work goes).
 - **Never write by hand** in `.loom/` outside your session's directory, your scratch, `.loom/agents/copies/` and `.loom/records/annotation-types.toml`, the quilt's annotation types, nor `config.toml`, nor the research state; Live state, at the end, lists all that is protected.
 
-You are working in a **quilt**: a research project managed by `loom`, usually mathematical, kept as LaTeX. It may hold several documents — a paper, a talk, notes from reading — or none yet; do not assume there is one paper, or a paper at all. `loom ai orient` printed this, `.loom/agents/instructions/rules.md` (how to work and what your output looks like), `.loom/agents/instructions/formatting.md` (how to write what the author reads) and the modes you can reach for. Read them once. Then run `loom status` and propose what to do from what it reports.
+You are working in a **quilt**: a research project managed by `loom`, usually mathematical, kept as LaTeX or Markdown. It may hold several documents — a paper, a talk, notes from reading — or none yet; do not assume there is one paper, or a paper at all. `loom ai orient` printed this, `.loom/agents/instructions/rules.md` (how to work and what your output looks like), `.loom/agents/instructions/formatting.md` (how to write what the author reads) and the modes you can reach for. Read them once. Then run `loom status` and propose what to do from what it reports, or from the files where the work is Markdown.
 
 Commands are written here as a shell takes them. Attached over MCP (`loom mcp`), each is the tool of the same name — `loom status` is `loom_status`, `loom library read` is `loom_library_read` — with its options as arguments (`--source-text` is `source_text`), and the author's commands are not tools. The server says who you are, so you pass no `--as`. A text is given as itself, never as `-` for stdin, and each item is a call of its own, so a tool has no `--batch`. A result too long for a reply is a file in your session's scratch, `.loom/agents/scratch/<id>/` (`none/` when the call names no session), which the tool names. If your app also gives you a shell, `loom` runs there too, for what a tool does not do, such as filtering a result or `--batch`; there you name yourself with `--as`.
 
@@ -45,10 +45,10 @@ To ask for one, write a {type:suggestion} on the thing concerned with your reaso
 
 ## 4. Where to look
 
-- `loom status`, first: every key, its state, its open annotations. It is the to-do list.
+- `loom status`, first: every key, its state, its open annotations. It is a LaTeX document's to-do list; a Markdown file has no keys and is not in it.
 - `loom lint`: every diagnostic, each with its class. The author's Problems page lists only `latex`, the problems in a document's LaTeX, one that did not compile among them, and a link in a Markdown file that goes nowhere; `model`, loom's model of the quilt (ids, `\uses`, links, copies, records), and `internal`, loom's own, are yours to read.
 - `loom search QUERY --json`: ids by title, alias, tag or citekey. When the author names a result by number — "Theorem 3.4" — resolve it here before reading anything.
-- `loom source KEY --closure`: a key's text and exactly the statements it rests on. A document's path instead prints it flattened. Read this, not the directories.
+- `loom source KEY --closure`: a key's text and exactly the statements it rests on. A document's path instead prints it flattened. Read a document through this, not its `.tex` files; a file with no keys, Markdown among them, you read directly.
 - `loom library WORK`, `loom library search`, `loom library read WORK N`: the literature. Ask the digest before the paper, and quote only what `library read` printed.
 - `loom ai annotations --by NAME`: the annotations NAME wrote, your own among them, with what the author decided about each; `--target`, `--type` and `--status` narrow it.
 - `loom ai drafts`: each agent document and what has moved on the author's side since; `loom ai refresh DOC` brings that in.
