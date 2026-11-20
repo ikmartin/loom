@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -127,9 +128,9 @@ def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
 
 #: A range whose difflib search would look at more than this many places per word of the two ranges is searched by window instead (`_longest_by_window`).
 _CHEAP = 8
-#: The window hash: a polynomial in the words' numbers, modulo a Mersenne prime.
+#: The window hash: a polynomial in the words' numbers, modulo a Mersenne prime, its base drawn once a process above every word's number, so that no text can be written to collide and send the listing down `_cut_by_difflib`'s path.
 _HASH_MOD = (1 << 61) - 1
-_HASH_BASE = 1_000_003
+_HASH_BASE = secrets.randbelow(_HASH_MOD - (1 << 32)) + (1 << 32)
 
 
 class _Inexact(Exception):

@@ -266,3 +266,20 @@ def test_a_long_file_with_recurring_words_is_listed_without_todays_search(monkey
     (change,) = pending.cut(old, new)
     assert pending._cut_by_difflib(old, new) == [change] and "Surely" in new[change[2] : change[3]]
     assert searched
+
+
+def test_the_window_hash_is_drawn_again_in_every_process() -> None:
+    """A text written to collide under one process's hash collides under no other's: the base is drawn when loom starts."""
+    import subprocess
+    import sys
+
+    said = {
+        subprocess.run(
+            [sys.executable, "-c", "from loom import pending; print(pending._HASH_BASE)"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        for _ in range(2)
+    }
+    assert len(said) == 2 and all(int(b) >= 1 << 32 for b in said)
