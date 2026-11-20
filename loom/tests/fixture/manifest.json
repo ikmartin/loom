@@ -673,7 +673,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "e42ed1a7172cbc16e20ff11b644d1379d894aed5fe8926991664947f0fd558c5",
+   "hash": "77bfd8ec6355358c2ddfecef40d58ce31e0e8737bb16041f130fce7d66f26829",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -688,7 +688,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "f9ba68f818a4c8587088737088f45d8ac059a2816314a4ffbd9ae0569dac4d04",
+   "hash": "c7cc97e3114dd972d9cff59ecfea8b4e97b7191b282e690277d05bfa16ec3f19",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -703,7 +703,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "fcc67bfe45ebc7147bb17f4325237f2b05e80ccb196f6ab46acd81cc2e545647",
+   "hash": "2ec42da20332eea0d062cc58e12987d2ca6307086d4298b2d23542031a173234",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -969,7 +969,8 @@
     "loom:unverified-locators",
     "loom:uses-missing",
     "loom:uses-unused",
-    "loom:version-mismatch"
+    "loom:version-mismatch",
+    "loom:write-left"
    ],
    "disable": []
   },
