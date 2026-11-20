@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from loom.render.normalise import normalise
+from loom.render.uses import passing
 from loom.tex.tex4ht import _balanced, _blank_comments, make_html, repair_displays
 
 #: The document a run compiles, written beside the owning document so its local files resolve.
@@ -203,10 +204,11 @@ def render_snippets(
         "TeX is not run here" if not tex else ("make4ht is not installed" if shutil.which("make4ht") is None else "")
     )
     if batch and absent:
-        # the machine's, not the text's: nothing is remembered
+        # the machine's, not the text's: nothing is remembered, and nothing made from it may be (`uses.passing`)
         for i in batch:
             out.made[i] = Snippet(None, absent)
         batch = []
+        passing()
     lock = threading.Lock()
     remember = True
 
@@ -268,6 +270,8 @@ def render_snippets(
                     (cache_dir / f"{keys[i]}.html").write_text(s.html, encoding="utf-8")
                 else:
                     (cache_dir / f"{keys[i]}.failed").write_text(s.error or "TeX made nothing of it", encoding="utf-8")
+        else:
+            passing()
     for i, k in enumerate(keys):
         if k in first and first[k] != i:
             out.made[i] = out.made[first[k]]

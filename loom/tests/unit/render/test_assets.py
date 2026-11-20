@@ -60,3 +60,20 @@ def test_without_pdftocairo_dvisvgm_converts_and_without_either_it_is_an_error(
         None,
         "could not convert cone to SVG (pdftocairo or dvisvgm --pdf needed)",
     )
+
+
+def test_only_a_figure_no_tool_here_converts_is_noted_as_passing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A figure no tool on the machine converts is the machine's, noted `uses.PASSING` so that nothing made with it outlives the build; one converted, or one the quilt does not hold, is not."""
+    from loom.render.uses import PASSING, noting
+
+    (tmp_path / "cone.pdf").write_bytes(b"%PDF-1.4\n%FAKE-LOOM\nx\n")
+    with noting() as converted:
+        publish_graphic(tmp_path, "cone", tmp_path / "svg1")
+    with noting() as absent:
+        publish_graphic(tmp_path, "nothing", tmp_path / "svg2")
+    monkeypatch.setattr(shutil, "which", lambda tool: None)
+    with noting() as unconverted:
+        publish_graphic(tmp_path, "cone", tmp_path / "svg3")
+    assert PASSING not in converted | absent and PASSING in unconverted

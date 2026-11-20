@@ -53,13 +53,19 @@ class Memo(Generic[K, V]):
         make = self._make
         return self.get(key, lambda: make(key))
 
-    def get(self, key: K, make: Callable[[], V]) -> V:
-        """`make()`, made once while `key` is in use: for a memo whose key names its inputs without holding them, a digest of a long text among them."""
+    def get(self, key: K, make: Callable[[], V], holds: Callable[[V], bool] | None = None) -> V:
+        """`make()`, made once while `key` is in use: for a memo whose key names its inputs without holding them, a digest of a long text among them.
+
+        `holds` says whether a value stands for its key in ways the key cannot name (what it was made from is still on disk; nothing it met was the machine's passing state): a value that does not hold is handed out and not kept, and a kept one that no longer holds is made again.
+        """
         hit = self._entries.get(key)
-        if hit is None:
-            value, made = make(), _generation
-        else:
+        if hit is not None and (holds is None or holds(hit[0])):
             value, made = hit[0], hit[2]
+        else:
+            value, made = make(), _generation
+            if holds is not None and not holds(value):
+                self._entries.pop(key, None)
+                return value
         self._entries[key] = (value, _generation, made)
         return value
 

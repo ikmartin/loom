@@ -308,7 +308,7 @@ def attach_context(
         context_id = "context/paper-" + Path(meta["context"]["path"]).name + "-" + Path(meta["source"]).stem + ".tex"
         # read once, so the rendering is of the text its key names
         text = (result.quilt.root / copy).read_text()
-        drafted = _drafted.get(_drafting(result, copy, meta, text), partial(_draft, result, copy, meta, text))
+        drafted = _drafted.get(_drafting(result, copy, meta, text), partial(_draft, result, copy, meta, text), _holds)
         used(*drafted.noted)
         local = drafted.local
         macro_name = "draft:" + copy
@@ -362,7 +362,7 @@ def attach_context(
 
 @dataclass(frozen=True)
 class _Drafted:
-    """What a section draft renders in its saved context, before the build's marks: its keys, its document and nodes, its macros, the saved paper's document and macros, and every cache file it was made from."""
+    """What a section draft renders in its saved context, before the build's marks: its keys, its document and nodes, its macros, the saved paper's document and macros, every cache file it was made from, and whether it met something of the machine's that no cache remembers (`uses.passing`)."""
 
     local: frozenset[str]
     document: str
@@ -371,6 +371,12 @@ class _Drafted:
     context: str
     context_macros: list[dict[str, object]]
     noted: frozenset[str]
+    passing: bool
+
+
+def _holds(drafted: _Drafted) -> bool:
+    """Whether a rendering may stand for its key at a later build: not one made while TeX failed for the machine's sake or a figure went unconverted, which the next build tries again."""
+    return not drafted.passing
 
 
 def _drafting(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> tuple[Any, ...]:
@@ -396,7 +402,7 @@ def _drafting(result: ScanResult, copy: str, meta: dict[str, Any], text: str) ->
 
 def _draft(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> _Drafted:
     from loom.render.fragments import FragmentRenderer, RenderPlan
-    from loom.render.uses import noting
+    from loom.render.uses import PASSING, noting
     from loom.scan.macros import to_mathjax
 
     with noting() as noted:
@@ -417,7 +423,8 @@ def _draft(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> _D
         to_mathjax(snap.closures[copy].macros),
         context,
         to_mathjax(snap.closures[context_source].macros),
-        frozenset(noted),
+        frozenset(noted - {PASSING}),
+        PASSING in noted,
     )
 
 

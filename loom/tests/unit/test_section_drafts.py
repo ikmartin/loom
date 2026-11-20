@@ -1,5 +1,6 @@
 """Section drafts isolate source edits without hiding shared-source consequences."""
 
+import re
 from pathlib import Path
 
 import pytest
@@ -377,14 +378,32 @@ def test_a_gone_annotation_is_re_anchored_once_per_build_and_again_when_its_bloc
     assert (len(resolved), len(placed)) == (3, 2)
 
 
+def typeset(root, base, preamble, texts, cache_dir, envs, engine, aux, timeout, math="mathjax"):
+    """One TeX4ht run as a working TeX4ht makes it, as far as these tests read it: prose a paragraph of its words marked as typeset, with each figure it includes as the PDF TeX4ht names for loom to convert; a statement refused, as TeX refuses a text, so it stands as its source."""
+    from html import escape
+
+    from loom.render.snippets import Snippet, _Run
+
+    def made(text):
+        if text.lstrip().startswith("\\begin"):
+            return Snippet(None, "statements are not typeset here")
+        words = escape(" ".join(re.sub(r"\\includegraphics\{[^}]*\}", "", text).split()))
+        figures = "".join(f'<img src="{f}.pdf" alt="" />' for f in re.findall(r"\\includegraphics\{([^}]*)\}", text))
+        return Snippet(f'<p data-at=":1">Typeset: {words}{figures}</p>')
+
+    return _Run({i: made(text) for i, text in texts}, None, True)
+
+
 @pytest.fixture
 def drafting(monkeypatch):
-    """An empty memo of section drafts' renderings, and a count of the renderings actually made."""
+    """An empty memo of section drafts' renderings, a count of the renderings actually made, and a TeX4ht that works (`typeset`): the test tier's makes no page, which no rendering may keep."""
+    import loom.render.snippets as snippets
     import loom.section_drafts as drafts
 
     made = []
     real = drafts._draft
     monkeypatch.setattr(drafts, "_draft", lambda *a: made.append(1) or real(*a))
+    monkeypatch.setattr(snippets, "_one_run", typeset)
     drafts._drafted.clear()
     return made
 
@@ -441,7 +460,7 @@ def test_a_section_draft_is_rendered_once_and_again_when_any_input_changes(quilt
     assert len(drafting) == 2
     drafts._drafted.clear()
     assert again == drafted(q, a)
-    # no setting changes a draft's rendering today, and the test tier's TeX makes no snippet a draft shows, so neither changes what is published; each is read in the rendering, so it is made again
+    # no setting changes a draft's rendering today, and what TeX made of the draft is in the snippet cache, so neither changes what is published; each is read in the rendering, so it is made again
     assert again != first or changed in ("the config", "whether TeX4ht is here")
 
 
@@ -468,3 +487,47 @@ def test_a_section_draft_is_not_rendered_again_after_an_edit_elsewhere_or_a_note
     marked = drafted(quilt, a)
     assert 'class="annotation"' in marked[0] and 'class="annotation"' not in first[0]
     assert len(drafting) == 1
+
+
+@pytest.mark.parametrize("stopped", ["TeX4ht made no page: it said nothing", "make4ht timed out after 600 seconds"])
+def test_a_section_draft_rendered_while_tex_failed_for_the_machines_sake_is_typeset_at_the_next_build(
+    quilt, drafting, stopped, monkeypatch
+):
+    """A TeX run that stopped with nothing said against a text, or ran out of time, is the machine's and the snippet cache remembers nothing of it: the draft shows as its source for that build alone, and the next build, after a change elsewhere, typesets it."""
+    import loom.render.snippets as snippets
+    import loom.section_drafts as drafts
+    from loom.render.snippets import _Run
+
+    a = copy(quilt)
+    monkeypatch.setattr(snippets, "_one_run", lambda *args: _Run({}, None, False, stopped))
+    assert "Typeset" not in drafted(quilt, a)[0]
+    monkeypatch.setattr(snippets, "_one_run", typeset)
+    edit(quilt, DOC, "Second prose.", "Second prose, changed.")
+    again = drafted(quilt, a)
+    assert "Typeset: " in again[0]
+    drafts._drafted.clear()
+    assert again == drafted(quilt, a)
+
+
+def test_a_figure_no_tool_converted_in_a_section_draft_is_converted_at_the_next_build(quilt, drafting, monkeypatch):
+    """A figure the draft includes that no tool on the machine converts shows unconverted for that build alone: a converter installed since converts it at the next build, after a change elsewhere."""
+    import shutil
+
+    import loom.section_drafts as drafts
+
+    edit(quilt, DOC, "First prose.", "First prose. \\includegraphics{fig}")
+    (quilt.root / "drafting" / "fig.pdf").write_bytes(b"%PDF-1.4 a figure\n")
+    a = copy(quilt)
+    which = shutil.which
+    monkeypatch.setattr(
+        shutil,
+        "which",
+        lambda name, *args, **kw: None if name in ("pdftocairo", "dvisvgm") else which(name, *args, **kw),
+    )
+    assert 'src="fig.pdf"' in drafted(quilt, a)[0]
+    monkeypatch.setattr(shutil, "which", which)
+    edit(quilt, DOC, "Second prose.", "Second prose, changed.")
+    again = drafted(quilt, a)
+    assert re.search(r'src="svg/[0-9a-f]{16}\.svg"', again[0])
+    drafts._drafted.clear()
+    assert again == drafted(quilt, a)

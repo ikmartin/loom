@@ -201,3 +201,43 @@ def test_a_scan_of_its_own_forgets_nothing_a_build_made() -> None:
     with reading(build=True):
         pass
     assert "made by the build" not in m
+
+
+def test_a_value_that_does_not_hold_is_handed_out_and_not_kept() -> None:
+    """A rendering made while TeX failed for the machine's sake serves the build that made it, and the next asks for it again."""
+    made: list[str] = []
+    m: Memo[str, str] = Memo(built=True)
+
+    def make() -> str:
+        made.append("passing")
+        return "passing"
+
+    assert m.get("draft", make, lambda v: v != "passing") == "passing"
+    assert "draft" not in m
+    m.get("draft", make, lambda v: v != "passing")
+    assert len(made) == 2
+
+
+def test_a_kept_value_that_no_longer_holds_is_made_again() -> None:
+    """A rendering whose files are gone from disk is made again, and kept again once they are back."""
+    there = {"picture"}
+    made: list[str] = []
+    m: Memo[str, str] = Memo(built=True)
+
+    def make() -> str:
+        made.append("picture")
+        return "picture"
+
+    def holds(v: str) -> bool:
+        return v in there
+
+    m.get("draft", make, holds)
+    m.get("draft", make, holds)
+    assert len(made) == 1
+    there.clear()
+    m.get("draft", make, holds)
+    assert len(made) == 2 and "draft" not in m
+    there.add("picture")
+    m.get("draft", make, holds)
+    m.get("draft", make, holds)
+    assert len(made) == 3 and "draft" in m
