@@ -289,43 +289,80 @@ def _heading_words(inline: Any) -> str:
     return text
 
 
-def _rewriter(directory: str, kinds: dict[str, str], seen: dict[str, int]) -> Any:
-    """The token pass a file's Markdown takes: ids on its headings, a relative link to a shown file turned into a `quilt:` link (a document's by its path, as every link to one is), a relative image into its `/_files/` address."""
+@dataclass(frozen=True)
+class Link:
+    """One link or source a Markdown file's page draws: its line in the file, from 1, its address as written and as the page has it, and whether it is a source (an image's, a video's) rather than a link."""
+
+    line: int
+    written: str
+    drawn: str
+    src: bool = False
+
+
+def _rewriter(
+    directory: str,
+    kinds: dict[str, str],
+    seen: dict[str, int],
+    found: list[Link] | None = None,
+    where: Any = None,
+    resolve: Any = None,
+) -> Any:
+    """The token pass a file's Markdown takes: ids on its headings, a relative link to a shown file turned into a `quilt:` link (a document's by its path, as every link to one is), a relative image into its `/_files/` address.
+
+    With `found`, each link and source the page draws is added to it with its line, `where` mapping a line of the parsed text to the file's (`records.store.source_line`) and `resolve` being what raw HTML's relative addresses take; a link's line is its block's first plus the line breaks before it.
+    """
+    from loom.raw_html import links as raw_links
+
+    def note(line: int, written: str, drawn: str, src: bool = False) -> None:
+        if found is not None:
+            found.append(Link(where(line) + 1, written, drawn, src))
 
     def walk(tokens: list[Any]) -> None:
         for i, tok in enumerate(tokens):
             if tok.type == "heading_open" and i + 1 < len(tokens):
                 tok.attrSet("id", slug(_heading_words(tokens[i + 1]), seen))
+            at = tok.map[0] if tok.map else 0
+            if found is not None and tok.type == "html_block":
+                for n, written, drawn, is_src in raw_links(tok.content, resolve):
+                    note(at + n, written, drawn, is_src)
             for child in tok.children or []:
-                if child.type == "link_open":
+                if child.type in ("softbreak", "hardbreak"):
+                    at += 1
+                elif child.type == "link_open":
                     href = str(child.attrGet("href") or "")
                     child.attrSet("href", _link(href, directory, kinds))
+                    note(at, href, str(child.attrGet("href")))
                 elif child.type == "image":
-                    got = _target(str(child.attrGet("src") or ""), directory, kinds)
+                    src = str(child.attrGet("src") or "")
+                    got = _target(src, directory, kinds)
                     if got is not None and got[2] == "image":
                         child.attrSet("src", FILES_URL + quote(got[0]))
+                    note(at, src, str(child.attrGet("src") or ""), True)
+                elif found is not None and child.type == "html_inline":
+                    for n, written, drawn, is_src in raw_links(child.content, resolve):
+                        note(at + n, written, drawn, is_src)
 
     return walk
 
 
 def render_file_markdown(
-    text: str, rel: str, kinds: dict[str, str], seen: dict[str, int] | None = None, *, tasks: list[Task] | None = None
+    text: str,
+    rel: str,
+    kinds: dict[str, str],
+    seen: dict[str, int] | None = None,
+    *,
+    tasks: list[Task] | None = None,
+    links: list[Link] | None = None,
 ) -> str:
     """The Markdown file `rel` drawn as the publisher draws pages, with ids on its headings, its relative links resolved against the shown files `kinds`, its raw HTML through the allowlist (`loom.raw_html`), and each task item a `li.task`.
 
-    Only a file's body takes raw HTML; pages and messages escape it. `seen` carries heading ids across calls, so a notebook's cells number repeats as one document does. `tasks` collects each item and makes its box tickable, for text that is a whole file; a notebook's cell passes none, so its boxes are only drawn.
+    Only a file's body takes raw HTML; pages and messages escape it. `seen` carries heading ids across calls, so a notebook's cells number repeats as one document does. `tasks` collects each item and makes its box tickable, for text that is a whole file; a notebook's cell passes none, so its boxes are only drawn. `links` collects each link and source as this page draws it, for text that is a whole file (`scan.lint.markdown_links`).
     """
     from loom.raw_html import clean
-    from loom.records.store import render_markdown
+    from loom.records.store import render_markdown, source_line
     from loom.tasks import mark_items
 
     directory = posixpath.dirname(rel)
-    rewrite = _rewriter(directory, kinds, {} if seen is None else seen)
-    mark = mark_items(text, tasks)
-
-    def walk(tokens: list[Any]) -> None:
-        mark(tokens)
-        rewrite(tokens)
 
     def resolve(name: str, url: str) -> str:
         if name == "href":
@@ -333,12 +370,40 @@ def render_file_markdown(
         got = _target(url, directory, kinds)
         return url if got is None else FILES_URL + quote(got[0])
 
+    where = source_line(text) if links is not None else None
+    rewrite = _rewriter(directory, kinds, {} if seen is None else seen, links, where, resolve)
+    mark = mark_items(text, tasks)
+
+    def walk(tokens: list[Any]) -> None:
+        mark(tokens)
+        rewrite(tokens)
+
     return render_markdown(text, tokens=walk, raw=lambda source, words: clean(source, resolve, words))
 
 
 def headings(body: str) -> set[str]:
     """The heading ids a drawn body carries, written by Markdown or by a file's own HTML: the places a link into it may name."""
     return set(re.findall(r'<h[1-6]\b[^>]*?\sid="([^"]+)"', body))
+
+
+_HEADINGS: dict[tuple[str, int, int], set[str]] = {}
+
+
+def headings_of(root: Path, rel: str, kind: str, body: str | None = None) -> set[str]:
+    """The heading ids of the drawn file `rel` (`DRAWN`), remembered by modification time and size; `body` is its drawn body where the caller has just drawn it."""
+    path = root / rel
+    try:
+        st = path.stat()
+    except OSError:
+        return set()
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if body is None and key in _HEADINGS:
+        return _HEADINGS[key]
+    if body is None:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        body = render_file_markdown(text, rel, {}) if kind == "markdown" else render_notebook(text, rel, {})
+    _HEADINGS[key] = found = headings(body)
+    return found
 
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
@@ -401,8 +466,40 @@ def render_notebook(text: str, rel: str, kinds: dict[str, str]) -> str:
     return "\n".join(parts)
 
 
-def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, str | bytes]) -> None:
-    """Publish the shown files into `manifest["files"]` and `corpus.home`, and each Markdown file's and notebook's body into `files` under `BODIES`.
+@dataclass
+class Drawn:
+    """What the pages of a quilt's shown files link to: every shown file's kind, and each Markdown file's links as its page draws them."""
+
+    kinds: dict[str, str]
+    links: dict[str, list[Link]]
+
+
+def shown_kinds(result: ScanResult) -> dict[str, str]:
+    """Every shown file of the scanned quilt with its kind (`kind_of`), as the manifest lists them."""
+    masters = set(result.masters)
+    return {rel: kind_of(result.quilt.root, rel, masters) for rel in Shown.of(result.quilt).walk()}
+
+
+def drawn_links(result: ScanResult) -> Drawn:
+    """Each shown Markdown file's links as its page draws them, each file drawn here; a build has them from its own drawing (`attach_files`)."""
+    root = result.quilt.root
+    kinds = shown_kinds(result)
+    out: dict[str, list[Link]] = {}
+    for rel, kind in kinds.items():
+        if kind != "markdown":
+            continue
+        try:
+            text = (root / rel).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        found: list[Link] = []
+        headings_of(root, rel, kind, render_file_markdown(text, rel, kinds, links=found))
+        out[rel] = found
+    return Drawn(kinds, out)
+
+
+def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, str | bytes]) -> Drawn:
+    """Publish the shown files into `manifest["files"]` and `corpus.home`, and each Markdown file's and notebook's body into `files` under `BODIES`; return what those pages link to, for `scan.lint.markdown_links`.
 
     Called once per build; the research state is listed like any Markdown file, and the viewer opens its page from the row. Every file carries `denied`, from `agents.denied_by`: what keeps agents out, or None where they may write it, so the viewer never matches the deny list itself and never guesses where a publisher said nothing.
     """
@@ -414,6 +511,7 @@ def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, 
     masters = set(result.masters)
     paths = shown.walk()
     kinds = {rel: kind_of(root, rel, masters) for rel in paths}
+    drawn = Drawn(kinds, {})
     entries: list[dict[str, Any]] = []
     for rel in paths:
         kind = kinds[rel]
@@ -429,16 +527,21 @@ def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, 
                 text = (root / rel).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 text = ""
+            found: list[Link] = []
             body = (
-                render_file_markdown(text, rel, kinds, tasks=[])
+                render_file_markdown(text, rel, kinds, tasks=[], links=found)
                 if kind == "markdown"
                 else render_notebook(text, rel, kinds)
             )
+            if kind == "markdown":
+                drawn.links[rel] = found
+            headings_of(root, rel, kind, body)
             entry["body"] = f"{BODIES}/{rel}.html"
             files[entry["body"]] = body
         entries.append(entry)
     manifest["files"] = entries
     manifest["corpus"]["home"] = home(result.quilt, set(paths))
+    return drawn
 
 
 def home(quilt: Quilt, shown: set[str]) -> str | None:

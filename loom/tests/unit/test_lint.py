@@ -177,6 +177,24 @@ def test_a_quilt_with_nothing_to_read_says_how_to_begin(tmp_path: Path) -> None:
     assert "\\documentclass" in found[0]["message"]
 
 
+def test_a_quilt_of_markdown_lessons_is_not_told_to_begin_a_document(tmp_path: Path) -> None:
+    """QF-14: a quilt whose work is Markdown lessons was told nothing is being worked on, with a paper to begin as its next steps; the advice is for a quilt with nothing in it, and what loom and its agents' setup write at the root is not the person's work."""
+    q = tmp_path / "course"
+    ok("init", str(q), "--ai", "none", cwd=tmp_path)
+
+    def advice() -> list[dict]:  # type: ignore[type-arg]
+        return [d for d in json_of("lint", "--json", cwd=q)["diagnostics"] if d["code"] == "loom:no-live-document"]
+
+    for name in ("CLAUDE.md", "AGENTS.md", "GEMINI.md"):
+        (q / name).write_text("This directory is a quilt managed by loom.\n", encoding="utf-8")
+    (said,) = advice()
+    assert "nothing is being worked on" not in said["message"] and "LaTeX document" in said["message"]
+    (q / "lessons").mkdir()
+    (q / "lessons" / "lesson-1.md").write_text("# Lesson 1\n\n- [ ] read chapter 1\n", encoding="utf-8")
+    assert advice() == []
+    assert ok("status", cwd=q).stdout.strip() == "no keys of yours yet"
+
+
 def _diag(message: str, line: int, *keys: str, code: str = "loom:detached-annotation") -> Diagnostic:
     return Diagnostic("info", code, message, [Location("drafting/main.tex", line)], list(keys))
 

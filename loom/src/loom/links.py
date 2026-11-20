@@ -2,7 +2,7 @@
 
 Two schemes and one grammar. `quilt:KEY[#PLACE]` names something this quilt owns by its fixed key -- a node, a document, an annotation, a session, the research state (`quilt:state`), or a shown file by its path with its suffix (`quilt:notes/day1.md#setup`) -- and `cited:SCHEME:VALUE[?page=N&quote=…]` names a place in a cited work by its global identifier. **Only what the viewer can show is linkable**: an included `.tex` file, a hidden file (a session's drafts among them), a deleted session are refused, because a link to something the viewer does not display is a link to nothing.
 
-A link is checked when it is posted (`loom session say`, `loom annotate`) and printed correctly by `loom link`, so an agent never composes one by hand.
+A link is checked when it is posted (`loom session say`, `loom annotate`) and printed correctly by `loom link`, so an agent never composes one by hand. A link written into a shown Markdown file is checked by `loom lint` through the same `resolve` (`scan.lint.markdown_links`).
 """
 
 from __future__ import annotations
@@ -22,7 +22,11 @@ SESSION = re.compile(rf"^{ids.SESSION}$")
 
 
 class LinkError(ValueError):
-    """A link that names nothing the viewer shows; the message says what and why."""
+    """A link that names nothing the viewer shows; the message says what and why, and `part` which part of the link is at fault: `target` (the thing), `place` (a place in it) or `work` (a cited work's identifier)."""
+
+    def __init__(self, message: str, part: str = "target") -> None:
+        super().__init__(message)
+        self.part = part
 
 
 @dataclass(frozen=True)
@@ -71,6 +75,8 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
 
     body = href[len("quilt:") :]
     key, _, place = body.partition("#")
+    # the viewer decodes the place as it decodes the key, so a heading written in other than ASCII is the same place either way
+    place = unquote(place)
     if not key:
         raise LinkError(f"{href}: names no key")
     if ANNOTATION.match(key):
@@ -90,7 +96,7 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
     if key == "state":
         # the quilt's research state, a page (plan 0.21.3): before landmarks and labels, so `state` always means it
         if place:
-            raise LinkError(f"{href}: the research state is linked whole")
+            raise LinkError(f"{href}: the research state is linked whole", "place")
         if not (root / result.quilt.config.research_state).is_file():
             raise LinkError(f"{href}: this quilt has no research state yet")
         return Target("page", "state", href=href)
@@ -100,7 +106,7 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
     landmarks = {**{Path(p).stem: p for p in result.canon_files}, **{p: p for p in result.canon_files}}
     if key in landmarks:
         if place:
-            raise LinkError(f"{href}: a landmark is linked whole")
+            raise LinkError(f"{href}: a landmark is linked whole", "place")
         return Target("document", landmarks[key], href=href)
     try:
         canonical = resolve_key(result, key)
@@ -114,15 +120,15 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
     if node is not None and node.kind == "file":
         raise LinkError(f"{href}: {key} is a file the documents include; link the keys it holds, or the document")
     if place:
-        owner = _owner(result, _key(result, href, place))
+        owner = _owner(result, _key(result, href, place, "place"))
         if owner != _owner(result, canonical):
-            raise LinkError(f"{href}: {place} is not in {key}")
+            raise LinkError(f"{href}: {place} is not in {key}", "place")
     return Target("node", canonical, place, href)
 
 
 def _file(result: Any, root: Path, href: str, path: str, place: str) -> Target:
-    """A shown file by its path: a Markdown file or notebook at one of its headings, a PDF at `page=N`, an HTML page at an anchor, anything else whole."""
-    from loom.files import DRAWN, LINKABLE, Shown, headings, kind_of, render_file_markdown, render_notebook
+    """A shown file by its path: a Markdown file or notebook at one of its headings, a PDF at `page=N`, a text file at `L` and a line number, an HTML page at an anchor, anything else whole."""
+    from loom.files import DRAWN, LINKABLE, Shown, headings_of, kind_of
 
     if not Shown.of(result.quilt).is_shown(path):
         raise LinkError(f"{href}: {path} is hidden from the viewer")
@@ -130,26 +136,31 @@ def _file(result: Any, root: Path, href: str, path: str, place: str) -> Target:
     if kind not in LINKABLE:
         raise LinkError(f"{href}: a LaTeX file is linked by its document or its keys")
     if place and kind in DRAWN:
-        text = (root / path).read_text(encoding="utf-8", errors="replace")
-        body = render_file_markdown(text, path, {}) if kind == "markdown" else render_notebook(text, path, {})
-        if place not in headings(body):
-            raise LinkError(f"{href}: {path} has no heading {place}")
+        if place not in headings_of(root, path, kind):
+            raise LinkError(f"{href}: {path} has no heading {place}", "place")
     elif place and kind == "pdf":
         if not re.fullmatch(r"page=[1-9]\d*", place):
-            raise LinkError(f"{href}: a place in a PDF is page=N, from 1")
+            raise LinkError(f"{href}: a place in a PDF is page=N, from 1", "place")
+    elif place and kind == "text":
+        line = re.fullmatch(r"L([1-9]\d*)", place)
+        if line is None:
+            raise LinkError(f"{href}: a place in a text file is L and a line number, from L1", "place")
+        count = len((root / path).read_text(encoding="utf-8", errors="replace").split("\n"))
+        if int(line.group(1)) > count:
+            raise LinkError(f"{href}: {path} has {count} lines", "place")
     elif place and kind != "html":
-        raise LinkError(f"{href}: {path} is linked whole")
+        raise LinkError(f"{href}: {path} is linked whole", "place")
     return Target("file", path, place, href)
 
 
-def _key(result: Any, href: str, key: str) -> str:
+def _key(result: Any, href: str, key: str, part: str = "target") -> str:
     from loom.cli._quilt import resolve_key
     from loom.errors import EnvError
 
     try:
         return resolve_key(result, key)
     except EnvError:
-        raise LinkError(f"{href}: no key {key} in this quilt") from None
+        raise LinkError(f"{href}: no key {key} in this quilt", part) from None
 
 
 def _owner(result: Any, key: str) -> str:
@@ -162,10 +173,10 @@ def _owner(result: Any, key: str) -> str:
 
 def _reached(result: Any, href: str, place: str, master: str) -> None:
     """Refuse a place a document does not reach."""
-    owner = _owner(result, _key(result, href, place))
+    owner = _owner(result, _key(result, href, place, "place"))
     node = result.nodes.get(owner)
     if node is None or master not in node.reached_by:
-        raise LinkError(f"{href}: {master} does not include {place}")
+        raise LinkError(f"{href}: {master} does not include {place}", "place")
 
 
 def _cited(result: Any, href: str) -> Target:
@@ -175,15 +186,15 @@ def _cited(result: Any, href: str) -> Target:
     target, rest = (m.group(1), m.group(2) or "") if m else ("", "")
     wid = parse(target)
     if wid is None:
-        raise LinkError(f"{href}: cited: takes a work's identifier, doi:…, arXiv:…, MR…, zbMATH…")
+        raise LinkError(f"{href}: cited: takes a work's identifier, doi:…, arXiv:…, MR…, zbMATH…", "work")
     for citekey, entry in result.bib.items():
         if any((w.scheme, w.value.lower()) == (wid.scheme, wid.value.lower()) for w in identify(entry)):
             keys = parse_qs(rest.replace("#", "&"))
             page = (keys.get("page") or [""])[0]
             if page and not (page.isdigit() and int(page) > 0):
-                raise LinkError(f"{href}: page must be a number from 1")
+                raise LinkError(f"{href}: page must be a number from 1", "place")
             return Target("work", citekey, f"page={page}" if page else "", href)
-    raise LinkError(f"{href}: no entry in the bibliography states {target}")
+    raise LinkError(f"{href}: no entry in the bibliography states {target}", "work")
 
 
 def check(result: Any, root: Path, text: str) -> list[str]:
