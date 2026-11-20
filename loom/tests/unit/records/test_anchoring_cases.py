@@ -770,15 +770,16 @@ def test_a_note_follows_its_lemma_when_its_id_moves_onto_the_next_one(out: Path)
     assert shown(out, a) == Xb.strip()
 
 
-def test_a_statements_note_stays_when_the_twin_beside_it_is_deleted(out: Path) -> None:
-    """B-10 with C-1's rule: a lemma restated right after itself, a note on the first; the restatement deleted. The neighbour recorded past the twin is now the nearest block standing once on that side, beside it."""
+@pytest.mark.parametrize("deleted", ["twin", "statement"])
+def test_a_statement_and_its_twin_beside_it_cannot_be_told_apart_once_one_is_deleted(out: Path, deleted: str) -> None:
+    """A lemma restated right after itself, a note on the first; one of the two deleted. Either deletion leaves the very same text, so which block is the note's cannot be told, and it is on none."""
     A = env("remark", "We fix notation throughout this section.")
     X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
     B = env("remark", "The bound is sharp.")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + X + B})
     a = note(out, "drafting/s1.tex#lemma:1", "cite Erdos")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B})
-    assert shown(out, a) == X.strip()
+    assert shown(out, a) is None
 
 
 def test_a_deleted_statements_note_goes_to_no_twin_where_its_neighbours_went_too(out: Path) -> None:

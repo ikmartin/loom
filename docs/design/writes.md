@@ -165,7 +165,7 @@ A body is what lies inside an environment's head and before its `\end`, or below
 
 An annotation and a suggested edit name a key, and hold the hash of their block's own text when they were written (`against`), whose text the store keeps (`cli/review._version`), and what tells that block from others (`context`, `records/locate.context_of`):
 
-- `before` and `after`: the nearest block on each side whose text stands once in its file, recognised by that text with labels left out, so a label moved onto or off it leaves it the same neighbour; with how many blocks lie between, or the distance to the file's edge. A neighbour stands beside a block at that distance, or as the nearest block on its side whose text stands once in the file now, so a twin deleted between them is no evidence either way;
+- `before` and `after`: the nearest block on each side whose text stands once in its file, recognised by that text with labels left out, so a label moved onto or off it leaves it the same neighbour; with how many blocks lie between, or the distance to the file's edge;
 - `kind`, what sort of block it is;
 - `copies`: how many blocks of the documents held its very text;
 - `twin`: whether another block of its file read at least 0.6 alike, word for word;
