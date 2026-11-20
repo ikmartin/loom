@@ -25,6 +25,7 @@ from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used
 from loom.scan.hashing import hash_text, mathematical_hash, normalize
+from loom.scan.memo import Memo
 from loom.scan.model import Diagnostic, Fix
 from loom.scan.nodes import NodeRec
 from loom.scan.owntext import key_hash, own_text
@@ -1292,7 +1293,7 @@ def render_markdown(
 ) -> str:
     """Markdown rendered into the dialect's inline subset, math included.
 
-    Every body loom publishes as HTML comes through here -- annotations, transcript messages and the project's Markdown files -- and all of them are written by people and agents who use `$...$` without thinking about it.
+    Every body loom publishes as HTML comes through here -- annotations, transcript messages and the project's Markdown files -- and all of them are written by people and agents who use `$...$` without thinking about it. A body given neither callable is rendered once for its text while builds ask for it (`_rendered`), since a build renders every annotation's body again.
 
     Parameters
     ----------
@@ -1308,6 +1309,21 @@ def render_markdown(
     str
         Dialect HTML.
     """
+    if tokens is None and raw is None:
+        return _rendered.get(text, lambda: _render_markdown(text, None, None))
+    return _render_markdown(text, tokens, raw)
+
+
+#: Each body rendered with neither callable, by its text.
+_rendered: Memo[str, str] = Memo(built=True)
+
+
+def _render_markdown(
+    text: str,
+    tokens: Callable[[list[Any]], None] | None,
+    raw: Callable[[str, Callable[[str], str]], str] | None,
+) -> str:
+    """`render_markdown`'s work, every time."""
     protected, spans = _protect_math(text)
     try:
         from markdown_it import MarkdownIt
