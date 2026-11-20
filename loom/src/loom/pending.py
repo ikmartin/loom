@@ -903,7 +903,8 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
             continue
         at = w.journal.wrote.get(gen)
         entry = writes.entry_at(root, at) if at is not None else None
-        if entry is None or writes.untrusted(root, hist, entry):
+        # only a Keep that wrote this file, so a restore of many files reads the store for the edits each holds
+        if entry is None or path not in (entry.get("splices") or {}) or writes.untrusted(root, hist, entry):
             continue
         made = [m for m in writes.splices_of(hist, entry, gen) or [] if m.rel == path]
         if not made:
