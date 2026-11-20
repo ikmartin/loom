@@ -634,7 +634,9 @@ def _not_written(edit: Edit) -> str:
     return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
 
 
-def _changed_since(edit: Edit) -> str:
+def _changed_since(edit: Edit, how: str = "changed") -> str:
+    if how == "too-much":
+        return f"the file has changed too much around {called(edit)} since it was kept to be sure where it was written, so its Keep is not undone; restore a version from The Record instead"
     return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
 
 
@@ -796,8 +798,10 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
                 failed.update({e.id: {"why": _changed_since(e), "code": "changed-since"} for e, *_ in mine})
                 continue
             plan = _undo_in(hist, raw, data, mine)
-            if isinstance(plan, set):
-                failed.update({i: {"why": _changed_since(named[i]), "code": "changed-since"} for i in plan})
+            if isinstance(plan, dict):
+                failed.update(
+                    {i: {"why": _changed_since(named[i], how), "code": "changed-since"} for i, how in plan.items()}
+                )
             else:
                 plans[rel] = (data, *plan)
         if not failed:
@@ -863,26 +867,31 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
 
 def _undo_in(
     hist: Path, raw: str, data: bytes, items: list[tuple[Edit, str, Any]]
-) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]]] | set[str]:
-    """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or the ids whose place is not established.
+) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]]] | dict[str, str]:
+    """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or, by id, why a place is not established (`changed`, or `too-much` when the file changed too much around it to compare).
 
-    Each Keep's words are taken out only at the place that Keep wrote them (`writes.place_in`), never wherever like words stand; the words put back take the file's line ending when it has changed since. Where the file holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
+    Each Keep's words are taken out only at the place that Keep wrote them (`writes.place_in`), never wherever like words stand. The words put back are the Keep's own bytes where the file is as that Keep left it, and otherwise take the file's own line ending at their place. Where the file holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
     """
     from loom import writes
 
     now = writes.digest(data)
     places: list[tuple[int, int, Any, str, str]] = []
-    bad: set[str] = set()
+    bad: dict[str, str] = {}
     for e, gen, m in items:
-        span = writes.place_in(m, raw)
+        try:
+            span = writes.place_in(m, raw)
+        except writes.TooChanged:
+            bad[e.id] = "too-much"
+            continue
         if span is None:
-            bad.add(e.id)
+            bad[e.id] = "changed"
         else:
             places.append((*span, m, gen, e.id))
     places.sort(key=lambda x: x[0])
     for (_, b, _, _, i), (a, _, _, _, j) in zip(places, places[1:], strict=False):
         if b > a:
-            bad.update((i, j))
+            bad.setdefault(i, "changed")
+            bad.setdefault(j, "changed")
     if bad:
         return bad
     nl = writes.newline_of(raw)
@@ -951,6 +960,13 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
         return
     root, hist = w.root, w.history
     flat = " ".join(now.split())
+
+    def placed(m: Any, text: str, side: str = "after") -> bool:
+        try:
+            return writes.place_in(m, text, side=side) is not None
+        except writes.TooChanged:
+            return False
+
     for e in replay(root)[0]:
         gen = keep_of(w.journal.wrote, e)
         at = w.journal.wrote.get(gen) if gen else None
@@ -963,8 +979,8 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
             continue
         if e.status == "kept":
             out = writes.digest(after) == made[0].before or all(
-                writes.place_in(m, was) is not None
-                and writes.place_in(m, now, side="before") is not None
+                placed(m, was)
+                and placed(m, now, "before")
                 and (not m.new.strip() or " ".join(m.new.split()) not in flat)
                 for m in made
             )
@@ -974,9 +990,7 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
                 if line is not None:
                     w.log(annotation_log(root), line)
         elif e.status == "open":
-            back = writes.digest(after) == made[0].after or all(
-                writes.place_in(m, now) is not None and writes.place_in(m, was) is None for m in made
-            )
+            back = writes.digest(after) == made[0].after or all(placed(m, now) and not placed(m, was) for m in made)
             if back:
                 kept = next((a for a in reversed(e.acts) if a.get("event") == "kept"), {})
                 event = kept_event(e, writer, str(kept.get("hash") or ""))

@@ -160,8 +160,14 @@ def reading_offset(raw: str, at: int) -> int:
 
 #: How many characters either side of an edit's words must stand unchanged at the place an act wrote them, for loom to say the words are still there.
 BESIDE = 32
-#: The most characters of changed lines, in either text, that `place_in` diffs by character; past it the place is not established.
+#: The most characters of changed lines around a place, in either text, that `place_in` diffs by character; past it the file changed too much there to be sure (`TooChanged`).
 WINDOW = 8000
+#: The most characters the two texts' differing middle may hold for `place_in` to diff it by lines; past it the file changed too much to be sure (`TooChanged`).
+MIDDLE = 4_000_000
+
+
+class TooChanged(Exception):
+    """The file changed so much around a place since its act that `place_in` will not compare the two texts to find it."""
 
 
 @dataclass(frozen=True)
@@ -257,34 +263,146 @@ def _starts(lines: list[str]) -> list[int]:
     return out
 
 
-def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
-    """How far `a[lo:hi]` moved to stand unchanged in `b` at its own place, by a diff of `a` against `b`; None when the diff does not carry it over whole.
+def shared(a: str, b: str) -> tuple[int, int]:
+    """How many characters `a` and `b` share at their start, and then at their end, never overlapping: found in one pass each."""
+    n = min(len(a), len(b))
+    pre = 0
+    step = 4096
+    while pre < n:
+        k = min(step, n - pre)
+        if a[pre : pre + k] == b[pre : pre + k]:
+            pre += k
+            continue
+        while a[pre] == b[pre]:
+            pre += 1
+        break
+    suf, room = 0, n - pre
+    while suf < room:
+        k = min(step, room - suf)
+        if a[len(a) - suf - k : len(a) - suf] == b[len(b) - suf - k : len(b) - suf]:
+            suf += k
+            continue
+        while a[len(a) - suf - 1] == b[len(b) - suf - 1]:
+            suf += 1
+        break
+    return pre, suf
 
-    Lines first; where the region touches changed lines, those lines alone are diffed again by character (at most `WINDOW` of them), and the region must lie inside one stretch the diff finds equal. Nothing is searched for: a run of equal words elsewhere is never the place.
+
+def _anchored(al: list[str], bl: list[str]) -> list[tuple[int, int]]:
+    """The lines of `al` and `bl` a diff pairs as unchanged, in order: a line that stands once in each of two stretches anchors them (the longest run of such lines in order), and the stretches between anchors are paired again the same way, after their shared first and last lines. Near linear; a run of lines alike that no unique line anchors stays unpaired, so it is never taken for another."""
+    from bisect import bisect_left
+    from collections import Counter
+
+    out: list[tuple[int, int]] = []
+    work: list[tuple[int, int, int, int] | tuple[int, int]] = [(0, len(al), 0, len(bl))]
+    while work:
+        task = work.pop()
+        if len(task) == 2:
+            out.append(task)
+            continue
+        a0, a1, b0, b1 = task
+        head: list[tuple[int, int]] = []
+        while a0 < a1 and b0 < b1 and al[a0] == bl[b0]:
+            head.append((a0, b0))
+            a0, b0 = a0 + 1, b0 + 1
+        tail: list[tuple[int, int]] = []
+        while a0 < a1 and b0 < b1 and al[a1 - 1] == bl[b1 - 1]:
+            a1, b1 = a1 - 1, b1 - 1
+            tail.append((a1, b1))
+        ca, cb = Counter(al[a0:a1]), Counter(bl[b0:b1])
+        where = {line: j for j in range(b0, b1) if cb[line := bl[j]] == 1 and ca[line] == 1}
+        pairs = [(i, where[al[i]]) for i in range(a0, a1) if al[i] in where]
+        # the longest run of anchors in order in both texts
+        tops: list[int] = []
+        tails: list[int] = []
+        back: list[int] = [-1] * len(pairs)
+        for k, (_, j) in enumerate(pairs):
+            at = bisect_left(tops, j)
+            if at == len(tops):
+                tops.append(j)
+                tails.append(k)
+            else:
+                tops[at], tails[at] = j, k
+            back[k] = tails[at - 1] if at else -1
+        chain: list[tuple[int, int]] = []
+        k = tails[-1] if tails else -1
+        while k >= 0:
+            chain.append(pairs[k])
+            k = back[k]
+        chain.reverse()
+        # pushed last first, so the pairs come out in order
+        todo: list[tuple[int, int, int, int] | tuple[int, int]] = [*head]
+        x, y = a0, b0
+        for i, j in chain:
+            todo += [(x, i, y, j), (i, j)]
+            x, y = i + 1, j + 1
+        if chain:
+            todo.append((x, a1, y, b1))
+        todo += list(reversed(tail))
+        work += reversed(todo)
+    return out
+
+
+def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
+    """How far `a[lo:hi]` moved to stand unchanged in `b` at its own place; None when the texts do not carry it over whole.
+
+    What the two share at their start and end places it by arithmetic, with no diff. Otherwise only their differing middle is compared: by lines (`_anchored`), and where the region touches lines the diff did not pair, those lines alone by characters. The region must lie inside one stretch found equal. Raises TooChanged past `MIDDLE` or `WINDOW`.
     """
     from bisect import bisect_right
     from difflib import SequenceMatcher
 
     if hi <= lo:
         return None
-    al, bl = a.splitlines(keepends=True), b.splitlines(keepends=True)
-    ast, bst = _starts(al), _starts(bl)
-    ops = SequenceMatcher(None, al, bl, autojunk=False).get_opcodes()
-    first, last = bisect_right(ast, lo) - 1, bisect_right(ast, hi - 1) - 1
-    held = [k for k, op in enumerate(ops) if op[1] < op[2] and op[1] <= last and first < op[2]]
-    if not held:
+    pre, suf = shared(a, b)
+    if hi <= pre:
+        return 0
+    if lo >= len(a) - suf:
+        return len(b) - len(a)
+    # the differing middle, to whole lines
+    m0 = a.rfind("\n", 0, pre) + 1
+    ma1, mb1 = len(a) - suf, len(b) - suf
+    ea = a.find("\n", ma1 - 1) if ma1 > m0 else -1
+    eb = b.find("\n", mb1 - 1) if mb1 > m0 else -1
+    ma1 = len(a) if ea < 0 else ea + 1
+    mb1 = len(b) if eb < 0 else eb + 1
+    if (ma1 - m0) + (mb1 - m0) > MIDDLE:
+        raise TooChanged
+    al, bl = a[m0:ma1].splitlines(keepends=True), b[m0:mb1].splitlines(keepends=True)
+    ast, bst = [m0 + s for s in _starts(al)], [m0 + s for s in _starts(bl)]
+    pairs = dict(_anchored(al, bl))
+    first, last = bisect_right(ast, max(lo, m0)) - 1, bisect_right(ast, min(hi, ma1) - 1) - 1
+    region_lines = range(max(first, 0), min(last, len(al) - 1) + 1)
+    if lo >= m0 and hi <= ma1 and all(i in pairs for i in region_lines):
+        js = [pairs[i] for i in region_lines]
+        if js == list(range(js[0], js[0] + len(js))):
+            return bst[js[0]] - ast[region_lines[0]]
+    # the lines around the region the diff did not pair, by characters, between the nearest paired lines either side
+    before = [i for i in pairs if i < first]
+    after = [i for i in pairs if i > last]
+    i0, j0 = (max(before) + 1, pairs[max(before)] + 1) if before else (0, 0)
+    i1, j1 = (min(after), pairs[min(after)]) if after else (len(al), len(bl))
+    a0, a1, b0, b1 = ast[i0], ast[i1], bst[j0], bst[j1]
+    if lo < a0 or hi > a1:
         return None
-    k1, k2 = held[0], held[-1]
-    if k1 == k2 and ops[k1][0] == "equal":
-        return bst[ops[k1][3]] - ast[ops[k1][1]]
-    a0, a1 = ast[ops[k1][1]], ast[ops[k2][2]]
-    b0, b1 = bst[ops[k1][3]], bst[ops[k2][4]]
     if a1 - a0 > WINDOW or b1 - b0 > WINDOW:
-        return None
-    for tag, i1, i2, j1, _j2 in SequenceMatcher(None, a[a0:a1], b[b0:b1], autojunk=False).get_opcodes():
-        if tag == "equal" and a0 + i1 <= lo and hi <= a0 + i2:
-            return (b0 + j1) - (a0 + i1)
+        raise TooChanged
+    for tag, i, i2, j, _j2 in SequenceMatcher(None, a[a0:a1], b[b0:b1], autojunk=False).get_opcodes():
+        if tag == "equal" and a0 + i <= lo and hi <= a0 + i2:
+            return (b0 + j) - (a0 + i)
     return None
+
+
+def _once(text: str, part: str) -> bool:
+    i = text.find(part)
+    return i >= 0 and text.find(part, i + 1) < 0
+
+
+def region(w: Written, side: str = "after") -> str:
+    """`w`'s words with `BESIDE` characters either side, as its act's text holds them, read as the scan reads them: what must stand unchanged, and once, for `place_in` to place them."""
+    src, at, words = (w.now, w.at, w.new) if side == "after" else (w.was, w.back, w.old)
+    a = _lf(src)
+    p0, p1 = reading_offset(src, at), reading_offset(src, at + len(words))
+    return a[max(0, p0 - BESIDE) : min(len(a), p1 + BESIDE)]
 
 
 def place_in(w: Written, text: str, *, side: str = "after") -> tuple[int, int] | None:
@@ -302,15 +420,27 @@ def place_in(w: Written, text: str, *, side: str = "after") -> tuple[int, int] |
     Returns
     -------
     (int, int) or None
-        The words' span in `text`. When `text` is that act's text, where the act put them; else carried over by a diff of that text against `text`, the words and `BESIDE` characters either side unchanged at their place, line endings aside. None when the place is not established that way: the words or a neighbour changed, or the diff does not carry them over whole.
+        The words' span in `text`. When `text` is that act's text, where the act put them. Otherwise the words and `BESIDE` characters either side (their region, a file's edge counting as part of it) must stand exactly once in the act's text and once in `text`, and be carried over unchanged to their place (`_shift`): by arithmetic when the region lies wholly in what the two texts share from their start or from their end, and otherwise by a diff of their differing middle. None when the place is not established that way: a changed word or neighbour, a region that also stands elsewhere and so cannot be told from its twin, or a file's edge that moved.
+
+    Raises
+    ------
+    TooChanged
+        The file changed too much around the place since the act to compare the texts.
     """
     src, at, words = (w.now, w.at, w.new) if side == "after" else (w.was, w.back, w.old)
     if text == src:
         return at, at + len(words)
     a, b = _lf(src), _lf(text)
     p0, p1 = reading_offset(src, at), reading_offset(src, at + len(words))
-    d = _shift(a, b, max(0, p0 - BESIDE), min(len(a), p1 + BESIDE))
+    lo, hi = max(0, p0 - BESIDE), min(len(a), p1 + BESIDE)
+    # a region that stands twice cannot be told from its twin by any alignment, a shared end included: no place
+    if not _once(a, a[lo:hi]) or not _once(b, a[lo:hi]):
+        return None
+    d = _shift(a, b, lo, hi)
     if d is None:
+        return None
+    # a file's edge inside the region is part of it, so the region must reach that edge in both texts
+    if (lo == 0 and d != 0) or (hi == len(a) and hi + d != len(b)):
         return None
     raw = raw_offsets(text)
     return raw[p0 + d], raw[p1 + d]

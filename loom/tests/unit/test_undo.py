@@ -116,14 +116,14 @@ def test_an_undo_refuses_once_the_words_beside_what_it_wrote_changed(q: Path) ->
     assert files(q) == now and status(q, FIXED) == "kept"
 
 
-def test_an_undo_writes_at_its_place_and_leaves_a_copy_of_its_words_with_their_neighbours(q: Path) -> None:
+def test_an_undo_refuses_where_its_words_and_their_neighbours_stand_twice(q: Path) -> None:
+    """A copy of the kept passage, region and all: the place cannot be told from its twin, so the undo refuses."""
     p = q / LEMMA
-    was = p.read_text()
     call(q, "change-keep", {"changes": [FIXED]})
-    copy = p.read_text().replace("{sy-0002}", "{sy-0002b}")
-    p.write_text(p.read_text() + "\n" + copy)
-    assert call(q, "change-undo", {"changes": [FIXED]})["done"] == [FIXED]
-    assert p.read_text() == was + "\n" + copy
+    p.write_text(p.read_text() + "\n" + p.read_text().replace("{sy-0002}", "{sy-0002b}"))
+    copied = p.read_bytes()
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and p.read_bytes() == copied
 
 
 TWINS = "drafting/nodes/twins.tex"
@@ -154,6 +154,62 @@ def test_an_undo_never_takes_the_persons_own_like_words_from_another_block(q: Pa
     reworded = f.read_bytes()
     res = call(q, "change-undo", {"changes": [edit]})
     assert [r["code"] for r in res["refused"]] == ["changed-since"] and f.read_bytes() == reworded
+
+
+def lemma(n: int, word: str, proof: str) -> str:
+    return f"\\begin{{lemma}}\\label{{sy-0E0{n}}}\n{word} claim holds.\n\\end{{lemma}}\n\\begin{{proof}}\n{proof}\n\\end{{proof}}\n\n"
+
+
+@pytest.mark.parametrize("kept_in", [1, 2])
+def test_an_undo_never_takes_a_twins_words_after_the_person_swaps_two_alike_blocks(q: Path, kept_in: int) -> None:
+    """The second review's R2-1: two proofs end with the same sentence, one by a Keep, one the person's; the person swaps the two lemmas, then undoes."""
+    proofs = {1: "Immediate.", 2: "Immediate."}
+    proofs[3 - kept_in] = "Immediate. This is clear."
+    f = twins(q)
+    f.write_text(lemma(1, "First", proofs[1]) + lemma(2, "Second", proofs[2]) + lemma(3, "Third", "Immediate."))
+    call(q, "change-keep", {"changes": [x.id for x in waiting(q) if x.kind == "edit"]})
+    edit = suggest(q, f"sy-0E0{kept_in}/proof", "This is clear.", "--quote", "Immediate.", "--after")
+    assert edit is not None and call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    one, two = lemma(1, "First", "Immediate. This is clear."), lemma(2, "Second", "Immediate. This is clear.")
+    f.write_text(f.read_text().replace(one + two, two + one))
+    swapped = f.read_bytes()
+    res = call(q, "change-undo", {"changes": [edit]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and f.read_bytes() == swapped
+
+
+def test_an_undo_after_typing_at_a_files_end_beside_its_words_refuses(q: Path) -> None:
+    """The second review's R2-2: kept words end a file with no final newline, and the person types right after them."""
+    f = q / "drafting/sections/tail.tex"
+    f.write_text("\\section{Tail}\\label{sy-0E41}\nThe paper ends here")
+    m = q / "drafting/main.tex"
+    m.write_bytes(
+        m.read_bytes().replace(b"\\input{nodes/sy-000A}", b"\\input{sections/tail}\n\n\\input{nodes/sy-000A}")
+    )
+    call(q, "change-keep", {"changes": [x.id for x in waiting(q) if x.kind == "edit"]})
+    edit = suggest(q, "sy-0E41", "ends at last", "--quote", "ends here")
+    assert edit is not None and call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    f.write_text(f.read_text() + "ing.")
+    typed = f.read_bytes()
+    res = call(q, "change-undo", {"changes": [edit]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and f.read_bytes() == typed
+
+
+def test_an_undo_after_typing_at_a_files_start_within_its_neighbours_refuses(q: Path) -> None:
+    """The second review's R2-2 at the other edge: a character typed at the very start, 30 characters before the kept words."""
+    p = q / REMARK
+    orig = p.read_text()
+    edit = suggest(q, "sy-000A", "Gadgets do exist:", "--quote", "Gadgets exist:")
+    assert edit is not None and call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    p.write_text("X" + p.read_text())
+    typed = p.read_bytes()
+    assert [r["code"] for r in call(q, "change-undo", {"changes": [edit]})["refused"]] == ["changed-since"]
+    assert p.read_bytes() == typed
+    # a whole line put above meets the file's start too, and is refused the same way: the edge is part of the region
+    p.write_text("% a line of mine\n" + p.read_text()[1:])
+    assert [r["code"] for r in call(q, "change-undo", {"changes": [edit]})["refused"]] == ["changed-since"]
+    # and once the start is as the Keep left it, the undo goes ahead
+    p.write_text(p.read_text().split("\n", 1)[1])
+    assert call(q, "change-undo", {"changes": [edit]})["done"] == [edit] and p.read_text() == orig
 
 
 def test_an_undo_never_takes_out_another_keeps_like_words(q: Path) -> None:
