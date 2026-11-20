@@ -40,16 +40,14 @@ async function onPage(page: Page, index: number, n: number): Promise<void> {
 	await expect.poll(() => shown(pane(page, index))).toBe(n);
 }
 
-/** Hover a link and read the page its card shows, then let the card go. */
-async function hovered(page: Page, link: Locator): Promise<number> {
+/** Hover a link and wait for its card to show page `n`, which it reaches by scrolling from the first, then let the card go. */
+async function hovered(page: Page, link: Locator, n: number): Promise<void> {
 	await link.hover();
 	const card = page.getByTestId('link-preview');
 	await expect(card.getByTestId('pdf-doc')).toBeVisible();
-	let at = 0;
-	await expect.poll(async () => (at = await shown(card))).toBeGreaterThan(0);
+	await expect.poll(() => shown(card)).toBe(n);
 	await page.mouse.move(0, 0);
 	await expect(card).toHaveCount(0);
-	return at;
 }
 
 test.describe('a citation', () => {
@@ -58,7 +56,7 @@ test.describe('a citation', () => {
 		await page.goto('/node/sy-000A');
 		const cite = pane(page, 0).locator(`span.cite[data-target="${RESULT}"] a`).first();
 		await expect(cite).toHaveAttribute('href', AT);
-		expect(await hovered(page, cite)).toBe(4);
+		await hovered(page, cite, 4);
 		await cite.click();
 		await onPage(page, 1, 4);
 	});
@@ -88,7 +86,7 @@ test.describe('a citation', () => {
 		await page.goto('/node/' + RESULT);
 		const heading = pane(page, 0).locator('span.cite[data-postnote="Theorem 2.1, p.~4"] a').first();
 		await expect(heading).toHaveAttribute('href', '/library/Kre99?page=4');
-		expect(await hovered(page, heading)).toBe(4);
+		await hovered(page, heading, 4);
 		await heading.click();
 		await onPage(page, 1, 4);
 		// and the plain link then opens where that left the reader
