@@ -405,12 +405,12 @@ def test_edit_between_initial_publish_and_watcher_start_is_not_lost(tmp_path, se
     deadline = time.monotonic() + PATIENCE
     while time.monotonic() < deadline:
         _, _, body = get(session.url + "build/manifest.json")
-        if json.loads(body)["nodes"]["dm-0002"]["title"] == "Edited at startup":
+        # the manifest is written inside the build and the build is counted after it, so the title and the count are waited for together
+        if json.loads(body)["nodes"]["dm-0002"]["title"] == "Edited at startup" and session.builds >= 2:
             break
         time.sleep(0.05)
     else:
         pytest.fail("The edit after initial publication was absorbed into the watcher's baseline")
-    assert session.builds >= 2
 
 
 class _Asked:
