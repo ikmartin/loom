@@ -210,7 +210,7 @@ def _by_place(
 ) -> NodeRec | None:
     """A record on a key named by place (or a document's path whose file is gone).
 
-    Its own key's block first: while it holds the record's text, or reads like it with no neighbour saying otherwise, it is the record's, however exact a copy elsewhere. Where the record's context recorded a twin or two copies, a block holding its very text is taken only with no recorded neighbour against it (of several such, the one with both beside it), and one reading alike only with both beside it. Otherwise only a block nothing else could be: the one holding its very text among the documents' blocks, where no other did when it was written; where every block holding it has a recorded neighbour against it, or none holds it, the one block reading `LIKE` alike, with both neighbours beside it for a record that had a twin or a block of another kind; its quote, standing in one block alone. A text with nothing of its own to recognise (`TRIVIAL`) is followed only to the one block of its very text standing between both its recorded neighbours. A record with no context follows only its very text standing once.
+    Its own key's block first: while it holds the record's text, or reads like it with no neighbour saying otherwise, it is the record's, however exact a copy elsewhere. Where the record's context recorded a twin or two copies, a block holding its very text is taken only with no recorded neighbour against it (of several such, the one with both beside it), and one reading alike only with both beside it. Otherwise only a block nothing else could be: the one holding its very text among the documents' blocks, where no other did when it was written; where every block holding it has a recorded neighbour against it, or none holds it, the one block reading `LIKE` alike, with both neighbours beside it for a record that had a twin or a block of another kind; its quote, standing in one block alone. A text with nothing of its own to recognise (`TRIVIAL`) is followed only to the one block of its very text standing between both its recorded neighbours. A record with no context follows only its very text standing once. A key whose block is in a file no document reads now is on no block, unless the record was written while none read it (`unread`).
     """
     frozen = _frozen(result, want)
     trivial = len(_own_words(frozen)) < TRIVIAL
@@ -220,6 +220,9 @@ def _by_place(
     twin = bool(context.get("twin")) or copies > 1
     path = node.file if node is not None else key.split("#", 1)[0]
     documents = _pool(result, path)
+    if node is not None and not context.get("unread") and not any(n is node for n in documents):
+        # its file stands but no document reads it now: on no block until one reads it again, never sent looking elsewhere
+        return None
     if node is not None and block_hash(result, node.key) == want:
         others = [n for n in documents if n is not node and block_hash(result, n.key) == want]
         if not others and not twin:

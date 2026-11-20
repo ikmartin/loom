@@ -661,16 +661,19 @@ def test_a_note_stays_with_its_rewritten_id_when_its_old_words_are_pasted_elsewh
     assert shown(out, a) == T2.strip()
 
 
-def test_an_ids_note_is_on_no_block_while_its_file_is_read_by_no_document(out: Path) -> None:
-    """C-5, `input_commented_out`: `\\input{appendix}` commented out; the note on tq-0007 is on no block, never on the restatement in the introduction, and is on tq-0007 again once the appendix is read again."""
+@pytest.mark.parametrize("key", ["tq-0007", "drafting/appendix.tex#theorem:1"])
+def test_a_note_is_on_no_block_while_its_file_is_read_by_no_document(out: Path, key: str) -> None:
+    """C-5, `input_commented_out`: `\\input{appendix}` commented out; the note on the theorem, by its id or by its place, is on no block, never on the restatement in the introduction, and is on the theorem again once the appendix is read again."""
     Tr = env("theorem", "Every compact orientable surface is a sphere with handles.")
     intro = sec("Introduction", "We state our main theorem.")
-    T = env("theorem", "Every compact orientable surface is a sphere with handles.", "tq-0007")
+    T = env(
+        "theorem", "Every compact orientable surface is a sphere with handles.", "tq-0007" if "#" not in key else ""
+    )
     app = sec("Appendix", "The proof of the main theorem.") + T + proof("Triangulate and cut along curves.")
     on = main_with("intro", "appendix")
     files = {"drafting/main.tex": on, "drafting/intro.tex": intro + Tr, "drafting/appendix.tex": app}
     write(out, files)
-    a = note(out, "tq-0007", "cite the classification")
+    a = note(out, key, "cite the classification")
     write(out, {**files, "drafting/main.tex": on.replace("\\input{appendix}", "% \\input{appendix}")})
     assert shown(out, a) is None
     write(out, files)
