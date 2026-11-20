@@ -39,7 +39,7 @@ A write is an act: `with writes.act(quilt, kind, actor) as w:`. Inside the block
    - The follow-ups run, still under the lock.
 8. **An act that changes no file** writes no journal line. Its record lines are still appended, since a Keep of an edit whose text stands already writes nothing and records it kept.
 
-An exception raised inside the block writes nothing. An exception during the commit, after `begin` (the file changed at the last read, a full disk), puts the before bytes back into each file already replaced, removes the temporary files, appends `aborted` with the reason, and is raised to the caller, which answers the person with it.
+An exception raised inside the block writes nothing. An exception during the commit, after `begin` (the file changed at the last read, a full disk), puts the before bytes back into each file already replaced while it still holds what the act wrote, checked at the last instant as every write is, removes the temporary files, appends `aborted` with the reason, and is raised to the caller, which answers the person with it. A file the person saved in the instant since loom wrote it is theirs and stays; the act is then left begun rather than called aborted, so recovery reports it and its edits wait until the person has looked ("Recovery").
 
 ## One lock
 
@@ -78,7 +78,7 @@ For each act begun and neither done nor aborted, and trusted:
 
 - its temporary files are removed;
 - if every file holds the act's after bytes, the act had written everything: whichever of its record lines are not already in their logs are appended (a line is compared whole, so no record needs a new field for this), and `done` is appended;
-- else, if every file holds either its before or its after bytes, the act was cut short between files or before the first: the before bytes are written back into each file that holds its after, and `aborted` is appended;
+- else, if every file holds either its before or its after bytes, the act was cut short between files or before the first: the before bytes are written back into each file that holds its after, each only while it still does and only when the store holds both its texts, so nothing is put back blind, and `aborted` is appended once all are back;
 - else someone changed a file since the crash. Recovery leaves the act as it is; both texts are in the store, and `loom doctor` reports it (not built yet: the doctor item `writes`).
 
 So an act happens at its last file's rename: before that it is undone, never half kept. Recovery settles loom's own unfinished act, and only where every file still holds exactly what that act read or wrote; where the person has been at a file since, it reports and changes nothing (P13).

@@ -347,25 +347,23 @@ def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None) -> 
     _flush_dir(target.parent)
 
 
-def _put(root: Path, rel: str, data: bytes | None) -> None:
-    """Make `rel` hold `data` with no check: recovery's and a failed act's way of putting the before bytes back."""
-    if data is None:
-        (root / rel).unlink(missing_ok=True)
-        return
-    target = _target(root, rel)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f".{target.name}.{secrets.token_hex(6)}{TEMP}")
+def _undo_file(root: Path, history: Path, rel: str, ab: list[str | None]) -> bool:
+    """Put back the before bytes of a journalled act's file `rel` (`ab` its before and after digests) while it holds the after (`_put_back`); False, with nothing written, when the store lacks either text, so nothing is put back blind."""
+    b, a = ab
+    before = fetch(history, b) if b else None
+    after = fetch(history, a) if a else None
+    if (b and before is None) or (a and after is None):
+        return False
+    return _put_back(root, rel, before, after)
+
+
+def _put_back(root: Path, rel: str, before: bytes | None, after: bytes | None) -> bool:
+    """Make `rel` hold `before` again while it holds `after`, what loom wrote, checked at the last instant as every write is (`_install`); False, with nothing written, once someone has changed it since or it cannot be written. Recovery's and a failed commit's way of undoing a file."""
     try:
-        with tmp.open("wb") as fh:
-            fh.write(data)
-            _flush(fh)
-        try:
-            os.chmod(tmp, target.stat().st_mode & 0o7777)
-        except FileNotFoundError:
-            pass
-        os.replace(tmp, target)
-    finally:
-        tmp.unlink(missing_ok=True)
+        _install(root, rel, before, after)
+    except (WriteRefused, OSError):
+        return False
+    return True
 
 
 def _temps(root: Path, rel: str) -> list[Path]:
@@ -639,12 +637,17 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
             said.append(f"finished {act_id}")
         elif all(before or after for before, after in holds.values()):
-            for rel, (before, after) in holds.items():
-                if after and not before:
-                    b = files[rel][0]
-                    _put(root, rel, fetch(history, b) if b else None)
-            j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
-            said.append(f"undid {act_id}")
+            back = [
+                _undo_file(root, history, rel, files[rel])
+                for rel, (before, after) in holds.items()
+                if after and not before
+            ]
+            if all(back):
+                j.append(
+                    root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True}
+                )
+                said.append(f"undid {act_id}")
+            # a file changed while it was being put back is the person's: the act stays, reported
     return said
 
 
@@ -822,13 +825,15 @@ class Act:
                 _install(self.root, rel, data, self.before.get(rel))
                 done.append(rel)
         except Exception as exc:
-            for rel in reversed(done):
-                _put(self.root, rel, self.before.get(rel))
+            # each file already written goes back while it holds what loom wrote; one changed since is the person's
+            kept = [rel for rel in reversed(done) if not _put_back(self.root, rel, self.before.get(rel), changed[rel])]
             for rel in changed:
                 for tmp in _temps(self.root, rel):
                     tmp.unlink(missing_ok=True)
-            why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
-            self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
+            if not kept:
+                why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
+                self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
+            # else the act stays begun: recovery reports it, and its edits wait until the person has looked
             _save_index(self.root, self.journal)
             raise
         # every file holds its after bytes: the act has happened, and a failure from here on is recovery's to finish
