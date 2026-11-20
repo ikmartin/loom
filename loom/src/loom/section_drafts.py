@@ -362,7 +362,7 @@ def attach_context(
 
 @dataclass(frozen=True)
 class _Drafted:
-    """What a section draft renders in its saved context, before the build's marks: its keys, its document and nodes, its macros, the saved paper's document and macros, every cache file it was made from, and whether it met something of the machine's that no cache remembers (`uses.passing`)."""
+    """What a section draft renders in its saved context, before the build's marks: its keys, its document and nodes, its macros, the saved paper's document and macros, every cache file it was made from, every picture it names in the site, and whether it met something of the machine's that no cache remembers (`uses.passing`)."""
 
     local: frozenset[str]
     document: str
@@ -371,12 +371,17 @@ class _Drafted:
     context: str
     context_macros: list[dict[str, object]]
     noted: frozenset[str]
+    pictures: frozenset[str]
     passing: bool
 
 
 def _holds(drafted: _Drafted) -> bool:
-    """Whether a rendering may stand for its key at a later build: not one made while TeX failed for the machine's sake or a figure went unconverted, which the next build tries again."""
-    return not drafted.passing
+    """Whether a rendering may stand for its key at a later build: not one made while TeX failed for the machine's sake or a figure went unconverted, which the next build tries again, nor one whose cache files or pictures are gone from disk, which a rendering made again makes and publishes again."""
+    return not drafted.passing and all(os.path.exists(f) for f in (*drafted.noted, *drafted.pictures) if f[:1] != "@")
+
+
+#: A picture a fragment names, by its path in the site.
+_PICTURE = re.compile(r'src="(svg/[^"]+)"')
 
 
 def _drafting(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> tuple[Any, ...]:
@@ -416,6 +421,7 @@ def _draft(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> _D
         nodes = {key: renderer.node_fragment(key) for key in sorted(local) if key != copy}
         renderer.prepare_document(context_source)
         context = renderer.master_fragment(context_source)
+    site = result.quilt.root / SITE
     return _Drafted(
         local,
         document,
@@ -424,6 +430,7 @@ def _draft(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> _D
         context,
         to_mathjax(snap.closures[context_source].macros),
         frozenset(noted - {PASSING}),
+        frozenset(str(site / rel) for html in (document, context, *nodes.values()) for rel in _PICTURE.findall(html)),
         PASSING in noted,
     )
 

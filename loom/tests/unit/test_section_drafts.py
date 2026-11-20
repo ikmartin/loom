@@ -11,7 +11,7 @@ from loom.history.steps import write_step
 from loom.reshape.copy import plan_copy
 from loom.scan.quilt import load_quilt, save_author
 from loom.scan.scan import scan
-from loom.section_drafts import capture_context, check_overlap
+from loom.section_drafts import _PICTURE, capture_context, check_overlap
 from loom.sync import SyncError
 
 DOC = "drafting/main.tex"
@@ -577,3 +577,38 @@ def test_a_forced_build_in_another_process_is_not_undone_by_a_rendering_from_bef
     )
     marked = drafted(quilt, a)[0]
     assert re.search(r"Typeset: [^<]*First prose", marked) and 'class="annotation"' in marked
+
+
+def test_a_section_draft_publishes_its_pictures_again_when_the_site_is_removed(quilt, drafting):
+    """`.loom/cache/` may be deleted at any time: with the site removed under a live server, the next build, after a change elsewhere, publishes every picture the draft names."""
+    import shutil
+
+    from loom.paths import SITE
+
+    edit(quilt, DOC, "First prose.", "First prose. \\includegraphics{fig}")
+    (quilt.root / "drafting" / "fig.pdf").write_bytes(b"%PDF-1.4 a figure\n")
+    a = copy(quilt)
+    first = drafted(quilt, a)[0]
+    named = _PICTURE.findall(first)
+    assert named and all((quilt.root / SITE / n).is_file() for n in named)
+    shutil.rmtree(quilt.root / SITE)
+    edit(quilt, DOC, "Second prose.", "Second prose, changed.")
+    assert drafted(quilt, a)[0] == first
+    assert all((quilt.root / SITE / n).is_file() for n in named)
+
+
+def test_a_section_draft_is_rendered_again_when_the_cache_it_was_made_from_is_removed(quilt, drafting):
+    """With the snippet cache removed under a live server, the next build renders the draft again, so the build's index names only files that are there."""
+    import shutil
+
+    from loom.lifetimes import read_index
+    from loom.paths import BLOCKS, CACHE
+
+    a = copy(quilt)
+    first = drafted(quilt, a)
+    shutil.rmtree(quilt.root / BLOCKS)
+    edit(quilt, DOC, "Second prose.", "Second prose, changed.")
+    assert drafted(quilt, a) == first and len(drafting) == 2
+    index = read_index(quilt.root)
+    named = {n for n in [*index.beside, *(n for ns in index.uses.values() for n in ns)] if n.startswith("blocks/")}
+    assert named and all((quilt.root / CACHE / n).exists() for n in named)
