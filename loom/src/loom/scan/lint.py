@@ -179,11 +179,11 @@ def _home(result: ScanResult) -> list[Diagnostic]:
 
 
 def _writes_left(result: ScanResult) -> list[Diagnostic]:
-    """`loom:write-left`: a write loom began on the person's files that recovery could neither finish nor undo, one per act at its first file, with what the person can do, in plain words; a record recovery cannot trust is said with no file."""
+    """`loom:write-left`: a write the journal records on the person's files that recovery could neither finish nor undo, one per act at its first file, saying only what was checked and what makes it go, in plain words; a record recovery cannot trust is said with no file."""
     from loom.writes import left
 
     out = []
-    for kind, files, why in left(result.quilt.root, result.quilt.history_dir):
+    for kind, files, why, kept in left(result.quilt.root, result.quilt.history_dir):
         if not files:
             out.append(
                 Diagnostic(
@@ -195,15 +195,18 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
                 )
             )
             continue
-        # the advice to the person is the author's to judge (handover): no command, no id
-        advice = "Nothing of yours was lost. Look at the file: if it reads as you want, there is nothing to do; if it does not, edit it, or put back a version from The Record."
+        # the wording is the author's to judge (handover): no command, no id
+        if kept:
+            goes = "This stays until each file reads exactly as before the act or as the act left it. Putting back the version The Record kept just before the act, where it kept one, does that, and keeps your text as it is now first."
+        else:
+            goes = "This stays unless each file comes to read exactly as the act left it, since loom cannot undo an act whose texts the history lacks."
         if kind == "a Keep":
-            advice += " Until this is settled, loom will not keep again the suggestions it was writing."
+            goes += " Until it is settled, loom will not keep again the suggestions this act records."
         out.append(
             Diagnostic(
                 "warning",
                 "loom:write-left",
-                f"loom could neither finish nor undo {kind} it began on {', '.join(files)}: {why}. {advice}",
+                f"The journal records {kind} on {', '.join(files)} that loom could neither finish nor undo: {why}. {goes}",
                 [Location(files[0], 1)],
                 owner="person",
             )

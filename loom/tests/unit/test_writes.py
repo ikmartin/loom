@@ -192,7 +192,11 @@ def test_a_commit_cut_short_puts_back_only_a_file_that_still_holds_what_loom_wro
     assert events(history) == ["begin"] and not temps(root)
     # recovery leaves it for the person, says so, and its edit is not written until they have looked
     said = writes.recover(root, history)
-    assert len(said) == 1 and said[0].startswith("left keep:") and "drafting/a.tex changed since" in said[0]
+    assert (
+        len(said) == 1
+        and said[0].startswith("left keep:")
+        and "drafting/a.tex neither as before the act nor as it left it" in said[0]
+    )
     assert [e["act"] for e in writes.unsettled(root, history)] == [journal(history)[0]["act"]]
     with writes.act(root, history, "keep") as w:
         assert "e-2026-01-01-aaaaaa:0" in w.unsettled_edits()
@@ -231,7 +235,9 @@ def test_recovery_puts_back_all_of_an_act_or_none_and_says_which(
         p.unlink()
     said = writes.recover(root, history)
     assert len(said) == 1 and said[0].startswith("left restore:") and "lacks a text of drafting/b.tex" in said[0]
-    assert "drafting/a.tex, drafting/b.tex as loom wrote" in said[0] and "drafting/c.tex as before it" in said[0]
+    assert (
+        "drafting/a.tex, drafting/b.tex as the act left it" in said[0] and "drafting/c.tex as before the act" in said[0]
+    )
     # none of it put back: the document is not made of files from two moments without a word
     assert (root / "drafting/a.tex").read_bytes() == b"new a\r\n" and (
         root / "drafting/b.tex"
@@ -368,9 +374,9 @@ def test_recovery_leaves_an_act_whose_file_someone_changed_since(
     assert (
         len(said) == 1
         and said[0].startswith("left restore:")
-        and "drafting/a.tex changed since loom began writing it" in said[0]
+        and "drafting/a.tex neither as before the act nor as it left it" in said[0]
     )
-    assert "drafting/b.tex as before it" in said[0]
+    assert "drafting/b.tex as before the act" in said[0]
     assert (root / "drafting/a.tex").read_bytes() == b"the person typed here\n"
     left = writes.unsettled(root, history)
     assert [e["kind"] for e in left] == ["restore"]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -653,10 +654,8 @@ def test_a_keep_or_undo_recovery_finished_is_not_listed_as_the_persons_edit(
     assert [x.id for x in waiting(q) if x.kind == "edit"] == []
 
 
-def test_a_write_recovery_leaves_is_listed_as_a_problem_in_the_persons_file(
-    q: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The second review's last item: what recovery leaves is said where a person looks, as a problem in their file, and not only on the server's terminal."""
+def _left_undo(q: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """An undo of a two-file Keep killed between its files, then a line of the person's in its first file, so recovery leaves it; checks what the problem says, and returns that file."""
     from click.testing import CliRunner
 
     from loom import writes
@@ -677,22 +676,59 @@ def test_a_write_recovery_leaves_is_listed_as_a_problem_in_the_persons_file(
     monkeypatch.setattr(writes, "_rename", real)
     first = renamed[0].relative_to(q).as_posix()
     (q / first).write_text((q / first).read_text() + "% the person's line\n")
-    res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
-    found = [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
-    assert len(found) == 1 and found[0]["message"].startswith("loom could neither finish nor undo an undo of a Keep")
-    assert f"{first} changed since loom began writing it" in found[0]["message"]
-    # what the person can do, in plain words, with no command and no id
-    assert "Look at the file: if it reads as you want, there is nothing to do" in found[0]["message"]
-    assert (
-        "`" not in found[0]["message"]
-        and "loom lint" not in found[0]["message"]
-        and "loom doctor" not in found[0]["message"]
-    )
-    assert "undo:" not in found[0]["message"] and "keep:" not in found[0]["message"]
-    # once the act is settled it is no problem any more: here, the person puts the file back as loom wrote it
+
+    def problems() -> list[dict]:
+        res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
+        return [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+
+    (found,) = problems()
+    said = found["message"]
+    # what the journal records, never who began it, and no word about loss
+    assert said.startswith("The journal records an undo of a Keep on ") and "began" not in said and "lost" not in said
+    assert f"{first} neither as before the act nor as it left it" in said and "kept in the history" in said
+    # what makes it go, in plain words, with no command and no id
+    assert "This stays until each file reads exactly as before the act or as the act left it" in said
+    assert "Putting back the version The Record kept just before the act" in said
+    assert "`" not in said and "loom lint" not in said and "loom doctor" not in said
+    assert not re.search(r"(undo|keep):\S", said)  # no act's id
+    return first
+
+
+def test_a_write_recovery_leaves_is_listed_as_a_problem_in_the_persons_file(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second review's last item: what recovery leaves is said where a person looks, as a problem in their file, and not only on the server's terminal; it goes once the file is as the act left it."""
+    from click.testing import CliRunner
+
+    from loom.cli import main
+
+    first = _left_undo(q, monkeypatch)
     (q / first).write_text((q / first).read_text().replace("% the person's line\n", ""))
     res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
     assert not [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+
+
+def test_a_left_write_goes_once_the_version_the_record_kept_just_before_it_is_put_back(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fourth review's R4-3: the way the message names does what it says, and keeps the person's text first."""
+    from click.testing import CliRunner
+
+    from loom.cli import main
+    from loom.history.ledger import load_history
+
+    first = _left_undo(q, monkeypatch)
+    history = load_history(scan(q).quilt.history_dir)
+    (before,) = [e for e in history.landmarks() if e.get("kept_for") == "undo" and e.get("in") == "drafting/main.tex"]
+    version = history.landmark_path(before).relative_to(q).as_posix()
+    said = call(q, "history-restore", {"document": "drafting/main.tex", "version": version})
+    assert "error" not in said, said
+    assert "% the person's line" not in (q / first).read_text()
+    res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
+    assert not [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+    # the person's text as it was is a version now
+    kept = [e for e in load_history(scan(q).quilt.history_dir).landmarks() if e.get("kept_for") == "restore"]
+    assert kept
 
 
 def test_a_record_recovery_cannot_trust_or_bear_out_is_said_with_no_path_and_no_false_claim(q: Path) -> None:
@@ -727,7 +763,12 @@ def test_a_record_recovery_cannot_trust_or_bear_out_is_said_with_no_path_and_no_
     assert "outside" not in found["message"] and not found.get("locations") and "cannot trust" in found["message"]
     plant("drafting/main.tex", ["sha256:" + "1" * 64, "sha256:" + "2" * 64])
     (found,) = problems()
-    assert "lacks a text of drafting/main.tex" in found["message"] and "kept in the history" not in found["message"]
+    said = found["message"]
+    assert "lacks a text of drafting/main.tex" in said and "kept in the history" not in said
+    # what the journal records, not that this machine's loom began it; no assurance where loom cannot tell
+    assert said.startswith("The journal records a Keep on drafting/main.tex that loom could neither finish nor undo")
+    assert "began" not in said and "lost" not in said and "cannot tell what the act did" in said
+    assert "This stays unless each file comes to read exactly as the act left it" in said
 
 
 def test_an_undo_cut_short_after_its_write_is_finished_once_by_the_next_act(
