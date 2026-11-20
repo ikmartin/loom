@@ -195,6 +195,24 @@ def test_a_keep_made_on_another_machine_is_not_undone_here(q: Path) -> None:
     assert files(q) == now
 
 
+def test_a_keep_written_through_a_link_out_of_the_quilt_is_not_undone_from_its_record(q: Path, tmp_path: Path) -> None:
+    # the person's own arrangement: a block kept in a file outside the quilt, linked in
+    outside = tmp_path / "shared" / "sy-000A.tex"
+    outside.parent.mkdir()
+    (q / REMARK).replace(outside)
+    (q / REMARK).symlink_to(outside)
+    edit = suggest(q, "sy-000A", "the swap of its two points", "--quote", "the swap")
+    assert edit is not None
+    assert call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    assert "the swap of its two points" in outside.read_text()
+    now = outside.read_bytes()
+    res = call(q, "change-undo", {"changes": [edit]})
+    assert [r["code"] for r in res["refused"]] == ["not-written"] and "not a file in the quilt" in res["refused"][0][
+        "why"
+    ]
+    assert outside.read_bytes() == now and (q / REMARK).is_symlink()
+
+
 def test_only_a_kept_edit_has_a_keep_to_undo(q: Path) -> None:
     res = call(q, "change-undo", {"changes": [FIXED]})
     assert [r["code"] for r in res["refused"]] == ["not-kept"]

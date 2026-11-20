@@ -726,16 +726,21 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
         gen = f"{e.id}:{generation(e)}"
         at = w.journal.wrote.get(gen)
         entry = writes.entry_at(root, at) if at is not None else None
-        made = (
-            writes.splices_of(hist, entry, gen)
-            if entry is not None
-            and entry.get("event") == "begin"
-            and gen in (entry.get("edits") or [])
-            and not writes.untrusted(root, hist, entry)
-            else None
-        )
-        if not made:
+        if entry is None or entry.get("event") != "begin" or gen not in (entry.get("edits") or []):
             out.refused.append({"id": i, "why": _not_written(i), "code": "not-written"})
+            continue
+        # what recovery would not act on, an undo does not either: a file reached through a link out of the quilt among it
+        why = writes.untrusted(root, hist, entry)
+        made = None if why else writes.splices_of(hist, entry, gen)
+        if not made:
+            said_why = why or "a text it wrote is missing from the history"
+            out.refused.append(
+                {
+                    "id": i,
+                    "why": f"loom will not undo the Keep of {i} from its record: {said_why}; restore a version from The Record instead",
+                    "code": "not-written",
+                }
+            )
             continue
         items += [(e, gen, m) for m in made]
     # where each edit's words stand in each file now; an edit refused in one file is undone in none, so plan again without it
@@ -745,12 +750,13 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
         plans = {}
         for rel in sorted({m.rel for *_, m in items}):
             mine = [(e, gen, m) for e, gen, m in items if m.rel == rel]
+            # the plan is made from one read of the file, the bytes the commit checks it still holds
+            data = w.read(rel)
             try:
-                raw = w.text(rel)
+                raw = w.text(rel, again=False)
             except writes.WriteRefused as exc:
                 failed.update({e.id: {"why": exc.message, "code": exc.code} for e, *_ in mine})
                 continue
-            data = w.read(rel)
             if raw is None or data is None:
                 failed.update({e.id: {"why": _changed_since(e.id), "code": "changed-since"} for e, *_ in mine})
                 continue
