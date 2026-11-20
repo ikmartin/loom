@@ -305,6 +305,16 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** The door's spike (`docs/reports/v0.1-study/raw/spike-door.md`, DOOR-5 and DOOR-15) and `raw/check-labels.md`; plan 0.32, the Safe workstream, the door's step 4.
 
+### The undo of a Keep takes out only what that Keep wrote
+
+**Rule.** The undo of a Keep (`pending.unkeep`) writes only where the words its Keep wrote still stand as that Keep left them, found by the journal's bytes or with their neighbours standing exactly once, and otherwise refuses and writes nothing (`changed-since`); every other byte of the file is kept. It undoes only a Keep this machine's journal holds, never one that wrote nothing, and keeps a version of each document it changes first. A kept edit is opened again only with its words taken out (`records.edits.discard` refuses it).
+
+**Why.** The v0.1 safety study (`docs/reports/v0.1-study/raw/safety.md`, SAFE-9 and SAFE-1): there was no one-step undo of Keep, and the viewer's undo of a Keep opened the record and left the words in the file, so the next Keep wrote them a second time.
+
+**Guard.** `loom/tests/unit/test_undo.py::test_a_keep_is_undone_in_one_step_with_the_exact_bytes_back`, `loom/tests/unit/test_undo.py::test_an_undo_in_a_crlf_file_gives_back_its_bytes`, `loom/tests/unit/test_undo.py::test_an_undo_keeps_what_changed_elsewhere_in_the_file_since`, `loom/tests/unit/test_undo.py::test_an_undo_refuses_once_the_words_beside_what_it_wrote_changed`, `loom/tests/unit/test_undo.py::test_an_undo_refuses_where_the_words_it_wrote_stand_twice_with_their_neighbours`, `loom/tests/unit/test_undo.py::test_a_keep_that_wrote_nothing_is_not_undone`, `loom/tests/unit/test_undo.py::test_a_kept_edit_is_opened_again_only_by_the_undo_of_its_keep`
+
+**Record.** The door's spike (`docs/reports/v0.1-study/raw/spike-door.md`, DOOR-14); plan 0.32, the Safe workstream, the door's step 5.
+
 ### Two definitions of one id leave it conflicted
 
 **Rule.** When an id is defined twice, by two files or within one, the id has no text and no winner; `duplicate-id` names every file, and whatever needs the text (accept, annotate, closure, stamp, revert) refuses until one definition goes.

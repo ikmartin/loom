@@ -106,6 +106,35 @@ def _change_discard(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
     # the viewer's undo opens a discarded suggested edit again; an in-place change comes back from History
     assert succeeds(s, "change-discard", {"changes": [edit], "undo": True})["done"] == [edit]
     refuses(s, "change-discard", {"changes": ["c-00000000"], "undo": True}, 404, "no-such-change", "from History")
+    # a kept one is not: its Keep is undone with change-undo, which takes its words out too
+    succeeds(s, "change-keep", {"changes": [edit]})
+    kept = succeeds(s, "change-discard", {"changes": [edit], "undo": True})
+    assert kept["done"] == [] and [r["code"] for r in kept["refused"]] == ["kept"]
+
+
+@case("change-undo")
+def _change_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.scan.quilt import save_author
+
+    s, q, _sid = on_demo(serve, tmp_path)
+    save_author(WHO)
+    lemma = q / "drafting" / "nodes" / "dm-0002.tex"
+    before = lemma.read_bytes()
+    edit = filed(q, "--quote", "one or two points", "--with", "at most two points")
+    s.rebuild()
+    succeeds(s, "change-keep", {"changes": [edit]})
+    assert "at most two points" in lemma.read_text()
+    refuses(s, "change-undo", {"changes": [edit], "author": "Claude Agent"}, 403, "author-only", "only the author")
+    refuses(s, "change-undo", {"changes": ["e-2026-01-01-nothere"]}, 404, "no-such-change", "no suggested edit")
+    refuses(s, "change-undo", {}, 400, "missing-field", "changes is the list")
+    said = succeeds(s, "change-undo", {"changes": [edit]})
+    assert said["done"] == [edit] and said["refused"] == [] and said["result"].startswith("undid the keep of 1 ")
+    assert lemma.read_bytes() == before
+    # undone, it is open again and waits to be kept, so it has no Keep left to undo
+    s.rebuild()
+    assert edit in [c["id"] for c in json.loads(get(s.url + "build/manifest.json")[2])["changes"]]
+    again = succeeds(s, "change-undo", {"changes": [edit]})
+    assert again["done"] == [] and [r["code"] for r in again["refused"]] == ["not-kept"]
 
 
 @case("history-restore")

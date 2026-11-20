@@ -23,7 +23,6 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 
 | operation | does | owner |
 |---|---|---|
-| `change-undo` | undoes the Keep of the suggested edits it names, each in one step | the safe write path; Review and the document call it |
 | `library-dismiss` | dismisses works an agent suggested | the library |
 | `formal-enable` | turns formalization on for the quilt, on this machine | formalization |
 | `formal-check` | runs loom's own check of a formal proof again | formalization |
@@ -39,7 +38,6 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 
 | name | means | owner |
 |---|---|---|
-| `changed-since` | an undo refused: the text has changed where it was written | the safe write path |
 | `published`, in every write's answer and in the manifest | the number of the publication that will show the write, which the viewer waits for | designed with the safe write path, built by the speed work |
 
 ## Record fields

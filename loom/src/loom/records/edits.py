@@ -2,7 +2,7 @@
 
 An edit names its key, the words it replaces as a selector (`anchor`; None means the key's body), the new text (`with`; empty deletes the quoted words), where the new text goes (`placement`: `replace` takes exactly the quoted words' place, `after` and `before` go right beside them), an optional `comment`, and the annotation it `answers`. It records the key's hash when it was written (`against`); on a key named by its place in its file, the line above the block (`near`); and at the head or foot of a body, the body's first or last `EDGE` characters (`edge`, '' for an empty body), as a quote's selector records the words either side of it. An insertion is placed only while those words still stand beside its place (`place`).
 
-`.loom/records/edits/log.jsonl` holds its events, appended under the log's lock: `created`; `kept`, with the key's hash once the edit is in; `discarded`, with an optional `why`; and `reopened`, the viewer's undo of either. Replay gives each edit's status; whether its key already reads as it taken is computed, never stored. Keeping an edit that answers an open annotation resolves that annotation, with the edit as its reason. Keeping writes an edit into its file on the author's act, through the door (`pending.keep`, `loom.writes`), which journals its `kept` event with the write.
+`.loom/records/edits/log.jsonl` holds its events, appended under the log's lock: `created`; `kept`, with the key's hash once the edit is in; `discarded`, with an optional `why`; and `reopened`: the undo of a Discard, or of a Keep (`pending.unkeep`), which takes the words its Keep wrote out of the file in the same act. Replay gives each edit's status; whether its key already reads as it taken is computed, never stored. Keeping an edit that answers an open annotation resolves that annotation, with the edit as its reason. Keeping writes an edit into its file on the author's act, through the door (`pending.keep`, `loom.writes`), which journals its `kept` event with the write.
 """
 
 from __future__ import annotations
@@ -803,8 +803,45 @@ def answered_event(root: Path, edit: Edit, writer: tuple[str, str]) -> dict[str,
     }
 
 
+def reopened_event(edit: Edit, writer: tuple[str, str], why: str | None = None) -> dict[str, Any]:
+    """The `reopened` event of `edit`, with `why` where an act other than the person's undo opened it (`restored`)."""
+    from loom.clock import stamp
+
+    akind, aid = writer
+    event: dict[str, Any] = {"event": "reopened", "id": edit.id, "when": stamp(), "author": aid, "kind": akind}
+    if why:
+        event["why"] = why
+    return event
+
+
+def unanswered_event(root: Path, edit: Edit, writer: tuple[str, str]) -> dict[str, Any] | None:
+    """The event that opens again the annotation `edit` answers, when keeping `edit` resolved it and nothing has resolved or opened it since; None otherwise. What the undo of a Keep journals with its write."""
+    from loom.clock import stamp
+    from loom.records.annotations import find_annotation, load_records
+
+    found = find_annotation(load_records(root)[0], edit.answers) if edit.answers else None
+    if found is None:
+        return None
+    ann = found[1]
+    if ann.status != "resolved" or ann.resolved_why != f"kept suggested edit {edit.id}":
+        return None
+    akind, aid = writer
+    return {
+        "event": "resolved",
+        "id": ann.id,
+        "when": stamp(),
+        "author": aid,
+        "kind": akind,
+        "body": f"undid the keep of suggested edit {edit.id}",
+        "undo": True,
+    }
+
+
 def discard(root: Path, edit: Edit, writer: tuple[str, str], why: str | None = None, *, undo: bool = False) -> str:
-    """Discard `edit`, with why; with `undo`, open a kept or discarded edit again. A person may discard any edit, an agent only its own. Returns what to say."""
+    """Discard `edit`, with why; with `undo`, open a discarded edit again. A person may discard any edit, an agent only its own. Returns what to say.
+
+    A kept edit is never opened here: its words are in the file, and only the undo of its Keep (`pending.unkeep`) takes them out with it.
+    """
     from loom.clock import stamp
 
     akind, aid = writer
@@ -815,7 +852,11 @@ def discard(root: Path, edit: Edit, writer: tuple[str, str], why: str | None = N
     if undo:
         if edit.status == "open":
             raise EditRefused("not-settled", f"{edit.id} is open; there is nothing to undo")
-        append(root, {"event": "reopened", "id": edit.id, "when": stamp(), "author": aid, "kind": akind})
+        if edit.status == "kept":
+            raise EditRefused(
+                "kept", f"{edit.id} is kept; undo its Keep instead, which takes its words out of the file too"
+            )
+        append(root, reopened_event(edit, writer))
         return f"reopened {edit.id}"
     if edit.status != "open":
         raise EditRefused("not-open", f"{edit.id} is {edit.status} already")

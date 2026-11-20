@@ -151,6 +151,114 @@ def splice(raw: str, spans: list[tuple[int, int, str]]) -> tuple[str, list[dict[
     return "".join(out), made
 
 
+def reading_offset(raw: str, at: int) -> int:
+    """Offset `at` of `raw` as an offset in the scan's reading of it (CRLF read as LF)."""
+    return at - raw.count("\r\n", 0, at)
+
+
+# ---- what an act wrote, found again -------------------------------------------------------------------------------
+
+#: How many characters either side of an edit's words, as an act left them, find those words again.
+BESIDE = 32
+
+
+@dataclass(frozen=True)
+class Written:
+    """One splice the act `act` made in `rel`, for the suggested edit `edit` (`<id>:<generation>`): the words it put in (`new`) at `at` of the act's after text, the words they replaced (`old`), and up to `BESIDE` characters either side as they stood after the act (`left`, `right`) and before it (`was_left`, `was_right`). `before` and `after` are the digests of the file's bytes either side of the act, and `edits` every edit it spliced into the file."""
+
+    act: str
+    rel: str
+    edit: str
+    at: int
+    old: str
+    new: str
+    left: str
+    right: str
+    was_left: str
+    was_right: str
+    before: str | None
+    after: str
+    edits: tuple[str, ...]
+
+    @property
+    def done(self) -> str:
+        """The words the act put in, with their neighbours as it left them."""
+        return self.left + self.new + self.right
+
+    @property
+    def undone(self) -> str:
+        """The words the act replaced, with their neighbours as they were before it."""
+        return self.was_left + self.old + self.was_right
+
+
+def splices_of(history: Path, entry: dict[str, Any], edit: str | None = None) -> list[Written] | None:
+    """Each splice the journal's `begin` line `entry` made, for the edit `edit` or for every edit, as `Written`; None when a text it needs is missing from the store, is not UTF-8, or the line does not read as a splice."""
+    out: list[Written] = []
+    files = entry.get("files") or {}
+    try:
+        for rel, made in (entry.get("splices") or {}).items():
+            mine = [m for m in made if edit is None or m.get("edit") == edit]
+            if not mine:
+                continue
+            ab = files.get(rel)
+            if not ab or ab[1] is None:
+                return None
+            before = fetch(history, ab[0]) if ab[0] else b""
+            after = fetch(history, ab[1])
+            if before is None or after is None:
+                return None
+            was, now = before.decode("utf-8"), after.decode("utf-8")
+            every = tuple(str(o.get("edit") or "") for o in made)
+            # each splice in the text after the act, and in the text before it: each splice ahead of one moved it
+            spans: list[tuple[int, int, int, int]] = []
+            for o in made:
+                at = int(o["at"])
+                back = at - sum(len(str(x["new"])) - len(str(x["old"])) for x in made if int(x["at"]) < at)
+                spans.append((at, at + len(str(o["new"])), back, back + len(str(o["old"]))))
+            for m in mine:
+                at, old, new = int(m["at"]), str(m["old"]), str(m["new"])
+                a0, a1, b0, b1 = spans[made.index(m)]
+                # its neighbours are the words beside it up to `BESIDE`, never the act's own words beside it
+                lo = max([x[1] for x in spans if x[1] <= a0], default=0)
+                hi = min([x[0] for x in spans if x[0] >= a1 and x != spans[made.index(m)]], default=len(now))
+                was_lo = max([x[3] for x in spans if x[3] <= b0], default=0)
+                was_hi = min([x[2] for x in spans if x[2] >= b1 and x != spans[made.index(m)]], default=len(was))
+                out.append(
+                    Written(
+                        act=str(entry.get("act") or ""),
+                        rel=str(rel),
+                        edit=str(m.get("edit") or ""),
+                        at=at,
+                        old=old,
+                        new=new,
+                        left=now[max(lo, a0 - BESIDE) : a0],
+                        right=now[a1 : min(hi, a1 + BESIDE)],
+                        was_left=was[max(was_lo, b0 - BESIDE) : b0],
+                        was_right=was[b1 : min(was_hi, b1 + BESIDE)],
+                        before=ab[0],
+                        after=ab[1],
+                        edits=every,
+                    )
+                )
+    except (AttributeError, KeyError, TypeError, ValueError, UnicodeDecodeError):
+        return None
+    return out
+
+
+def stands_once(text: str, needle: str) -> int | None:
+    """Where `needle` starts in `text` when it stands there exactly once; None when nowhere or more than once."""
+    i = text.find(needle)
+    if i < 0 or text.find(needle, i + 1) >= 0:
+        return None
+    return i
+
+
+def where_now(text: str, w: Written) -> int | None:
+    """Where `w`'s words stand in `text`, found with their neighbours as the act left them, and only where those stand exactly once."""
+    i = stands_once(text, w.done)
+    return None if i is None else i + len(w.left)
+
+
 # ---- paths ----------------------------------------------------------------------------------------------------------
 
 
@@ -602,6 +710,7 @@ class Act:
         self.after: dict[str, bytes | None] = {}
         self.splices: dict[str, list[dict[str, Any]]] = {}
         self.edits: list[str] = []
+        self.undone: list[str] = []
         self.records: list[dict[str, str]] = []
         self.follow: list[Callable[[], None]] = []
 
@@ -660,6 +769,10 @@ class Act:
         """Name a suggested edit's `<edit>:<generation>` as one this act writes."""
         self.edits.append(gen)
 
+    def undid(self, gen: str) -> None:
+        """Name a suggested edit's `<edit>:<generation>` as one whose Keep this act undoes; kept apart from `edits`, so the journal's `wrote` still says only what loom wrote."""
+        self.undone.append(gen)
+
     def log(self, log: Path, line: dict[str, Any] | str) -> None:
         """A record line written with the act, after its files and before `done`; recovery appends it too when it finishes the act. A dict is written as the edit and annotation logs write theirs; a string is the line exactly. WriteRefused (`outside-quilt`) for a log that is not one of loom's own (`_logs`)."""
         text = line if isinstance(line, str) else json.dumps(line, ensure_ascii=False, sort_keys=True)
@@ -700,6 +813,8 @@ class Act:
             "edits": self.edits,
             "records": self.records,
         }
+        if self.undone:
+            begin["undid"] = self.undone
         self.journal.append(self.root, begin, full=True)
         done: list[str] = []
         try:
@@ -738,7 +853,7 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
     history : Path
         The quilt's history directory (`[quilt] history`): the text store is there; the lock and the journal are in `.loom/local/`.
     kind : str
-        What the act is: `keep`, `discard`, `restore`, `put-back`, `tick`, `settings`.
+        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`.
     actor : str, optional
         Who asked for it, for the journal.
 

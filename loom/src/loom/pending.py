@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from loom.records.edits import Edit, Placed
     from loom.scan.nodes import NodeRec
     from loom.scan.scan import ScanResult
@@ -613,6 +615,271 @@ def _place_kept(
         else:
             refused.append({"id": e.id, "why": str(pl)})
     return taken, placed, refused
+
+
+# ---- undoing a Keep -------------------------------------------------------------------------------------------------
+
+
+def _not_written(edit_id: str) -> str:
+    return f"loom has no write of {edit_id} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
+
+
+def _changed_since(edit_id: str) -> str:
+    return f"the words of {edit_id} have changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
+
+
+def unkeep(
+    result: ScanResult, who: str, ids: list[str], writer: tuple[str, str], said: list[str] | None = None
+) -> tuple[list[str], list[dict[str, str]]]:
+    """Undo the Keep of each suggested edit `ids`, in one act through the door (`loom.writes`): the words its Keep wrote come out and the words they replaced go back, a version of each document it changes kept first, and the edit is open again.
+
+    Every decision is made under the door's lock (`_unkeep`). Each edit's Keep is found in this machine's journal by `<id>:<generation>`; its words are found by the bytes the Keep left, or with their neighbours as it wrote them; every other byte of the file is kept.
+
+    Parameters
+    ----------
+    result : ScanResult
+        The quilt as scanned now.
+    who : str
+        Whose look takes the words put back.
+    ids : list of str
+        The suggested edits, by id.
+    writer : (str, str)
+        Who undoes them, as `_annotator` gives it.
+    said : list of str, optional
+        Where to say which versions were kept.
+
+    Returns
+    -------
+    (list of str, list of dict)
+        The ids undone, and `{id, why, code}` for each that is not: one not kept (`not-kept`), one whose Keep loom has no write of here (`not-written`), one whose words have changed where it was written (`changed-since`), one in a file that is not UTF-8 (`not-utf8`) or that moved while it was being undone (`changed`).
+
+    Raises
+    ------
+    PendingRefused
+        `no-such-change` (404) for an id that names no suggested edit.
+
+    See Also
+    --------
+    keep : what this undoes.
+    """
+    from loom import writes
+    from loom.records.edits import find
+
+    root, hist = result.quilt.root, result.quilt.history_dir
+    ids = list(dict.fromkeys(ids))
+    gone = [i for i in ids if find(root, i) is None]
+    if gone:
+        raise PendingRefused("no-such-change", f"no suggested edit {gone[0]}", 404)
+    out = _Unkept(result)
+    try:
+        with writes.act(root, hist, "undo", writer[1]) as w:
+            _unkeep(w, out, ids, writer, said)
+
+            def follow() -> None:
+                if out.ids:
+                    _after_unkeep(out, who, writer)
+
+            w.then(follow)
+    except writes.WriteRefused as exc:
+        # the act was undone, its files and its records: no Keep of this request is undone
+        said_no = {r["id"] for r in out.refused}
+        tried = [i for i in [*out.ids, *out.trying] if i not in said_no]
+        return [], out.refused + [{"id": i, "why": exc.message, "code": exc.code} for i in dict.fromkeys(tried)]
+    return out.ids, out.refused
+
+
+@dataclass
+class _Unkept:
+    """What the undo of Keeps staged in an act: the scan it was planned with, the ids being undone and those undone, the refusals, where in each file (in the scan's reading, after the write) the words put back stand, and what carrying annotations back needs."""
+
+    result: ScanResult
+    trying: list[str] = field(default_factory=list)
+    ids: list[str] = field(default_factory=list)
+    refused: list[dict[str, str]] = field(default_factory=list)
+    spans: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    changes: list[Pending] = field(default_factory=list)
+    before: dict[str, str] = field(default_factory=dict)
+
+
+def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said: list[str] | None) -> None:
+    """Decide and stage in the act `w` the undo of the Keeps of `ids`, all under the door's lock, into `out`.
+
+    By record, each edit must be kept and its Keep in the journal; by the bytes now, its words must stand where the Keep left them (`_undo_in`); an edit refused in one file is undone in none. The versions are stamped from a scan that reads as the files do, taken again once when one moved; a file that moves after its undo was planned refuses the act (`changed`), which then writes nothing.
+    """
+    from loom import writes
+    from loom.history.acts import UNAPPLY, keep_versions, ledger_line
+    from loom.looks import UNDO
+    from loom.paths import EDIT_LOG
+    from loom.records.edits import generation, home, reopened_event, replay, unanswered_event
+    from loom.records.log import log_path as annotation_log
+
+    result = out.result
+    root, hist = result.quilt.root, result.quilt.history_dir
+    fresh = {e.id: e for e in replay(root)[0]}
+    items: list[tuple[Edit, str, writes.Written]] = []
+    for i in ids:
+        e = fresh.get(i)
+        if e is None or e.status != "kept":
+            why = f"{i} is {e.status if e else 'gone'}, so there is no Keep of it to undo"
+            out.refused.append({"id": i, "why": why, "code": "not-kept"})
+            continue
+        gen = f"{e.id}:{generation(e)}"
+        at = w.journal.wrote.get(gen)
+        entry = writes.entry_at(root, at) if at is not None else None
+        made = (
+            writes.splices_of(hist, entry, gen)
+            if entry is not None
+            and entry.get("event") == "begin"
+            and gen in (entry.get("edits") or [])
+            and not writes.untrusted(root, hist, entry)
+            else None
+        )
+        if not made:
+            out.refused.append({"id": i, "why": _not_written(i), "code": "not-written"})
+            continue
+        items += [(e, gen, m) for m in made]
+    # where each edit's words stand in each file now; an edit refused in one file is undone in none, so plan again without it
+    plans: dict[str, tuple[bytes, bytes, list[dict[str, Any]], list[tuple[int, int]]]] = {}
+    while items:
+        failed: dict[str, dict[str, str]] = {}
+        plans = {}
+        for rel in sorted({m.rel for *_, m in items}):
+            mine = [(e, gen, m) for e, gen, m in items if m.rel == rel]
+            try:
+                raw = w.text(rel)
+            except writes.WriteRefused as exc:
+                failed.update({e.id: {"why": exc.message, "code": exc.code} for e, *_ in mine})
+                continue
+            data = w.read(rel)
+            if raw is None or data is None:
+                failed.update({e.id: {"why": _changed_since(e.id), "code": "changed-since"} for e, *_ in mine})
+                continue
+            plan = _undo_in(hist, raw, data, mine)
+            if isinstance(plan, set):
+                failed.update({i: {"why": _changed_since(i), "code": "changed-since"} for i in plan})
+            else:
+                plans[rel] = (data, *plan)
+        if not failed:
+            break
+        out.refused += [{"id": i, **f} for i, f in failed.items()]
+        items = [it for it in items if it[0].id not in failed]
+    if not items:
+        return
+    out.trying = list(dict.fromkeys(e.id for e, *_ in items))
+    files = sorted(plans)
+    # the versions are of the text the undo replaces: stamp them from a scan that reads as the files now do
+    for again in (False, True):
+        if again:
+            result = out.result = _rescan(result)
+        if all(f in result.files and w.reads_as(f, result.files[f].text) for f in files):
+            break
+    else:
+        raise writes.WriteRefused(
+            "changed", "a file changed while loom was undoing a Keep; nothing was written, look at it again"
+        )
+    for e, _, m in items:
+        node = home(result, e)
+        key = node.key if node is not None else e.target_key
+        if not any(p.id == e.id for p in out.changes):
+            out.changes.append(
+                Pending(
+                    id=e.id,
+                    kind="suggested",
+                    path=m.rel,
+                    key=key,
+                    documents=[],
+                    old=m.new.strip(),
+                    new=m.old.strip(),
+                    at=[0, 0],
+                    edit=e,
+                )
+            )
+    out.before = _kept_texts(result, out.changes)
+    _say(said, keep_versions(result, files, UNDO, "Before undoing a kept edit", writer[1]))
+    # stamping takes a moment: what is written replaces the bytes the plan was made from, or nothing is
+    if any(w.read(f) != plans[f][0] for f in files):
+        raise writes.WriteRefused(
+            "changed", "a file changed while loom was undoing a Keep; nothing was written, look at it again"
+        )
+    for rel in files:
+        _, new, splices, spans = plans[rel]
+        w.replace(rel, new, splices)
+        out.spans[rel] = spans
+    answered: set[str] = set()
+    for e, gen, _ in items:
+        if e.id in out.ids:
+            continue
+        w.undid(gen)
+        w.log(root / EDIT_LOG, reopened_event(e, writer))
+        line = unanswered_event(root, e, writer)
+        if line is not None and line["id"] not in answered:
+            answered.add(line["id"])
+            w.log(annotation_log(root), line)
+        for rel in sorted({m.rel for f, _, m in items if f is e}):
+            w.log(*ledger_line(hist, UNAPPLY, {"edit": e.id, "path": rel}, writer[1]))
+        out.ids.append(e.id)
+
+
+def _undo_in(
+    hist: Path, raw: str, data: bytes, items: list[tuple[Edit, str, Any]]
+) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]]] | set[str]:
+    """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or the ids whose words cannot be found as their Keep left them.
+
+    Where the file holds a Keep's after bytes, its words are where it wrote them; else they are found with their neighbours as it wrote them, standing exactly once (`writes.where_now`). Where it holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
+    """
+    from loom import writes
+
+    now = writes.digest(data)
+    places: list[tuple[int, Any, str, str]] = []
+    bad: set[str] = set()
+    for e, gen, m in items:
+        at = m.at if now == m.after else writes.where_now(raw, m)
+        if at is None:
+            bad.add(e.id)
+        else:
+            places.append((at, m, gen, e.id))
+    places.sort(key=lambda x: x[0])
+    for (a, m, _, i), (b, _, _, j) in zip(places, places[1:], strict=False):
+        if a + len(m.new) > b:
+            bad.update((i, j))
+    if bad:
+        return bad
+    out: list[str] = []
+    made: list[dict[str, Any]] = []
+    spans: list[tuple[int, int]] = []
+    last = shift = 0
+    for at, m, gen, _ in places:
+        out += [raw[last:at], m.old]
+        made.append({"edit": gen, "at": at + shift, "old": m.new, "new": m.old})
+        spans.append((at + shift, at + shift + len(m.old)))
+        shift += len(m.old) - len(m.new)
+        last = at + len(m.new)
+    out.append(raw[last:])
+    text = "".join(out)
+    new = text.encode("utf-8")
+    first = places[0][1]
+    if (
+        {m.act for _, m, _, _ in places} == {first.act}
+        and now == first.after
+        and set(first.edits) <= {g for *_, g, _ in places}
+        and first.before is not None
+    ):
+        # the file is as that one Keep left it and every edit it wrote here is undone: its bytes before come back whole
+        back = writes.fetch(hist, first.before)
+        if back is not None:
+            new = back
+    return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans]
+
+
+def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:
+    """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file, and the annotations on the words taken out are carried onto the words put back."""
+    from loom.records.carry import carry_all
+
+    after = _rescan(out.result)
+    for path, spans in out.spans.items():
+        absorb(after, who, path, spans)
+    after = _rescan(after)
+    carry_all(after, out.before, out.changes, writer)
 
 
 def _not_utf8(path: str) -> str:

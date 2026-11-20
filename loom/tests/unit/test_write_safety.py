@@ -28,6 +28,11 @@ WORDS = "orbit group action finite widget lemma bound measure compact dense clos
 @pytest.fixture
 def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """A copy of the synthetic quilt, edits tracked, with a Markdown task list; the person is `Pat`, and no agent marker is set."""
+    return synthetic(tmp_path, monkeypatch)
+
+
+def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The `q` fixture's quilt, for another test module's fixture."""
     for m in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
         monkeypatch.delenv(m, raising=False)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))

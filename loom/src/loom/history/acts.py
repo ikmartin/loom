@@ -18,6 +18,8 @@ KEEP = "keep"
 RESTORE = "restore"
 #: The ledger's line for a suggested edit written into its file (`pending.keep`).
 APPLY = "apply"
+#: The ledger's line for the Keep of a suggested edit undone (`pending.unkeep`).
+UNAPPLY = "unapply"
 
 
 @dataclass
