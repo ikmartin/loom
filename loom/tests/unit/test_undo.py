@@ -555,6 +555,40 @@ def test_a_keep_or_undo_recovery_finished_is_not_listed_as_the_persons_edit(
     assert [x.id for x in waiting(q) if x.kind == "edit"] == []
 
 
+def test_a_write_recovery_leaves_is_listed_as_a_problem_in_the_persons_file(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The second review's last item: what recovery leaves is said where a person looks, as a problem in their file, and not only on the server's terminal."""
+    from click.testing import CliRunner
+
+    from loom import writes
+    from loom.cli import main
+
+    call(q, "change-keep", {"changes": [FIXED, ANSWER]})
+    real, renamed = writes._rename, []
+
+    def dying(tmp: Path, target: Path) -> None:
+        if renamed:
+            raise SystemExit("killed between the two files")
+        renamed.append(target)
+        real(tmp, target)
+
+    monkeypatch.setattr(writes, "_rename", dying)
+    with pytest.raises(SystemExit):
+        call(q, "change-undo", {"changes": [FIXED, ANSWER]})
+    monkeypatch.setattr(writes, "_rename", real)
+    first = renamed[0].relative_to(q).as_posix()
+    (q / first).write_text((q / first).read_text() + "% the person's line\n")
+    res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
+    found = [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+    assert len(found) == 1 and found[0]["message"].startswith("loom could neither finish nor undo an undo of a Keep")
+    assert f"{first} changed since loom began writing it" in found[0]["message"]
+    # once the act is settled it is no problem any more: here, the person puts the file back as loom wrote it
+    (q / first).write_text((q / first).read_text().replace("% the person's line\n", ""))
+    res = CliRunner().invoke(main, ["lint", "--json", "--quilt", str(q)])
+    assert not [d for d in json.loads(res.stdout)["diagnostics"] if d["code"] == "loom:write-left"]
+
+
 def test_an_undo_cut_short_after_its_write_is_finished_once_by_the_next_act(
     q: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

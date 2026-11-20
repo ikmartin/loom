@@ -87,6 +87,8 @@ LOOM: dict[str, tuple[str, bool]] = {  # code -> (severity, fixed)
     "loom:agent-permissions-stale": ("warning", False),
     # the viewer's front door (plan 0.22.7): `[quilt] home` names no file the viewer shows
     "loom:home-missing": ("warning", False),
+    # the one door (docs/design/writes.md, "Recovery"): a write to the person's file recovery could neither finish nor undo
+    "loom:write-left": ("warning", False),
     # the PDF invariant (plan 0.13 §4): a warning and never an error, because loom cannot fetch without consent
     "loom:no-readable-copy": ("warning", False),
 }

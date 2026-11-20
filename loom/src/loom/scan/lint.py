@@ -178,6 +178,22 @@ def _home(result: ScanResult) -> list[Diagnostic]:
     ]
 
 
+def _writes_left(result: ScanResult) -> list[Diagnostic]:
+    """`loom:write-left`: a write loom began on the person's files that recovery could neither finish nor undo, one per act, at its first file; both texts of each file are in the history."""
+    from loom.writes import left
+
+    return [
+        Diagnostic(
+            "warning",
+            "loom:write-left",
+            f"loom could neither finish nor undo {kind} it began on {', '.join(files)}: {why}",
+            [Location(files[0], 1)] if files else [],
+            owner="person",
+        )
+        for kind, files, why in left(result.quilt.root, result.quilt.history_dir)
+    ]
+
+
 def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic]:
     asm = result.assembly
     files = result.files
@@ -223,6 +239,7 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
     diags.extend(_agent_documents(result))
     diags.extend(_agent_permissions(result))
     diags.extend(_home(result))
+    diags.extend(_writes_left(result))
     digest_keys = set(asm.digest_files.values())
     slugs = {citekey_slug(k) for k in result.bib} | {citekey_slug(k) for k in digest_keys}
     for path, directives in asm.directives.items():
