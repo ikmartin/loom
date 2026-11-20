@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A document's compiled PDF's toolbar: under *view*, `Open in browser`, the file at its own address in a new tab, for the browser's own viewer, and `Save as…`, which hands it to the browser's download named by the document (`main.pdf`), never by the build's path; both greyed while there is no PDF yet. The page and the zoom stand over the paper (`CompiledItem`).
+	// A document's compiled PDF's toolbar: under *view*, `open in browser`, the file at its own address in a new tab, for the browser's own viewer, and `save as…`, which hands it to the browser's download named by the document (`main.pdf`), never by the build's path; both greyed while there is no PDF yet. The page and the zoom stand over the paper (`CompiledItem`).
 	import { store } from '$lib/manifest/client.svelte';
 	import { compiledUrl, dataUrl } from '$lib/paths';
 	import { download } from '$lib/pdf/desk.svelte';
@@ -34,7 +34,7 @@
 
 <ItemToolbar {name}>
 	{#snippet view()}
-		<ToolbarItem label="Open in browser" name="open {name} in the browser's own viewer, in a new tab" href={master?.pdf ? dataUrl(master.pdf) : undefined} off={none} testid="pdf-open-browser" />
-		<ToolbarItem label="Save as…" name="save {name} as {file}" about="Save a copy of this PDF as {file}" off={none ?? (busy ? 'Saving…' : undefined)} testid="pdf-save" onclick={() => void save()} />
+		<ToolbarItem label="open in browser" name="open {name} in the browser's own viewer, in a new tab" href={master?.pdf ? dataUrl(master.pdf) : undefined} off={none} testid="pdf-open-browser" />
+		<ToolbarItem label="save as…" name="save {name} as {file}" about="Save a copy of this PDF as {file}" off={none ?? (busy ? 'Saving…' : undefined)} testid="pdf-save" onclick={() => void save()} />
 	{/snippet}
 </ItemToolbar>

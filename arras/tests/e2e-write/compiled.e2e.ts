@@ -1,4 +1,4 @@
-// A document's compiled PDF (plan 0.29.1): a row under its document in the tree, and `View PDF` in the document's *view* menu, open it to read, and a new compile opens it again where the reader is, with nobody asking; its own *view* menu opens the file the server answers in a tab of its own and saves it. The suite serves with `--no-compile`, so the test stands in for the compile by putting PDFs where one writes.
+// A document's compiled PDF (plan 0.29.1): a row under its document in the tree, and `view PDF` in the document's *view* menu, open it to read, and a new compile opens it again where the reader is, with nobody asking; its own *view* menu opens the file the server answers in a tab of its own and saves it. The suite serves with `--no-compile`, so the test stands in for the compile by putting PDFs where one writes.
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { ARRAS, compileFolder, expect, test } from '../served';
@@ -47,7 +47,7 @@ test("a document's compiled PDF opens from its row in the tree, and a new compil
 	await expect(page).toHaveURL(/\/pdf\/drafting\/main$/);
 });
 
-test("View PDF opens the compiled PDF beside its document, whose view menu opens the file the server answers in a tab of its own and saves its bytes under the document's name; a document never compiled says so", async ({ page, served }) => {
+test("view PDF opens the compiled PDF beside its document, whose view menu opens the file the server answers in a tab of its own and saves its bytes under the document's name; a document never compiled says so", async ({ page, served }) => {
 	await page.goto('/master/drafting/main');
 	await viewMenu(page, 0);
 	await page.getByTestId('toolbar-menu').getByTestId('view-pdf').click();

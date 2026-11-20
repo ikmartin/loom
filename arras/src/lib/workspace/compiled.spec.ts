@@ -50,7 +50,7 @@ describe('how a compile stands', () => {
 		expect(compileError(c('idle', 'ok'))).toBe('');
 	});
 
-	it("says beside a document's View PDF that nothing is compiled yet where there is no PDF and nothing under way", () => {
+	it("says beside a document's view PDF that nothing is compiled yet where there is no PDF and nothing under way", () => {
 		expect(pdfWord(false, undefined)).toBe('not compiled yet');
 		expect(pdfWord(true, undefined)).toBe('');
 		expect(pdfWord(false, c('compiling'))).toBe('compiling');
@@ -58,7 +58,7 @@ describe('how a compile stands', () => {
 		expect(pdfWord(false, c('idle', 'failed'))).toBe('did not compile');
 	});
 
-	it('greys View PDF only where there is no PDF to open, saying why, and opens the last PDF of a compile that failed or had errors', () => {
+	it('greys view PDF only where there is no PDF to open, saying why, and opens the last PDF of a compile that failed or had errors', () => {
 		expect(pdfLine(true, undefined)).toEqual({ word: '', about: undefined });
 		expect(pdfLine(false, undefined)).toEqual({ word: 'not compiled yet', off: 'There is no compiled PDF to open yet' });
 		expect(pdfLine(false, c('compiling'))).toEqual({ word: 'compiling', off: 'There is no compiled PDF to open yet' });

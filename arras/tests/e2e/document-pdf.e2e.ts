@@ -1,4 +1,4 @@
-// A document's compiled PDF from the document itself: `View PDF` in its *view* menu opens the PDF beside the text, and the PDF's own *view* menu opens the file in the browser and saves a copy named by the document; the same for an agent's copy; and beside `View PDF`, in the tree's words, that there is none yet, that it is compiling, that the last compile failed or had errors. Every address is the fixture manifest's own, answered here with a PDF of the test's.
+// A document's compiled PDF from the document itself: `view PDF` in its *view* menu opens the PDF beside the text, and the PDF's own *view* menu opens the file in the browser and saves a copy named by the document; the same for an agent's copy; and beside `view PDF`, in the tree's words, that there is none yet, that it is compiling, that the last compile failed or had errors. Every address is the fixture manifest's own, answered here with a PDF of the test's.
 import { readFileSync } from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 import { manifest, PDF, serve } from '../manifest';
@@ -28,7 +28,7 @@ async function compiling(page: Page, said: () => Record<string, unknown>): Promi
 async function viewOpenAndSave(page: Page, d: Doc): Promise<void> {
 	await viewMenu(page, 0);
 	const view = page.getByTestId('toolbar-menu').getByTestId('view-pdf');
-	await expect(view).toHaveText('View PDF');
+	await expect(view).toHaveText('view PDF');
 	await expect(view).not.toHaveAttribute('aria-disabled');
 	await expect(view.getByTestId('view-pdf-said')).toHaveCount(0);
 	await view.click();
@@ -41,7 +41,7 @@ async function viewOpenAndSave(page: Page, d: Doc): Promise<void> {
 	// the file itself, at its own address, in a tab of its own: the browser's viewer shows it
 	await viewMenu(page, 1);
 	const menu = page.getByTestId('toolbar-menu');
-	await expect(menu.locator('[role^="menuitem"]')).toHaveText(['Open in browser', 'Save as…', 'turn annotations off']);
+	await expect(menu.locator('[role^="menuitem"]')).toHaveText(['open in browser', 'save as…', 'turn annotations off']);
 	const browser = menu.getByTestId('pdf-open-browser');
 	await expect(browser).toHaveAttribute('href', `/build/${d.pdf}`);
 	await expect(browser).toHaveAttribute('target', '_blank');
@@ -75,7 +75,7 @@ test("a document's view menu opens its PDF beside it, whose own view menu opens 
 	await expect(pane(page, 1).getByTestId('item-tab')).toHaveCount(1);
 });
 
-test("an agent's copy has View PDF too, and its PDF saves under the copy's own name", async ({ page }) => {
+test("an agent's copy has view PDF too, and its PDF saves under the copy's own name", async ({ page }) => {
 	await servePdfs(page);
 	await page.goto(route(main));
 	await page.getByTestId('docs-copies').getByRole('link', { name: file(copy), exact: true }).click();
@@ -83,7 +83,7 @@ test("an agent's copy has View PDF too, and its PDF saves under the copy's own n
 	await viewOpenAndSave(page, copy);
 });
 
-test('View PDF says in words when nothing is compiled yet, while it compiles and when the last compile failed, greyed while there is no PDF; one compiled with errors, or kept from before a failure, still opens', async ({ page }) => {
+test('view PDF says in words when nothing is compiled yet, while it compiles and when the last compile failed, greyed while there is no PDF; one compiled with errors, or kept from before a failure, still opens', async ({ page }) => {
 	let said: Record<string, unknown> = {};
 	await compiling(page, () => said);
 	await servePdfs(page);
@@ -133,7 +133,7 @@ test("a project's own PDF opens in the browser from its view menu too, as the fi
 	await page.goto('/file/' + fig.path);
 	await viewMenu(page, 0);
 	const browser = page.getByTestId('toolbar-menu').getByTestId('pdf-open-browser');
-	await expect(browser).toHaveText('Open in browser');
+	await expect(browser).toHaveText('open in browser');
 	await expect(browser).toHaveAttribute('href', `/_files/${fig.path}`);
 	await expect(browser).toHaveAttribute('target', '_blank');
 });

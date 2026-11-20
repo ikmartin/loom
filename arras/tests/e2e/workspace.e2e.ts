@@ -659,7 +659,7 @@ test.describe('the toolbar', () => {
 		const menu = page.getByTestId('toolbar-menu');
 		await expect(menu).toHaveAttribute('role', 'menu');
 		// each says what a click does, and neither has a key: a stray letter never hides what a reader is looking at
-		await expect(menu.getByRole('menuitem')).toHaveText(['show settled annotations', 'View PDF', 'turn annotations off']);
+		await expect(menu.getByRole('menuitem')).toHaveText(['show settled annotations', 'view PDF', 'turn annotations off']);
 		await expect(menu.getByTestId('toggle-settled')).not.toHaveAttribute('aria-keyshortcuts');
 		await expect(menu.getByTestId('toggle-hide-notes')).not.toHaveAttribute('aria-keyshortcuts');
 		// its compiled PDF opens from here, as a cited work's does from its own
