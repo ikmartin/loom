@@ -71,8 +71,9 @@ def suggest_command(
     from loom.clock import stamp, today
     from loom.records.annotations import find_annotation, load_records
     from loom.records.edits import append_new, edge_of, misplaced, whole_body
+    from loom.records.locate import alike, line_before, named_by_place
     from loom.records.selectors import find_quote, make_selector
-    from loom.records.store import Records, alike, line_before, named_by_place
+    from loom.records.store import Records
     from loom.scan.owntext import key_hash
 
     if withdraw is not None:

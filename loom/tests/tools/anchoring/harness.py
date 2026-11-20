@@ -31,7 +31,7 @@ except ImportError:  # today's code has none
     place_context = None
 
 try:  # what `loom suggest` records on a key named by place, where loom has it
-    from loom.records.store import line_before, named_by_place
+    from loom.records.locate import line_before, named_by_place
 except ImportError:
     line_before = named_by_place = None
 

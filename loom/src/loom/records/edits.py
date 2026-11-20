@@ -195,18 +195,19 @@ def node_of(result: ScanResult, key: str) -> NodeRec | None:
 
 
 def home(result: ScanResult, edit: Edit) -> NodeRec | None:
-    """The block `edit` is on now, or None when no block can be said to be it (`filed_on`).
+    """The block `edit` is on now, or None when no block can be said to be it (`records.locate.follow`).
 
     A key named by a label names its block. A key named by its place in its file names another block once one is put in before it, so an edit on one goes with the text it was filed on and the line above it, wherever they now stand, and is on no block when they do not say which.
     """
-    from loom.records.store import filed_on
+    from loom.records.locate import follow
 
-    return filed_on(
+    return follow(
         result,
         edit.target_key,
         node_of(result, edit.target_key),
         edit.target_hash,
-        edit.near,
+        edit=True,
+        near=edit.near,
         quoted=edit.selector is not None,
     )
 
@@ -452,7 +453,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again; and when the body a whole-body replacement would replace has changed since it was suggested (`_same_body`).
+        When its key is gone or, named by place, no longer says which block (`records.locate.follow`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again; and when the body a whole-body replacement would replace has changed since it was suggested (`_same_body`).
     """
     from loom.scan.owntext import key_hash
 
@@ -525,8 +526,8 @@ def place(result: ScanResult, edit: Edit) -> Placed:
 
 
 def _by_place_alone(result: ScanResult, edit: Edit, node: NodeRec) -> bool:
-    """Whether `edit`'s block was found by its place and the line above alone: its key is named by place and the block no longer holds the text the edit was written against (`filed_on`'s last answer)."""
-    from loom.records.store import named_by_place
+    """Whether `edit`'s block was found by its place and the line above alone: its key is named by place and the block no longer holds the text the edit was written against (`follow`'s last answer)."""
+    from loom.records.locate import named_by_place
     from loom.scan.owntext import key_hash
 
     return (

@@ -21,6 +21,7 @@ from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, EDIT_LOG, LINKS, REVIEW
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
+from loom.records.locate import follow
 from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used
@@ -103,122 +104,6 @@ class ResolvedAnnotation:
 def is_document_path(result: ScanResult, path: str) -> bool:
     """Whether `path` names a document, live or not, rather than a key: a `.tex` path, which no key (`prose:` keys aside) is."""
     return path.endswith(".tex") and not path.startswith("prose:")
-
-
-#: The scan the block hashes below were read from, and each key's hash; one scan at a time, held as one tuple so that a thread reading it never mixes two scans.
-_BLOCK_HASHES: tuple[ScanResult, dict[str, str]] | None = None
-
-
-def _block_hash(result: ScanResult, key: str) -> str:
-    """A block's hash as a record's `against` holds it (`key_hash`), remembered for the scan it was read from."""
-    global _BLOCK_HASHES
-    held = _BLOCK_HASHES
-    if held is None or held[0] is not result:
-        held = _BLOCK_HASHES = (result, {})
-    known = held[1].get(key)
-    if known is None:
-        known = held[1][key] = key_hash(result, key)
-    return known
-
-
-def written_on(result: ScanResult, key: str, node: NodeRec | None, want: str) -> NodeRec | None:
-    """The block a record on `key` was written on: `node`, the block `key` names now, unless `key` is named by its place in its file and no longer holds the text `want` hashes while exactly one other block of that file does.
-
-    A key named by place (`FILE#proof:3`) names another block once a block is put in before it, so a record goes with the text it was written against wherever that now stands. A labelled key always names its own block, and so does a region inside one. None when `key` is gone and no block of its file holds that text.
-
-    Parameters
-    ----------
-    result : ScanResult
-    key : str
-        The key the record names.
-    node : NodeRec or None
-        The block `key` names now; None when it names none.
-    want : str
-        The record's `against`: the hash of the block's text when it was written; '' moves nothing.
-
-    Returns
-    -------
-    NodeRec or None
-    """
-    if not want or "#" not in key or key in result.assembly.regions:
-        return node
-    if node is not None and _block_hash(result, node.key) == want:
-        return node
-    path = node.file if node is not None else key.split("#", 1)[0]
-    same = [n for n in result.nodes.values() if n.file == path and n is not node and _block_hash(result, n.key) == want]
-    return same[0] if len(same) == 1 else node
-
-
-def named_by_place(result: ScanResult, key: str, node: NodeRec | None) -> bool:
-    """Whether `key` names a block by its place in its file (`FILE#proof:3`), which another block takes once one is put in before it.
-
-    The scan's record of the block decides, not the key's shape: a key made from a label (`FILE#lab`) has a `#` too, and names its own block. A region inside a block is not named by place. A key that names no block now is taken as named by place, the kind that stops naming one.
-    """
-    if "#" not in key or key in result.assembly.regions:
-        return False
-    return node is None or key.split("#", 1)[1] not in node.labels
-
-
-def line_before(result: ScanResult, node: NodeRec) -> str:
-    """The last line with words above `node` in its file: what a suggested edit on a key named by place records beside the block's text (`near`), to tell the block from another that reads the same."""
-    source = result.files.get(node.file)
-    if source is None:
-        return ""
-    return source.text[: node.start].rstrip().rsplit("\n", 1)[-1].strip()
-
-
-def alike(result: ScanResult, node: NodeRec) -> list[NodeRec]:
-    """The other blocks of `node`'s file that hold the same text under the same line above: the ones a suggested edit on a key named by place could not be told from (`filed_on`)."""
-    text, above = _block_hash(result, node.key), line_before(result, node)
-    return [
-        n
-        for n in result.nodes.values()
-        if n.file == node.file
-        and n is not node
-        and _block_hash(result, n.key) == text
-        and line_before(result, n) == above
-    ]
-
-
-def filed_on(
-    result: ScanResult, key: str, node: NodeRec | None, want: str, near: str = "", quoted: bool = False
-) -> NodeRec | None:
-    """The block a suggested edit on `key` was filed on, or None when that cannot be told.
-
-    An edit is written into a person's file, so where `written_on` falls back on whatever block the key names now, this answers no block: an edit on a key named by place goes only where the text it was filed on, and the line above it, say.
-
-    Parameters
-    ----------
-    result : ScanResult
-    key : str
-        The key the edit names.
-    node : NodeRec or None
-        The block `key` names now; None when it names none.
-    want : str
-        The edit's `against`: the hash of the block's text when it was filed; '' is no evidence, and the key's block is answered.
-    near : str, default ''
-        The line above the block when the edit was filed (`line_before`); '' for an edit filed before that was recorded.
-    quoted : bool, default False
-        Whether the edit quotes words of the block, which `place` then needs to stand there once.
-
-    Returns
-    -------
-    NodeRec or None
-        For a key not named by place, `node`. Else the one block of the file that holds the text; among several that hold it, the one whose line above is `near`; and when none holds it, the block the key names now only for an edit that quotes words and whose line above still stands there. None otherwise: the edit is unplaced.
-    """
-    if not want or not named_by_place(result, key, node):
-        return node
-    path = node.file if node is not None else key.split("#", 1)[0]
-    same: list[NodeRec] = [n for n in result.nodes.values() if n.file == path and _block_hash(result, n.key) == want]
-    if len(same) == 1:
-        return same[0]
-    if not near:
-        return None
-    if same:
-        under = [n for n in same if line_before(result, n) == near]
-        return under[0] if len(under) == 1 else None
-    # its block has changed: with no words quoted nothing says the block now at its place is the one, and the new text would replace or join a body it was not written for
-    return node if quoted and node is not None and line_before(result, node) == near else None
 
 
 #: Acceptance states by (reviewer, the ledger as read), each kept for the one scan it was computed against; see `Records.key_states`.
@@ -643,10 +528,15 @@ class Records:
                 if n is None:
                     region = result.assembly.regions.get(target)
                     n = result.nodes.get(region.container) if region else None
-                # a key named by place goes with the block it was written on, once a block put in before it renumbers the keys
-                moved = written_on(result, target, n, a.target_hash)
-                if moved is not None and moved is not n:
-                    n, target = moved, moved.key
+                # a key named by place goes with the text it was written on, and is never read on the block that took its place
+                found = follow(result, target, n, a.target_hash)
+                if found is None and n is not None:
+                    out.append(
+                        ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc)
+                    )
+                    continue
+                if found is not None and found is not n:
+                    n, target = found, found.key
                 if n is None:
                     out.append(
                         ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc)
