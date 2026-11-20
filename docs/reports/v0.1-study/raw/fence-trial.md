@@ -1,6 +1,6 @@
 # A fence for Lean and TeX on macOS (v0.1 study, raw, the fence trial)
 
-Investigator: fence trial, for the Formalization row of plan 0.32 and what is left of SEC-3. Machine: macOS 26.5.2 (build 25F84) on arm64, 8 cores, 16 GB, shared with another session running test lanes, so the one-minute load average stood between 1.5 and 23 and **every timing below is indicative**. Done on 2026-11-19 from 17:30, and finished on 2026-11-20 after a pause. Lean `leanprover/lean4:v4.36.0-rc2` under `~/.elan` through Homebrew's elan 4.2.4 (both from the earlier trial), Mathlib `9d581dfff2e4`. TeX Live 2024 at `/usr/local/texlive/2024` (pdfTeX 1.40.26, kpathsea 6.4.0, latexmk 4.86a, biber 2.20, make4ht 0.4b). Xcode is installed and selected (`xcode-select -p` is `/Applications/Xcode.app/Contents/Developer`). Loom at `b563e6b7`, read and not run, except one function called to write its TeX4ht configuration. Paths starting `$F/` are under `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/fence-trial/`, where every profile, script, project and log of the trial is.
+Investigator: fence trial, for the Formalization row of plan 0.32 and what is left of SEC-3. Machine: macOS 26.5.2 (build 25F84) on arm64, 8 cores, 16 GB, shared with another session running test lanes, so the one-minute load average stood between 1.5 and 23 and **every timing below is indicative**. Done on 2026-11-19 from 17:30, and finished on 2026-11-20 after a pause. Lean `leanprover/lean4:v4.36.0-rc2` under `~/.elan` through Homebrew's elan 4.2.4 (both from the earlier trial), Mathlib `9d581dfff2e4`. TeX Live 2024 at `/usr/local/texlive/2024` (pdfTeX 1.40.26, kpathsea 6.4.0, latexmk 4.86a, biber 2.20, make4ht 0.4b). Xcode is installed and selected (`xcode-select -p` is `/Applications/Xcode.app/Contents/Developer`). Loom at `b563e6b7`, read and not run, except one function called to write its TeX4ht configuration. Paths starting `$F/` are under `<scratch>/fence-trial/`, where every profile, script, project and log of the trial is.
 
 Every fact is marked **measured** (done here, on this machine, today) or **read** (from a file, a manual or a binary's strings, not tried). The decoy home is `$F/decoy-home`, holding `secret.txt` and `secret.tex` with the text `DECOY-SECRET-7f3a9c`; every run was given it as `HOME`. The second scratch folder every escape tried to write into is `$F/outside`. The one real file read was `/etc/hosts` (594 characters; its contents are not reported) and the one real existence check was `~/.zshenv`.
 
@@ -41,7 +41,7 @@ Parameters go in with `-D KEY=VALUE` and are read with `(param "KEY")`, so a pro
 
 A Lake project at `$F/lean/Trial` with `lakefile.toml` requiring Mathlib at the exact revision of the earlier trial and `lean-toolchain` at `leanprover/lean4:v4.36.0-rc2`, so no new toolchain was fetched. One module, `Trial/Saturation.lean`, holds the earlier trial's `divergence`, `cycleLattice` and `cycleLattice_saturated` (its section 2), with a six-line proof, under `import Mathlib`. `lake update` took 69 s: it cloned Mathlib and its eight dependencies (57 MB of `.git` in all, Mathlib's 43 MB) and Mathlib's post-update hook ran the cache tool, which found all 9,080 files already in `~/.cache/mathlib` and downloaded nothing ("No files to download"; decompressing took 20 s). `lake exe cache get` run again by hand took 17 s and downloaded nothing. The project is 7.2 GB, 6.7 GB of it Mathlib's build (130,351 files). This was the trial's only network use outside the fence. **measured**
 
-The certifying check, as loom would run it (`$F/scripts/leancheck`): remove the project's own `.lake/build`; `lake build Trial.Saturation`; `lake env lean .loom-probe/Axioms.lean`, a file holding `import Trial.Saturation` and `#print axioms Trial.cycleLattice_saturated`; `lake env leanchecker Trial.Saturation`. Each ran in an environment of five variables: `PATH`, `HOME` (the decoy), `ELAN_HOME=/Users/isaac/.elan`, `TMPDIR` (inside the project's `.lake`), `LANG`.
+The certifying check, as loom would run it (`$F/scripts/leancheck`): remove the project's own `.lake/build`; `lake build Trial.Saturation`; `lake env lean .loom-probe/Axioms.lean`, a file holding `import Trial.Saturation` and `#print axioms Trial.cycleLattice_saturated`; `lake env leanchecker Trial.Saturation`. Each ran in an environment of five variables: `PATH`, `HOME` (the decoy), `ELAN_HOME=~/.elan`, `TMPDIR` (inside the project's `.lake`), `LANG`.
 
 ### How the profile was found
 
@@ -58,7 +58,7 @@ Each run started from `deny default` and `import "system.sb"`, and each refusal 
 | direct | `lean5` without Homebrew's elan and without `/private/etc/ssl`, calling the toolchain's `lake` directly | **passed** (refusals only of `~/.CFUserTextEncoding`, which git tolerates) |
 | `lean6` | the direct form, reading one toolchain's folder instead of all of `~/.elan` | **the full check passed**: build 90.6 s, axioms 105.8 s, replay 87.5 s, at a load of 1.6 to 4.7; refusals only of git's `~/.CFUserTextEncoding` and of the trial's own wrapper `/usr/bin/env` |
 
-`lean6`, the profile to build, in full. Its parameters for this machine were `PROJECT=$F/lean/Trial`, `TOOLCHAIN=/Users/isaac/.elan/toolchains/leanprover--lean4---v4.36.0-rc2`, `DEVDIR=/Applications/Xcode.app/Contents/Developer`, with `PATH=$TOOLCHAIN/bin:$DEVDIR/usr/bin:/usr/bin:/bin` and the toolchain's `lake` called by its full path. Loom reads `lean-toolchain` itself to find the folder, says plainly when it is not installed, and never runs elan, the only part of the chain that downloads.
+`lean6`, the profile to build, in full. Its parameters for this machine were `PROJECT=$F/lean/Trial`, `TOOLCHAIN=~/.elan/toolchains/leanprover--lean4---v4.36.0-rc2`, `DEVDIR=/Applications/Xcode.app/Contents/Developer`, with `PATH=$TOOLCHAIN/bin:$DEVDIR/usr/bin:/usr/bin:/bin` and the toolchain's `lake` called by its full path. Loom reads `lean-toolchain` itself to find the folder, says plainly when it is not installed, and never runs elan, the only part of the chain that downloads.
 
 ```scheme
 ;; Lean's certifying check, fenced: one toolchain's lake, lean and leanchecker, called directly, and git from the developer tools.
@@ -72,7 +72,7 @@ Each run started from `deny default` and `import "system.sb"`, and each refusal 
 (allow file-write* (subpath (param "PROJECT")))
 ```
 
-`lean5`, the profile that worked through elan (Homebrew's), in full, for a loom that keeps calling `lake` through elan. Its parameters were `PROJECT`, `ELAN=/Users/isaac/.elan`, `ELANBIN=/opt/homebrew`, `DEVDIR`, with `PATH=$DEVDIR/usr/bin:/opt/homebrew/bin:/usr/bin:/bin`.
+`lean5`, the profile that worked through elan (Homebrew's), in full, for a loom that keeps calling `lake` through elan. Its parameters were `PROJECT`, `ELAN=~/.elan`, `ELANBIN=/opt/homebrew`, `DEVDIR`, with `PATH=$DEVDIR/usr/bin:/opt/homebrew/bin:/usr/bin:/bin`.
 
 ```scheme
 ;; Lean's certifying check, fenced: the toolchain's lake, lean and leanchecker, and git from the developer tools.
@@ -117,8 +117,8 @@ With no network a fenced build cannot fetch Mathlib's cache, so whatever of Math
 | R1 read `decoy-home/secret.txt` | read the secret | `operation not permitted` | `file-read-data …/decoy-home/secret.txt` |
 | R2 list the decoy home | 3 entries | refused | `file-read-data …/decoy-home` |
 | R3 read `/etc/hosts` | 594 characters | refused | `file-read-data /private/etc/hosts` |
-| R4 does `~/.zshenv` exist | true | false | `file-read-metadata /Users/isaac/.zshenv` |
-| R5 list `~/.cache/mathlib` | 9,081 entries | refused | `file-read-data /Users/isaac/.cache/mathlib` |
+| R4 does `~/.zshenv` exist | true | false | `file-read-metadata ~/.zshenv` |
+| R5 list `~/.cache/mathlib` | 9,081 entries | refused | `file-read-data ~/.cache/mathlib` |
 | W1 write `$F/outside/lean-w1.txt` | written | refused | `file-write-create …/outside/lean-w1.txt` |
 | S1 spawn `cat` on the secret | printed it | `cat: … Operation not permitted` | as R1 |
 | S2 spawn `sh -c 'echo > outside'` | written | `Operation not permitted` | `file-write-create …/outside/lean-s2.txt` |
@@ -229,7 +229,7 @@ With `openin_any=p` and no fence, R1 to R4 were refused on TeX Live 2024, and lu
 
 The whole check (rebuild, axioms, replay) took 337 s and 519 s unfenced and 635 s and 303 s fenced, run in alternation at loads of 7 to 15 (`$F/logs/timing-batch.log`), and 284 s fenced under `lean6` at a load of 2 to 5: the spread is the machine's. In the first three biber pairs the fenced run took 3.6, 9.2 and 8.4 s longer on the wall clock with the same CPU; in the last two (one of them with `xcrun`'s cache writable, to test that as the cause) it took the same as unfenced. No refusal was logged and the cause was not found. The first fenced biber timings were void and are not in the table: under `tex7`, and under `tex8` with the clone misplaced, biber failed on its standard output or unpacked a fresh copy into `TMPDIR` (13 s of CPU against 8) (FENCE-12). **measured**
 
-**What it does not cover.** The fence allows reading the whole toolchain, the TeX tree, the developer folder and `/bin` and `/usr/bin`, which hold nothing of the person's; it allows the metadata of every ancestor folder of those places, so a document can learn that `/Users/isaac` exists but not list it; it allows `system.sb`'s Mach services, among them `opendirectoryd`, so a run can learn the person's user name and home path. It does not limit time, memory or disk, which `setrlimit` and the existing timeouts must do: a run that needs Mathlib rebuilt would compile for hours inside the fence (FENCE-8). It does not stop a document writing `TEXMFVAR/fonts` once TeX's own `openout_any` is opened, though what is written there is read as fonts. It runs Apple's private profile `system.sb`, which an update can change.
+**What it does not cover.** The fence allows reading the whole toolchain, the TeX tree, the developer folder and `/bin` and `/usr/bin`, which hold nothing of the person's; it allows the metadata of every ancestor folder of those places, so a document can learn that the home folder exists but not list it; it allows `system.sb`'s Mach services, among them `opendirectoryd`, so a run can learn the person's user name and home path. It does not limit time, memory or disk, which `setrlimit` and the existing timeouts must do: a run that needs Mathlib rebuilt would compile for hours inside the fence (FENCE-8). It does not stop a document writing `TEXMFVAR/fonts` once TeX's own `openout_any` is opened, though what is written there is read as fonts. It runs Apple's private profile `system.sb`, which an update can change.
 
 ## 5. Recommendation
 
@@ -263,7 +263,7 @@ Nothing was installed system-wide and no shell profile was changed. `sudo` was n
 
 | what | where | size | remove with |
 |---|---|---|---|
-| the Lake project with Mathlib (7.2 GB), the copies without `.lake`, the TeX runs (51 MB, after removing the 5.6 GB of copies biber unpacked into them), biber's trial unpack folder (202 MB), the decoy home, profiles, scripts and logs | `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/fence-trial` | 7.5 GB | `rm -rf` of that folder |
+| the Lake project with Mathlib (7.2 GB), the copies without `.lake`, the TeX runs (51 MB, after removing the 5.6 GB of copies biber unpacked into them), biber's trial unpack folder (202 MB), the decoy home, profiles, scripts and logs | `<scratch>/fence-trial` | 7.5 GB | `rm -rf` of that folder |
 | a line in elan's list of projects, written by `lake update` | `~/.elan/known-projects` (the earlier trial's line is there too) | 250 bytes | harmless; delete the line naming `fence-trial` |
 | launchd jobs the unfenced escapes submitted (`fence.trial.s4`, `fence.trial.lean`) | the person's launchd domain | — | already removed with `launchctl remove`; `launchctl list | grep fence.trial` is empty |
 | the Lean toolchain, elan and `~/.cache/mathlib` | from the earlier trial, unchanged | 3.0 GB, 5.9 MB, 455 MB | as `raw/lean-trial.md` section 7 says |
