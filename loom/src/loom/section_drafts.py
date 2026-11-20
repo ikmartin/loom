@@ -8,7 +8,6 @@ import json
 import os
 import re
 from collections.abc import Mapping
-from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
@@ -315,8 +314,8 @@ def attach_context(
         used(*drafted.noted)
         local = drafted.local
         macro_name = "draft:" + copy
-        # the manifest's own, so nothing done to it reaches what the memo hands the next build
-        manifest["macros"]["sets"][macro_name] = deepcopy(drafted.macros)
+        # the manifest's own, so nothing done to it reaches what the memo hands the next build; an entry is flat (`macros._published`), so a new dict of it is a whole copy
+        manifest["macros"]["sets"][macro_name] = [dict(m) for m in drafted.macros]
         master.update(macros=macro_name, context_document=context_id)
 
         def pin(fragment: str, local: frozenset[str] = local, context_id: str = context_id) -> str:
@@ -351,7 +350,7 @@ def attach_context(
         fragment = "fragments/contexts/" + hashlib.sha256(context_id.encode()).hexdigest() + ".html"
         files[fragment] = drafted.context
         context_macros = "context:" + context_id
-        manifest["macros"]["sets"][context_macros] = deepcopy(drafted.context_macros)
+        manifest["macros"]["sets"][context_macros] = [dict(m) for m in drafted.context_macros]
         manifest["masters"].append(
             {
                 "path": context_id,
