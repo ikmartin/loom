@@ -7,9 +7,12 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Any
 
 from loom.history.ledger import History, load_history
@@ -312,7 +315,8 @@ def attach_context(
         used(*drafted.noted)
         local = drafted.local
         macro_name = "draft:" + copy
-        manifest["macros"]["sets"][macro_name] = drafted.macros
+        # the manifest's own, so nothing done to it reaches what the memo hands the next build
+        manifest["macros"]["sets"][macro_name] = deepcopy(drafted.macros)
         master.update(macros=macro_name, context_document=context_id)
 
         def pin(fragment: str, local: frozenset[str] = local, context_id: str = context_id) -> str:
@@ -347,7 +351,7 @@ def attach_context(
         fragment = "fragments/contexts/" + hashlib.sha256(context_id.encode()).hexdigest() + ".html"
         files[fragment] = drafted.context
         context_macros = "context:" + context_id
-        manifest["macros"]["sets"][context_macros] = drafted.context_macros
+        manifest["macros"]["sets"][context_macros] = deepcopy(drafted.context_macros)
         manifest["masters"].append(
             {
                 "path": context_id,
@@ -366,7 +370,7 @@ class _Drafted:
 
     local: frozenset[str]
     document: str
-    nodes: dict[str, str]
+    nodes: Mapping[str, str]
     macros: list[dict[str, object]]
     context: str
     context_macros: list[dict[str, object]]
@@ -425,7 +429,7 @@ def _draft(result: ScanResult, copy: str, meta: dict[str, Any], text: str) -> _D
     return _Drafted(
         local,
         document,
-        nodes,
+        MappingProxyType(nodes),
         to_mathjax(snap.closures[copy].macros),
         context,
         to_mathjax(snap.closures[context_source].macros),

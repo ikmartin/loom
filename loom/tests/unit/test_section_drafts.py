@@ -612,3 +612,27 @@ def test_a_section_draft_is_rendered_again_when_the_cache_it_was_made_from_is_re
     index = read_index(quilt.root)
     named = {n for n in [*index.beside, *(n for ns in index.uses.values() for n in ns)] if n.startswith("blocks/")}
     assert named and all((quilt.root / CACHE / n).exists() for n in named)
+
+
+def test_what_a_remembered_section_draft_hands_out_is_the_builds_own(quilt, drafting):
+    """A build that changes the macro sets it published, or the nodes it was handed, changes nothing the next build publishes."""
+    import loom.section_drafts as drafts
+    from loom.render.build import build
+
+    edit(quilt, DOC, "\\newtheorem{lemma}{Lemma}", "\\newtheorem{lemma}{Lemma}\n\\newcommand{\\R}{\\mathbb{R}}")
+    a = copy(quilt)
+    sets = build(quilt).manifest["macros"]["sets"]
+    master = next(m for m in build(quilt).manifest["masters"] if m["path"] == a)
+    published = {k: v for k, v in sets.items() if k in (master["macros"], "context:" + master["context_document"])}
+    assert len(published) == 2 and all(published.values())
+    for macros in published.values():
+        macros[0]["changed"] = True
+        macros.append({"name": "added"})
+    (entry,) = (drafts._drafted.get(k, lambda: None) for k in drafts._drafted)
+    with pytest.raises(TypeError):
+        entry.nodes["zk-0001"] = "changed"
+    again = build(quilt).manifest["macros"]["sets"]
+    drafts._drafted.clear()
+    fresh = build(quilt).manifest["macros"]["sets"]
+    assert len(drafting) == 2
+    assert {k: again[k] for k in published} == {k: fresh[k] for k in published}
