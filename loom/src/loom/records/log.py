@@ -177,6 +177,7 @@ def _annotation(event: dict[str, Any]) -> Annotation:
         artifact=str(event["artifact"]) if event.get("artifact") else None,
         origin=dict(event["origin"]) if isinstance(event.get("origin"), dict) else None,
         gap=_gap(event.get("gap")),
+        context=dict(event["context"]) if isinstance(event.get("context"), dict) else None,
     )
 
 

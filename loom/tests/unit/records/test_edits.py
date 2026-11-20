@@ -421,7 +421,7 @@ def test_text_written_in_and_edited_since_reads_as_taken_and_keep_writes_nothing
 
 
 def test_an_edit_goes_with_its_block_when_a_block_put_in_before_it_renumbers_the_keys(tmp_path: Path) -> None:
-    """A key named by its place in its file (`#section:2`) names another block once a block is put in before it; the edit goes with the text it was written against, and is unplaced only when no block holds that text."""
+    """A key named by its place in its file (`#section:2`) names another block once a block is put in before it; the edit goes with the text it was written against, and, that text changed too, with the block its context finds (`records.locate`)."""
     q = demo(tmp_path)
     outline = q / "drafting/outline.tex"
     a = suggest(
@@ -443,10 +443,9 @@ def test_an_edit_goes_with_its_block_when_a_block_put_in_before_it_renumbers_the
     ok("changes", "--keep", a, cwd=q)
     text = outline.read_text()
     assert text.count("Neither of these is proved yet.") == 1 and "A word on notation." in text
-    # its block edited as well as moved: no block holds the text it was written against, and its key names another
+    # its block edited as well as moved: no block holds the text it was written against, and its key names another; the one section that still reads like it is the one
     edit(outline, "already in the paper", "in the paper")
-    with pytest.raises(Unplaced, match="no longer stands in drafting/outline.tex#section:1"):
-        place(*placed(q, b))
+    assert place(*placed(q, b)).key == "drafting/outline.tex#section:2"
 
 
 def test_a_replacement_that_keeps_its_quote_and_opens_a_section_reads_as_taken(tmp_path: Path) -> None:
@@ -842,7 +841,7 @@ def test_the_second_of_two_insertions_after_one_quote_is_unplaced_once_the_first
 
 
 def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_its_quote(tmp_path: Path) -> None:
-    """Once the block's text has changed, no block holds what the edit was filed on. An edit that quotes words still goes on the block at its place while the line above stands, where `place` needs its quote; one on the body has nothing to say the block is the one, and is unplaced."""
+    """Once the block's text has changed, no block holds what the edit was filed on. An edit that quotes words still goes on the block at its place while the line above stands, where `place` needs its quote; one on the body goes there while the neighbours its context recorded stand either side, where `place` needs its body's end unchanged; one filed with neither has nothing to say the block is the one, and is unplaced."""
     q = sheet(tmp_path)
     remark = f"{SHEET}#remark:1"
     quoted = suggest(q, "--quote", "every orbit is small", "--with", "every orbit has at most two points", key=remark)
@@ -851,18 +850,18 @@ def test_an_edit_on_a_block_named_by_place_that_has_changed_goes_there_only_by_i
     edit(q / SHEET, "Widgets are finite here", "Widgets are finite throughout")
     got = place(*placed(q, quoted))
     assert got.key == remark and got.moved
-    for unplaced in (body, old):
-        with pytest.raises(Unplaced, match="named by its place"):
-            place(*placed(q, unplaced))
-    # a remark put in under the same line takes the key; the quote is not in it, so the edit is unplaced, never written there
+    with pytest.raises(Unplaced, match="end of the body"):
+        place(*placed(q, body))
+    with pytest.raises(Unplaced, match="named by its place"):
+        place(*placed(q, old))
+    # a remark put in under the same line takes the key, and is never written into; the remark the edit was suggested on reads like it, and its quote stands there
     edit(
         q / SHEET,
         "\\begin{remark}",
         "\\begin{remark}\nAnother remark altogether.\n\\end{remark}\n\\begin{remark}",
         count=1,
     )
-    with pytest.raises(Unplaced, match="no longer stands"):
-        place(*placed(q, quoted))
+    assert place(*placed(q, quoted)).key == f"{SHEET}#remark:2"
     # nor when it does hold the quote: the remark the edit was suggested on holds it too, and the line above no longer says which
     edit(q / SHEET, "Another remark altogether.", "Another remark, and every orbit is small.")
     with pytest.raises(Unplaced, match="stand in another block"):

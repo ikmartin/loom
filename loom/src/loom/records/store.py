@@ -529,7 +529,14 @@ class Records:
                     region = result.assembly.regions.get(target)
                     n = result.nodes.get(region.container) if region else None
                 # a key named by place goes with the text it was written on, and is never read on the block that took its place
-                found = follow(result, target, n, a.target_hash, quote=a.selector.exact if a.selector else "")
+                found = follow(
+                    result,
+                    target,
+                    n,
+                    a.target_hash,
+                    quote=a.selector.exact if a.selector else "",
+                    context=a.context,
+                )
                 if found is None and n is not None:
                     out.append(
                         ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc)

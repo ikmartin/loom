@@ -559,12 +559,22 @@ def _one_comment(
             "in": in_doc,
             **styled,
             "body": message or "",
+            **_context(result, node_key, selector.exact if selector else ""),
         },
         records,
         date,
         dry_run,
     )
     return f"{ann_id}  {key}  {type_id or 'untyped'}  ({aid})"
+
+
+def _context(result: ScanResult, node_key: str, quote: str) -> dict[str, Any]:
+    """`{"context": …}` for a record written now on the block `node_key` (`records.locate.context_of`), so it can be found again once its key names another block; {} for a document or a file."""
+    from loom.records.locate import context_of
+
+    node = result.nodes.get(node_key)
+    found = context_of(result, node, quote) if node is not None else {}
+    return {"context": found} if found else {}
 
 
 NO_MESSAGE = 'an annotation of a type that stays open until resolved asks something, so it needs words; give them after the target: loom annotate TARGET "…"'

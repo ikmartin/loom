@@ -138,7 +138,7 @@ def test_an_annotation_on_a_key_named_by_place_goes_with_its_block_when_one_is_p
     got = row(root, ann)
     assert got["target"]["key"] == "drafting/outline.tex#section:3"
     assert (got["detached"], got["anchored"]) == (False, True)
-    # its block edited as well as moved: no block holds the text it was written on, so it stays on the key it names, where its words are not
+    # its block edited as well as moved: no block holds the text it was written on, and the one section that reads like it is the one (`records.locate`); its quoted words are gone, so it is detached there
     edit(outline, "Neither of these is proved.", "Neither of these is proved yet.")
     got = row(root, ann)
-    assert got["target"]["key"] == "drafting/outline.tex#section:2" and got["detached"] is True
+    assert got["target"]["key"] == "drafting/outline.tex#section:3" and got["detached"] is True

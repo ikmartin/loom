@@ -25,9 +25,9 @@ from loom.scan.labels import is_id_shaped, rename_labels
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 
-try:
-    from loom.records.store import place_context
-except ImportError:  # today's code has none
+try:  # what `loom suggest` records to find an edit's block again by, where loom has it
+    from loom.records.locate import context_of as place_context
+except ImportError:
     place_context = None
 
 try:  # what `loom suggest` records on a key named by place, where loom has it
@@ -193,8 +193,8 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
             recs.append({"tid": t.tid, "type": "ann", "id": said.split()[0], "quoted": False})
             event = {"event": "created", "when": stamp(), "author": "Agent Tester", "kind": "agent", "target": t.key, "against": _version(result, t.key) or key_hash(result, t.key), "anchor": None, "with": "The answer an agent wrote for this problem.", "placement": "replace"}
             event.update(near_of(result, t.key, result.nodes[t.key]))
-            if place_context:
-                event["context"] = place_context(result, result.nodes[t.key])
+            if place_context and (found := place_context(result, result.nodes[t.key])):
+                event["context"] = found
             recs.append({"tid": t.tid, "type": "edit", "id": E.append_new(root, event, today()), "quoted": False})
             t.file_hits = 0  # type: ignore[attr-defined]
             continue
@@ -231,8 +231,8 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
             "placement": "replace",
         }
         event.update(near_of(result, t.key, node))
-        if place_context:
-            event["context"] = place_context(result, node, t.quote)
+        if place_context and (found := place_context(result, node, t.quote)):
+            event["context"] = found
         eid = E.append_new(root, event, today())
         recs.append({"tid": t.tid, "type": "edit", "id": eid, "quoted": True})
     return recs

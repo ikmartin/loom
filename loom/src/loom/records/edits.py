@@ -45,6 +45,9 @@ class Edit:
     placement: str
     near: str = ""  # on a key named by place: the line above its block when it was written; '' when none was recorded
     edge: str | None = None  # a body's head or foot when written (`body_edge`); '' an empty body; None: unrecorded
+    context: dict[str, Any] | None = (
+        None  # what tells its block from others when it was written (`records.locate.context_of`); None: unrecorded
+    )
     comment: str = ""
     answers: str | None = None  # the annotation it answers
     status: str = "open"
@@ -129,6 +132,7 @@ def replay(root: Path) -> tuple[list[Edit], list[str]]:
                 target_hash=str(e.get("against") or ""),
                 near=str(e.get("near") or ""),
                 edge=e["edge"] if isinstance(e.get("edge"), str) else None,
+                context=dict(e["context"]) if isinstance(e.get("context"), dict) else None,
                 selector=Selector.from_dict(anchor) if isinstance(anchor, dict) else None,
                 with_text=e["with"],
                 placement=placement,
@@ -210,6 +214,7 @@ def home(result: ScanResult, edit: Edit) -> NodeRec | None:
         near=edit.near,
         quoted=edit.selector is not None,
         quote=edit.selector.exact if edit.selector else "",
+        context=edit.context,
     )
 
 
@@ -352,6 +357,35 @@ def edge_of(result: ScanResult, node: NodeRec, placement: str) -> str:
         return body_edge(own, placement)
     text = result.files[node.file].text[node.start : node.end]
     return text.rstrip()[-EDGE:] if placement == "after" else text.lstrip()[:EDGE]
+
+
+def beside_of(result: ScanResult, node: NodeRec, span: tuple[int, int], placement: str) -> str | None:
+    """What `loom suggest` records of the file beside an insertion after (`after`) or before (`before`) the quote at `span` of `node`'s own text (`context["beside"]`): the file's next or last `CONTEXT` characters, a kept block's text among them, which the block's own text leaves out; None where the quote is not in one piece of the file."""
+    from loom.records.selectors import CONTEXT
+
+    _, pieces = Records.own_pieces(result, node)
+    at = Records.to_file_span(pieces, span)
+    if at is None:
+        return None
+    text = result.files[node.file].text
+    return text[at[1] : at[1] + CONTEXT] if placement == "after" else text[max(0, at[0] - CONTEXT) : at[0]]
+
+
+def _file_beside(edit: Edit, text: str, at: int) -> str | None:
+    """Why the file's words recorded beside an insertion's place (`context["beside"]`) no longer stand there in `text`, its file, at `at`; None when they do, or none was recorded. Words recorded as only whitespace say the file ended there."""
+    beside = (edit.context or {}).get("beside")
+    if not isinstance(beside, str) or edit.selector is None or edit.placement == "replace":
+        return None
+    side = "after" if edit.placement == "after" else "before"
+    if not beside.split():
+        stands = not (text[at:] if side == "after" else text[:at]).strip()
+    else:
+        stands = (_after(text, at, beside) if side == "after" else _before(text, at, beside)) is not None
+    return (
+        None
+        if stands
+        else f"the words of its file right {side} the text {edit.id} quotes have changed since it was suggested"
+    )
 
 
 def _after(text: str, at: int, words: str) -> tuple[int, int] | None:
@@ -523,6 +557,8 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         at = (x, x) if x is not None else None
     if at is None:
         raise Unplaced(f"the place {edit.id} names in {node.key} is not in one piece of its file")
+    if (moved := _file_beside(edit, result.files[node.file].text, at[0])) is not None:
+        raise Unplaced(f"{moved} in {node.key}, so it is not written in blind")
     return Placed(node.key, node.file, own, span, at, text, edit.target_hash != key_hash(result, node.key))
 
 

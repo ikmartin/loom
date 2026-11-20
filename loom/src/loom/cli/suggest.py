@@ -67,10 +67,10 @@ def suggest_command(
 
     The person keeps or discards it with `loom changes`: keeping writes it into the file, discarding leaves the text as it is, and `loom changes ID` prints the patch that takes it. An edit that names the annotation it --answers resolves that annotation when it is kept. `--before` with no quote puts the text at the head of the body, which is how a `\\uses{…}` is proposed. `--withdraw EDIT` takes back one of your own while it is open; `loom changes --by NAME` lists the edits NAME suggested, in every state.
     """
-    from loom.cli.review import _annotator, _version
+    from loom.cli.review import _annotator, _context, _version
     from loom.clock import stamp, today
     from loom.records.annotations import find_annotation, load_records
-    from loom.records.edits import append_new, edge_of, misplaced, whole_body
+    from loom.records.edits import append_new, beside_of, edge_of, misplaced, whole_body
     from loom.records.locate import alike, line_before, named_by_place
     from loom.records.selectors import find_quote, make_selector
     from loom.records.store import Records
@@ -146,6 +146,10 @@ def suggest_command(
     }
     if near:
         event["near"] = near
+    event.update(_context(result, node_key, selector.exact if selector else ""))
+    if quote and placement != "replace" and (beside := beside_of(result, node, spans[0], placement)) is not None:
+        # the file's own words beside the place, which a block kept there since changes though the block's own text does not
+        event.setdefault("context", {})["beside"] = beside
     if selector is None and placement != "replace":
         # the body's foot or head as it reads now, so that text written there since is never written beside again
         event["edge"] = edge_of(result, node, placement)

@@ -44,10 +44,9 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 
 | field | on | owner |
 |---|---|---|
-| `context` | annotations and edits: the neighbours either side, `twin`, and the quote's count in the quilt | the safe write path |
 | the annotation types `dead-end` and `claim` | a quilt's `annotation-types.toml` | the learner's work |
 
-`near`, the line above a block named by its place, is written on created edits already (`loom suggest`).
+`near`, the line above a block named by its place, is written on created edits already (`loom suggest`), and `context`, what tells a record's block from others, on created annotations and edits (`docs/design/writes.md`, "Where a record goes").
 
 ## The manifest
 

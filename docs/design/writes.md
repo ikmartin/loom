@@ -158,19 +158,36 @@ A replacement whose new text holds its quote adds words either side of the quote
 
 A body is what lies inside an environment's head and before its `\end`, or below a section's heading and its labels (`body_span`), so a suggestion on a section's body never replaces its heading; a body replacement whose body runs across a block inside it, or holds a line that brings in another file (`\input`), is refused at filing and at Keep (`whole_body`), since those would go with it.
 
-**Open.** Two insertions beside the same quote or body edge: once the first is kept, the second's recorded neighbour is gone and it is unplaced, rather than put in ahead of the first, out of the order they were suggested in; the agent suggests it again. Once its text has changed, a key named by place has only the line above its block and its quote to go by; the neighbours on both sides and the quote's count across the quilt are the context record of `docs/reports/v0.1-study/raw/check-labels.md` (KEY-13), not built yet. An edit whose new text is the very words already beside its place (a body's own last words suggested at its foot) can read either way, since written and not written look alike there; nothing is lost whichever it reads as.
+**Open.** Two insertions beside the same quote or body edge: once the first is kept, the second's recorded neighbour is gone and it is unplaced, rather than put in ahead of the first, out of the order they were suggested in; the agent suggests it again. Once its text has changed, an edit on a key named by place written before `context` was recorded has only the line above its block and its quote to go by ("Where a record goes"). An edit whose new text is the very words already beside its place (a body's own last words suggested at its foot) can read either way, since written and not written look alike there; nothing is lost whichever it reads as.
 
 
 ## Where a record goes
 
-An annotation and a suggested edit name a key, and hold the hash of their block's own text when they were written (`against`), whose text the store keeps (`cli/review._version`). One rule says which block that is now, for both (`records/locate.py`, `follow`):
+An annotation and a suggested edit name a key, and hold the hash of their block's own text when they were written (`against`), whose text the store keeps (`cli/review._version`), and what tells that block from others (`context`, `records/locate.context_of`):
 
-- **A stable key**, an id or a label, names its own block. An edit on one is placed only where its quote stands (above).
+- `before` and `after`: the nearest block on each side whose text stands once in its file, with how many blocks lie between, or the distance to the file's edge;
+- `kind`, what sort of block it is;
+- `copies`: how many blocks of its file held its very text;
+- `twin`: whether another block of its file read at least 0.6 alike, word for word;
+- with a quote, `quote`: how many blocks of the person's files it stood in;
+- for an insertion beside a quote, `beside`: the file's own words beside the place, which a block kept there since changes though the block's own text does not.
+
+One rule says which block a record is on now, for both (`records/locate.py`, `follow`):
+
+- **A stable key**, an id or a label, names its own block. An edit on one is placed only where its quote stands (above). Whether a note on one whose block was rewritten past recognition stays there (loom's reading) or is detached (`VERIFY`, the reading the Safe gate measures) is the author's to decide.
 - **A region** goes where the block it is in goes; one whose label was renamed or went is read in that block, where its quote is looked for.
-- **A key named by place**, or a document's path once its file is gone, goes with its text: to the one block of its file that holds it, or, its file renamed or taken apart, the one among the person's files, never an agent's copy under `.loom/`. Among blocks that read the same, the line above (`near`) tells an edit's apart; an annotation, which records none, stays at its place while that holds its text. Where no block holds the text, an edit that quotes words is taken at its place under the line it was filed under (above), and an annotation while the block at its place reads at least 0.6 alike, word for word, the text it was written on, and no other block of its file does (`LIKE`). So a block edited where it stands keeps its notes, and one put in at its place does not take them.
+- **A key named by place**, or a document's path once its file is gone, goes with its text. With `context`, in this order:
+  - the one block of its file that holds its text, or, its file renamed or taken apart, the one among the person's files, never an agent's copy under `.loom/`, where no other block held that text when it was written; among several, the one its neighbours tell;
+  - the block at its place while its neighbours stand on both sides, however it was edited;
+  - the one block of its kind that reads at least 0.6 alike the text it was written on, ahead of every other by 0.1, never for a block that had a twin unless a neighbour still stands beside the one found;
+  - the quote alone, of four words or more, where it stood in one block of the person's files and stands in one now.
+
+  Without `context` (one written before it was recorded): the one block of its file that holds its text, or, its file gone, the one among the person's files; among blocks that read the same, the one under the edit's `near`, and an annotation's at its place while that holds its text, as it always was; where none holds it, an edit that quotes words at its place under its `near` (above), and an annotation at its place while the block there reads 0.6 alike the text it was written on and no other block of its file does.
 - **Otherwise none.** An annotation is detached on its key and shown against the text it was written on; an edit is unplaced. The block that now holds the place is never the answer for text it is not, and nothing looks for a quote outside the block a record is on, since a quote is unique in its block and not in its file (the study's `raw/check-labels.md`, KEY-5).
 
-**Open.** A record with no context cannot tell a block that moved and changed from one put in at its place, nor a block that moved from a verbatim restatement left behind after the original was rewritten: the first detaches, and the second goes to the restatement. The context record (`context`, `docs/specs/reserved.md`) is what tells them apart.
+An insertion whose `beside` no longer stands at its place is unplaced, so a second section suggested after the same quote is not written ahead of the first once the first is kept (decision 21's first choice).
+
+**Open.** A record written before `context` was recorded cannot tell a block that moved and changed from one put in at its place, nor two blocks that read the same once one is put in above them: the first detaches, and of the second it keeps the one at its place. Nothing stamps `context` on such records; whether something should is the author's. A block rewritten heavily where it stands, whose neighbours were rewritten too, has nothing left to say it is the one, and its records detach.
 
 ## Where it stands
 

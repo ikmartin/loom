@@ -45,6 +45,8 @@ class Annotation:
     origin: dict[str, Any] | None = None
     #: A mark drawn on a PDF page, not on words: its top left less its pin word's, by which it is found again on a changed file (`marks.context_at`).
     gap: list[float] | None = None
+    #: What tells the block it was written on from others when it was written (`records.locate.context_of`); None for one written before it was recorded.
+    context: dict[str, Any] | None = None
     #: Carried by a kept change onto its new words (`records/carry.py`): `{quote, change}`, the words it was on and the change that replaced them.
     earlier: dict[str, Any] | None = None
 

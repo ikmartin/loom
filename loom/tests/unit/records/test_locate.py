@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -37,33 +38,50 @@ def row(q: Path, ann: str) -> dict[str, Any]:
     return manifest["annotations"][ann]  # type: ignore[no-any-return]
 
 
-def test_a_note_on_a_key_named_by_place_is_never_read_on_the_block_put_in_at_its_place(q: Path) -> None:
+def unrecorded(q: Path) -> None:
+    """Take `context` off every annotation in the log: what a record written before it was recorded is."""
+    log = q / ".loom/records/annotations/log.jsonl"
+    lines = [json.loads(line) for line in log.read_text().splitlines() if line]
+    log.write_text("".join(json.dumps({k: v for k, v in e.items() if k != "context"}) + "\n" for e in lines))
+
+
+@pytest.mark.parametrize("context", [True, False])
+def test_a_note_on_a_key_named_by_place_is_never_read_on_the_block_put_in_at_its_place(q: Path, context: bool) -> None:
     whole = note(q, CONSIDERED)
     quoted = note(q, CONSIDERED, "--quote", "Neither of these is proved.")
+    if not context:
+        unrecorded(q)
     edit(
         q / OUTLINE,
         "\\section{What is being considered}",
         "\\section{Notation}\nA word on notation.\n\n\\section{What is being considered}",
     )
-    edit(q / OUTLINE, "Neither of these is proved.", "Neither of these is proved yet.")
+    edit(q / OUTLINE, "the question owes nothing.", "the question owes nothing at all.")
     for ann in (whole, quoted):
         got = row(q, ann)
-        # moved and edited: nothing says where its block went, so it is detached, and the section put in at its place does not take it
-        assert got["detached"] is True and got["target"]["key"] == CONSIDERED, got
+        if context:
+            # the one section that reads like the one it was written on, moved below the new one
+            assert got["detached"] is False and got["target"]["key"] == "drafting/outline.tex#section:3", got
+        else:
+            # nothing says where its block went: detached, and the section put in at its place does not take it
+            assert got["detached"] is True and got["target"]["key"] == CONSIDERED, got
 
 
-def test_a_note_on_a_block_edited_where_it_stands_stays_on_it_while_it_reads_like_it(q: Path) -> None:
+@pytest.mark.parametrize("context", [True, False])
+def test_a_note_on_a_block_rewritten_where_it_stands(q: Path, context: bool) -> None:
     whole = note(q, CONSIDERED)
+    if not context:
+        unrecorded(q)
     edit(q / OUTLINE, "the question owes nothing.", "the question owes nothing at all.")
     got = row(q, whole)
     assert (got["detached"], got["target"]["key"]) == (False, CONSIDERED)
-    # rewritten past recognition: the block at its place is no longer the one it was written on
     edit(
         q / OUTLINE,
         "Neither of these is proved. The conjecture owes a proof and appears among the blockers until it is proved or refuted; the question owes nothing at all.",
         "Two loose ends, recorded so they are not forgotten.",
     )
-    assert row(q, whole)["detached"] is True
+    # rewritten past recognition: with the neighbours it recorded standing either side, it is the block it was written on; with none, the block at its place no longer reads like it
+    assert row(q, whole)["detached"] is (not context)
 
 
 def test_a_note_follows_its_text_into_a_renamed_file(q: Path) -> None:
@@ -124,3 +142,62 @@ def test_a_note_on_an_id_stays_on_its_rewritten_block_and_under_verify_is_detach
     assert row(q, whole)["detached"] is True and row(q, quoted)["detached"] is True
     monkeypatch.setattr(locate, "VERIFY", False)
     assert row(q, whole)["detached"] is False and row(q, whole)["target"]["key"] == "dm-0002"
+
+
+def test_two_sections_suggested_after_one_quote_are_never_written_in_reverse_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The queue's item 56: a section kept after `\\maketitle` becomes a block of its own, so the document's own text there reads as it did; the file's words beside the place (`context["beside"]`) do not, and the second is unplaced once the first is kept."""
+    from tests.unit.test_write_safety import call, suggest, synthetic
+
+    root = synthetic(tmp_path, monkeypatch)
+    main = root / "drafting/main.tex"
+    first = suggest(root, "drafting/main.tex", "\\section*{First}\nOne.", "--quote", "\\maketitle", "--after")
+    second = suggest(root, "drafting/main.tex", "\\section*{Second}\nTwo.", "--quote", "\\maketitle", "--after")
+    assert first and second
+    assert call(root, "change-keep", {"changes": [first]})["done"] == [first]
+    answer = call(root, "change-keep", {"changes": [second]})
+    assert answer["done"] == [] and "have changed since it was suggested" in answer["refused"][0]["why"]
+    text = main.read_text()
+    assert text.count("\\section*{First}") == 1 and "\\section*{Second}" not in text
+
+
+def test_a_note_on_one_of_two_empty_answers_is_told_from_its_twin_by_its_neighbours(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """SAFE-4's shape for notes: two empty answers read the same, and an answer put in above renumbers them; the note goes with the answer its neighbours say it was written on."""
+    from tests.unit.test_write_safety import call, scan, synthetic
+
+    root = synthetic(tmp_path, monkeypatch)
+    main = root / "drafting/main.tex"
+    empty = "\\begin{proof}[Answer]\n\\end{proof}\n"
+    edit(main, "\\end{document}", f"\\section*{{One}}\n{empty}\\section*{{Two}}\n{empty}\\end{{document}}")
+    result = scan(root)
+    last = max((n.start, k) for k, n in result.nodes.items() if k.startswith("drafting/main.tex#proof:"))[1]
+    said = call(root, "annotate", {"target": last, "message": "Which?", "type": "question"})
+    ann = said["result"].split()[0]
+    edit(main, "\\section*{One}", f"\\section*{{Zero}}\n{empty}\\section*{{One}}")
+    got = row(root, ann)
+    after = scan(root)
+    assert got["detached"] is False and got["target"]["key"] != last
+    # the answer under Two, wherever its key now numbers it
+    assert (
+        after.files["drafting/main.tex"]
+        .text[: after.nodes[got["target"]["key"]].start]
+        .rstrip()
+        .endswith("\\section*{Two}")
+    )
+
+
+def test_a_record_written_now_holds_its_context(q: Path) -> None:
+    import json as _json
+
+    note(q, CONSIDERED, "--quote", "Neither of these is proved.")
+    (event,) = [
+        e
+        for e in map(_json.loads, (q / ".loom/records/annotations/log.jsonl").read_text().splitlines())
+        if e.get("target") == CONSIDERED
+    ]
+    context = event["context"]
+    assert {"before", "after", "kind", "copies", "twin", "quote"} <= set(context)
+    assert context["kind"] == "section" and context["copies"] == 1 and context["quote"] == 1
