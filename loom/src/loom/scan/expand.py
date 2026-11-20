@@ -76,14 +76,31 @@ class Expansion:
 def _kpsewhich(name: str, cwd: Path) -> bool:
     """Whether the distribution resolves `name`, asked of the `kpsewhich` on PATH now from `cwd`, the document's directory, as a compile there would ask.
 
-    Memoised, since a subprocess per unresolved inclusion was 86 ms of a 166 ms scan on the Manolache import; keyed by executable, TEXINPUTS and directory as well as name, so a run under another installation is never answered from this one's memo.
+    Memoised, since a subprocess per unresolved inclusion was 86 ms of a 166 ms scan on the Manolache import; keyed by executable, TEXINPUTS and directory as well as name, so a run under another installation is never answered from this one's memo. A name found stays found; a name not found is asked again once the trees it would be found in have changed (`_trees`), as installing a package changes them.
     """
-    return _probe(shutil.which("kpsewhich"), os.environ.get("TEXINPUTS", ""), name, str(cwd))
+    exe = shutil.which("kpsewhich")
+    key = (exe, os.environ.get("TEXINPUTS", ""), name, str(cwd))
+    if key in _FOUND:
+        return True
+    # taken before asking, so a package installed while kpsewhich runs is asked about again
+    trees = _trees(exe)
+    if _MISSING.get(key) == trees:
+        return False
+    if _probe(*key):
+        _FOUND.add(key)
+        _MISSING.pop(key, None)
+        return True
+    _MISSING[key] = trees
+    return False
 
 
-@cache
+#: Each name `kpsewhich` found, by `_kpsewhich`'s key, and each it did not, with the trees as they were when it was asked.
+_FOUND: set[tuple[str | None, str, str, str]] = set()
+_MISSING: dict[tuple[str | None, str, str, str], tuple[object, ...]] = {}
+
+
 def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> bool:
-    """One `kpsewhich NAME` in `cwd`; `texinputs` is only a cache key, since the subprocess inherits the environment it names."""
+    """One `kpsewhich NAME` in `cwd`; `texinputs` is only part of the memo's key, since the subprocess inherits the environment it names."""
     if not exe:
         return False
     try:
@@ -99,6 +116,43 @@ def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> bool:
     except (OSError, subprocess.SubprocessError):
         return False
     return proc.returncode == 0 and bool(proc.stdout.strip())
+
+
+def _trees(exe: str | None) -> tuple[object, ...]:
+    """The trees `exe` searches, as they are now: the modification time of each `ls-R` database it reads, which `tlmgr` and `mktexlsr` rewrite on every install, and of every folder of TEXMFHOME, which it searches without one and where a person copies a package by hand."""
+    if not exe:
+        return ()
+    databases, homes = _searched(exe, os.environ.get("TEXMFHOME", ""))
+    out: list[object] = []
+    for path in databases:
+        try:
+            out.append((path, os.stat(path).st_mtime_ns))
+        except OSError:
+            out.append((path, None))
+    for home in homes:
+        for folder, _dirs, _files in os.walk(home):
+            try:
+                out.append((folder, os.stat(folder).st_mtime_ns))
+            except OSError:
+                pass
+    return tuple(out)
+
+
+@cache
+def _searched(exe: str, texmfhome: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    """The `ls-R` databases `exe` reads and the folders TEXMFHOME names, asked of it once; `texmfhome` is only part of the memo's key, since it inherits the environment."""
+
+    def asked(*args: str) -> list[str]:
+        try:
+            proc = subprocess.run(
+                [exe, *args], capture_output=True, text=True, errors="replace", timeout=20, check=False
+            )
+        except (OSError, subprocess.SubprocessError):
+            return []
+        return [line.strip() for line in proc.stdout.splitlines() if line.strip()] if proc.returncode == 0 else []
+
+    homes = [p.removeprefix("!!") for line in asked("--expand-braces=$TEXMFHOME") for p in line.split(os.pathsep) if p]
+    return tuple(asked("--all", "ls-R")), tuple(h for h in homes if h)
 
 
 def resolve_inclusion(

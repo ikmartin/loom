@@ -150,9 +150,11 @@ def isolated_env(
     # a fresh shim's first run waits on macOS for the system's check of a new executable, which a parallel suite can make longer than doctor's timeout; the hang test sets its own
     monkeypatch.setattr("loom.doctor.PROBE_TIMEOUT", 120.0)
     # what kpsewhich answered belongs to the PATH it was asked on, which differs by tier
-    from loom.scan.expand import _probe
+    from loom.scan import expand
 
-    _probe.cache_clear()
+    expand._FOUND.clear()
+    expand._MISSING.clear()
+    expand._searched.cache_clear()
     return home
 
 

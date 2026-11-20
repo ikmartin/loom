@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.scan.expand import expand_master
+from loom.scan.expand import expand_master, resolve_inclusion
 from loom.scan.sections import find_sections, heading_labels
 from loom.scan.source import read_source
 
@@ -99,10 +99,11 @@ def test_kpsewhich_is_probed_once_per_name(tmp_path: Path, monkeypatch: pytest.M
     """The probe is a subprocess run once per unresolved inclusion, and a paper's unresolved names repeat; on the Manolache import it was 86 ms of a 166 ms scan."""
     from loom.scan import expand as expand_mod
 
-    expand_mod._probe.cache_clear()
     calls: list[str] = []
 
     def fake(cmd, **kw):  # type: ignore[no-untyped-def]
+        if cmd[1].startswith("-"):
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
         calls.append(cmd[1])
         return subprocess.CompletedProcess(cmd, 0, stdout="/usr/share/x.sty\n", stderr="")
 
@@ -117,4 +118,44 @@ def test_kpsewhich_is_probed_once_per_name(tmp_path: Path, monkeypatch: pytest.M
     assert calls == ["amsmath.sty", "amsmath.sty"]
     monkeypatch.setattr(expand_mod.shutil, "which", lambda _n: None)
     assert expand_mod._kpsewhich("amsmath.sty", tmp_path) is False
-    expand_mod._probe.cache_clear()
+
+
+@pytest.mark.parametrize("how", ["copied into TEXMFHOME by hand", "installed, its ls-R written again"])
+def test_a_file_not_found_is_asked_about_again_once_its_trees_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    """A server goes on scanning after a package is installed: a name `kpsewhich` did not find is asked about again once a tree it searches has changed, and not before."""
+    from loom.scan import expand as expand_mod
+
+    home, dist = tmp_path / "texmf", tmp_path / "texmf-dist"
+    home.mkdir()
+    dist.mkdir()
+    (dist / "ls-R").write_text("% ls-R\n")
+    calls: list[str] = []
+
+    def kpsewhich(cmd, **kw):  # type: ignore[no-untyped-def]
+        """A kpsewhich over the two trees: TEXMFHOME searched on disk, the distribution through its ls-R."""
+        if cmd[1] == "--expand-braces=$TEXMFHOME":
+            return subprocess.CompletedProcess(cmd, 0, stdout=f"{home}\n", stderr="")
+        if cmd[1:] == ["--all", "ls-R"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=f"{dist / 'ls-R'}\n", stderr="")
+        calls.append(cmd[1])
+        found = list(home.rglob(cmd[1])) or ([dist / cmd[1]] if cmd[1] in (dist / "ls-R").read_text().split() else [])
+        return subprocess.CompletedProcess(cmd, 0 if found else 1, stdout="".join(f"{f}\n" for f in found), stderr="")
+
+    monkeypatch.setattr(expand_mod.shutil, "which", lambda _n: "/usr/bin/kpsewhich")
+    monkeypatch.setattr(expand_mod.subprocess, "run", kpsewhich)
+    root = tmp_path / "quilt"
+    root.mkdir()
+    assert resolve_inclusion(root, "reviewextra") == (None, "missing")
+    assert resolve_inclusion(root, "reviewextra") == (None, "missing")
+    assert calls == ["reviewextra.tex"]
+    if how == "copied into TEXMFHOME by hand":
+        (home / "tex" / "latex" / "reviewextra").mkdir(parents=True)
+        (home / "tex" / "latex" / "reviewextra" / "reviewextra.tex").write_text("Words.\n")
+    else:
+        (dist / "reviewextra.tex").write_text("Words.\n")
+        (dist / "ls-R").write_text("% ls-R\nreviewextra.tex\n")
+    assert resolve_inclusion(root, "reviewextra") == (None, "system")
+    assert resolve_inclusion(root, "reviewextra") == (None, "system")
+    assert calls == ["reviewextra.tex", "reviewextra.tex"]
