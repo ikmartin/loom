@@ -82,6 +82,20 @@ test('Keep and Discard act on one change at once, as in the document, and the ba
 	await expect(card(page, STUCK).getByTestId('card-keep')).toBeDisabled();
 });
 
+test('the bar undoes a kept suggestion, which waits again', async ({ page }) => {
+	await withChanges(page);
+	const sent = await serving(page);
+	await page.goto('/review');
+	await card(page, SUGGESTED).getByTestId('card-keep').click();
+	await expect(card(page, SUGGESTED)).toHaveCount(0);
+	expect(sent['change-keep']).toEqual({ changes: [SUGGESTED] });
+	await expect(page.getByTestId('review-undo')).toHaveText('Undo keep');
+	await page.getByTestId('review-undo').click();
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED] });
+	await expect(card(page, SUGGESTED)).toHaveCount(1);
+	await expect(page.getByTestId('review-undo')).toHaveCount(0);
+});
+
 test("Keep all and Discard all act on a document's ready changes, saying what each does", async ({ page }) => {
 	await withChanges(page);
 	const sent = await serving(page);

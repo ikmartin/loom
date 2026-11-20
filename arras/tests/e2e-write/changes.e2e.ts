@@ -109,6 +109,17 @@ for (const where of ['document', 'review'] as const) {
 	});
 }
 
+test('a suggestion kept is undone from the toolbar: its words come out, the file is as it was byte for byte, and it waits again', async ({ page, served }) => {
+	const before = text(served);
+	await act(page, served, 'document', SUGGESTED, 'keep');
+	expect(text(served)).toContain('the fixed points are those of');
+	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
+	await pane(page, 0).getByTestId('annotate-undo').click();
+	await expect.poll(() => text(served), { timeout: 60_000 }).toBe(before);
+	await expect.poll(() => pending(served).some((c) => c.id === SUGGESTED), { timeout: 60_000 }).toBe(true);
+	await expect(words(page, SUGGESTED, 'new').first()).toBeVisible({ timeout: 60_000 });
+});
+
 test('an annotation on the words a kept edit replaces is drawn again on its new words, and moves to them', async ({ page, served }) => {
 	const edit = await editInPlace(served);
 	// before Keep it stands on the words kept, and is drawn again on the new ones

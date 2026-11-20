@@ -99,6 +99,13 @@ test("a change's popup says what it is and what is on its words, and Keep takes 
 	expect(await css(words(page, SUGGESTED, 'new'), 'color')).not.toBe(TEAL);
 	expect(sent['change-keep']).toEqual({ changes: [SUGGESTED] });
 	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('2');
+	// the toolbar's Undo takes it out again, and it waits as it did
+	await expect(pane(page, 0).getByTestId('annotate-undo')).toHaveAttribute('title', 'Undo keep (⌘Z)');
+	await pane(page, 0).getByTestId('annotate-undo').click();
+	await expect.poll(() => sent['change-undo']).toEqual({ changes: [SUGGESTED] });
+	await expect(words(page, SUGGESTED, 'old')).toBeVisible();
+	expect(await css(words(page, SUGGESTED, 'new'), 'color')).toBe(TEAL);
+	await expect(pane(page, 0).getByTestId('changes-count')).toHaveText('3');
 });
 
 test("the annotations on a change's words are named in its popup and open their own", async ({ page }) => {

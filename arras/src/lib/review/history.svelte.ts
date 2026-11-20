@@ -1,6 +1,6 @@
 // The person's own annotation writes in this page's life, each kept with the write that undoes it and the write that does it again: Undo and Redo on the toolbar, ⌘Z and ⇧⌘Z. A new annotation or reply is undone by deleting it and done again by restoring what the delete took out; a delete by restoring and deleting again; an edit by an edit back to its type, look and words before; a resolve by reopening. Every annotation write in the viewer goes through here, so there is one record of what can be undone.
 //
-// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; a keep writes the person's text, and is not undone here either. Neither enters the history.
+// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
 
@@ -148,8 +148,8 @@ export async function remove(id: string, said: string): Promise<string> {
 	return '';
 }
 
-/** What `change-keep` and `change-discard` answer: the changes done, by id, and each refused with why. */
-export type ChangeAnswer = WriteResult & { done?: string[]; refused?: { id: string; why: string }[] };
+/** What `change-keep`, `change-discard` and `change-undo` answer: the changes done, by id, and each refused with why. */
+export type ChangeAnswer = WriteResult & { done?: string[]; refused?: { id: string; why: string; code?: string }[] };
 
 /** Which changes an act takes: some by id, or every one, of one document or of the whole quilt. */
 export type Which = { changes: string[] } | { all: true; document?: string };
@@ -176,8 +176,39 @@ async function act(endpoint: 'change-keep' | 'change-discard', which: Which, ext
 	return { res, done, suggested: done.filter((id) => kinds.get(id) === 'suggested') };
 }
 
+/** `res` as a step of the history takes it: loom having done none of the changes it was asked for is a refusal, with the first one's why; when it did some, those refused are said under `title`. */
+function asStep(res: ChangeAnswer, title: string): ChangeAnswer {
+	const refused = res.refused ?? [];
+	if (!res.ok || !refused.length) return res;
+	if (!(res.done ?? []).length) return { ...res, ok: false, error: { code: refused[0].code ?? 'refused', message: refused[0].why } };
+	say({ title, lines: refused.slice(0, 3).map((r) => r.why) });
+	return res;
+}
+
+/** The Keep of suggestions `ids`, which loom wrote in: undone by `change-undo`, which takes their words out again and opens them, and done again by keeping them again. */
+function kept(ids: string[]): Step {
+	let these = ids;
+	return {
+		label: ids.length === 1 ? 'keep' : `keep of ${ids.length} suggestions`,
+		undo: async () => {
+			const res = asStep((await run('change-undo', { changes: these })) as ChangeAnswer, 'Not all undone');
+			if (res.ok) {
+				these = res.done ?? these;
+				unmark(these);
+			}
+			return res;
+		},
+		redo: async () => {
+			const { res, done } = await act('change-keep', { changes: these });
+			const step = asStep({ ...res, done }, 'Not all kept again');
+			if (step.ok && done.length) these = done;
+			return step;
+		}
+	};
+}
+
 /**
- * Keep pending changes: an edit in the file becomes what the person has kept, a suggestion is written into its file. Not undone here.
+ * Keep pending changes: an edit in the file becomes what the person has kept, a suggestion is written into its file. A suggestion loom writes is kept so it can be undone.
  *
  * Parameters
  * ----------
@@ -190,7 +221,12 @@ async function act(endpoint: 'change-keep' | 'change-discard', which: Which, ext
  *     loom's answer, with the changes done and each refused.
  */
 export async function keepChanges(which: Which): Promise<ChangeAnswer> {
-	return (await act('change-keep', which)).res;
+	// what loom will write in: a suggestion the manifest lists ready; one taken already is kept with nothing written
+	const writes = new Set(pending(store.manifest).filter((c) => c.kind === 'suggested' && c.state === 'ready').map((c) => c.id));
+	const { res, suggested } = await act('change-keep', which);
+	const wrote = suggested.filter((id) => writes.has(id));
+	if (wrote.length) push(kept(wrote));
+	return res;
 }
 
 /**

@@ -150,6 +150,30 @@ describe('Keep and Discard', () => {
 		expect(history.done).toHaveLength(0);
 	});
 
+	it('puts a suggestion loom writes on the undo history, undone by change-undo and kept again by redo; one taken already is not', async () => {
+		live.changes = [change({}), suggestion, change({ id: 'e-2', kind: 'suggested', state: 'taken' })];
+		answer = { ok: true, result: 'kept 3', done: ['c-0001', 'e-1', 'e-2'], refused: [] };
+		await keepChanges({ all: true, document: MAIN });
+		expect(history.done).toHaveLength(1);
+		expect(history.done[0].label).toBe('keep');
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await undo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'] }]);
+		expect(acted.map['e-1']).toBeUndefined();
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		expect(await redo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-keep', { changes: ['e-1'] }]);
+	});
+
+	it('says why an undo of a keep was refused, and leaves the keep to be undone', async () => {
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await keepChanges({ changes: ['e-1'] });
+		answer = { ok: true, result: 'undid 0', done: [], refused: [{ id: 'e-1', why: 'its words have changed', code: 'changed-since' }] };
+		expect(await undo()).toBe('its words have changed');
+		expect(history.done).toHaveLength(1);
+	});
+
 	it('shows a change refused, or an act refused whole, pending again', async () => {
 		live.changes = [change({}), suggestion];
 		answer = { ok: true, result: 'kept 1', done: ['c-0001'], refused: [{ id: 'e-1', why: 'author-only' }] };
