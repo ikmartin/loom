@@ -877,6 +877,59 @@ def _undo_in(
     return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans]
 
 
+def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, writer: tuple[str, str]) -> None:
+    """Stage in the act `w`, which writes `after` whole over `before` in `path` (a restore or a put-back), the records of the suggested edits whose words that moves, by what the journal says loom wrote.
+
+    A kept edit is opened again (`reopened`, why `restored`) when `after` is the very bytes its Keep replaced, or when the words its Keep wrote stand in `before` as that Keep left them, the words they replaced stand in `after` as they stood before it, and the words it wrote stand nowhere in `after` with their neighbours; an open edit loom wrote in its last generation is recorded kept again (why `restored`) when the reverse holds. Anything else leaves the record as it is, so an edit is left kept with its words gone rather than open with its words in, which a Keep could write a second time. The annotation a Keep resolved follows its edit.
+    """
+    from loom import writes
+    from loom.paths import EDIT_LOG
+    from loom.records.edits import answered_event, generation, kept_event, reopened_event, replay, unanswered_event
+    from loom.records.log import log_path as annotation_log
+
+    try:
+        was = before.decode("utf-8") if before is not None else ""
+        now = after.decode("utf-8") if after is not None else ""
+    except UnicodeDecodeError:
+        return
+    root, hist = w.root, w.history
+    for e in replay(root)[0]:
+        g = generation(e)
+        if e.status == "kept":
+            gen, out_of, into = f"{e.id}:{g}", was, now
+        elif e.status == "open" and g > 0:
+            gen, out_of, into = f"{e.id}:{g - 1}", now, was
+        else:
+            continue
+        at = w.journal.wrote.get(gen)
+        entry = writes.entry_at(root, at) if at is not None else None
+        if entry is None or writes.untrusted(root, hist, entry):
+            continue
+        made = [m for m in writes.splices_of(hist, entry, gen) or [] if m.rel == path]
+        if not made:
+            continue
+        # the very bytes on the other side of that Keep, or its words moved at their place and nowhere else
+        exact = writes.digest(after) == (made[0].before if e.status == "kept" else made[0].after)
+        if not exact and not all(
+            writes.stands_once(out_of, m.done) is not None
+            and writes.stands_once(into, m.undone) is not None
+            and m.done not in into
+            for m in made
+        ):
+            continue
+        if e.status == "kept":
+            w.log(root / EDIT_LOG, reopened_event(e, writer, "restored"))
+            line = unanswered_event(root, e, writer)
+        else:
+            kept = next((a for a in reversed(e.acts) if a.get("event") == "kept"), {})
+            event = kept_event(e, writer, str(kept.get("hash") or ""))
+            event["why"] = "restored"
+            w.log(root / EDIT_LOG, event)
+            line = answered_event(root, e, writer)
+        if line is not None:
+            w.log(annotation_log(root), line)
+
+
 def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:
     """After the undo of Keeps is written: the words put back go into `who`'s look, so the undo is not listed as an edit in the file, and the annotations on the words taken out are carried onto the words put back."""
     from loom.records.carry import carry_all

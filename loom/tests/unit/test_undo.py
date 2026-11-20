@@ -1,4 +1,4 @@
-"""The undo of a Keep (`change-undo`, `pending.unkeep`): the bytes the Keep replaced come back, every other byte stays, and an undo that cannot find what its Keep wrote refuses and writes nothing."""
+"""The undo of a Keep (`change-undo`, `pending.unkeep`): the bytes the Keep replaced come back, every other byte stays, and an undo that cannot find what its Keep wrote refuses and writes nothing. Restore and put-back move a kept edit's record with its words."""
 
 from __future__ import annotations
 
@@ -262,3 +262,84 @@ def test_an_undo_cut_short_after_its_write_is_finished_once_by_the_next_act(
 
     edit = find(q, FIXED)
     assert edit is not None and sum(1 for a in edit.acts if a.get("event") == "reopened") == 1
+
+
+# ---- records follow restore and put-back ------------------------------------------------------------------------
+
+
+def record(root: Path, name: str) -> str:
+    """Keep a version of the main document under `name`; its landmark's path, which restore takes."""
+    from loom.history.ledger import load_history
+    from loom.scan.quilt import load_quilt
+
+    assert call(root, "history-record", {"document": "drafting/main.tex", "name": name}).get("ok")
+    history = load_history(load_quilt(root).history_dir)
+    entry = [e for e in history.landmarks() if e.message == name][-1]
+    return history.landmark_path(entry).relative_to(root).as_posix()
+
+
+def restore(root: Path, landmark: str) -> None:
+    res = call(root, "history-restore", {"document": "drafting/main.tex", "version": landmark})
+    assert res.get("ok"), res
+
+
+def test_a_restore_that_takes_a_kept_edit_out_opens_it_again(q: Path) -> None:
+    before = files(q)
+    first = record(q, "First")
+    call(q, "change-keep", {"changes": [FIXED]})
+    restore(q, first)
+    assert files(q)[LEMMA] == before[LEMMA]
+    assert status(q, FIXED) == "open" and [p.state for p in waiting(q) if p.id == FIXED] == ["ready"]
+    # kept again, it is written once
+    call(q, "change-keep", {"changes": [FIXED]})
+    assert files(q)[LEMMA].count(b"the fixed points are those of") == 1
+
+
+def test_a_restore_that_brings_an_undone_edit_back_records_it_kept(q: Path) -> None:
+    call(q, "change-keep", {"changes": [FIXED]})
+    kept = files(q)[LEMMA]
+    with_it = record(q, "With it")
+    call(q, "change-undo", {"changes": [FIXED]})
+    assert status(q, FIXED) == "open"
+    restore(q, with_it)
+    assert files(q)[LEMMA] == kept and status(q, FIXED) == "kept"
+    assert [p.id for p in waiting(q) if p.id == FIXED] == []
+    # recorded kept by the restore, not written by a Keep: there is no Keep of it to undo
+    assert [r["code"] for r in call(q, "change-undo", {"changes": [FIXED]})["refused"]] == ["not-written"]
+
+
+def test_a_restore_leaves_kept_an_edit_whose_words_the_person_changed_beside(q: Path) -> None:
+    p = q / LEMMA
+    first = record(q, "First")
+    p.write_text(p.read_text().replace("by \\eqref{eq:prose}.", "by \\eqref{eq:prose}, as claimed."))
+    call(q, "change-keep", {"changes": [FIXED]})
+    p.write_text(p.read_text().replace("one or two points;", "at most two points;"))
+    restore(q, first)
+    # its words are gone, and it stays kept: never open while a Keep could write it beside words that are its own
+    assert b"the fixed points are those of" not in p.read_bytes()
+    assert status(q, FIXED) == "kept"
+
+
+def test_a_restore_of_the_very_bytes_a_keep_replaced_opens_its_edit_again(q: Path) -> None:
+    p = q / LEMMA
+    first = record(q, "First")
+    call(q, "change-keep", {"changes": [FIXED]})
+    p.write_text(p.read_text().replace("one or two points;", "at most two points;"))
+    restore(q, first)
+    assert status(q, FIXED) == "open" and [x.state for x in waiting(q) if x.id == FIXED] == ["ready"]
+
+
+def test_putting_back_a_text_that_takes_a_kept_edit_out_opens_it_again(q: Path) -> None:
+    from loom.history.ledger import load_history
+    from loom.scan.quilt import load_quilt
+
+    p = q / LEMMA
+    # an edit made in the file and discarded: the text it had is set aside, without the suggestion
+    p.write_text(p.read_text().replace("by \\eqref{eq:prose}.", "by \\eqref{eq:prose}, as claimed."))
+    (change,) = [x.id for x in waiting(q) if x.kind == "edit"]
+    call(q, "change-discard", {"changes": [change]})
+    aside = [e for e in load_history(load_quilt(q).history_dir).entries if e.action == "undo"][-1].get("from")
+    call(q, "change-keep", {"changes": [FIXED]})
+    assert call(q, "history-restore", {"path": LEMMA, "text": aside}).get("ok")
+    assert "as claimed" in p.read_text() and "the fixed points are those of" not in p.read_text()
+    assert status(q, FIXED) == "open"

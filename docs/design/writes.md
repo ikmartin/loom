@@ -110,6 +110,8 @@ The person undoes the Keep of a suggested edit in one step (`change-undo`, `pend
 
 The undo is offered on the machine that wrote the Keep, because the journal is that machine's (above). What travels is the `kept` record and the texts, so on another machine a version from The Record takes the words out. Undoing a Discard of a suggested edit only opens it again (`change-discard` with `undo`), since a Discard wrote nothing; a kept edit is refused there (`kept`), since opening it would leave its words in the file for the next Keep to write again. Restore and put-back take their bytes from the same store.
 
+**Records follow restore and put-back.** Every act that moves an edit's words updates the edit's record, through the journal and not by reading the text for likeness (`pending.follow_words`, journalled with the act's files). A restore or a put-back writes a file whole, so it knows the file's text before and after. A kept edit is opened again (`reopened`, `why: "restored"`) when the text after is the very bytes its Keep replaced, or when the words its Keep wrote stand in the text before as that Keep left them, the words they replaced stand in the text after as they stood before it, and the words it wrote stand nowhere in the text after with their neighbours: the act took that Keep out at its place. An open edit whose last generation loom wrote (a Keep since undone, or taken out by a restore) is recorded kept again (`why: "restored"`) when the reverse holds. Anything else leaves the record as it is, which errs toward an edit left kept with its words gone, harmless, and never toward an open edit whose words stand, which a Keep could write a second time; step 4's anchor precondition guards that case as well. The annotation a Keep resolved follows its edit either way. An edit recorded kept by a restore was not written by a Keep, so it has no Keep to undo (`not-written`).
+
 ## What the rebuild may rely on
 
 Writes from the viewer are to answer before the rebuild that publishes them (not built yet: `docs/plans/0.32-v0.1.md`, decision 8). The rebuild then takes this same lock to scan, and may rely on the following.
@@ -165,8 +167,7 @@ The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.
 | ticking a box (`tasks.tick`), saving Settings (`config_edit.set_values`) | 1 | yes |
 | Discard of an in-place change, put-back, restore | 2 | yes |
 | Keep of a suggested edit | 3 | yes |
-| undo of a Keep in one step (`pending.unkeep`) | 5 | yes |
-| a restore or put-back that reopens what it takes out | 5 | not built yet |
+| undo of a Keep in one step (`pending.unkeep`), and a restore or put-back that reopens what it takes out and records what it brings back (`pending.follow_words`) | 5 | yes |
 | taking in an agent's copy, a pull, `loom mv`, atomize, import, `init --from`, the agent layer, pages, new files; then a test that nothing else writes a person's file | 6 | not built yet |
 
 Step 4 is placement, not the door ("Where an edit goes").
