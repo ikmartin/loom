@@ -646,8 +646,11 @@ def test_a_server_at_rest_gives_back_what_its_builds_left_once_after_a_burst(
     from tests.unit.render._serve import fake_bundle
 
     given: list[float] = []
-    monkeypatch.setattr(served, "give_back", lambda: given.append(time.monotonic()))
     timers: list[threading.Timer] = []
+    # `give_back` is the module's, so a settle timer another test's server left running reaches it too: only a call from one of this server's own timers counts
+    monkeypatch.setattr(
+        served, "give_back", lambda: given.append(time.monotonic()) if threading.current_thread() in timers else None
+    )
 
     class Counted(threading.Timer):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
