@@ -177,6 +177,36 @@ def test_an_undo_never_takes_a_twins_words_after_the_person_swaps_two_alike_bloc
     assert [r["code"] for r in res["refused"]] == ["changed-since"] and f.read_bytes() == swapped
 
 
+def test_an_undo_refuses_a_copy_of_its_words_elsewhere_once_the_original_is_reworded(q: Path) -> None:
+    """What the line diff decides that a search would not: the person copies the kept lemma to the end of the file and rewords the original; the region's one occurrence is the copy, out of order with the Keep's place, so the undo refuses rather than edit the copy."""
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    lemma = p.read_text().split("\\begin{proof}")[0]
+    copied = p.read_text() + "\n% a copy of mine\n" + lemma.replace("{sy-0002}", "{sy-0002c}")
+    p.write_text(copied.replace("the fixed points are those of", "the fixed points are just those of", 1))
+    before = p.read_bytes()
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and p.read_bytes() == before
+
+
+def test_an_undo_past_its_bound_of_work_refuses_and_says_the_file_changed_too_much(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The third review's R3-3: finding a place is bounded by work, not the clock; past the bound the undo refuses, writes nothing, and says why."""
+    from loom import writes
+
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    # changes before and after the words, so the place is found by the diff, not by what the texts share
+    changed = p.read_text().replace("by \\eqref{eq:prose}.", "by \\eqref{eq:prose}, as claimed.")
+    p.write_text(changed.replace("% !LOOM tags: orbits, setup", "% !LOOM tags: orbits, setup, mine"))
+    before = p.read_bytes()
+    monkeypatch.setattr(writes, "PAIRING", -1_000_000)
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and "changed too much" in res["refused"][0]["why"]
+    assert p.read_bytes() == before and status(q, FIXED) == "kept"
+
+
 def test_an_undo_after_typing_at_a_files_end_beside_its_words_refuses(q: Path) -> None:
     """The second review's R2-2: kept words end a file with no final newline, and the person types right after them."""
     f = q / "drafting/sections/tail.tex"

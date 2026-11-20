@@ -160,10 +160,10 @@ def reading_offset(raw: str, at: int) -> int:
 
 #: How many characters either side of an edit's words must stand unchanged at the place an act wrote them, for loom to say the words are still there.
 BESIDE = 32
-#: The most characters of changed lines around a place, in either text, that `place_in` diffs by character; past it the file changed too much there to be sure (`TooChanged`).
-WINDOW = 8000
 #: The most characters the two texts' differing middle may hold for `place_in` to diff it by lines; past it the file changed too much to be sure (`TooChanged`).
 MIDDLE = 4_000_000
+#: How many times over its lines `paired` may look at a pair of texts before it gives up (`TooChanged`): lines that stand once anchor most texts in a pass or two.
+PAIRING = 20
 
 
 class TooChanged(Exception):
@@ -295,12 +295,17 @@ def paired(al: list[str], bl: list[str]) -> list[tuple[int, int]]:
 
     out: list[tuple[int, int]] = []
     work: list[tuple[int, int, int, int] | tuple[int, int]] = [(0, len(al), 0, len(bl))]
+    # each stretch costs its length; texts whose lines anchor so poorly that this passes a bound refuse rather than run on
+    budget = PAIRING * (len(al) + len(bl)) + 100_000
     while work:
         task = work.pop()
         if len(task) == 2:
             out.append(task)
             continue
         a0, a1, b0, b1 = task
+        budget -= (a1 - a0) + (b1 - b0)
+        if budget < 0:
+            raise TooChanged
         head: list[tuple[int, int]] = []
         while a0 < a1 and b0 < b1 and al[a0] == bl[b0]:
             head.append((a0, b0))
@@ -346,10 +351,9 @@ def paired(al: list[str], bl: list[str]) -> list[tuple[int, int]]:
 def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
     """How far `a[lo:hi]` moved to stand unchanged in `b` at its own place; None when the texts do not carry it over whole.
 
-    What the two share at their start and end places it by arithmetic, with no diff. Otherwise only their differing middle is compared: by lines (`_anchored`), and where the region touches lines the diff did not pair, those lines alone by characters. The region must lie inside one stretch found equal. Raises TooChanged past `MIDDLE` or `WINDOW`.
+    What the two share at their start and end places it by arithmetic, with no diff. Otherwise only their differing middle is compared, by lines (`paired`): the region lies in lines the diff pairs, in order, or its one occurrence in `b` (the caller has made sure there is one) lies between the same paired lines as in `a`, so that a copy elsewhere is never taken for it. Linear in the texts but for `paired`, whose work is bounded; raises TooChanged past `MIDDLE` or that bound.
     """
     from bisect import bisect_right
-    from difflib import SequenceMatcher
 
     if hi <= lo:
         return None
@@ -376,7 +380,7 @@ def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
         js = [pairs[i] for i in region_lines]
         if js == list(range(js[0], js[0] + len(js))):
             return bst[js[0]] - ast[region_lines[0]]
-    # the lines around the region the diff did not pair, by characters, between the nearest paired lines either side
+    # its one occurrence in `b` is the place only between the same paired lines: a copy elsewhere, the original reworded, is not
     before = [i for i in pairs if i < first]
     after = [i for i in pairs if i > last]
     i0, j0 = (max(before) + 1, pairs[max(before)] + 1) if before else (0, 0)
@@ -384,12 +388,8 @@ def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
     a0, a1, b0, b1 = ast[i0], ast[i1], bst[j0], bst[j1]
     if lo < a0 or hi > a1:
         return None
-    if a1 - a0 > WINDOW or b1 - b0 > WINDOW:
-        raise TooChanged
-    for tag, i, i2, j, _j2 in SequenceMatcher(None, a[a0:a1], b[b0:b1], autojunk=False).get_opcodes():
-        if tag == "equal" and a0 + i <= lo and hi <= a0 + i2:
-            return (b0 + j) - (a0 + i)
-    return None
+    q = b.find(a[lo:hi], b0, b1)
+    return None if q < 0 else q - lo
 
 
 def _once(text: str, part: str) -> bool:
