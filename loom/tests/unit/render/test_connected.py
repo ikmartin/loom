@@ -90,3 +90,10 @@ def test_api_answers_from_the_last_look(
 
     monkeypatch.setattr(loom.presence, "live", looked)
     assert json.loads(get(s.url + "_api")[2])["connected"] == []
+
+
+def test_api_names_the_quilt_s_folder(serve: Callable[[Path], ServeSession], tmp_path: Path) -> None:
+    """The viewer says which folder to choose in an agent's app from `/_api`'s `root`, the quilt's folder resolved."""
+    q = demo(tmp_path)
+    s = serve(q)
+    assert json.loads(get(s.url + "_api")[2])["root"] == str(q.resolve())
