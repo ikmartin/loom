@@ -1,6 +1,7 @@
 <script lang="ts">
-	// A project file's toolbar: a PDF's bar (`PdfBar`), annotated as a cited work's pages are, with **PDF ▾** holding Open in its application where the publisher can open it; any other file has the plain toolbar, its views and *view*.
+	// A project file's toolbar: a PDF's bar (`PdfBar`), annotated as a cited work's pages are, with **PDF ▾** holding Open in its application where the publisher can open it, and under *view* `open in browser`, the file at its own address in a new tab, without the marks loom keeps; any other file has the plain toolbar, its views and *view*.
 	import { store } from '$lib/manifest/client.svelte';
+	import { filesUrl } from '$lib/paths';
 	import PdfBar from '$lib/pdf/PdfBar.svelte';
 	import { hand, hintFor } from '$lib/review/annotating.svelte';
 	import { say } from '$lib/review/toasts.svelte';
@@ -42,6 +43,8 @@
 				testid="toggle-settled"
 				onclick={() => (ui.showSettled = !ui.showSettled)}
 			/>
+			<hr />
+			<ToolbarItem label="open in browser" name="open {name} in the browser's own viewer, in a new tab" href={filesUrl(item.id)} testid="pdf-open-browser" />
 		{/snippet}
 	</ItemToolbar>
 {:else}
