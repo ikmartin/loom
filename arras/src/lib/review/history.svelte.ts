@@ -86,7 +86,11 @@ function save(): void {
 
 /** The Keep steps this tab kept in this quilt before a reload, put back on the history once the server has said which quilt it serves. */
 async function load(): Promise<void> {
-	serving = (await capabilities())?.quilt;
+	try {
+		serving = (await capabilities())?.quilt;
+	} catch {
+		return; // no publisher to ask: nothing is kept, and nothing offered
+	}
 	if (!serving) return;
 	const mine = stored()[serving];
 	if (!Array.isArray(mine)) return;

@@ -373,6 +373,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
 
     #: Set when the socket binds; every write must carry it (plan 0.13 §8).
     token: str = ""
+    #: Which quilt this server serves, as `GET /_api` names it: a digest of where it lies, never the place.
+    quilt_id: str = ""
 
     def _csrf(self) -> str:
         """Why this request must be refused, or '' when it may proceed.
@@ -588,7 +590,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 {
                     **discovery(),
                     "token": self.token,
-                    **({"quilt": self.quilt_id} if getattr(self, "quilt_id", None) else {}),
+                    **({"quilt": self.quilt_id} if self.quilt_id else {}),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,
