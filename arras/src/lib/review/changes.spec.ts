@@ -3,8 +3,10 @@ import type { Manifest, PendingChange } from '$lib/manifest/types';
 
 const calls: [string, Record<string, unknown>][] = [];
 let answer: Record<string, unknown> = { ok: true, result: 'done' };
+let quilt = 'q-one';
 vi.mock('$lib/write', () => ({
 	can: async () => true,
+	capabilities: async () => ({ write_api: 1, capabilities: [], quilt }),
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
 		return answer;
@@ -181,22 +183,42 @@ describe('Keep and Discard', () => {
 		expect(history.done.map((s) => s.label)).toEqual(['resolve']);
 	});
 
-	it('keeps a Keep step in the tab across a reload, and nothing else', async () => {
+	it('keeps a Keep step in the tab across a reload, offered only in the quilt it was made in', async () => {
 		const kept: Record<string, string> = {};
 		vi.stubGlobal('sessionStorage', { getItem: (k: string) => kept[k] ?? null, setItem: (k: string, v: string) => (kept[k] = v) });
+		vi.resetModules();
+		let h = await import('./history.svelte');
+		await vi.waitFor(() => expect(h.history.done).toEqual([]));
+		await new Promise((r) => setTimeout(r));
+		live.changes = [suggestion];
+		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
+		await h.keepChanges({ changes: ['e-1'] });
+		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [['e-1']] });
+		// the same tab, another quilt served on the port: nothing of q-one is offered
+		quilt = 'q-two';
+		vi.resetModules();
+		h = await import('./history.svelte');
+		await new Promise((r) => setTimeout(r));
+		expect(h.history.done).toEqual([]);
+		// back in the quilt it was made in, the step is there, and undoes
+		quilt = 'q-one';
+		vi.resetModules();
+		h = await import('./history.svelte');
+		await vi.waitFor(() => expect(h.history.done.map((s) => s.label)).toEqual(['keep']));
+		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
+		expect(await h.undo()).toBe('');
+		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'] }]);
+		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [] });
+		vi.unstubAllGlobals();
+	});
+
+	it('lets a step go whose suggestion the quilt does not have, saying so without an id', async () => {
 		live.changes = [suggestion];
 		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
 		await keepChanges({ changes: ['e-1'] });
-		expect(JSON.parse(kept['arras.keeps'])).toEqual([['e-1']]);
-		// the page goes and comes back: the module is loaded again, and the step with it
-		vi.resetModules();
-		const again = await import('./history.svelte');
-		expect(again.history.done.map((s) => s.label)).toEqual(['keep']);
-		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
-		expect(await again.undo()).toBe('');
-		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'] }]);
-		expect(JSON.parse(kept['arras.keeps'])).toEqual([]);
-		vi.unstubAllGlobals();
+		answer = { ok: false, error: { code: 'no-such-change', message: 'a suggestion it names is not in this quilt' } };
+		expect(await undo()).toBe('a suggestion it names is not in this quilt');
+		expect(history.done).toHaveLength(0);
 	});
 
 	it('shows a change refused, or an act refused whole, pending again', async () => {

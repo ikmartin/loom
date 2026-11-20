@@ -26,7 +26,7 @@ async function withChanges(page: Page): Promise<Record<string, Record<string, un
 	});
 	await page.route(`**/${MERGED}`, (r) => r.fulfill({ contentType: 'text/html', body: merged }));
 	const sent: Record<string, Record<string, unknown>> = {};
-	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['annotate', 'edit', 'delete', 'restore', 'change-keep', 'change-discard'], token: 't' } }));
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['annotate', 'edit', 'delete', 'restore', 'change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
 	await page.route('**/_api/*', (r) => {
 		const endpoint = new URL(r.request().url()).pathname.split('/').pop() ?? '';
 		const body = r.request().postDataJSON();

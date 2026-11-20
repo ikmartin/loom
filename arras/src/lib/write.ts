@@ -17,6 +17,8 @@ export interface Capabilities {
 	capabilities: string[];
 	/** What every write must carry: the publisher's own token, which it keeps outside the quilt. Absent from a corpus nobody is serving. */
 	token?: string;
+	/** Which quilt the publisher serves, as a digest of where it lies: what a viewer keeps per quilt is keyed by it. */
+	quilt?: string;
 	/** Whether the publisher says when it publishes a new manifest, at `/_api/stream` (manifest/stream.ts). */
 	stream?: boolean;
 	/** The viewer the publisher serves, by its build's version; a page of another version is out of step with it. */

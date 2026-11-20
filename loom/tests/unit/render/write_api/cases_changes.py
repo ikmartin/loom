@@ -125,7 +125,7 @@ def _change_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     succeeds(s, "change-keep", {"changes": [edit]})
     assert "at most two points" in lemma.read_text()
     refuses(s, "change-undo", {"changes": [edit], "author": "Claude Agent"}, 403, "author-only", "only the author")
-    refuses(s, "change-undo", {"changes": ["e-2026-01-01-nothere"]}, 404, "no-such-change", "no suggested edit")
+    refuses(s, "change-undo", {"changes": ["e-2026-01-01-nothere"]}, 404, "no-such-change", "not in this quilt")
     refuses(s, "change-undo", {}, 400, "missing-field", "changes is the list")
     said = succeeds(s, "change-undo", {"changes": [edit]})
     assert said["done"] == [edit] and said["refused"] == [] and said["result"].startswith("undid the keep of 1 ")

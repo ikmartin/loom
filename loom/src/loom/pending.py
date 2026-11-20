@@ -715,7 +715,7 @@ def unkeep(
     ids = list(dict.fromkeys(ids))
     gone = [i for i in ids if find(root, i) is None]
     if gone:
-        raise PendingRefused("no-such-change", f"no suggested edit {gone[0]}", 404)
+        raise PendingRefused("no-such-change", "a suggestion it names is not in this quilt", 404)
     out = _Unkept(result)
     try:
         with writes.act(root, hist, "undo", writer[1]) as w:

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const calls: [string, Record<string, unknown>][] = [];
 vi.mock('$lib/write', () => ({
+	capabilities: async () => null,
 	write: async (endpoint: string, body: Record<string, unknown>) => {
 		calls.push([endpoint, body]);
 		if (endpoint === 'annotate' || endpoint === 'reply') return { ok: true, result: 'a-new  key  untyped' };

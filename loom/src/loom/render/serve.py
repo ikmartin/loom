@@ -588,6 +588,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 {
                     **discovery(),
                     "token": self.token,
+                    **({"quilt": self.quilt_id} if getattr(self, "quilt_id", None) else {}),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,
@@ -1096,6 +1097,8 @@ class ServeSession:
         self.httpd = ThreadingHTTPServer(("127.0.0.1", self.port), handler)
         self.port = self.httpd.server_address[1]
         handler.token = write_serve_json(self.quilt.root, self.port)  # type: ignore[attr-defined]
+        # which quilt this is, for a viewer that keeps something per quilt; a digest of where it lies, not the place
+        handler.quilt_id = hashlib.sha256(str(self.quilt.root.resolve()).encode()).hexdigest()[:16]  # type: ignore[attr-defined]
         shown = self.shown
         frames = type(
             "Frames",

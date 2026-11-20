@@ -1,12 +1,12 @@
 // The person's own annotation writes in this page's life, each kept with the write that undoes it and the write that does it again: Undo and Redo on the toolbar, ⌘Z and ⇧⌘Z. A new annotation or reply is undone by deleting it and done again by restoring what the delete took out; a delete by restoring and deleting again; an edit by an edit back to its type, look and words before; a resolve by reopening. Every annotation write in the viewer goes through here, so there is one record of what can be undone.
 //
-// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step is kept in the tab's session storage, so a reload still offers its undo; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
+// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step is kept in the tab's session storage under the quilt the server says it serves, so a reload still offers its undo in that quilt and no other; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
 
 import { store } from '$lib/manifest/client.svelte';
 import type { Annotation, Look } from '$lib/manifest/types';
-import { write, type WriteResult } from '$lib/write';
+import { capabilities, write, type WriteResult } from '$lib/write';
 import { plain, typeById } from './annotating.svelte';
 import { mark, prune, unmark } from './acted.svelte';
 import { changesIn, pending } from './changes';
@@ -57,29 +57,41 @@ function push(step: Step): void {
 	save();
 }
 
-/** Where the Keep steps still to be undone are kept for this tab: the ids of each, oldest first. */
+/** Where the Keep steps still to be undone are kept for this tab: by quilt, the ids of each, oldest first. */
 const KEEPS = 'arras.keeps';
 
-/** Keep this tab's Keep steps still to be undone; a browser that cannot store them loses them on a reload. */
-function save(): void {
+/** The quilt the server says it serves (`GET /_api`'s `quilt`), once it has answered; steps are kept and offered only under it. */
+let serving: string | undefined;
+
+function stored(): Record<string, string[][]> {
 	try {
-		globalThis.sessionStorage?.setItem(KEEPS, JSON.stringify(history.done.filter((s) => s.keeps).map((s) => s.keeps)));
+		const all: unknown = JSON.parse(globalThis.sessionStorage?.getItem(KEEPS) ?? '{}');
+		return all && typeof all === 'object' && !Array.isArray(all) ? (all as Record<string, string[][]>) : {};
+	} catch {
+		return {};
+	}
+}
+
+/** Keep this tab's Keep steps still to be undone, under the quilt being served; a browser that cannot store them loses them on a reload. */
+function save(): void {
+	if (!serving) return;
+	try {
+		const all = stored();
+		all[serving] = history.done.filter((s) => s.keeps).map((s) => s.keeps as string[]);
+		globalThis.sessionStorage?.setItem(KEEPS, JSON.stringify(all));
 	} catch {
 		// storage refused: the history still holds them until the page goes
 	}
 }
 
-/** The Keep steps this tab kept before a reload, put back on the history. */
-function load(): void {
-	try {
-		const raw = globalThis.sessionStorage?.getItem(KEEPS);
-		const all: unknown = raw ? JSON.parse(raw) : [];
-		if (!Array.isArray(all)) return;
-		const steps = all.filter((ids): ids is string[] => Array.isArray(ids) && ids.length > 0 && ids.every((i) => typeof i === 'string')).map((ids) => kept(ids));
-		if (steps.length) history.done = [...history.done, ...steps];
-	} catch {
-		// nothing stored, or not readable: nothing to put back
-	}
+/** The Keep steps this tab kept in this quilt before a reload, put back on the history once the server has said which quilt it serves. */
+async function load(): Promise<void> {
+	serving = (await capabilities())?.quilt;
+	if (!serving) return;
+	const mine = stored()[serving];
+	if (!Array.isArray(mine)) return;
+	const steps = mine.filter((ids) => Array.isArray(ids) && ids.length > 0 && ids.every((i) => typeof i === 'string')).map((ids) => kept(ids));
+	if (steps.length) history.done = [...steps, ...history.done];
 }
 
 /** The id loom gave a new annotation or reply: the first word of its answer. */
@@ -207,13 +219,15 @@ async function act(endpoint: 'change-keep' | 'change-discard', which: Which, ext
 	return { res, done, suggested: done.filter((id) => kinds.get(id) === 'suggested') };
 }
 
-/** The refusals after which a change's undo or redo can never succeed: it is not kept, loom wrote nothing to undo, or its words changed where they were written. A file that moved while loom worked (`changed`) may succeed when pressed again. */
-const FINAL = new Set(['not-kept', 'not-written', 'changed-since', 'not-open']);
+/** The refusals after which a change's undo or redo can never succeed: it is not kept, loom wrote nothing to undo, its words changed where they were written, or the quilt has no such suggestion. A file that moved while loom worked (`changed`) may succeed when pressed again. */
+const FINAL = new Set(['not-kept', 'not-written', 'changed-since', 'not-open', 'no-such-change']);
 
 /** `res` as a step of the history takes it: loom having done none of the changes it was asked for is a refusal, with the first one's why, and final when every refusal is; when it did some, those refused are said under `title`. */
 function asStep(res: ChangeAnswer, title: string): StepResult & ChangeAnswer {
 	const refused = res.refused ?? [];
-	if (!res.ok || !refused.length) return res;
+	// the request refused whole, as a suggestion this quilt does not have is: final when its code is
+	if (!res.ok) return { ...res, final: FINAL.has(res.error?.code ?? '') };
+	if (!refused.length) return res;
 	if (!(res.done ?? []).length) {
 		const final = refused.every((r) => FINAL.has(r.code ?? ''));
 		return { ...res, ok: false, final, error: { code: refused[0].code ?? 'refused', message: refused[0].why } };
@@ -360,4 +374,4 @@ export function nextRedo(): string {
 	return history.undone.at(-1)?.label ?? '';
 }
 
-load();
+void load();
