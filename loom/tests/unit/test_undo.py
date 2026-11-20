@@ -69,6 +69,33 @@ def test_an_undo_in_a_crlf_file_gives_back_its_bytes(q: Path) -> None:
     assert p.read_bytes() == before
 
 
+def test_an_undo_after_the_files_line_endings_changed_writes_in_the_files_own(q: Path) -> None:
+    p = q / LEMMA
+    before = p.read_bytes()
+    call(q, "change-keep", {"changes": [FIXED]})
+    p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))
+    assert call(q, "change-undo", {"changes": [FIXED]})["done"] == [FIXED]
+    assert p.read_bytes() == before.replace(b"\n", b"\r\n")
+
+
+def test_words_a_keep_joined_onto_one_line_come_back_in_the_files_line_ending(q: Path) -> None:
+    """The review's finding 4: a Keep joins two lines, the file is then saved with CRLF, and the undo writes no bare LF."""
+    p = q / "drafting/nodes/sy-000B.tex"
+    p.write_bytes(
+        p.read_bytes().replace(
+            b"Every finite widget of odd order has a fixed point, and the fixed locus is functorial.",
+            b"Every finite widget of odd order, however large it may be, has a fixed point,\nand the fixed locus is functorial in every sense one could want.",
+        )
+    )
+    call(q, "change-keep", {"changes": [x.id for x in waiting(q) if x.kind == "edit"]})
+    before = p.read_bytes()
+    edit = suggest(q, "sy-000B", "has a fixed point; moreover", "--quote", "has a fixed point,\nand")
+    assert edit is not None and call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))
+    assert call(q, "change-undo", {"changes": [edit]})["done"] == [edit]
+    assert p.read_bytes() == before.replace(b"\n", b"\r\n")
+
+
 def test_an_undo_keeps_what_changed_elsewhere_in_the_file_since(q: Path) -> None:
     p = q / LEMMA
     was = p.read_text()
@@ -89,13 +116,75 @@ def test_an_undo_refuses_once_the_words_beside_what_it_wrote_changed(q: Path) ->
     assert files(q) == now and status(q, FIXED) == "kept"
 
 
-def test_an_undo_refuses_where_the_words_it_wrote_stand_twice_with_their_neighbours(q: Path) -> None:
+def test_an_undo_writes_at_its_place_and_leaves_a_copy_of_its_words_with_their_neighbours(q: Path) -> None:
     p = q / LEMMA
+    was = p.read_text()
     call(q, "change-keep", {"changes": [FIXED]})
-    p.write_text(p.read_text() + "\n" + p.read_text().replace("{sy-0002}", "{sy-0002b}"))
-    now = files(q)
-    res = call(q, "change-undo", {"changes": [FIXED]})
-    assert [r["code"] for r in res["refused"]] == ["changed-since"] and files(q) == now
+    copy = p.read_text().replace("{sy-0002}", "{sy-0002b}")
+    p.write_text(p.read_text() + "\n" + copy)
+    assert call(q, "change-undo", {"changes": [FIXED]})["done"] == [FIXED]
+    assert p.read_text() == was + "\n" + copy
+
+
+TWINS = "drafting/nodes/twins.tex"
+
+
+def twins(q: Path, second_proof: str = "Immediate.") -> Path:
+    """A file of three lemmas brought into the main document, the first two with proofs alike."""
+    f = q / TWINS
+    f.write_text(
+        "\\begin{lemma}\\label{sy-0E01}\nFirst claim holds.\n\\end{lemma}\n\\begin{proof}\nImmediate.\n\\end{proof}\n\n"
+        "\\begin{lemma}\\label{sy-0E02}\nSecond claim holds.\n\\end{lemma}\n\\begin{proof}\n"
+        + second_proof
+        + "\n\\end{proof}\n\n\\begin{lemma}\\label{sy-0E03}\nThird claim holds.\n\\end{lemma}\n",
+        encoding="utf-8",
+    )
+    m = q / "drafting/main.tex"
+    m.write_bytes(m.read_bytes().replace(b"\\input{nodes/sy-000A}", b"\\input{nodes/twins}\n\n\\input{nodes/sy-000A}"))
+    call(q, "change-keep", {"changes": [x.id for x in waiting(q) if x.kind == "edit"]})
+    return f
+
+
+def test_an_undo_never_takes_the_persons_own_like_words_from_another_block(q: Path) -> None:
+    """The review's case w: the person's second proof already says the kept sentence; they reword the kept one, then undo."""
+    f = twins(q, second_proof="Immediate. This is clear.")
+    edit = suggest(q, "sy-0E01/proof", "This is clear.", "--quote", "Immediate.", "--after")
+    assert edit is not None and call(q, "change-keep", {"changes": [edit]})["done"] == [edit]
+    f.write_text(f.read_text().replace("Immediate. This is clear.", "Immediate. This is clear from the definition.", 1))
+    reworded = f.read_bytes()
+    res = call(q, "change-undo", {"changes": [edit]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and f.read_bytes() == reworded
+
+
+def test_an_undo_never_takes_out_another_keeps_like_words(q: Path) -> None:
+    """The review's case v: two Keeps put the same sentence after two proofs alike; the first is reworded, then undone."""
+    f = twins(q)
+    one = suggest(q, "sy-0E01/proof", "This is clear.", "--quote", "Immediate.", "--after")
+    two = suggest(q, "sy-0E02/proof", "This is clear.", "--quote", "Immediate.", "--after")
+    assert one and two
+    call(q, "change-keep", {"changes": [one]})
+    call(q, "change-keep", {"changes": [two]})
+    f.write_text(f.read_text().replace("Immediate. This is clear.", "Immediate. This is clear from the definition.", 1))
+    reworded = f.read_bytes()
+    res = call(q, "change-undo", {"changes": [one]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and f.read_bytes() == reworded
+    assert status(q, one) == "kept" and status(q, two) == "kept"
+
+
+def test_an_undo_of_edits_kept_side_by_side_never_writes_in_another_block(q: Path) -> None:
+    """The review's case u: three one-word edits kept together, the middle one changed by the person, then the Keep undone."""
+    f = q / THEOREM
+    edits = [
+        suggest(q, "sy-0005", "Enumerate", "--quote", "Count"),
+        suggest(q, "sy-0005", "disjoint", "--quote", "fixed"),
+        suggest(q, "sy-0005", "orbits", "--quote", "points"),
+    ]
+    assert all(edits) and sorted(call(q, "change-keep", {"changes": edits})["done"]) == sorted(edits)
+    f.write_text(f.read_text().replace("Enumerate disjoint orbits", "Enumerate disjointed orbits"))
+    changed = f.read_bytes()
+    res = call(q, "change-undo", {"changes": edits})
+    assert res["done"] == [] and {r["code"] for r in res["refused"]} == {"changed-since"}
+    assert f.read_bytes() == changed and b"is a disjoint union" in changed
 
 
 def test_of_two_edits_kept_in_one_file_at_once_one_is_undone_and_the_other_stays(q: Path) -> None:
@@ -107,7 +196,14 @@ def test_of_two_edits_kept_in_one_file_at_once_one_is_undone_and_the_other_stays
     assert call(q, "change-undo", {"changes": [FIXED]})["done"] == [FIXED]
     text = p.read_text()
     assert "Each orbit of a widget has one or two points; compare \\eqref{eq:fix}" in text
-    assert call(q, "change-undo", {"changes": [other]})["done"] == [other]
+    # the other's neighbours as that Keep left them held the first's words, which are gone: its place is not established
+    res = call(q, "change-undo", {"changes": [other]})
+    assert [r["code"] for r in res["refused"]] == ["changed-since"] and p.read_text() == text
+    # undone together, as the viewer undoes a Keep of both, they come back whole
+    call(q, "change-keep", {"changes": [FIXED]})
+    call(q, "change-undo", {"changes": [FIXED]})
+    assert call(q, "change-keep", {"changes": [FIXED]})["done"] == [FIXED]
+    assert sorted(call(q, "change-undo", {"changes": [FIXED, other]})["done"]) == sorted([FIXED, other])
     assert p.read_text() == before
 
 
@@ -213,6 +309,73 @@ def test_a_keep_written_through_a_link_out_of_the_quilt_is_not_undone_from_its_r
     assert outside.read_bytes() == now and (q / REMARK).is_symlink()
 
 
+def plant(q: Path, before: bytes, after: bytes, splices: list[dict], gen: str) -> None:
+    """What a copied quilt could carry: FIXED recorded kept, two texts in the store, and a Keep of it in the journal."""
+    from loom import writes
+    from loom.paths import EDIT_LOG, JOURNAL, JOURNAL_INDEX
+
+    hist = scan(q).quilt.history_dir
+    b, a = writes.store(hist, before), writes.store(hist, after)
+    with (q / EDIT_LOG).open("a") as fh:
+        fh.write(
+            json.dumps(
+                {
+                    "event": "kept",
+                    "id": FIXED,
+                    "when": "2026-11-01T00:00:00Z",
+                    "author": "Pat",
+                    "kind": "human",
+                    "hash": "x",
+                }
+            )
+            + "\n"
+        )
+    act = {"act": "keep:feedfacefeedface", "kind": "keep", "actor": "Pat", "when": "x"}
+    with (q / JOURNAL).open("a") as fh:
+        line = {
+            **act,
+            "event": "begin",
+            "files": {LEMMA: [b, a]},
+            "splices": {LEMMA: splices},
+            "edits": [gen],
+            "records": [],
+        }
+        fh.write(json.dumps(line) + "\n" + json.dumps({"event": "done", "act": act["act"], "when": "x"}) + "\n")
+    (q / JOURNAL_INDEX).unlink(missing_ok=True)
+
+
+def test_an_undo_writes_nothing_its_journal_line_and_texts_do_not_bear_out(q: Path) -> None:
+    """The review's finding 11: a journal that came with a copied quilt names a Keep whose texts and splices disagree."""
+    p = q / LEMMA
+    shipped = p.read_bytes()
+    # before bytes the file never held, with a splice that does not turn them into the after bytes
+    plant(
+        q,
+        b"\\immediate\\write18{echo hi}\n",
+        shipped,
+        [{"edit": f"{FIXED}:0", "at": 0, "old": "", "new": ""}],
+        f"{FIXED}:0",
+    )
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert [r["code"] for r in res["refused"]] == ["not-written"] and p.read_bytes() == shipped
+
+
+def test_an_undo_splices_in_nothing_its_texts_do_not_hold(q: Path) -> None:
+    p = q / LEMMA
+    shipped = p.read_bytes()
+    plant(
+        q,
+        shipped,
+        shipped + b"%\n",
+        [{"edit": f"{FIXED}:0", "at": 0, "old": "\\input{/etc/passwd}", "new": ""}],
+        f"{FIXED}:0",
+    )
+    p.write_bytes(shipped.replace(b"by \\eqref{eq:prose}.", b"by \\eqref{eq:prose}, mine."))
+    edited = p.read_bytes()
+    res = call(q, "change-undo", {"changes": [FIXED]})
+    assert [r["code"] for r in res["refused"]] == ["not-written"] and p.read_bytes() == edited
+
+
 def test_only_a_kept_edit_has_a_keep_to_undo(q: Path) -> None:
     res = call(q, "change-undo", {"changes": [FIXED]})
     assert [r["code"] for r in res["refused"]] == ["not-kept"]
@@ -304,8 +467,9 @@ def test_a_restore_that_brings_an_undone_edit_back_records_it_kept(q: Path) -> N
     restore(q, with_it)
     assert files(q)[LEMMA] == kept and status(q, FIXED) == "kept"
     assert [p.id for p in waiting(q) if p.id == FIXED] == []
-    # recorded kept by the restore, not written by a Keep: there is no Keep of it to undo
-    assert [r["code"] for r in call(q, "change-undo", {"changes": [FIXED]})["refused"]] == ["not-written"]
+    # recorded kept by the restore on the Keep that wrote those words, which an undo takes out again
+    assert call(q, "change-undo", {"changes": [FIXED]})["done"] == [FIXED]
+    assert b"the fixed points are those of" not in (q / LEMMA).read_bytes()
 
 
 def test_a_restore_leaves_kept_an_edit_whose_words_the_person_changed_beside(q: Path) -> None:
@@ -327,6 +491,53 @@ def test_a_restore_of_the_very_bytes_a_keep_replaced_opens_its_edit_again(q: Pat
     p.write_text(p.read_text().replace("one or two points;", "at most two points;"))
     restore(q, first)
     assert status(q, FIXED) == "open" and [x.state for x in waiting(q) if x.id == FIXED] == ["ready"]
+
+
+def test_restores_back_and_forth_leave_the_record_as_the_file_reads(q: Path) -> None:
+    """The review's finding 6: restore the version before a Keep, the one after it, and the one before again."""
+    before, after = record(q, "Before"), ""
+    call(q, "change-keep", {"changes": [FIXED]})
+    after = record(q, "After")
+    restore(q, before)
+    assert status(q, FIXED) == "open"
+    restore(q, after)
+    assert status(q, FIXED) == "kept"
+    restore(q, before)
+    assert status(q, FIXED) == "open" and [x.state for x in waiting(q) if x.id == FIXED] == ["ready"]
+
+
+def test_a_restore_never_opens_an_edit_whose_words_stand_elsewhere(q: Path) -> None:
+    """The review's finding 5: the person moved the kept words into the proof and typed the old ones back; a version of that is restored."""
+    p = q / LEMMA
+    call(q, "change-keep", {"changes": [FIXED]})
+    kept = p.read_text()
+    moved = kept.replace(
+        "the fixed points are those of \\eqref{eq:fix} in Definition~\\ref{sy-0001}.",
+        "compare \\eqref{eq:fix} in Definition~\\ref{sy-0001}.",
+    ).replace(
+        "by \\eqref{eq:prose}.",
+        "by \\eqref{eq:prose}; here the fixed points are those of \\eqref{eq:fix} in Definition~\\ref{sy-0001}.",
+    )
+    p.write_text(moved)
+    v = record(q, "Moved")
+    p.write_text(kept)
+    call(q, "change-keep", {"changes": [x.id for x in waiting(q) if x.kind == "edit"]})
+    restore(q, v)
+    assert status(q, FIXED) == "kept"
+    call(q, "change-keep", {"all": True})
+    assert p.read_text().count("the fixed points are those of") == 1
+
+
+def test_discarding_a_change_that_brings_a_kept_edits_words_back_records_it_kept(q: Path) -> None:
+    """The review's finding 7: a restore takes a Keep out, Your Changes lists that as the person's edit, and Discard writes the words back."""
+    first = record(q, "First")
+    call(q, "change-keep", {"changes": [FIXED]})
+    restore(q, first)
+    assert status(q, FIXED) == "open"
+    (change,) = [x.id for x in waiting(q) if x.kind == "edit" and x.path == LEMMA]
+    call(q, "change-discard", {"changes": [change]})
+    assert b"the fixed points are those of" in (q / LEMMA).read_bytes()
+    assert status(q, FIXED) == "kept" and [x.id for x in waiting(q) if x.id == FIXED] == []
 
 
 def test_putting_back_a_text_that_takes_a_kept_edit_out_opens_it_again(q: Path) -> None:

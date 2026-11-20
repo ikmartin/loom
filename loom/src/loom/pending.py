@@ -620,12 +620,41 @@ def _place_kept(
 # ---- undoing a Keep -------------------------------------------------------------------------------------------------
 
 
-def _not_written(edit_id: str) -> str:
-    return f"loom has no write of {edit_id} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
+def called(edit: Edit) -> str:
+    """A suggested edit as a person knows it, by its words: what it puts in, or for a deletion what it takes out; never its id."""
+    words = " ".join((edit.with_text or (edit.selector.exact if edit.selector else "")).split())
+    short = words if len(words) <= 48 else words[:47].rstrip() + "…"
+    return f"the suggestion “{short}”" if edit.with_text else f"the deletion of “{short}”"
 
 
-def _changed_since(edit_id: str) -> str:
-    return f"the words of {edit_id} have changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
+def _not_written(edit: Edit) -> str:
+    return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
+
+
+def _changed_since(edit: Edit) -> str:
+    return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
+
+
+def keep_of(wrote: dict[str, int], edit: Edit) -> str | None:
+    """The `<id>:<generation>` of the Keep whose words `edit`'s record stands on, by the journal's `wrote`; None when loom wrote none.
+
+    A kept edit stands on the Keep of its generation when that Keep wrote; one a restore recorded kept (`why: "restored"`) on the last Keep that wrote it; one whose Keep wrote nothing, its words being in already, on none. An open edit opened again stands on the last Keep that wrote it before.
+    """
+    from loom.records.edits import generation
+
+    g = generation(edit)
+    if edit.status == "kept":
+        if f"{edit.id}:{g}" in wrote:
+            return f"{edit.id}:{g}"
+        last = next((a for a in reversed(edit.acts) if a.get("event") == "kept"), {})
+        if last.get("why") != "restored":
+            return None
+        top = g
+    elif edit.status == "open":
+        top = g - 1
+    else:
+        return None
+    return next((f"{edit.id}:{k}" for k in range(top, -1, -1) if f"{edit.id}:{k}" in wrote), None)
 
 
 def unkeep(
@@ -710,7 +739,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
     from loom.history.acts import UNAPPLY, keep_versions, ledger_line
     from loom.looks import UNDO
     from loom.paths import EDIT_LOG
-    from loom.records.edits import generation, home, reopened_event, replay, unanswered_event
+    from loom.records.edits import home, reopened_event, replay, unanswered_event
     from loom.records.log import log_path as annotation_log
 
     result = out.result
@@ -720,24 +749,24 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
     for i in ids:
         e = fresh.get(i)
         if e is None or e.status != "kept":
-            why = f"{i} is {e.status if e else 'gone'}, so there is no Keep of it to undo"
+            why = f"{called(e)} is {e.status}, so there is no Keep of it to undo" if e else f"{i} is gone"
             out.refused.append({"id": i, "why": why, "code": "not-kept"})
             continue
-        gen = f"{e.id}:{generation(e)}"
-        at = w.journal.wrote.get(gen)
+        gen = keep_of(w.journal.wrote, e)
+        at = w.journal.wrote.get(gen) if gen else None
         entry = writes.entry_at(root, at) if at is not None else None
-        if entry is None or entry.get("event") != "begin" or gen not in (entry.get("edits") or []):
-            out.refused.append({"id": i, "why": _not_written(i), "code": "not-written"})
+        if gen is None or entry is None or entry.get("event") != "begin" or gen not in (entry.get("edits") or []):
+            out.refused.append({"id": i, "why": _not_written(e), "code": "not-written"})
             continue
         # what recovery would not act on, an undo does not either: a file reached through a link out of the quilt among it
         why = writes.untrusted(root, hist, entry)
         made = None if why else writes.splices_of(hist, entry, gen)
         if not made:
-            said_why = why or "a text it wrote is missing from the history"
+            said_why = why or "the texts it names are missing from the history or do not bear it out"
             out.refused.append(
                 {
                     "id": i,
-                    "why": f"loom will not undo the Keep of {i} from its record: {said_why}; restore a version from The Record instead",
+                    "why": f"loom will not undo the Keep of {called(e)} from its record: {said_why}; restore a version from The Record instead",
                     "code": "not-written",
                 }
             )
@@ -745,6 +774,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
         items += [(e, gen, m) for m in made]
     # where each edit's words stand in each file now; an edit refused in one file is undone in none, so plan again without it
     plans: dict[str, tuple[bytes, bytes, list[dict[str, Any]], list[tuple[int, int]]]] = {}
+    named = {e.id: e for e, *_ in items}
     while items:
         failed: dict[str, dict[str, str]] = {}
         plans = {}
@@ -758,11 +788,11 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
                 failed.update({e.id: {"why": exc.message, "code": exc.code} for e, *_ in mine})
                 continue
             if raw is None or data is None:
-                failed.update({e.id: {"why": _changed_since(e.id), "code": "changed-since"} for e, *_ in mine})
+                failed.update({e.id: {"why": _changed_since(e), "code": "changed-since"} for e, *_ in mine})
                 continue
             plan = _undo_in(hist, raw, data, mine)
             if isinstance(plan, set):
-                failed.update({i: {"why": _changed_since(i), "code": "changed-since"} for i in plan})
+                failed.update({i: {"why": _changed_since(named[i]), "code": "changed-since"} for i in plan})
             else:
                 plans[rel] = (data, *plan)
         if not failed:
@@ -829,62 +859,84 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
 def _undo_in(
     hist: Path, raw: str, data: bytes, items: list[tuple[Edit, str, Any]]
 ) -> tuple[bytes, list[dict[str, Any]], list[tuple[int, int]]] | set[str]:
-    """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or the ids whose words cannot be found as their Keep left them.
+    """The bytes `data` (read as `raw`) of one file with the Keeps `items` undone, the undo's splices, and where the words put back stand in the scan's reading after it; or the ids whose place is not established.
 
-    Where the file holds a Keep's after bytes, its words are where it wrote them; else they are found with their neighbours as it wrote them, standing exactly once (`writes.where_now`). Where it holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
+    Each Keep's words are taken out only at the place that Keep wrote them (`writes.place_in`), never wherever like words stand; the words put back take the file's line ending when it has changed since. Where the file holds exactly one Keep's after bytes and every edit that Keep wrote in it is undone, its before bytes come back whole.
     """
     from loom import writes
 
     now = writes.digest(data)
-    places: list[tuple[int, Any, str, str]] = []
+    places: list[tuple[int, int, Any, str, str]] = []
     bad: set[str] = set()
     for e, gen, m in items:
-        at = m.at if now == m.after else writes.where_now(raw, m)
-        if at is None:
+        span = writes.place_in(m, raw)
+        if span is None:
             bad.add(e.id)
         else:
-            places.append((at, m, gen, e.id))
+            places.append((*span, m, gen, e.id))
     places.sort(key=lambda x: x[0])
-    for (a, m, _, i), (b, _, _, j) in zip(places, places[1:], strict=False):
-        if a + len(m.new) > b:
+    for (_, b, _, _, i), (a, _, _, _, j) in zip(places, places[1:], strict=False):
+        if b > a:
             bad.update((i, j))
     if bad:
         return bad
+    nl = writes.newline_of(raw)
     out: list[str] = []
     made: list[dict[str, Any]] = []
     spans: list[tuple[int, int]] = []
     last = shift = 0
-    for at, m, gen, _ in places:
-        out += [raw[last:at], m.old]
-        made.append({"edit": gen, "at": at + shift, "old": m.new, "new": m.old})
-        spans.append((at + shift, at + shift + len(m.old)))
-        shift += len(m.old) - len(m.new)
-        last = at + len(m.new)
+    for a, b, m, gen, _ in places:
+        # the words it replaced, in the file's own line ending when that changed since the Keep
+        old = (
+            m.old
+            if nl == writes.newline_of(m.was)
+            else m.old.replace("\r\n", "\n").replace("\r", "\n").replace("\n", nl)
+        )
+        out += [raw[last:a], old]
+        made.append({"edit": gen, "at": a + shift, "old": raw[a:b], "new": old})
+        spans.append((a + shift, a + shift + len(old)))
+        shift += len(old) - (b - a)
+        last = b
     out.append(raw[last:])
     text = "".join(out)
     new = text.encode("utf-8")
-    first = places[0][1]
+    first = places[0][2]
     if (
-        {m.act for _, m, _, _ in places} == {first.act}
+        {m.act for _, _, m, _, _ in places} == {first.act}
         and now == first.after
         and set(first.edits) <= {g for *_, g, _ in places}
         and first.before is not None
     ):
         # the file is as that one Keep left it and every edit it wrote here is undone: its bytes before come back whole
         back = writes.fetch(hist, first.before)
-        if back is not None:
+        if back is not None and back.decode("utf-8", "replace") == text:
             new = back
     return new, made, [(writes.reading_offset(text, a), writes.reading_offset(text, b)) for a, b in spans]
 
 
 def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, writer: tuple[str, str]) -> None:
-    """Stage in the act `w`, which writes `after` whole over `before` in `path` (a restore or a put-back), the records of the suggested edits whose words that moves, by what the journal says loom wrote.
+    """Stage in an act the records of the suggested edits whose words it moves in one file, by what the journal says loom wrote.
 
-    A kept edit is opened again (`reopened`, why `restored`) when `after` is the very bytes its Keep replaced, or when the words its Keep wrote stand in `before` as that Keep left them, the words they replaced stand in `after` as they stood before it, and the words it wrote stand nowhere in `after` with their neighbours; an open edit loom wrote in its last generation is recorded kept again (why `restored`) when the reverse holds. Anything else leaves the record as it is, so an edit is left kept with its words gone rather than open with its words in, which a Keep could write a second time. The annotation a Keep resolved follows its edit.
+    For an act that writes a file's text whole or puts words back (a restore, a put-back, a Discard). A kept edit is opened again (`reopened`, `why: "restored"`) when `after` is the very bytes its Keep replaced, or when its Keep's words stand at their place in `before` (`writes.place_in`), the words they replaced stand at their place in `after`, and its words stand nowhere in `after` at all. An edit open again is recorded kept (`kept`, `why: "restored"`) when `after` is the very bytes its last Keep wrote, or when that Keep's words stand at their place in `after` and did not in `before`. Anything else leaves the record as it is: an edit is left kept with its words gone rather than open with its words in the file, which a Keep could write a second time. The annotation a Keep resolved follows its edit.
+
+    Parameters
+    ----------
+    w : Act
+        The act, under the door's lock; its journal is read as recovery left it.
+    path : str
+        The file the act writes.
+    before, after : bytes or None
+        The file's bytes before and after the act; None for a file absent.
+    writer : (str, str)
+        Who acts, for the records.
+
+    See Also
+    --------
+    unkeep : the undo of a Keep, which updates its own edit's record.
     """
     from loom import writes
     from loom.paths import EDIT_LOG
-    from loom.records.edits import answered_event, generation, kept_event, reopened_event, replay, unanswered_event
+    from loom.records.edits import answered_event, kept_event, reopened_event, replay, unanswered_event
     from loom.records.log import log_path as annotation_log
 
     try:
@@ -893,15 +945,10 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
     except UnicodeDecodeError:
         return
     root, hist = w.root, w.history
+    flat = " ".join(now.split())
     for e in replay(root)[0]:
-        g = generation(e)
-        if e.status == "kept":
-            gen, out_of, into = f"{e.id}:{g}", was, now
-        elif e.status == "open" and g > 0:
-            gen, out_of, into = f"{e.id}:{g - 1}", now, was
-        else:
-            continue
-        at = w.journal.wrote.get(gen)
+        gen = keep_of(w.journal.wrote, e)
+        at = w.journal.wrote.get(gen) if gen else None
         entry = writes.entry_at(root, at) if at is not None else None
         # only a Keep that wrote this file, so a restore of many files reads the store for the edits each holds
         if entry is None or path not in (entry.get("splices") or {}) or writes.untrusted(root, hist, entry):
@@ -909,26 +956,30 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
         made = [m for m in writes.splices_of(hist, entry, gen) or [] if m.rel == path]
         if not made:
             continue
-        # the very bytes on the other side of that Keep, or its words moved at their place and nowhere else
-        exact = writes.digest(after) == (made[0].before if e.status == "kept" else made[0].after)
-        if not exact and not all(
-            writes.stands_once(out_of, m.done) is not None
-            and writes.stands_once(into, m.undone) is not None
-            and m.done not in into
-            for m in made
-        ):
-            continue
         if e.status == "kept":
-            w.log(root / EDIT_LOG, reopened_event(e, writer, "restored"))
-            line = unanswered_event(root, e, writer)
-        else:
-            kept = next((a for a in reversed(e.acts) if a.get("event") == "kept"), {})
-            event = kept_event(e, writer, str(kept.get("hash") or ""))
-            event["why"] = "restored"
-            w.log(root / EDIT_LOG, event)
-            line = answered_event(root, e, writer)
-        if line is not None:
-            w.log(annotation_log(root), line)
+            out = writes.digest(after) == made[0].before or all(
+                writes.place_in(m, was) is not None
+                and writes.place_in(m, now, side="before") is not None
+                and (not m.new.strip() or " ".join(m.new.split()) not in flat)
+                for m in made
+            )
+            if out:
+                w.log(root / EDIT_LOG, reopened_event(e, writer, "restored"))
+                line = unanswered_event(root, e, writer)
+                if line is not None:
+                    w.log(annotation_log(root), line)
+        elif e.status == "open":
+            back = writes.digest(after) == made[0].after or all(
+                writes.place_in(m, now) is not None and writes.place_in(m, was) is None for m in made
+            )
+            if back:
+                kept = next((a for a in reversed(e.acts) if a.get("event") == "kept"), {})
+                event = kept_event(e, writer, str(kept.get("hash") or ""))
+                event["why"] = "restored"
+                w.log(root / EDIT_LOG, event)
+                line = answered_event(root, e, writer)
+                if line is not None:
+                    w.log(annotation_log(root), line)
 
 
 def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> None:
@@ -1068,6 +1119,8 @@ def _discard_in(
     for _cid, (o0, o1), (n0, n1) in mine:
         text = text[:n0] + old[o0:o1] + text[n1:]
     data = None if not text and not looked else text.encode("utf-8")
+    # words it puts back may be a suggested edit's: its record follows them
+    follow_words(w, path, w.before.get(path), data, writer)
     w.replace(path, data)
     entry: dict[str, Any] = {
         "who": who,

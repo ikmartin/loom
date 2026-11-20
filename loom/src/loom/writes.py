@@ -156,43 +156,56 @@ def reading_offset(raw: str, at: int) -> int:
     return at - raw.count("\r\n", 0, at)
 
 
-# ---- what an act wrote, found again -------------------------------------------------------------------------------
+# ---- what an act wrote, found again at its place ------------------------------------------------------------------
 
-#: How many characters either side of an edit's words, as an act left them, find those words again.
+#: How many characters either side of an edit's words must stand unchanged at the place an act wrote them, for loom to say the words are still there.
 BESIDE = 32
+#: The most characters of changed lines, in either text, that `place_in` diffs by character; past it the place is not established.
+WINDOW = 8000
 
 
 @dataclass(frozen=True)
 class Written:
-    """One splice the act `act` made in `rel`, for the suggested edit `edit` (`<id>:<generation>`): the words it put in (`new`) at `at` of the act's after text, the words they replaced (`old`), and up to `BESIDE` characters either side as they stood after the act (`left`, `right`) and before it (`was_left`, `was_right`). `before` and `after` are the digests of the file's bytes either side of the act, and `edits` every edit it spliced into the file."""
+    """One splice the act `act` made in `rel`, for the suggested edit `edit` (`<id>:<generation>`), with the texts either side of the act.
+
+    `new` stands at `at` of the act's after text (`now`), and replaced `old`, which stood at `back` of its before text (`was`). `before` and `after` are those texts' digests, and `edits` every edit the act spliced into the file. `splices_of` makes one only when the stored texts bear the splice out.
+    """
 
     act: str
     rel: str
     edit: str
     at: int
+    back: int
     old: str
     new: str
-    left: str
-    right: str
-    was_left: str
-    was_right: str
     before: str | None
     after: str
     edits: tuple[str, ...]
-
-    @property
-    def done(self) -> str:
-        """The words the act put in, with their neighbours as it left them."""
-        return self.left + self.new + self.right
-
-    @property
-    def undone(self) -> str:
-        """The words the act replaced, with their neighbours as they were before it."""
-        return self.was_left + self.old + self.was_right
+    was: str = field(repr=False, compare=False)
+    now: str = field(repr=False, compare=False)
 
 
 def splices_of(history: Path, entry: dict[str, Any], edit: str | None = None) -> list[Written] | None:
-    """Each splice the journal's `begin` line `entry` made, for the edit `edit` or for every edit, as `Written`; None when a text it needs is missing from the store, is not UTF-8, or the line does not read as a splice."""
+    """The splices the journal's `begin` line `entry` made, as the stored texts bear them out.
+
+    Parameters
+    ----------
+    history : Path
+        The history directory, whose `texts/` holds the act's before and after texts.
+    entry : dict
+        The act's `begin` line, as `entry_at` reads it.
+    edit : str, optional
+        Only the splices made for this `<id>:<generation>`; default every one.
+
+    Returns
+    -------
+    list of Written or None
+        One per splice. None when a text is missing from the store or is not UTF-8, or the line does not read as splices, or the splices do not explain the act: each `new` must stand at its `at` in the after text, each `old` at its place in the before text, and the before text must be the after text with every splice of the file reversed.
+
+    See Also
+    --------
+    place_in : where a splice's words stand in a file now.
+    """
     out: list[Written] = []
     files = entry.get("files") or {}
     try:
@@ -208,55 +221,99 @@ def splices_of(history: Path, entry: dict[str, Any], edit: str | None = None) ->
             if before is None or after is None:
                 return None
             was, now = before.decode("utf-8"), after.decode("utf-8")
-            every = tuple(str(o.get("edit") or "") for o in made)
-            # each splice in the text after the act, and in the text before it: each splice ahead of one moved it
-            spans: list[tuple[int, int, int, int]] = []
+            spans = []
             for o in made:
-                at = int(o["at"])
+                at, old, new = int(o["at"]), str(o["old"]), str(o["new"])
                 back = at - sum(len(str(x["new"])) - len(str(x["old"])) for x in made if int(x["at"]) < at)
-                spans.append((at, at + len(str(o["new"])), back, back + len(str(o["old"]))))
-            for m in mine:
-                at, old, new = int(m["at"]), str(m["old"]), str(m["new"])
-                a0, a1, b0, b1 = spans[made.index(m)]
-                # its neighbours are the words beside it up to `BESIDE`, never the act's own words beside it
-                lo = max([x[1] for x in spans if x[1] <= a0], default=0)
-                hi = min([x[0] for x in spans if x[0] >= a1 and x != spans[made.index(m)]], default=len(now))
-                was_lo = max([x[3] for x in spans if x[3] <= b0], default=0)
-                was_hi = min([x[2] for x in spans if x[2] >= b1 and x != spans[made.index(m)]], default=len(was))
-                out.append(
-                    Written(
-                        act=str(entry.get("act") or ""),
-                        rel=str(rel),
-                        edit=str(m.get("edit") or ""),
-                        at=at,
-                        old=old,
-                        new=new,
-                        left=now[max(lo, a0 - BESIDE) : a0],
-                        right=now[a1 : min(hi, a1 + BESIDE)],
-                        was_left=was[max(was_lo, b0 - BESIDE) : b0],
-                        was_right=was[b1 : min(was_hi, b1 + BESIDE)],
-                        before=ab[0],
-                        after=ab[1],
-                        edits=every,
-                    )
-                )
+                if now[at : at + len(new)] != new or was[back : back + len(old)] != old:
+                    return None
+                spans.append((at, back, old, new, str(o.get("edit") or "")))
+            # the after text with every splice reversed is the before text, or the record is not this act's
+            undone, last = [], 0
+            for at, _, old, new, _ in sorted(spans):
+                undone += [now[last:at], old]
+                last = at + len(new)
+            if "".join([*undone, now[last:]]) != was:
+                return None
+            every = tuple(s[4] for s in spans)
+            out += [
+                Written(str(entry.get("act") or ""), str(rel), gen, at, back, old, new, ab[0], ab[1], every, was, now)
+                for at, back, old, new, gen in spans
+                if edit is None or gen == edit
+            ]
     except (AttributeError, KeyError, TypeError, ValueError, UnicodeDecodeError):
         return None
     return out
 
 
-def stands_once(text: str, needle: str) -> int | None:
-    """Where `needle` starts in `text` when it stands there exactly once; None when nowhere or more than once."""
-    i = text.find(needle)
-    if i < 0 or text.find(needle, i + 1) >= 0:
+def _lf(text: str) -> str:
+    return text.replace("\r\n", "\n").replace("\r", "\n")
+
+
+def _starts(lines: list[str]) -> list[int]:
+    out = [0]
+    for line in lines:
+        out.append(out[-1] + len(line))
+    return out
+
+
+def _shift(a: str, b: str, lo: int, hi: int) -> int | None:
+    """How far `a[lo:hi]` moved to stand unchanged in `b` at its own place, by a diff of `a` against `b`; None when the diff does not carry it over whole.
+
+    Lines first; where the region touches changed lines, those lines alone are diffed again by character (at most `WINDOW` of them), and the region must lie inside one stretch the diff finds equal. Nothing is searched for: a run of equal words elsewhere is never the place.
+    """
+    from bisect import bisect_right
+    from difflib import SequenceMatcher
+
+    if hi <= lo:
         return None
-    return i
+    al, bl = a.splitlines(keepends=True), b.splitlines(keepends=True)
+    ast, bst = _starts(al), _starts(bl)
+    ops = SequenceMatcher(None, al, bl, autojunk=False).get_opcodes()
+    first, last = bisect_right(ast, lo) - 1, bisect_right(ast, hi - 1) - 1
+    held = [k for k, op in enumerate(ops) if op[1] < op[2] and op[1] <= last and first < op[2]]
+    if not held:
+        return None
+    k1, k2 = held[0], held[-1]
+    if k1 == k2 and ops[k1][0] == "equal":
+        return bst[ops[k1][3]] - ast[ops[k1][1]]
+    a0, a1 = ast[ops[k1][1]], ast[ops[k2][2]]
+    b0, b1 = bst[ops[k1][3]], bst[ops[k2][4]]
+    if a1 - a0 > WINDOW or b1 - b0 > WINDOW:
+        return None
+    for tag, i1, i2, j1, _j2 in SequenceMatcher(None, a[a0:a1], b[b0:b1], autojunk=False).get_opcodes():
+        if tag == "equal" and a0 + i1 <= lo and hi <= a0 + i2:
+            return (b0 + j1) - (a0 + i1)
+    return None
 
 
-def where_now(text: str, w: Written) -> int | None:
-    """Where `w`'s words stand in `text`, found with their neighbours as the act left them, and only where those stand exactly once."""
-    i = stands_once(text, w.done)
-    return None if i is None else i + len(w.left)
+def place_in(w: Written, text: str, *, side: str = "after") -> tuple[int, int] | None:
+    """Where `w`'s words stand in `text` at the place its act wrote them, established exactly.
+
+    Parameters
+    ----------
+    w : Written
+        The splice, as `splices_of` gives it.
+    text : str
+        A file's text with its own line endings: the file now, or a text an act would write.
+    side : {'after', 'before'}, default 'after'
+        Which words: those the act put in, at their place in its after text, or those they replaced, at their place in its before text.
+
+    Returns
+    -------
+    (int, int) or None
+        The words' span in `text`. When `text` is that act's text, where the act put them; else carried over by a diff of that text against `text`, the words and `BESIDE` characters either side unchanged at their place, line endings aside. None when the place is not established that way: the words or a neighbour changed, or the diff does not carry them over whole.
+    """
+    src, at, words = (w.now, w.at, w.new) if side == "after" else (w.was, w.back, w.old)
+    if text == src:
+        return at, at + len(words)
+    a, b = _lf(src), _lf(text)
+    p0, p1 = reading_offset(src, at), reading_offset(src, at + len(words))
+    d = _shift(a, b, max(0, p0 - BESIDE), min(len(a), p1 + BESIDE))
+    if d is None:
+        return None
+    raw = raw_offsets(text)
+    return raw[p0 + d], raw[p1 + d]
 
 
 # ---- paths ----------------------------------------------------------------------------------------------------------
