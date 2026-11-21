@@ -52,6 +52,13 @@ def test_a_stub_ends_with_the_line_feed_of_its_second_fence() -> None:
     assert stub.empty
 
 
+def test_a_body_of_whitespace_alone_is_empty_and_written_as_nothing() -> None:
+    data = file('schema = 1\nid = "tq-00B7"\ntaxon = "lemma"\nsource = "tq-00B1-ref"\n', "  \n\n")
+    node = read_node(data, "tq-00B7.node")
+    assert node.empty
+    assert node_bytes(node).endswith(b"+++\n")
+
+
 @pytest.mark.parametrize(
     ("title", "written"),
     [

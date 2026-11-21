@@ -1,0 +1,114 @@
+"""Writing and removing a node (`library.store`): a write is checked against itself and the library as it stands and refused whole, lands by a rename under the library's lock, and touches nothing but the node's file, the lock and the index."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+import pytest
+
+from loom.library.checks import check
+from loom.library.index import NodeIndex
+from loom.library.node import Node, node_bytes, node_hash, read_node
+from loom.library.store import NodeRefused, node_ids, read, remove_node, write_node
+from loom.paths import LIBRARY_NODES
+from tests.unit.library._examples import fixtures
+from tests.unit.library._store import quilt
+
+
+def snapshot(root: Path) -> dict[str, bytes]:
+    return {p.relative_to(root).as_posix(): p.read_bytes() for p in (root / LIBRARY_NODES).iterdir()}
+
+
+def test_the_nine_files_are_written_one_at_a_time_as_the_store_grows(tmp_path: Path) -> None:
+    """Each write is checked against what is already there, so a work comes before its results and a statement before its proof; the files are the spec's."""
+    root = tmp_path / "q"
+    order = [
+        "tq-00A1-ref",
+        "tq-00A1-macros",
+        "tq-00B1-ref",
+        "tq-00B7",
+        "tq-00A4",
+        "tq-00K3",
+        "tq-00K3-proof00",
+        "tq-00K5",
+        "tq-00K5-proof00",
+    ]
+    for node_id in order:
+        name = f"{node_id}.node"
+        assert write_node(root, read_node(fixtures()[name], name)) == node_hash(fixtures()[name])
+    assert {p.name: p.read_bytes() for p in (root / LIBRARY_NODES).iterdir()} == fixtures()
+    assert node_ids(root) == sorted(order)
+    assert check(root) == []
+
+
+def test_a_write_out_of_order_is_refused(tmp_path: Path) -> None:
+    root = tmp_path / "q"
+    with pytest.raises(NodeRefused) as caught:
+        write_node(root, read_node(fixtures()["tq-00K3.node"], "tq-00K3.node"))
+    assert {d.code for d in caught.value.diagnostics} == {"loom:node-parent", "loom:node-edge"}
+    assert not (root / LIBRARY_NODES / "tq-00K3.node").exists()
+
+
+@pytest.mark.parametrize(
+    ("node", "code"),
+    [
+        (Node(id="tq-00K6", taxon="Lemma", source="tq-00A1-ref", body="x\n"), "loom:node-taxon"),
+        (Node(id="tq-00K6", taxon="lemma", source="tq-00A1-ref", uses=("tq-00Z9",), body="x\n"), "loom:node-edge"),
+        (Node(id="tq-00K6", taxon="lemma", source="tq-00A1-ref", body="By \\ref{tq-00K5}.\n"), "loom:node-body-ref"),
+        (Node(id="tq-00K6", taxon="lemma", body=""), "loom:node-incomplete"),
+        (Node(id="tq-00C1-ref", taxon="reference", body="@article{smi24, title={x}}\n"), "loom:node-bibtex"),
+        (Node(id="tq-00K3-proof01", taxon="proof", source="tq-00A1-ref", title="Proof", body="x\n"), "loom:node-key"),
+        (Node(id="TQ-00K3", taxon="lemma", source="tq-00A1-ref", body="x\n"), "loom:node-id"),
+    ],
+)
+def test_a_write_that_would_fail_a_check_is_refused_and_writes_nothing(tmp_path: Path, node: Node, code: str) -> None:
+    root = quilt(tmp_path)
+    before = snapshot(root)
+    with pytest.raises(NodeRefused) as caught:
+        write_node(root, node)
+    assert code in {d.code for d in caught.value.diagnostics}
+    assert snapshot(root) == before
+
+
+def test_filling_a_stub_is_a_write_over_its_file(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    stub = read(root, "tq-00B7")
+    assert stub is not None and stub.empty
+    filled = Node(**{**stub.__dict__, "body": "Every bounded set is covered by finitely many balls.\n"})
+    digest = write_node(root, filled)
+    assert read(root, "tq-00B7") == filled
+    assert digest == node_hash(node_bytes(filled)) != node_hash(fixtures()["tq-00B7.node"])
+    with NodeIndex.open(root) as index:
+        assert [h.row.id for h in index.search("finitely many balls")] == ["tq-00B7"]
+        assert index.stubs() == []
+
+
+def test_a_write_refused_for_what_it_breaks_elsewhere_is_not_refused(tmp_path: Path) -> None:
+    """Rewriting the lemma without the anchor a proof points at is the lemma's own text; the proof's failure is said when the store is checked."""
+    root = quilt(tmp_path)
+    lemma = read(root, "tq-00K3")
+    assert lemma is not None
+    write_node(root, Node(**{**lemma.__dict__, "body": "Let $W$ be a widget (Definition~\\ref{tq-00A4}).\n"}))
+    assert [(d.keys[0], d.code) for d in check(root)] == [("tq-00K5-proof00", "loom:node-body-ref")]
+
+
+def test_removing_a_node_leaves_what_used_it_to_say_so(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    assert remove_node(root, "tq-00A4") is True
+    assert remove_node(root, "tq-00A4") is False
+    assert read(root, "tq-00A4") is None
+    assert {d.keys[0] for d in check(root)} == {"tq-00K3", "tq-00K3-proof00", "tq-00K5"}
+    with NodeIndex.open(root) as index:
+        assert index.node("tq-00A4") is None
+        assert index.uses("tq-00K3") == []
+
+
+def test_a_write_touches_the_node_the_lock_and_the_index_alone(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    write_node(root, Node(id="tq-00K6", taxon="remark", source="tq-00A1-ref", pages="14", body="A remark.\n"))
+    made = sorted(p.relative_to(root).as_posix() for p in root.rglob("*") if p.is_file())
+    assert [m for m in made if not m.startswith(LIBRARY_NODES + "/")] == [
+        ".loom/cache/library/nodes.sqlite3",
+        ".loom/local/library.lock",
+    ]
+    assert not [m for m in made if m.endswith(".tmp")]

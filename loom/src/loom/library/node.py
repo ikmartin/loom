@@ -305,7 +305,7 @@ def _type_problem(typ: str, value: Any) -> str | None:
 
 
 def node_bytes(node: Node) -> bytes:
-    """The file loom writes for `node`: §2's keys in their order, one `key = value` a line, and the body exactly.
+    """The file loom writes for `node`: §2's keys in their order, one `key = value` a line, and the body exactly, or nothing when it holds only whitespace.
 
     A string is a basic string, except one with a backslash that a literal string can hold, which is written `'…'` so that LaTeX reads as LaTeX. A list is written on one line.
 
@@ -323,7 +323,7 @@ def node_bytes(node: Node) -> bytes:
     for key, value in node.header().items():
         lines.append(f"{key} = {_toml(value)}")
     lines.append(FENCE)
-    return ("\n".join(lines) + "\n" + node.body).encode("utf-8")
+    return ("\n".join(lines) + "\n" + ("" if node.empty else node.body)).encode("utf-8")
 
 
 def _toml(value: Any) -> str:
