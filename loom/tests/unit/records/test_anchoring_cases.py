@@ -877,4 +877,6 @@ def test_every_note_on_no_block_is_given_the_document_that_read_its_file_when_it
     manifest: dict = {"nodes": {}, "keys": {}, "diagnostics": []}  # type: ignore[type-arg]
     Records(out).apply(scanned(out), manifest)
     assert {u["id"]: u["document"] for u in manifest["unplaced"]} == {a: "drafting/talk.tex", b: "drafting/talk.tex"}
-    assert next(u["why"] for u in manifest["unplaced"] if u["id"] == a) == "its block is in a file no document reads now"
+    assert (
+        next(u["why"] for u in manifest["unplaced"] if u["id"] == a) == "its block is in a file no document reads now"
+    )
