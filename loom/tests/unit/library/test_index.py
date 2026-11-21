@@ -333,7 +333,7 @@ def test_the_generation_moves_when_a_node_or_a_tag_changes_and_not_otherwise(tmp
         assert index.refresh().generation == first + 2, "a file that does not read changes no node"
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- the generation, what says a file changed, words written in TeX, keys, and a damaged index -------------------------
 
 
 def _lemmas(root: Path, count: int) -> None:

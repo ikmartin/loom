@@ -166,7 +166,7 @@ def test_a_library_stem_is_drawn_from_everything_loom_id_counts(tmp_path: Path) 
     assert next_stem(scan(load_quilt(q))) == "dm-0051"
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- writes as one act, new nodes, ids, and what reaches the disk ------------------------------------------------------
 
 
 def _pair() -> list[Node]:

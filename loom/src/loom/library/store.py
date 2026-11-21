@@ -8,7 +8,6 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import re
 import shutil
 from collections.abc import Iterable
 from pathlib import Path
@@ -21,7 +20,7 @@ from loom.library.index import NodeIndex
 from loom.library.node import SUFFIX, Node, NodeUnreadable, Problem, file_name, node_bytes, node_hash, read_node
 from loom.locks import locked
 from loom.paths import ANNOTATION_LOG, LEDGER, LIBRARY_ACT, LIBRARY_LOCK, LIBRARY_NODES, TAG_LOG
-from loom.scan.alloc import git_mentions, visible_locals
+from loom.scan.alloc import git_escape, git_mentions, visible_locals
 from loom.scan.model import Diagnostic
 
 if TYPE_CHECKING:
@@ -166,7 +165,7 @@ def next_proof(root: Path, statement: str) -> str:
     for record in (TAG_LOG, ANNOTATION_LOG, LEDGER):
         with contextlib.suppress(FileNotFoundError):
             seen.append((root / record).read_text(encoding="utf-8", errors="replace"))
-    seen.append(git_mentions(root, rf"{re.escape(statement)}-proof[0-9A-Z]{{2}}"))
+    seen.append(git_mentions(root, rf"{git_escape(statement)}-proof[0-9A-Z]{{2}}"))
     return ids.mint_proof(statement, seen)
 
 

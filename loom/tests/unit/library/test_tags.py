@@ -139,7 +139,7 @@ def test_a_line_that_is_not_a_tag_is_skipped_and_said(tmp_path: Path) -> None:
     assert {d.class_ for d in said} == {"internal"}
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- one tag however it is composed, separators, ids, and a line cut short ---------------------------------------------
 
 
 def test_a_tag_composed_or_decomposed_is_one_tag(tmp_path: Path) -> None:

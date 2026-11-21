@@ -34,7 +34,7 @@ def visible_locals(result: ScanResult, prefix: str) -> set[str]:
             found.update(pat.findall(log.read_text(encoding="utf-8", errors="replace")))
     with contextlib.suppress(FileNotFoundError, NotADirectoryError):
         found.update(pat.findall(" ".join(os.listdir(root / LIBRARY_NODES))))
-    found.update(pat.findall(git_mentions(root, rf"{re.escape(prefix)}-[0-9A-Z]{{4}}")))
+    found.update(pat.findall(git_mentions(root, rf"{git_escape(prefix)}-[0-9A-Z]{{4}}")))
     return {x for x in found if LOOMLOCAL.match(x)}
 
 
@@ -69,3 +69,8 @@ def git_mentions(root: Path, pattern: str) -> str:
         return out.stdout
     except (OSError, subprocess.SubprocessError):
         return ""
+
+
+def git_escape(text: str) -> str:
+    """`text` as a literal in `git grep -E`'s pattern: each character special to an extended pattern escaped, and nothing else, since POSIX leaves an escaped ordinary character (`re.escape`'s `\\-`) undefined."""
+    return re.sub(r"[.^$*+?()\[\]{}|\\]", lambda m: "\\" + m.group(0), text)

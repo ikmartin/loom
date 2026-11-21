@@ -375,7 +375,7 @@ def test_a_quilt_s_store_is_its_node_files_and_nothing_else(tmp_path: Path) -> N
     assert ("tq-00K3", "loom:node-unreadable") in [(d.keys[0], d.code) for d in check(tmp_path)]
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- the commands check 8 reads, line endings, an entry's key and abbreviations, and real preambles --------------------
 
 
 @pytest.mark.parametrize("command", ["\\thmref{def:a}", "\\Citeyear{Jon19}", "\\secrefs{x}"])

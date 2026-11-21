@@ -118,7 +118,7 @@ def test_what_a_macros_body_should_not_hold_is_an_item_of_its_own() -> None:
     assert len(items) == 4
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- the commands a body points with, read or refused, and what it does not read ---------------------------------------
 
 
 def test_cleveref_s_varioref_s_and_hyperref_s_commands_are_read() -> None:
