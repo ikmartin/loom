@@ -316,10 +316,7 @@ def comparison(result: ScanResult, copy: str) -> dict[str, Any]:
         "merged_document": merged,
         "baseline": baseline,
     }
-    # Pin the comparison's own inputs, so a save to an unrelated file keeps a saved choice and the preview: the copy and
-    # its baseline (in `comparison`), the target document's files and preamble, the one config key allocation reads,
-    # the history's entries for this copy, and the context's inputs. Taking it in decides again under the lock, so an
-    # id taken or a dependency changed elsewhere since is still refused there (`_incorporate`).
+    # Pin the comparison's own inputs, so a save to an unrelated file keeps a saved choice and the preview: the copy and its baseline (in `comparison`), the target document's files and preamble, the one config key allocation reads, the history's entries for this copy, and the context's inputs. Taking it in decides again under the lock, so an id taken or a dependency changed elsewhere since is still refused there (`_incorporate`).
     from loom.history.steps import document_files
 
     data["fingerprint"] = _digest(

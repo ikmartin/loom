@@ -1052,6 +1052,21 @@ KINDS = {
     "put-back": "a put-back",
     "tick": "a tick",
     "settings": "a save of Settings",
+    "adopt": "a taking in of an agent's copy",
+    "pull": "a pull",
+    "mv": "a move",
+    "atomize": "an atomize",
+    "linearize": "a flat copy",
+    "import": "an import",
+    "restore-to": "a version restored to a file",
+    "fork": "a fork",
+    "new": "a new node",
+    "page": "a page written",
+    "pdf-save": "a saved PDF",
+    "patch": "a patch written",
+    "id": "a copy with ids",
+    "deloom": "a copy without loom",
+    "agents": "the agent layer's files",
 }
 
 
@@ -1383,7 +1398,7 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
     history : Path
         The quilt's history directory (`[quilt] history`): the text store is there; the lock and the journal are in `.loom/local/`.
     kind : str
-        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`, `adopt`, `pull`.
+        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`, `adopt`, `pull`, `mv`, `atomize`, `linearize`, `import`, `restore-to`, `fork`, `new`, `page`, `pdf-save`, `patch`, `id`, `deloom`, `agents` (`KINDS` names each as a person does).
     actor : str, optional
         Who asked for it, for the journal.
 
