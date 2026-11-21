@@ -66,8 +66,8 @@ def _change_keep(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
 
     s, q, _sid = on_demo(serve, tmp_path)
     save_author(WHO)
-    # before a first look, keeping all takes one
-    assert succeeds(s, "change-keep", {"all": True})["result"] == "took your first look"
+    # before a first look, keeping all takes one, then keeps what waits: the demo's suggested edit
+    assert succeeds(s, "change-keep", {"all": True})["result"].startswith("took your first look; kept 1 change")
     lemma = q / "drafting" / "nodes" / "dm-0002.tex"
     lemma.write_text(lemma.read_text().replace("Every orbit", "Each orbit"))
     edit = filed(q, "--quote", "one or two points", "--with", "at most two points")

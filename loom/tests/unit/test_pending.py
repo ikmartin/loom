@@ -17,11 +17,12 @@ WHO = "Tester"
 
 @pytest.fixture
 def q(tmp_path: Path) -> Path:
-    from loom.scan.quilt import save_author
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt, save_author
 
     save_author(WHO)
     root = demo(tmp_path)
-    ok("changes", "--keep-all", cwd=root)
+    take(load_quilt(root), WHO)  # the first look, the demo's suggested edit left open
     return root
 
 

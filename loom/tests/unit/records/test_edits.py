@@ -505,7 +505,9 @@ def test_keep_all_with_no_look_takes_the_first_and_keeps_the_suggested_edits(tmp
     q = demo(tmp_path)
     a = suggest(q, "--quote", "one or two points", "--with", "at most two points")
     said = handle(q, "change-keep", {"all": True, "author": "Tom"})
-    assert a in said["done"] and said["result"].startswith("took your first look; kept 1 change")
+    assert a in said["done"] and said["result"].startswith(
+        "took your first look; kept 2 changes"
+    )  # the demo's own as well
     assert "at most two points" in (q / LEMMA).read_text()
 
 
