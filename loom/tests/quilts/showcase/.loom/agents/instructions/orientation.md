@@ -18,6 +18,7 @@ The project is a graph. A theorem-like environment or a section becomes a **node
 The source contract, briefly:
 
 - a node is `\begin{ENV}[Title]\label{ID} … \end{ENV}`, or a `\section{Title}\label{ID}`, its `\begin` and `\end` alone on their lines;
+- a statement with no id is keyed by its first label where that label is defined once in the quilt and has no spaces (`thm:main`, `thm:main/proof`), else by its place (`FILE#theorem:3`), which still names it after a label keys it;
 - a proof is `\begin{proof} … \end{proof}` right after its statement, or anywhere as `\begin{proof}[Proof of Theorem~\ref{ID}]`; proofs are keyed `ID/proof`, `ID/proof/2`;
 - `\uses{ID, ID}` names a dependency the text does not; `\incomplete{…}` marks what is not yet proved, and is what you write instead of bluffing;
 - digest nodes carry a cited paper's statements verbatim. Their ids are not the citekey: `loom search CITEKEY --json` gives them.
