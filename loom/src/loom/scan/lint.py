@@ -209,7 +209,7 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
                 Diagnostic(
                     "warning",
                     "loom:write-left",
-                    f"{why[0].upper()}{why[1:]}. No file of yours was touched.",
+                    f"{why[0].upper()}{why[1:]}.",
                     [],
                     owner="person",
                 )

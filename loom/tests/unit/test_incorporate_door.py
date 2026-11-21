@@ -252,6 +252,36 @@ def test_an_adoption_keeps_the_document_s_line_endings(tmp_path: Path) -> None:
     assert b"Proposal." in data and data.count(b"\r\n") == data.count(b"\n")
 
 
+def test_an_adoption_keeps_each_untouched_line_s_own_ending_in_a_mixed_file(tmp_path: Path) -> None:
+    """A mostly-LF file with two CRLF lines away from the change: every byte but the change's is as it was (D-5)."""
+    lines = TEXT.split("\n")
+    crlf = [i for i, line in enumerate(lines[:-1]) if line and "First statement." not in line][:2]
+    mixed = "".join(line + ("\r\n" if i in crlf else "\n") for i, line in enumerate(lines[:-1])) + lines[-1]
+    q, token = ready(tmp_path, mixed)
+    incorporate(scan(q), COPY, token)
+    assert (q.root / DOC).read_bytes() == mixed.replace("First statement.", "Proposal.").encode("utf-8")
+
+
+def test_an_adoption_over_a_file_deleted_since_its_scan_is_refused_and_brings_nothing_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The document deleted after the scan under the lock and before the act reads it: refused, not written again (D-14)."""
+    q, token = ready(tmp_path)
+    real = writes.Act.text
+    gone: list[bool] = []
+
+    def text(self: writes.Act, rel: str) -> str | None:
+        if rel == DOC and not gone:
+            gone.append(True)
+            (q.root / DOC).unlink()
+        return real(self, rel)
+
+    monkeypatch.setattr(writes.Act, "text", text)
+    with pytest.raises(SyncError, match="changed since loom read it"):
+        incorporate(scan(q), COPY, token)
+    assert not (q.root / DOC).exists()
+
+
 def test_an_adoption_into_a_document_that_is_not_utf8_is_refused(tmp_path: Path) -> None:
     """Loom has no reading of a Latin-1 file in which to write a merge, so the act refuses it whole (`not-utf8`) and writes nothing, as Keep does."""
     q, token = ready(tmp_path, TEXT.replace("Original introduction.", "Introduction r\u00e9sum\u00e9."))

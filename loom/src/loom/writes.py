@@ -5,6 +5,7 @@ An act holds `.loom/local/writes.lock` across processes and threads, settles wha
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
@@ -108,6 +109,29 @@ def newline_of(text: str) -> str:
     lf = text.count("\n") - crlf
     best = max((lf, "\n"), (crlf, "\r\n"), (cr, "\r"), key=lambda c: c[0])
     return best[1] if best[0] else "\n"
+
+
+#: A line and its ending, of any of the three kinds; the last may have none.
+_LINE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)|[^\r\n]+\Z")
+
+
+def with_endings(before: str, merged: str) -> str:
+    """`merged`, a new text of the file in the scan's reading (each line ending `\\n`), given the line endings of `before`, what the file holds: each line `merged` keeps as it was keeps its own ending, and each line it writes takes the file's most common one (`newline_of`). A file of one ending throughout is written with it."""
+    newline = newline_of(before)
+    old = _LINE.findall(before)
+    if len({x[len(x.rstrip("\r\n")) :] for x in old} - {""}) <= 1:
+        return merged if newline == "\n" else merged.replace("\n", newline)
+    new = _LINE.findall(merged)
+    out: list[str] = []
+    matcher = difflib.SequenceMatcher(
+        None, [x.rstrip("\r\n") for x in old], [x.rstrip("\n") for x in new], autojunk=False
+    )
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag == "equal":
+            out += [o if n.endswith("\n") else o.rstrip("\r\n") for o, n in zip(old[i1:i2], new[j1:j2], strict=True)]
+        else:
+            out += [x[:-1] + newline if x.endswith("\n") else x for x in new[j1:j2]]
+    return "".join(out)
 
 
 def raw_offsets(raw: str) -> list[int]:
@@ -1013,17 +1037,31 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, bool]]:
         if v.how != "left":
             continue
         if not v.trusted:
-            out.append(
-                (
-                    "a write",
-                    [],
-                    "the journal holds a record of a write that loom cannot trust, perhaps one that came with a copied folder, so loom changed nothing for it",
-                    False,
-                )
+            linked = _links_out(root, e.get("files"))
+            why = (
+                f"the journal records {KINDS.get(str(e.get('kind')), 'a write')} on {_named(linked)}, a link to a file outside the quilt, which loom does not write through on its own, so recovery changed nothing; the act may have written that file before it was cut short"
+                if linked
+                else "the journal holds a record of a write that loom cannot trust, perhaps one that came with a copied folder, so loom changed nothing for it"
             )
+            out.append(("a write", [], why, False))
         else:
             out.append((KINDS.get(str(e.get("kind")), "a write"), sorted(v.holds), v.why, v.kept))
     return out
+
+
+def _links_out(root: Path, files: Any) -> list[str]:
+    """Of a journal line's files, those that are paths of the quilt by name and lead out of it through a link: what an act cut short may have written outside, which a person must be told of by name."""
+    if not isinstance(files, dict):
+        return []
+    out = []
+    for rel in files:
+        try:
+            named = isinstance(rel, str) and contained(root, rel) == rel
+        except WriteRefused:
+            named = False
+        if named and not _in_quilt(root, rel):
+            out.append(rel)
+    return sorted(out)
 
 
 def _named(rels: list[str]) -> str:

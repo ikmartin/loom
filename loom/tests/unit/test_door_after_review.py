@@ -167,3 +167,29 @@ def test_a_folder_that_lets_no_file_be_made_is_refused_by_the_file_s_name(tmp_pa
     finally:
         os.chmod(folder, 0o755)
     assert "drafting/main.tex" in str(refusal.value) and "loom-tmp" not in str(refusal.value)
+
+
+# ---- D-12: an act cut short through a link out of the quilt ----------------------------------------------------
+
+
+def test_an_act_left_on_a_link_out_of_the_quilt_names_the_file_and_claims_nothing_untouched(tmp_path: Path) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = demo(tmp_path)
+    outside = tmp_path / "outside.tex"
+    outside.write_text("the outside file\n")
+    doc = root / "drafting/main.tex"
+    doc.unlink()
+    doc.symlink_to(outside)
+    hist = load_quilt(root).history_dir
+    a, b = writes.store(hist, b"before\n"), writes.store(hist, b"after\n")
+    journal = root / ".loom/local/writes.jsonl"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    line = {"event": "begin", "act": "keep:0123456789abcdef", "kind": "keep", "actor": "Pat", "when": "x"}
+    journal.write_text(json.dumps({**line, "files": {"drafting/main.tex": [a, b]}, "records": []}) + "\n")
+    ((kind, files, why, _kept),) = writes.left(root, hist)
+    assert "drafting/main.tex" in why and "a link to a file outside the quilt" in why
+    said = json.loads(ok("lint", "--json", cwd=root).stdout)["diagnostics"]
+    (left,) = [d for d in said if d["code"] == "loom:write-left"]
+    assert "drafting/main.tex" in left["message"] and "No file of yours was touched" not in left["message"]

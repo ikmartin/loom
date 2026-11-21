@@ -756,7 +756,7 @@ def _incorporate(result: ScanResult, w: Any, copy: str, token: str, saved: dict[
 
     A preview made from another state of the quilt, of the copy or of the selection is refused, as is a file of the document that changed since this scan; the document is written whole with its own line endings, and a file that is not UTF-8 is refused (`not-utf8`), as every act refuses one.
     """
-    from loom.writes import newline_of, scan_reading
+    from loom.writes import scan_reading, with_endings
 
     root = result.quilt.root
     data = comparison(result, copy)
@@ -794,13 +794,13 @@ def _incorporate(result: ScanResult, w: Any, copy: str, token: str, saved: dict[
     )
     for rel, text in saved["overlay"].items():
         before = w.text(rel)
-        if before is not None and (
-            rel not in result.files or scan_reading(before.encode("utf-8")) != result.files[rel].text
+        if (before is None and rel in result.files) or (
+            before is not None
+            and (rel not in result.files or scan_reading(before.encode("utf-8")) != result.files[rel].text)
         ):
             raise SyncError(f"{rel} changed since loom read it; nothing was written, preview again")
-        # the merge is in the scan's reading; the file keeps its own line endings
-        newline = newline_of(before) if before is not None else "\n"
-        w.replace(rel, (text if newline == "\n" else text.replace("\n", newline)).encode("utf-8"))
+        # the merge is in the scan's reading; each line the merge leaves keeps its own ending
+        w.replace(rel, (with_endings(before, text) if before is not None else text).encode("utf-8"))
 
     def finish() -> dict[str, Any]:
         history = _history(result)  # re-read: the landmark's stamp step, staged in the act, is now the latest
