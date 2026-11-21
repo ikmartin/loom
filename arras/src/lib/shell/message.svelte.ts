@@ -48,6 +48,12 @@ class ColumnMessage {
 		if (!this.#held && this.said && !this.undoing) this.#start();
 	}
 
+	/** The message's box went away (the column folded under the pointer, or the view changed): whatever held it lets go, and the message goes after the usual while. */
+	drop(): void {
+		this.#held = 0;
+		if (this.said && !this.undoing && !this.#timer) this.#start();
+	}
+
 	/** Runs the message's undo once; the message stays while it is answered, goes when it is done, and says so when it failed. */
 	async undo(failed: (why: string) => string): Promise<void> {
 		const undo = this.said?.undo;

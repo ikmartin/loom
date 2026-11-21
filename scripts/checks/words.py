@@ -4,12 +4,12 @@
 Usage:
     scripts/checks/words.py [--base REF] [--all] [--file PATH ...]
 
-Every `.svelte` file under `arras/src/` is read, except those on `LEGACY` below: the components that predate the words folder, each taken off the list when its words move. The list only shrinks, and the check holds it so: a path on `LEGACY` that the list at `--base` (default `$WORDS_BASE`, else `$HARDWRAP_BASE`, else HEAD) does not hold fails, a component moved since keeping its place (git's rename or copy), as does a path on it that no longer exists or whose component now holds no words. A base that names no commit fails; a base whose `words.py` holds no list is said in the output, and then nothing is compared. In a component read, once its `<script>`, `<style>` and `<!-- -->` comments are dropped, these are words:
+Every `.svelte` file under `arras/src/` is read, except those on `LEGACY` below: the components that predate the words folder, each taken off the list when its words move. The list only shrinks, and the check holds it so: a path on `LEGACY` that the list at `--base` (default `$WORDS_BASE`, else `$HARDWRAP_BASE`, else HEAD) does not hold fails, a component moved since keeping its place (git's rename, or a copy whose source left the list; a copy made to start a new component leaves its source listed), as does a path on it that no longer exists or whose component now holds no words. A base that names no commit fails; a base whose `words.py` holds no list is said in the output, and then nothing is compared. In a component read, once its `<script>`, `<style>` and `<!-- -->` comments are dropped, these are words:
 
 - text between tags that holds a letter once its HTML entities are decoded; glyphs, digits and punctuation alone (`×`, `›`, `·`, `…`, `2`) are not words;
 - the static part, holding a letter, of a `title`, `aria-label`, `aria-description`, `aria-roledescription`, `aria-valuetext`, `aria-placeholder`, `placeholder`, `alt` or `label` attribute, or of `value` on an `<input>` of type `button`, `submit` or `reset`, quoted or not (`title="Open {name}"` is words; `title={words.x}` and `title="{words.x}"` are not);
 - in an expression in text, in such an attribute's expression, or in `{@html …}`: a string literal, or a template literal's fixed part, that holds a word, a space with a letter or a leading capital (`{ok ? 'Saved.' : 'Saving…'}`, ``title={`Opened ${n} minutes ago`}``), and, at the expression's top level, where it can be the value shown, one that holds any letter (`{busy ? 'undoing' : 'undo'}`); markup in a literal is not words, the text between its tags is;
-- in the expression of an event handler (`onclick={…}`), an action (`use:hovercard={{ text: … }}`) or `data-tip`, and in every block tag (`{@render row(…)}`, `{@const …}`, `{#each [...]}`, `{#if …}`, `{:else if …}`, `{#key …}`, `{#await …}`): a literal that holds a word by the same rule, a space with a letter or a leading capital.
+- in the expression of an event handler (`onclick={…}`), an action (`use:hovercard={{ text: … }}`) or `data-tip`, in an attachment or a spread inside a tag (`{@attach tip("…")}`), and in every block tag (`{@render row(…)}`, `{@const …}`, `{#each [...]}`, `{#if …}`, `{:else if …}`, `{#key …}`, `{#await …}`): a literal that holds a word by the same rule, a space with a letter or a leading capital.
 
 Never words, anywhere: a value tested, the operand of `===`, `!==`, `==` or `!=`, a `case` label, or a key tested with `in` (`e.key === 'Escape'`, `'short' in source`).
 
@@ -386,7 +386,10 @@ def scan_tag(src: str, i: int, found: list[tuple[int, str]]) -> int:
                 return n if end < 0 else end + 1
             return k
         if c == "{":
-            k = close_brace(src, k)
+            # an attachment or a spread in the tag (`{@attach tip("…")}`, `{...props}`): read by the words rule
+            end = close_brace(src, k)
+            found.extend((at, f"{{…{words}…}}") for at, words in spoken(src, k + 1, end - 1))
+            k = end
             continue
         a = k
         while k < n and not (src[k].isspace() or src[k] in "=>" or src.startswith("/>", k)):
@@ -536,13 +539,16 @@ def legacy_at(base: str) -> set[str] | None:
     return None
 
 
-def moved_since(base: str) -> dict[str, str]:
-    """The components git sees as moved since `base`, each old path to its new one, so that one on LEGACY keeps its place when it moves; a move whose old path now holds something new is a copy to git, so copies count, each mapped onto its new path."""
+def moved_since(base: str, legacy: set[str]) -> dict[str, str]:
+    """The components on `LEGACY` at `base` that moved since, each old path to its new one, so that a component keeps its place on the list when it moves.
+
+    A rename moves a path. To git a move whose old path now holds something new is a copy, so a copy counts as a move too, but only where its old path has left the list: a component copied to start a new one leaves its source where it was, on the list, and the copy is read like any new component. One `git diff` answers for every path.
+    """
     shown_ = subprocess.run(["git", "diff", "-C", "-C", "--name-status", base, "--", "arras/src"], cwd=ROOT, capture_output=True, text=True)
     moved: dict[str, str] = {}
     for line in shown_.stdout.splitlines():
         parts = line.split("\t")
-        if len(parts) == 3 and parts[0][:1] in ("R", "C"):
+        if len(parts) == 3 and (parts[0].startswith("R") or (parts[0].startswith("C") and parts[1] not in legacy)):
             moved[parts[1]] = parts[2]
     return moved
 
@@ -575,7 +581,8 @@ def main() -> int:
         return 1
     gone = [] if args.file else [p for p in LEGACY if not (ROOT / p).is_file()]
     before = None if args.file else legacy_at(args.base)
-    added = [] if before is None else sorted(legacy - {moved_since(args.base).get(p, p) for p in before})
+    moved = {} if before is None else moved_since(args.base, legacy)
+    added = [] if before is None else sorted(legacy - {moved.get(p, p) for p in before})
     clean = [] if args.file else [p for p in LEGACY if (ROOT / p).is_file() and not holds_words((ROOT / p).read_text(encoding="utf-8"))]
     read = args.file or [p for p in components if rel(p) not in legacy]
     bad = report(read)

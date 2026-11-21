@@ -27,4 +27,10 @@ jobs:
             base="$(git merge-base HEAD "origin/$DEFAULT_BRANCH")"
           fi
           echo "HARDWRAP_BASE=$base" >> "$GITHUB_ENV"
+          # the words check holds its list of older components to the list its base held; a base before scripts/checks/words.py existed holds none, so it is held to where the branch left library-web, where the list began, while that branch exists
+          words="$base"
+          if ! git cat-file -e "$base:scripts/checks/words.py" 2>/dev/null && git rev-parse --verify --quiet origin/library-web >/dev/null; then
+            words="$(git merge-base HEAD origin/library-web)"
+          fi
+          echo "WORDS_BASE=$words" >> "$GITHUB_ENV"
       - run: scripts/verify full --only docs

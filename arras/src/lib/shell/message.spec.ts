@@ -61,4 +61,12 @@ describe("the column's message", () => {
 		vi.advanceTimersByTime(MESSAGE_FOR);
 		expect(message.said).toBeNull();
 	});
+
+	it('goes by itself once its box is taken away from under the pointer, as when the column folds', () => {
+		message.post('Added a work.');
+		message.hold();
+		message.drop();
+		vi.advanceTimersByTime(MESSAGE_FOR);
+		expect(message.said).toBeNull();
+	});
 });

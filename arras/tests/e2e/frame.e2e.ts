@@ -122,3 +122,31 @@ test("a message dismissed by mouse lets the next go by itself, and one dismissed
 	await expect(said).toHaveCount(0);
 	await expect(page.getByTestId('legend-open')).toBeFocused();
 });
+
+test("an undo by keyboard hands the keyboard to the foot's next control, and a message under the pointer when the column folds lets the next go by itself", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	const row = page.getByTestId('work-row').filter({ hasText: 'Widgets and their bounds' }).first();
+	await row.hover();
+	await row.getByRole('button', { name: 'more' }).click();
+	await page.getByTestId('row-delete').click();
+	const said = page.getByTestId('column-message');
+	await said.getByTestId('column-message-undo').focus();
+	await page.keyboard.press('Enter');
+	await expect(said).toHaveCount(0);
+	await expect(page.getByTestId('legend-open')).toBeFocused();
+	// a message under the pointer, then the column folds beneath it
+	await page.goto('/review?fixture=round6');
+	await page.getByTestId('review-kind-agents').click();
+	const tasks = page.getByTestId('review-task');
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await said.hover();
+	await page.setViewportSize({ width: 1100, height: 900 });
+	await expect(page.getByTestId('column-message-dot')).toBeVisible();
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await page.mouse.move(700, 600);
+	await expect(page.getByTestId('column-message-dot')).toHaveCount(0, { timeout: 9000 });
+});
