@@ -1129,6 +1129,8 @@ class Records:
                 "on_changes": list(res.on_changes),
                 "earlier": dict(a.earlier) if a.earlier else None,
                 "mark": a.mark,
+                # what it is for: `to-digest` on a mark asking for a result to be read, which no list of notes holds; null on a note
+                "purpose": a.purpose,
                 "origin": a.origin,
                 "hides": res.hides,
                 "resolved_why": a.resolved_why,

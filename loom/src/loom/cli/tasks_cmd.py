@@ -38,10 +38,12 @@ def _refused(exc: Exception) -> ContentError:
     return ContentError(str(exc))
 
 
-def _row(found: Any, standing: Any) -> dict[str, Any]:
-    """An ask as a command prints it in JSON: the asking line's fields, and how it stands."""
+def _row(found: Any, standing: Any, marks: dict[str, Any] | None = None) -> dict[str, Any]:
+    """An ask as a command prints it in JSON: the asking line's fields, how it stands, and for a `digest` of marks where each mark stands."""
     a = found
+    places = [_mark_place(marks[m]) for m in a.get("marks", []) if marks and m in marks]
     return {
+        **({"mark_places": places} if places else {}),
         "id": a.id,
         "what": a.what,
         "to": a.to,
@@ -60,6 +62,17 @@ def _row(found: Any, standing: Any) -> dict[str, Any]:
         "working": standing.working,
         "taken_by": [t["by"]["name"] for t in a.took],
         "answers": [{k: v for k, v in x.items() if k in ("by", "at", "choice", "words")} for x in a.answers],
+    }
+
+
+def _mark_place(mark: Any) -> dict[str, Any]:
+    """Where a mark to digest stands, as its annotation records it: the work, the page, the words and the rectangles."""
+    return {
+        "mark": mark.id,
+        "work": mark.target_key,
+        "page": mark.anchor.page if mark.anchor else mark.page,
+        "quote": mark.selector.exact if mark.selector else None,
+        "rects": mark.rects,
     }
 
 
@@ -94,9 +107,11 @@ def tasks(ctx: click.Context, show_all: bool, as_json: bool, quilt_path: str | N
     if ctx.invoked_subcommand is not None:
         return
     from loom.evidence.asks import open_asks
+    from loom.records.annotations import load_records
 
     root = open_quilt(quilt_path).root
     every = open_asks(root, closed=show_all)
+    marks = {a.id: a for rec in load_records(root)[0] for a in rec.annotations if a.purpose == "to-digest"}
     for_agents = [s for s in every if s.ask.to == "agent"]
     of_person = [s for s in every if s.ask.to == "person"]
     groups = [
@@ -107,7 +122,7 @@ def tasks(ctx: click.Context, show_all: bool, as_json: bool, quilt_path: str | N
     Report(
         f"{counted(waiting, 'task waits', 'tasks wait')} for an agent; {counted(sum(1 for s in of_person if s.open), 'ask waits', 'asks wait')} for the person",
         groups=[g for g in groups if g.items],
-        data={"tasks": [_row(s.ask, s) for s in for_agents], "asked": [_row(s.ask, s) for s in of_person]},
+        data={"tasks": [_row(s.ask, s, marks) for s in for_agents], "asked": [_row(s.ask, s) for s in of_person]},
     ).emit(as_json)
 
 

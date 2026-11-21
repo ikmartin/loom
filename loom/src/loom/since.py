@@ -349,6 +349,8 @@ def _annotations(result: ScanResult, name: str, new: Any, out: Since) -> None:
         if not new(when, mark) or e.get("kind") == "agent" or aid not in by_id:
             continue
         a = by_id[aid]
+        if a.purpose is not None:
+            continue  # a mark to digest reaches an agent as a task (`loom tasks`), not as a note
         if kind in ("created", "replied"):
             # what a person wrote and settled in one window is reported once, as it stands
             made.add(aid)
