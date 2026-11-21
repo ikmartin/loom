@@ -93,6 +93,8 @@ SCRATCH = f"{AGENTS}/scratch"
 
 #: The running server's address and pid; the token a write carries is kept outside the quilt (`loom.machine`).
 SERVE_JSON = f"{LOCAL}/serve.json"
+#: A batch of nodes being written, while its files are renamed into place: what it replaces and what it makes, which the next writer rolls back when its writer died midway (`library.store`).
+LIBRARY_ACT = f"{LOCAL}/library-act"
 #: How the server's compiles stand, for `loom status`.
 COMPILES = f"{LOCAL}/compiles.json"
 #: Where each agent last looked, which `loom since` reads.

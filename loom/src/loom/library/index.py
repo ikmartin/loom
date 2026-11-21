@@ -994,8 +994,12 @@ def _stamp(st: os.stat_result) -> tuple[int, int, int, int]:
     return (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
 
 
+#: The name a writer gives a node's file before it renames it into place, `.<id>.node.<pid>.tmp`; nothing else in the folder is a writer's.
+_LEFTOVER = re.compile(r"\.(.+)\.node\.\d+\.tmp")
+
+
 def _scan(folder: Path) -> tuple[dict[str, os.stat_result], list[str]]:
-    """Each node file directly in `folder`, by name, with its `stat`, and the names of writers' temporary files (`.<name>.node.<pid>.tmp`); empty when there is no folder."""
+    """Each node file directly in `folder`, by name, with its `stat`, and the names of writers' temporary files (`_LEFTOVER`, an id of §3 in it); empty when there is no folder."""
     present: dict[str, os.stat_result] = {}
     leftovers: list[str] = []
     with contextlib.suppress(FileNotFoundError, NotADirectoryError):
@@ -1003,7 +1007,7 @@ def _scan(folder: Path) -> tuple[dict[str, os.stat_result], list[str]]:
             for entry in entries:
                 if entry.name.endswith(SUFFIX) and entry.is_file():
                     present[entry.name] = entry.stat()
-                elif entry.name.startswith(".") and entry.name.endswith(".tmp") and SUFFIX + "." in entry.name:
+                elif (m := _LEFTOVER.fullmatch(entry.name)) and ids.parse_id(m.group(1)):
                     leftovers.append(entry.name)
     return present, leftovers
 
