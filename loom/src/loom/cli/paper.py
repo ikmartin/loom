@@ -500,6 +500,12 @@ def import_command(
     if not path.is_file():
         raise NotFoundError("file", f"{file} is not a file")
     done = run_import(quilt, path, yes, check=not no_check, fix_anchors=fix_anchors, dry_run=dry_run, to=to)
+    if not dry_run:
+        from loom.looks import first
+        from loom.scan.quilt import load_quilt
+
+        # the person's first look where they have none, so an agent's edit to what they brought in is listed
+        first(load_quilt(quilt.root))
     groups = list(done.groups)
     if not dry_run:
         document = done.data["document"]

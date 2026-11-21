@@ -331,6 +331,12 @@ def init(
     # said only once the quilt is certain to outlive the command; into a folder of the person's, through the door
     with making(target) if not theirs else nullcontext():
         _, said_ai = setup_ai(target, choice)
+    if not demo:
+        from loom.looks import first as first_look
+        from loom.scan.quilt import load_quilt
+
+        # the person's first look, so an agent's edit before the first `loom serve` is listed
+        first_look(load_quilt(target))
     gitted = git_init and _git_init(target)
     groups = list(imported.groups) if imported else []
     setup = [Item(line) for line in said_ai]

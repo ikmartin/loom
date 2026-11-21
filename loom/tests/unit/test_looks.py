@@ -290,3 +290,18 @@ def test_an_agent_s_act_is_listed_for_the_person_to_keep(person: Path, monkeypat
     ok("new", "lemma", "An agent's lemma", "--as", "Referee Agent", cwd=person)
     monkeypatch.delenv("AI_AGENT")
     assert edits(person)
+
+
+def test_an_agent_s_edit_before_the_first_serve_is_listed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`init` takes the person's first look, so the edit an agent makes before `loom serve` ever runs is not taken in unseen (P-3)."""
+    from loom.render.serve import ServeSession
+    from loom.scan.quilt import load_quilt, save_author
+
+    for marker in AGENT_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    save_author("Tester")
+    q = tmp_path / "fresh"
+    ok("init", str(q), "--prefix", "fr", "--ai", "none", "--yes", cwd=tmp_path)
+    (q / "README.md").write_text("an agent's edit before any serve\n", encoding="utf-8")
+    ServeSession(load_quilt(q), q, port=0, compile_masters=False).first_look()
+    assert edits(q) == ["README.md"]

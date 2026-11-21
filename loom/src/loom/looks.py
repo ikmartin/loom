@@ -125,6 +125,16 @@ def take(quilt: Quilt, who: str) -> Look:
     return look
 
 
+def first(quilt: Quilt) -> Look | None:
+    """The reviewer's first look, taken when they have none (`read_look` carries another's where the quilt holds one): when the person makes a quilt or brings a paper in, and when `loom serve` starts, so an agent's edit before then is listed. None without a reviewer name."""
+    from loom.scan.quilt import reviewer_identity
+
+    who = reviewer_identity(quilt.root)[0]
+    if not who:
+        return None
+    return read_look(quilt.root, who) or take(quilt, who)
+
+
 def _lines(text: str) -> list[str]:
     return text.splitlines(keepends=True)
 
