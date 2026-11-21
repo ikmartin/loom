@@ -12,13 +12,9 @@ import pytest
 from tests.helpers import ok, refused
 from tests.unit._quilts import demo
 
-AGENT_MARKERS = ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI")
-
 
 @pytest.fixture
-def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    for marker in AGENT_MARKERS:
-        monkeypatch.delenv(marker, raising=False)
+def q(tmp_path: Path) -> Path:
     return demo(tmp_path)
 
 
@@ -71,8 +67,6 @@ def test_an_import_writes_its_assets_its_draft_and_its_step_in_one_act(
 ) -> None:
     from tests.unit.test_paper import paper_dir
 
-    for marker in AGENT_MARKERS:
-        monkeypatch.delenv(marker, raising=False)
     p = paper_dir(tmp_path)
     ok(
         "init",
@@ -100,8 +94,6 @@ def test_an_imported_figure_is_journalled_by_its_digest_and_not_kept_in_the_stor
     from loom import writes
     from tests.unit.test_paper import paper_dir
 
-    for marker in AGENT_MARKERS:
-        monkeypatch.delenv(marker, raising=False)
     p = paper_dir(tmp_path)
     figure = b"%PDF-1.4\n\xff\xfe" + bytes(range(256)) * 64
     (p / "figures" / "fig.pdf").write_bytes(figure)

@@ -182,8 +182,6 @@ def test_a_stamp_after_a_crash_settles_the_act_first(tmp_path: Path, monkeypatch
     with pytest.raises(Died):
         incorporate(scan(q), COPY, token)
     monkeypatch.undo()
-    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
-        monkeypatch.delenv(marker, raising=False)
     said = ok("stamp", DOC, "-m", "between", cwd=q.root).stderr
     assert "finished adopt:" in said
     assert not writes.read_journal(q.root).begun
@@ -228,8 +226,6 @@ def test_a_step_recorded_beside_a_left_act_takes_a_number_its_folders_do_not(
         incorporate(scan(q), COPY, token)
     restore()
     (q.root / DOC).write_text(TEXT + "% the person's line\n", encoding="utf-8")
-    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
-        monkeypatch.delenv(marker, raising=False)
     said = ok("stamp", DOC, "-m", "mine", cwd=q.root).stderr
     assert "left adopt:" in said
     numbers = [name[:4] for name in steps(q)]

@@ -258,8 +258,6 @@ def test_a_paper_folder_made_a_quilt_keeps_the_person_s_files_and_writes_into_th
     tmp_path: Path, monkeypatch
 ) -> None:  # type: ignore[no-untyped-def]
     """`init --from` a paper inside the folder: the person's README stays, and the agent layer's lines go into their files as acts of the door (D-3)."""
-    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
-        monkeypatch.delenv(marker, raising=False)
     p = paper_dir(tmp_path)
     (p / "README.md").write_text("# My paper\n\nNotes for my coauthors.\n")
     (p / "CLAUDE.md").write_text("Write in British English.\n")
