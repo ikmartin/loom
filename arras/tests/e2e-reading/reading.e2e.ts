@@ -1,14 +1,19 @@
 // Reading under `loom serve` (plan 0.13 §11): the things the fixture-only suite cannot check because they need the publisher — on a work's pages, a selection mapped onto the page text loom derives and recorded, a box recorded as drawn, and a locator lit from a link; in a document, a selection across a citation quoted as written; and a PDF's place kept, as a work's and a project file's.
 //
 // A test that writes (`test`) is served on its own copy of the showcase, and one that only reads (`readOnly`) on its worker's; a test that needs a note to exist writes it first through the API.
-import { compileFolder, expect, readOnly, test, workOf, type Served } from '../served';
+import { ARRAS, compileFolder, expect, readOnly, test, workOf, type Served } from '../served';
 import type { Page } from '@playwright/test';
 import { openPicker, pickSession } from '../picker';
 import { beside, openHere } from '../workspace';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-const PAGE2 = '/library/Bellamy19?page=2';
+/** The showcase quilt every served copy is made from, whose works' references each copy keeps. */
+const SHOWCASE = join(ARRAS, '../loom/tests/quilts/showcase');
+/** A work's reference, by the key its entry has, as a work's address names it. */
+const refOf = (key: string): string => workOf(SHOWCASE, key)!.ref;
+
+const PAGE2 = `/library/${refOf('Bellamy19')}?page=2`;
 /** A PDF of the project's own. */
 const HANDOUT = '/file/notes/handout.pdf';
 
@@ -79,13 +84,13 @@ async function intoASession(page: Page, served: Served): Promise<string> {
 
 /** A person's note on page 2 of Bellamy19 over `phrase`, of type `type` or none, written through the API; returns its id. */
 async function noteOnPageAs(served: Served, phrase: string, body: string, type: string | null): Promise<string> {
-	const result = await served.api('annotate', { target: 'Bellamy19', page: 2, quote: phrase, message: body, ...(type ? { type } : {}) });
+	const result = await served.api('annotate', { target: bellamy(served).ref, page: 2, quote: phrase, message: body, ...(type ? { type } : {}) });
 	return result.split(/\s+/)[0];
 }
 
 /** A person's note on page 2 of Bellamy19 over `phrase`, written through the API into `session`; returns its id. */
 async function noteOnPage2(served: Served, session: string, phrase: string, body: string): Promise<string> {
-	const result = await served.api('annotate', { target: 'Bellamy19', page: 2, quote: phrase, message: body, type: 'note', session });
+	const result = await served.api('annotate', { target: bellamy(served).ref, page: 2, quote: phrase, message: body, type: 'note', session });
 	return result.split(/\s+/)[0];
 }
 
@@ -112,8 +117,7 @@ async function clickMark(page: Page, id: string): Promise<void> {
 /** The colour a line of a mark is drawn in: grey, in the light, given as sRGB or as `color()`. */
 const GREY = /rgb\(136, 135, 128\)|color\(srgb 0\.533\d* 0\.529\d* 0\.50\d*\)/;
 
-test.fixme('a selection stays selected and offers only Quote; a note on its words is drawn on the page in the look loom gave it', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a selection stays selected and offers only Quote; a note on its words is drawn on the page in the look loom gave it', async ({ page, served }) => {
 	const id = await noteOnPageAs(served, 'incidence matrix', 'So the vertices are integral.', null);
 	await opened(page, served);
 	// highlighting a phrase to copy it is the ordinary thing to do with a paper, so selecting writes nothing and opens nothing: the selection survives, and Quote is offered at its end
@@ -169,8 +173,7 @@ test('a selection across a citation and a reference is quoted as they were writt
 		.toBe('true true');
 });
 
-test.fixme('a region drawn with Alt is commented on, recorded as drawn, and drawn as an outline in the look in hand', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a region drawn with Alt is commented on, recorded as drawn, and drawn as an outline in the look in hand', async ({ page, served }) => {
 	await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: null, over: {}, plain: { color: 'grey', style: 'underline', weight: 1, opacity: 100 } })));
 	await opened(page, served);
 	const canvas = page.locator('[data-testid="pdf-page-2"] canvas');
@@ -223,8 +226,7 @@ test.fixme('a region drawn with Alt is commented on, recorded as drawn, and draw
 	await expect(page.getByTestId('ann-popup')).toHaveAttribute('data-annotation-id', String(written.id));
 });
 
-test.fixme('a mark opens the popup a fragment opens, and Escape closes it', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a mark opens the popup a fragment opens, and Escape closes it', async ({ page, served }) => {
 	const id = await noteOnPage2(served, served.openSessions().at(-1)!, 'incidence matrix', 'a note to open from its mark');
 	await opened(page, served);
 	await expect(page.getByTestId(`page-mark-${id}`)).toBeVisible();
@@ -236,8 +238,7 @@ test.fixme('a mark opens the popup a fragment opens, and Escape closes it', asyn
 	await expect(open).toHaveCount(0);
 });
 
-test.fixme('a locator in the URL is lit while the URL carries it, and a note is focused by its id', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a locator in the URL is lit while the URL carries it, and a note is focused by its id', async ({ page, served }) => {
 	// a note by id: one written here, since the showcase's own are in a closed session and closed sessions' annotations are hidden until shown
 	const id = await noteOnPage2(served, served.openSessions().at(-1)!, 'incidence matrix', 'a note to focus by its id');
 	await opened(page, served);
@@ -254,8 +255,7 @@ test.fixme('a locator in the URL is lit while the URL carries it, and a note is 
 	await expect(page.locator(`[data-testid="ann-popup"][data-annotation-id="${id}"]`)).toBeVisible();
 });
 
-test.fixme('a session is named on the spot and closed from the page', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a session is named on the spot and closed from the page', async ({ page, served }) => {
 	await opened(page, served);
 	await openPicker(page);
 	await page.getByTestId('session-new').click();
@@ -273,8 +273,7 @@ test.fixme('a session is named on the spot and closed from the page', async ({ p
 	await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
 });
 
-test.fixme('two notes on one place are each drawn there, with no count, and a click opens one of them', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('two notes on one place are each drawn there, with no count, and a click opens one of them', async ({ page, served }) => {
 	const session = served.openSessions().at(-1)!;
 	const first = await noteOnPage2(served, session, 'Boundedness holds', 'first on this phrase');
 	const second = await noteOnPage2(served, session, 'Boundedness holds', 'second on this phrase');
@@ -289,8 +288,7 @@ test.fixme('two notes on one place are each drawn there, with no count, and a cl
 	await expect(page.getByTestId('ann-popup')).toHaveAttribute('data-annotation-id', new RegExp(`^(${first}|${second})$`));
 });
 
-test.fixme('a popup shows the write it fired, without being closed and reopened', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a popup shows the write it fired, without being closed and reopened', async ({ page, served }) => {
 	// a popup reads its annotation from the manifest by id, so a resolve that comes back on the next poll is shown where the reader acted
 	const id = await noteOnPageAs(served, 'exchange inequalities', 'resolve me', 'question');
 	await opened(page, served);
@@ -306,8 +304,7 @@ test.fixme('a popup shows the write it fired, without being closed and reopened'
 	await expect(p.getByTestId('popup-status')).toHaveText('Open');
 });
 
-test.fixme('a selection records the lines it covers and nothing else', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test('a selection records the lines it covers and nothing else', async ({ page, served }) => {
 	// **A phantom rectangle is a wrong anchor, not a cosmetic fault.** A range over the text layer yields a rectangle for every element it crosses, degenerate ones included, and those were mapped to points and recorded, at the layer's top-left, hundreds of points above the words they claimed to be. Words marked with Annotate are anchored by their text, and the rectangles drawn for them are the lines they cover.
 	await opened(page, served);
 	await page.getByTestId('tool-annotate').click();
@@ -328,8 +325,7 @@ test.fixme('a selection records the lines it covers and nothing else', async ({ 
 	}
 });
 
-readOnly.fixme('the page and the zoom are typed into, and take exactly what was typed', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('the page and the zoom are typed into, and take exactly what was typed', async ({ page, served }) => {
 	// The controls live on the pane's toolbar rather than in a toolbar of the renderer's own, and both boxes are editable the way a desktop viewer's are: `+` twelve times is not how a reader reaches page 12. Typing over a box is the case that broke -- the field held `140`, the reader typed `150`, and `140150` clamped to the maximum -- so each assertion below is that the value taken is exactly the value typed.
 	await opened(page, served);
 	const zoom = page.getByTestId('zoom-at');
@@ -364,9 +360,8 @@ readOnly.fixme('the page and the zoom are typed into, and take exactly what was 
 	await expect(at).toHaveValue('1');
 });
 
-readOnly.fixme('a link that quotes a work without a page is lit on the page the publisher finds it on', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
-	await page.goto('/library/Bellamy19?quote=' + encodeURIComponent('The median orders of a weighted digraph are in bijection with the vertices'));
+readOnly('a link that quotes a work without a page is lit on the page the publisher finds it on', async ({ page }) => {
+	await page.goto(`/library/${refOf('Bellamy19')}?quote=` + encodeURIComponent('The median orders of a weighted digraph are in bijection with the vertices'));
 	await expect(page.locator('[data-mark="_locator"]').first()).toBeInViewport();
 	await expect(page.getByTestId('page-at')).toHaveValue('2');
 });
@@ -396,19 +391,19 @@ test.describe('a document never compiled', () => {
 	});
 });
 
-readOnly.fixme("a paper's page in view is what loom here reports, at the address loom link prints", async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly("a paper's page in view is what loom here reports, at the address loom link prints", async ({ page, served }) => {
 	await page.goto(PAGE2);
 	await page.locator('[data-testid="pdf-page-2"] canvas').waitFor();
 	const looking = () => JSON.parse(served.loom(['here', '--json'])).looking ?? {};
-	await expect.poll(() => looking().item?.work).toBe('Bellamy19');
+	await expect.poll(() => looking().item?.work).toBe(refOf('Bellamy19'));
 	await expect.poll(() => looking().item?.page).toBe(2);
 	expect(looking().item.link).toMatch(/^cited:.+\?page=2$/);
 });
 
 // Where a work opens: where the reader last was, unless a link names a place. These write nothing to the quilt, only to this browser, so each runs on its worker's copy in a browser of its own.
-const BELLAMY = '/library/Bellamy19';
-const SECOND = '/library/Arden24-v2';
+const BELLAMY = `/library/${refOf('Bellamy19')}`;
+/** Arden's second version, a work of its own. */
+const SECOND = `/library/${refOf('ArdenCycleSpaces')}`;
 const QUOTE = 'The median orders of a weighted digraph are in bijection with the vertices';
 
 /** A work's stored PDF in a copy of the quilt, by the key its entry has. */
@@ -495,7 +490,7 @@ async function readTo(page: Page, want: At, pane = 0): Promise<void> {
 /** Open the other work in the pane and bring Bellamy19's tab back, which makes its paper again. */
 async function awayAndBack(page: Page): Promise<void> {
 	await openHere(page, SECOND);
-	await page.getByRole('tab', { name: 'Bellamy19' }).click();
+	await page.getByRole('tab', { name: 'Bellamy 2019' }).click();
 }
 
 /** A PDF of `n` pages saying their numbers, the first small and the rest A4, as nothing in the showcase is: long enough that most of it is never drawn, and not one size throughout. */
@@ -518,8 +513,7 @@ function longPdf(n: number): Buffer {
 	return Buffer.from(out, 'latin1');
 }
 
-readOnly.fixme('a work opens where the reader left it: after a reload, by a plain link, and by a link outside the panes', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a work opens where the reader left it: after a reload, by a plain link, and by a link outside the panes', async ({ page }) => {
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
@@ -535,8 +529,7 @@ readOnly.fixme('a work opens where the reader left it: after a reload, by a plai
 	await staysAt(page, left);
 });
 
-readOnly.fixme('a link that names a place wins over where the reader last was, and is where they are from then on', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a link that names a place wins over where the reader last was, and is where they are from then on', async ({ page }) => {
 	const left = { page: 3, share: 0.2 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
@@ -554,24 +547,10 @@ readOnly.fixme('a link that names a place wins over where the reader last was, a
 	await expect(page.getByTestId('page-at')).toHaveValue('2');
 	await page.waitForTimeout(800);
 	await expect(lit).toBeInViewport();
-	// a result, by its address and by a citation of it
-	await page.goto(SECOND);
-	await readTo(page, { page: 1, share: 0.5 });
-	await page.goto(`${SECOND}?page=3&result=Arden24v2-thm-5.1`);
-	const mark = page.locator('[data-mark="Arden24v2-thm-5.1"]').first();
-	await expect(mark).toBeInViewport();
-	await page.waitForTimeout(800);
-	await expect(mark).toBeInViewport();
-	await expect(page.getByTestId('page-at')).toHaveValue('3');
-	await readTo(page, { page: 1, share: 0.5 });
-	await page.goto('/node/sh-0100');
-	await page.locator('[data-pane="0"] span.cite[data-target="Arden24v2-thm-5.1"] a').first().click();
-	await expect(page.locator('[data-pane="1"] [data-mark="Arden24v2-thm-5.1"]').first()).toBeInViewport();
-	await expect(page.getByTestId('pane-1').getByTestId('page-at')).toHaveValue('3');
+	// a result by its address, and by a citation of it, come back with the library's results: digests went with the node store's phase 2, and a citation names no result until it resolves to a node
 });
 
-readOnly.fixme('a work never read opens at its start, whatever was read before it', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a work never read opens at its start, whatever was read before it', async ({ page }) => {
 	await page.goto(BELLAMY);
 	await staysAt(page, { page: 1, share: 0 });
 	await readTo(page, { page: 2, share: 0.4 });
@@ -579,8 +558,7 @@ readOnly.fixme('a work never read opens at its start, whatever was read before i
 	await staysAt(page, { page: 1, share: 0 });
 });
 
-readOnly.fixme('two works keep a place each', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('two works keep a place each', async ({ page }) => {
 	const first = { page: 3, share: 0.2 };
 	const second = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
@@ -591,12 +569,11 @@ readOnly.fixme('two works keep a place each', async ({ page }) => {
 	await staysAt(page, second);
 	await openHere(page, BELLAMY);
 	await staysAt(page, first);
-	await page.getByRole('tab', { name: 'Arden24-v2' }).click();
+	await page.getByRole('tab', { name: 'arden-cycle-spaces-v2.pdf' }).click();
 	await staysAt(page, second);
 });
 
-readOnly.fixme('a work is open in one pane of a window, and a second window on it leaves the first where it is', async ({ page, context }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a work is open in one pane of a window, and a second window on it leaves the first where it is', async ({ page, context }) => {
 	await page.goto(`${BELLAMY}?beside=${encodeURIComponent(BELLAMY)}`);
 	await expect(page.locator('[data-pane]')).toHaveCount(1);
 	await page.goto(BELLAMY);
@@ -621,14 +598,13 @@ readOnly.fixme('a work is open in one pane of a window, and a second window on i
 	await staysAt(third, { page: 1, share: 0.5 });
 });
 
-readOnly.fixme('a tab brought back is where it was left', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a tab brought back is where it was left', async ({ page }) => {
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
 	await openHere(page, SECOND);
 	await staysAt(page, { page: 1, share: 0 });
-	await page.getByRole('tab', { name: 'Bellamy19' }).click();
+	await page.getByRole('tab', { name: 'Bellamy 2019' }).click();
 	await staysAt(page, left);
 	// a page asked for in the box is answered once, not again by a paper made later
 	const at = page.getByTestId('page-at');
@@ -643,8 +619,7 @@ readOnly.fixme('a tab brought back is where it was left', async ({ page }) => {
 	await staysAt(page, left);
 });
 
-readOnly.fixme('a link’s place holds until the reader has left its page: then it comes off the address, and a reload stays with them', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a link’s place holds until the reader has left its page: then it comes off the address, and a reload stays with them', async ({ page }) => {
 	await page.goto(`${BELLAMY}?quote=${encodeURIComponent(QUOTE)}`);
 	const lit = page.locator('[data-mark="_locator"]').first();
 	await expect(lit).toBeInViewport();
@@ -667,8 +642,7 @@ readOnly.fixme('a link’s place holds until the reader has left its page: then 
 	await staysAt(page, on);
 });
 
-readOnly.fixme('a plain link to a work already open leaves the reader where they are', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a plain link to a work already open leaves the reader where they are', async ({ page }) => {
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
@@ -683,8 +657,7 @@ readOnly.fixme('a plain link to a work already open leaves the reader where they
 	await staysAt(page, { page: 3, share: 0.2 });
 });
 
-readOnly.fixme('a place holds at another zoom and another width, with most of a long paper never drawn', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a place holds at another zoom and another width, with most of a long paper never drawn', async ({ page }) => {
 	const body = longPdf(40);
 	await page.route('**/paper.pdf', (r) => r.fulfill({ body, contentType: 'application/pdf' }));
 	await page.goto(BELLAMY);
@@ -716,8 +689,7 @@ readOnly.fixme('a place holds at another zoom and another width, with most of a 
 	await staysAt(page, left, { within: 0.02 });
 });
 
-readOnly.fixme('a page asked for as a long paper opens is where it stays, as the pages around it draw at their own size', async ({ page }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a page asked for as a long paper opens is where it stays, as the pages around it draw at their own size', async ({ page }) => {
 	const body = longPdf(300);
 	await page.route('**/paper.pdf', (r) => r.fulfill({ body, contentType: 'application/pdf' }));
 	await page.goto(BELLAMY);
@@ -733,8 +705,7 @@ readOnly.fixme('a page asked for as a long paper opens is where it stays, as the
 	await arrived(page, 250);
 });
 
-readOnly.fixme('a place in another file behind the work is not carried over, and a page it no longer has is not looked for', async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly('a place in another file behind the work is not carried over, and a page it no longer has is not looked for', async ({ page, served }) => {
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
@@ -831,8 +802,7 @@ test.describe('a PDF among the project’s files', () => {
 		await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 	});
 
-	test.fixme('the same file as a work keeps one place, whichever way it is opened, and neither moves the other when both are open', async ({ page }) => {
-		// needs the Library view to open a work's stored PDF
+	test('the same file as a work keeps one place, whichever way it is opened, and neither moves the other when both are open', async ({ page }) => {
 		const first = { page: 2, share: 0.4 };
 		await page.goto(BELLAMY);
 		await readTo(page, first);

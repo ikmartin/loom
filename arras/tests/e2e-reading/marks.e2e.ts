@@ -122,8 +122,7 @@ test.afterEach(({}, info) => {
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
-test.fixme("a highlight on a cited work's page needs no session, is drawn at once in the look in hand, and after a reload is an annotation on its words drawn in its look", async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+test("a highlight on a cited work's page needs no session, is drawn at once in the look in hand, and after a reload is an annotation on its words drawn in its look", async ({ page, served }) => {
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	const before = marksOf(served, ref).map((a) => a.id);
 	await openPaper(page, `/library/${ref}?page=2`, 2);
@@ -414,8 +413,7 @@ test.describe('where no publisher takes writes', () => {
 		}
 	});
 
-	test.fixme('marks are drawn, the tools are not offered, and a copy can still be saved', async ({ page, served }) => {
-		// needs the Library view to open a work's stored PDF
+	test('marks are drawn, the tools are not offered, and a copy can still be saved', async ({ page, served }) => {
 		const ref = workOf(served.root, 'Bellamy19')!.ref;
 		await page.route('**/_api', (route) => route.fulfill({ status: 404, body: '' }));
 		await openPaper(page, `/library/${ref}?page=2`, 2);

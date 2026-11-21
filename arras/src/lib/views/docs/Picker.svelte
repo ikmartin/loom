@@ -29,7 +29,7 @@
 
 	function open(w: Work): void {
 		shortNames.set(w.ref, w.short);
-		workspace.beside({ kind: 'reading', id: w.ref }, workspace.focus);
+		workspace.beside({ kind: 'work', id: w.ref }, workspace.focus);
 		ds.picker = false;
 	}
 </script>

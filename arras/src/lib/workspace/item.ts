@@ -8,14 +8,14 @@ import { anchorId, canonStem, canonUrl, keyFromParam, masterName, masterUrl, nod
 import { route } from '$lib/paths';
 import { placeParams, readKeys, type WorkLink } from '$lib/worklink';
 
-export type ItemKind = 'document' | 'work' | 'node' | 'context' | 'session' | 'page' | 'file' | 'pdf' | 'reading' | 'notes';
+export type ItemKind = 'document' | 'work' | 'node' | 'context' | 'session' | 'page' | 'file' | 'pdf' | 'notes';
 
 /** A place on a work's page: the work-link keys without the work's identifier, which the item already names. */
 export type Place = Omit<WorkLink, 'id'>;
 
 export interface Item {
 	kind: ItemKind;
-	/** A document's path, a work's reference, a node's key, a session's id, a project file's path; a compiled PDF's is its document's; a work of the library read beside a draft, its reference too. */
+	/** A document's path, a work's reference, a node's key, a session's id, a project file's path; a compiled PDF's is its document's. */
 	id: string;
 	/** An internal view: a session's `did`; absent means the first. */
 	view?: string;
@@ -110,8 +110,6 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 			return { kind: 'page', id: safe(tail) };
 		case 'file':
 			return { kind: 'file', id: tail.split('/').map(safe).join('/'), ...(anchor ? { anchor } : {}) };
-		case 'reading':
-			return { kind: 'reading', id: safe(tail), ...(anchor ? { anchor } : {}) };
 		case 'notes':
 			return { kind: 'notes', id: 'all' };
 		case 'pdf': {
@@ -164,8 +162,6 @@ export function pathFor(m: Documents | null, item: Item): string {
 			return fileRoute(item.id) + hash;
 		case 'pdf':
 			return pdfRoute(item.id) + hash;
-		case 'reading':
-			return route('/reading/' + encodeURIComponent(item.id)) + hash;
 		case 'notes':
 			return route('/notes');
 	}

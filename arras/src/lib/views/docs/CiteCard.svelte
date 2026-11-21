@@ -30,7 +30,7 @@
 	function beside(page: number): void {
 		if (!n) return;
 		shortNames.set(n.work.ref, n.work.short);
-		workspace.beside({ kind: 'reading', id: n.work.ref, ...(page ? { anchor: `page=${page}` } : {}) }, Math.max(pane, 0));
+		workspace.beside({ kind: 'work', id: n.work.ref, ...(page ? { place: { page } } : {}) }, Math.max(pane, 0));
 		ondone();
 	}
 	async function atPlace(): Promise<void> {

@@ -55,19 +55,19 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 	await page.getByTestId('docs-library').click();
 	await picker.getByTestId('picker-row').filter({ hasText: 'Cycle spaces of finite quivers' }).filter({ hasText: '2024' }).click();
 	await expect(picker).toHaveCount(0);
-	await expect(page.getByTestId('reading-item')).toBeVisible();
-	await expect(page.getByTestId('reading-item').getByTestId('pdf-doc')).toBeVisible();
+	await expect(page.getByTestId('work-item')).toBeVisible();
+	await expect(page.getByTestId('work-item').getByTestId('pdf-doc')).toBeVisible();
 	await expect(page.getByRole('tab', { name: /Arden 2024/ })).toBeVisible();
 	// beside a draft, the reader draws no digest marks and offers none
-	await expect(page.getByTestId('reading-item').getByTestId('reader-view')).toHaveCount(0);
+	await expect(page.getByTestId('work-item').getByTestId('reader-view')).toHaveCount(0);
 	// one toolbar over the paper: the pane's row holds the reader's bar
 	const bar = page.getByRole('group', { name: 'controls for Arden 2024' });
 	await expect(bar.getByTestId('zoom-in')).toBeVisible();
 	await expect(bar.getByTestId('page-at')).toBeVisible();
-	await expect(page.getByTestId('reading-item').locator('.tb')).toHaveCount(0);
-	await expect(page.getByTestId('reading-item').getByTestId('zoom-in')).toHaveCount(0);
+	await expect(page.getByTestId('work-item').locator('.tb')).toHaveCount(0);
+	await expect(page.getByTestId('work-item').getByTestId('zoom-in')).toHaveCount(0);
 	// words selected offer no note, as in the Library
-	const reader = page.getByTestId('reading-item');
+	const reader = page.getByTestId('work-item');
 	await expect(reader.locator('.text span').first()).toBeAttached();
 	await reader.evaluate((box) => {
 		const span = [...box.querySelectorAll('.text span')].find((s) => (s.textContent ?? '').trim().length > 8)!;
@@ -77,8 +77,10 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 		getSelection()!.addRange(range);
 		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 	});
-	await expect(page.getByTestId('selection-popup')).toBeVisible();
-	await expect(page.getByTestId('selection-popup').getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
+	// the one reader's Quote, and no note: beside a draft the Library's own actions are not laid over it
+	await expect(page.getByTestId('quote-offer')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
+	await expect(page.getByTestId('mark-to-digest')).toHaveCount(0);
 	await expect(page).toHaveURL(/\/master\//);
 });
 
@@ -97,11 +99,11 @@ test("a citation's card shows the cited result and opens its work beside the dra
 	await expect(card).toContainText('Arden 2024 · page 7');
 	await expect(card).toContainText('matches the paper');
 	await card.getByRole('button', { name: 'open at its place' }).click();
-	await expect(page.getByTestId('reading-item')).toBeVisible();
+	await expect(page.getByTestId('work-item')).toBeVisible();
 	await expect(page.getByRole('tab', { name: /Arden 2024/ })).toBeVisible();
 	// at the page the card names
 	await expect(page.getByRole('group', { name: 'controls for Arden 2024' }).getByTestId('page-at')).toHaveValue('7');
-	await expect(page.getByTestId('reading-item').getByTestId('pdf-page-7')).toBeInViewport({ ratio: 0.3 });
+	await expect(page.getByTestId('work-item').getByTestId('pdf-page-7')).toBeInViewport({ ratio: 0.3 });
 	await expect(card).toHaveCount(0);
 	await citing(page, 1, 'tq-04A1');
 	await page.locator('.fragment span.cite').nth(1).hover();
@@ -138,7 +140,7 @@ test('the notes tab lists every note by work, the orphaned first, and by date; a
 	await tab.getByRole('button', { name: 'date' }).click();
 	await expect(tab.getByTestId('note').first()).toContainText('is saturated by Proposition 2.6');
 	await tab.getByTestId('note').filter({ hasText: 'whose coordinates sum to zero' }).getByRole('button').first().click();
-	await expect(page.getByTestId('reading-item')).toBeVisible();
+	await expect(page.getByTestId('work-item')).toBeVisible();
 	await expect(page).toHaveURL(/\/notes|\/master\//);
 });
 

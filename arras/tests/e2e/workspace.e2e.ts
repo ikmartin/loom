@@ -1,6 +1,7 @@
 // Reading mode as items in two panes: what a pane opens on, its tabs and its views, the divider between the panes, focus, the arrangement the URL keeps, and what gives way in a narrow window. Grouped by the principle each rule serves, and each test named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, openHere, pane, prefs, scrollPane, viewMenu } from '../workspace';
+import { serveWork } from '../works';
 import { PDF, serve } from '../manifest';
 
 /** Advertise a write API that annotates, so a document's and a node's bar carries the tools. */
@@ -38,9 +39,9 @@ test.describe('V1 · open on the thing itself', () => {
 		expect(at.share).toBeGreaterThanOrEqual(0.45); // and the prose column is most of the first screen
 	});
 
-	test.fixme('a work opens on the paper', async ({ page }) => {
-		// needs the Library view to give a work's stored PDF, which opens its pages
+	test('a work opens on the paper', async ({ page }) => {
 		await page.setViewportSize({ width: 1440, height: 900 });
+		await serveWork(page, 'sy-0099-ref');
 		await page.goto('/library/sy-0099-ref');
 		const paper = pane(page, 0).getByTestId('pdf-doc');
 		await expect(paper).toBeVisible();
@@ -714,21 +715,21 @@ test.describe('the toolbar', () => {
 		await expect(pane(page, 1).getByTestId('context')).toBeVisible();
 	});
 
-	test.fixme('a paper shows settled annotations from its toolbar', async ({ page }) => {
-		// needs the Library view to give a work's stored PDF, which opens its pages
+	test('a paper shows settled annotations from its toolbar', async ({ page }) => {
+		await serveWork(page, 'sy-0099-ref');
 		await page.goto('/library/sy-0099-ref');
 		await expect(page.getByTestId('pdf-doc')).toBeVisible();
 		await viewMenu(page);
 		await expect(page.getByTestId('toolbar-menu').locator('[role^="menuitem"]')).toHaveText(['show settled annotations', 'open the PDF', 'turn annotations off']);
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('href', /paper\.pdf$/);
+		await expect(page.getByTestId('open-pdf')).toHaveAttribute('href', /\/_api\/library\/pdf\/[0-9a-f]{64}$/);
 		await page.getByTestId('toggle-settled').click();
 		await expect(page.getByTestId('marked-doc')).toHaveClass(/show-settled/);
 		await expect(page.getByTestId('toolbar-view-on')).toBeVisible();
 	});
 
-	test('a work whose pages are not open says where they open, and greys its page tools and its PDF', async ({ page }) => {
+	test('a work where no library is served says so, and greys its page tools and its PDF', async ({ page }) => {
 		await page.goto('/library/sy-0099-ref');
-		await expect(pane(page, 0).getByTestId('work-unread')).toHaveText("This work's pages open from the Library, which is being built.");
+		await expect(pane(page, 0).getByTestId('work-unread')).toHaveText('This loom does not serve that yet.');
 		await expect.poll(() => new URL(page.url()).search).toBe('');
 		await expect(page.getByTestId('zoom-fit')).toBeDisabled();
 		await viewMenu(page);

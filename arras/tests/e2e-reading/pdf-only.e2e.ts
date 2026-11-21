@@ -88,8 +88,7 @@ test.afterEach(({}, info) => {
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
-readOnly.fixme("every annotation on a cited work's pages with a place is drawn there in its look, and a detached one is listed and drawn nowhere", async ({ page, served }) => {
-	// needs the Library view to open a work's stored PDF
+readOnly("every annotation on a cited work's pages with a place is drawn there in its look, and a detached one is listed and drawn nowhere", async ({ page, served }) => {
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	await adding(page, (m) => {
 		const base = Object.values(m.annotations)[0];
@@ -236,8 +235,7 @@ test.describe('the toolbar', () => {
 			await bar(page, `/file/${FILE}`, scheme);
 		});
 
-		test.fixme(`a cited work carries the bar a project PDF has, in the ${scheme} theme`, async ({ page, served }) => {
-			// needs the Library view to open a work's stored PDF
+		test(`a cited work carries the bar a project PDF has, in the ${scheme} theme`, async ({ page, served }) => {
 			await bar(page, `/library/${workOf(served.root, 'Bellamy19')!.ref}?page=1`, scheme);
 		});
 	}

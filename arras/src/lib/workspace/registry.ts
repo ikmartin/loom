@@ -19,8 +19,6 @@ import PageItem from './items/PageItem.svelte';
 import FileItem from './items/FileItem.svelte';
 import CompiledItem from './items/CompiledItem.svelte';
 import CompiledControls from './items/CompiledControls.svelte';
-import ReadingItem from './items/ReadingItem.svelte';
-import ReadingControls from './items/ReadingControls.svelte';
 import NotesItem from './items/NotesItem.svelte';
 import { docs as docsWords } from '$lib/words/docs';
 import { shortNames } from '$lib/views/docs/names.svelte';
@@ -63,8 +61,8 @@ function nodeTab(id: string, m: Manifest): string {
 
 export const kinds: Record<ItemKind, Kind> = {
 	document: { tab: documentTab, renderer: DocumentItem, controls: DocumentControls },
-	// a work by its reference; it previews nothing, since nothing the manifest says names its pages
-	work: { tab: (item) => item.id, renderer: WorkItem, controls: WorkControls },
+	// a work by its reference, named by its short name once the works list has said it; it previews nothing, since nothing the manifest says names its pages
+	work: { tab: (item) => shortNames.get(item.id) ?? '', renderer: WorkItem, controls: WorkControls },
 	node: {
 		tab: (item, m) => nodeTab(item.id, m),
 		renderer: NodeItem,
@@ -95,8 +93,6 @@ export const kinds: Record<ItemKind, Kind> = {
 	file: { tab: (item) => item.id.split('/').pop() ?? item.id, renderer: FileItem, controls: FileControls },
 	// a document's compiled PDF (plan 0.29.1), named by its document, since an author's own PDF beside it may have the file name
 	pdf: { tab: (item, m) => pdfName(m.masters, item.id), renderer: CompiledItem, controls: CompiledControls },
-	// a work of the library beside a draft, named by its short name once its read has said it
-	reading: { tab: (item) => shortNames.get(item.id) ?? '', renderer: ReadingItem, controls: ReadingControls },
 	// every note of the quilt, by work or by date (8b)
 	notes: { tab: () => docsWords.notes.tab, renderer: NotesItem, controls: PlainControls }
 };

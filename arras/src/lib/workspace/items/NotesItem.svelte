@@ -42,7 +42,7 @@
 		if ('doc' in at) workspace.here({ kind: 'document', id: at.doc, note: n.annotation });
 		else {
 			if (at.short) shortNames.set(at.ref, at.short);
-			workspace.beside({ kind: 'reading', id: at.ref, anchor: `page=${at.page}` }, workspace.focus);
+			workspace.beside({ kind: 'work', id: at.ref, place: { page: at.page } }, workspace.focus);
 		}
 	}
 	async function remove(n: Note): Promise<void> {

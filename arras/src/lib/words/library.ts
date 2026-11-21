@@ -7,8 +7,6 @@ const SCHEMES: Record<string, string> = { arxiv: 'arXiv', doi: 'doi', mr: 'MR', 
 
 export const library = {
 	work: {
-		/** A work's tab in Docs, opened by a link to a note on it, in place of its pages, which only the Library can open; taken out once it does. */
-		unread: "This work's pages open from the Library, which is being built.",
 		/** A work's toolbar, on `open the PDF` and the PDF's tools while no PDF is drawn. */
 		noPdf: 'No PDF of this work is open'
 	},

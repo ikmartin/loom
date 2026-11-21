@@ -265,7 +265,7 @@ test('the chosen columns and the sort are kept across a reload', async ({ page }
 	await expect(page.getByTestId('sort-holds')).toBeVisible();
 });
 
-test("words selected on a page offer no note yet, and an agent's question takes the keyboard and is said", async ({ page }) => {
+test("words selected on a page offer Quote, and the Library's mark to digest and ask an agent beside it; an agent's question takes the keyboard and is said", async ({ page }) => {
 	await open(page);
 	await row(page, 'Widgets and their bounds').click();
 	const reader = page.getByTestId('work-reader');
@@ -278,10 +278,11 @@ test("words selected on a page offer no note yet, and an agent's question takes 
 		getSelection()!.addRange(range);
 		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 	});
-	const pop = page.getByTestId('selection-popup');
-	await expect(pop).toBeVisible();
-	await expect(pop.getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
-	await pop.getByRole('button', { name: 'ask an agent…' }).click();
+	// the one reader's Quote, with the Library's own actions laid beside it
+	await expect(page.getByTestId('quote-offer')).toBeVisible();
+	await expect(page.getByTestId('mark-to-digest')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
+	await page.getByTestId('ask-agent').click();
 	await expect(page.getByTestId('ask-field')).toBeFocused();
 	await page.keyboard.type('Is this the bound used in Section 4?');
 	await page.keyboard.press('Enter');
