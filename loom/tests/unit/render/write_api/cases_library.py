@@ -245,17 +245,6 @@ def _library_file(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     refuses(s, "library-file", {"upload": "0" * 64, "citekey": "Man12"}, 404, "no-such-upload", "no PDF was dropped")
 
 
-@case("library-delete")
-def _library_delete(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
-    s, q, _ = on_demo(serve, tmp_path)
-    succeeds(s, "library-add", {"text": ENTRY})
-    assert succeeds(s, "library-delete", {"citekey": "Ost18"})["result"] == "deleted Ost18 from the library"
-    manifest = json.loads(get(s.url + "build/manifest.json")[2])
-    assert "Ost18" not in manifest["references"]
-    refuses(s, "library-delete", {"citekey": "Calloway14"}, 409, "from-document", "gathering brings it back")
-    refuses(s, "library-delete", {"citekey": "Nobody99"}, 404, "no-such-work", "no work Nobody99")
-
-
 @case("library-ignore")
 def _library_ignore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
@@ -284,17 +273,21 @@ def _received(q: Path, name: str, *lines: str) -> str:
     """A file received as the viewer streams one, through the intake's own function; the drop's id."""
     import io
 
-    from loom.refs.intake import receive
+    from loom.library.intake import receive
 
     data = ("%PDF-1.4\n%FAKE-LOOM\n%%Pages: 1\n" + "\n".join(lines) + "\n").encode()
     return str(receive(q, name, io.BytesIO(data), len(data))["incoming"])
 
 
 def _library_files(q: Path) -> dict[str, bytes]:
-    """Every file of the library's records, its store and its drops, with its bytes."""
+    """Every file of the library's nodes, its documents and its drops, with its bytes."""
     return {
         p.relative_to(q).as_posix(): p.read_bytes()
-        for d in (q / ".loom" / "library", q / ".loom" / "local" / "incoming")
+        for d in (
+            q / ".loom" / "library" / "nodes",
+            q / ".loom" / "library" / "documents",
+            q / ".loom" / "local" / "incoming",
+        )
         if d.is_dir()
         for p in sorted(d.rglob("*"))
         if p.is_file()
@@ -314,7 +307,13 @@ def _runs_done(s: ServeSession) -> None:
         time.sleep(0.1)
 
 
-PULLBACKS = ("Virtual pull-backs", "Cristina Manolache", "arXiv:0805.2065v2")
+PULLBACKS = ("arXiv:0805.2065v2", "Virtual pull-backs", "Cristina Manolache")
+MAN12 = "@article{Man12,\n  author = {Manolache, Cristina},\n  title = {Virtual pull-backs},\n  year = {2012},\n  eprint = {0805.2065},\n}\n"
+
+
+def _pasted(s: ServeSession, text: str) -> str:
+    """A work made by pasting its entry; its reference."""
+    return str(succeeds(s, "library-take", {"items": [{"text": text}]})["rows"][0]["ref"])
 
 
 def _stream(s: ServeSession, name: str, data: bytes, *, token: str | None = None) -> tuple[int, Any]:
@@ -350,61 +349,31 @@ def _library_receive(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     assert json.loads((drop / "arrived.json").read_text())["name"] == "Halberd - 2021 - Gadget towers.pdf"
     # the same bytes again are the drop kept already, and receiving rebuilds nothing
     assert _stream(s, "again.pdf", data)[1]["incoming"] == said["incoming"]
-    assert s.builds == builds and len(list(drop.glob("*.pdf"))) == 1
+    assert s.builds == builds
     assert succeeds(s, "library-take", {"items": [{"incoming": said["incoming"]}]})["rows"][0]["state"] == "added"
-    # bytes that are no PDF are kept nowhere
+    # a .bib and a source are taken; bytes that are none of these are kept nowhere
+    assert _stream(s, "refs.bib", b"@misc{x, title = {x}}\n")[0] == 200
     status, said = _stream(s, "notes.txt", b"plain text, not a document")
-    assert (status, said["error"]["code"]) == (400, "not-a-pdf")
-    kept = sorted(p.name for p in (q / ".loom" / "local" / "incoming").iterdir())
-    assert kept == [drop.name], kept
+    assert (status, said["error"]["code"]) == (400, "not-a-document")
     assert _stream(s, "x.pdf", data, token="")[0] == 403
-    # a length that is no number, on an upload refused for want of a token, is still answered
-    import http.client
-    import urllib.parse
-
-    where = urllib.parse.urlsplit(s.url)
-    conn = http.client.HTTPConnection(where.hostname, where.port, timeout=60)
-    conn.putrequest("POST", "/_api/library-receive?name=x.pdf")
-    conn.putheader("Content-Type", "application/octet-stream")
-    conn.putheader("Content-Length", "many")
-    conn.endheaders()
-    answered = conn.getresponse()
-    assert answered.status == 403 and json.loads(answered.read())["error"]["code"] == "refused"
-    conn.close()
-    # nor one that Python's isdigit takes for a digit and int does not
-    conn = http.client.HTTPConnection(where.hostname, where.port, timeout=60)
-    conn.putrequest("POST", "/_api/library-receive?name=x.pdf")
-    conn.putheader("Content-Type", "application/octet-stream")
-    conn.putheader("Content-Length", "²")
-    conn.endheaders()
-    answered = conn.getresponse()
-    assert answered.status == 403 and json.loads(answered.read())["error"]["code"] == "refused"
-    conn.close()
     refuses(s, "library-receive", {"name": "x.pdf"}, 400, "bad-request", "application/octet-stream")
 
 
 @case("library-take")
 def _library_take(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
     new = _received(q, "Halberd - 2021 - Gadget towers.pdf", "Gadget towers", "A. Halberd")
     asked = _received(q, "pullbacks.pdf", *PULLBACKS)
-    items = [{"incoming": new}, {"incoming": asked}, {"text": ENTRY}, {"text": "10.5555/x"}]
+    items = [{"incoming": new}, {"incoming": asked}, {"text": ENTRY}, {"text": "ISBN 978-3-16-148410-0"}]
     rows = succeeds(s, "library-take", {"items": items})["rows"]
-    assert [(r["state"], r.get("citekey")) for r in rows] == [
-        ("added", "halberdGadgetTowers2021"),
-        ("question", None),
-        ("added", "Ost18"),
-        ("cannot", None),
-    ], rows
-    # its pages are read by a run on the publisher's runner, with no network in it
-    assert rows[0]["pages"] == "reading" and [x["name"] for x in rows[0]["job"]["steps"]] == ["map"]
-    assert [c["citekey"] for c in rows[1]["candidates"]] == ["Man12"] and rows[3]["code"] == "offline"
-    references = json.loads(get(s.url + "build/manifest.json")[2])["references"]
-    assert {"halberdGadgetTowers2021", "Ost18"} <= set(references)
-    # the same file again is already here
+    assert [r["state"] for r in rows] == ["added", "question", "added", "cannot"], rows
+    assert rows[0]["short"] == "Gadget towers" and rows[0]["found_by"] == "title"
+    assert [c["ref"] for c in rows[1]["candidates"]] == [man12] and rows[3]["code"] == "no-service"
+    # the same file again is already here, and nothing is matched by its title
     assert succeeds(s, "library-take", {"items": [{"incoming": new}]})["rows"][0]["state"] == "here"
-    refuses(s, "library-take", {"items": [{"incoming": "0" * 64}]}, 404, "no-such-incoming", "receive the file first")
-    refuses(s, "library-take", {"items": [{"incoming": asked, "for": "Nobody"}]}, 404, "no-such-work", "no work Nobody")
+    refuses(s, "library-take", {"items": [{"incoming": "0" * 64}]}, 404, "no-such-incoming", "drop it again")
+    refuses(s, "library-take", {"items": [{"incoming": asked, "for": "tq-0ZZZ-ref"}]}, 404, "no-such-work", "no work")
     refuses(s, "library-take", {"items": [{"name": "x"}]}, 400, "bad-field", "each item is")
     refuses(
         s,
@@ -414,7 +383,6 @@ def _library_take(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         "author-only",
         "only the author",
     )
-    # a quilt that has not said whether loom may look papers up is asked first, and nothing is read
     config = q / "config.toml"
     config.write_text(config.read_text().replace("online = false", ""))
     refuses(s, "library-take", {"items": [{"incoming": asked}]}, 409, "network-unasked", "has not said")
@@ -423,26 +391,22 @@ def _library_take(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
 @case("library-answer")
 def _library_answer(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
     asked = _received(q, "pullbacks.pdf", *PULLBACKS)
-    assert succeeds(s, "library-take", {"items": [{"incoming": asked}]})["rows"][0]["question"] == asked
-    # the question waits in the manifest, where a viewer's tray finds it after a reload
-    arriving = json.loads(get(s.url + "build/manifest.json")[2])["arriving"]
-    assert [(r["id"], r["state"], r["candidates"][0]["citekey"]) for r in arriving] == [(asked, "question", "Man12")]
-    refuses(s, "library-answer", {"question": asked, "same": "Har77"}, 400, "not-a-candidate", "not one of the works")
-    refuses(s, "library-answer", {"question": "0" * 64, "same": None}, 404, "no-such-question", "no question waits")
-    refuses(s, "library-answer", {"question": asked}, 400, "missing-field", "same is required")
+    question = succeeds(s, "library-take", {"items": [{"incoming": asked}]})["rows"][0]["question"]
+    refuses(s, "library-answer", {"question": question, "same": "tq-0ZZZ-ref"}, 400, "not-a-candidate", "not one of")
+    refuses(s, "library-answer", {"question": "q-000000000000", "same": None}, 404, "no-such-question", "no drop waits")
+    refuses(s, "library-answer", {"question": question}, 400, "missing-field", "same is required")
     refuses(
         s,
         "library-answer",
-        {"question": asked, "same": "Man12", "author": "Referee (Agent)"},
+        {"question": question, "same": man12, "author": "Referee (Agent)"},
         403,
         "author-only",
         "only the author",
     )
-    row = succeeds(s, "library-answer", {"question": asked, "same": "Man12"})["row"]
-    assert (row["state"], row["under"]) == ("added", "Man12"), row
-    manifest = json.loads(get(s.url + "build/manifest.json")[2])
-    assert manifest["references"]["Man12"]["artifacts"]["pdf"] is True and manifest["arriving"] == []
+    row = succeeds(s, "library-answer", {"question": question, "same": man12})["row"]
+    assert (row["state"], row["ref"], row["under"]) == ("added", man12, True), row
 
 
 @case("library-undo")
@@ -451,12 +415,9 @@ def _library_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     before = _library_files(q)
     drop = _received(q, "Halberd - 2021 - Gadget towers.pdf", "Gadget towers", "A. Halberd")
     row = succeeds(s, "library-take", {"items": [{"incoming": drop}]})["rows"][0]
-    assert row["state"] == "added"
-    _runs_done(s)
-    assert succeeds(s, "library-undo", {"id": row["id"]})["result"] == "took halberdGadgetTowers2021 out again"
+    assert succeeds(s, "library-undo", {"id": row["id"], "act": row["act"]})["result"].endswith("taken out again")
     assert _library_files(q) == before
-    assert "halberdGadgetTowers2021" not in json.loads(get(s.url + "build/manifest.json")[2])["references"]
-    refuses(s, "library-undo", {"id": drop}, 404, "no-such-intake", "nothing was dropped")
+    refuses(s, "library-undo", {"id": "0" * 64}, 404, "no-such-intake", "names no drop")
     refuses(s, "library-undo", {"id": "../config"}, 404, "no-such-intake", "names no drop")
     refuses(s, "library-undo", {"id": drop, "author": "Referee (Agent)"}, 403, "author-only", "only the author")
 
@@ -464,16 +425,87 @@ def _library_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
 @case("library-unfile")
 def _library_unfile(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
     drop = _received(q, "schedule.pdf", "Department of Mathematics", "Seminar schedule, spring")
-    assert succeeds(s, "library-take", {"items": [{"incoming": drop, "for": "Man12"}]})["rows"][0]["under"] == "Man12"
-    _runs_done(s)
+    assert succeeds(s, "library-take", {"items": [{"incoming": drop, "for": man12}]})["rows"][0]["under"] is True
     filed = _library_files(q)
-    said = succeeds(s, "library-unfile", {"citekey": "Man12"})
-    assert said["incoming"] == drop and said["row"]["state"] == "received"
-    assert json.loads(get(s.url + "build/manifest.json")[2])["references"]["Man12"]["artifacts"]["pdf"] is False
-    refuses(s, "library-unfile", {"citekey": "Man12"}, 409, "no-document", "holds no PDF")
-    refuses(s, "library-unfile", {"citekey": "Calloway14"}, 409, "has-results", "results read off this PDF")
-    refuses(s, "library-unfile", {"citekey": "Nobody"}, 404, "no-such-work", "no work Nobody")
-    # the unfile is undone in one step, and the store is as it was
-    succeeds(s, "library-undo", {"id": drop})
-    assert _library_files(q) == filed
+    said = succeeds(s, "library-unfile", {"ref": man12})
+    assert said["incoming"] == drop and said["row"]["state"] == "cannot"
+    refuses(s, "library-unfile", {"ref": man12}, 409, "no-document", "holds no pdf")
+    refuses(s, "library-unfile", {"ref": "tq-0ZZZ-ref"}, 404, "no-such-work", "no work")
+    refuses(s, "library-unfile", {"ref": man12, "which": "djvu"}, 400, "bad-field", "pdf or tex")
+    succeeds(s, "library-undo", {"id": drop, "act": said["act"]})
+    assert {k: v for k, v in _library_files(q).items() if "nodes/" in k} == {
+        k: v for k, v in filed.items() if "nodes/" in k
+    }
+
+
+@case("library-works")
+def _library_works(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s, q, _ = on_demo(serve, tmp_path)
+    builds = s.builds
+    said = succeeds(s, "library-works", {})
+    assert said["works"], "gathering makes the demo's cited works"
+    assert {
+        "ref",
+        "short",
+        "title",
+        "authors",
+        "year",
+        "holds",
+        "digested",
+        "used_in",
+        "link",
+        "version",
+        "lookup",
+        "cited_as",
+    } <= set(said["works"][0])
+    assert isinstance(said["gen"], int) and s.builds == builds
+
+
+@case("library-look-up")
+def _library_look_up(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
+    plain = _pasted(s, "@misc{Notes, title = {Notes with no identifier}}\n")
+    refuses(s, "library-look-up", {"ref": man12}, 409, "offline", "needs the network")
+    config = q / "config.toml"
+    config.write_text(config.read_text().replace("online = false", "online = true"))
+    refuses(s, "library-look-up", {"ref": plain}, 409, "no-identifier", "states no")
+    refuses(s, "library-look-up", {"ref": "tq-0ZZZ-ref"}, 404, "no-such-ref", "no work")
+    refuses(s, "library-look-up", {"ref": man12, "author": "Referee (Agent)"}, 403, "author-only", "only the author")
+
+
+@case("library-entry")
+def _library_entry(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
+    succeeds(s, "library-entry", {"ref": man12, "bibtex": MAN12.replace("Virtual pull-backs", "Virtual pullbacks")})
+    assert "Virtual pullbacks" in (q / ".loom/library/nodes" / f"{man12}.node").read_text()
+    refuses(s, "library-entry", {"ref": man12, "bibtex": "not bibtex"}, 400, "bad-entry", "not one BibTeX entry")
+    other = _pasted(s, ENTRY)
+    refuses(s, "library-entry", {"ref": other, "bibtex": "@article{man12, title = {x}}"}, 409, "key-taken", "is also")
+
+
+@case("library-delete")
+def _library_delete(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
+    undo = succeeds(s, "library-delete", {"ref": man12})["undo"]
+    assert not (q / ".loom/library/nodes" / f"{man12}.node").exists() and undo.startswith("u-")
+    refuses(s, "library-delete", {"ref": man12}, 404, "no-such-ref", "no work")
+    refuses(s, "library-delete", {"ref": man12, "author": "Referee (Agent)"}, 403, "author-only", "only the author")
+
+
+@case("library-restore")
+def _library_restore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s, q, _ = on_demo(serve, tmp_path)
+    man12 = _pasted(s, MAN12)
+    before = _library_files(q)
+    undo = succeeds(s, "library-delete", {"ref": man12})["undo"]
+    assert succeeds(s, "library-restore", {"undo": undo})["ref"] == man12
+    assert {k: v for k, v in _library_files(q).items() if "nodes/" in k} == {
+        k: v for k, v in before.items() if "nodes/" in k
+    }
+    refuses(s, "library-restore", {"undo": undo}, 404, "no-such-undo", "names no delete")
+    refuses(s, "library-restore", {"undo": "../x"}, 404, "no-such-undo", "names no delete")

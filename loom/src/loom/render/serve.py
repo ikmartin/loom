@@ -58,6 +58,9 @@ ASSET_SUFFIXES = {
 BUILD_URL = "/build/"
 TEX_URL = f"{BUILD_URL}{TEX_ADDRESS}/"
 STORE_URL = f"/{STORE_ADDRESS}/"
+#: The library's stored PDFs and their thumbnails, by hash (library-views.md §2, "Bytes"): what never changes once made, served with no token, since pdf.js and an <img> send none.
+LIBRARY_PDF_URL = "/_api/library/pdf/"
+LIBRARY_THUMB_URL = "/_api/library/thumb/"
 #: How often an idle stream says it is still open, so a proxy or a sleeping laptop does not drop it unseen.
 HEARTBEAT = 15.0
 #: The headers everything but the viewer's bundle is served with -- `/build/`, `/digests/storage/`, `/_files/` and every JSON answer -- so a page there runs no script and has an opaque origin, never the viewer's: an agent running as the person can write what loom derives and the project's files, and a page that ran as the viewer could read the token and post the author's acts.
@@ -616,6 +619,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
             root = self.shown.root.resolve()
             target = (root / rel).resolve()
             return target if target.is_relative_to(root) and target.is_file() else None
+        if path.startswith((LIBRARY_PDF_URL, LIBRARY_THUMB_URL)):
+            return self._library_file(path)
         if path == "/_api" or path.startswith("/_api/"):
             return None  # answered by do_GET and do_POST, never from the file tree
         rel = path.lstrip("/")
@@ -631,6 +636,21 @@ class LoomHandler(SimpleHTTPRequestHandler):
         return (
             self.bundle_dir / "index.html"
         )  # every other path is a viewer route, dots included (`/node/ro-thm-1.0.1`)
+
+    def _library_file(self, path: str) -> Path | None:
+        """A stored PDF by its hash's 64 digits, or its first page as a PNG, made when first asked for; None for any other name or one the store lacks."""
+        from loom.library import documents, thumbs
+
+        if self.quilt_root is None:
+            return None
+        if path.startswith(LIBRARY_PDF_URL):
+            digits = path[len(LIBRARY_PDF_URL) :]
+            if not re.fullmatch(r"[0-9a-f]{64}", digits):
+                return None
+            target = documents.path_of(self.quilt_root, f"sha256:{digits}", "pdf")
+            return target if target.is_file() else None
+        m = re.fullmatch(r"([0-9a-f]{64})\.png", path[len(LIBRARY_THUMB_URL) :])
+        return thumbs.thumb(self.quilt_root, f"sha256:{m.group(1)}") if m else None
 
     def _json(self, status: HTTPStatus | int, payload: dict[str, object]) -> None:
         data = json.dumps(payload).encode("utf-8")
@@ -877,7 +897,11 @@ class LoomHandler(SimpleHTTPRequestHandler):
         ctype = mimetypes.guess_type(str(target))[0] or "application/octet-stream"
         if target.suffix in (".html", ".js", ".css", ".json", ".svg"):
             ctype += "; charset=utf-8"
-        held = self.path.split("?", 1)[0].startswith((BUILD_URL, STORE_URL, FILES_URL))
+        held = self.path.split("?", 1)[0].startswith(
+            (BUILD_URL, STORE_URL, FILES_URL, LIBRARY_PDF_URL, LIBRARY_THUMB_URL)
+        )
+        # a document named by its hash never changes
+        forever = self.path.split("?", 1)[0].startswith((LIBRARY_PDF_URL, LIBRARY_THUMB_URL))
         etag = '"' + hashlib.sha256(data).hexdigest()[:32] + '"'
         if self.headers.get("If-None-Match") == etag:
             self.send_response(HTTPStatus.NOT_MODIFIED)
@@ -889,7 +913,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
         self.send_header("ETag", etag)
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "public, max-age=31536000, immutable" if forever else "no-cache")
         self._confine(held)
         self.end_headers()
         self.wfile.write(data)

@@ -225,8 +225,8 @@ def _refused(exc: Any) -> ApiError:
 
 
 def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """The library's intake (specs/write-api.md §6): take in received files and pasted works, answer a question, undo an act on a drop, take a wrongly filed PDF off its work. The author's, each through the one function `loom library add` goes through (`refs.intake`)."""
-    from loom.refs.intake import IntakeRefused, Item, answer, take, undo, unfile
+    """The library's intake (specs/write-api.md §6): take in received files and pasted works, answer a question, undo an act on a drop, take a document off its work. The author's, each through the one function `loom library add` goes through (`library.intake`)."""
+    from loom.library.intake import IntakeRefused, Item, answer, take, undo, unfile
     from loom.scan.quilt import load_quilt
 
     who = _author(root, body)
@@ -242,31 +242,20 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
                     "this quilt has not said whether loom may look papers up online: ask once, and save the answer as library.online",
                     status=409,
                 )
-            result = _scan(root)
             taken: list[Item] = []
             for item in items:
                 if not isinstance(item, dict):
                     raise ApiError("bad-field", "each item is {incoming, for?} or {text}")
                 drop, text, work = item.get("incoming"), item.get("text"), item.get("for")
-                if work is not None and (not isinstance(work, str) or work not in result.bib):
-                    raise ApiError("no-such-work", f"the library has no work {work}", status=404)
-                if work:
-                    _busy(root, work)  # a run fetching or reading this work writes its place too
+                if work is not None and not isinstance(work, str):
+                    raise ApiError("bad-field", "for is the reference a file was dropped on")
                 if isinstance(drop, str) and drop:
                     taken.append(Item(drop=drop, work=work or ""))
                 elif isinstance(text, str) and text.strip():
                     taken.append(Item(text=text))
                 else:
                     raise ApiError("bad-field", "each item is {incoming, for?} or {text}")
-            rows = take(
-                quilt,
-                dict(result.bib),
-                taken,
-                by=who,
-                online=quilt.config.online,
-                fetch=body.get("fetch") is True,
-                runner=_runner(root, who),
-            )
+            rows = take(root, taken, by=who, online=quilt.config.online, result=_scan(root))
             counts = {s: sum(1 for r in rows if r.state == s) for s in ("added", "here", "question", "cannot")}
             said = ", ".join(f"{n} {s}" for s, n in counts.items() if n)
             return {"ok": True, "result": f"took in {len(rows)}: {said}", "rows": [r.to_json() for r in rows]}
@@ -276,34 +265,65 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
                 raise ApiError("missing-field", "same is required: the work it is, or null for a work of its own")
             same = body["same"]
             if same is not None and not isinstance(same, str):
-                raise ApiError("bad-field", "same must be a citekey or null")
-            if same:
-                _busy(root, same)
-            row = answer(
-                quilt,
-                dict(_scan(root).bib),
-                question,
-                same,
-                by=who,
-                online=quilt.config.online,
-                runner=_runner(root, who),
-            )
-            return {"ok": True, "result": f"{row.name}: {row.state} as {row.citekey}", "row": row.to_json()}
+                raise ApiError("bad-field", "same must be a reference or null")
+            row = answer(root, question, same, by=who, online=quilt.config.online, result=_scan(root))
+            return {"ok": True, "result": f"{row.name}: {row.state}", "row": row.to_json()}
         if endpoint == "library-undo":
             drop = _str(body, "id", required=True) or ""
-            from loom.refs.intake import _acts, drop_dir
-
-            acts = _acts(drop_dir(root, drop))
-            if acts:
-                _busy(root, str(acts[-1].get("citekey") or ""))
-            done, again = undo(_scan(root), drop, by=who, act=_str(body, "act") or "")
+            done, again = undo(root, drop, by=who, act=_str(body, "act") or "")
             return {"ok": True, "result": done, **({"row": again.to_json()} if again is not None else {})}
-        citekey = _str(body, "citekey", required=True) or ""
-        _busy(root, citekey)
-        off = unfile(_scan(root), citekey, by=who)
-        return {"ok": True, "result": f"took the PDF off {citekey}; it waits to be taken in", **off}
+        ref = _str(body, "ref", required=True) or ""
+        which = _str(body, "which") or "pdf"
+        if which not in ("pdf", "tex"):
+            raise ApiError("bad-field", "which is pdf or tex")
+        off = unfile(root, ref, which=which, by=who)
+        return {"ok": True, "result": f"took the {which} off {ref}; it waits to be taken in", **off}
     except IntakeRefused as exc:
         raise _refused(exc) from exc
+
+
+def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-works` (library-views.md §3.1): every work as a row, gathering first; `doc` adds the labels that document's compile cites each work by."""
+    from loom.library.index import NodeIndex
+    from loom.library.works import works
+
+    doc = _str(body, "doc")
+    rows = works(_scan(root), doc=doc)
+    with NodeIndex.open(root) as index:
+        gen = index.generation()
+    return {"ok": True, "result": f"{len(rows)} works", "gen": gen, "works": rows}
+
+
+def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The person's acts on one work (library-views.md §3.1, §7): `library-look-up`, `library-entry`, `library-delete` and `library-restore`; the author's."""
+    from loom.library.acts import ActRefused, delete, edit_entry, look_up, restore
+    from loom.scan.quilt import load_quilt
+
+    who = _author(root, body)
+    try:
+        if endpoint == "library-restore":
+            undo = _str(body, "undo", required=True) or ""
+            ref = restore(root, undo, by=who, kind="person")
+            return {"ok": True, "result": f"put back {ref}", "ref": ref}
+        ref = _str(body, "ref", required=True) or ""
+        if endpoint == "library-look-up":
+            quilt = load_quilt(root)
+            if not quilt.config.online:
+                raise ApiError(
+                    "network-unasked" if not quilt.config.online_asked else "offline",
+                    "a look-up needs the network, which this quilt has not allowed: ask once, and save the answer as library.online",
+                    status=409,
+                )
+            look_up(root, ref, by=who, kind="person")
+            return {"ok": True, "result": f"looked {ref} up", "ref": ref}
+        if endpoint == "library-entry":
+            bibtex = _str(body, "bibtex", required=True) or ""
+            edit_entry(root, ref, bibtex, by=who, kind="person")
+            return {"ok": True, "result": f"rewrote the entry of {ref}", "ref": ref}
+        undo = delete(root, ref, by=who, kind="person")
+        return {"ok": True, "result": f"deleted {ref}", "undo": undo}
+    except ActRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
 
 
 def _library_receive(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -315,7 +335,7 @@ def _library_receive(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 def receive_stream(root: Path, name: str, stream: Any, length: int) -> dict[str, Any]:
     """The publisher's way into `library-receive`: keep the streamed bytes as a drop, or raise ApiError."""
-    from loom.refs.intake import IntakeRefused, receive
+    from loom.library.intake import IntakeRefused, receive
 
     try:
         got = receive(root, name, stream, length)
@@ -449,7 +469,11 @@ HANDLERS: dict[str, Handler] = {
     "library-add": _library_add,
     "library-upload": _library_add,
     "library-file": _library_add,
-    "library-delete": _library_add,
+    "library-delete": _library_act,
+    "library-restore": _library_act,
+    "library-look-up": _library_act,
+    "library-entry": _library_act,
+    "library-works": plain(_library_works),
     "library-ignore": plain(_library_ignore),
     "library-receive": plain(_library_receive),
     "library-take": _intake,
@@ -459,10 +483,10 @@ HANDLERS: dict[str, Handler] = {
     "locate": plain(_locate),
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
-READS: tuple[str, ...] = ("locate", "library-recognise", "library-lookup")
+READS: tuple[str, ...] = ("locate", "library-recognise", "library-lookup", "library-works")
 #: The ones the publisher does not rebuild after: the reads, and the two whose run or filing publishes what it changes.
 NO_REBUILD: tuple[str, ...] = (*READS, "library-update", "library-upload", "library-receive")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ()
 #: The ones that take the library's lock themselves, once every lookup has answered, and so run outside the publication's lock: a slow service holds up no rebuild and no other write.
-OWN_LOCK: tuple[str, ...] = ("library-take", "library-answer")
+OWN_LOCK: tuple[str, ...] = ("library-take", "library-answer", "library-look-up")

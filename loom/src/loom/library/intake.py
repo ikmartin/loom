@@ -429,6 +429,10 @@ def _take_drop(t: _Take, n: int, drop: str, work: str) -> list[Row]:
     arrived = _read_json(d / ARRIVED) or {}
     name = str(arrived.get("name") or (f.name if f else drop[:12]))
     if f is None:
+        # a drop taken already, its bytes held under a work: the same file given again is here
+        held = t.lib.by_doc.get("sha256:" + drop)
+        if held is not None and _acts(d):
+            return [Row(drop, n, name, "here", **t.lib.shown(held), why=f"loom holds these very bytes as {t.lib.shown(held)['short']}'s")]
         raise IntakeRefused("no-such-incoming", f"nothing waits as {drop[:12]}: drop it again", 404)
     if work and work not in t.lib.refs:
         raise IntakeRefused("no-such-work", f"the library has no work {work}", 404)
