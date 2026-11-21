@@ -498,7 +498,9 @@ def attach_pending(
     who = reviewer(result)
     look = read_look(result.quilt.root, who) if who else None
     if look is not None:
-        manifest["changes_since"] = {"who": look.who, "when": look.when}
+        manifest["changes_since"] = {"who": look.who, "when": look.when} | (
+            {"carried": look.carried} if look.carried else {}
+        )
     changes = (in_place(result, who) if who else []) + suggested(result)
     texts = look_texts(result, who) if who else None
     then = texts[0] if texts else {}

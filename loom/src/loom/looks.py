@@ -26,14 +26,18 @@ CONTEXT = 3
 
 @dataclass
 class Look:
-    """One person's look: who, when, and each open file's text by its hash."""
+    """One person's look: who, when, each open file's text by its hash, and whose look it was carried over from (`read_look`), '' for one taken under this name."""
 
     who: str
     when: str
     files: dict[str, str] = field(default_factory=dict)
+    carried: str = ""
 
     def to_json(self) -> dict[str, Any]:
-        return {"who": self.who, "when": self.when, "files": dict(sorted(self.files.items()))}
+        out: dict[str, Any] = {"who": self.who, "when": self.when, "files": dict(sorted(self.files.items()))}
+        if self.carried:
+            out["carried"] = self.carried
+        return out
 
 
 @dataclass(frozen=True)
@@ -53,13 +57,32 @@ def look_path(root: Path, who: str) -> Path:
     return root / LOOKED / f"{slug(who)}.json"
 
 
-def read_look(root: Path, who: str) -> Look | None:
-    """`who`'s last look, or None before their first (or when the file does not parse, which is the same thing)."""
+def _load(path: Path) -> Look | None:
     try:
-        data = json.loads(look_path(root, who).read_text(encoding="utf-8"))
-        return Look(str(data["who"]), str(data["when"]), {str(k): str(v) for k, v in data.get("files", {}).items()})
+        data = json.loads(path.read_text(encoding="utf-8"))
+        files = {str(k): str(v) for k, v in data.get("files", {}).items()}
+        return Look(str(data["who"]), str(data["when"]), files, str(data.get("carried", "")))
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
+
+
+def read_look(root: Path, who: str) -> Look | None:
+    """`who`'s last look; None before the quilt has any (or when the file does not parse, which is the same thing).
+
+    A name with no look of its own, as after the person sets their name in Settings, is given the newest look the quilt holds, saying whose (`carried`), and kept under the new name: a fresh first look would take in unseen every edit waiting since that one.
+    """
+    if not who:
+        return None
+    own = _load(look_path(root, who))
+    if own is not None:
+        return own
+    others = [x for p in sorted((root / LOOKED).glob("*.json")) if (x := _load(p)) is not None]
+    if not others:
+        return None
+    newest = max(others, key=lambda x: x.when)
+    carried = Look(who, newest.when, dict(newest.files), newest.who)
+    _write(root, carried)
+    return carried
 
 
 def _write(root: Path, look: Look) -> None:

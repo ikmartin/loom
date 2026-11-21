@@ -53,7 +53,7 @@
 	const changedCount = $derived(y ? y.changed.length : 0);
 	const takenCount = $derived(y ? y.taken.reduce((n, t) => n + t.rows.length, 0) : 0);
 	const reviewer = $derived(m.reviewer?.name ?? '');
-	const since = $derived(m.changes_since ? m.changes_since.when.slice(0, 16).replace('T', ' ') : '');
+	const since = $derived(m.changes_since ? m.changes_since.when.slice(0, 16).replace('T', ' ') + (m.changes_since.carried ? `, carried over from ${m.changes_since.carried}'s` : '') : '');
 
 	let served = $state(false);
 	let writes = $state({ keep: false, discard: false });

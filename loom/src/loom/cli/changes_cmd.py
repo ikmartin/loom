@@ -125,7 +125,13 @@ def changes_command(
     if document is not None:
         listed = [c for c in listed if document in c.documents]
     look = read_look(root, who) if who else None
-    since = f"since your look ({look.when[:16].replace('T', ' ')})" if look else "before your first look"
+    since = (
+        f"since your look ({look.when[:16].replace('T', ' ')}"
+        + (f", carried over from {look.carried}'s" if look.carried else "")
+        + ")"
+        if look
+        else "before your first look"
+    )
     verdict = f"{since}: " + (counted(len(listed), "change") if listed else "nothing waits on you")
     groups = []
     for doc in sorted({d for c in listed for d in c.documents}) + (
