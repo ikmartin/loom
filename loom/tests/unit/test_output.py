@@ -76,6 +76,7 @@ SCRATCH = (
     ".loom/local/compiles.json",
     ".loom/local/ids.lock",
     ".loom/local/library.lock",
+    ".loom/local/writes.lock",
     ".loom/local/annotations-before-delete.jsonl",
     ".loom/records/review-observations.json",
     "last-seen.json",
