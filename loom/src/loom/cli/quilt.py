@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from contextlib import nullcontext
 from importlib import resources
 from pathlib import Path
 
@@ -148,7 +149,7 @@ def _user_history() -> str:
 def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
     """Write a quilt's three entries into `target`: `config.toml`, the tutorial `README.md`, and `.loom/` with its layout's number, its ignore file and an empty history.
 
-    Returns the paths it created, deepest first, so `init --from` can undo them when the import that follows fails; paths that were already there are not listed and so are never removed.
+    `config.toml` and `README.md` are written only where there is none: in a folder of the person's (`init --from` a paper inside it) a README of theirs stays, and `init` refuses a `config.toml` that is not a quilt's before calling this. Returns the paths it created, deepest first, so `init --from` can undo them when the import that follows fails; paths that were already there are not listed and so are never removed.
     """
     from loom.gitignore import LOOM_IGNORE
     from loom.layout import NUMBER
@@ -168,7 +169,10 @@ def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
         path.mkdir(parents=True, exist_ok=True)
 
     def write(path: Path, text: str) -> None:
-        if not path.exists():
+        if path.exists():
+            if LOOM not in path.relative_to(target).parts:
+                return  # the person's: a folder made a quilt keeps what it held
+        else:
             made.append(path)
         path.write_text(text, encoding="utf-8")
 
@@ -290,6 +294,13 @@ def init(
                 f"to turn an existing paper directory into a quilt."
             )
     existed = target.exists()
+    # a folder of the person's made a quilt: its files are theirs, so loom writes into it only through the door
+    theirs = existed and any(target.iterdir())
+    if (target / "config.toml").exists():
+        raise EnvError(
+            f"{target / 'config.toml'} is there and is not a quilt's; loom writes no config over it. "
+            "Move it aside, then run loom init again."
+        )
     made: list[Path] = []
     chosen = ""
     if not demo:
@@ -320,8 +331,8 @@ def init(
             # the import writes nothing into the quilt until its refusals are past, so a failure leaves only the skeleton above; leaving that behind would refuse the obvious retry -- the same command with --fix-anchoring -- as "already inside a quilt"
             undo_minimal_quilt(target, existed, made)
             raise
-    # said only once the quilt is certain to outlive the command
-    with making(target):
+    # said only once the quilt is certain to outlive the command; into a folder of the person's, through the door
+    with making(target) if not theirs else nullcontext():
         _, said_ai = setup_ai(target, choice)
     gitted = git_init and _git_init(target)
     groups = list(imported.groups) if imported else []

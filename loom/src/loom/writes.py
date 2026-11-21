@@ -1368,7 +1368,7 @@ _MAKING: ContextVar[str | None] = ContextVar("loom_writes_making", default=None)
 
 @contextmanager
 def making(root: Path) -> Iterator[None]:
-    """While `loom init` makes the quilt `root`, which did not exist, `put` writes its files straight and journals nothing: there is no person's text in it yet to keep, and a new quilt starts with no journal of its own making."""
+    """While `loom init` makes the quilt `root` in a folder that held nothing, `put` writes its files straight and journals nothing: there is no person's text in it to keep, and a new quilt starts with no journal of its own making. A folder of the person's made a quilt is written through the door."""
     token = _MAKING.set(os.path.realpath(root))
     try:
         yield
