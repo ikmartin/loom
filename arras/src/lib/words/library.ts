@@ -2,6 +2,9 @@
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+/** How each identifier's scheme is written for a person. */
+const SCHEMES: Record<string, string> = { arxiv: 'arXiv', doi: 'doi', mr: 'MR', zbl: 'zbMATH' };
+
 export const library = {
 	work: {
 		/** A work's tab in Docs, opened by a link to a note on it, in place of its pages, which only the Library can open; taken out once it does. */
@@ -81,6 +84,12 @@ export const library = {
 		delete: 'delete',
 		/** A row looked up while the network is off: the identifier loom found, and the question. */
 		lookAsk: 'look it up this once?',
+		/** An identifier loom found, `scheme:value`, as a person reads it: "arXiv 2209.01234v2". */
+		identifier: (id: string): string => {
+			const at = id.indexOf(':');
+			const scheme = id.slice(0, at).toLowerCase();
+			return `${SCHEMES[scheme] ?? scheme} ${id.slice(at + 1)}`;
+		},
 		yes: 'yes',
 		notNow: 'not now',
 		/** A row whose details were not looked up. */

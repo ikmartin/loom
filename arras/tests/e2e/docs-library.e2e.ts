@@ -1,13 +1,20 @@
 // What Docs draws of the library on round six's fixture (`?fixture=round6`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 8 to 11): the Library button and its picker, a work beside a draft, a citation's card, the notes tab, the Lean marks in the margin and the formalize panel. Where the library's reads are not served, Docs keeps today's Library shelf, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { viewMenu } from '../workspace';
 
-/** One of the showcase quilt's stored papers, which the fixture serves as every work's PDF. */
-const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
+/** Tabs `times` through the page: the keyboard never leaves `dialog`. */
+async function tabsWithin(page: Page, dialog: string, times = 12): Promise<void> {
+	for (let i = 0; i < times; i++) {
+		await page.keyboard.press('Tab');
+		const inside = await page.evaluate((id) => {
+			const at = document.activeElement;
+			return !at || at === document.body || !!at.closest(`[data-testid="${id}"]`);
+		}, dialog);
+		expect(inside, `Tab ${i + 1} left the dialog`).toBe(true);
+	}
+}
 
 async function open(page: Page): Promise<void> {
-	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto('/master/drafting/main?fixture=round6');
 	await expect(page.getByTestId('docs-library')).toBeVisible();
@@ -17,6 +24,17 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 	await open(page);
 	await page.getByTestId('docs-library').click();
 	const picker = page.getByTestId('docs-picker');
+	// a modal dialog: it takes the keyboard, the draft behind it is inert, and Escape gives the keyboard back to the Library button
+	await expect(picker).toHaveAttribute('role', 'dialog');
+	await expect(picker).toHaveAttribute('aria-modal', 'true');
+	await expect(picker.getByTestId('picker-search')).toBeFocused();
+	expect(await page.locator('.fragment').first().evaluate((el) => !!el.closest('[inert]'))).toBe(true);
+	await tabsWithin(page, 'docs-picker');
+	await page.keyboard.press('Escape');
+	await expect(picker).toHaveCount(0);
+	await expect(page.getByTestId('docs-library')).toBeFocused();
+	expect(await page.locator('.fragment').first().evaluate((el) => !!el.closest('[inert]'))).toBe(false);
+	await page.getByTestId('docs-library').click();
 	await expect(picker.getByTestId('picker-row')).toHaveCount(300);
 	await expect(picker).toContainText('300 works');
 	const arden = picker.getByTestId('picker-row').filter({ hasText: 'Cycle spaces of finite quivers' }).filter({ hasText: '2024' });
@@ -25,6 +43,9 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 	await picker.getByTestId('picker-search').fill('median orders on weighting lattices');
 	await expect(picker.getByTestId('picker-row')).toHaveCount(1);
 	await expect(picker).toContainText('1 work');
+	// the search folds accents, as the Library's does
+	await picker.getByTestId('picker-search').fill('kovac');
+	await expect(picker.getByTestId('picker-row').first()).toContainText('Kovač');
 	await picker.getByTestId('picker-search').fill('');
 	await picker.getByRole('button', { name: 'thumbnails' }).click();
 	await expect(picker.getByTestId('work-thumb')).toHaveCount(60);
@@ -39,6 +60,25 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 	await expect(page.getByRole('tab', { name: /Arden 2024/ })).toBeVisible();
 	// beside a draft, the reader draws no digest marks and offers none
 	await expect(page.getByTestId('reading-item').getByTestId('reader-view')).toHaveCount(0);
+	// one toolbar over the paper: the pane's row holds the reader's bar
+	const bar = page.getByRole('group', { name: 'controls for Arden 2024' });
+	await expect(bar.getByTestId('zoom-in')).toBeVisible();
+	await expect(bar.getByTestId('page-at')).toBeVisible();
+	await expect(page.getByTestId('reading-item').locator('.tb')).toHaveCount(0);
+	await expect(page.getByTestId('reading-item').getByTestId('zoom-in')).toHaveCount(0);
+	// words selected offer no note, as in the Library
+	const reader = page.getByTestId('reading-item');
+	await expect(reader.locator('.text span').first()).toBeAttached();
+	await reader.evaluate((box) => {
+		const span = [...box.querySelectorAll('.text span')].find((s) => (s.textContent ?? '').trim().length > 8)!;
+		const range = document.createRange();
+		range.selectNodeContents(span);
+		getSelection()!.removeAllRanges();
+		getSelection()!.addRange(range);
+		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+	await expect(page.getByTestId('selection-popup')).toBeVisible();
+	await expect(page.getByTestId('selection-popup').getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
 	await expect(page).toHaveURL(/\/master\//);
 });
 
@@ -59,6 +99,9 @@ test("a citation's card shows the cited result and opens its work beside the dra
 	await card.getByRole('button', { name: 'open at its place' }).click();
 	await expect(page.getByTestId('reading-item')).toBeVisible();
 	await expect(page.getByRole('tab', { name: /Arden 2024/ })).toBeVisible();
+	// at the page the card names
+	await expect(page.getByRole('group', { name: 'controls for Arden 2024' }).getByTestId('page-at')).toHaveValue('7');
+	await expect(page.getByTestId('reading-item').getByTestId('pdf-page-7')).toBeInViewport({ ratio: 0.3 });
 	await expect(card).toHaveCount(0);
 	await citing(page, 1, 'tq-04A1');
 	await page.locator('.fragment span.cite').nth(1).locator('a').first().hover();
@@ -161,8 +204,17 @@ test("Lean marks stand in a draft's margin, a click on one not formalized opens 
 	const not = page.locator('[data-testid="lean-mark"][data-mark="not"]');
 	await expect(not).toHaveAttribute('title', 'not formalized · formalize…');
 	await not.click();
-	await expect(page.getByTestId('formalize-panel')).toContainText('Formalize Theorem 3.4');
+	const panel = page.getByTestId('formalize-panel');
+	await expect(panel).toContainText('Formalize Theorem 3.4');
+	// a modal dialog: it takes the keyboard, the draft behind it is inert, and Escape gives the keyboard back to the mark
+	await expect(panel).toHaveAttribute('role', 'dialog');
+	await expect(panel).toHaveAttribute('aria-modal', 'true');
+	await expect(panel).toBeFocused();
+	expect(await page.locator('.fragment').first().evaluate((el) => !!el.closest('[inert]'))).toBe(true);
+	await tabsWithin(page, 'formalize-panel');
 	await page.keyboard.press('Escape');
+	await expect(panel).toHaveCount(0);
+	await expect(not).toBeFocused();
 	await viewMenu(page);
 	await page.getByTestId('toggle-lean-marks').click();
 	await expect(page.getByTestId('lean-mark')).toHaveCount(0);

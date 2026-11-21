@@ -1,6 +1,7 @@
 // What the Library remembers while the person moves between views: its tabs (the list of works, and a tab for each work open), the list's search, filter, sort, columns and selection, the result beside each work's page, what is being chosen to digest, and the reads on screen. Kept in this module, not the component, since the column and the view both draw from it and a view is taken down when another is shown. The list or thumbnails choice, the sort, the columns and the digest marks are remembered across visits, per viewer.
 
-import { SvelteSet } from 'svelte/reactivity';
+import { SvelteMap, SvelteSet } from 'svelte/reactivity';
+import { MarkDesk } from '$lib/pdf/desk.svelte';
 import { goto } from '$app/navigation';
 import { route } from '$lib/paths';
 import { Annotating } from '$lib/review/annotating.svelte';
@@ -170,6 +171,26 @@ class LibraryState {
 		let r = this.#readers.get(ref);
 		if (!r) this.#readers.set(ref, (r = { view: new PdfView(), notes: new Annotating() }));
 		return r;
+	}
+
+	/** Each work's paper as its reader names it: its address and its file's name. */
+	#papers = new SvelteMap<string, { url: string; name: string }>();
+	#desks = new Map<string, MarkDesk>();
+
+	/** Says which paper a work's reader shows, for its desk. */
+	paper(ref: string, url: string, name: string): void {
+		const was = this.#papers.get(ref);
+		if (was?.url !== url || was?.name !== name) this.#papers.set(ref, { url, name });
+	}
+
+	/** A work's reader's drawing desk, one for the work wherever its reader and its bar are drawn: in a Library tab the reader's own bar, beside a draft the pane's. */
+	desk(ref: string): MarkDesk {
+		let d = this.#desks.get(ref);
+		if (!d) {
+			d = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url: this.#papers.get(ref)?.url ?? '', name: this.#papers.get(ref)?.name ?? '', notes: this.reader(ref).notes }));
+			this.#desks.set(ref, d);
+		}
+		return d;
 	}
 }
 

@@ -3,6 +3,7 @@
 import type { CheckRow, Note, DigestMark, LeanStatus, NodeAnswer, OutlineItem, Paper, Place, Section, Work, WorkAnswer } from '../types';
 import { ask, review6, type ReviewFixture } from './review6';
 import { notes6 } from './notes6';
+import { paperUrl } from './paper';
 
 // ---- the prototype's generator, as it wrote it, so the same seed gives the same 300 works ----
 
@@ -87,13 +88,13 @@ const PROTO_OF: Record<string, Proto> = Object.fromEntries(PROTOS.map((w) => [RE
 /** The stored PDF's hash: a fixed one for each work that holds one. */
 const hashOf = (id: string) => 'sha256:' + Array.from({ length: 64 }, (_, i) => '0123456789abcdef'[(id.charCodeAt(i % id.length) + i * 7) % 16]).join('');
 
-/** The fixture's PDFs are the showcase quilt's papers, served where `loom serve` serves its store; one per work, in turn. */
-const PAPERS = ['arxiv/2504.01234v1', 'doi/10.4171_showcase_19-2', 'file/e43d5afaac8f10f0'];
-const PAPER_OF: Record<string, string> = {};
+/** How long each stored PDF is: Smith 2024's 31 pages, every other 24. */
+const PAGES_OF: Record<string, number> = {};
+const pagesOf = (id: string) => (id === 'smith' ? 31 : 24);
 
+/** A stand-in paper as long as the work says (`paper.ts`). */
 export function fixturePdfUrl(hash: string): string {
-	const paper = PAPER_OF[hash] ?? PAPERS[0];
-	return `/digests/storage/${paper}/paper.pdf`;
+	return paperUrl(PAGES_OF[hash] ?? 24);
 }
 
 const auShort = (a: string[]) => (!a.length ? '' : a.length === 1 ? a[0] : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a[0]} et al.`);
@@ -106,7 +107,7 @@ function digestedOf(dig: string): Work['digested'] {
 
 function workOf(w: Proto, i: number): Work {
 	const pdf = w.holds === 'no document' ? null : hashOf(w.id);
-	if (pdf) PAPER_OF[pdf] = PAPERS[i % PAPERS.length];
+	if (pdf) PAGES_OF[pdf] = pagesOf(w.id);
 	return {
 		ref: REF[w.id],
 		short: shortOf(w),
@@ -272,7 +273,7 @@ export function workAnswer(f: Fixture, ref: string): WorkAnswer | null {
 		title: row.title,
 		authors: row.authors,
 		year: row.year,
-		holds: { pdf: row.holds.pdf, pages: w.id === 'smith' ? 31 : row.holds.pdf ? 24 : null, tex: row.holds.tex },
+		holds: { pdf: row.holds.pdf, pages: row.holds.pdf ? (PAGES_OF[row.holds.pdf] ?? 24) : null, tex: row.holds.tex },
 		entry,
 		link: row.link,
 		outline: outlineOf(f, ref),
@@ -360,8 +361,8 @@ export function placesOf(f: Fixture, args: { ref?: string; node?: string; pages?
 		list.forEach((r, i) => {
 			if (!r.node || !r.p || r.p === 'stub') return;
 			if (args.node && r.node !== args.node) return;
-			// on the first two pages, which every stand-in PDF the fixture serves has
-			const page = ((i % 2) + 1) as number;
+			// on its own page, the one the outline and the node name
+			const page = r.page ?? 1;
 			if (args.pages && !args.pages.includes(page)) return;
 			const top = 120 + ((i * 97) % 520);
 			out.push({ node: r.node, name: `${r.tax} ${r.num}`, number: r.num, page, rects: [[72, top, 540, top + 46]], paper: r.p as Paper, lean: r.l ?? null });
@@ -429,11 +430,11 @@ export function check(f: Fixture, node: string): boolean {
 export function addWork(f: Fixture, name: string, offline = false): Work {
 	const arxiv = /^\d{4}\.\d{4,5}/.test(name);
 	const w: Work = arxiv && offline
-		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: '', title: `arXiv ${name}`, authors: [], year: '', holds: { pdf: null, tex: false }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: { state: 'unconfirmed', identifier: `arXiv ${name}` }, cited_as: null }
+		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: '', title: `arXiv ${name}`, authors: [], year: '', holds: { pdf: null, tex: false }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: { state: 'unconfirmed', identifier: `arxiv:${name}` }, cited_as: null }
 		: arxiv
 		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: 'Halberd and Ravel 2021', title: 'Gadget towers', authors: ['Halberd', 'Ravel'], year: '2021', holds: { pdf: hashOf('halberd' + f.gen), tex: true }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: null, cited_as: null }
 		: { ref: `tq-${b36(900 + f.gen)}-ref`, short: name, title: name, authors: [], year: '', holds: { pdf: hashOf(name + f.gen), tex: false }, digested: null, used_in: [], link: null, version: null, lookup: null, cited_as: null };
-	if (w.holds.pdf) PAPER_OF[w.holds.pdf] = PAPERS[0];
+	if (w.holds.pdf) PAGES_OF[w.holds.pdf] = 24;
 	f.works.push(w);
 	f.gen++;
 	return w;
@@ -471,7 +472,7 @@ export function lookUp(f: Fixture, ref: string): boolean {
 	const w = f.works.find((x) => x.ref === ref);
 	if (!w?.lookup) return false;
 	Object.assign(w, { short: 'Halberd and Ravel 2021', title: 'Gadget towers', authors: ['Halberd', 'Ravel'], year: '2021', holds: { pdf: hashOf('halberd' + ref), tex: true }, lookup: null });
-	if (w.holds.pdf) PAPER_OF[w.holds.pdf] = PAPERS[0];
+	if (w.holds.pdf) PAGES_OF[w.holds.pdf] = 24;
 	f.gen++;
 	return true;
 }

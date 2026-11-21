@@ -1,10 +1,6 @@
 // Review on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/review6.ts`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 4 to 12): the column's kinds, counts and drafts; the list by who is waiting; answering a question, keeping an edit, withdrawing a task; and the rules that hold everywhere: no control but the four view names changes view, and no id is drawn. Where Review's reads are not served, today's Review stands, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
 import { serve } from '../manifest';
-
-/** One of the showcase quilt's stored papers, which the fixture serves as every work's PDF. */
-const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
 
 async function open(page: Page): Promise<void> {
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -77,7 +73,6 @@ test('a proposed edit opens to its change and is kept; one made in place that br
 });
 
 test("a work's results to check open the first a draft rests on beside its page, and the yes takes it away", async ({ page }) => {
-	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
 	await open(page);
 	await page.getByTestId('review-kind-check').click();
 	const smith = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · ' });
@@ -116,7 +111,6 @@ test("an agent's correction to a compared result shows what it changes, and is t
 });
 
 test("a cited result is located in its paper, its passage marked to digest, and asked for; or asked for at once, alone or all together", async ({ page }) => {
-	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
 	await open(page);
 	await page.getByTestId('review-kind-cited').click();
 	await expect(page.getByText('4 results your drafts cite that loom could not digest by itself')).toBeVisible();
@@ -293,7 +287,6 @@ test('no control in Review changes view, and no id is drawn', async ({ page }) =
 });
 
 test("the review's round: locate washes the words found at reading size, a page the PDF lacks says so, and a library result to attest speaks of the paper", async ({ page }) => {
-	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
 	await open(page);
 	await page.getByTestId('review-kind-cited').click();
 	const okafor = page.getByTestId('review-row').filter({ hasText: 'Okafor 2022 · ' });

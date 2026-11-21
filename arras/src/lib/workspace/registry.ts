@@ -20,6 +20,7 @@ import FileItem from './items/FileItem.svelte';
 import CompiledItem from './items/CompiledItem.svelte';
 import CompiledControls from './items/CompiledControls.svelte';
 import ReadingItem from './items/ReadingItem.svelte';
+import ReadingControls from './items/ReadingControls.svelte';
 import NotesItem from './items/NotesItem.svelte';
 import { docs as docsWords } from '$lib/words/docs';
 import { shortNames } from '$lib/views/docs/names.svelte';
@@ -95,7 +96,7 @@ export const kinds: Record<ItemKind, Kind> = {
 	// a document's compiled PDF (plan 0.29.1), named by its document, since an author's own PDF beside it may have the file name
 	pdf: { tab: (item, m) => pdfName(m.masters, item.id), renderer: CompiledItem, controls: CompiledControls },
 	// a work of the library beside a draft, named by its short name once its read has said it
-	reading: { tab: (item) => shortNames.get(item.id) ?? '', renderer: ReadingItem, controls: PlainControls },
+	reading: { tab: (item) => shortNames.get(item.id) ?? '', renderer: ReadingItem, controls: ReadingControls },
 	// every note of the quilt, by work or by date (8b)
 	notes: { tab: () => docsWords.notes.tab, renderer: NotesItem, controls: PlainControls }
 };

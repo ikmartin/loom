@@ -19,7 +19,7 @@
 			<span>{words.files.head}</span>{#if !filesShelf.open}<span class="count">{store.manifest.files.length}</span>{/if}
 		</button>
 		{#if filesShelf.open}
-			<FileTree files={store.manifest.files} {masters} {own} {copiesOf} {section} />
+			<div class="rows"><FileTree files={store.manifest.files} {masters} {own} {copiesOf} {section} /></div>
 		{:else if peek}
 			<div class="drawer" data-testid="files-drawer">
 				<div class="clip"><FileTree files={store.manifest.files} {masters} {own} {copiesOf} {section} /></div>
@@ -40,14 +40,18 @@
 		position: relative;
 		margin: 0 0 var(--gap-tight);
 	}
+	/* the head stands as tall as today's shelf head, its rule within that height, so the tree's rows stand where they always have */
 	.head {
 		display: flex;
-		align-items: baseline;
+		align-items: center;
 		width: 100%;
-		margin: 0 0 4px;
-		padding: 4px 4px 5px;
+		box-sizing: border-box;
+		height: calc(12px * 1.4 + 6px);
+		margin: 0;
+		padding: 3px 6px 2px 4px;
 		font: inherit;
-		font-size: 12.5px;
+		font-size: 12px;
+		line-height: 1.4;
 		font-weight: 500;
 		color: var(--ink);
 		text-align: left;
@@ -62,6 +66,10 @@
 		font-weight: 400;
 		color: var(--ink-faint);
 		font-variant-numeric: tabular-nums;
+	}
+	/* a top-level row starts where the head's word does, as in today's shelf */
+	.rows {
+		padding: 0 6px 6px 4px;
 	}
 	.drawer {
 		position: absolute;

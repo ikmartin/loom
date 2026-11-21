@@ -35,6 +35,7 @@ export interface Work {
 	used_in: string[];
 	link: string | null;
 	version: number | string | null;
+	/** A work still being looked up, or made while the network was off; `identifier` is `scheme:value`, the scheme lower-case. */
 	lookup: { state: 'looking' | 'unconfirmed'; identifier: string } | null;
 	cited_as: string | null;
 }

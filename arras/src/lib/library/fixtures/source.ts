@@ -198,7 +198,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 				const added = addWork(f, name, offline);
 				const id = `d-${f.gen}-${item}`;
 				f.taken[id] = added.ref;
-				return { id, item, name, state: 'added', act: 'add', ref: added.ref, short: added.short, title: added.title, found_by: arxiv ? 'arxiv' : 'none', tex: arxiv && !offline, unconfirmed: offline && arxiv, ...(offline && arxiv ? { identifier: `arXiv ${name}` } : {}) };
+				return { id, item, name, state: 'added', act: 'add', ref: added.ref, short: added.short, title: added.title, found_by: arxiv ? 'arxiv' : 'none', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null };
 			});
 			changed();
 			return ok({ rows });

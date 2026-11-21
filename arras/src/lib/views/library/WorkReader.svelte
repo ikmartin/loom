@@ -8,7 +8,6 @@
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
 	import type { Place, PlacesAnswer, Rect, WorkAnswer } from '$lib/library/types';
-	import { MarkDesk } from '$lib/pdf/desk.svelte';
 	import MarkedDoc from '$lib/pdf/MarkedDoc.svelte';
 	import PdfBar from '$lib/pdf/PdfBar.svelte';
 	import { paperPlace } from '$lib/pdf/place.svelte';
@@ -23,7 +22,8 @@
 	const ref = $derived(work.ref);
 	const url = $derived(work.holds.pdf ? api.pdfUrl(work.holds.pdf) : '');
 	const reader = $derived(lib.reader(ref));
-	const desk = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url, name: `${work.short}.pdf`, notes: reader.notes }));
+	$effect(() => lib.paper(ref, url, `${work.short}.pdf`));
+	const desk = $derived(lib.desk(ref));
 	const place = paperPlace(
 		() => reader.view,
 		() => ({ seq: lib.goto[ref]?.seq ?? 0, page: lib.goto[ref]?.page ?? 1 })
@@ -101,18 +101,19 @@
 </script>
 
 <div class="reader" data-testid="work-reader">
-	<div class="tb">
+	<!-- beside a draft, the pane's toolbar is the reader's bar (`ReadingControls`), so one row stands over the paper -->
+	{#if !beside}<div class="tb">
 		<PdfBar view={reader.view} notes={reader.notes} {desk} of={work.short} part="read" writes={desk.writes} />
 		<span class="grow"></span>
-		{#if !beside}<span class="menuwrap">
+		<span class="menuwrap">
 			<button type="button" class="btn quiet" aria-expanded={menus.open === `view:${ref}`} onclick={() => menus.toggle(`view:${ref}`)} data-testid="reader-view">{words.reader.view}</button>
 			{#if menus.open === `view:${ref}`}
 				<div class="menu viewmenu">
 					<button type="button" class="mi" role="menuitemcheckbox" aria-checked={lib.overlay} onclick={() => (lib.overlay = !lib.overlay)} data-testid="overlay-toggle"><span class="chk">{lib.overlay ? '✓' : ''}</span>{words.reader.overlay}</button>
 				</div>
 			{/if}
-		</span>{/if}
-	</div>
+		</span>
+	</div>{/if}
 	<div class="doc">
 		<MarkedDoc
 			{desk}

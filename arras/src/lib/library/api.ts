@@ -195,8 +195,8 @@ export interface TakeRow {
 	short?: string;
 	title?: string;
 	found_by?: 'arxiv' | 'doi' | 'isbn' | 'entry' | 'row' | 'none';
-	/** The identifier loom found, as the row names it ("arXiv 2209.01234v2"). */
-	identifier?: string;
+	/** The identifier loom found, `scheme:value` with the scheme lower-case (`arxiv:2209.01234v2`); null where none was found. */
+	identifier: string | null;
 	tex?: boolean;
 	unconfirmed?: boolean;
 	why?: string;

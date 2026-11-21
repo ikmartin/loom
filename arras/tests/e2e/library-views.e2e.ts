@@ -2,13 +2,12 @@
 import { expect, test, type Page, type Request } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-/** One of the showcase quilt's stored papers, which the fixture serves as every work's PDF. */
+/** One of the showcase quilt's stored papers, as a file the person drops on the intake. */
 const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
 
 async function open(page: Page): Promise<Request[]> {
 	const asked: Request[] = [];
 	page.on('request', (r) => asked.push(r));
-	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto('/library?fixture=round6');
 	await expect(page.getByTestId('works-table')).toBeVisible();
@@ -108,7 +107,10 @@ test('the digest marks are asked for only once they are on', async ({ page }) =>
 	expect(asked.some((r) => r.url().includes('library-places'))).toBe(false);
 	await page.getByTestId('reader-view').click();
 	await page.getByTestId('overlay-toggle').click();
-	await expect(page.getByTestId('digest-chip').first()).toBeVisible();
+	// Definition 2.1 stands on page 3, where Section 2 begins
+	await page.getByTestId('work-reader').getByTestId('page-at').fill('3');
+	await page.getByTestId('work-reader').getByTestId('page-at').press('Enter');
+	await expect(page.locator('[data-testid="digest-chip"][data-node="tq-00A4"]')).toBeInViewport();
 });
 
 test('a work held only as a PDF lists its marks and the stubs no place is known for', async ({ page }) => {

@@ -80,13 +80,13 @@
 						{#if c === 'title'}
 							<td class="t">
 								{#if asking.has(w.ref) && w.lookup?.state === 'unconfirmed'}
-									<span>{w.lookup.identifier}</span><span class="found ask">{words.works.lookAsk}</span>
+									<span>{words.works.identifier(w.lookup.identifier)}</span><span class="found ask">{words.works.lookAsk}</span>
 									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w, true); }} data-testid="look-yes">{words.works.yes}</button>
 									<button type="button" class="linkish small quiet" onclick={(e) => { e.stopPropagation(); asking.delete(w.ref); }} data-testid="look-not">{words.works.notNow}</button>
 								{:else if w.lookup?.state === 'looking'}
 									<span class="grey">{w.title}</span><span class="found">{words.works.lookingUp}</span>
 								{:else if w.lookup?.state === 'unconfirmed'}
-									<span>{w.lookup.identifier}</span><span class="found">{words.works.unconfirmed}</span>
+									<span>{words.works.identifier(w.lookup.identifier)}</span><span class="found">{words.works.unconfirmed}</span>
 									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w); }}>{words.works.lookUp}</button>
 								{:else}
 									<button type="button" class="open" onclick={(e) => { e.stopPropagation(); opened(e, w); }} data-testid="work-open">{w.title}</button>{#if w.version}<span class="found">· {words.works.version(w.version)}</span>{/if}

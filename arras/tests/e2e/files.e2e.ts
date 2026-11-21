@@ -292,6 +292,14 @@ test('the project tree stands under a Files head, open by default; folded, it co
 	await page.goto('/master/drafting/main');
 	const files = page.getByTestId('files-toggle');
 	await expect(files).toHaveAttribute('aria-expanded', 'true');
+	// the tree's rows stand where today's shelf put them: under a head as tall as its head (a 12 px line and 6 px), with the tree's own 2 px above its first row, and 4 px in from the head's left
+	const head = (await files.boundingBox())!;
+	const first = (await page.getByTestId('docs-tree').getByRole('link').first().boundingBox())!;
+	const tree = (await page.getByTestId('docs-tree').boundingBox())!;
+	expect(Math.abs(head.height - 22.8)).toBeLessThanOrEqual(0.5);
+	expect(Math.abs(tree.y - (head.y + 24.8))).toBeLessThanOrEqual(0.5);
+	expect(Math.abs(tree.x - (head.x + 4))).toBeLessThanOrEqual(0.5);
+	expect(first.y).toBeGreaterThanOrEqual(tree.y);
 	// hovering it says what it is a view of: the project's own directory
 	await expect(files).toHaveAttribute('title', 'View of files in synthetic/');
 	await expect(page.getByTestId('docs-tree')).toBeVisible();

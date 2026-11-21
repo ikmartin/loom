@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The formalize panel (11a, 11b; from the Web, 11c, 11e), over the view it was opened from: the results asked for in full, the sentence of what an agent will do, what stops the request and what keeps the result from reading formalized, each under its own head and drawn only when it holds something, what is to be stated, proved (or assumed for now) and assumed, what is formalized already, folded, each item's statement a click away; and the button, which asks an agent, one task a result. The plan is `formal-plan`'s, asked again as the person chooses to prove or assume.
+	// The formalize panel (11a, 11b; from the Web, 11c, 11e), over the view it was opened from: the results asked for in full, the sentence of what an agent will do, what stops the request and what keeps the result from reading formalized, each under its own head and drawn only when it holds something, what is to be stated, proved (or assumed for now) and assumed, what is formalized already, folded, each item's statement a click away; and the button, which asks an agent, one task a result. The plan is `formal-plan`'s, asked again as the person chooses to prove or assume. A modal dialog: it takes the keyboard on opening, what is behind it is inert, and Escape closes it, the keyboard going back to what opened it.
 	import * as api from '$lib/library/api';
 	import type { FormalPlan, NodeAnswer, PlanRow as Row } from '$lib/library/types';
 	import Icon from '$lib/components/Icon.svelte';
@@ -12,6 +12,8 @@
 	import { docs } from '$lib/words/docs';
 	import { review } from '$lib/words/review';
 	import { formalize } from './state.svelte';
+	import { modal } from '$lib/components/modal';
+	import { said } from '$lib/library/said';
 
 	let { left }: { left: number } = $props();
 	const words = docs.formalize;
@@ -67,13 +69,12 @@
 		busy = true;
 		const done = await api.formalAsk(formalize.targets, formalize.assume);
 		busy = false;
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		message.post(words.asked(name, one));
 		formalize.close();
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && formalize.close()} />
 
 {#snippet item(r: Row, extra?: import('svelte').Snippet)}
 	{@const o = open[r.result]}
@@ -94,7 +95,7 @@
 {/snippet}
 
 {#if formalize.targets}
-	<section class="fz" style:left="{left + 24}px" data-testid="formalize-panel" aria-label={name ? words.title(name) : words.close}>
+	<div class="fz" style:left="{left + 24}px" role="dialog" aria-modal="true" tabindex="-1" data-testid="formalize-panel" aria-label={name ? words.title(name) : words.close} use:modal={() => formalize.close()}>
 		<header>
 			<b>{name ? words.title(name) : ''}</b>
 			<span class="quiet">{doc.split('/').pop()}</span>
@@ -146,7 +147,7 @@
 				</div>
 			</div>
 		{/if}
-	</section>
+	</div>
 {/if}
 
 <style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The library's picker over Docs (8a): a search, how many works, list or thumbnails (the Library's choice, one for both), sorted by title, authors or year, the list saying the label the draft cites each work by. A click opens the work beside the draft and closes the picker.
+	// The library's picker over Docs (8a): a search, how many works, list or thumbnails (the Library's choice, one for both), sorted by title, authors or year, the list saying the label the draft cites each work by. A click opens the work beside the draft and closes the picker. It is a modal dialog: it takes the keyboard on opening, the page behind it is inert, and Escape closes it, the keyboard going back to the Library button.
 	import '$lib/views/library/library.css';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
@@ -14,6 +14,7 @@
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { shortNames } from './names.svelte';
 	import { docsState as ds } from './docs.svelte';
+	import { modal } from '$lib/components/modal';
 
 	let { doc, left }: { doc: string | null; left: number } = $props();
 	const read = new Read<WorksAnswer>();
@@ -33,9 +34,7 @@
 	}
 </script>
 
-<svelte:window onkeydown={(e) => e.key === 'Escape' && (ds.picker = false)} />
-
-<section class="lv picker" style:left="{left}px" data-testid="docs-picker" aria-label={words.picker.open}>
+<div class="lv picker" style:left="{left}px" role="dialog" aria-modal="true" tabindex="-1" data-testid="docs-picker" aria-label={words.picker.open} use:modal={() => (ds.picker = false)}>
 	<div class="pk-h">
 		<input class="search" placeholder={words.picker.search} aria-label={words.picker.search} bind:value={ds.q} data-testid="picker-search" />
 		<span class="small grey">{words.picker.count(works.length)}</span>
@@ -72,7 +71,7 @@
 			</table>
 		</div>
 	{/if}
-</section>
+</div>
 
 <style>
 	.picker {
