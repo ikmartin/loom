@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
 	import { canonUrl, keyUrl, masterUrl, threadUrl, workUrl } from '$lib/nav';
-	import { shelf } from '$lib/library';
+	import { workRows } from '$lib/works';
 	import { landmarkName } from '$lib/workspace/history';
 	import { frame } from '$lib/words/frame';
 
@@ -20,7 +20,7 @@
 		const m = store.manifest;
 		if (!m) return [];
 		// the cited works too, by key and title, each opening its paper: the palette is the one search, and a work is a thing a reader opens, once however many documents it has
-		const works = shelf(m).map((r) => ({
+		const works = workRows(m).map((r) => ({
 			id: `work:${r.citekey}`,
 			title: `${r.citekey} · ${r.title}`,
 			section: `${frame.views.docs.name} · work`,

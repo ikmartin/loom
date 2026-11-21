@@ -99,73 +99,7 @@ def test_atomize_refuses_a_target_file_that_exists(tmp_path: Path) -> None:
     )
 
 
-# Lint by citation (plan 0.18.5b §3): a digest's diagnostic is the author's when their text reaches the result it is on, a cited work's when the bibliography's work is cited, and otherwise a work nothing cites, which counts toward nothing.
-
 _DANGLING = "\\ref{nowhere-at-all}"
-
-
-def _uncited_digest(q: Path) -> None:
-    """A digest of `Har77`, which the demo's bibliography holds and nothing cites, with one dangling reference (a warning: no document's compile reads a digest)."""
-    (q / ".loom/library" / "Har77.tex").write_text(
-        "% !LOOM digest: Har77\n% !LOOM prefix: Har77\n\n"
-        "\\begin{theorem}[{\\cite[Theorem 1.1]{Har77}}]\\label{Har77-thm-1.1}\n"
-        f"Every scheme is a scheme, as in {_DANGLING}.\n\\end{{theorem}}\n",
-        encoding="utf-8",
-    )
-
-
-def _dangle_in(q: Path, label: str) -> None:
-    """A dangling reference inside the Calloway14 result labelled `label`."""
-    path = q / ".loom/library" / "Calloway14.tex"
-    text = path.read_text(encoding="utf-8")
-    start = text.index(f"\\label{{{label}}}")
-    end = text.index("\\end{", start)
-    path.write_text(text[:end] + f"See {_DANGLING}.\n" + text[end:], encoding="utf-8")
-
-
-def test_an_uncited_digest_counts_toward_nothing_and_library_check_lists_it(tmp_path: Path) -> None:
-    q = demo(tmp_path)
-    before = ok("lint", cwd=q).output.splitlines()[0]
-    _uncited_digest(q)
-    r = ok("lint", cwd=q)  # its error is no error of the author's
-    assert r.output.splitlines()[0] == before
-    line = the(r.output.splitlines(), lambda ln: "nothing cites" in ln, "the uncited line")
-    # the line says what it counts: diagnostics, in how many works
-    assert line.endswith("in 1 work nothing cites; loom library check lists them") and " diagnostic" in line, line
-    assert "dangling-link" not in r.output and "Har77" not in r.output  # nor its missing copy and identifier
-    data = json_of("lint", "--json", cwd=q)
-    group = the(data["groups"], lambda g: "nothing cites" in g["heading"], "the uncited group")
-    assert "dangling-link" in [i["diagnostic"]["code"] for i in group["items"]]
-    assert group["count"] == len(group["items"]) == int(line.split()[0])
-    from loom.refs.proposals import record_extracted
-    from loom.scan.quilt import load_quilt
-    from loom.scan.scan import scan
-
-    record_extracted(scan(load_quilt(q)), "Har77")  # so the work's only finding is lint's
-    out = ok("library", "check", "Har77", cwd=q).output.splitlines()  # listed, and not a failure
-    assert out[0].endswith("; 1 work nothing cites with lint diagnostics"), out[0]
-    heading = the(out, lambda ln: ln.startswith("works nothing cites that lint finds wrong"), "check's group")
-    assert out[out.index(heading) + 1].strip().startswith("lint finds 2 warnings, ")
-    assert out[out.index(heading) + 1].strip().endswith("Har77")
-
-
-def test_a_cited_digest_keeps_the_cited_works_heading(tmp_path: Path) -> None:
-    q = demo(tmp_path)
-    _dangle_in(q, "Calloway14-prop-3.3")  # no postnote names Proposition 3.3
-    r = ok("lint", cwd=q)  # a digest is loom's reading of a paper, which no document's compile reads
-    assert "1 warning in cited works" in r.output.splitlines()[0]
-    assert "in cited works (1)" in r.output.splitlines()
-    assert "1 warning  dangling-link (internal)" in [ln.strip() for ln in r.output.splitlines()]
-    assert "nothing cites" not in r.output
-
-
-def test_a_diagnostic_on_a_result_the_author_reaches_is_the_authors(tmp_path: Path) -> None:
-    q = demo(tmp_path)
-    _dangle_in(q, "Calloway14-prop-3.2")  # dm-0003 cites [Proposition 3.2]{Calloway14}
-    r = ok("lint", cwd=q)
-    assert r.output.splitlines()[0].startswith("2 warnings, ")  # the demo's own warning and infos follow it
-    assert "warning dangling-link (internal) (1)" in r.output.splitlines()
-    assert "in cited works" not in r.output
 
 
 def test_a_quilt_with_nothing_to_read_says_how_to_begin(tmp_path: Path) -> None:
@@ -248,15 +182,10 @@ def _fixes(q: Path, code: str) -> list[str]:
 
 
 def test_every_finding_names_what_resolves_it_and_the_command_works(tmp_path: Path) -> None:
-    """T3: `uses-missing`, `detached-annotation`, `unmatched-postnote`, `undigested-citekey` and `unreachable` named no command; each now names one, and the one it names runs in that state."""
+    """T3: `uses-missing`, `detached-annotation` and `unreachable` named no command; each now names one, and the one it names runs in that state."""
     q = demo(tmp_path)
     proof = q / "drafting" / "nodes" / "dm-0003.tex"
     edit(proof, "\\uses{dm-0002}\nBy Lemma", "\\uses{dm-0002}\nAs in Definition~\\ref{def:widget}, by Lemma")
-    edit(
-        proof,
-        "\\cite[Proposition 3.2]{Calloway14}",
-        "\\cite[Proposition 3.2]{Calloway14}, \\cite[Theorem 99]{Calloway14}, \\cite[Theorem 1]{Har77}",
-    )
     (q / "drafting" / "nodes" / "stray.tex").write_text("\\begin{remark}\\label{dm-0099}\nStray.\n\\end{remark}\n")
     a = ok(
         "annotate",
@@ -274,12 +203,8 @@ def test_every_finding_names_what_resolves_it_and_the_command_works(tmp_path: Pa
     ok("annotate", "dm-0002", "--quote", "one-point orbits", "--as", "Tester", cwd=q)
     edit(q / "drafting" / "nodes" / "dm-0002.tex", "the one-point orbits", "the orbits of one point")
     assert "add dm-0001 to the \\uses of dm-0003/proof" in _fixes(q, "loom:uses-missing")
-    assert _fixes(q, "loom:unmatched-postnote") == ["loom library Calloway14"]
-    assert _fixes(q, "loom:undigested-citekey") == ["loom library update Har77"]
     assert _fixes(q, "unreachable") == ["\\input{nodes/stray} in a document, or remove drafting/nodes/stray.tex"]
     assert _fixes(q, "loom:detached-annotation") == [f'loom annotate --resolve {a} "…"']
-    ok("library", "Calloway14", cwd=q)
-    ok("library", "update", "Har77", "--dry-run", cwd=q)
     ok("annotate", "--resolve", a, "The orbit is still there, reworded.", "--as", "Tester", cwd=q)
     assert _fixes(q, "loom:detached-annotation") == []
     # a fork whose patch was never applied: its node file is unreachable, and the fix says what the patch would do, with no command the cut list removes
@@ -301,14 +226,9 @@ def _rows(q: Path, code: str) -> list[dict]:  # type: ignore[type-arg]
 
 
 def test_every_diagnostic_says_whose_it_is_to_fix(tmp_path: Path) -> None:
-    """The person's own, an agent's copy's, or a cited work's: Problems in the viewer listed 174 errors and none was in the author's files."""
-    from loom.scan.owners import CITED, Owners
-    from loom.scan.quilt import load_quilt
-    from loom.scan.scan import scan
-
+    """The person's own, or an agent's copy's: Problems in the viewer listed 174 errors and none was in the author's files."""
     q = demo(tmp_path)
     edit(q / "drafting" / "nodes" / "dm-0002.tex", "the one-point orbits", f"the one-point orbits {_DANGLING}")
-    _dangle_in(q, "Calloway14-prop-3.2")  # reached from the person's dm-0003, and still the work's
     ok("draft", "drafting/main.tex", "--ai", "aidoc.tex", cwd=q)
     copy = q / ".loom" / "agents" / "copies" / "aidoc.tex"
     copy.write_text(
@@ -317,54 +237,22 @@ def test_every_diagnostic_says_whose_it_is_to_fix(tmp_path: Path) -> None:
     )
     rows = _rows(q, "dangling-link")
     whose = {d["locations"][0]["file"]: d["owner"] for d in rows}
-    assert whose == {
-        "drafting/nodes/dm-0002.tex": "person",
-        ".loom/agents/copies/aidoc.tex": "copy",
-        ".loom/library/Calloway14.tex": "work",
-    }, rows
-    work = next(d for d in rows if d["owner"] == "work")
-    assert work["fixes"][-1]["act"] == {
-        "endpoint": "library-update",
-        "body": {"works": ["Calloway14"], "redo": True, "steps": ["extract"]},
-    }, "a digest's problem is mended by digesting its work again"
-    assert all("act" not in f for d in rows if d["owner"] != "work" for f in d.get("fixes", []))
-    # a copy reaching a digest's result makes it no more the person's in lint's report groups
-    result = scan(load_quilt(q))
-    (dangle,) = [d for d in result.lint if d.code == "dangling-link" and d.locations[0].file.endswith("Calloway14.tex")]
-    assert Owners(result).of(dangle) != CITED, "the person's dm-0003 reaches it"
-
-
-def test_a_fix_a_viewer_can_do_names_its_endpoint(tmp_path: Path) -> None:
-    """An undigested work is digested, and a stale permission file rewritten, through the write API; every other fix stays a command to copy."""
-    q = demo(tmp_path)
-    edit(
-        q / "drafting" / "nodes" / "dm-0003.tex",
-        "\\cite[Proposition 3.2]{Calloway14}",
-        "\\cite[Proposition 3.2]{Calloway14}, \\cite[Theorem 1]{Har77}",
-    )
-    (undigested,) = _rows(q, "loom:undigested-citekey")
-    assert undigested["owner"] == "person"
-    assert undigested["fixes"] == [
-        {
-            "label": "digest it",
-            "command": "loom library update Har77",
-            "act": {"endpoint": "library-update", "body": {"works": ["Har77"]}},
-        }
-    ]
+    assert whose == {"drafting/nodes/dm-0002.tex": "person", ".loom/agents/copies/aidoc.tex": "copy"}, rows
+    assert all("act" not in f for d in rows for f in d.get("fixes", []))
 
 
 def test_the_manifest_and_lint_agree_whose_each_diagnostic_is(tmp_path: Path) -> None:
     """The viewer's Problems reads the manifest and `loom lint --json` the scan; one stamp serves both."""
     q = demo(tmp_path)
-    _dangle_in(q, "Calloway14-prop-3.3")
+    edit(q / "drafting" / "nodes" / "dm-0002.tex", "the one-point orbits", f"the one-point orbits {_DANGLING}")
     run("build", cwd=q)
     published = json.loads((q / ".loom" / "cache" / "site" / "manifest.json").read_text(encoding="utf-8"))[
         "diagnostics"
     ]
-    assert published and all(d.get("owner") in ("person", "copy", "work") for d in published), published
+    assert published and all(d.get("owner") in ("person", "copy") for d in published), published
     linted = json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"]
     key = lambda d: (d["code"], d["message"])  # noqa: E731
     assert {key(d): d["owner"] for d in linted} == {
         key(d): d["owner"] for d in published if key(d) in {key(x) for x in linted}
     }
-    assert _rows(q, "dangling-link")[0]["owner"] == "work"
+    assert _rows(q, "dangling-link")[0]["owner"] == "person"

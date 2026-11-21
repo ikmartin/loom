@@ -19,7 +19,6 @@ from loom.errors import EXIT_CONTENT, ContentError, EnvError, NotFoundError
 from loom.paths import CLOSURES, LOOM, document_build, document_page
 from loom.render.compiles import COMPILE_CODES, error_place
 from loom.reshape.linearize import flatten
-from loom.scan.model import Diagnostic
 from loom.scan.scan import ScanResult
 from loom.tex.bundle import (
     Bundle,
@@ -104,7 +103,7 @@ def compile(  # noqa: A001
 ) -> None:
     """Run latexmk from a master's own directory into its compile folder, .loom/cache/tex/<stem>-<hash>/ (default: the default master), or for a key.
 
-    Compiling a key builds the document of its closure and runs latexmk on that, so `--with` previews a proposed diff and `--draft` a node that has no id yet: neither writes into the quilt, and a failure names the digests whose packages are missing. `--html` also makes a document's HTML as TeX makes it, which its fragments are cut from: the page, the fragment loom rebuilt from it, and how many of the document's nodes and blocks it places.
+    Compiling a key builds the document of its closure and runs latexmk on that, so `--with` previews a proposed diff and `--draft` a node that has no id yet: neither writes into the quilt. `--html` also makes a document's HTML as TeX makes it, which its fragments are cut from: the page, the fragment loom rebuilt from it, and how many of the document's nodes and blocks it places.
     """
     result = open_scan(quilt_path)
     root = result.quilt.root
@@ -115,7 +114,6 @@ def compile(  # noqa: A001
         parts += ["--with", with_file]
     if draft_file:
         parts += ["--draft", draft_file]
-    missing: list[Diagnostic] = []
     if draft_file:
         if not result.masters:
             raise ContentError("the quilt has no master; compiling a draft needs a preamble")
@@ -158,7 +156,7 @@ def compile(  # noqa: A001
                 root, result.base_of(master), master, root / document_build(master), engine_for(result, master, engine)
             )
         if html:
-            report = compile_report(res, label, root, missing)
+            report = compile_report(res, label, root)
             with Progress("making HTML", 1) as p:
                 p.item(master)
                 made = html_report(result, master, engine_for(result, master, engine))
@@ -189,9 +187,7 @@ def compile(  # noqa: A001
                 root / CLOSURES / out.stem,
                 engine_for(result, result.default_master or result.masters[0], engine),
             )
-        if res.usable == "failed":
-            missing = missing_packages(result, b.closure + [key])
-    compile_report(res, label, root, missing).emit(as_json)
+    compile_report(res, label, root).emit(as_json)
 
 
 def html_report(result: ScanResult, master: str, engine: str) -> dict[str, Any]:
@@ -311,10 +307,10 @@ def failure(res: CompileResult, root: Path) -> tuple[str, dict[str, Any] | None,
     return said, place, log
 
 
-def compile_report(res: CompileResult, label: str, root: Path, missing: list[Diagnostic] | None = None) -> Report:
+def compile_report(res: CompileResult, label: str, root: Path) -> Report:
     """The outcome of one compile, as `loom compile` reports it: exit 0 when it produced a PDF, whether or not the log carried warnings.
 
-    A nonzero exit with a readable PDF and no `!` line is reported as warnings, not as a failure: latexmk exits nonzero on an undefined reference, and an agent told FAILED cannot tell its own proposal from a document that was already like that. `missing` are the digests' missing-package diagnostics, named before the error.
+    A nonzero exit with a readable PDF and no `!` line is reported as warnings, not as a failure: latexmk exits nonzero on an undefined reference, and an agent told FAILED cannot tell its own proposal from a document that was already like that.
     """
     state = res.usable
     where = f"{res.outdir.relative_to(root).as_posix()}/"
@@ -325,7 +321,6 @@ def compile_report(res: CompileResult, label: str, root: Path, missing: list[Dia
         "outdir": where,
         "warnings": list(res.warnings),
         "errors": list(res.errors),
-        "missing_packages": [d.to_dict() for d in missing or []],
     }
     if state == "ok":
         return Report(f"compiled {label} into {where} ({res.engine})", data=data)
@@ -335,21 +330,13 @@ def compile_report(res: CompileResult, label: str, root: Path, missing: list[Dia
             groups=[Group("warnings", [Item(w) for w in res.warnings], next=None)],
             data=data,
         )
-    # a missing package is a digest's, so it is listed in full here rather than summarised as a cited work's
-    groups = diagnostic_groups(missing or [], None)
     said, place, log = failure(res, root)
     data.update(error_at=place, log=log)
-    named = (
-        f"; {counted(len({tuple(d.keys) for d in missing}), 'digest')} it includes requires a package that is missing"
-        if missing
-        else ""
-    )
     return Report(
-        f"{label} did not compile: {said}{named}",
+        f"{label} did not compile: {said}",
         ok=False,
         exit=EXIT_CONTENT,
         lines=[f"the log: {log}"] if log else [],
-        groups=groups,
         data=data,
     )
 
@@ -360,14 +347,6 @@ def _failed(res: CompileResult, root: Path, bad: bool) -> dict[str, Any]:
         return {"error": None}
     said, place, log = failure(res, root)
     return {"error": said + (f"; the log: {log}" if log else ""), "error_at": place, "log": log}
-
-
-def missing_packages(result: ScanResult, keys: list[str]) -> list[Diagnostic]:
-    """The `loom:missing-package` diagnostics of the digests among `keys`, named before a failed closure compile."""
-    files = {result.nodes[k].file for k in keys if k in result.nodes and result.nodes[k].digest}
-    return [
-        d for d in result.lint if d.code == "loom:missing-package" and any(loc.file in files for loc in d.locations)
-    ]
 
 
 @click.command()
@@ -395,11 +374,7 @@ def check(closures: str, as_json: bool, quilt_path: str | None) -> None:
         p.next_stage("linting")
         # every document is compiled below and reported by this run, so what its last compile left is not read here
         diags = [d for d in lint_cmd.all_diagnostics(result) if d.code not in COMPILE_CODES]
-        keys = (
-            [k for k, n in result.nodes.items() if n.kind == "environment" and n.digest is None]
-            if closures == "all"
-            else []
-        )
+        keys = [k for k, n in result.nodes.items() if n.kind == "environment"] if closures == "all" else []
         p.next_stage("compiling", len(result.masters) + len(keys))
         for master in result.masters:
             p.item(master)
@@ -611,21 +586,12 @@ def source(target: str, closure: bool, at: str | None, diff: bool, run_dir: str 
     key = resolve_key(result, target)
     region = result.assembly.regions.get(key)
     if region is not None:
-        # an equation's label names a point inside a node, not a node: print the node that holds it, and say so,
-        # rather than index a region as if it were one -- which crashed with a KeyError on a digest's display equation
+        # an equation's label names a point inside a node, not a node: print the node that holds it, and say so, rather than index a region as if it were one, which crashed with a KeyError on a display equation
         note(
             f"{region.label} labels {'an equation' if region.where != 'prose' else 'a line'} inside {region.container}; printing that"
         )
         key = region.container
     require_text(result, key)
-    from loom.scan.digests import other_version
-
-    ck = result.assembly.digest_files.get(result.nodes[key].file) if key in result.nodes else None
-    v = other_version(result.assembly, result.nodes[key].file) if ck else None
-    if v is not None:
-        note(
-            f"{key} is read off {ck}'s digest, which {v.why}; its number and page are unverified, so check them with loom library read {ck}"
-        )
     log_run(
         run_dir,
         f"loom source {key}"

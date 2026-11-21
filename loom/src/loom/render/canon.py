@@ -14,11 +14,10 @@ from loom.history.ledger import Entry, History
 from loom.paths import document_build
 from loom.render.fragments import FragmentRenderer, Owner, _from_tex, bare_preamble, plain_text
 from loom.render.markup import esc
-from loom.scan.digests import loaded_packages
 from loom.scan.envtree import norm_label
 from loom.scan.macros import compatibility_macros, declared_alphabets, package_macros, to_mathjax
 from loom.scan.model import SourceFile
-from loom.scan.preamble import PreambleClosure, build_closure
+from loom.scan.preamble import PreambleClosure, build_closure, loaded_packages
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult
 from loom.scan.source import read_source

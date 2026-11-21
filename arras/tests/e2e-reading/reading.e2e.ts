@@ -4,6 +4,7 @@
 import { compileFolder, expect, readOnly, storeDir, test, type Served } from '../served';
 import type { Page } from '@playwright/test';
 import { openPicker, pickSession } from '../picker';
+import { openHere } from '../workspace';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -406,9 +407,6 @@ readOnly('a citation opens its paper at the result, past the first page, and a \
 	// a remark of the revision refers to its Corollary 5.2 by `\ref`, which opens the paper at that result too
 	await page.goto('/node/Arden24v2-rem-5.3');
 	await expect(page.locator('[data-pane="0"] a.ref[data-target="Arden24v2-cor-5.2"]').first()).toHaveAttribute('href', '/library/Arden24-v2?page=3&result=Arden24v2-cor-5.2');
-	// and the work and its revision are one row of the column's Library
-	await page.getByTestId('library-toggle').click();
-	await expect(page.getByTestId('library-list').locator('a[data-testid^="library-work-Arden24"]')).toHaveCount(1);
 });
 
 readOnly('a link that quotes a work without a page is lit on the page the publisher finds it on', async ({ page }) => {
@@ -560,16 +558,6 @@ readOnly('a paper drawn again at a new zoom never shows a render refused', async
 	await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 });
 
-readOnly("Bellamy19's overview, written by the survey agent through `loom write`, tops its Info with its result links named", async ({ page }) => {
-	// plan 0.21.3: the showcase's survey session writes the overview; the publisher renders it with its blocks and says who wrote it
-	await page.goto('/library/Bellamy19?view=info');
-	const overview = page.getByTestId('work-overview');
-	await expect(overview).toContainText('Bellamy counts the lattice points of the median polytope');
-	await expect(overview.getByTestId('page-meta')).toContainText('written by Survey Agent');
-	await expect(overview.locator('section[data-block="proof-basics"] h2')).toHaveText('proof-basics');
-	await expect(overview.locator('a').filter({ hasText: /3\.2/ }).first()).toBeVisible();
-});
-
 readOnly("a paper's page in view is what loom here reports, at the address loom link prints", async ({ page, served }) => {
 	await page.goto(PAGE2);
 	await page.locator('[data-testid="pdf-page-2"] canvas').waitFor();
@@ -666,18 +654,10 @@ async function readTo(page: Page, want: At, pane = 0): Promise<void> {
 		.toBe('there');
 }
 
-/** Open a work from the column's Library, as a reader chooses what to read. A work and its revision are one row, so a row is named by how its key begins. */
-async function fromShelf(page: Page, citekey: string): Promise<void> {
-	const row = page.locator(`a[data-testid^="library-work-${citekey}"]`);
-	if (!(await row.isVisible())) await page.getByTestId('library-toggle').click();
-	await row.click();
-}
-
-/** Leave for the work's Info and come back, which makes the paper again. */
-async function toInfoAndBack(page: Page): Promise<void> {
-	await page.getByTestId('tab-info').click();
-	await page.getByTestId('work-info').waitFor();
-	await page.getByTestId('tab-paper').click();
+/** Open the other work in the pane and bring Bellamy19's tab back, which makes its paper again. */
+async function awayAndBack(page: Page): Promise<void> {
+	await openHere(page, SECOND);
+	await page.getByRole('tab', { name: 'Bellamy19' }).click();
 }
 
 /** A PDF of `n` pages saying their numbers, the first small and the rest A4, as nothing in the showcase is: long enough that most of it is never drawn, and not one size throughout. */
@@ -700,7 +680,7 @@ function longPdf(n: number): Buffer {
 	return Buffer.from(out, 'latin1');
 }
 
-readOnly('a work opens where the reader left it: after a reload, by a plain link, from the shelf and from the library’s page', async ({ page }) => {
+readOnly('a work opens where the reader left it: after a reload, by a plain link, and by a link outside the panes', async ({ page }) => {
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
@@ -710,13 +690,9 @@ readOnly('a work opens where the reader left it: after a reload, by a plain link
 	await page.goto('/review');
 	await page.goto(BELLAMY);
 	await staysAt(page, left);
-	// from the shelf, with something else being read
+	// by a link outside the panes, with something else being read
 	await page.goto(SECOND);
-	await fromShelf(page, 'Bellamy19');
-	await staysAt(page, left);
-	// from the library's own page
-	await page.goto('/review/library');
-	await page.getByTestId('ledger-Bellamy19').locator('a.title').click();
+	await openHere(page, BELLAMY);
 	await staysAt(page, left);
 });
 
@@ -771,7 +747,7 @@ readOnly('two works keep a place each', async ({ page }) => {
 	await readTo(page, second);
 	await page.reload();
 	await staysAt(page, second);
-	await fromShelf(page, 'Bellamy19');
+	await openHere(page, BELLAMY);
 	await staysAt(page, first);
 	await page.getByRole('tab', { name: 'Arden24-v2' }).click();
 	await staysAt(page, second);
@@ -791,7 +767,7 @@ readOnly('a work is open in one pane of a window, and a second window on it leav
 	await readTo(other, theirs);
 	await staysAt(page, mine);
 	// not even a paper made again takes the other window's place: what this window was doing is in the tab
-	await toInfoAndBack(page);
+	await awayAndBack(page);
 	await staysAt(page, mine);
 	await staysAt(other, theirs);
 	// whichever moved last is what the next visit opens at
@@ -802,15 +778,13 @@ readOnly('a work is open in one pane of a window, and a second window on it leav
 	await staysAt(third, { page: 1, share: 0.5 });
 });
 
-readOnly('a tab brought back and a paper back from Info are where they were left', async ({ page }) => {
+readOnly('a tab brought back is where it was left', async ({ page }) => {
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
-	await fromShelf(page, 'Arden24');
+	await openHere(page, SECOND);
 	await staysAt(page, { page: 1, share: 0 });
 	await page.getByRole('tab', { name: 'Bellamy19' }).click();
-	await staysAt(page, left);
-	await toInfoAndBack(page);
 	await staysAt(page, left);
 	// a page asked for in the box is answered once, not again by a paper made later
 	const at = page.getByTestId('page-at');
@@ -821,7 +795,7 @@ readOnly('a tab brought back and a paper back from Info are where they were left
 	// read back from page 3, once the paper is there
 	await arrived(page, 3);
 	await readTo(page, left);
-	await toInfoAndBack(page);
+	await awayAndBack(page);
 	await staysAt(page, left);
 });
 
@@ -835,7 +809,7 @@ readOnly('a link’s place holds until the reader has left its page: then it com
 	await readTo(page, within);
 	await expect(page).toHaveURL(/quote=/);
 	await expect(lit).toBeAttached();
-	await toInfoAndBack(page);
+	await awayAndBack(page);
 	await staysAt(page, within);
 	await expect(lit).toBeAttached();
 	// off its page, it lets go
@@ -852,13 +826,13 @@ readOnly('a plain link to a work already open leaves the reader where they are',
 	const left = { page: 2, share: 0.4 };
 	await page.goto(BELLAMY);
 	await readTo(page, left);
-	await fromShelf(page, 'Bellamy19');
+	await openHere(page, BELLAMY);
 	await staysAt(page, left);
 	// and with a link's place in force, it is the plain link that goes
 	await page.goto(`${BELLAMY}?page=3`);
 	await staysAt(page, { page: 3, share: 0 });
 	await readTo(page, { page: 3, share: 0.2 });
-	await fromShelf(page, 'Bellamy19');
+	await openHere(page, BELLAMY);
 	await expect(page).toHaveURL(new RegExp(`${BELLAMY}$`));
 	await staysAt(page, { page: 3, share: 0.2 });
 });
@@ -907,7 +881,7 @@ readOnly('a page asked for as a long paper opens is where it stays, as the pages
 	await arrived(page, 250);
 	await expect(at).toHaveValue('250');
 	// and it is where a paper made again opens
-	await toInfoAndBack(page);
+	await awayAndBack(page);
 	await arrived(page, 250);
 });
 
@@ -958,7 +932,7 @@ test.describe('a PDF among the project’s files', () => {
 		await page.goto('/review');
 		await page.goto(AT);
 		await staysAt(page, left);
-		await fromShelf(page, 'Arden24');
+		await openHere(page, SECOND);
 		await staysAt(page, { page: 1, share: 0 });
 		await page.getByRole('tab', { name: 'bellamy.pdf' }).click();
 		await staysAt(page, left);
@@ -973,7 +947,7 @@ test.describe('a PDF among the project’s files', () => {
 		const within = { page: 3, share: 0.2 };
 		await readTo(page, within);
 		await expect(page).toHaveURL(/#page=3$/);
-		await fromShelf(page, 'Arden24');
+		await openHere(page, SECOND);
 		await page.getByRole('tab', { name: 'bellamy.pdf' }).click();
 		await staysAt(page, within);
 		// off its page, it lets go

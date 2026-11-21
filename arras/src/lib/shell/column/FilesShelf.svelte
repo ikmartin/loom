@@ -12,7 +12,7 @@
 </script>
 
 {#if store.manifest?.files}
-	<!-- Files is the quilt's directory as it is, where Library is what loom keeps of the cited works: two shelves, folding alike, so the two read as different kinds of thing -->
+	<!-- Files is the quilt's directory as it is, in a shelf that folds -->
 	<Shelf label="Files" testid="files-shelf" toggle="files-toggle" title="View of files in {store.manifest.corpus.directory ?? store.manifest.corpus.name}/" bind:open={filesShelf.open}>
 		<FileTree files={store.manifest.files} {masters} {own} {copiesOf} {section} />
 	</Shelf>

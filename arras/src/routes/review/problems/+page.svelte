@@ -63,7 +63,7 @@
 			const done = await jobs.start(b.works ?? [], { redo: !!b.redo, steps: b.steps });
 			const named = (b.works ?? []).join(', ') || 'every work';
 			works = b.works ?? [];
-			if (done.ok) text = `Digesting ${named}${b.redo ? ' again' : ''}; the Library shows the run, and this page is drawn again when it ends.`;
+			if (done.ok) text = `Digesting ${named}${b.redo ? ' again' : ''}; this page is drawn again when it ends.`;
 			else [text, refused] = [done.error?.message ?? 'The library run did not start.', true];
 		} else {
 			const done = await write(a.endpoint, a.body);

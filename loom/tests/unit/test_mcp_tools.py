@@ -52,12 +52,11 @@ def test_the_checked_in_surface_is_what_the_tree_generates() -> None:
 
 
 def test_a_schema_says_types_choices_defaults_and_what_is_required() -> None:
-    s = schema(SPECS["loom_library_search"])
-    assert s["type"] == "object" and s["additionalProperties"] is False and s["required"] == ["text"]
-    props = s["properties"]
-    assert props["work"] == {"type": "array", "items": {"type": "string"}, "description": props["work"]["description"]}
-    assert props["limit"]["type"] == "integer" and props["limit"]["minimum"] == 1 and props["limit"]["default"] == 20
-    assert props["pages"]["type"] == "boolean" and "quilt" not in props
+    s = schema(SPECS["loom_deps"])
+    assert s["type"] == "object" and s["additionalProperties"] is False and s["required"] == ["key"]
+    assert "quilt" not in s["properties"]
+    keys = schema(SPECS["loom_build"])["properties"]["keys"]
+    assert keys == {"type": "array", "items": {"type": "string"}, "description": keys["description"]}
     assert "as" not in schema(SPECS["loom_annotate"])["properties"]  # the server supplies who is acting
     assert "batch" not in schema(SPECS["loom_annotate"])["properties"]  # it reads stdin, which a call has none of
     look = schema(SPECS["loom_annotate"])["properties"]
@@ -82,17 +81,7 @@ def test_a_schema_says_types_choices_defaults_and_what_is_required() -> None:
         ("loom_annotate", {"reply": "a-1", "message": "Yes."}, ["annotate", "--reply", "a-1", "--as", "Test Agent", "Yes."]),
         ("loom_annotate", {"reply": "a-1", "message": "-1 is odd"}, ["annotate", "--reply", "a-1", "--as", "Test Agent", "--", "-1 is odd"]),
         ("loom_history", {"key": "dm-0002", "json": True}, ["history", "dm-0002", "--json"]),
-        ("loom_library", {"work": "Calloway14"}, ["library", "Calloway14"]),
         ("loom_id", {"file": "drafting/x.tex", "sections": False}, ["id", "--no-sections", "drafting/x.tex"]),
-        ("loom_library_search", {"text": "orbit", "work": ["A", "B"]}, ["library", "search", "--work", "A", "--work", "B", "orbit"]),
-        (
-            "loom_library_propose",
-            {"work": "Calloway14", "local": "rem-9.1", "source_text": "An involution", "statement": "S", "page": "1"},
-            [
-                "library", "propose", "--local", "rem-9.1", "--page", "1", "--source-text", "An involution",
-                "--statement", "S", "--as", "Test Agent", "Calloway14",
-            ],
-        ),
     ],
 )  # fmt: skip
 def test_a_call_is_the_command_line_it_stands_for(tool: str, arguments: dict[str, object], line: list[str]) -> None:
@@ -105,9 +94,9 @@ def test_a_call_is_the_command_line_it_stands_for(tool: str, arguments: dict[str
         ("loom_status", {"bogus": 1}, "takes no bogus"),
         ("loom_deps", {}, "needs key"),
         ("loom_annotate", {"target": "dm-0002", "message": "-"}, "give the text itself"),
-        ("loom_library_search", {"text": "x", "limit": "20"}, "limit is integer"),
+        ("loom_search", {"query": "x", "in": 3}, "in is string"),
         ("loom_status", {"stale": "yes"}, "stale is boolean"),
-        ("loom_library_search", {"text": "x", "work": "A"}, "work is a list"),
+        ("loom_build", {"keys": "dm-0002"}, "keys is a list"),
     ],
 )
 def test_a_call_that_names_nothing_its_command_takes_is_refused(

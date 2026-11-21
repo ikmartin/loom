@@ -27,7 +27,7 @@ from loom.paths import (
     EDITS,
     INCORPORATION_PREVIEWS,
     LAST_SEEN,
-    LIBRARY,
+    LIBRARY_DOCUMENTS,
     LIVE,
     LOOM,
     RETIRED,
@@ -38,7 +38,6 @@ from loom.paths import (
     SERVE_JSON,
     SESSIONS,
     SINCE,
-    STORAGE,
 )
 
 if TYPE_CHECKING:
@@ -46,10 +45,10 @@ if TYPE_CHECKING:
 
 #: Pruned by name at any depth: tools' directories, among them a Lake project's `.lake`, its build and every package it depends on, which no build reads.
 SKIP = {".git", "node_modules", ".svelte-kit", ".lake"}
-#: Pruned by quilt-relative path: what loom derives, which a build writes and which holds thousands of files, the agents' scratch, which no build reads, and loom's store of other people's documents, which no build reads as source.
-PRUNED = (CACHE, SCRATCH, STORAGE)
+#: Pruned by quilt-relative path: what loom derives, which a build writes and which holds thousands of files, the agents' scratch, which no build reads, and the library's stored documents, which no build reads as source.
+PRUNED = (CACHE, SCRATCH, LIBRARY_DOCUMENTS)
 #: The directories under `.loom/` watched for their sources alone, as any of the quilt's directories is; everything else there is a record.
-SOURCES_ONLY = (f"{LIBRARY}/", f"{RETIRED}/", f"{COPIES}/")
+SOURCES_ONLY = (f"{RETIRED}/", f"{COPIES}/")
 SUFFIXES = {".tex", ".sty", ".cls", ".bib", ".toml", ".json", ".jsonl", ".md", ".log"}
 #: What a change to records alone touches; see `scan_unread`.
 RECORDS = (f"{ANNOTATIONS}/", f"{EDITS}/", f"{SESSIONS}/")

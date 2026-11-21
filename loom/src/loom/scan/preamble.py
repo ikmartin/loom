@@ -91,7 +91,7 @@ def build_closure(
 ) -> PreambleClosure:
     """Collect the closure, then parse taxa and macros over it in inclusion order.
 
-    `foreign` is for someone else's paper, read by `loom library update`'s extraction: it also takes theorem environments declared in the body and environments defined as wrappers around theorem-like ones. A quilt's own scan does not, deliberately -- an author is asked to declare in the preamble so a node file describes itself -- but a cited paper cannot be asked, and missing either idiom cost three of sixteen real papers their results or their numbering.
+    `foreign` is for someone else's paper, a work's source the library holds (`refs.sourcemap`): it also takes theorem environments declared in the body and environments defined as wrappers around theorem-like ones. A quilt's own scan does not, deliberately -- an author is asked to declare in the preamble so a node file describes itself -- but a cited paper cannot be asked, and missing either idiom cost three of sixteen real papers their results or their numbering.
     """
     closure = PreambleClosure(master=master.path)
     seen: set[str] = set()
@@ -340,3 +340,23 @@ def loom_sty_missing(closure: PreambleClosure, root: Path, base: str) -> bool:
     if any(PurePosixPath(f).name == "loom.sty" for f in closure.files):
         return False
     return shutil.which("kpsewhich") is not None and not _kpsewhich("loom.sty", root / base)
+
+
+_PACKAGE = re.compile(r"\\(?:usepackage|RequirePackage)\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
+_CLASS = re.compile(r"\\documentclass\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}")
+#: Document classes that load a package themselves, so a paper using its commands never names it. An `amsart` paper writing `\\Tilde` is the common case.
+CLASS_PACKAGES = {"amsart": {"amsmath"}, "amsproc": {"amsmath"}, "amsbook": {"amsmath"}}
+
+
+def loaded_packages(closure: PreambleClosure) -> set[str]:
+    """Package names the closure loads with \\usepackage or \\RequirePackage, and those its document class loads for it."""
+    out: set[str] = set()
+    text = closure.clean_text()
+    for m in _CLASS.finditer(text):
+        out |= CLASS_PACKAGES.get(m.group(1).strip(), set())
+    for m in _PACKAGE.finditer(text):
+        for name in m.group(1).split(","):
+            name = name.strip()
+            if name:
+                out.add(name)
+    return out

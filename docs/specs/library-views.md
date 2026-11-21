@@ -30,7 +30,7 @@ Three of the views' rules reach the backend. No id and no command is drawn, so e
 
 **Transport.** A read is `POST /_api/<name>` with a JSON body and a JSON answer, as `locate` and `compare` are: a handler in its family's module under `loom/src/loom/render/endpoints/`, listed in that module's `READS`, so the publisher does not rebuild after it, with the token and the checks every request to `/_api` takes (`write-api.md` §3), and a case in `cases_<family>.py`. The names follow `reserved.md`'s prefixes: `library-` for the library, `review-` for Review, `formal-` for formalization; the Web's reads take a prefix of their own, `web-`, and the notes' read is `notes`, which `reserved.md` gains when they are built. Each is named in `GET /_api`'s `capabilities` once it is served, and a viewer that does not find one draws nothing that needs it (`write-api.md` §1). Rendered content is never in an answer (`write-api.md` §2): a draft's result is drawn from its fragment, whose path an answer gives, a change from fragments marked as `compare` marks them, and a library node from its LaTeX, which the viewer draws (§3.4).
 
-**Bytes.** What never changes once made is a `GET` at a content address, as `/build/` and today's `/digests/storage/` are: no token, since pdf.js and an `<img>` fetch by URL and send none, served with `Cache-Control: immutable` and, as everything outside the viewer's bundle is, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` (`write-api.md` §3). A hash in an address is its 64 hexadecimal digits, without the `sha256:` an answer's field carries. `GET /_api/library/pdf/<hex>` is a stored PDF by its `pdf` hash; `GET /_api/library/thumb/<hex>.png` its first page (§3.1); `GET /_api/library/drawn/<node-hex>-<macros-hex>.svg` a node drawn by TeX, named by its own hash and its macros node's (`none` for a work with none), drawn only through an `<img>`, since it is TeX's output from a source nobody at loom wrote (§3.4). Today's `/digests/storage/` goes with the store's layout.
+**Bytes.** What never changes once made is a `GET` at a content address, as `/build/` is: no token, since pdf.js and an `<img>` fetch by URL and send none, served with `Cache-Control: immutable` and, as everything outside the viewer's bundle is, `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` (`write-api.md` §3). A hash in an address is its 64 hexadecimal digits, without the `sha256:` an answer's field carries. `GET /_api/library/pdf/<hex>` is a stored PDF by its `pdf` hash; `GET /_api/library/thumb/<hex>.png` its first page (§3.1); `GET /_api/library/drawn/<node-hex>-<macros-hex>.svg` a node drawn by TeX, named by its own hash and its macros node's (`none` for a work with none), drawn only through an `<img>`, since it is TeX's output from a source nobody at loom wrote (§3.4).
 
 **Freshness.** Every answer carries `gen`, the library's generation: a number the publisher raises whenever anything a read on this page answers from changes, a node file, the tag log, an evidence record, a task, a mark, an annotation, a stored document, or what the scan gives these reads (results, labels, numbers, citations, edges), but not a publish that changes none of these, so a compile does not set every open view reading again. The stream (`GET /_api/stream`) gains an event `library` carrying `{"gen": N}` each time it is raised. A view asks again for what it shows when it hears one; a read given `"since": N` while the generation is still N answers `{"gen": N, "unchanged": true}` and does no other work. A node file an agent's command writes outside the publisher raises it too, so the publisher's watcher follows `.loom/library/` and `.loom/records/`. The obligations in `README.md` that make the manifest the viewer's only index and its change the only signal widen, once this is built, to these reads and this event.
 
@@ -105,7 +105,7 @@ From: index (the references and a count of nodes by `source`), evidence (`compar
 - `edit its entry…` is `library-entry` (§7). **Open 4.** Round six draws the item and not the editing. Editing rewrites the reference's body and so its hash, which stales every record naming the reference (the inventory's question 20). Proposal: the entry opens as text in the work's tab, and a change rewrites the body; an attestation's closure takes in the statements and definitions a statement uses and leaves references out, since an entry's fields are not what a statement means, so editing an entry stales no attestation.
 - `delete` is `library-delete`, answered with an `undo` the column's message offers ("Deleted Smith 2024, with its results and notes"), which `library-restore` takes. Ruled with the spec's merge: deleting a work is never refused. It is one act with one undo: the reference, its macros node, its nodes, and the person's notes and marks on the work go together and `library-restore` puts them back whole; what cites the work then reads as a result whose work is gone (`library.md`, "What this replaces"), and the evidence records stay, naming hashes no file has. How a node of another work that uses one of its nodes stays a valid file (`nodes.md` §11, check 7), and whether gathering makes the reference again from a draft's bibliography, is the references lane's to settle in `nodes.md`.
 
-**The empty library (1c).** A box: "Drop papers here to start your library", "PDFs, TeX sources, or a .bib file", and the same panel as `add work…`. **Open 6.** The intake takes PDFs and pasted identifiers; a dropped TeX source (an archive or a folder) and a dropped `.bib` are not taken today (`library-receive` refuses `not-a-pdf`). Proposal: a `.bib` is a pasted text of BibTeX entries, as `library-take` with `{text}` already reads; a TeX source is an archive (`.tar.gz`, `.zip`) that joins a work as a dropped PDF does (§3.5): by its identifier, or by being dropped on the work's row, and otherwise is a work of its own; nothing is matched by title or author.
+**The empty library (1c).** A box: "Drop papers here to start your library", "PDFs, TeX sources, or a .bib file", and the same panel as `add work…`. **Open 6**, closed: the intake takes a dropped `.bib`, an entry a row, and a TeX source, a `.tex` file or an archive, besides PDFs and pasted identifiers (`write-api.md` §6); nothing is matched by title or author.
 
 **A work found while the network is off (1d).** Right after a drop, the row reads "arXiv 2209.01234v2 · look it up on arXiv this once?" with `yes` and `not now`; otherwise, "details unconfirmed · look up". The publisher sends `lookup.state` `unconfirmed` for a reference made from an identifier with no look-up, and `looking` while one runs; whether to ask "this once?" is the viewer's, which asks only right after a drop of its own whose row said `unconfirmed`. `yes` and `look up` are `library-look-up`; `not now` writes nothing. **Open 7.** What makes a reference unconfirmed is not a field of its file, which holds no status. Proposal: the intake's record of the act that made the reference says how its details were found (`found_by`, §3.5) and whether they were looked up; the reference reads `unconfirmed` until a look-up's record follows.
 
@@ -155,7 +155,7 @@ From: index, evidence, store (the survey, the stored documents), annotations. Co
 **Reads.**
 
 - The PDF: `GET /_api/library/pdf/<hex>`. pdf.js reads it whole, as today: a paper of 30 pages is 0.3 to 2 MB. **Open 11.** A book of several hundred pages would show its first page late. Proposal: this address answers `Range` requests, so pdf.js fetches the pages in view; not needed at the sizes in use.
-- The person's annotations on the work, as today, from the annotation log. **Open 12.** They are keyed by the work's identifier or citekey today (the inventory's question 4). Proposal: by the reference's id, carried over once.
+- The person's annotations on the work, as today, from the annotation log, keyed by the reference's id (Open 12, closed).
 - **`library-places`.** Asked only while the overlay is on, for the pages in view and their neighbours. Given `{"ref": REF, "pages": [12, 13]}`, or `{"node": NODE}` for one node's place (a use followed into another work, a crop in Review, "open at its place"). Answers:
 
 ```json
@@ -226,7 +226,7 @@ Ruled with the spec's merge: nothing is matched by title or author. A dropped fi
 
 **Open 19.** The intake's `question` row ("is this one of these works?") and its `cannot` row have no drawing in round six. Proposal: each is a column message, the question with its candidates as choices and "a work of its own", the cannot with its reason; the `arriving` rows keep them across a reload, as today.
 
-**Open 36.** A drop on a quilt that has not said whether loom may use the network: `library-take` refuses it `network-unasked` (409) and the files wait (`write-api.md` §6). Round six draws no such question, and today's viewer asks it in `NetworkAsk.svelte`. Proposal: the column's message asks it once ("May loom look papers up on the internet?"), the answer is saved with `settings-save` (`library.online`), and the take is made again.
+**Open 36.** A drop on a quilt that has not said whether loom may use the network: `library-take` refuses it `network-unasked` (409) and the files wait (`write-api.md` §6). Round six draws no such question, and the viewer asks it nowhere. Proposal: the column's message asks it once ("May loom look papers up on the internet?"), the answer is saved with `settings-save` (`library.online`), and the take is made again.
 
 ## 4. Review
 
@@ -385,7 +385,7 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
 
 **Drawn.** The reader of §3.3 beside the draft, without the digest overlay. A hover on a citation in the draft, "[1, Proposition 2.1]", shows a card: "Proposition 2.1", "Arden 2024 · page 1", its marks, the statement, and `open at its place`; on a stub, "Theorem 2.3", "Okafor 2022", "Loom knows this result only by its number. Nobody has read it.", `locate in PDF` and `ask an agent to read it`.
 
-**Reads.** A citation's target is the node the scan resolved it to. This changes `dialect.md` §2.8, whose `span.cite[data-target]` names a digest node today, resolved through the manifest, and whose `data-unmatched` marks a locator nothing answers: once this is built, `data-target` names a library node or a stub, every locator having one (Open 29), and `dialect.md` changes with it. The card is `library-node` with `{"node", "brief": true}`. `open at its place` opens the work beside the draft at `library-places` with `{node}`. `locate in PDF` opens it at loom's best guess, `library-find`, given `{"ref", "q": "Theorem 2.3"}` and answering `{"gen", "pdf", "hits": [{"page", "rects"}], "pages": 24}` from the stored page text by the normalisation a quotation is checked under; this is the one guess `library.md` allows, a page loom opens at, never a mark. Cost: 30 ms for a paper of 30 pages once its page text is read, about a second the first time.
+**Reads.** A citation's target is the node the scan resolved it to. This changes `dialect.md` §2.8, whose `span.cite` carries no target: once this is built, its `data-target` names a library node or a stub, every locator having one (Open 29), and `dialect.md` changes with it. The card is `library-node` with `{"node", "brief": true}`. `open at its place` opens the work beside the draft at `library-places` with `{node}`. `locate in PDF` opens it at loom's best guess, `library-find`, given `{"ref", "q": "Theorem 2.3"}` and answering `{"gen", "pdf", "hits": [{"page", "rects"}], "pages": 24}` from the stored page text by the normalisation a quotation is checked under; this is the one guess `library.md` allows, a page loom opens at, never a mark. Cost: 30 ms for a paper of 30 pages once its page text is read, about a second the first time.
 
 **Writes.** The person selects the result's passage and marks it, a `to-digest` mark naming the stub (§3.3); `ask an agent to read it` is `review-task` with `{"kind": "read", "on": {"nodes": [NODE]}}`, naming the mark where there is one.
 
@@ -444,7 +444,7 @@ Every write the views make, in one place. "Built" marks one that exists today.
 | `library-receive`, `library-take`, `library-answer`, `library-undo` | as `write-api.md` §6 | rows | built; the intake, its `added` row now making a reference, with `found_by`, `tex` and `unconfirmed` (§3.5) |
 | `library-look-up` | `{ref}` | `{gen, ref}` | looks up, once and with the network, the identifier the reference states, and writes its details from the record found, unless the person corrected the entry; `no-identifier` (409), `unreachable` (409) |
 | `library-entry` | `{ref, bibtex}` | `{gen, ref}` | replaces the reference's body with one BibTeX entry (Open 4); `bad-entry` (400), `key-taken` (409) |
-| `library-delete` | `{ref}` | `{gen, undo}` | deletes the work as one act, never refused, replacing today's `library-delete` by citekey (§3.1) |
+| `library-delete` | `{ref}` | `{gen, undo}` | deletes the work as one act, never refused (§3.1) |
 | `library-restore` | `{undo}` | `{gen, ref}` | puts back what one delete took; `changed` (409) when something has since taken its place |
 | `library-digest` | `{refs, scope, chosen?}` | `{gen, made, tasks, job?}` | §3.2; `no-document` (409) |
 | `library-check` | `{node, hash}` | `{gen}` | the person's record that the transcription with that hash matches its paper; `changed` (409) |
@@ -481,7 +481,7 @@ Every write the views make, in one place. "Built" marks one that exists today.
 | `formal-marks`, `formal-markers` | under 5 KB | 10 ms | |
 | `formal-plan` | under 20 KB | 50 ms | |
 
-The manifest carries nothing of the library: today's `references`, its macro sets, its digest search entries and its sidecars go, and with them most of the ten megabytes the author's quilt sends today on every change (`library.md`, "Scale").
+The manifest carries nothing of the library (`library.md`, "Scale").
 
 ## 9. Open questions
 
@@ -492,13 +492,13 @@ The manifest carries nothing of the library: today's `references`, its macro set
 | 3 | §3.1 | "second version" | the entry's own field, else the later of two references a `same` record joins |
 | 4 | §3.1 | editing an entry rewrites the reference's hash | allowed; attestations do not cover references |
 | 5 | §3.1 | what deleting a work removes | closed: never refused; one act, one undo; the references lane settles the files that used it |
-| 6 | §3.1 | a dropped `.bib` or TeX source | a `.bib` is pasted BibTeX; a source archive joins a work as a PDF does |
+| 6 | §3.1 | a dropped `.bib` or TeX source | closed: the intake takes both (`write-api.md` §6) |
 | 7 | §3.1 | "details unconfirmed" | the intake's record of how the details were found |
 | 8 | §3.2 | matching the survey to nodes, and a stub the source lacks | by label, else printed number and taxon; never by guess |
 | 9 | §3.2 | an item's page before the survey's compile | null; a click goes to its section |
 | 10 | §3.2 | order and sections of a work held only as a PDF | by place, else pages and number |
 | 11 | §3.3 | long PDFs | `Range` on the PDF's address, later |
-| 12 | §3.3 | annotations on a work keyed by identifier | keyed by the reference's id, carried once |
+| 12 | §3.3 | annotations on a work keyed by identifier | closed: keyed by the reference's id, which the carry-over re-keys them to |
 | 13 | §3.3 | the overlay's default | closed: off, remembered once turned on |
 | 14 | §3.3 | where a mark to digest is kept | closed: an annotation of kind `to-digest` |
 | 15 | §3.4 | anchors' printed numbers | a header key `anchors` in `nodes.md` |

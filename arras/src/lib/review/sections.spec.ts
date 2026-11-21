@@ -38,7 +38,7 @@ const m = {
 describe('Review as the meta view', () => {
 	it("leads with the person's text, and counts every pending change there, a suggested edit among them", () => {
 		const sections = sectionsOf(m);
-		expect(sections.map((s) => s.id)).toEqual(['changes', 'proposed', 'problems', 'library', 'record']);
+		expect(sections.map((s) => s.id)).toEqual(['changes', 'proposed', 'problems', 'record']);
 		expect(sections.find((s) => s.id === 'changes')!.waits).toBe(2);
 		// a count is what waits for the author: an open session waits for no one
 		expect(sections.find((s) => s.id === 'record')!.waits).toBe(0);
@@ -54,8 +54,8 @@ describe('Review as the meta view', () => {
 });
 
 describe('an annotation on a PDF', () => {
-	it("opens a project PDF at its page with its mark, and a cited work's Info when it is on the whole work", () => {
+	it("opens a project PDF at its page with its mark, and a cited work when it is on the whole work", () => {
 		expect(itemForQuilt(m, 'a-2026-10-01-pdf001')).toEqual({ kind: 'file', id: 'notes/a.pdf', anchor: 'page=2', note: 'a-2026-10-01-pdf001' });
-		expect(itemForQuilt(m, 'a-2026-10-01-work01')).toEqual({ kind: 'work', id: 'Arden24', view: 'info' });
+		expect(itemForQuilt(m, 'a-2026-10-01-work01')).toEqual({ kind: 'work', id: 'Arden24' });
 	});
 });

@@ -20,7 +20,7 @@ LOOM_GITIGNORE = f"{LOOM}/.gitignore"
 
 #: What the person and loom decided or said; travels with the quilt, and loom deletes none of it.
 RECORDS = f"{LOOM}/records"
-#: Other people's documents and what was drawn from them: the digests, and the store.
+#: The library: its nodes, the documents its works hold, and what is reserved beside them.
 LIBRARY = f"{LOOM}/library"
 #: The agents' places: what they are told, their sessions and copies, and their scratch.
 AGENTS = f"{LOOM}/agents"
@@ -68,23 +68,12 @@ FORMAL_ATTESTED = f"{FORMAL}/attest.toml"
 
 # ---- the library ------------------------------------------------------------------------------------------------------
 
-#: The quilt's bibliography, gathered from the landmarks.
-BIBLIOGRAPHY = f"{LIBRARY}/bibliography.bib"
-UNREADABLE = f"{LIBRARY}/unreadable.json"
-LINKS = f"{LIBRARY}/links.jsonl"
-LINKS_REMOVED = f"{LIBRARY}/links-removed.jsonl"
 #: Reserved (docs/specs/reserved.md): the works an agent suggested.
 SUGGESTED_WORKS = f"{LIBRARY}/suggested.jsonl"
 #: The library's nodes, one `<id>.node` file each (docs/specs/nodes.md).
 LIBRARY_NODES = f"{LIBRARY}/nodes"
 #: The works' documents by hash, `<hex>.pdf` and a TeX source as `<hex>.tar` (`library.documents`).
 LIBRARY_DOCUMENTS = f"{LIBRARY}/documents"
-#: Loom's store of other people's documents, keyed by the work's identifier.
-STORAGE = f"{LIBRARY}/storage"
-#: What the store holds and what each copy in it was taken from (`refs/intake.py`, `refs/scan.py`).
-STORE_LEDGER = f"{STORAGE}/copied.json"
-#: The address the viewer reaches the store at, under its root, fixed wherever `STORAGE` sits: the server answers it and the manifest's `artifacts.dir` is written in it.
-STORE_ADDRESS = "digests/storage"
 
 # ---- the agents' places -----------------------------------------------------------------------------------------------
 
@@ -147,15 +136,14 @@ TEX = f"{CACHE}/tex"
 TEX_ADDRESS = "tex"
 #: What the build as it stands names under `CACHE`: each fragment's input hash and the cache files it was made from, what the build read or wrote beside its fragments, and every file of the site it published (`loom.lifetimes`).
 BUILD_INDEX = f"{CACHE}/index.json"
-#: Rendered blocks, by key: the snippets, the previews and the spans; a render plan may be given another folder (`render.fragments.RenderPlan.cache`), which holds the same names.
+#: Rendered blocks, by key: the snippets and the previews; a render plan may be given another folder (`render.fragments.RenderPlan.cache`), which holds the same names.
 BLOCKS = f"{CACHE}/blocks"
 SNIPPETS = f"{BLOCKS}/snippets"
 BLOCK_PREVIEWS = f"{BLOCKS}/previews"
-BLOCK_SPANS = f"{BLOCKS}/spans"
-#: What the library draws from its stored documents: word boxes, by the work's place in the store, and the answers of identifier lookups.
+#: What the library draws from its stored documents and its nodes.
 LIBRARY_CACHE = f"{CACHE}/library"
-STORE_BOXES = f"{LIBRARY_CACHE}/boxes"
-RESOLVED = f"{LIBRARY_CACHE}/resolve"
+#: A stored PDF's page text, section map and word boxes, `<hex>/`, made when first read (`refs.pages.mapped`).
+LIBRARY_PAGES = f"{LIBRARY_CACHE}/pages"
 #: What the library's nodes and the tag log are asked by: made when first asked for, brought up to date at each asking, and made again at will (`library.index`).
 NODE_INDEX = f"{LIBRARY_CACHE}/nodes.sqlite3"
 #: A stored source unpacked, `<hex>/`, made when something reads it.
@@ -164,7 +152,7 @@ LIBRARY_SOURCES = f"{LIBRARY_CACHE}/sources"
 LIBRARY_THUMBS = f"{LIBRARY_CACHE}/thumbs"
 #: What a delete took, kept on this machine for its one undo (`library.delete`).
 LIBRARY_UNDO = f"{LOCAL}/library-undo"
-#: What marks on a PDF are found by: word boxes of a PDF outside the store, by its hash, and where each mark was found again.
+#: What marks on a PDF are found by: word boxes of a PDF the library does not store, by its hash, and where each mark was found again.
 MARKS = f"{CACHE}/marks"
 MARK_BOXES = f"{MARKS}/boxes"
 REFOUND = f"{MARKS}/refound"

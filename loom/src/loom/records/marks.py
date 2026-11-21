@@ -1,8 +1,8 @@
-"""Annotations on a page of a PDF: a project file the viewer shows, or a cited work's copy on this machine.
+"""Annotations on a page of a PDF: a project file the viewer shows, or the PDF a work's reference holds.
 
 An annotation on a PDF page names its `page` and stands at `rects` (`[x0, y0, x1, y1]` in points from the page's top left) or along `strokes` (`x, y, x, y…` per stroke). One drawn with a tool says so in `mark`: a pin, ink, words on the page, a box, an oval or an arrow; one on words has no `mark`, and its look's style says how it is drawn. It records the hash of the PDF it was written on (`artifact`), so a changed file is noticed (A3), and the words under and around it, with a drawing's gap from them (`context_at`), by which it is found again anywhere in a changed file (`refind`); one that cannot be is detached. `origin` says where one taken in from a PDF's own annotations came from.
 
-A text or box annotation on a cited work's page is anchored through the work's store instead (`refs/anchoring.py`); this module serves the drawn ones there and every one on a project PDF.
+A text or box annotation on a work's page is anchored through the PDF's page text instead (`refs/anchoring.py`); this module serves the drawn ones there and every one on a project PDF.
 """
 
 from __future__ import annotations
@@ -72,22 +72,29 @@ def project_pdf(result: Any, target: str) -> str | None:
     return rel if Shown.of(result.quilt).is_shown(rel) else None
 
 
+def reference_pdf(root: Path, ref: str) -> Path | None:
+    """The stored PDF the reference `ref` holds (`library.documents`); None when it holds none, or the store lacks it, or `ref` names no reference."""
+    from loom.library import documents
+    from loom.library.ids import REFERENCE, kind_of
+    from loom.library.store import read
+
+    node = read(root, ref) if kind_of(ref) == REFERENCE else None
+    if node is None or not node.pdf:
+        return None
+    path = documents.path_of(root, node.pdf, "pdf")
+    return path if path.is_file() else None
+
+
 def pdf_of(result: Any, target: str, work: str = "") -> Path | None:
-    """The PDF an annotation's target is on: a project PDF by its path, or the copy on this machine of the cited work `work` (a citekey); None for anything else."""
+    """The PDF an annotation's target is on: a project PDF by its path, or the PDF the reference `work` holds; None for anything else."""
     root: Path = result.quilt.root
     if target.lower().endswith(".pdf"):
         return root / target
-    entry = result.bib.get(work) if work else None
-    if entry is None:
-        return None
-    from loom.refs.fetch import work_dir
-
-    paper: Path = work_dir(root, entry) / "paper.pdf"
-    return paper if paper.is_file() else None
+    return reference_pdf(root, work) if work else None
 
 
 def lines_of(pdf: Path, page: int, words: str, home: Path | None = None) -> list[list[float]] | None:
-    """Where `words` stand on a page, one rectangle per line; None where they are not there or the page cannot be read. With `home`, a stored work's directory, the page's word boxes are read from the store's cache (`token_boxes`)."""
+    """Where `words` stand on a page, one rectangle per line; None where they are not there or the page cannot be read. With `home`, a stored PDF's `refs.pages.pages_home`, the page's word boxes are kept there (`token_boxes`)."""
     from loom.refs.pages import MapRefused, token_boxes
     from loom.refs.search import locate_span
 
@@ -289,28 +296,27 @@ class DocumentWords:
 
 
 def words_of(result: Any, pdf: Path) -> DocumentWords:
-    """The words of `pdf` (`refs.pages.document_boxes`), kept by the file's hash in `.loom/cache/marks/`, or a stored work's in `.loom/cache/library/`.
+    """The words of `pdf` (`refs.pages.document_boxes`), kept by the file's hash in `.loom/cache/marks/`, or a stored PDF's beside its page text (`refs.pages.pages_home`).
 
     Parameters
     ----------
     result : ScanResult
         The quilt as scanned.
     pdf : Path
-        A project PDF, or a stored work's `paper.pdf`.
+        A project PDF, or one the library stores.
 
     Returns
     -------
     DocumentWords
         Every word in reading order; MapRefused when pdftotext cannot read the file.
     """
-    from loom.paths import MARK_BOXES
-    from loom.refs.pages import document_boxes, storage_root, store_boxes
+    from loom.paths import LIBRARY_DOCUMENTS, MARK_BOXES
+    from loom.refs.pages import document_boxes, pages_home, store_boxes
 
     root: Path = result.quilt.root
-    try:
-        pdf.resolve().relative_to(storage_root(root).resolve())
-        cache = store_boxes(pdf.parent)
-    except ValueError:
+    if pdf.resolve().parent == (root / LIBRARY_DOCUMENTS).resolve():
+        cache = store_boxes(pages_home(root, pdf.stem))
+    else:
         cache = root / MARK_BOXES / artifact_of(pdf)[:16]
     from loom.render.uses import used
 
@@ -542,7 +548,7 @@ def take_in(
     result : ScanResult
         The quilt as scanned.
     target : str
-        The PDF they are taken onto: a project PDF's path or a cited work's citekey.
+        The PDF they are taken onto: a project PDF's path, or a reference by its id or the key its entry has.
     items : iterable of dict
         Each `{page, mark?, style?, rects?, strokes?, body?, color?, origin?}`, in points from the page's top left. A `mark` of highlight, underline or strike, or an `origin.subtype` of StrikeOut, is the look's style; a `color` that is not one of the nine is matched to the nearest from `origin.color`.
     writer : (str, str)
@@ -637,13 +643,13 @@ def take_in(
 
 
 def pdf_target(result: Any, target: str) -> tuple[str, Path | None]:
-    """What an annotation on `target`'s pages names as its target -- a project PDF's path, or a cited work's identifier -- and the PDF it is drawn on; (target, None) when `target` is neither."""
+    """What an annotation on `target`'s pages names as its target -- a project PDF's path, or a reference's id -- and the PDF it is drawn on; (target, None) when `target` is neither."""
     from loom.cli.review import _work_target
 
     rel = project_pdf(result, target)
     if rel is not None:
         return rel, result.quilt.root / rel
-    work = _work_target(result, target)
-    if work is None:
+    ref = _work_target(result, target)
+    if ref is None:
         return target, None
-    return str(work[1]), pdf_of(result, "", work[0])
+    return ref, pdf_of(result, "", ref)

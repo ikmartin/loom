@@ -1,14 +1,12 @@
-"""Fragments: one HTML file per node, per master, and per digest, every one from HTML TeX made.
+"""Fragments: one HTML file per node and per master, every one from HTML TeX made.
 
-A document is read from the page its compile made (`fromhtml`), and its nodes are cut from that page. Text no compile makes, a node no document reaches and a digest, is made by TeX as snippets under the preamble of the document that owns it (`snippets`), and shaped the same way. What TeX has not made, a document not yet compiled, a node its page lacks, a text TeX refused, is shown as its source (`sourceview`), never as an approximation.
+A document is read from the page its compile made (`fromhtml`), and its nodes are cut from that page. Text no compile makes, a node no document reaches, is made by TeX as snippets under the preamble of the document that owns it (`snippets`), and shaped the same way. What TeX has not made, a document not yet compiled, a node its page lacks, a text TeX refused, is shown as its source (`sourceview`), never as an approximation.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import json
-import os
 import posixpath
 import re
 import threading
@@ -32,7 +30,6 @@ from loom.scan.preamble import PreambleClosure
 from loom.scan.scan import ScanResult
 from loom.scan.tokenize import read_args
 from loom.tex.aux import AuxNumber
-from loom.tex.bundle import _macro_block
 from loom.tex.runner import normalise_engine
 
 if TYPE_CHECKING:
@@ -105,11 +102,10 @@ class FragmentRenderer:
         self._shaping = threading.Lock()
         self._shaped: dict[str, DocumentHtml | None] = {}
         self._owners: dict[str, Owner] = {}
-        # what snippets made, by key: node fragments, a digest's document, a document's body
+        # what snippets made, by key: node fragments, a document's body
         self._made: dict[str, str] = {}
-        self._made_digests: dict[str, str] = {}
         self._made_masters: dict[str, str] = {}
-        #: what the work several fragments share noted, by group (`uses`): `page:<master>`, `loose`, `digest:<file>`; and each node made by that work, by the group it was made in
+        #: what the work several fragments share noted, by group (`uses`): `page:<master>`, `loose`; and each node made by that work, by the group it was made in
         self.groups: dict[str, set[str]] = {}
         self._made_in: dict[str, str] = {}
         self.previews = _Previews(self)
@@ -198,18 +194,6 @@ class FragmentRenderer:
         """The environments a run stamps as nodes: the owner's theorem-like ones, else the quilt's, and proofs."""
         taxa = owner.closure.taxa if owner.closure else self.result.taxa
         return [*taxa, "proof"]
-
-    def _cite_target(self, citekey: str, postnote: str | None) -> str | None:
-        for e in self.result.edges.edges:
-            if e.via == "postnote" and e.label == f"{citekey}|{postnote}":
-                return e.to
-        return None
-
-    def _cite_unmatched(self, citekey: str, postnote: str) -> bool:
-        """Whether the citation names a result its work's digest does not hold, as `loom:unmatched-postnote` reports it; never where the quilt silences that code."""
-        return (citekey, postnote) in self.result.edges.unmatched and (
-            "loom:unmatched-postnote" not in self.result.quilt.config.lint_disable
-        )
 
     def _pair_attrs(self, node: NodeRec) -> list[str]:
         """`data-pair` and `data-hash`, what compare pairs a node by; none for a node whose key names no id.
@@ -319,20 +303,18 @@ class FragmentRenderer:
         return DocumentHtml(self, owner, page, only=only, files=files, pairs=pairs, labels=labels)
 
     def prepare(self, keys: list[str] | None = None) -> None:
-        """Make by TeX, before fragments are cut, what no compile makes among `keys` (default all): the nodes no document reaches that have a fragment, all of them in one batch under the default document's preamble when any is among `keys`, and each digest under its own.
+        """Make by TeX, before fragments are cut, what no compile makes among `keys` (default all): the nodes no document reaches that have a fragment, all of them in one batch under the default document's preamble when any is among `keys`.
 
-        Done once per build, ahead of the fragments that read it, so each preamble is paid for once rather than once per node. The nodes no document reaches are made together, from the cache where unchanged, as a build that renders every fragment makes them, so that what the batch noted (`groups['loose']`) is what every one of them was made from.
+        Done once per build, ahead of the fragments that read it, so the preamble is paid for once rather than once per node. The nodes no document reaches are made together, from the cache where unchanged, as a build that renders every fragment makes them, so that what the batch noted (`groups['loose']`) is what every one of them was made from.
         """
         result = self.result
         wanted = set(keys) if keys is not None else None
-        digests = result.assembly.digest_files
         loose = [
             k
             for k, n in result.nodes.items()
             if (n.kind in ("environment", "section") or (n.kind == "proof" and n.id))
             and not n.reached_by
             and n.file in result.files
-            and n.file not in digests
         ]
         if loose and (wanted is None or not wanted.isdisjoint(loose)):
             owner = self.owner(result.default_master)
@@ -343,43 +325,6 @@ class FragmentRenderer:
             self.groups["loose"] = noted
             self._made.update({k: _from_tex(_stamp_first(v, "node")) for k, v in doc.nodes.items()})
             self._made_in.update({k: "loose" for k in doc.nodes})
-        todo = []
-        for file in sorted(digests):
-            held = [k for k, n in result.nodes.items() if n.file == file and n.kind != "file"]
-            if wanted is None or file in wanted or set(held) & wanted:
-                todo.append(file)
-        # each digest is its own preamble, so its own run: a few at once, as a long list of texts runs a few at once
-        from concurrent.futures import ThreadPoolExecutor
-
-        with ThreadPoolExecutor(max_workers=max(1, min(4, (os.cpu_count() or 2) // 2))) as pool:
-            list(pool.map(self._prepare_digest, todo))
-
-    def _prepare_digest(self, file: str) -> None:
-        """A digest as a document: its body after the macro block, cut into texts at its statements, made under the default document's preamble with the packages its header requires and its macro block."""
-        from loom.scan.digests import loaded_packages, required_packages
-
-        result = self.result
-        src = result.files[file]
-        end_block = re.search(r"^\s*%\s*!LOOM\s+end\s+macros\s*$", src.text, re.M)
-        start = end_block.end() if end_block else 0
-        owner = self.owner(result.default_master)
-        loaded = loaded_packages(owner.closure) if owner.closure else set()
-        extra = "".join(f"\\usepackage{{{p}}}\n" for p in required_packages(result.assembly, file) if p not in loaded)
-        preamble = owner.preamble.rstrip("\n") + "\n" + extra + _macro_block(result, file) + "\n"
-        nodes = sorted(
-            (k for k, n in result.nodes.items() if n.file == file and n.kind in ("environment", "proof", "section")),
-            key=lambda k: result.nodes[k].start,
-        )
-        regions = body_regions(result, file, start, len(src.text))
-        # its own preamble for its diagrams too, which draw with its macros
-        with noting(apart=True) as noted:
-            doc = self.snippet_page(dataclasses.replace(owner, preamble=preamble), regions, nodes)
-            made = doc.master_html()
-        group = f"digest:{file}"
-        self.groups[group] = noted
-        self._made.update({k: _from_tex(_stamp_first(v, "node")) for k, v in doc.nodes.items()})
-        self._made_in.update({k: group for k in doc.nodes})
-        self._made_digests[file] = made
 
     def prepare_document(self, master: str) -> None:
         """A document no compile has made, made by TeX as snippets of its body: a section draft, read in its saved context."""
@@ -457,20 +402,6 @@ class FragmentRenderer:
             self, master, begin.end() if begin else 0, end.start() if end else len(src.text), owner=self.owner(master)
         )
         return _stamp_first(head + body, "master")
-
-    def digest_fragment(self, file: str) -> str:
-        """The digest file as a document, after its macro block, which is loaded around every statement and never shown: made by TeX, else its source."""
-        from loom.render.sourceview import source_body
-
-        if file not in self._made_digests:
-            self._prepare_digest(file)
-        made = self._made_digests.get(file)
-        if made is not None:
-            used(f"@digest:{file}")
-            return _from_tex(_stamp_first(made, "digest"))
-        text = self.result.files[file].text
-        m = re.search(r"^\s*%\s*!LOOM\s+end\s+macros\s*$", text, re.M)
-        return _stamp_first(source_body(self, file, m.end() if m else 0, len(text)), "digest")
 
 
 def body_regions(result: ScanResult, file: str, start: int, end: int) -> list[tuple[str, int, int]]:
@@ -710,10 +641,3 @@ def plain_title(latex: str, width: int = 60) -> str:
         return title
     cut = title.rfind(" ", 0, width - 1)
     return title[: cut if cut > 0 else width - 1].rstrip(",;:") + "…"
-
-
-def digest_macro_set(result: ScanResult, file: str) -> list[dict[str, object]]:
-    from loom.scan.macros import parse_macros, to_mathjax
-
-    block = _macro_block(result, file)
-    return to_mathjax(parse_macros(block)) if block else []

@@ -1,4 +1,4 @@
-"""Annotations on a PDF: a project file by its path or a cited work, on a page with its place, drawn with a tool, edited, found again when the file changes or detached when they cannot be, and taken in from the file's own annotations; and on a cited work as a whole."""
+"""Annotations on a PDF: a project file by its path or a work's, on a page with its place, drawn with a tool, edited, found again when the file changes or detached when they cannot be, and taken in from the file's own annotations; and on a work as a whole."""
 
 from __future__ import annotations
 
@@ -55,16 +55,19 @@ def published(q: Path, ann_id: str) -> dict[str, Any]:
     return manifest["annotations"][ann_id]  # type: ignore[no-any-return]
 
 
-def test_an_annotation_on_a_cited_work_with_no_page_is_on_the_whole_work(paper: Path) -> None:
-    """By citekey or by an identifier its entry states; it has no place, so nothing detaches it, and an agent reads it with `loom since`."""
-    whole = annotated(paper, "Calloway14", "Read this paper through and write its overview.")
-    assert (whole["target"], whole["anchor"], "page" in whole) == ("doi:10.4171/demo/14-1", None, False)
-    again = annotated(paper, "doi:10.4171/demo/14-1", "and this one")
+def test_an_annotation_on_a_work_with_no_page_is_on_the_whole_work(paper: Path) -> None:
+    """By the key its entry has or by its reference; it has no place, so nothing detaches it, and an agent reads it with `loom since`."""
+    from loom.cli._quilt import open_scan
+
+    ref = open_scan(str(paper)).refs["Calloway14"]
+    whole = annotated(paper, "Calloway14", "Read this paper through and write a note on what it proves.")
+    assert (whole["target"], whole["anchor"], "page" in whole) == (ref, None, False)
+    again = annotated(paper, ref, "and this one")
     assert again["target"] == whole["target"]
     row = published(paper, whole["id"])
-    assert (row["target"]["work"], row["target"]["page"], row["detached"]) == ("Calloway14", None, False)
+    assert (row["target"]["work"], row["target"]["page"], row["detached"]) == (ref, None, False)
     got = json_of("since", "--as", AGENT, "--json", cwd=paper)
-    assert {a["body"] for a in got["annotations"]} >= {"Read this paper through and write its overview."}
+    assert {a["body"] for a in got["annotations"]} >= {"Read this paper through and write a note on what it proves."}
     assert "the whole work" in ok("status", "--reading", cwd=paper).stdout
 
 
@@ -339,19 +342,26 @@ def test_a_pdf_marked_in_preview_is_taken_in_in_the_nearest_of_the_nine(paper: P
 
 @pytest.mark.poppler
 def test_a_note_on_a_works_page_is_found_again_on_a_changed_copy_of_the_work(tmp_path: Path) -> None:
-    """A work filed again: a text anchor's words are looked for on every page's committed text, its own first, and a box anchor, which records its words and gap like any drawing, is found by them."""
+    """A work given another copy of its PDF: a text anchor's words are looked for on every page of the new copy's text, its own first, and a box anchor, which records its words and gap like any drawing, is found by them."""
+    from loom.cli._quilt import open_scan
+    from loom.library import documents
+    from loom.library.references import attach
+    from loom.library.store import read
+    from loom.refs.pages import mapped
+
     q = showcase(tmp_path)
     words = annotated(q, "Bellamy19", "Why?", "--page", "2", "--quote", "totally unimodular")["id"]
     box = annotated(q, "Bellamy19", "This one.", "--page", "2", "--box", "82,85,157,97")
     assert box["anchor"]["basis"] == "box" and box["anchor"]["exact"] == "Theorem 2.3." and box["gap"]
-    home = q / ".loom/library/storage/doi/10.4171_showcase_19-2"
-    # the copy is filed again: its bytes differ, so its map names another hash, and its words moved to page 3
-    pdf = home / "paper.pdf"
-    pdf.write_bytes(pdf.read_bytes() + b"\n% filed again\n")
-    from loom.refs.pages import sha256_of
-
-    sections = json.loads((home / "sections.json").read_text())
-    (home / "sections.json").write_text(json.dumps({**sections, "sha256": sha256_of(pdf)}))
+    # the work is given another copy: its bytes differ, so its hash does, and its words moved to page 3
+    ref = open_scan(str(q)).refs["Bellamy19"]
+    node = read(q, ref)
+    assert node is not None and node.pdf
+    again = tmp_path / "again.pdf"
+    again.write_bytes(documents.path_of(q, node.pdf, "pdf").read_bytes() + b"\n% filed again\n")
+    attach(q, ref, "pdf", documents.put_pdf(q, again), by="Tester", kind="person")
+    home = mapped(q, read(q, ref).pdf)  # type: ignore[union-attr]
+    assert home is not None
     page2 = (home / "pages" / "0002.txt").read_text()
     (home / "pages" / "0002.txt").write_text(page2.replace("totally unimodular", "unimodular"))
     (home / "pages" / "0003.txt").write_text((home / "pages" / "0003.txt").read_text() + "\ntotally unimodular\n")
@@ -360,31 +370,3 @@ def test_a_note_on_a_works_page_is_found_again_on_a_changed_copy_of_the_work(tmp
     row = published(q, box["id"])
     assert (row["target"]["page"], row["refound"], row["detached"]) == (2, True, False)
     assert row["rects"][0] == pytest.approx([82, 85, 157, 97], abs=0.5)
-
-
-@pytest.mark.poppler
-def test_a_note_on_a_work_filed_by_its_hash_is_read_on_the_copy_it_was_written_on(tmp_path: Path) -> None:
-    """Arden24's second version's copy is filed by its file's hash, `file/<sha16>/`, as `library add` files a PDF that states no identifier of its own; the directory its identifier names holds another document. A note on its page is read on its own copy (`work_dir`), as the viewer's artifacts and the sidecar are: it keeps its page and is recorded, anchored, not found again elsewhere and not detached."""
-    from loom.refs.pages import sha256_of
-    from loom.scan.bib import parse_bib
-
-    q = showcase(tmp_path)
-    store = q / ".loom/library/storage"
-    assert (store / "file/e43d5afaac8f10f0/paper.pdf").is_file()
-    entries = parse_bib((q / ".loom/library/bibliography.bib").read_text(encoding="utf-8"))
-    version = next(k for k, e in entries.items() if e.fields.get("loom-copy-of") == "Arden24")
-    quote = "a saturated sublattice of the lattice of weightings"
-    note = annotated(q, version, "Why saturated?", "--page", "2", "--quote", quote, who="A. Author")
-    assert note["anchor"]["page"] == 2 and note["anchor"]["basis"] == "text"
-    # another document under the identifier's own directory, its words on page 3: read there, the note would look written on a changed file and move
-    decoy = store / "arxiv" / "2504.01234v2"
-    (decoy / "pages").mkdir(parents=True)
-    (decoy / "paper.pdf").write_bytes((store / "doi/10.4171_showcase_19-2/paper.pdf").read_bytes())
-    sha = sha256_of(decoy / "paper.pdf")
-    (decoy / "sections.json").write_text(json.dumps({"sha256": sha, "pages": 3, "chars": 0, "sections": []}))
-    for n, text in ((1, "Nothing here."), (2, "Nor here."), (3, f"Here: {quote}.")):
-        (decoy / "pages" / f"{n:04d}.txt").write_text(text + "\n")
-    ok("build", cwd=q)
-    row = json.loads((q / ".loom/cache/site" / "manifest.json").read_text())["annotations"][note["id"]]
-    assert (row["target"]["work"], row["target"]["page"]) == (version, 2)
-    assert (row["recorded"], row["anchored"], row["refound"], row["detached"]) == (True, True, False, False)

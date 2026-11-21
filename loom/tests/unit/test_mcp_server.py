@@ -190,14 +190,12 @@ def test_what_a_link_names_is_a_resource_read_by_the_command_it_stands_for(tmp_p
         "quilt:drafting/main-atomic.tex": ("loom source drafting/main-atomic.tex", "\\documentclass"),
         "quilt:.loom/records/history/0001-flows-v1/flows-v1.tex": ("loom history show flows-v1", "\\documentclass"),
         "quilt:state": ("loom ai orient", "# Research state"),
-        "cited:doi:10.4171/showcase/19-2": ("loom library read doi:10.4171/showcase/19-2", "Bellamy19's overview"),
-        "cited:doi:10.4171/showcase/19-2?page=3": ("loom library read doi:10.4171/showcase/19-2 3", "Bellamy19 p.3"),
     }
 
     async def body(client: Any) -> None:
         listed = {r.uri for r in (await client.list_resources()).resources}
-        assert set(reads) - listed == {"quilt:sh-0007?closure", "cited:doi:10.4171/showcase/19-2?page=3"}
-        assert len((await client.list_resource_templates()).resource_templates) == 4
+        assert set(reads) - listed == {"quilt:sh-0007?closure"}
+        assert len((await client.list_resource_templates()).resource_templates) == 2
         for uri, (command, said) in reads.items():
             r = await client.read_resource(uri)
             assert r.meta["loom/command"] == command and said in r.contents[0].text, (uri, r.contents[0].text[:300])

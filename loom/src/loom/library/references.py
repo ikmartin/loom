@@ -17,7 +17,42 @@ from loom.library.node import Node
 from loom.library.store import read, remove_node, write_node
 
 if TYPE_CHECKING:
+    from loom.scan.bib import BibEntry
     from loom.scan.scan import ScanResult
+
+
+def entries(root: Path) -> dict[str, tuple[str, BibEntry]]:
+    """Each reference's entry by its key as written, with the reference's id: the citekeys the scan knows (`ScanResult.bib`). Where two references hold one key, the first by id has it; a reference whose body holds no entry is passed over."""
+    from loom.library.node import NodeUnreadable, read_node
+    from loom.library.store import folder
+    from loom.scan.bib import parse_bib
+
+    out: dict[str, tuple[str, BibEntry]] = {}
+    nodes = folder(root)
+    if not nodes.is_dir():
+        return out
+    for path in sorted(nodes.glob("*-ref.node")):
+        try:
+            node = read_node(path.read_bytes(), path.name)
+        except NodeUnreadable:
+            continue
+        for key, entry in parse_bib(node.body).items():
+            out.setdefault(key, (node.id, entry))
+            break
+    return out
+
+
+def named(result: ScanResult, word: str) -> str | None:
+    """The reference `word` names: a reference's id, or the key its entry has, ignoring case; None for neither."""
+    from loom.library.ids import REFERENCE, kind_of
+    from loom.library.store import exists
+
+    if kind_of(word) == REFERENCE:
+        return word if exists(result.quilt.root, word) else None
+    if word in result.refs:
+        return result.refs[word]
+    folded = word.lower()
+    return next((ref for key, ref in result.refs.items() if key.lower() == folded), None)
 
 
 class Minter:

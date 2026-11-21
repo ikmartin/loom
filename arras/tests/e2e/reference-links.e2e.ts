@@ -34,9 +34,8 @@ function shown(scope: Locator): Promise<number> {
 		});
 }
 
-/** A pane shows the work on its paper, at page `n`. */
+/** A pane shows the work's paper, at page `n`. */
 async function onPage(page: Page, index: number, n: number): Promise<void> {
-	await expect(pane(page, index).getByTestId('tab-paper')).toHaveAttribute('aria-pressed', 'true');
 	await expect.poll(() => shown(pane(page, index))).toBe(n);
 }
 
@@ -203,14 +202,6 @@ test.describe('a link to a result', () => {
 		await onPage(page, 0, 4);
 	});
 
-	test('to a work open on Info switches it to its paper at the place', async ({ page }) => {
-		await filed(page);
-		await page.goto('/node/sy-000A' + beside('/library/Kre99?view=info'));
-		await expect(pane(page, 1).getByTestId('work-info')).toBeVisible();
-		await pane(page, 0).locator(`span.cite[data-target="${RESULT}"] a`).first().click();
-		await onPage(page, 1, 4);
-	});
-
 	test('followed again after the reader scrolled away lands again', async ({ page }) => {
 		await filed(page);
 		await page.goto('/node/sy-000A');
@@ -230,46 +221,5 @@ test.describe('a link to a result', () => {
 		await expect(pane(page, 0).getByTestId('context').locator(`a[title="${RESULT}"]`).first()).toHaveAttribute('href', `/node/${RESULT}`);
 		await page.goto('/node/sy-000A');
 		await expect(pane(page, 0).locator(`span.cite[data-target="${RESULT}"] a`).first()).toHaveAttribute('href', `/node/${RESULT}`);
-	});
-});
-
-test.describe("a work's Info", () => {
-	test("lists the work's results as cards, each linking to its paper at its page", async ({ page }) => {
-		await filed(page);
-		await page.goto('/library/Kre99?view=info');
-		// the result's card: its number goes to its own page, where what is said about it is, and its page to the paper there
-		const card = pane(page, 0).locator(`[data-testid="result-card"][data-result="${RESULT}"]`);
-		await expect(card).toHaveCount(1);
-		await expect(card.getByTestId('result-name')).toHaveAttribute('href', `/node/${RESULT}`);
-		await expect(card.getByTestId('page-link')).toHaveAttribute('href', AT);
-		// a result whose locator names no page has no paper to open at one, so its card links only its digest node
-		const setup = pane(page, 0).locator('[data-testid="result-card"][data-result="Kre99-setup"]');
-		await expect(setup.getByTestId('result-name')).toHaveAttribute('href', '/node/Kre99-setup');
-		await expect(setup.getByTestId('page-link')).toHaveCount(0);
-		// the work is open here, so its own link moves it to its paper at the page
-		await card.getByTestId('page-link').click();
-		await onPage(page, 0, 4);
-	});
-});
-
-test.describe('the Library in the column', () => {
-	test('lists a work once, however many documents it has, and opens the one filed in the focused pane', async ({ page }) => {
-		await serve(page, (m) => {
-			m.references.Kre99A = { ...structuredClone(m.references.Kre99), citekey: 'Kre99A', version_of: 'Kre99', digest: null, results: {}, artifacts: { dir: 'refs/arxiv/math_9810166v1', pdf: true, source: false } };
-			m.references.Kre99.versions = [{ citekey: 'Kre99A', work: 'arXiv:math/9810166v1', artifacts: m.references.Kre99A.artifacts }];
-		});
-		await servePapers(page);
-		await page.goto('/master/drafting/main' + beside('/node/sy-0003'));
-		await page.getByTestId('library-toggle').click();
-		const list = page.getByTestId('library-list');
-		await expect(list.getByTestId('library-work-Kre99')).toHaveAttribute('href', '/library/Kre99A');
-		await expect(list.getByTestId('library-work-Kre99A')).toHaveCount(0);
-		// the filter stands however short the list, and finds a work by its version's key
-		await page.getByTestId('library-filter').fill('kre99a');
-		await expect(list.locator('a[data-testid^="library-work-"]')).toHaveCount(1);
-		await pane(page, 0).locator('.fragment').first().click();
-		await list.getByTestId('library-work-Kre99').click();
-		await expect(pane(page, 0).getByRole('group', { name: 'views of Kre99A' })).toBeVisible();
-		await expect(pane(page, 1).getByTestId('item-tab')).toHaveCount(1);
 	});
 });

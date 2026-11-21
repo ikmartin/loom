@@ -222,8 +222,6 @@ def live_text(result: ScanResult, records: Records, run: Path | None, session_id
 
     found = result.lint + compile_problems(result) + markdown_links(result)
     lines.append(f"- lint: {tally(found, result)}; run `loom lint` for the list")
-    und = payload["undigested"]
-    lines.append("- undigested citekeys: " + (", ".join(und) if und else "none"))
     from loom.sessions import active
 
     here = active(root)

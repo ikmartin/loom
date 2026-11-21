@@ -17,7 +17,7 @@ export interface Item {
 	kind: ItemKind;
 	/** A document's path, a work's citekey, a node's key, a session's id, a project file's path; a compiled PDF's is its document's. */
 	id: string;
-	/** An internal view: a work's `info`; absent means the first. */
+	/** An internal view: a session's `did`; absent means the first. */
 	view?: string;
 	/** An element to scroll to, by its published id: a document's section or result, a node's proof, a file's heading; a PDF file's `page=N`. */
 	anchor?: string;
@@ -98,8 +98,7 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 		case 'library': {
 			const place = readKeys({ id: '' }, url.search.slice(1)) as WorkLink;
 			const { id: _drop, ...keys } = place;
-			const view = query.get('view') || undefined;
-			return { kind: 'work', id: safe(tail), ...(view ? { view } : {}), ...(Object.keys(keys).length ? { place: keys } : {}) };
+			return { kind: 'work', id: safe(tail), ...(Object.keys(keys).length ? { place: keys } : {}) };
 		}
 		case 'node':
 			return { kind: 'node', id: keyFromParam(tail), ...(anchor ? { anchor } : {}), ...(note ? { note } : {}) };
@@ -147,7 +146,6 @@ export function pathFor(m: Documents | null, item: Item): string {
 		}
 		case 'work': {
 			const q = placeParams(item.place ?? {});
-			if (item.view) q.set('view', item.view);
 			return workUrl(item.id) + (q.size ? '?' + q : '');
 		}
 		case 'node':

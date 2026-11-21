@@ -288,17 +288,13 @@ test("the agents' config documents leave the tree when the reader hides them in 
 	await expect(tree.getByRole('link', { name: 'AGENTS.md', exact: true })).toBeVisible();
 });
 
-test('the project tree stands under Files, a shelf open by default that folds as Library does', async ({ page }) => {
+test('the project tree stands under Files, a shelf open by default that folds', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	const files = page.getByTestId('files-toggle');
 	await expect(files).toHaveAttribute('aria-expanded', 'true');
 	// hovering it says what it is a view of: the project's own directory
 	await expect(files).toHaveAttribute('title', 'View of files in synthetic/');
 	await expect(page.getByTestId('docs-tree')).toBeVisible();
-	// the same kind of control as Library's, above it
-	expect(await files.getAttribute('class')).toBe(await page.getByTestId('library-toggle').getAttribute('class'));
-	const at = async (id: string) => (await page.getByTestId(id).boundingBox())!.y;
-	expect(await at('files-toggle')).toBeLessThan(await at('library-toggle'));
 	await files.click();
 	await expect(files).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.getByTestId('docs-tree')).toHaveCount(0);

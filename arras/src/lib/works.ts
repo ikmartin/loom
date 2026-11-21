@@ -1,7 +1,7 @@
-// A cited work's way out of the viewer: its identifiers as links to the services that resolve them, and a fetched copy when there is one. Also the one place a bibliography's TeX markup is made readable.
+// A cited work's way out of the viewer: its identifiers as links to the services that resolve them, and a fetched copy when there is one. Also the one place a bibliography's TeX markup is made readable, and the works as the palette lists them.
 import { artifactUrl } from '$lib/paths';
 
-import type { Reference } from '$lib/manifest/types';
+import type { Manifest, Reference } from '$lib/manifest/types';
 
 export interface WorkLink {
 	/** What the link reads as: `doi`, `arXiv`, `MR`, `zbMATH`, `link` or `PDF`. */
@@ -105,4 +105,46 @@ export function surnames(author: string | number | undefined): string {
 		.map((n) => (n.includes(',') ? n.split(',')[0].trim() : (n.split(/\s+/).pop() ?? n)));
 	if (names.length > 2) return `${names[0]} et al.`;
 	return names.join(' and ');
+}
+
+/** A work as the palette lists it: one row, whichever of its documents is filed. */
+export interface WorkRow {
+	citekey: string;
+	title: string;
+	/** Its authors' surnames, as a byline gives them; '' where none is known. */
+	authors: string;
+	/** The citekey a choice opens: the work's own where its copy is filed, else a version's that is. */
+	opens: string;
+	/** What a search matches, lowercased: every document's key, title and authors. */
+	text: string;
+}
+
+/**
+ * The works a reader opens, one row each: a version is folded into its work.
+ *
+ * Parameters
+ * ----------
+ * m : Manifest
+ *
+ * Returns
+ * -------
+ * WorkRow[]
+ *     Sorted by author, then title; a work with no author known stands by its title among them, so the list follows what each row starts with. A version whose work is not in the manifest keeps a row of its own.
+ */
+export function workRows(m: Manifest): WorkRow[] {
+	const refs = Object.values(m.references ?? {});
+	return refs
+		.filter((r) => !r.version_of || !m.references[r.version_of])
+		.map((r) => {
+			const all = [r, ...refs.filter((v) => v.version_of === r.citekey)];
+			const copy = all.find((x) => x.artifacts?.pdf);
+			return {
+				citekey: r.citekey,
+				title: bibText(r.bib.title) || r.citekey,
+				authors: surnames(r.bib.author),
+				opens: (copy ?? r).citekey,
+				text: all.map((x) => `${x.citekey} ${bibText(x.bib.title)} ${bibText(x.bib.author ?? '')}`).join(' ').toLowerCase()
+			};
+		})
+		.sort((a, b) => (a.authors || a.title).localeCompare(b.authors || b.title) || a.title.localeCompare(b.title));
 }

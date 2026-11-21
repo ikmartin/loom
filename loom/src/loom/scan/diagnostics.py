@@ -2,12 +2,16 @@
 
 Reserved codes have no namespace and cannot be silenced; loom codes are namespaced and can be, except those marked fixed. Every code emitted anywhere must appear here with a class; the coverage and registry tests check both.
 
-A class says what kind of problem a code reports: `LATEX`, a problem in a document's LaTeX that an author would recognise, a failed compile among them, and what else the person is to be shown with no other place to say it; `MODEL`, loom's model of the quilt, the hygiene of keys, links, copies and records an agent keeps; `INTERNAL`, loom's own difficulty or the integrity of its records. The viewer shows a person `LATEX` alone; `loom lint` shows every class. An entry is its code's plainest instance: `VARIES` names the codes whose emitter grades each instance, and `scan.owners.stamped` makes whatever a digest holds `INTERNAL`.
+A class says what kind of problem a code reports: `LATEX`, a problem in a document's LaTeX that an author would recognise, a failed compile among them, and what else the person is to be shown with no other place to say it; `MODEL`, loom's model of the quilt, the hygiene of keys, links, copies and records an agent keeps; `INTERNAL`, loom's own difficulty or the integrity of its records. The viewer shows a person `LATEX` alone; `loom lint` shows every class. An entry is its code's plainest instance: `VARIES` names the codes whose emitter grades each instance.
 """
 
 from __future__ import annotations
 
-from typing import Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
+
+if TYPE_CHECKING:
+    from loom.scan.model import Diagnostic
+    from loom.scan.scan import ScanResult
 
 #: The three classes, in the order a reader is shown them.
 LATEX, MODEL, INTERNAL = "latex", "model", "internal"
@@ -41,7 +45,6 @@ LOOM: dict[str, Code] = {
     "loom:macros-missing": Code("error", MODEL),
     "loom:macro-shadowed": Code("warning", MODEL),
     "loom:taxon-conflict": Code("warning", MODEL),
-    "loom:prefix-is-citekey": Code("warning", MODEL),
     "loom:unknown-directive": Code("warning", MODEL),
     "loom:invalid-name": Code("warning", MODEL),
     "loom:unknown-config-key": Code("warning", MODEL),
@@ -63,20 +66,10 @@ LOOM: dict[str, Code] = {
     "loom:retired-ledger-key": Code("info", MODEL),
     "loom:detached-annotation": Code("info", MODEL),
     "loom:previous-key-match": Code("info", MODEL),
-    "loom:unmatched-postnote": Code("warning", INTERNAL),
-    "loom:cites-proposed-node": Code("warning", MODEL),
-    "loom:undigested-citekey": Code("info", INTERNAL),
-    "loom:postnote-from-another-version": Code("info", INTERNAL),
-    "loom:version-mismatch": Code("warning", INTERNAL),
-    "loom:unresolved-work": Code("info", INTERNAL),
-    "loom:unverified-locators": Code("warning", INTERNAL),
-    "loom:missing-package": Code("warning", INTERNAL),
-    "loom:digest-without-bib": Code("warning", INTERNAL),
     "loom:interface-version": Code("error", INTERNAL, fixed=True),
     "loom:non-utf8-source": Code("warning", LATEX),
     "loom:unknown-theoremstyle": Code("warning", INTERNAL),
     "loom:taxon-name-macro": Code("info", INTERNAL),
-    "loom:citekey-slug-collision": Code("warning", MODEL),
     "loom:main-not-found": Code("warning", MODEL),
     "loom:main-unset": Code("info", MODEL),
     "loom:foreign-annotations": Code("warning", INTERNAL),
@@ -111,7 +104,6 @@ LOOM: dict[str, Code] = {
     # the one door (docs/design/writes.md, "Recovery"): a write to the person's file recovery could neither finish nor undo, which the person has no other place to be told of
     "loom:write-left": Code("warning", LATEX),
     # a warning and never an error, because loom cannot fetch without consent
-    "loom:no-readable-copy": Code("warning", INTERNAL),
     # the library's nodes (docs/specs/nodes.md §11): a file of loom's records failing one of the eleven checks, a code each
     "loom:node-unreadable": Code("error", INTERNAL),
     "loom:node-schema": Code("error", INTERNAL),
@@ -130,7 +122,7 @@ LOOM: dict[str, Code] = {
     "loom:foreign-library-acts": Code("warning", INTERNAL),
 }
 
-#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case; `loom:document-gone` of class `LATEX` where annotations are on the document, which the person is shown nowhere else.
+#: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:annotation-types` an info in its milder case; `loom:document-gone` of class `LATEX` where annotations are on the document, which the person is shown nowhere else.
 VARIES = frozenset(
     {
         "duplicate-id",
@@ -140,7 +132,6 @@ VARIES = frozenset(
         "loom:environment-spans-files",
         "loom:compile-failed",
         "loom:compile-errors",
-        "loom:no-readable-copy",
         "loom:annotation-types",
         "loom:document-gone",
     }
@@ -166,7 +157,6 @@ GATED = frozenset(
         "loom:closure-failed",
         "loom:atomize-target-exists",
         "loom:interface-version",
-        "loom:citekey-slug-collision",
         "loom:history-missing",
         "loom:history-edited",
         "loom:history-corrupt",
@@ -205,3 +195,30 @@ def can_disable(name: str) -> bool:
 
 def all_codes() -> list[str]:
     return sorted(RESERVED) + sorted(LOOM)
+
+
+#: Whose a diagnostic is to fix, as the manifest says it: the person's, or an agent's copy's.
+PERSON, COPY = "person", "copy"
+
+
+def stamped(result: ScanResult, diags: list[Diagnostic]) -> list[Diagnostic]:
+    """Each diagnostic with its `owner`: `COPY` for one wholly in an agent's copy (its every location in a copy, or its every key a copy's node), else `PERSON`; one naming both is the person's.
+
+    One reading for every reader: the manifest stamps it (`render.build`) and `loom lint --json` carries it, so the viewer and the command line never disagree about whose a problem is.
+    """
+    from dataclasses import replace
+
+    copies = result.agent_documents
+
+    def copy_key(key: str) -> bool:
+        node = result.nodes.get(key)
+        return node is not None and (
+            bool(node.derived_of) or (bool(node.reached_by) and set(node.reached_by) <= copies)
+        )
+
+    def owner(d: Diagnostic) -> str:
+        if d.locations:
+            return COPY if all(loc.file in copies for loc in d.locations) else PERSON
+        return COPY if d.keys and all(copy_key(k) for k in d.keys) else PERSON
+
+    return [replace(d, owner=owner(d)) for d in diags]

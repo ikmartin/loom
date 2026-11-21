@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { bibText, resolve, surnames, workLinks } from './works';
-import type { Reference } from './manifest/types';
+import { readFileSync } from 'node:fs';
+import { bibText, resolve, surnames, workLinks, workRows } from './works';
+import type { Manifest, Reference } from './manifest/types';
 
 const ref = (over: Partial<Reference>): Reference => ({ citekey: 'X', bib: {}, digest: null, version_mismatch: false, cited_by: [], ...over });
 
@@ -56,5 +57,39 @@ describe('surnames', () => {
 		expect(surnames('Kresch, A. and Vistoli, A.')).toBe('Kresch and Vistoli');
 		expect(surnames('Abramovich, D. and Corti, A. and Vistoli, A.')).toBe('Abramovich et al.');
 		expect(surnames(undefined)).toBe('');
+	});
+});
+
+describe('the works the palette lists', () => {
+	const fixture = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
+
+	it('sorts by author then title, a work with no author standing by its title among them', () => {
+		const m = structuredClone(fixture);
+		const one = m.references.Kre99;
+		const work = (citekey: string, bib: Record<string, string>) => ({ ...structuredClone(one), citekey, bib, version_of: undefined });
+		m.references = {
+			A: work('A', { title: 'Zebras', author: 'Casella, George and Berger, Roger' }),
+			B: work('B', { title: 'Statistics for quants' }),
+			C: work('C', { title: 'Options', author: 'John Hull' }),
+			D: work('D', { title: 'Futures', author: 'John Hull' }),
+			E: work('E', { title: 'Abstract nonsense', author: 'Mac Lane, Saunders' })
+		} as typeof m.references;
+		const rows = workRows(m);
+		expect(rows.map((r) => r.citekey)).toEqual(['A', 'D', 'C', 'E', 'B']);
+		expect(rows.map((r) => r.authors)).toEqual(['Casella and Berger', 'Hull', 'Hull', 'Mac Lane', '']);
+	});
+
+	it("lists a work once, opening the copy filed: its own, else a version's", () => {
+		const m = structuredClone(fixture);
+		m.references.Kre99A = { ...structuredClone(m.references.Kre99), citekey: 'Kre99A', version_of: 'Kre99', bib: { title: 'A preprint', author: 'Kresch, A.' }, artifacts: { dir: 'x', pdf: true, source: false } };
+		const rows = workRows(m);
+		expect(rows.map((r) => r.citekey).sort()).toEqual(Object.keys(fixture.references).sort());
+		const kre = rows.find((r) => r.citekey === 'Kre99')!;
+		expect(kre.opens).toBe('Kre99A');
+		// a search finds the work by its version's key or title
+		expect(kre.text).toContain('kre99a');
+		expect(kre.text).toContain('a preprint');
+		m.references.Kre99.artifacts!.pdf = true;
+		expect(workRows(m).find((r) => r.citekey === 'Kre99')!.opens).toBe('Kre99');
 	});
 });

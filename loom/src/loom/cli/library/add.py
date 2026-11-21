@@ -9,7 +9,6 @@ from typing import Any
 import click
 
 from loom.cli._quilt import open_scan, quilt_option
-from loom.cli.library._works import present
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.errors import EnvError
 from loom.identity import refuse_under_agent, whoever
@@ -78,7 +77,7 @@ def add_command(
 ) -> None:
     """Take PDFs, `.bib` files and LaTeX sources into the library, each added, already here, a question, or one that cannot be added.
 
-    A FILE is a PDF, a `.bib`, a `.tex` file, an archive of a source, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. A document is offered as a work the library has only by an identifier it states (arXiv's stamp or an identifier set apart on a PDF's first page, or an arXiv number in its name), never by its title or byline: such a document is filed nowhere, the question names the work, `--for WORK` files it there and `--new` keeps it as a work of its own. Any other document is a work of its own, its entry looked up by the identifier it states where the network is allowed, else made from what it says of itself. With `--for`, every FILE is filed under that work (a reference, or the key its entry has), refused where it states another work's identifier unless `--force`. Only the same bytes given twice are already here. A `.bib` adds each of its entries.
+    A FILE is a PDF, a `.bib`, a `.tex` file, an archive of a source, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. A document is offered as a work the library has only by an identifier it states (arXiv's stamp or an identifier set apart on a PDF's first page, or an arXiv number in its name), never by its title or byline: such a document is filed nowhere, the question names the work, `--for WORK` files it there and `--new` keeps it as a work of its own. Any other document is a work of its own, its entry looked up by the identifier it states where the network is allowed, else made from what it says of itself. With `--for`, every FILE is filed under that work (a reference, or the key its entry has, the entries the documents' bibliographies hold among them), refused where it states another work's identifier unless `--force`. Only the same bytes given twice are already here. A `.bib` adds each of its entries.
     """
     from loom.library.intake import Item, take
 
@@ -94,6 +93,11 @@ def add_command(
     docs = _documents(files)
     result = open_scan(quilt_path)
     root = result.quilt.root
+    if not dry_run:
+        from loom.library.gather import gather
+
+        # a reference for each entry the documents' bibliographies hold, so `--for` names a work by the key a document cites it by
+        gather(result)
     target = _work(root, for_work) if for_work else ""
     by = "" if dry_run else whoever(root, as_name)
     items: list[Item] = []
@@ -176,7 +180,7 @@ def _report(rows: list[Any], dry_run: bool, notes: list[str]) -> Report:
         verdict,
         ok=not (asked or cannot),
         dry_run=dry_run,
-        groups=present(
+        groups=_present(
             Group("cannot be added", [Item(f"{r.name}: {r.why}") for r in cannot], problem=True, limit=None),
             Group("to answer: filed nowhere until you say which work each is", questions, problem=True, limit=None),
             Group("would be added" if dry_run else "added", items, limit=None),
@@ -191,6 +195,11 @@ def _report(rows: list[Any], dry_run: bool, notes: list[str]) -> Report:
             "documents": [r.to_json() for r in rows],
         },
     )
+
+
+def _present(*groups: Group) -> list[Group]:
+    """The groups that hold something; an empty one would print a heading over nothing."""
+    return [g for g in groups if g.items]
 
 
 #: The commands this module adds to `loom library`.

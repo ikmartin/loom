@@ -2,7 +2,7 @@
 
 It specifies the files the library holds: one file for each node, with the ids, the header, the body, and the edges a file may state. What the design is for and why it has this shape is [`docs/design/library.md`](../design/library.md); where the two disagree about a shape, this page wins.
 
-**Built:** reading and writing a file (§1–5), the checks (§11), the index loom derives from the files (§13), the tag log (§14), and references and macros nodes made from the works a quilt holds (§7, §8), in `loom/src/loom/library/`. **Not built yet:** statements and proofs made from a work (digesting), so `digests.md` still specifies how a work's results are read, and the change that digests into nodes rewrites it.
+**Built:** reading and writing a file (§1–5), the checks (§11), the index loom derives from the files (§13), the tag log (§14), and references and macros nodes made from the works a quilt holds (§7, §8), in `loom/src/loom/library/`. **Not built yet:** statements and proofs made from a work (digesting).
 
 A rule marked **[decided]** was settled by the author on 2026-11-20. The others complete the format and are his to change.
 

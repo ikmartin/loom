@@ -6,21 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from loom import layout
+from loom.library.carry import BIBLIOGRAPHY
 from loom.library.store import node_ids
-from loom.paths import BIBLIOGRAPHY, FORMAT
+from loom.paths import FORMAT
 from tests.helpers import json_of, ok, refused
-from tests.unit._quilts import demo
+from tests.unit.library._old import older_quilt
 
 
 @pytest.fixture
-def older(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """The demo as an earlier loom left it: format 1, where this loom is made to read 2 and to carry 1."""
-    q = demo(tmp_path)
-    monkeypatch.setattr(layout, "NUMBER", 2)
-    monkeypatch.setattr(layout, "CARRIES", frozenset({"1"}))
-    (q / FORMAT).write_text("1\n", encoding="utf-8")
-    return q
+def older(tmp_path: Path) -> Path:
+    """A quilt as an earlier loom left it, in format 1, its library written by hand (`_old`)."""
+    return older_quilt(tmp_path)
 
 
 def test_every_other_command_refuses_the_quilt_and_says_upgrade(older: Path) -> None:

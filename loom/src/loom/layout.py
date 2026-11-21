@@ -13,9 +13,9 @@ from pathlib import Path
 from loom.paths import FORMAT, LOOM
 
 #: The layout this loom reads and writes.
-NUMBER = 1
+NUMBER = 2
 #: The earlier layouts this loom can bring forward to its own (`loom upgrade`, `library.carry`), which every other command refuses.
-CARRIES = frozenset({"1"}) - {str(NUMBER)}
+CARRIES = frozenset({"1"})
 
 
 def carriable(root: Path) -> bool:

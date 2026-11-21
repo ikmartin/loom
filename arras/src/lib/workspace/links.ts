@@ -186,7 +186,7 @@ function threadOf(m: Manifest, id: string): string {
 	return at;
 }
 
-/** Where an annotation is read: its target, with the annotation to open there. One on a project PDF opens the file at its page; one on a cited work its page, or the work's Info for one on the whole work. A box round an equation is filed under the region's key (`KEY#label`), and is read in the node that holds it. */
+/** Where an annotation is read: its target, with the annotation to open there. One on a project PDF opens the file at its page; one on a cited work its page, or the work itself for one on the whole work. A box round an equation is filed under the region's key (`KEY#label`), and is read in the node that holds it. */
 function noteItem(m: Manifest, id: string, target: { key: string; page?: number | null; file?: string | null }): Item | null {
 	if (target.file) return { kind: 'file', id: target.file, ...(target.page ? { anchor: `page=${target.page}` } : {}), note: id };
 	// a note on no block names no key: it opens in the document it was written in, beside its card in the list; '' never matches a reference with no identifier
@@ -196,7 +196,7 @@ function noteItem(m: Manifest, id: string, target: { key: string; page?: number 
 		return isDocument(m, doc) ? { kind: 'document', id: doc, note: id } : null;
 	}
 	const work = Object.values(m.references).find((r) => r.work === target.key || r.works?.includes(target.key));
-	if (work) return target.page ? { kind: 'work', id: work.citekey, place: { page: target.page, annot: id } } : { kind: 'work', id: work.citekey, view: 'info' };
+	if (work) return target.page ? { kind: 'work', id: work.citekey, place: { page: target.page, annot: id } } : { kind: 'work', id: work.citekey };
 	if (isDocument(m, target.key)) return { kind: 'document', id: target.key, note: id };
 	// a note on a cited result is on loom's record of it, so it opens there rather than on the paper
 	const key = m.regions?.[target.key]?.container ?? target.key;

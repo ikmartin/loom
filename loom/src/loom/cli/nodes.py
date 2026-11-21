@@ -113,8 +113,6 @@ def new(
     env = resolve_taxon(result, taxon)
     if prefix is not None and not PREFIX.match(prefix):
         raise EnvError(f"--prefix {prefix}: a prefix is letters and digits, without a hyphen")
-    if prefix is not None and prefix in result.assembly.citeslugs:
-        raise EnvError(f"--prefix {prefix} is a cited work's slug, whose ids are that paper's own")
     root = result.quilt.root
     author = (whoever(root, declared) if print_only else writer(root, declared)[0]) or None
     if dry_run and run_dir:
@@ -160,9 +158,7 @@ def search_entries(result: ScanResult, query: str, kind: str | None) -> list[dic
     out: list[tuple[int, str, dict[str, object]]] = []
     for key, n in result.assembly.nodes.items():
         entry_kind = (
-            "master"
-            if n.kind == "master"
-            else ("digest" if n.digest else ("node" if n.kind in ("environment", "section", "proof") else "file"))
+            "master" if n.kind == "master" else ("node" if n.kind in ("environment", "section", "proof") else "file")
         )
         if kind and entry_kind != kind:
             continue
@@ -181,7 +177,6 @@ def search_entries(result: ScanResult, query: str, kind: str | None) -> list[dic
             or any(q in a.lower() for a in n.aliases)
             or any(q == t.lower() for t in tags)
             or (n.taxon or "").lower() == q
-            or (n.digest or "").lower() == q
         ):
             rank = 2
         if rank is None:
@@ -196,7 +191,7 @@ def search_entries(result: ScanResult, query: str, kind: str | None) -> list[dic
                     "kind": entry_kind,
                     "taxon": n.taxon,
                     "title": title,
-                    "name": cited_name(result, n.digest, title) if n.digest else title,
+                    "name": title,
                     "aliases": list(n.aliases),
                     "tags": tags,
                     "file": n.file,
@@ -208,23 +203,6 @@ def search_entries(result: ScanResult, query: str, kind: str | None) -> list[dic
         )
     out.sort(key=lambda x: (x[0], natural(x[1])))
     return [e for _, _, e in out]
-
-
-def cited_name(result: ScanResult, citekey: str, title: str) -> str:
-    """A cited work's result as a reader names it: its locator without the page, then the work's authors (`Corollary 2.16 of Edidin et al.`); the title as written when it carries no locator."""
-    from loom.refs.resolve import query_for
-    from loom.scan.postnote import locator_of
-
-    loc = locator_of(title)
-    if not loc:
-        return title
-    loc = re.sub(r",\s*p+\.\s*~?\s*[\d-]+$", "", loc).replace("~", " ").strip()
-    entry = result.bib.get(citekey)
-    names = list(query_for(entry).surnames) if entry is not None else []
-    more = entry is not None and bool(re.search(r"\band\s+others\b", entry.fields.get("author", "")))
-    if not names:
-        return f"{loc} of {citekey}"
-    return f"{loc} of " + (f"{names[0]} et al." if len(names) > 2 or more else " and ".join(names))
 
 
 #: A result named as a reader sees it: `Theorem 3.4`, `Lemma 4.1`, `3.4`, or an equation's `(3)`.
@@ -284,7 +262,7 @@ def numbered_entries(result: ScanResult, query: str, only: str | None = None) ->
 @click.command()
 @click.argument("query")
 @click.option(
-    "--kind", type=click.Choice(["node", "digest", "master", "thread"]), default=None, help="Only matches of this kind."
+    "--kind", type=click.Choice(["node", "master", "thread"]), default=None, help="Only matches of this kind."
 )
 @click.option(
     "--in", "within", default=None, metavar="DOC", help="Resolve a number like `Theorem 3.4` in this document only."
@@ -297,7 +275,7 @@ def numbered_entries(result: ScanResult, query: str, only: str | None = None) ->
 def search(
     query: str, kind: str | None, within: str | None, as_json: bool, run_dir: str | None, quilt_path: str | None
 ) -> None:
-    """Find ids by id, alias, title, taxon, tag, or citekey; exact matches first.
+    """Find ids by id, alias, title, taxon or tag; exact matches first.
 
     A number as a reader sees it -- `Theorem 3.4`, `3.4`, `(3)` -- finds what each drafting document numbers so, the default document's first and marked; `--in DOC` asks one document only.
     """
@@ -340,26 +318,16 @@ def search(
         raise EnvError("--in names a document to resolve a number in, such as `Theorem 3.4`")
     entries = search_entries(result, query, kind)
     more = f"loom search {shlex.quote(query)} --json"
-    groups = []
-    for heading, part in (
-        ("in your documents", [e for e in entries if e["kind"] != "digest"]),
-        ("in cited works", [e for e in entries if e["kind"] == "digest"]),
-    ):
-        rows = [
-            (
-                (str(e["taxon"] or e["kind"]), f'"{e["name"]}"' if e["name"] else "", f"{e['file']}:{e['line']}"),
-                str(e["key"]),
-            )
-            for e in part
-        ]
-        if rows:
-            # the cited works' results by their words are the library's search; each names the other (K7)
-            other = f"loom library search {shlex.quote(query)} searches their results by every word"
-            later = more if len(rows) > 20 else other if heading == "in cited works" else None
-            groups.append(Group(heading, keyed(rows), limit=20, next=later))
+    rows = [
+        (
+            (str(e["taxon"] or e["kind"]), f'"{e["name"]}"' if e["name"] else "", f"{e['file']}:{e['line']}"),
+            str(e["key"]),
+        )
+        for e in entries
+    ]
+    groups = [Group("in your documents", keyed(rows), limit=20, next=more if len(rows) > 20 else None)] if rows else []
     Report(
         f"{counted(len(entries), 'match', 'matches')} for {asked!r}" if entries else f"nothing matches {asked!r}",
-        lines=[] if entries else [f"next: loom library search {shlex.quote(query)} searches the cited works' results"],
         groups=groups,
         data={"matches": entries},
     ).emit(as_json)

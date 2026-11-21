@@ -2,7 +2,7 @@
 
 **Nothing on this page is built yet.** It lists the names that work in progress will add to what loom writes and what its viewer asks of it: paths in a quilt, write operations, refusals, record fields, manifest fields, commands, diagnostic codes and the viewer's routes. They are fixed here, before the work that builds them, so that two pieces of work done at once do not give one thing two names or two things one name.
 
-A name leaves this page when it is built: the change that builds it moves it into the specification it belongs to (`manifest.md`, `write-api.md`, `diagnostics.md`, `digests.md`) and deletes its row here. `loom/tests/unit/test_reserved.py` fails for a write operation that is served while this page still lists it. A name that turns out wrong is changed here first.
+A name leaves this page when it is built: the change that builds it moves it into the specification it belongs to (`manifest.md`, `write-api.md`, `diagnostics.md`, `nodes.md`) and deletes its row here. `loom/tests/unit/test_reserved.py` fails for a write operation that is served while this page still lists it. A name that turns out wrong is changed here first.
 
 Two kinds of entry. A name that crosses a boundary, made by one part of loom and read by another, is fixed. Where one part alone will add names of a kind, its prefix is reserved and the names are its own to choose. The owner is the part of loom that builds the name.
 
@@ -57,7 +57,6 @@ Loom writes none of these, so `manifest.md`, which says loom writes every top-le
 | `published` | the number of this publication | the speed work |
 | `suggested_works` | the works an agent suggested and nobody has added or dismissed | the library |
 | `formal`, and `keys[K].formal` | the formal proposals, and each key's formal state | formalization; Review's list of proposals reads it |
-| `diagnostics[*].class` | whose problem a code is, so that a person is shown only problems in their own text | Review; every part that adds a code gives its class |
 
 With one owner and no name fixed: the list of what changed and an AI document's state (Review, which may reshape `changes` and `changes_since`); a work's state word and its page text (the library).
 

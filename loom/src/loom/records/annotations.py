@@ -20,7 +20,7 @@ class Annotation:
     author_kind: str  # agent | person: who wrote it, which is not where it belongs (plan 0.13 §5)
     author_id: str
     created: str
-    target_key: str  # a key, a cited work's identifier (on one of its pages or the whole work), or a project PDF's path
+    target_key: str  # a key, a work's reference (on one of its PDF's pages or the whole work), or a project PDF's path
     target_hash: str
     selector: Selector | None  # the text triple: what was quoted, and the words either side
     type: str | None  # the id of its type in the quilt's types, or None: a type is only a label
@@ -30,7 +30,7 @@ class Annotation:
     own_look: dict[str, Any] = field(default_factory=dict)
     #: Its whole look when it was written or last restyled: how it is drawn once its type is gone.
     drawn: dict[str, Any] = field(default_factory=dict)
-    anchor: Anchor | None = None  # the page anchor of a note on a cited work's page; None on a key (plan 0.13 item 2)
+    anchor: Anchor | None = None  # the page anchor of a note on a work's page; None on a key (plan 0.13 item 2)
     in_reply_to: str | None = None
     #: The document this is read in, for a claim about a node that holds only there (plan 0.15, decision 9); None means the node wherever it appears.
     in_doc: str | None = None

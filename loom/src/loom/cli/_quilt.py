@@ -13,7 +13,6 @@ import click
 from loom.errors import ContentError, EnvError, NotFoundError
 from loom.locks import locked
 from loom.paths import ID_LOCK
-from loom.scan.bib import BibEntry
 from loom.scan.quilt import NoQuiltError, Quilt, find_quilt
 from loom.scan.scan import ScanResult, scan
 
@@ -80,16 +79,6 @@ def draws_ids(command: Callable[..., Any]) -> Callable[..., Any]:
             return command(*args, **kwargs)
 
     return holding
-
-
-def open_bib(quilt_path: str | None) -> tuple[Quilt, dict[str, BibEntry]]:
-    """The quilt and its bibliography, read without a scan: for a command that needs a work's entry and nothing the documents say."""
-    from loom.scan.bib import BIBLIOGRAPHY, parse_bib
-    from loom.scan.source import read_source
-
-    quilt = open_quilt(quilt_path)
-    bib = parse_bib(read_source(quilt.root, BIBLIOGRAPHY).text) if (quilt.root / BIBLIOGRAPHY).is_file() else {}
-    return quilt, bib
 
 
 def resolve_key(result: ScanResult, key: str) -> str:

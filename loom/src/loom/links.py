@@ -207,9 +207,7 @@ def _cited(result: Any, href: str) -> Target:
     target, rest = (m.group(1), m.group(2) or "") if m else ("", "")
     scheme, _, value = target.partition(":")
     if scheme.lower() == "work":
-        raise LinkError(
-            f"{href}: a work is no longer linked by work:…; link it by its identifier, or as quilt:REF", "work"
-        )
+        raise LinkError(f"{href}: work:… names no work; link a work by its identifier, or as quilt:REF", "work")
     if scheme.lower() not in _CITED or not value:
         raise LinkError(f"{href}: cited: takes a work's identifier, doi:…, arXiv:…, MR…, zbMATH…", "work")
     held = Library.read(result.quilt.root).stating([matchable(f"{_CITED[scheme.lower()]}:{value}")])

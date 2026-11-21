@@ -151,7 +151,7 @@ def _look(given: Any) -> dict[str, Any]:
 def _annotation(event: dict[str, Any]) -> Annotation:
     """One `created` or `replied` event as an annotation.
 
-    `anchor` is one of two shapes under one name: the text triple every annotation carries, or -- on a note against a page of a cited work -- a page anchor carrying `kind` beside that triple (plan 0.13 item 2). The triple is read in both cases; the page anchor only when `kind` says so, since `Selector.from_dict` would otherwise swallow the page fields without a word.
+    `anchor` is one of two shapes under one name: the text triple every annotation carries, or -- on a note against a page of a work's PDF -- a page anchor carrying `kind` beside that triple (plan 0.13 item 2). The triple is read in both cases; the page anchor only when `kind` says so, since `Selector.from_dict` would otherwise swallow the page fields without a word.
     """
     anchor = event.get("anchor")
     return Annotation(

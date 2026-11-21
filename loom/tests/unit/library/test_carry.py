@@ -8,41 +8,20 @@ from pathlib import Path
 
 from loom.identity import is_agent
 from loom.library import documents, log
-from loom.library.carry import OVERVIEW_AUTHOR, Carried, carry
+from loom.library.carry import BIBLIOGRAPHY, LINKS, OVERVIEW_AUTHOR, STORAGE, STORE_LEDGER, UNREADABLE, Carried, carry
 from loom.library.checks import check
 from loom.library.entries import read_entry
 from loom.library.store import read
-from loom.paths import (
-    ANNOTATION_LOG,
-    BIBLIOGRAPHY,
-    CACHE,
-    FORMAT,
-    LIBRARY,
-    LIBRARY_DOCUMENTS,
-    LIBRARY_NODES,
-    LINKS,
-    LOCAL,
-    STORAGE,
-    STORE_LEDGER,
-    UNREADABLE,
-)
+from loom.paths import ANNOTATION_LOG, CACHE, LIBRARY, LIBRARY_DOCUMENTS, LIBRARY_NODES, LOCAL
 from loom.records.log import replay
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
+from tests.unit.library._old import HAR77, PDF_A, SMI24, old_library
 
-PDF_A = b"%PDF-1.4\n% the arXiv preprint\n"
 PDF_V = b"%PDF-1.4\n% its second version\n"
 MAIN = "\\documentclass{amsart}\n\\newcommand{\\R}{\\mathbb{R}}\n\\title{Widgets}\n\\begin{document}\nWidgets.\n\\end{document}\n"
 FILED = "file/0123456789abcdef"
 
-SMI24 = """@article{Smi24,
-  author = {Smith, Jane},
-  title  = {Widgets},
-  year   = {2024},
-  eprint = {2401.01234v1},
-  archiveprefix = {arXiv},
-  loom-source = {smith-widgets.pdf},
-}"""
 SMI24_V2 = f"""@article{{Smi24-v2,
   author = {{Smith, Jane}},
   title  = {{Widgets}},
@@ -52,12 +31,6 @@ SMI24_V2 = f"""@article{{Smi24-v2,
   loom-copy-of = {{Smi24}},
   loom-parsed = {{heuristic}},
 }}"""
-HAR77 = """@book{Har77,
-  author    = {Hartshorne, Robin},
-  title     = {Algebraic Geometry},
-  publisher = {Springer},
-  year      = {1977},
-}"""
 CARRIED = {
     "Smi24": "@article{Smi24,\n  author = {Smith, Jane},\n  title  = {Widgets},\n  year   = {2024},\n  eprint = {2401.01234v1},\n  archiveprefix = {arXiv},\n}\n",
     "Smi24-v2": "@article{Smi24-v2,\n  author = {Smith, Jane},\n  title  = {Widgets},\n  year   = {2024},\n}\n",
@@ -87,21 +60,19 @@ def old_quilt(tmp_path: Path, bib: str | None = None) -> Path:
     root = tmp_path / "q"
     root.mkdir(parents=True)
     (root / "config.toml").write_text('[quilt]\nprefix = "tq"\n')
-    (root / FORMAT).parent.mkdir(parents=True)
-    (root / FORMAT).write_text("1\n")
+    arxiv = "arxiv/2401.01234v1"
+    old_library(
+        root,
+        bib if bib is not None else "\n\n".join([SMI24, SMI24_V2, HAR77]),
+        {
+            f"{arxiv}/paper.pdf": PDF_A,
+            f"{arxiv}/src/main.tex": MAIN.encode(),
+            f"{arxiv}/overview.md": f"Widgets, read whole. Compare [](cited:work:{HAR77_WORK}).\n".encode(),
+            f"{arxiv}/sections.json": b"{}\n",
+            f"{FILED}/paper.pdf": PDF_V,
+        },
+    )
     library = root / LIBRARY
-    library.mkdir(parents=True)
-    head = "% The quilt's bibliography, gathered by `loom library update` from the landmarks.\n\n"
-    (root / BIBLIOGRAPHY).write_text(head + (bib if bib is not None else "\n\n".join([SMI24, SMI24_V2, HAR77])) + "\n")
-    store = root / STORAGE
-    arxiv = store / "arxiv" / "2401.01234v1"
-    (arxiv / "src").mkdir(parents=True)
-    (arxiv / "paper.pdf").write_bytes(PDF_A)
-    (arxiv / "src" / "main.tex").write_text(MAIN)
-    (arxiv / "overview.md").write_text(f"Widgets, read whole. Compare [](cited:work:{HAR77_WORK}).\n")
-    (arxiv / "sections.json").write_text("{}\n")
-    (store / FILED).mkdir(parents=True)
-    (store / FILED / "paper.pdf").write_bytes(PDF_V)
     (root / STORE_LEDGER).write_text(
         json.dumps({hashlib.sha256(PDF_V).hexdigest(): {"from": "smith-widgets-v2.pdf", "to": FILED}}) + "\n"
     )

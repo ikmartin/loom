@@ -48,5 +48,5 @@ def test_cited_resolves_through_what_references_state(tmp_path: Path) -> None:
     assert (work.kind, work.key, work.place) == ("work", ref, "page=3")
     with pytest.raises(LinkError, match="no work in the library states"):
         resolve(result, root, "cited:doi:10.1000/none")
-    with pytest.raises(LinkError, match="no longer linked by work:"):
+    with pytest.raises(LinkError, match="work:… names no work"):
         resolve(result, root, "cited:work:abcdef0123456789")

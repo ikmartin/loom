@@ -48,8 +48,7 @@ test.describe('V1 · open on the thing itself', () => {
 	});
 
 	test("a pane head carries its tabs and nothing else, and its toolbar leads with its item's views", async ({ page }) => {
-		await withPapers(page);
-		await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
 		for (const [i, views] of [
 			[0, false],
 			[1, true]
@@ -61,7 +60,7 @@ test.describe('V1 · open on the thing itself', () => {
 			expect(kinds).toEqual(kinds.map(() => 'item-tab'));
 			// the row that reads, the toolbar's first
 			const first = await controls(page, i).evaluate((t) => t.firstElementChild?.firstElementChild?.getAttribute('aria-label') ?? '');
-			if (views) expect(first).toBe('views of Kre99');
+			if (views) expect(first).toMatch(/^views of /);
 			else expect(first).not.toMatch(/^views of /);
 		}
 	});
@@ -348,40 +347,36 @@ test.describe('the tab strip', () => {
 	const open = (page: Page, id: string) => openHere(page, `/node/${id}`);
 
 	test("each pane's toolbar begins with its own item's views", async ({ page }) => {
-		await withPapers(page);
-		// a document beside a paper: the paper's pane carries Text · Info though the document's pane is focused, and the document's carries none
-		await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+		// a document beside a session: the session's pane carries Transcript · What it did though the document's pane is focused, and the document's carries none
+		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
 		await expect(pane(page, 0)).toHaveClass(/focused/);
 		await expect(pane(page, 0).getByRole('group', { name: /^views of / })).toHaveCount(0);
-		const views = pane(page, 1).getByRole('group', { name: 'views of Kre99' });
-		await expect(views.getByRole('button')).toHaveText(['Text', 'Info']);
+		const views = pane(page, 1).getByRole('group', { name: /^views of / });
+		await expect(views.getByRole('button')).toHaveText(['Transcript', 'What it did']);
 		const bar = (await controls(page, 1).boundingBox())!;
 		const box = (await views.boundingBox())!;
 		expect(Math.abs(box.x - bar.x), "the views start at the toolbar's left edge, px").toBeLessThanOrEqual(1);
 		// the current view is underlined in the accent, the others are links
-		const paper = pane(page, 1).getByTestId('tab-paper');
-		await expect(paper).toHaveAttribute('aria-pressed', 'true');
-		expect(await paper.evaluate((b) => getComputedStyle(b).boxShadow)).toContain('inset');
-		await expect(pane(page, 1).getByTestId('tab-info')).toHaveCSS('box-shadow', 'none');
+		const chat = pane(page, 1).getByTestId('tab-chat');
+		await expect(chat).toHaveAttribute('aria-pressed', 'true');
+		expect(await chat.evaluate((b) => getComputedStyle(b).boxShadow)).toContain('inset');
+		await expect(pane(page, 1).getByTestId('tab-did')).toHaveCSS('box-shadow', 'none');
 		// a click switches the view in its own pane, which takes focus, and the address follows
-		await pane(page, 1).getByTestId('tab-info').click();
-		await expect(pane(page, 1).getByTestId('tab-info')).toHaveAttribute('aria-pressed', 'true');
+		await pane(page, 1).getByTestId('tab-did').click();
+		await expect(pane(page, 1).getByTestId('tab-did')).toHaveAttribute('aria-pressed', 'true');
 		await expect(pane(page, 1)).toHaveClass(/focused/);
-		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toContain('view=info');
+		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toContain('view=did');
 
-		// two papers: each toolbar its own item's views, switched apart
-		await page.goto('/library/Kre99' + beside('/library/Har77'));
-		await expect(pane(page, 0).getByRole('group', { name: 'views of Kre99' })).toBeVisible();
-		await expect(pane(page, 1).getByRole('group', { name: 'views of Har77' })).toBeVisible();
-		await pane(page, 1).getByTestId('tab-info').click();
-		await expect(pane(page, 1).getByTestId('tab-info')).toHaveAttribute('aria-pressed', 'true');
-		await expect(pane(page, 0).getByTestId('tab-paper')).toHaveAttribute('aria-pressed', 'true');
+		// two sessions: each toolbar its own item's views, switched apart
+		await page.goto('/session/s-2026-09-15-fk1w66' + beside('/session/s-2026-09-16-p9z37z'));
+		await pane(page, 1).getByTestId('tab-did').click();
+		await expect(pane(page, 1).getByTestId('tab-did')).toHaveAttribute('aria-pressed', 'true');
+		await expect(pane(page, 0).getByTestId('tab-chat')).toHaveAttribute('aria-pressed', 'true');
 
-		// a session beside a document: Transcript · What it did, in the unfocused pane
-		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
-		await expect(pane(page, 0)).toHaveClass(/focused/);
-		await expect(pane(page, 1).getByRole('group', { name: /^views of / }).getByRole('button')).toHaveText(['Transcript', 'What it did']);
-		await expect(pane(page, 1).getByTestId('tab-chat')).toHaveAttribute('aria-pressed', 'true');
+		// a paper has one reading, and no views
+		await withPapers(page);
+		await page.goto('/library/Kre99');
+		await expect(pane(page, 0).getByRole('group', { name: /^views of / })).toHaveCount(0);
 	});
 
 	test('tabs are 148px, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
@@ -410,7 +405,7 @@ test.describe('the tab strip', () => {
 		expect(room.scroll).toBeLessThanOrEqual(room.client);
 
 		// twelve are at the floor, and the row scrolls with the newest, the active tab, in view
-		for (const id of ['sy-0008', 'sy-0009', 'sy-000A', 'sy-000B', 'sy-000C', 'sy-000D', 'sy-000E', 'sy-999A']) await open(page, id);
+		for (const id of ['sy-0008', 'sy-0009', 'sy-000A', 'sy-000B', 'sy-000C', 'sy-000D', 'sy-000E', 'sy-999D']) await open(page, id);
 		await expect(tabs(page, 1)).toHaveCount(12);
 		for (const w of await widths(page, 1)) expect(w).toBeCloseTo(floor, 0);
 		const inView = () =>
@@ -441,15 +436,15 @@ test.describe('the tab strip', () => {
 
 	test('past the floor the tabs scroll, and the views beneath them keep their place', async ({ page }) => {
 		await withPapers(page);
-		// the right pane as narrow as a work lets it be, 420px, so ten tabs pass the floor
+		// the right pane as narrow as a work beside it lets it be, 420px, so ten tabs pass the floor
 		await prefs(page, { divider: 0.8 });
 		await page.setViewportSize({ width: 1440, height: 900 });
-		await page.goto('/node/sy-0001' + beside('/library/Kre99'));
+		await page.goto('/library/Kre99' + beside('/session/s-2026-09-16-p9z37z'));
 		await tabs(page, 1).first().getByRole('tab').click();
 		for (const id of ['sy-0003', 'sy-0006', 'sy-0007', 'sy-0008', 'sy-0009', 'sy-000A', 'sy-000B', 'sy-000C', 'sy-000D']) await open(page, id);
-		// the paper brought forward as a link does it, which reveals its tab; a click on a tab still scrolling never settles on the runner
-		await openHere(page, '/library/Kre99');
-		const views = pane(page, 1).getByRole('group', { name: 'views of Kre99' });
+		// the session brought forward as a link does it, which reveals its tab; a click on a tab still scrolling never settles on the runner
+		await openHere(page, '/session/s-2026-09-16-p9z37z');
+		const views = pane(page, 1).getByRole('group', { name: /^views of / });
 		await expect(views).toBeVisible();
 		const tablist = pane(page, 1).getByRole('tablist');
 		const box = (await views.boundingBox())!;
@@ -565,28 +560,24 @@ test.describe('a narrow window', () => {
 		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').panel)).not.toBe(false);
 	});
 
-	test("a narrow pane's toolbar keeps its views and view whole, its bar giving way first", async ({ page }) => {
+	test("a narrow pane's toolbar keeps its view whole, its bar giving way first", async ({ page }) => {
 		await serve(page, (m) => (m.references.Kre99.artifacts.pdf = true));
 		await page.setViewportSize({ width: 760, height: 800 });
 		await page.goto('/library/Kre99');
-		const bar = (await controls(page, 0).boundingBox())!;
-		const views = (await pane(page, 0).getByRole('group', { name: 'views of Kre99' }).boundingBox())!;
-		expect(Math.abs(views.x - bar.x), "the views start at the toolbar's left edge, px").toBeLessThanOrEqual(1);
 		await expect(pane(page, 0).getByTestId('toolbar-view')).toBeInViewport({ ratio: 1 });
 		await expect(page.getByTestId('zoom-at')).toBeVisible();
 	});
 
 	test("below the two-pane width one strip holds both panes' tabs, and the shown pane's toolbar leads with its views", async ({ page }) => {
-		await withPapers(page);
 		await page.setViewportSize({ width: 640, height: 800 });
-		await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+		await page.goto('/master/drafting/main' + beside('/session/s-2026-09-16-p9z37z'));
 		const strip = page.getByTestId('narrow-strip');
 		await expect(strip).toBeVisible();
 		await expect(strip.getByTestId('item-tab')).toHaveCount(2);
 		await expect(strip.getByRole('group', { name: /^views of / })).toHaveCount(0);
 		await strip.getByTestId('pane-head-1').getByRole('tab').click();
-		const views = controls(page, 1).getByRole('group', { name: 'views of Kre99' });
-		await expect(views.getByRole('button')).toHaveText(['Text', 'Info']);
+		const views = controls(page, 1).getByRole('group', { name: /^views of / });
+		await expect(views.getByRole('button')).toHaveText(['Transcript', 'What it did']);
 		const bar = (await controls(page, 1).boundingBox())!;
 		expect(Math.abs((await views.boundingBox())!.x - bar.x)).toBeLessThanOrEqual(1);
 	});
@@ -727,7 +718,7 @@ test.describe('the toolbar', () => {
 		await expect(pane(page, 1).getByTestId('context')).toBeVisible();
 	});
 
-	test('a paper shows settled annotations from its toolbar, and greys its page tools and its PDF off the Text view', async ({ page }) => {
+	test('a paper shows settled annotations from its toolbar', async ({ page }) => {
 		await withPapers(page);
 		await page.goto('/library/Kre99');
 		await expect(page.getByTestId('pdf-doc')).toBeVisible();
@@ -737,23 +728,11 @@ test.describe('the toolbar', () => {
 		await page.getByTestId('toggle-settled').click();
 		await expect(page.getByTestId('marked-doc')).toHaveClass(/show-settled/);
 		await expect(page.getByTestId('toolbar-view-on')).toBeVisible();
-		// off the paper: drawn and greyed, the PDF with its reason
-		await page.getByTestId('tab-info').click();
-		await expect(page.getByTestId('zoom-fit')).toBeDisabled();
-		await viewMenu(page);
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('aria-disabled', 'true');
-		await expect(page.getByTestId('open-pdf')).toHaveAttribute('title', /Text view/);
 	});
 
-	test('a paper with no readable copy greys its Text view and opens on Info, which reads its digest', async ({ page }) => {
+	test('a paper with no readable copy says so, and greys its page tools and its PDF', async ({ page }) => {
 		await page.goto('/library/Kre99');
-		const paper = pane(page, 0).getByTestId('tab-paper');
-		await expect(paper).toBeDisabled();
-		await expect(paper).toHaveAttribute('title', 'No copy of this work is on file');
-		await expect(pane(page, 0).getByTestId('tab-info')).toHaveAttribute('aria-pressed', 'true');
-		// with no copy to read, the digest is read here as one text, folded beneath the results' cards
-		await pane(page, 0).getByTestId('digest-text').locator('summary').click();
-		await expect(pane(page, 0).getByTestId('work-digest').locator('.env').first()).toBeVisible();
+		await expect(pane(page, 0).getByTestId('reading-absent')).toHaveText('No copy of this paper on this machine.');
 		await expect.poll(() => new URL(page.url()).search).toBe('');
 		await expect(page.getByTestId('zoom-fit')).toBeDisabled();
 		await viewMenu(page);

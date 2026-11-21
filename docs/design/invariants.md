@@ -14,6 +14,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** DR-185, DR-203, DR-325-ikmartin
 
+**2026-11-21.** Today's library is deleted with its commands (plan 0.32, the library's phase 2): of its acts on the command line only `loom library add` stays, and over the write API the author's library writes are `library-take`, `-answer`, `-undo`, `-unfile`, `-look-up`, `-entry`, `-delete`, `-restore` and `-upgrade`, each refusing a declared agent (`author-only`, 403), which the write API's cases for each hold. The rule is unchanged.
+
 ### The network is the person's to allow
 
 **Rule.** Loom looks works up and fetches them only under `[library] online = true` or a run the person allows: `--online` in a terminal of their own, or "Allow and run" in the viewer, which sends `online` with `library-update`. Neither is written anywhere. Under an agent marker `--online` is refused without the standing consent, and `library-update` refuses a declared agent, so an agent never grants itself the network.
@@ -23,6 +25,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Guard.** `loom/tests/unit/refs/test_library_store.py::test_online_is_refused_under_an_agent_without_standing_consent`, `loom/tests/unit/render/test_write_api.py::test_each_endpoint_writes_and_refuses_over_the_wire[library-update]`
 
 **Record.** DR-193; plan 0.24.1
+
+**2026-11-21.** `library-update` and `--online` on the library's runs are gone with today's library (plan 0.32, the library's phase 2), and so are the two guards named above. The person's allowance is now `online` on `library-take`, `library-answer` and `library-look-up`, for that one act and written nowhere; those writes refuse a declared agent, and `loom library add` reads an unset quilt as offline. Guards: `loom/tests/unit/render/test_write_api.py::test_each_endpoint_writes_and_refuses_over_the_wire[library-take]` and `[library-look-up]`. The rule is unchanged.
 
 ### Identity is never stored in the quilt
 
@@ -43,6 +47,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Guard.** `loom/tests/unit/test_refs_layer.py::test_propose_does_not_hand_an_agent_the_authors_verb`
 
 **Record.** DR-183
+
+**2026-11-21.** Proposals, `refs propose` and the author's `library verify` are gone with today's library (plan 0.32, the library's phase 2), and so is the guard named above. The rule stands for what records a check of a node against its paper, the evidence lane's; until a test there holds it, it has no guard.
 
 ### Overlooking is never accepting
 
@@ -351,6 +357,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** DR-109, DR-181
 
+**2026-11-21.** Digests are gone with today's library (plan 0.32, the library's phase 2), and so are the guards named above. A version of a paper is now a reference of its own holding its documents by hash (`docs/specs/nodes.md` §7), so what a node was read from is the document its reference holds; the rule has no guard until the digest that writes nodes (phase 3) names one.
+
 ### A proposal is never a dependency
 
 **Rule.** The scan makes no edge to a proposed result from outside its own file, whether by `\cite[postnote]`, `\ref` or `\uses`: `loom:cites-proposed-node` (warning) reports the citation, and verifying the proposal makes it a dependency. So nobody's unchecked statement enters a closure, a closure document or a compile (P15).
@@ -360,6 +368,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Guard.** `loom/tests/unit/test_refs_layer.py::test_a_cited_proposal_is_no_dependency_until_it_is_verified`
 
 **Record.** Commit `3f38e7c9`.
+
+**2026-11-21.** Proposals are gone with today's library (plan 0.32, the library's phase 2), and so are `loom:cites-proposed-node` and the guard named above. The failure's lesson stands for the library's nodes, whose state is evidence's: an unchecked node entering a closure is phase 3's to settle, and the rule has no guard until then.
 
 ### A document is filed under a work only on the person's word
 
@@ -371,6 +381,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** DR-331-ikmartin. 2026-11-04, at the author's request: what is withheld is the filing against the entry, never the PDF. The author could not add revision notes with no DOI, a scanned textbook, or a book whose PDF was refused after its entry was written; a PDF they provide is now always kept. The rule the failure taught is unchanged for a match loom makes on its own; a file name a reference manager wrote now counts as evidence, and an entry naming no author is matched on its whole title. 2026-11-17, agreed by the author (plan 0.32, Library): a strong match no longer files on its own anywhere, the command line asking for `--for` as the viewer asks its one question, after the quant quilt's wrong match; an entry naming no author is matched by its identifier alone, and is still offered when a PDF's own title is its title.
 
+**2026-11-21.** The intake is rebuilt on references (plan 0.32, the library's phase 2; the rulings on `library-views.md` Opens 6 and 18): a document is offered as a work the library has only by an identifier it states, never by its title or byline, and filed under it only on the person's answer or a drop on the work's row. The guards named above are gone; the guards are now `loom/tests/unit/library/test_intake.py::test_a_title_alike_is_never_a_match`, `::test_a_pdf_stating_an_identifier_the_library_has_asks_and_is_answered` and `::test_a_drop_on_a_row_is_filed_under_it`.
+
 ### Redoing a step keeps what a person verified
 
 **Rule.** `library update --redo` and `library drop` keep every result a person verified: its record, and its text in the digest byte for byte.
@@ -381,6 +393,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Record.** DR-326-ikmartin, DR-331-ikmartin, DR-333-ikmartin
 
+**2026-11-21.** `library update --redo` and `library drop` are gone with today's library (plan 0.32, the library's phase 2), and so are the guards named above. The rule's reason holds for the digest that writes over nodes a person may have checked (phase 3), and has no guard until then.
+
 ### A paper outside the quilt is compiled from a clean copy
 
 **Rule.** Importing a paper and extracting a cited work's source compile a scratch copy of the paper's directory without its build products (a `.bbl` stays only when there is no `.bib`). latexmk never runs in the paper's own directory.
@@ -390,6 +404,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Guard.** `loom/tests/unit/test_paper.py::test_import_leaves_the_paper_directory_and_no_scratch_behind`
 
 **Record.** DR-186
+
+**2026-11-21.** Extracting a cited work's source is gone with digests (plan 0.32, the library's phase 2); importing a paper is unchanged, and so is the guard.
 
 ## Rendering and the viewer
 
@@ -402,6 +418,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Guard.** `arras/tests/e2e/library.e2e.ts::a proposal shows the page itself, and names the words of the rendering the page does not have`
 
 **Record.** DR-179, DR-201
+
+**2026-11-21.** The viewer's review of proposals is gone with today's library (plan 0.32, the library's phase 2), and so is the guard named above. The rule is the Library view's check of a node against its paper (`docs/specs/library-views.md`, `check`), built in its own change, and has no guard until then.
 
 ### A mark never splits a formula
 
@@ -454,6 +472,8 @@ Two differences are known and allowed: the blank space two runs of TeX over one 
 **2026-11-04.** A Markdown file may hold HTML, which the viewer draws in its own page rather than a frame so that links, mathematics and quoting keep working there. So the publisher writes that HTML back out through an allowlist with everything escaped, and a frame in it loads only an `https:` address, sandboxed, which is never the viewer's origin. A click on a `javascript:` address written with a space or a control character, which a formula's `\href` can carry, is now refused too.
 
 **Open.** The rule above holds for what loom renders, not for what an agent edits after it. What loom derives, `.loom/cache/`, is not among an agent's places, so loom's commands and Claude Code refuse an agent an edit there; but the other apps leave that list to the agent, and the boundary is not a security boundary (`agents.md`). The viewer inserts a body or a manifest's `body_html` as it reads them, so one edited there directly runs as the viewer and can read the token (reproduced 2026-11-04 against a real `loom serve`, with a handler in a file's body under what was then `.loom/build/files/`, now `.loom/cache/site/files/`). A `Content-Security-Policy` on the viewer's own page that refuses inline script, or a viewer that filters what it inserts, would close it; document fragments reach the page the same way.
+
+**2026-11-21.** `/digests/storage/` is gone with today's library (plan 0.32, the library's phase 2); a work's documents are served by hash at `/_api/library/pdf/<hex>` and `/_api/library/thumb/<hex>.png`, sandboxed as `/build/` is, which `test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers` holds. The rule is unchanged.
 
 ### Loom opens only documents in their application
 

@@ -29,18 +29,11 @@ from loom.library.store import NodeRefused, read
 from loom.locks import locked
 from loom.paths import (
     ANNOTATION_LOG,
-    BIBLIOGRAPHY,
     ID_LOCK,
     LIBRARY,
     LIBRARY_DOCUMENTS,
     LIBRARY_LOCK,
     LIBRARY_NODES,
-    LINKS,
-    LINKS_REMOVED,
-    STORAGE,
-    STORE_LEDGER,
-    SUGGESTED_WORKS,
-    UNREADABLE,
 )
 from loom.scan.bib import citekey_slug, parse_bib, raw_entries
 from loom.scan.tokenize import match_group
@@ -48,6 +41,15 @@ from loom.scan.tokenize import match_group
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
 
+#: The old library's bibliography, its entries holding loom's own `loom-*` fields.
+BIBLIOGRAPHY = f"{LIBRARY}/bibliography.bib"
+#: What a person said could not be read, and the relations between results, kept and removed.
+UNREADABLE = f"{LIBRARY}/unreadable.json"
+LINKS = f"{LIBRARY}/links.jsonl"
+LINKS_REMOVED = f"{LIBRARY}/links-removed.jsonl"
+#: The old store of documents, a folder each work, and its ledger of what each copy was taken from.
+STORAGE = f"{LIBRARY}/storage"
+STORE_LEDGER = f"{STORAGE}/copied.json"
 #: Who an overview's note is written by: a name `identity.is_agent` reads as no agent's.
 OVERVIEW_AUTHOR = "loom (carried overview)"
 #: A work's folder in the old store: its PDF, its source's files, and its overview.
@@ -59,7 +61,7 @@ OLD_FILES = (BIBLIOGRAPHY, UNREADABLE, LINKS, LINKS_REMOVED)
 #: A digest's files directly under `.loom/library/`, by the end of their names: `<ck>.tex` its verified results and `<ck>.proposed.tex` its proposals (both `.tex`), `<ck>.results.json` each result's two texts, anchor and state, and `<ck>.proposals.jsonl` the proposals' events.
 DIGEST_ENDINGS = (".tex", ".results.json", ".proposals.jsonl")
 #: What the node store keeps under `.loom/library/`, which the carry leaves alone.
-KEPT = (LIBRARY_NODES, LIBRARY_DOCUMENTS, SUGGESTED_WORKS)
+KEPT = (LIBRARY_NODES, LIBRARY_DOCUMENTS)
 #: The schemes a note named a work by, as the earlier loom parsed them, in any case.
 SCHEMES = ("doi", "arxiv", "mr", "zbl", "work")
 

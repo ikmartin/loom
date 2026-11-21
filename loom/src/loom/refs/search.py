@@ -1,6 +1,6 @@
-"""Finding text in a cited work's pages, and the one normalisation an anchor is checked under (plan 0.12 §5, digest contract §9.5).
+"""Finding text in a work's pages, and the one normalisation a quotation is checked under (plan 0.12 §5).
 
-Everything that compares a quotation to a page goes through `normalize` here: `loom library locate` so a span can be given geometry, and `loom library propose` so a proposal is accepted or refused on the same terms. Three implementations of "near enough" would mean a quotation that is found but will not anchor, which is the worst failure this layer could have. `loom library search` finds under `fold`, which is `normalize` without case, and ranks what it finds here too.
+Everything that compares a quotation to a page goes through `normalize` here: anchoring an annotation on a page (`refs.anchoring`), and placing a quotation's words in the word boxes (`locate_span`). Two implementations of "near enough" would mean a quotation that is found but will not anchor, which is the worst failure this layer could have. Page search finds under `fold`, which is `normalize` without case, and ranks what it finds by how often its terms occur.
 """
 
 from __future__ import annotations
@@ -59,63 +59,20 @@ def normalize(text: str) -> str:
 
 
 def find_in_page(page: str, needle: str) -> bool:
-    """Whether `needle` appears on `page`, both normalised. This is the whole of digest contract §9.5."""
+    """Whether `needle` appears on `page`, both normalised."""
     n = normalize(needle)
     return bool(n) and n in normalize(page)
-
-
-# What `words_not_on_page` drops before comparing: mathematics, which the text layer spells as glyph soup, and
-# control words with the label-like arguments of the ones that name things rather than say them.
-_MATH = re.compile(
-    r"\$\$.*?\$\$|\$.*?\$|\\\(.*?\\\)|\\\[.*?\\\]"
-    r"|\\begin\{(equation|align|gather|multline|eqnarray|displaymath)(\*?)\}.*?\\end\{\1\2\}",
-    re.S,
-)
-_NAMING = re.compile(r"\\(?:ref|eqref|cref|Cref|label|cite[a-z]*|begin|end)\*?(?:\[[^\]]*\])*\{[^{}]*\}")
-_COMPOUND = re.compile(r"[A-Za-z]+(?:-[A-Za-z]+)+")
-_CONTROL_WORD = re.compile(r"\\[A-Za-z@]+\*?")
-_PROSE = re.compile(r"[A-Za-z]{3,}")
-
-
-def words_not_on_page(statement: str, source_text: str) -> list[str]:
-    """The prose words of a rendering that its quoted source text does not contain, in order, once each.
-
-    Parameters
-    ----------
-    statement : str
-        The LaTeX rendering of a result.
-    source_text : str
-        The page's own words it claims to render.
-
-    Returns
-    -------
-    list of str
-        Words of three or more letters outside mathematics, compared without case (a capital at a sentence start is not an addition). What is left is the agent's: a gloss, an inlined definition, a clause from elsewhere. Five of thirteen Brion renderings in the third study run carried one, after the orientation said "the paper's words only".
-    """
-    prose = normalize(_CONTROL_WORD.sub(" ", _NAMING.sub(" ", _MATH.sub(" ", statement))))
-    have = {w.lower() for w in _PROSE.findall(normalize(source_text))}
-    for compound in _COMPOUND.findall(prose):
-        # "pull-backs" broken over a line on the page is "pullbacks" once the break is joined
-        if compound.replace("-", "").lower() in have:
-            have.update(part.lower() for part in compound.split("-"))
-    out: list[str] = []
-    seen: set[str] = set()
-    for w in _PROSE.findall(prose):
-        if w.lower() not in have and w.lower() not in seen:
-            seen.add(w.lower())
-            out.append(w)
-    return out
 
 
 @dataclass
 class Hit:
     """One page a search matched, with enough context to decide whether to read it."""
 
-    citekey: str
+    ref: str
     page: int
     section: str
     context: str
-    #: How often the search's terms occur on the page, which `loom library search --pages` ranks by.
+    #: How often the search's terms occur on the page, which a page search ranks by.
     score: int = 0
 
 
@@ -129,8 +86,8 @@ def _context(page: str, needle: str, width: int = 70) -> str:
     return ("…" if lo else "") + flat[lo:hi] + ("…" if hi < len(flat) else "")
 
 
-def grep_work(home: Path, citekey: str, needle: str) -> list[Hit]:
-    """Every page of one mapped work whose text contains `needle`; reads the committed page text, never the PDF."""
+def grep_work(home: Path, ref: str, needle: str) -> list[Hit]:
+    """Every page of one mapped PDF (`pages.mapped`) whose text contains `needle`, for the reference `ref`; reads the page text, never the PDF."""
     from loom.refs.pages import read_map
 
     out: list[Hit] = []
@@ -146,12 +103,12 @@ def grep_work(home: Path, citekey: str, needle: str) -> list[Hit]:
         n = int(path.stem)
         sec = m.section_of(n) if m and not m.suspect else None
         label = f"{sec.n} {sec.title}".strip() if sec else ""
-        out.append(Hit(citekey=citekey, page=n, section=label, context=_context(text, needle)))
+        out.append(Hit(ref=ref, page=n, section=label, context=_context(text, needle)))
     return out
 
 
 def fold(text: str) -> str:
-    """`normalize`, then case-folded and with a hyphen inside a word dropped: the form `loom library search` matches its terms in, so `pullback` finds `pull-back`.
+    """`normalize`, then case-folded and with a hyphen inside a word dropped: the form a page search matches its terms in, so `pullback` finds `pull-back`.
 
     For finding only. An anchor is still checked under `normalize`, whose case and hyphens a statement keeps.
     """
@@ -171,24 +128,6 @@ def terms_of(text: str) -> list[str]:
     return out
 
 
-#: What a term found in a result's head (its locator, its local name, its work's title) counts, against one in its body.
-HEAD, BODY = 3, 1
-
-
-def score_result(terms: list[str], head: str, body: str, *, level: int, citations: int) -> int | None:
-    """A result's rank for `terms` (WQ-41), or None when some term is in neither its head nor its body.
-
-    Each term scores `HEAD` when it is in `head` and `BODY` when it is in `body`, both folded; a level-1 result scores 2 more, and each citation of it in the author's documents 1 more.
-    """
-    h, b = fold(head), fold(body)
-    score = 0
-    for t in terms:
-        if t not in h and t not in b:
-            return None
-        score += (HEAD if t in h else 0) + (BODY if t in b else 0)
-    return score + (2 if level == 1 else 0) + citations
-
-
 def snippet(text: str, terms: list[str], width: int = 60) -> str:
     """The text around the first of `terms` it contains, on one line; its opening when it contains none."""
     flat = _unhyphen(normalize(text))
@@ -201,8 +140,8 @@ def snippet(text: str, terms: list[str], width: int = 60) -> str:
     return ("…" if lo else "") + flat[lo:hi].strip() + ("…" if hi < len(flat) else "")
 
 
-def search_pages(home: Path, citekey: str, terms: list[str]) -> list[Hit]:
-    """Every page of one mapped work holding all of `terms`, folded, each scored by how often they occur on it."""
+def search_pages(home: Path, ref: str, terms: list[str]) -> list[Hit]:
+    """Every page of one mapped PDF (`pages.mapped`) holding all of `terms`, folded, for the reference `ref`, each scored by how often they occur on it."""
     from loom.refs.pages import read_map
 
     out: list[Hit] = []
@@ -221,7 +160,7 @@ def search_pages(home: Path, citekey: str, terms: list[str]) -> list[Hit]:
         # a map that is a guess names no section, rather than a misread line as one
         sec = m.section_of(n) if m and not m.suspect else None
         label = f"{sec.n} {sec.title}".strip() if sec else ""
-        hit = Hit(citekey=citekey, page=n, section=label, context=snippet(text, terms, 70))
+        hit = Hit(ref=ref, page=n, section=label, context=snippet(text, terms, 70))
         hit.score = sum(folded.count(t) for t in terms)
         out.append(hit)
     return out
@@ -344,9 +283,9 @@ def _by_line(boxes: list[tuple[float, float, float, float, str]]) -> list[tuple[
 
 
 def locate_offsets(page_text: str, needle: str) -> tuple[int, int] | None:
-    """Where `needle` sits in a page's committed text, as offsets into that text; None when it is not there.
+    """Where `needle` sits in a page's text, as offsets into that text; None when it is not there.
 
-    The counterpart of `locate_span`, and deliberately the same tolerance: the reader's selection came from a third extraction again -- the viewer's own text layer -- so spacing around mathematics and a hyphen left by a line break must not decide whether an anchor can be recorded. Offsets index the raw text as committed, not a normalised copy of it, because that file is what a coauthor with no PDF checks an anchor against.
+    The counterpart of `locate_span`, and deliberately the same tolerance: the reader's selection came from a third extraction again -- the viewer's own text layer -- so spacing around mathematics and a hyphen left by a line break must not decide whether an anchor can be recorded. Offsets index the raw page text, not a normalised copy of it, so an anchor's offsets name the words a reader sees.
     """
     keep: list[int] = []
     flat: list[str] = []
@@ -363,62 +302,3 @@ def locate_offsets(page_text: str, needle: str) -> tuple[int, int] | None:
     if at < 0:
         return None
     return keep[at], keep[at + len(want) - 1] + 1
-
-
-def statement_span(page_text: str, label: str, statement: str) -> tuple[int, int] | None:
-    """Where a result's statement sits in a page's committed text: from its printed label to its last words.
-
-    A digest node is a transcription of a statement, and what a reader wants to see of it is the statement — not the page it happens to be on. The two ends are found differently because the page offers different evidence for each. The **start** is the printed label, `Proposition 2.1`, which is on the page in exactly the form a reader sees. The **end** cannot be matched the same way: the statement is LaTeX and its mathematics is not on the page as typed, so what is searched for is the last run of three prose words that survives stripping the mathematics out, and the span ends where that run ends.
-
-    Parameters
-    ----------
-    page_text : str
-        The page's committed text, as `pages/NNNN.txt` holds it.
-    label : str
-        The result as the paper prints it, `Proposition 2.1`.
-    statement : str
-        The result's LaTeX, whose prose supplies the end.
-
-    Returns
-    -------
-    tuple of (int, int), or None
-        Offsets into `page_text`, or None when the label is not on the page. A statement whose prose cannot be found — one that is nearly all mathematics, or one that runs onto the next page — ends at its label, which is short but never wrong.
-    """
-    head = locate_offsets(page_text, label)
-    if head is None:
-        return None
-    start, end = head
-    prose = _PROSE.findall(normalize(_CONTROL_WORD.sub(" ", _NAMING.sub(" ", _MATH.sub(" ", statement)))))
-    rest = page_text[start:]
-    for i in range(len(prose) - 3, -1, -1):
-        found = locate_offsets(rest, " ".join(prose[i : i + 3]))
-        if found is not None and start + found[1] > end:
-            return start, start + found[1]
-    return start, end
-
-
-def words_under(bbox_xml: str, rects: list[list[float]]) -> str:
-    """The page's words whose middles stand in `rects`, in reading order.
-
-    For a mark taken in from a PDF: another program drew its rectangles, which cut through a word's edge more often than they clear it, so `words_in_boxes`'s whole-word test would lose the ends of a line.
-    """
-    out: list[str] = []
-    for w in _words(bbox_xml):
-        cx, cy = (w[0] + w[2]) / 2, (w[1] + w[3]) / 2
-        if any(x0 <= cx <= x1 and y0 <= cy <= y1 for x0, y0, x1, y1 in rects):
-            out.append(w[4])
-    return _SPACE.sub(" ", " ".join(out)).strip()
-
-
-def words_in_boxes(bbox_xml: str, rects: list[list[float]]) -> str:
-    """The page's own words under a reader's rectangles, in reading order.
-
-    A box anchor records no offsets, so this is the best text it can carry: unreliable by construction, since a box is drawn exactly where the text layer could not be trusted, but enough for a list to show something and for a search to reach it in principle.
-    """
-    out: list[str] = []
-    for w in _words(bbox_xml):
-        for x0, y0, x1, y1 in rects:
-            if w[0] >= x0 - 1 and w[2] <= x1 + 1 and w[1] >= y0 - 1 and w[3] <= y1 + 1:
-                out.append(w[4])
-                break
-    return _SPACE.sub(" ", " ".join(out)).strip()

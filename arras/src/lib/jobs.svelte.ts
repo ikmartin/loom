@@ -1,6 +1,5 @@
 // The library runs the publisher keeps (plan 0.24.1): a run started here answers at once with its job, and the viewer asks how each is going, once a second while any is queued or running and not at all otherwise. A run that finishes refreshes the manifest, so what it made shows.
 
-import type { RunRow } from '$lib/library';
 import { store } from '$lib/manifest/client.svelte';
 import { read, write, type WriteResult } from '$lib/write';
 
@@ -18,8 +17,6 @@ export interface JobReport {
 	ok: boolean;
 	groups: { heading: string; count: number; items: { text: string; key?: string; fixes?: string[] }[]; next?: string }[];
 	notes: string[];
-	/** Each work the run acted on, with what failed for it. */
-	works?: RunRow[];
 }
 
 export interface Job {
@@ -44,17 +41,9 @@ const live = (j: Job) => j.state === 'queued' || j.state === 'running';
 class Jobs {
 	list = $state<Job[]>([]);
 	#timer: ReturnType<typeof setTimeout> | null = null;
-	#asked = false;
 
 	/** Whether a run is queued or running. */
 	readonly active = $derived(this.list.some(live));
-
-	/** Ask the publisher once, so a run started in another tab shows here too; later asks follow a live run. */
-	ask(): void {
-		if (this.#asked) return;
-		this.#asked = true;
-		void this.refresh();
-	}
 
 	async refresh(): Promise<void> {
 		const got = await read<{ jobs: Job[] }>('/jobs');
@@ -78,46 +67,11 @@ class Jobs {
 		return answer;
 	}
 
-	/** The latest run acting on the work `citekey`, a run over every work included. */
-	forWork(citekey: string): Job | undefined {
-		return this.list.find((j) => !j.works.length || j.works.includes(citekey));
-	}
-
-	/** The latest run over every work. */
-	forAll(): Job | undefined {
-		return this.list.find((j) => !j.works.length);
-	}
-
 	/** The latest run over exactly `works`, as a run started on them is followed; none is every work. */
 	forWorks(works: string[]): Job | undefined {
 		const want = [...works].sort().join('\n');
 		return this.list.find((j) => [...j.works].sort().join('\n') === want);
 	}
-
-	/** `citekey`'s line in the report of the latest finished run that acted on it, while the publisher holds that run. */
-	lastRun(citekey: string): RunRow | undefined {
-		for (const j of this.list) {
-			if (live(j) || !(j.works.length === 0 || j.works.includes(citekey))) continue;
-			const row = j.report?.works?.find((w) => w.citekey === citekey);
-			if (row) return row;
-		}
-		return undefined;
-	}
 }
 
 export const jobs = new Jobs();
-
-/** Whether a job is queued or running. */
-export function running(job: Job | undefined): boolean {
-	return !!job && live(job);
-}
-
-/** Whether a run only reads a work's text, as filing a PDF starts one. */
-export function readingOnly(job: Job): boolean {
-	return job.steps.length === 1 && job.steps[0].name === 'map';
-}
-
-/** A run that only read a work's text and found nothing to say, which has nothing to show once it is over. */
-export function readQuietly(job: Job): boolean {
-	return readingOnly(job) && job.state === 'done' && !job.report?.works?.some((w) => w.no_text || w.map_error);
-}

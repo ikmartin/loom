@@ -100,11 +100,7 @@ def test_bundle_contents_and_order(tmp_path: Path) -> None:
     d = demo(tmp_path)
     result = scan(load_quilt(d))
     b = build_bundle(result, "dm-0003/proof")
-    assert set(b.closure) == {
-        "dm-0002",
-        "Calloway14-def-3.1",
-        "Calloway14-prop-3.2",
-    }  # the proof cites Calloway14 by postnote
+    assert set(b.closure) == {"dm-0002"}  # Calloway14, which the proof cites, is a work and no node of it
     text = b.text
     assert text.index("% !LOOM begin loom-macros") < text.index("\\begin{document}")
     assert text.index("% id: dm-0002") < text.index("% id: dm-0003") < text.index("% proof: dm-0003/proof")

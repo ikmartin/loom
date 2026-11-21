@@ -35,12 +35,12 @@ test.describe('the one rule', () => {
 	});
 
 	test('what is not open opens as a new tab in the other pane, and the Chat stays', async ({ page }) => {
-		// sy-999A is in the talk only, so the open main.tex does not hold it
-		await saying(page, '<p>See <a href="quilt:sy-999A"></a>.</p>');
+		// sy-999D is in the talk only, so the open main.tex does not hold it
+		await saying(page, '<p>See <a href="quilt:sy-999D"></a>.</p>');
 		await page.goto('/master/drafting/main' + beside('/session/' + REFEREE));
 		await pane(page, 1).getByTestId('message-1').locator('a').click();
 		await expect(pane(page, 0).getByTestId('item-tab')).toHaveCount(2);
-		await expect(pane(page, 0).getByRole('tab', { selected: true })).toContainText('sy-999A');
+		await expect(pane(page, 0).getByRole('tab', { selected: true })).toContainText('sy-999D');
 		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
 	});
 
@@ -268,7 +268,7 @@ test.describe('previews', () => {
 	});
 
 	test('a citation previews the page at the place it names, and nothing where the place is unknown', async ({ page }) => {
-		// a hover over a citation shows the paper, not a card about it: the entry and the digest are what the work's own Info view is for; with no copy on this machine there is no page to show, so nothing opens
+		// a hover over a citation shows the paper, not a card about it; with no copy on this machine there is no page to show, so nothing opens
 		// the card's delay runs on the page's clock, so each absence below is asserted after moving that clock past it
 		await page.clock.install();
 		await page.goto('/master/drafting/main');

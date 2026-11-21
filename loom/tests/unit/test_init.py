@@ -78,7 +78,7 @@ def test_init_writes_loom_s_ignore_file_always_and_a_repository_only_when_asked(
         ln for ln in (tmp_path / "n" / ".loom" / ".gitignore").read_text().splitlines() if ln and not ln.startswith("#")
     ]
     assert ignored == ["/local/", "/cache/", "/agents/scratch/"]
-    assert (tmp_path / "n" / ".loom" / "format").read_text() == "1\n"
+    assert (tmp_path / "n" / ".loom" / "format").read_text() == "2\n"
 
 
 def test_the_starter_preamble_declares_candidate_taxa() -> None:
@@ -266,11 +266,11 @@ def test_upgrade_rewrites_loom_s_ignore_lines_and_keeps_the_person_s(tmp_path: P
     ok("init", tmp_path / "q", "--prefix", "zz", "--ai", "claude", "--yes")
     q = tmp_path / "q"
     assert missing(q) == [] and (q / ".loom" / ".gitignore").read_text() == LOOM_IGNORE
-    (q / ".loom" / ".gitignore").write_text(f"build/\n{OWN}\nlibrary/storage/**/paper.pdf\n")
+    (q / ".loom" / ".gitignore").write_text(f"build/\n{OWN}\nlibrary/documents/*.pdf\n")
     (q / ".gitignore").write_text("# mine\nscratch/\n")
     said = ok("upgrade", cwd=q).output
     assert ".loom/.gitignore" in said
-    assert (q / ".loom" / ".gitignore").read_text() == LOOM_IGNORE + "library/storage/**/paper.pdf\n"
+    assert (q / ".loom" / ".gitignore").read_text() == LOOM_IGNORE + "library/documents/*.pdf\n"
     lines = (q / ".gitignore").read_text().splitlines()
     assert lines[:2] == ["# mine", "scratch/"] and missing(q) == [] and all(line in lines for line in CLIENT_LINES)
 

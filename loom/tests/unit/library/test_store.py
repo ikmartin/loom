@@ -161,7 +161,7 @@ def test_a_library_stem_is_drawn_from_everything_loom_id_counts(tmp_path: Path) 
     from tests.unit._quilts import demo
 
     q = demo(tmp_path)
-    (q / LIBRARY_NODES).mkdir(parents=True)
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
     (q / LIBRARY_NODES / "dm-0050-ref.node").write_text("+++\n")
     assert next_stem(scan(load_quilt(q))) == "dm-0051"
 

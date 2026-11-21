@@ -1,10 +1,10 @@
 # loom-arras
 
-One repository holding loom, its viewer arras, and the documents that govern them. `loom` turns a LaTeX paper into a *quilt*, where every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref`, `\cite[postnote]` and `\uses` an author already writes, acceptances are recorded with content hashes, and review comments are anchored to quoted text. `arras` is the viewer it publishes to. The paper still compiles with plain `pdflatex`, from the same files, on Overleaf.
+One repository holding loom, its viewer arras, and the documents that govern them. `loom` turns a LaTeX paper into a *quilt*, where every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` an author already writes, acceptances are recorded with content hashes, and review comments are anchored to quoted text. `arras` is the viewer it publishes to. The paper still compiles with plain `pdflatex`, from the same files, on Overleaf.
 
 | directory | what it is | language |
 |---|---|---|
-| `loom/` | the CLI: scanner, reshaping commands, history, digests, build | Python |
+| `loom/` | the CLI: scanner, reshaping commands, history, library, build | Python |
 | `arras/` | the static viewer for a published quilt | Svelte |
 
 loom and its viewer are separate codebases, each with its own build, tests and dependencies, and the viewer ships inside loom. `loom` never needs the viewer: a quilt edited in a plain text editor loses nothing.
@@ -14,7 +14,7 @@ loom and its viewer are separate codebases, each with its own build, tests and d
 They are the reason this repository exists, and they govern loom rather than describing it after the fact.
 
 - `docs/design/` — the design: what loom is for, the three people every decision is tested against, the principles, the model, how agents take part, and the invariants that must not be lost. It records current thinking and changes as the design is discovered; what is decided but not built is marked as such.
-- `docs/specs/` — the formats: the loom–arras interface (manifest, HTML dialect, conformance fixture), the source contract, digests and diagnostics. They win over the design wherever shapes are concerned.
+- `docs/specs/` — the formats: the loom–arras interface (manifest, HTML dialect, conformance fixture), the source contract, the library's nodes and diagnostics. They win over the design wherever shapes are concerned.
 - `docs/contributing.md` — how to build, test, verify and release.
 - `docs/work-queue/` — deferred work, each item with an observable trigger saying when it becomes worth doing.
 - `docs/plans/` — the plan for work in progress. Earlier plans are history: what was intended at the time.

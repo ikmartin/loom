@@ -10,6 +10,6 @@ if TYPE_CHECKING:
 
 def attach(build: Attaching) -> None:
     """Add `arriving`: each drop that waits, a question or a file received and not yet taken, as the intake's row (specs/manifest.md §1); empty when none does."""
-    from loom.refs.intake import waiting
+    from loom.library.intake import waiting
 
     build.manifest["arriving"] = waiting(build.result.quilt.root)

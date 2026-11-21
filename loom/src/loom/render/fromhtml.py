@@ -614,7 +614,7 @@ class DocumentHtml:
                 figure.kids = [El("pre", {}, [tex])]
 
     def _cite(self, el: El, kids: list[El | str]) -> El:
-        """A citation with its key, and its note and target, or else the result its work's digest lacks (`data-unmatched`), read from the `\\cite` the block it stands in has for that key, at or after the block's line."""
+        """A citation with its key and its note, read from the `\\cite` the block it stands in has for that key, at or after the block's line."""
         key = next((k.attrs.get("data-citekey", "") for k in _walk(el) if "cite-label" in k.classes), "")
         attrs = {"class": "cite", "data-citekey": key}
         m = self._command(key, _CITES, lambda m: [k.strip() for k in m.group(2).split(",")]) if key else None
@@ -629,12 +629,6 @@ class DocumentHtml:
                 attrs["data-at"] = str(m.start())  # the command's offset, by which a quote takes it once
             if note:
                 attrs["data-postnote"] = note
-                target = self.r._cite_target(key, note)
-                if target:
-                    attrs["data-target"] = target
-                elif self.r._cite_unmatched(key, note):
-                    # the result as the person named it, which loom's reading of the work lacks; a tie reads as a space
-                    attrs["data-unmatched"] = note.replace("~", "\u00a0")
         else:
             attrs["data-tex"] = f"\\cite{{{key}}}"
         return El("span", attrs, _unwrap(kids, "cite-label"))
@@ -786,8 +780,6 @@ class DocumentHtml:
             attrs["data-id"] = n.id
         attrs.update({"data-key": key, "data-taxon": n.taxon or "", "data-style": n.style or "plain", "data-src": src})
         attrs.update(_pairs(self.r, n))
-        if n.digest:
-            attrs["data-macros"] = n.digest
         title = _head_title(head) if n.title else None
         return El("div", attrs, [label_el(n, self.owner.numbers, title, self.owner.macros), *inner])
 

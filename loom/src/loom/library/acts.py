@@ -71,7 +71,7 @@ def look_up(root: Path, ref: str, *, by: str, kind: str, http: Any = None) -> No
     if entry is None or not stated:
         raise ActRefused("no-identifier", "its entry states no DOI, arXiv number or zbMATH number to look up")
     scheme, _, value = stated[0].partition(":")
-    found = ask(f"{'arXiv' if scheme == 'arxiv' else scheme}:{value}", {}, online=True, http=http)
+    found = ask(f"{'arXiv' if scheme == 'arxiv' else scheme}:{value}", online=True, http=http)
     if found.state == "unreachable":
         raise ActRefused("unreachable", found.message or "the service could not be asked")
     ok = found.state == "found" and bool(found.entry)

@@ -17,7 +17,7 @@ from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
 
 #: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/agents/instructions/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
-MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "ingest"]
+MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft"]
 RULES = "rules.md"  # `.loom/agents/instructions/rules.md`: not a mode, and no longer filed among them
 # The one list: every loom command an agent may run, by its full path in the command tree. Everything else loom offers is the author's, so a command added later is denied until it is named here -- which an enumeration of forbidden commands could never promise, and did not: twelve mutating commands were missing from it (DR-173).
 AGENT_COMMANDS = frozenset(
@@ -31,21 +31,16 @@ AGENT_COMMANDS = frozenset(
         "ai annotations", "ai drafts", "ai refresh", "ai orient", "ai mode",
         # the agent opens and names the session it works in, and writes its transcript; closing, resuming and deleting a session stay the author's, because they are decisions about the work rather than part of it
         "session new", "session rename", "session list", "session say",
-        # the library's readers and an agent's tools; filing a document (`library add`, `import`) and every decision are the author's
-        "library", "library update", "library review", "library read", "library search", "library why",
-        "library propose", "library locate", "library relate", "library check",
         # the MCP server an agent's app starts, often from a shell that already marks an agent
         "mcp",
     }
 )  # fmt: skip
-#: What each agent command does to the quilt, which is what an MCP tool's hints say (`loom.mcp.tools.hints`): `read` changes nothing but loom's own command log; `derive` rewrites what loom derives, in `.loom/cache/`; `write` adds to a record, a session, a document of the agent's or the library, or moves the agent's own marker (`since`); `replace` puts new text in place of a page's. Every command in `AGENT_COMMANDS` is here, and nothing else.
+#: What each agent command does to the quilt, which is what an MCP tool's hints say (`loom.mcp.tools.hints`): `read` changes nothing but loom's own command log; `derive` rewrites what loom derives, in `.loom/cache/`; `write` adds to a record, a session or a document of the agent's, or moves the agent's own marker (`since`); `replace` puts new text in place of a page's. Every command in `AGENT_COMMANDS` is here, and nothing else.
 ACTS: dict[str, str] = {
     **dict.fromkeys(
         (
             "deps", "doctor", "downstream", "here", "history", "history show", "history verify", "link", "lint", "search",
             "source", "status", "changes", "ai annotations", "ai drafts", "ai mode", "ai orient", "session list",
-            "library", "library check", "library locate", "library read", "library review", "library search",
-            "library why",
         ),
         "read",
     ),
@@ -53,7 +48,7 @@ ACTS: dict[str, str] = {
     **dict.fromkeys(
         (
             "annotate", "suggest", "draft", "new", "since", "ai refresh", "session new", "session rename", "session say",
-            "library propose", "library relate", "library update", "mcp",
+            "mcp",
         ),
         "write",
     ),
@@ -63,10 +58,8 @@ ACTS: dict[str, str] = {
 AUTHOR_OPTIONS: dict[str, frozenset[str]] = {
     "changes": frozenset({"--keep", "--discard", "--keep-all", "--discard-all", "--why"}),
 }
-#: Agent commands that are no MCP tool: the server itself, `serve`, which runs until stopped, and `library relate`, which no agent was found to use and which the rules no longer ask for; a shell still runs it.
-NOT_TOOLS = frozenset({"mcp", "serve", "library relate"})
-#: The one agent command that may reach the network, when the quilt's config allows it.
-NETWORK = frozenset({"library update"})
+#: Agent commands that are no MCP tool: the server itself, and `serve`, which runs until stopped.
+NOT_TOOLS = frozenset({"mcp", "serve"})
 #: The line loom puts in each agent's root file, one per variant: an agent attached over MCP starts from the server's tool, and one working through a shell from the command.
 MCP_LINE = "This directory is a quilt managed by loom. Before doing anything, call `loom_ai_orient`, the tool of the loom MCP server, and follow it; if you have no loom tools, run `loom ai orient` in a shell instead, and `loom doctor` to tell the author why. Write anywhere but the paths the orientation names as protected."
 SHELL_LINE = "This directory is a quilt managed by loom. Before doing anything, run `loom ai orient` and follow it. Write anywhere but the paths `loom ai orient` names as protected."
@@ -89,7 +82,7 @@ def _asset(*parts: str) -> str:
 
 
 def command_tree() -> list[str]:
-    """Every leaf command loom offers, as the path a person types: `accept`, `ai orient`, `library verify`."""
+    """Every leaf command loom offers, as the path a person types: `accept`, `ai orient`, `library add`."""
     import click
 
     from loom.cli import main

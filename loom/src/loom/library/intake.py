@@ -638,7 +638,7 @@ def _entry_for(t: _Take, f: Path, name: str, which: str, stated: list[str]) -> t
 
     found_by = stated[0].partition(":")[0] if stated else "none"
     if stated and t.online:
-        found = look_up(stated[0].replace("arxiv:", "arXiv:"), {}, online=True, http=t.http)
+        found = look_up(stated[0].replace("arxiv:", "arXiv:"), online=True, http=t.http)
         if found.state == "found" and found.entry:
             return dict(found.entry), "article", found_by, True
     fields: dict[str, str] = {}
@@ -719,7 +719,7 @@ def _file_hash(root: Path, ref: str) -> str | None:
 
 def _take_text(t: _Take, n: int, text: str) -> list[Row]:
     """A pasted text as rows: each BibTeX entry it holds, or each line as one identifier."""
-    from loom.refs.identity import recognise
+    from loom.refs.lookup import recognise
 
     if text.lstrip().startswith("@"):
         entries = raw_entries(text)
@@ -752,12 +752,12 @@ def _take_identifier(t: _Take, n: int, line: str, rec: Any) -> Row:
     rid = _text_id(line)
     if rec.kind not in ("doi", "arxiv", "zbl"):
         code = "no-service" if rec.kind in ("isbn", "mr") else "not-recognised"
-        return Row(rid, n, line, "cannot", code=code, why=look_up(rec, {}, online=False).message)
+        return Row(rid, n, line, "cannot", code=code, why=look_up(rec, online=False).message)
     stated = [f"{rec.kind}:{rec.value}"]
     if held := t.lib.stating(stated):
         return Row(rid, n, line, "here", **t.lib.shown(held[0]), why=f"{t.lib.shown(held[0])['short']} states {line}")
     if t.online:
-        found = look_up(rec, {}, online=True, http=t.http)
+        found = look_up(rec, online=True, http=t.http)
         if found.state != "found":
             return Row(rid, n, line, "cannot", code=_CANNOT.get(found.state, "not-recognised"), why=found.message)
         fields, looked = dict(found.entry), True

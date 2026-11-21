@@ -1,6 +1,6 @@
 # The build directory loom writes and its viewer reads
 
-This directory specifies what loom publishes into `.loom/cache/site/`, which the server answers at `/build/` with each document's compile folder (`.loom/cache/tex/`) under it at `/build/tex/`, and what its viewer, arras, reads there and asks of it: the HTML dialect of fragments, the manifest, the diagnostic codes, the write API, and what loom reads from an author's LaTeX. Loom and its viewer are one tool (P11): the viewer is built from `arras/` and vendored inside loom, so the two change together and nothing between them negotiates a version. The interface files (dialect, manifest, diagnostics, fixture, write API) mark normative statements **[decided]**, a convention kept from the old design book; `source-contract.md` and `digests.md` state their rules plainly. What the specs describe is what the code does: where one disagrees with the code, one of them is wrong.
+This directory specifies what loom publishes into `.loom/cache/site/`, which the server answers at `/build/` with each document's compile folder (`.loom/cache/tex/`) under it at `/build/tex/`, and what its viewer, arras, reads there and asks of it: the HTML dialect of fragments, the manifest, the diagnostic codes, the write API, and what loom reads from an author's LaTeX. Loom and its viewer are one tool (P11): the viewer is built from `arras/` and vendored inside loom, so the two change together and nothing between them negotiates a version. The interface files (dialect, manifest, diagnostics, fixture, write API) mark normative statements **[decided]**, a convention kept from the old design book; `source-contract.md` and `library-views.md` state their rules plainly, and `nodes.md` marks **[decided]** a rule the author settled. What the specs describe is what the code does: where one disagrees with the code, one of them is wrong.
 
 ## Files
 
@@ -8,11 +8,10 @@ This directory specifies what loom publishes into `.loom/cache/site/`, which the
 - `manifest.md` : the schema of `manifest.json`.
 - `diagnostics.md` : diagnostic codes, reserved and loom's own.
 - `source-contract.md` : what loom reads from an author's LaTeX: nodes, ids, proofs, edges, directives.
-- `digests.md` : digests of cited works: their files, ids, result states, postnote edges and the library store.
 - `fixture.md` : the fixture and how it is used.
 - `write-api.md` : the write API, the HTTP form of loom's local commands that the viewer calls.
 - `reserved.md` : the names work in progress will add to all of the above, none of them built yet.
-- `nodes.md` : the library's nodes, one file each: ids, the header, the body, references, macros and proofs, the edges a file states, the checks, the index and the tag log. The file, its checks, the index and the tag log are built; nothing makes a node from a work yet, and when that is built this replaces most of `digests.md`.
+- `nodes.md` : the library's nodes, one file each: ids, the header, the body, references, macros and proofs, the edges a file states, the checks, the index and the tag log. The file, its checks, the index, the tag log and the references and macros nodes made from the works a quilt holds are built; nothing makes a statement or a proof from a work yet.
 - `library-views.md` : what the viewer's four views ask of the publisher for the rebuilt library, read by read and write by write. Not built yet; when it is, the library leaves the manifest, and the publisher's obligation 3 and the viewer's 1 and 2 below take in its reads and the stream's `library` event.
 - `tools/validate-dialect.py` : the fragment validator both codebases vendor; `tools/refresh-fixture.sh` : regenerates `fixture/` and both vendored snapshots.
 

@@ -16,7 +16,6 @@ from loom.render.endpoints import agents, changes, files, library, review, sync
 from loom.render.endpoints import annotations as annotating  # `annotations` is the name `from __future__` binds here
 from loom.render.endpoints.agents import forget_place, reading_place
 from loom.render.endpoints.base import ApiError, Handler, offer_scan
-from loom.render.endpoints.library import offer_jobs
 
 __all__ = [
     "CAPABILITIES",
@@ -31,7 +30,6 @@ __all__ = [
     "discovery",
     "forget_place",
     "handle",
-    "offer_jobs",
     "offer_scan",
     "reading_place",
 ]

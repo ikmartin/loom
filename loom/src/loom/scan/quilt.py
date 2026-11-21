@@ -23,7 +23,7 @@ NO_AUTHOR_MESSAGE = (
 CONFIG_KEYS: dict[str, set[str]] = {
     # `history` is the record's directory, documented and never written by init
     "quilt": {"name", "main", "home", "history", "prefix", "engine", "research_state"},
-    # `online`: whether loom may use the network for cited works; `contact`: the address the lookup services are given
+    # `online`: whether loom may look a work's identifier up; `contact`: the address the lookup services are given
     "library": {"online", "contact"},
     "lint": {"disable"},
     # `deny`: where an agent may not write, gitignore-style, beside what is always protected (`loom.agents`)

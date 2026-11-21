@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { Manifest } from '$lib/manifest/types';
 import { placeUrl } from '$lib/nav';
-import { keepRow, ledgerRows, needsYou, problemsOf } from '$lib/library';
-import { reachedExternal } from '$lib/reached';
 import { fileHref } from '$lib/shell/files';
 
 const fixture = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
@@ -30,13 +28,5 @@ describe('Review opens a thing where it lives (plan 0.25.1)', () => {
 		expect(at('drafting/main.tex')).toBe('/master/drafting/main');
 		expect(at('research-state.md')).toBe('/page/state');
 		expect(at('README.md')).toContain('README.md');
-	});
-});
-
-describe("Library's count is its page's \"needs you\"", () => {
-	it('counts the works the page shows under needs you, from what stands on disk', () => {
-		const rows = ledgerRows(fixture, reachedExternal(fixture));
-		const page = rows.filter((r) => keepRow(r, problemsOf(fixture, fixture.references[r.citekey]), 'needs-you')).length;
-		expect(needsYou(fixture)).toBe(page);
 	});
 });

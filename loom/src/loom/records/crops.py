@@ -81,9 +81,10 @@ def rects_of(result: Any, ra: Any) -> list[list[float]] | None:
     Returns
     -------
     list of [x0, y0, x1, y1] or None
-        Its own place, a box anchor's, or a text anchor's words found on its page as the work's sidecar finds them; None when it stands nowhere.
+        Its own place, a box anchor's, or a text anchor's words found on its page; None when it stands nowhere.
     """
     from loom.records.marks import lines_of, pdf_of
+    from loom.refs.pages import pages_home
 
     a, anchor = ra.annotation, ra.annotation.anchor
     rects = ra.rects or a.rects or (anchor.quads if anchor else None)
@@ -93,8 +94,8 @@ def rects_of(result: Any, ra: Any) -> list[list[float]] | None:
     pdf = pdf_of(result, a.target_key, ra.work)
     if not page or pdf is None or not pdf.is_file():
         return None
-    # a stored work's word boxes are cached in the store, so asking again reads no PDF
-    return lines_of(pdf, page, a.selector.exact, pdf.parent if ra.work else None)
+    # a stored PDF's word boxes are kept beside its page text, so asking again reads no PDF
+    return lines_of(pdf, page, a.selector.exact, pages_home(result.quilt.root, pdf.stem) if ra.work else None)
 
 
 def crop_region(result: Any, pdf: Path, page: int, rects: list[list[float]]) -> Path | None:

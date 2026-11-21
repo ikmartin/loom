@@ -43,7 +43,7 @@ def _first_node_offset(asm: Assembly, path: str) -> int | None:
 def find_relations(asm: Assembly, files: dict[str, SourceFile]) -> RelationResult:
     """Resolve every `see:` item to a node key, after ids and aliases are known.
 
-    An item resolves like a reference: an id, an alias, or a digest node id. A target inside a node (a labelled equation) resolves to the node that contains it, as a reference does. Unresolved items are `dangling-link`; a self-relation or a duplicate is `loom:see-redundant`.
+    An item resolves like a reference: an id or an alias. A target inside a node (a labelled equation) resolves to the node that contains it, as a reference does. Unresolved items are `dangling-link`; a self-relation or a duplicate is `loom:see-redundant`.
     """
     res = RelationResult()
     seen: set[tuple[str, str, str]] = set()

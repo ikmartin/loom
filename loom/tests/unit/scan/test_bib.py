@@ -35,17 +35,18 @@ def test_citekey_slug() -> None:
     assert citekey_slug("Man12") == "Man12"
 
 
-def test_the_quilts_bibliography_is_the_only_bib_read(tmp_path: Path) -> None:
-    """An author's `.bib`, a fetched source's, a run's: none is the quilt's bibliography until `loom library update` gathers an entry into `.loom/library/bibliography.bib`."""
+def test_the_quilts_citekeys_are_its_references_keys(tmp_path: Path) -> None:
+    """An author's `.bib`, a source's, a run's: none gives the scan a citekey; the library's references do, each entry's key to its reference."""
     from tests.unit.scan.helpers import PREAMBLE, make_quilt
 
+    owned = '+++\nschema = 1\nid = "tq-00A1-ref"\ntaxon = "reference"\n+++\n@book{Owned, title={Owned}}\n'
     result = make_quilt(
         tmp_path,
         {
             "drafting/main.tex": PREAMBLE + "\\begin{document}\n\\end{document}\n",
             "refs.bib": "@book{Author, title={Mine}}\n",
             "refs/arxiv/1/src/theirs.bib": "@book{Theirs, title={Theirs}}\n",
-            ".loom/library/bibliography.bib": "@book{Owned, title={Owned}}\n",
+            ".loom/library/nodes/tq-00A1-ref.node": owned,
         },
     )
-    assert set(result.bib) == {"Owned"}
+    assert set(result.bib) == {"Owned"} and result.refs == {"Owned": "tq-00A1-ref"}

@@ -6,7 +6,7 @@ import { titleOf } from '$lib/sessions/sessions.svelte';
 import { regionAt, type Item, type ItemKind } from './item';
 import { landmarkName } from './history';
 import { documentLabel, pdfName, shortLocator } from './names';
-import { workViews, type View } from './views';
+import type { View } from './views';
 import DocumentItem from './items/DocumentItem.svelte';
 import DocumentControls from './items/DocumentControls.svelte';
 import WorkItem from './items/WorkItem.svelte';
@@ -72,8 +72,7 @@ export const kinds: Record<ItemKind, Kind> = {
 		renderer: WorkItem,
 		controls: WorkControls,
 		preview: WorkPreview,
-		bleeds: true,
-		views: (item, m) => workViews(m, item.id)
+		bleeds: true
 	},
 	node: {
 		tab: (item, m) => nodeTab(item.id, m),
@@ -99,7 +98,7 @@ export const kinds: Record<ItemKind, Kind> = {
 			{ id: 'did', label: 'What it did' }
 		]
 	},
-	// a page loom keeps (plan 0.21.3); the research state is the one a quilt has, and a work's overview is read on the work's Info
+	// a page loom keeps (plan 0.21.3); the research state is the one a quilt has
 	page: { tab: () => 'Research state', renderer: PageItem, controls: PlainControls },
 	// a file of the project (plan 0.22.7), named by its file name as the tree shows it
 	file: { tab: (item) => item.id.split('/').pop() ?? item.id, renderer: FileItem, controls: FileControls },

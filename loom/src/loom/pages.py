@@ -1,4 +1,4 @@
-"""Pages (plan 0.21.3): a Markdown file loom keeps for one thing -- the quilt's research state, or a cited work's overview.
+"""Pages (plan 0.21.3): a Markdown file loom keeps for one thing, the quilt's research state.
 
 The person edits a page directly; an agent writes one through `loom write`, never by hand. A page is a reading, never a source: it says who wrote it, nothing in it is checked, and it is never cited as the paper. Every write is a `page-write` line in the history with its texts kept raw, so who changed what can be read back, and an edit made outside loom shows as one on the next write.
 """
@@ -12,45 +12,27 @@ from typing import Any
 
 from loom.scan.hashing import sha256
 
-#: TARGET for the quilt's research state; anything else names a work.
+#: TARGET for the quilt's research state.
 STATE = "state"
-#: A work's overview, in the work's own directory of loom's store, beside its page text.
-OVERVIEW = "overview.md"
 #: The history's action for a write.
 ACTION = "page-write"
 
 
 @dataclass(frozen=True)
 class Page:
-    """One page: which kind, where it is, and for an overview the work it is about."""
+    """One page: which kind, and where it is."""
 
-    kind: str  # "state" | "overview"
+    kind: str  # "state"
     path: str  # quilt-relative
-    work: str = ""  # an overview's citekey, the work's primary
 
     @property
     def name(self) -> str:
-        return "the research state" if self.kind == STATE else f"{self.work}'s overview"
+        return "the research state"
 
 
 def state_page(config: Any) -> Page:
     """The quilt's research state, wherever `[quilt] research_state` puts it."""
     return Page(STATE, config.research_state)
-
-
-def primary(bib: dict[str, Any], citekey: str) -> str:
-    """The work a citekey belongs to: itself, or the entry it is filed as another document of, since a work's versions share one overview."""
-    from loom.refs.scan import versions_of
-
-    return next((top for top, others in versions_of(bib).items() if citekey in others), citekey)
-
-
-def overview_page(root: Path, bib: dict[str, Any], citekey: str) -> Page:
-    """A work's overview, in the work's directory of the store (`work_dir`)."""
-    from loom.refs.fetch import work_dir
-
-    ck = primary(bib, citekey)
-    return Page("overview", (work_dir(root, bib[ck]) / OVERVIEW).relative_to(root).as_posix(), ck)
 
 
 def read(root: Path, page: Page) -> str | None:
@@ -116,8 +98,6 @@ def write(result: Any, page: Page, text: str, *, actor: str, session: str | None
         "outside": outside,
         "links": links,
     }
-    if page.work:
-        data["work"] = page.work
     if session:
         data["session"] = session
     return append_entry(history_dir, ACTION, data, actor)

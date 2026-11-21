@@ -85,12 +85,3 @@ def test_each_line_says_what_it_names_and_the_session_when_it_was_last_active(q:
     row = next(s for s in m["sessions"] if s["id"] == sid)
     # the newest of what was done in it, which opening it never moves
     assert row["last"] == "2099-09-03T00:00:00Z" and row["opened"] != row["last"]
-
-
-def test_library_commands_log_their_arguments_as_typed(q: Path) -> None:
-    """The log, and so the status line and What it did, shows a library command as typed, not as a Python tuple (0.14 study F10)."""
-    sid = new_session(q)
-    ok("library", "search", "widget", "--work", "Calloway14", "--work", "Man12", "--session", sid, cwd=q)
-    [line] = lines(q, sid)
-    assert line.startswith("loom library search ") and "(" not in line and "'" not in line, line
-    assert {"widget", "Calloway14", "Man12"} <= set(line.split()), line

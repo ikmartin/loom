@@ -1,7 +1,7 @@
 <script lang="ts">
-	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in; the Docs Library shelf's two links into Review go when Docs' Library button replaces that shelf); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
+	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
 	//
-	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, the sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`), the documents listed by name (`DocumentList`) and the Library (`LibraryShelf`, whose dialog is `LibraryAdd`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs. At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
+	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, the sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs. At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
 	import HoverCard from './HoverCard.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -10,8 +10,6 @@
 	import Message from './column/Message.svelte';
 	import DocumentList from './column/DocumentList.svelte';
 	import FilesShelf from './column/FilesShelf.svelte';
-	import LibraryAdd from './column/LibraryAdd.svelte';
-	import LibraryShelf from './column/LibraryShelf.svelte';
 	import ReviewNav from './column/ReviewNav.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
@@ -211,7 +209,7 @@
 					<div class="part docs-part rail-scroll" data-testid="docs-part" style:flex={outline ? `0 0 ${share * 100}%` : '1 1 auto'}>
 						<FilesShelf {masters} {own} {copiesOf} {section} />
 						<DocumentList {own} {unplaced} {closed} {copiesOf} {section} {filename} {onDocument} {currentDoc} />
-						<LibraryShelf />
+						<!-- the Library's place in Docs' column is built with the Library view, in its own change -->
 					</div>
 					{#if outline}
 						<!-- A separator that takes focus is a widget in ARIA's own terms, with the arrow keys and aria-valuenow this one has. -->
@@ -276,7 +274,6 @@
 	{#if rail}<aside class="right rail-scroll">{@render rail()}</aside>{/if}
 </div>
 
-<LibraryAdd />
 <HoverCard />
 
 <style>

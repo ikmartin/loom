@@ -6,7 +6,7 @@ import shlex
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import click
 
@@ -17,7 +17,7 @@ from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted, table
 from loom.cli.review import STATUSES
 from loom.errors import EXIT_CONTENT, EnvError, NotFoundError
-from loom.paths import AI, COPIES, LIBRARY
+from loom.paths import AI, COPIES
 
 if TYPE_CHECKING:
     from loom.ai.clients import Client, ClientReport
@@ -567,35 +567,8 @@ def ai_drafts(as_json: bool, closed: bool, quilt_path: str | None) -> None:
     ).emit(as_json)
 
 
-def proposals_by(root: Path, name: str) -> list[dict[str, Any]]:
-    """Every digest proposal `name` made, with the author's decision on it: state, the edit as diff lines, and the reason for a discard."""
-    from loom.refs.proposals import DISCARDED, VERIFIED, edit_diff, load_results, read_events, state_of
-
-    out: list[dict[str, Any]] = []
-    for path in sorted((root / LIBRARY).glob("*.results.json")):
-        ck = path.name[: -len(".results.json")]
-        reasons = {e.get("id"): e.get("reason", "") for e in read_events(root, ck) if e.get("event") == "discarded"}
-        for rid, r in sorted(load_results(root, ck).items()):
-            if not any(o.get("act") == "proposed" and o.get("by") == name for o in r.origin):
-                continue
-            out.append(
-                {
-                    "id": rid,
-                    "work": ck,
-                    "state": "transcription verified" if state_of(r) == VERIFIED else state_of(r),
-                    "edited": any(o.get("act") == "edited" for o in r.origin),
-                    "edit": edit_diff(r),
-                    "renamed_from": next((str(o.get("was")) for o in r.origin if o.get("act") == "renamed"), ""),
-                    "reason": reasons.get(rid, "") if state_of(r) == DISCARDED else "",
-                }
-            )
-    return out
-
-
 @ai.command(name="annotations")
-@click.option(
-    "--by", "f_by", default=None, metavar="NAME", help="Only annotations NAME wrote; with it, NAME's proposals too."
-)
+@click.option("--by", "f_by", default=None, metavar="NAME", help="Only annotations NAME wrote.")
 @click.option("--target", "f_target", default=None, metavar="KEY", help="Only annotations on KEY.")
 @click.option("--type", "f_type", default=None, metavar="TYPE", help="Only annotations of this type, by id or name.")
 @click.option("--status", "f_status", type=click.Choice(STATUSES), default=None, help="Only annotations in this state.")
@@ -611,7 +584,7 @@ def ai_annotations(
 ) -> None:
     """List annotations: id, target, type, status, author and the quoted text, every one unless --by, --target, --type or --status narrows it; `--json` carries each one whole.
 
-    An agent re-reading its own annotations is the common case — a re-check resolves what is met and edits what still stands, and needs the ids to do it — so `--by` its own name lists them, with what the author decided on each result it proposed. The JSON form carries `message` too, so a re-check can tell what it already said without reading the log itself; `loom changes --by` lists the edits it suggested.
+    An agent re-reading its own annotations is the common case — a re-check resolves what is met and edits what still stands, and needs the ids to do it — so `--by` its own name lists them. The JSON form carries `message` too, so a re-check can tell what it already said without reading the log itself; `loom changes --by` lists the edits it suggested.
     """
     from loom.cli._quilt import open_scan
     from loom.mailbox import on_page, page_lines
@@ -630,6 +603,11 @@ def ai_annotations(
         type_id = named.id if named else None
     resolved = Records(root, result.quilt.history_dir).resolved(result)
     if f_target is not None and f_target not in result.nodes:
+        from loom.library.references import named as reference_named
+
+        # a work is named by its reference or by the key its entry has, and its notes carry the reference
+        f_target = reference_named(result, f_target) or f_target
+    if f_target is not None and f_target not in result.nodes:
         if not any(f_target in (a.annotation.target_key, a.target, a.work) for a in resolved):
             raise NotFoundError("key", f"{f_target} is no key of this quilt and no annotation's target")
     rows = [
@@ -637,7 +615,7 @@ def ai_annotations(
             "id": a.annotation.id,
             # the block it is shown on now, which may not be the key it was written on; null for one on no block
             "target": None if a.unplaced else (a.target or a.annotation.target_key),
-            # an annotation on a cited work: the citekey the agent knows it by, and the page (plan 0.13 item 2)
+            # an annotation on a work: its reference, and the page (plan 0.13 item 2)
             "work": a.work or None,
             "page": a.annotation.anchor.page if a.annotation.anchor else None,
             "type": a.annotation.type,
@@ -657,22 +635,6 @@ def ai_annotations(
         and (f_target is None or f_target in (None if a.unplaced else (a.target or a.annotation.target_key), a.work))
     ]
     rows = [r for r in rows if (not type_id or r["type"] == type_id) and (not f_status or r["status"] == f_status)]
-    proposals = proposals_by(root, f_by) if f_by else []
-    # what the author did with an agent's proposals: a reattaching agent otherwise ran `library why` on each id it happened to know, which is how it learned the author's decisions three times over
-    lines: list[str] = []
-    if proposals:
-        lines += ["", f"proposals ({len(proposals)})"]
-        for pr in proposals:
-            extra = (
-                f" -- {pr['reason']}"
-                if pr.get("reason")
-                else (" (edited by the author first)" if pr.get("edited") else "")
-            )
-            if pr.get("renamed_from"):
-                extra += f" (renamed by the author from {pr['renamed_from']})"
-            lines.append(f"  {pr['id']}  {pr['state']}{extra}")
-            # the edit itself: a reattached agent that could not see it diffed its own scratch script against the digest
-            lines += [f"      {line}" for line in pr.get("edit") or []]
     cells = []
     under: list[list[str]] = []
     for r in rows:
@@ -689,13 +651,10 @@ def ai_annotations(
     verdict = (
         counted(len(rows), "annotation") if rows else ("no annotations match" if narrowed else "no annotations yet")
     ) + (f" by {f_by}" if f_by else "")
-    if proposals:
-        verdict += f", {counted(len(proposals), 'proposal')}"
     Report(
         verdict,
         groups=[Group("annotations", items, count=len(rows), limit=None)] if items else [],
-        lines=lines,
-        data={"annotations": rows, "proposals": proposals},
+        data={"annotations": rows},
     ).emit(as_json)
 
 

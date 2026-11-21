@@ -1,6 +1,6 @@
 # loom
 
-A tool for atomized mathematical development. loom turns a LaTeX paper into a *quilt*: every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref`, `\cite[postnote]`, and `\uses` you already write, acceptances are recorded with content hashes so you are told exactly what went stale and why, review comments are anchored to quoted text, and the whole is published to the [arras](https://github.com/ikmartin/arras) viewer. The paper compiles exactly as before, with plain `pdflatex`, from the same files, on Overleaf.
+A tool for atomized mathematical development. loom turns a LaTeX paper into a *quilt*: every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` you already write, acceptances are recorded with content hashes so you are told exactly what went stale and why, review comments are anchored to quoted text, and the whole is published to the [arras](https://github.com/ikmartin/arras) viewer. The paper compiles exactly as before, with plain `pdflatex`, from the same files, on Overleaf.
 
 Status: alpha. The design, the interface specification and the example quilts live in the [loom-arras workspace](https://github.com/ikmartin/loom-arras).
 
@@ -27,7 +27,7 @@ uv run loom doctor
 
 ```
 loom doctor                 # names every missing tool and how to install it
-loom init demo --demo       # a five-node quilt with a digest, acceptances, comments, and an AI run
+loom init demo --demo       # a small quilt with a landmark, acceptances, annotations, and an agent's run
 cd demo
 loom check                  # lint plus a compile of the master
 loom serve                  # http://127.0.0.1:8791, re-renders whenever a file changes
@@ -36,15 +36,14 @@ loom serve                  # http://127.0.0.1:8791, re-renders whenever a file 
 Then, on your own paper:
 
 ```
-loom init mypaper --from ~/papers/draft.tex     # the paper arrives as one flat landmark in canon/
+loom init mypaper --from ~/papers/draft.tex     # the paper as received kept as a landmark, and the working document drafted from it
 cd mypaper
-loom draft canon/draft.tex --to drafting/main.tex   # a working copy, with an id on every node
-loom status                                     # every key, its state, and its open comments
-loom atomize drafting/main.tex --to drafting/spine.tex --sections  # one file per node, a spine of \input lines
-loom canonize drafting/spine.tex -m "Submitted"  # a landmark, and a record of what every key was
+loom status                                     # every key, its state, and its open annotations
+loom atomize draft/draft.tex --to draft/spine.tex --sections  # one file per node, a spine of \input lines
+loom stamp draft/spine.tex -m "Submitted"       # a landmark, and a record of what every key was
 loom accept rl-0004 --proofs                    # record what you have checked; later edits show up as stale
-loom annotate rl-0004/proof "Why closed?" --quote "the diagonal is closed" --kind question
-loom digest extract Man12 ~/papers/manolache/virtual6.tex  # a cited paper's results as nodes; \cite[Theorem 4.1]{Man12} becomes an edge
+loom annotate rl-0004/proof "Why closed?" --quote "the diagonal is closed"
+loom library add ~/papers/manolache.pdf         # a paper you read or cite, kept in the quilt's library
 loom ai init                                    # the optional AI layer: orientation, rules, modes, permissions, and what starts the loom MCP server
 ```
 
@@ -52,7 +51,7 @@ Every command is described in [docs/cli-reference.md](docs/cli-reference.md), ge
 
 ## What a quilt is
 
-An ordinary LaTeX project loom can read: the documents you are working on, laid out as you like, and three macros from `loom.sty` that print nothing (`\uses`, `\incomplete`, `\nest`). Each document compiles with plain `pdflatex` from its own directory, and on Overleaf. Loom changes a file of yours only when you ask it to, and keeps what it replaces first (`docs/design/writes.md`). Everything loom keeps lies in `.loom/`, in a folder for each kind: `records/` (the acceptance ledger, the history of every key with its landmarks, the annotations and the suggested edits), `library/` (digests of cited papers and the store of their documents), `agents/` (what agents are told, their sessions, copies and scratch), `local/` (this machine's state) and `cache/` (everything derived), beside `format`, the layout's number.
+An ordinary LaTeX project loom can read: the documents you are working on, laid out as you like, and three macros from `loom.sty` that print nothing (`\uses`, `\incomplete`, `\nest`). Each document compiles with plain `pdflatex` from its own directory, and on Overleaf. Loom changes a file of yours only when you ask it to, and keeps what it replaces first (`docs/design/writes.md`). Everything loom keeps lies in `.loom/`, in a folder for each kind: `records/` (the acceptance ledger, the history of every key with its landmarks, the annotations and the suggested edits), `library/` (the works you read and cite, a file each, and the documents you gave them), `agents/` (what agents are told, their sessions, copies and scratch), `local/` (this machine's state) and `cache/` (everything derived), beside `format`, the layout's number.
 
 ## Layout of this repository
 
@@ -61,7 +60,7 @@ An ordinary LaTeX project loom can read: the documents you are working on, laid 
 - `src/loom/history/` holds the history: the ledger of steps, the versions of every key, and the checks over them.
 - `src/loom/render/` publishes the build directory arras reads (fragments, manifest, threads, serve).
 - `src/loom/tex/` wraps latexmk, reads `.aux` files, builds bundles, and runs the identity test.
-- `src/loom/reshape/` is `id`, `import`, `atomize`, `linearize` and `deloom`; `src/loom/digest/` extracts, imports, and fetches digests; `src/loom/ai/` is the AI layer.
+- `src/loom/reshape/` is `id`, `import`, `atomize`, `linearize` and `deloom`; `src/loom/library/` is the library, its nodes, the intake and gathering; `src/loom/ai/` is the AI layer.
 - `src/loom/assets/` ships `loom.sty`, the demo quilt, the AI-layer templates, and the built arras viewer.
 
 ## Development
