@@ -161,7 +161,9 @@ def _work(entry_text: str) -> tuple[str | None, str]:
         return None, ""
     fields = next(iter(parse_bib(entry_text).values()), None)
     got = fields.fields if fields else {}
-    return entry.key, " ".join([plain(entry.key), *(words(_accents(got.get(k, ""))) for k in ("author", "title", "year"))])
+    return entry.key, " ".join(
+        [plain(entry.key), *(words(_accents(got.get(k, ""))) for k in ("author", "title", "year"))]
+    )
 
 
 #: TeX's accent commands, each with the combining character it puts on its letter, so `M\"uller` is indexed as "Müller", which "Muller" finds too.
