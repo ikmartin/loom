@@ -91,6 +91,60 @@ def test_an_import_writes_its_assets_its_draft_and_its_step_in_one_act(
     assert history_lines(act) == ["import"]
 
 
+# ---- D-4: what the history's store holds ----------------------------------------------------------------------
+
+
+def test_an_imported_figure_is_journalled_by_its_digest_and_not_kept_in_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom import writes
+    from tests.unit.test_paper import paper_dir
+
+    for marker in AGENT_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    p = paper_dir(tmp_path)
+    figure = b"%PDF-1.4\n\xff\xfe" + bytes(range(256)) * 64
+    (p / "figures" / "fig.pdf").write_bytes(figure)
+    ok(
+        "init",
+        str(tmp_path / "q"),
+        "--from",
+        str(p / "main.tex"),
+        "--prefix",
+        "pp",
+        "--ai",
+        "none",
+        "--yes",
+        cwd=tmp_path,
+    )
+    q = tmp_path / "q"
+    (act,) = begun(q, "import")
+    assert act["files"]["main/figures/fig.pdf"] == [None, writes.digest(figure)]
+    hexd = writes.digest(figure).split(":", 1)[1]  # type: ignore[union-attr]
+    assert not list((q / ".loom/records/history/texts").glob(f"{hexd}.*"))
+
+
+def test_an_act_cut_short_after_making_a_binary_file_is_undone_by_its_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root = demo(tmp_path)
+    hist = load_quilt(root).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(root, hist, "pdf-save") as w:
+            w.replace("drafting/fig.bin", b"\xff\x00binary")
+            w.replace("drafting/notes.md", b"# Notes\n")
+    restore()
+    assert (root / "drafting/fig.bin").is_file()
+    said = writes.recover(root, hist)
+    assert said and said[0].startswith("undid pdf-save:")
+    assert not (root / "drafting/fig.bin").exists() and not (root / "drafting/notes.md").exists()
+
+
 # ---- D-6 and D-14: a move ---------------------------------------------------------------------------------------
 
 

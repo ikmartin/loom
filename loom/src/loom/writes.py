@@ -80,6 +80,19 @@ def store(history: Path, data: bytes) -> str:
     return d
 
 
+def _unkept(data: bytes) -> bool:
+    """Whether a file an act makes is journalled by its digest alone: one that is not UTF-8 text, or is larger than the viewer reads (`files.TEXT_LIMIT`), as a figure or a saved PDF is. Undoing it needs only to know it by its digest, and its bytes in the history's store would be committed for nothing."""
+    from loom.files import TEXT_LIMIT
+
+    if len(data) > TEXT_LIMIT:
+        return True
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError:
+        return True
+    return False
+
+
 def fetch(history: Path, d: str) -> bytes | None:
     """The bytes stored as `d`, or None when the store does not hold them or `d` is not a digest's shape (`DIGEST`), which is never made into a path."""
     if not isinstance(d, str) or not DIGEST.match(d):
@@ -586,6 +599,18 @@ def _undo_file(root: Path, history: Path, rel: str, ab: list[str | None]) -> boo
     return _put_back(root, rel, before, after)
 
 
+def _remove_made(root: Path, rel: str, made: str) -> bool:
+    """Remove a file an act made while it holds the bytes it was made with, known by their digest (`_unkept`); False, with nothing removed, once someone has changed it since."""
+    try:
+        if digest(_read(root, rel)) != made:
+            return False
+        (root / rel).unlink()
+        _flush_dir((root / rel).parent)
+    except (WriteRefused, OSError):
+        return False
+    return True
+
+
 def _put_back(root: Path, rel: str, before: bytes | None, after: bytes | None) -> bool:
     """Make `rel` hold `before` again while it holds `after`, what loom wrote, checked at the last instant as every write is (`_install`); False, with nothing written, once someone has changed it since or it cannot be written. Recovery's and a failed commit's way of undoing a file."""
     try:
@@ -928,6 +953,8 @@ class _Verdict:
     texts: dict[str, list[bytes | None]] = field(default_factory=dict)
     trusted: bool = True
     kept: bool = False
+    #: each file the act made, by the digest it was made with: undone by removing it while it holds that
+    made: dict[str, str] = field(default_factory=dict)
 
 
 def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
@@ -951,7 +978,12 @@ def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
             holds,
         )
     texts = {rel: [fetch(history, d) if d else None for d in ab] for rel, ab in files.items()}
-    lacking = [rel for rel, ab in files.items() if any(d and x is None for d, x in zip(ab, texts[rel], strict=True))]
+    # a file the act made is undone by its digest alone (`_unkept`): only a file it replaced or removed needs its texts
+    lacking = [
+        rel
+        for rel, ab in files.items()
+        if ab[0] is not None and any(d and x is None for d, x in zip(ab, texts[rel], strict=True))
+    ]
     if lacking:
         # with a text missing, loom cannot tell what the act did, nor put anything back blind
         return _Verdict(
@@ -960,13 +992,20 @@ def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
             holds,
         )
     if any(not before and not after for before, after in holds.values()):
+        # the texts are said to be kept only where the store holds each one, as it does not a file made by its digest alone
+        kept = all(x is not None for rel, ab in files.items() for d, x in zip(ab, texts[rel], strict=True) if d)
         return _Verdict(
             "left",
-            f"a file of it has changed since, so recovery changed nothing: {_where(holds, kept=True)}",
+            f"a file of it has changed since, so recovery changed nothing: {_where(holds, kept=kept)}",
             holds,
-            kept=True,
+            kept=kept,
         )
-    return _Verdict("undo", holds=holds, texts={rel: texts[rel] for rel, (b, a) in holds.items() if a and not b})
+    return _Verdict(
+        "undo",
+        holds=holds,
+        texts={rel: texts[rel] for rel, (b, a) in holds.items() if a and not b},
+        made={rel: str(ab[1]) for rel, ab in files.items() if ab[0] is None and ab[1]},
+    )
 
 
 def _settle(root: Path, history: Path, j: Journal) -> list[str]:
@@ -988,7 +1027,11 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             said.append(f"finished {act_id}")
             said += _relook(root, act_id, e)
             continue
-        failed = [rel for rel, texts in v.texts.items() if not _put_back(root, rel, *texts)]
+        failed = [
+            rel
+            for rel, texts in v.texts.items()
+            if not (_remove_made(root, rel, v.made[rel]) if rel in v.made else _put_back(root, rel, *texts))
+        ]
         if failed:
             files: dict[str, list[str | None]] = e.get("files") or {}
             now = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
@@ -1277,7 +1320,7 @@ class Act:
         files = {
             rel: [
                 store(self.history, b) if (b := self.before.get(rel)) is not None else None,
-                store(self.history, data) if data is not None else None,
+                None if data is None else digest(data) if b is None and _unkept(data) else store(self.history, data),
             ]
             for rel, data in changed.items()
         }
