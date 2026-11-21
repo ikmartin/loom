@@ -5,7 +5,7 @@ import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { discardChanges, keepChanges, type ChangeAnswer } from '$lib/review/history.svelte';
-import type { DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WorkAnswer, WorksAnswer, WriteDone } from './types';
+import type { DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
 
 export interface ApiError {
 	code: string;
@@ -128,6 +128,14 @@ export const digestScopes = (target: { ref: string } | { all: true }, s?: number
 export const places = (target: { ref: string; pages: number[] } | { node: string }, s?: number) => call<PlacesAnswer>('library-places', { ...target, ...since(s) });
 export const node = (target: { node: string; brief?: boolean } | { ref: string; item: string }, s?: number) => call<NodeAnswer>('library-node', { ...target, ...since(s) });
 export const find = (ref: string, q: string) => call<FindAnswer>('library-find', { ref, q });
+/** Where a Web read looks: its scope, and the draft where the scope names one. */
+export type InScope = { scope: WebScope; doc?: string };
+const scoped = (w: InScope) => ({ scope: w.scope, ...(w.doc && (w.scope === 'draft' || w.scope === 'deps') ? { doc: w.doc } : {}) });
+export const webList = (w: InScope, sort: 'document' | 'status', open: string[], offset = 0, s?: number) => call<WebList>('web-list', { ...scoped(w), sort, ...(open.length ? { open } : {}), ...(offset ? { offset } : {}), ...since(s) });
+export const webGroup = (w: InScope, group: string, s?: number) => call<WebGroupAnswer>('web-group', { ...scoped(w), group, ...since(s) });
+export const webSearch = (w: InScope, q: string) => call<WebSearch>('web-search', { ...scoped(w), q, limit: 50 });
+export const webFocus = (w: InScope, result: string, more: boolean, s?: number) => call<WebFocus>('web-focus', { ...scoped(w), result, ...(more ? { more: true } : {}), ...since(s) });
+export const webGraph = (w: InScope, result: string, s?: number) => call<WebGraph>('web-graph', { ...scoped(w), result, ...since(s) });
 export const reviewCounts = (doc?: string, s?: number) => call<ReviewCounts>('review-counts', { ...(doc ? { doc } : {}), ...since(s) });
 export const reviewList = (kind: ReviewKind | 'all' | 'agents', doc?: string, s?: number) => call<ReviewList>('review-list', { kind, ...(doc ? { doc } : {}), ...since(s) });
 export const reviewRow = (row: string, s?: number, node?: string) => call<ReviewBody>('review-row', { row, ...(node ? { node } : {}), ...since(s) });

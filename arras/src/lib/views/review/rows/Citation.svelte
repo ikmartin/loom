@@ -6,7 +6,7 @@
 	import type { CitedRow, ReviewBody } from '$lib/library/types';
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
-	import Statement from '../Statement.svelte';
+	import Statement from '$lib/views/Statement.svelte';
 	import SeeItLink from '../SeeItLink.svelte';
 
 	let { row }: { row: Extract<CitedRow, { citation: string }> } = $props();

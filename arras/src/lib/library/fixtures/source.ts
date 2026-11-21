@@ -2,9 +2,10 @@
 
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
-import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
 import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
-import type { ReviewKind, TaskRow } from '../types';
+import type { ReviewKind, TaskRow, WebScope } from '../types';
 
 type Body = Record<string, unknown>;
 
@@ -34,6 +35,17 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'library-find': (b) => {
 			const pdf = f.works.find((w) => w.ref === b.ref)?.holds.pdf ?? '';
 			return ok({ pdf, hits: [{ page: 1, rects: [[72, 140, 300, 156]] }], pages: 24 });
+		},
+		'web-list': (b) => ok(webList(REF, b as { scope: WebScope; doc?: string; sort: string; open?: string[]; offset?: number })),
+		'web-group': (b) => ok({ rows: webGroup(REF, b as { scope: WebScope; doc?: string; group: string }) }),
+		'web-search': (b) => ok(webSearch(REF, b as { scope: WebScope; doc?: string; q: string })),
+		'web-focus': (b) => {
+			const a = webFocus(REF, b as { scope: WebScope; doc?: string; result: string; more?: boolean });
+			return a ? ok(a) : no('no-such-result');
+		},
+		'web-graph': (b) => {
+			const a = webGraph(REF, b as { scope: WebScope; doc?: string; result: string });
+			return a ? ok(a) : no('no-such-result');
 		},
 		'review-counts': (b) => ok(counts(f.review, checkRows(f), b.doc as string | undefined)),
 		'review-list': (b) => ok(list(f.review, checkRows(f), b.kind as ReviewKind | 'all' | 'agents', b.doc as string | undefined)),
@@ -173,7 +185,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			return name in reads || name in writes;
 		},
 		async fragment(path: string) {
-			return fragmentOf(f.review, path);
+			return fragmentOf(f.review, path) ?? webFragment(path);
 		},
 		pdfUrl: fixturePdfUrl,
 		drawnUrl: () => null,

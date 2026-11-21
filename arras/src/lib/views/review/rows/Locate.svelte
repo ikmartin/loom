@@ -7,7 +7,7 @@
 	import Mark from '$lib/marks/Mark.svelte';
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
-	import Statement from '../Statement.svelte';
+	import Statement from '$lib/views/Statement.svelte';
 	import Crop from './Crop.svelte';
 
 	type Cite = { doc: string; key: string; where: string; fragment: string; nth: number };

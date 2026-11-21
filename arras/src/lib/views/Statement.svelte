@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A text in a Review body: a fragment of the build by its path, its change marked as a pending change's is (struck old words, new words underlined), and its mathematics typeset with the quilt's macros.
+	// A text in a view: a fragment of the build by its path (a Review body, a draft's result in the Web), its change marked as a pending change's is (struck old words, new words underlined), a citation marked where asked, and its mathematics typeset with the quilt's macros.
 	import { tick } from 'svelte';
 	import * as api from '$lib/library/api';
 	import { store } from '$lib/manifest/client.svelte';

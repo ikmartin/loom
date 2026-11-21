@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
 	//
-	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs. At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
+	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs (`LibraryColumn`, `WebColumn`). At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
 	import HoverCard from './HoverCard.svelte';
 	import Icon from '$lib/components/Icon.svelte';
@@ -13,6 +13,8 @@
 	import FilesShelf from './column/FilesShelf.svelte';
 	import ReviewNav from './column/ReviewNav.svelte';
 	import ReviewColumn from './column/review/ReviewColumn.svelte';
+	import WebColumn from './column/web/WebColumn.svelte';
+	import { wb } from '$lib/views/web/state.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
@@ -37,6 +39,7 @@
 	onMount(() => {
 		void can('review-accept').then((yes) => readOnly = !yes);
 		rv.ask();
+		wb.ask();
 	});
 	const reviewPerspective = $derived(store.manifest?.reviewer?.name
 		? frame.column.perspective(store.manifest.reviewer.name)
@@ -211,6 +214,8 @@
 					<ReviewNav {sections} />
 				{:else if primary === 'library'}
 					<LibraryColumn />
+				{:else if primary === 'web' && wb.served}
+					<WebColumn />
 				{/if}
 				{#if panel}
 					<p class="rail-label">{panelLabel}</p>
@@ -349,7 +354,7 @@
 		gap: var(--gap-hair);
 	}
 	/* A label keeps its own height; the documents and the outline take the rest and scroll apart, and a page's own panel takes all of it. */
-	.sections > :global(*:not(.page-panel):not(.part):not(.lv-col):not(.rv-col)) {
+	.sections > :global(*:not(.page-panel):not(.part):not(.lv-col):not(.rv-col):not(.wb-col)) {
 		flex: 0 0 auto;
 	}
 	/* folded: the fold, the four names, and at the foot a dot for the message and the session's */

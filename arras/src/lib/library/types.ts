@@ -356,3 +356,68 @@ export interface ReviewBody extends Gen {
 	statement?: Statement;
 	[field: string]: unknown;
 }
+
+// ---- the Web (`docs/specs/library-views.md` §5) ----
+
+/** What the Web shows: the library, one draft, a draft and what it rests on, or everything. */
+export type WebScope = 'library' | 'draft' | 'deps' | 'all';
+
+/** A row of works or documents in the list, its rows sent only while it is open. */
+export interface WebGroup {
+	group: string;
+	short?: string;
+	title?: string;
+	doc?: string;
+	n: number;
+	rows?: Row[];
+}
+
+export interface WebSection {
+	head: 'draft' | 'uses' | 'drafts' | 'library';
+	doc?: string;
+	rows?: Row[];
+	groups?: WebGroup[];
+}
+
+/** `web-list`: by document, its sections; by status, its rows, two hundred at a time. */
+export interface WebList extends Gen {
+	count: number;
+	sections?: WebSection[];
+	undigested?: number;
+	rows?: Row[];
+	more?: number;
+}
+
+/** `web-group`: an opened group's rows. */
+export interface WebGroupAnswer extends Gen {
+	rows: Row[];
+}
+
+/** `web-search`: hits, each with the words of its statement around the match where the match is there. */
+export interface WebSearch extends Gen {
+	count: number;
+	hits: { row: Row; snippet?: { before: string; match: string; after: string } }[];
+}
+
+/** A result's text in the focus card: a draft's fragment, or a library node's body as `library-node` gives it. */
+export type WebStatement = Statement | { body: string; macros: string | null; points: Record<string, Point> };
+
+/** `web-focus`: the result, its statement, its standing in Lean in rows, and its neighbourhood. */
+export interface WebFocus extends Gen {
+	row: Row;
+	statement: WebStatement | null;
+	relative_to: Row[] | null;
+	rests_on: Row[];
+	more: { proofs: { where: string | { ref: string; short: string; pages: string }; uses: Row[] }[]; lean: string[]; record: { act: string; by: string; at: string }[] } | null;
+	uses: { statement: Row[]; proof: Row[]; outside: { statement: number; proof: number } };
+	used_by: { rows: Row[]; outside: number; more: number };
+}
+
+/** `web-graph`: the four columns' results, what each holds beyond the five it draws, and the edges among them, `from` using `to`. */
+export interface WebGraph extends Gen {
+	focus: Row;
+	excerpt: string;
+	columns: { back: Row[]; uses: Row[]; used_by: Row[] };
+	more: { back: number; uses: number; used_by: number };
+	edges: { from: string; to: string; proof: boolean }[];
+}

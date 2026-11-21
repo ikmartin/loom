@@ -10,7 +10,7 @@
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
 	import Lean from '../Lean.svelte';
-	import Statement from '../Statement.svelte';
+	import Statement from '$lib/views/Statement.svelte';
 	import Restate from './Restate.svelte';
 
 	type Part = { part: string; draft?: string; lean: string; reading: string; by?: string; from?: 'statement' | 'macros' };

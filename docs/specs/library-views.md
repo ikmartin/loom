@@ -357,7 +357,7 @@ Write: `review-task-delete` with `{"task"}`, which withdraws it (`library.md`: a
  "used_by": {"rows": [ROW], "outside": 0, "more": 0}}
 ```
 
-- `statement` is a draft's result's fragment, which the viewer fetches as Docs does, or for a library node `{"body", "macros", "points"}` as `library-node` gives them.
+- `statement` is a draft's result's fragment, which the viewer fetches as Docs does, or for a library node `{"body", "macros", "points"}` as `library-node` gives them; null for a stub, which loom knows only by its number.
 - `relative_to` is, for a formalized result, the assumed results its Lean theorem rests on, read off the axioms Lean reported it used and the nodes their declarations state; an empty list is "relative to Mathlib alone"; null when it is not formalized.
 - `rests_on` is, for a result of the person's not formalized, the results it uses directly that are not read or not compared.
 - `more`, sent only when the fold is opened: `{"proofs": [{"where": "main.tex, Section 3" or {"ref", "short", "pages"}, "uses": [ROW]}], "lean": ["Showcase.rank_cycleSpace"], "record": [{"act": "lean-accepted"|"attested"|"verified"|"digested", "by": "you", "at"}]}`.
@@ -371,7 +371,7 @@ From: scan, index, evidence, lean. Cost: 20 ms, under 10 KB.
 
 **Drawn.** Four columns: two steps back, what it uses, the focus, what uses it; a solid line for a use by a statement, a dashed one for a use by a proof; a column of more than six draws five and "and 3 more · in the list"; the focus's card under the graph at full width.
 
-**Read `web-graph`.** Given the scope and `{"result": RESULT}`; answers `{"gen", "focus": ROW, "excerpt": "rank 𝒵(Q) = |A(Q)| − |V(Q)| + c", "columns": {"back": [ROW], "uses": [ROW], "used_by": [ROW]}, "more": {"back": 0, "uses": 0, "used_by": 0}, "edges": [{"from": RESULT, "to": RESULT, "proof": false}]}`, the edges only among what is drawn, and `excerpt` the statement's first line in plain words, as search indexes them. The card under it is `web-focus`. Cost: 20 ms.
+**Read `web-graph`.** Given the scope and `{"result": RESULT}`; answers `{"gen", "focus": ROW, "excerpt": "rank 𝒵(Q) = |A(Q)| − |V(Q)| + c", "columns": {"back": [ROW], "uses": [ROW], "used_by": [ROW]}, "more": {"back": 0, "uses": 0, "used_by": 0}, "edges": [{"from": RESULT, "to": RESULT, "proof": false}]}`, the edges only among what is drawn, each `from` a result that uses `to`, and `excerpt` the statement's first line in plain words, as search indexes them. The card under it is `web-focus`. Cost: 20 ms.
 
 ## 6. Docs
 

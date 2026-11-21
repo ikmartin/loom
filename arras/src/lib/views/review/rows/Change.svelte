@@ -6,7 +6,7 @@
 	import type { AcceptedChangedRow, EditRow, ReviewBody } from '$lib/library/types';
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
-	import Statement from '../Statement.svelte';
+	import Statement from '$lib/views/Statement.svelte';
 	import SeeItLink from '../SeeItLink.svelte';
 
 	let { row }: { row: EditRow | AcceptedChangedRow } = $props();
