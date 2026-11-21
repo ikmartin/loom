@@ -63,6 +63,7 @@
       "Edit(/.loom/records/retired/**)",
       "Edit(/.loom/records/looked/**)",
       "Edit(/.loom/records/formal/**)",
+      "Edit(/.loom/records/tags/**)",
       "Edit(/.loom/library/**)",
       "Edit(/.loom/agents/instructions/**)",
       "Edit(/.loom/local/**)",
