@@ -809,8 +809,7 @@ test.describe('a PDF among the project’s files', () => {
 		await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
 	});
 
-	test.fixme('the same file as a work keeps one place, whichever way it is opened, and neither moves the other when both are open', async ({ page }) => {
-		// fails on the views joined to the node store's phase 2, not yet understood: with the file read last in the other pane, the work opened alone again stands where its own pane left it, not where the file was last read; every other place test passes
+	test('the same file as a work keeps one place, whichever way it is opened, and neither moves the other when both are open', async ({ page }) => {
 		const first = { page: 2, share: 0.4 };
 		await page.goto(BELLAMY);
 		await readTo(page, first);
