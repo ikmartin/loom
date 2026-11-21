@@ -38,6 +38,8 @@ export interface Served {
 	openSessions(): string[];
 	/** POST to the write API with the served token; returns the publisher's `result`, and fails on a refusal. */
 	api(endpoint: string, body: Record<string, unknown>): Promise<string>;
+	/** POST to the write API with the served token; returns the publisher's whole answer, and fails on a refusal. */
+	answer(endpoint: string, body: Record<string, unknown>): Promise<Record<string, unknown>>;
 	/** Run the loom CLI against this copy; returns stdout. */
 	loom(args: string[], env?: Record<string, string>): string;
 }
@@ -226,7 +228,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 				}
 				return [...open].filter(([, o]) => o).map(([id]) => id);
 			},
-			async api(endpoint, body) {
+			async answer(endpoint, body) {
 				const res = await fetch(`${url}/_api/${endpoint}`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json', 'X-Loom-Token': token },
@@ -234,7 +236,10 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 				});
 				const text = await res.text();
 				expect(res.status, `POST /_api/${endpoint} answered ${text}`).toBe(200);
-				return String((JSON.parse(text) as { result: unknown }).result ?? '');
+				return JSON.parse(text) as Record<string, unknown>;
+			},
+			async api(endpoint, body) {
+				return String((await this.answer(endpoint, body)).result ?? '');
 			},
 			loom
 		};

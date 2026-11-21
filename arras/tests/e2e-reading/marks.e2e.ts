@@ -122,8 +122,7 @@ test.afterEach(({}, info) => {
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
-test.fixme("a highlight on a cited work's page needs no session, is drawn at once in the look in hand, and after a reload is an annotation on its words drawn in its look", async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test("a highlight on a cited work's page needs no session, is drawn at once in the look in hand, and after a reload is an annotation on its words drawn in its look", async ({ page, served }) => {
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	const before = marksOf(served, ref).map((a) => a.id);
 	await openPaper(page, `/library/${ref}?page=2`, 2);
@@ -141,7 +140,7 @@ test.fixme("a highlight on a cited work's page needs no session, is drawn at onc
 	expect(await page.getByTestId(`mark-band-${mark.id}`).evaluate((g) => getComputedStyle(g).getPropertyValue('--band-strength').trim())).toBe('0.6');
 });
 
-test("one reader: a work's notes are drawn alike in the Library's tab and in its pane in Docs, and one made in either is recorded on the work and counted in the other", async ({ page, served }) => {
+test("one reader: a work's notes are drawn alike in the Library's tab and in its pane in Docs, and one made on words in either is recorded on the work, counted in the other and drawn there", async ({ page, served }) => {
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	const before = marksOf(served, ref).map((a) => a.id);
 	const made = () => marksOf(served, ref).filter((a) => !before.includes(a.id));
@@ -153,12 +152,26 @@ test("one reader: a work's notes are drawn alike in the Library's tab and in its
 	await expect(page.locator(`[data-testid="page-mark-${box.id}"]`)).toHaveCount(1);
 	await openPaper(page, `/library/${ref}?page=1`, 1);
 	await expect(page.locator(`[data-testid="page-mark-${box.id}"]`)).toHaveCount(1);
-	// a highlight made in the pane is recorded on the work, and the tab counts it as the pane does
-	await annotate(page, 1, await page.locator('[data-testid="pdf-page-1"] .text span').filter({ hasText: /^\w{5,}$/ }).first().innerText());
+	// a highlight made on words in the pane is recorded on the work by its words alone, and the tab counts it as the pane does and draws it where the publisher finds them
+	const words = page.locator('[data-testid="pdf-page-1"] .text span').filter({ hasText: /^\w{5,}$/ });
+	const [first, second] = [await words.nth(0).innerText(), await words.nth(1).innerText()];
+	await annotate(page, 1, first);
 	await expect.poll(() => made().length).toBe(2);
+	const inPane = made().find((a) => a.id !== box.id)!;
+	expect(inPane.quote).toBe(first);
+	expect(inPane.rects).toBeNull();
 	const counted = await page.getByTestId('step-count').first().innerText();
 	await openPaper(page, `/library?work=${ref}`, 1);
 	await expect(page.getByTestId('step-count').first()).toHaveText(counted);
+	await expect(page.locator(`[data-testid="page-mark-${inPane.id}"][data-kind="highlight"]`)).toHaveCount(1);
+	// and one made on words in the tab is drawn in the pane, beside the first
+	await annotate(page, 1, second);
+	await expect.poll(() => made().length).toBe(3);
+	const inTab = made().find((a) => a.id !== box.id && a.id !== inPane.id)!;
+	expect(inTab.rects).toBeNull();
+	await openPaper(page, `/library/${ref}?page=1`, 1);
+	await expect(page.locator(`[data-testid="page-mark-${inTab.id}"][data-kind="highlight"]`)).toHaveCount(1);
+	await expect(page.locator(`[data-testid="page-mark-${inPane.id}"][data-kind="highlight"]`)).toHaveCount(1);
 });
 
 test.describe('on a project PDF', () => {

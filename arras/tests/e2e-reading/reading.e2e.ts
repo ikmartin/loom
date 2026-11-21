@@ -117,8 +117,7 @@ async function clickMark(page: Page, id: string): Promise<void> {
 /** The colour a line of a mark is drawn in: grey, in the light, given as sRGB or as `color()`. */
 const GREY = /rgb\(136, 135, 128\)|color\(srgb 0\.533\d* 0\.529\d* 0\.50\d*\)/;
 
-test.fixme('a selection stays selected and offers only Quote; a note on its words is drawn on the page in the look loom gave it', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test('a selection stays selected and offers only Quote; a note on its words is drawn on the page in the look loom gave it', async ({ page, served }) => {
 	const id = await noteOnPageAs(served, 'incidence matrix', 'So the vertices are integral.', null);
 	await opened(page, served);
 	// highlighting a phrase to copy it is the ordinary thing to do with a paper, so selecting writes nothing and opens nothing: the selection survives, and Quote is offered at its end
@@ -174,8 +173,7 @@ test('a selection across a citation and a reference is quoted as they were writt
 		.toBe('true true');
 });
 
-test.fixme('a region drawn with Alt is commented on, recorded as drawn, and drawn as an outline in the look in hand', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test('a region drawn with Alt is commented on, recorded as drawn, and drawn as an outline in the look in hand', async ({ page, served }) => {
 	await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: null, over: {}, plain: { color: 'grey', style: 'underline', weight: 1, opacity: 100 } })));
 	await opened(page, served);
 	const canvas = page.locator('[data-testid="pdf-page-2"] canvas');
@@ -228,8 +226,7 @@ test.fixme('a region drawn with Alt is commented on, recorded as drawn, and draw
 	await expect(page.getByTestId('ann-popup')).toHaveAttribute('data-annotation-id', String(written.id));
 });
 
-test.fixme('a mark opens the popup a fragment opens, and Escape closes it', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test('a mark opens the popup a fragment opens, and Escape closes it', async ({ page, served }) => {
 	const id = await noteOnPage2(served, served.openSessions().at(-1)!, 'incidence matrix', 'a note to open from its mark');
 	await opened(page, served);
 	await expect(page.getByTestId(`page-mark-${id}`)).toBeVisible();
@@ -241,8 +238,7 @@ test.fixme('a mark opens the popup a fragment opens, and Escape closes it', asyn
 	await expect(open).toHaveCount(0);
 });
 
-test.fixme('a locator in the URL is lit while the URL carries it, and a note is focused by its id', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test('a locator in the URL is lit while the URL carries it, and a note is focused by its id', async ({ page, served }) => {
 	// a note by id: one written here, since the showcase's own are in a closed session and closed sessions' annotations are hidden until shown
 	const id = await noteOnPage2(served, served.openSessions().at(-1)!, 'incidence matrix', 'a note to focus by its id');
 	await opened(page, served);
@@ -277,8 +273,7 @@ test('a session is named on the spot and closed from the page', async ({ page, s
 	await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
 });
 
-test.fixme('two notes on one place are each drawn there, with no count, and a click opens one of them', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test('two notes on one place are each drawn there, with no count, and a click opens one of them', async ({ page, served }) => {
 	const session = served.openSessions().at(-1)!;
 	const first = await noteOnPage2(served, session, 'Boundedness holds', 'first on this phrase');
 	const second = await noteOnPage2(served, session, 'Boundedness holds', 'second on this phrase');
@@ -293,8 +288,7 @@ test.fixme('two notes on one place are each drawn there, with no count, and a cl
 	await expect(page.getByTestId('ann-popup')).toHaveAttribute('data-annotation-id', new RegExp(`^(${first}|${second})$`));
 });
 
-test.fixme('a popup shows the write it fired, without being closed and reopened', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
+test('a popup shows the write it fired, without being closed and reopened', async ({ page, served }) => {
 	// a popup reads its annotation from the manifest by id, so a resolve that comes back on the next poll is shown where the reader acted
 	const id = await noteOnPageAs(served, 'exchange inequalities', 'resolve me', 'question');
 	await opened(page, served);
@@ -310,19 +304,26 @@ test.fixme('a popup shows the write it fired, without being closed and reopened'
 	await expect(p.getByTestId('popup-status')).toHaveText('Open');
 });
 
-test.fixme('a selection records the lines it covers and nothing else', async ({ page, served }) => {
-	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
-	// **A phantom rectangle is a wrong anchor, not a cosmetic fault.** A range over the text layer yields a rectangle for every element it crosses, degenerate ones included, and those were mapped to points and recorded, at the layer's top-left, hundreds of points above the words they claimed to be. Words marked with Annotate are anchored by their text, and the rectangles drawn for them are the lines they cover.
+test('a selection on words records its words alone, and is drawn on the lines they cover and nothing else', async ({ page, served }) => {
+	// **A phantom rectangle is a wrong anchor, not a cosmetic fault.** A range over the text layer yields a rectangle for every element it crosses, degenerate ones included, which mapped to points stand at the layer's top-left, hundreds of points above the words they claim to be. Words marked with Annotate are anchored by their text alone, and the rectangles drawn for them are the lines the publisher finds those words on (`library-places`).
+	const { ref } = bellamy(served);
+	const manifest = () => JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
+	type Raw = { id: string; quote?: string | null; rects?: number[][] | null };
+	const before = new Set(Object.keys(manifest().annotations));
 	await opened(page, served);
 	await page.getByTestId('tool-annotate').click();
 	await selectOnly(page, 'rational polytope');
 	await page.keyboard.press('Escape');
-	// where the drawn rectangles stand, as the manifest publishes them; a letter-sized page bounds them
-	const manifest = () => JSON.parse(readFileSync(join(served.root, '.loom/cache/site/manifest.json'), 'utf8'));
-	type Raw = { id: string; quote?: string | null; rects?: number[][] | null };
-	const found = () => (Object.values(manifest().annotations) as Raw[]).find((a) => (a.quote ?? '').includes('rational polytope'));
-	await expect.poll(() => found()?.rects?.length ?? 0).toBeGreaterThan(0);
-	for (const [x0, y0, x1, y1] of found()!.rects!) {
+	const found = () => (Object.values(manifest().annotations) as Raw[]).find((a) => !before.has(a.id) && (a.quote ?? '').includes('rational polytope'));
+	await expect.poll(() => found()?.id ?? '').not.toBe('');
+	const id = found()!.id;
+	expect(found()!.rects ?? null).toBeNull();
+	// where it is drawn, as the publisher places it; a letter-sized page bounds them
+	const placed = (await served.answer('library-places', { ref, pages: [2] })) as { places: { annotation: string; page: number; rects: number[][] }[] };
+	const at = placed.places.find((p) => p.annotation === id);
+	expect(at?.page).toBe(2);
+	expect(at!.rects.length).toBeGreaterThan(0);
+	for (const [x0, y0, x1, y1] of at!.rects) {
 		expect(x1, `a quad with no width: ${JSON.stringify([x0, y0, x1, y1])}`).toBeGreaterThan(x0);
 		expect(y1, `a quad with no height: ${JSON.stringify([x0, y0, x1, y1])}`).toBeGreaterThan(y0);
 		expect(x0).toBeGreaterThanOrEqual(-1);
@@ -330,6 +331,7 @@ test.fixme('a selection records the lines it covers and nothing else', async ({ 
 		expect(x1).toBeLessThanOrEqual(612 + 1);
 		expect(y1).toBeLessThanOrEqual(792 + 1);
 	}
+	await expect(page.getByTestId(`page-mark-${id}`)).toHaveCount(1);
 });
 
 readOnly('the page and the zoom are typed into, and take exactly what was typed', async ({ page, served }) => {
