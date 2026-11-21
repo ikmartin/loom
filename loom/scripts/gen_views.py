@@ -164,24 +164,36 @@ def render(sample: dict[str, Any]) -> str:
     return json.dumps(sample, indent=1, ensure_ascii=False, sort_keys=True) + "\n"
 
 
-def main(check: bool) -> int:
+#: The files of this folder that are this generator's: Review's and the Web's samples. Another generator writes the Library's beside them, and neither reads, writes or clears the other's.
+MINE = ("review-*.json", "web-*.json")
+
+
+def mine(folder: Path) -> dict[str, str]:
+    """This generator's files in `folder`, by name, with their text; another generator's are not read."""
+    if not folder.is_dir():
+        return {}
+    return {p.name: p.read_text(encoding="utf-8") for pattern in MINE for p in folder.glob(pattern)}
+
+
+def main(check: bool, out: Path = OUT) -> int:
+    """Write the samples into `out`, clearing only this generator's files there; with `check`, write nothing and say which of them are stale."""
     with tempfile.TemporaryDirectory(prefix="loom-views-") as tmp:
         made = {f"{name}.json": render(sample) for name, sample in samples(Path(tmp)).items()}
     text = json.dumps(made)
     if Path(tempfile.gettempdir()).as_posix() in text or "loom-views-" in text:
         raise SystemExit("a sample names the temporary quilt's place; a reply must not carry a path outside the quilt")
-    have = {p.name: p.read_text(encoding="utf-8") for p in OUT.glob("*.json")} if OUT.is_dir() else {}
+    have = mine(out)
     if check:
         stale = sorted(set(made) ^ set(have) | {n for n in made if have.get(n) != made[n]})
         for name in stale:
-            print(f"stale: {OUT.relative_to(REPO) / name}")
+            print(f"stale: {out / name}")
         return 1 if stale else 0
-    OUT.mkdir(parents=True, exist_ok=True)
+    out.mkdir(parents=True, exist_ok=True)
     for name in set(have) - set(made):
-        (OUT / name).unlink()
+        (out / name).unlink()
     for name, body in made.items():
-        (OUT / name).write_text(body, encoding="utf-8")
-    print(f"wrote {len(made)} samples to {OUT.relative_to(REPO)}")
+        (out / name).write_text(body, encoding="utf-8")
+    print(f"wrote {len(made)} samples to {out}")
     return 0
 
 
