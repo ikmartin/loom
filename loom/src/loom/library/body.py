@@ -284,11 +284,13 @@ def _quoted(text: str, pos: int) -> int:
 
 @dataclass(frozen=True)
 class Item:
-    """One thing at the top level of a macros body: the command, or `text` for words that are none, and its 1-based line."""
+    """One thing at the top level of a macros body: the command, or `text` for words that are none, its 1-based line, and where it starts and ends in the body."""
 
     command: str
     line: int
     text: str = ""
+    start: int = 0
+    end: int = 0
 
 
 #: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`. A starred form is its command's. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets, and no setting of the page's layout (`\setlength`, `\setcounter`), which is the document's, not the work's.
@@ -355,15 +357,16 @@ def macros_items(body: str) -> list[Item]:
         if m is None:
             stop = text.find("\\", pos + 1)
             stop = n if stop < 0 else stop
-            out.append(Item("text", line, text[pos:stop].strip()))
+            out.append(Item("text", line, text[pos:stop].strip(), pos, stop))
             pos = stop
             continue
+        start = pos
         name = m.group(0)[1:]
         pos = m.end()
         if pos < n and text[pos] == "*" and name in ARGUMENTS:
             pos += 1
-        out.append(Item(name, line))
         pos = _arguments(text, pos, ARGUMENTS.get(name) or _ANY)
+        out.append(Item(name, line, "", start, pos))
 
 
 def _arguments(text: str, pos: int, shape: str) -> int:
