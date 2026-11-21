@@ -609,62 +609,6 @@ def live_sessions(root: Path) -> frozenset[str]:
     return frozenset(str(r["session"]) for r in live(root) if r.get("session"))
 
 
-# ---- a dropped paper ---------------------------------------------------------------------------------------------------
-
-_ARXIV_NEW = re.compile(r"(?<![\d.])(\d{4}\.\d{4,5})(?:v\d+)?(?!\d)")
-_ARXIV_OLD = re.compile(r"\b([a-z-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?(?!\d)", re.I)
-_DOI = re.compile(r"\b(10\.\d{4,9}/[^\s\"<>]+)", re.I)
-#: The DOI arXiv gives each paper, which names its arXiv number too.
-_ARXIV_DOI = re.compile(r"10\.48550/arxiv\.(.+)", re.I)
-
-
-def identifiers(text: str) -> frozenset[str]:
-    """The identifiers a link, an entry's field or a file's name states, normalised: `arxiv:2401.01234` with no version, `doi:` lower-cased.
-
-    Only what is written in the form of an identifier is read, and a number inside a DOI is not taken for an arXiv one; nothing is guessed from a title or an author.
-    """
-    out: set[str] = set()
-    rest = text
-    for m in _DOI.finditer(text):
-        doi = m.group(1).rstrip(".,;)]").lower()
-        out.add("doi:" + doi)
-        arxiv = _ARXIV_DOI.fullmatch(doi)
-        if arxiv:
-            out |= {"arxiv:" + n.group(1).lower() for n in _ARXIV_NEW.finditer(arxiv.group(1))}
-        rest = rest.replace(m.group(1), " ")
-    for pattern in (_ARXIV_NEW, _ARXIV_OLD):
-        out |= {"arxiv:" + n.group(1).lower() for n in pattern.finditer(rest)}
-    return frozenset(out)
-
-
-def waiting_for(root: Path, found: frozenset[str], known: Mapping[str, frozenset[str]] | None = None) -> list[str]:
-    """The works a paper waits for that a dropped file's identifiers name.
-
-    Parameters
-    ----------
-    root : Path
-        The quilt.
-    found : frozenset of str
-        The identifiers the intake read in the file, as `identifiers` normalises them.
-    known : mapping, optional
-        Each reference's identifiers from its entry, by its id (the node store's); the link the agent could not fetch from is always read.
-
-    Returns
-    -------
-    list of str
-        The references waiting, in the order asked, whose identifiers meet `found`: one is attached, several is the intake's question, none is an ordinary drop.
-    """
-    out: list[str] = []
-    for a in replay(root).asks.values():
-        if a.what != "paper" or a.withdrawn is not None:
-            continue
-        ref = str(a.get("ref"))
-        theirs = identifiers(str(a.get("link"))) | (known or {}).get(ref, frozenset())
-        if theirs & found and ref not in out:
-            out.append(ref)
-    return out
-
-
 def open_asks(root: Path, *, closed: bool = False, web: Web | None = None) -> list[Standing]:
     """Every ask of the quilt as it stands now, in the order asked.
 

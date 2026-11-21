@@ -181,13 +181,13 @@ An ask is open until what it asked for exists, whoever made it; an agent's `done
 | `restate` | loom observes the target's Lean after it, standing (§5.1), with statements other than the person's last attestation's |
 | `which-result` | the person says only a mention (§3.7) of that block and work, or an agent files a suggested edit on that block after it |
 | `formalize` | loom observes the target's Lean after it, standing, and Lean accepts it |
-| `paper` | the work holds the document wanted |
+| `paper` | the work holds the document wanted, read from the store |
 
 Every ask is closed once withdrawn. One that a node would close stays open while nothing can say of the node, as before the node store. An ask taken (`took`) is **working** while an agent server alive now (`presence.live`) is in the session that took it, and waiting otherwise, so a session that has ended does not look busy.
 
 ### 4.4 A dropped paper
 
-When the person drops a file, the intake reads the identifiers it states, in its name, its metadata or on its first page, and asks `asks.waiting_for` which works waiting for a paper they name. `waiting_for` is built; the intake's call to it, and the drop on a row, come with the references (not built yet). Identifiers are read only where written as identifiers, normalised as `arxiv:2401.01234` with no version (an old-style `arxiv:math/0601001` too) and `doi:` lower-cased, and a number inside a DOI is not taken for an arXiv one; nothing is matched by title or author. A work's identifiers are those of the link its request names and, with the node store, of its entry. One work found: the file is attached to it. Several: the intake's one question. None: an ordinary drop. A file dropped on the request's row in Review is attached to that work without a match.
+Nothing here matches a dropped file to a request. The intake files a dropped file under the reference that states its identifier, or under the row in Review it was dropped on, whether or not a request waits for it (the node store's references, `nodes.md` §7); a `paper` ask is closed by the fact that its reference now holds the document it wants, read from the store (§4.3). No call crosses between the intake and this log.
 
 ### 4.5 An agent's commands
 

@@ -1,4 +1,4 @@
-"""Asks close by what they produce, never by being called done: a question by its answer, a formalization by Lean's acceptance, a paper by its file; a live session shows as working; a dropped file finds the paper waiting by identifier alone."""
+"""Asks close by what they produce, never by being called done: a question by its answer, a formalization by Lean's acceptance, a paper by its file; a live session shows as working."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from loom.evidence import asks
-from loom.evidence.asks import ask, identifiers, open_asks, say, standing, waiting_for
+from loom.evidence.asks import ask, open_asks, say, standing
 from loom.evidence.log import replay as replay_evidence
 from loom.evidence.log import write
 from loom.evidence.subjects import Subject, Who
@@ -165,51 +165,6 @@ def test_open_asks_leaves_out_what_is_closed_unless_asked(root: Path) -> None:
     say(root, PERSON, "answered", a.id, words="yes")
     assert [s.ask.id for s in open_asks(root)] == [b.id]
     assert [s.ask.id for s in open_asks(root, closed=True)] == [a.id, b.id]
-
-
-@pytest.mark.parametrize(
-    ("text", "found"),
-    [
-        ("https://arxiv.org/abs/2401.01234v2", {"arxiv:2401.01234"}),
-        ("https://arxiv.org/pdf/2401.01234", {"arxiv:2401.01234"}),
-        ("arXiv:math/0601001v3", {"arxiv:math/0601001"}),
-        ("https://doi.org/10.1016/J.JALGEBRA.2019.01234", {"doi:10.1016/j.jalgebra.2019.01234"}),
-        ("10.48550/arXiv.2401.01234", {"doi:10.48550/arxiv.2401.01234", "arxiv:2401.01234"}),
-        ("Smith - Widgets and their bounds.pdf", set()),
-    ],
-)
-def test_identifiers_are_read_only_where_written_as_identifiers(text: str, found: set[str]) -> None:
-    assert identifiers(text) == found
-
-
-def test_a_dropped_file_finds_the_paper_that_waits_for_it_by_identifier_alone(root: Path) -> None:
-    a = ask(
-        root,
-        AGENT,
-        "paper",
-        "person",
-        {"ref": "tq-00B1-ref"},
-        ref="tq-00B1-ref",
-        link="https://arxiv.org/abs/2401.01234",
-        want="pdf",
-    )
-    ask(
-        root,
-        AGENT,
-        "paper",
-        "person",
-        {"ref": "tq-00B2-ref"},
-        ref="tq-00B2-ref",
-        link="https://www.example.org/paper",
-        want="pdf",
-    )
-    assert waiting_for(root, identifiers("2401.01234v3.pdf")) == ["tq-00B1-ref"]
-    assert waiting_for(root, frozenset({"doi:10.1000/b2"})) == []
-    assert waiting_for(root, frozenset({"doi:10.1000/b2"}), {"tq-00B2-ref": frozenset({"doi:10.1000/b2"})}) == [
-        "tq-00B2-ref"
-    ]
-    say(root, AGENT, "withdrawn", a.id)
-    assert waiting_for(root, identifiers("2401.01234v3.pdf")) == []
 
 
 # ---- the agents' commands ---------------------------------------------------------------------------------------------
