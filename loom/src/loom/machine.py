@@ -15,7 +15,7 @@ from pathlib import Path
 TOKENS = "tokens"
 #: The folder of `data_dir` a tool that unpacks itself on its first run unpacks into, once for the machine: TeX Live's `biber`, about 200 MB.
 UNPACKED = "unpacked"
-#: The folder of `data_dir` that holds the viewer a running server serves, one copy a version, about 11 MB each, kept while a live server holds it.
+#: The folder of `data_dir` that holds the viewer a running server serves, one copy a version, about 11 MB each, kept until the first server to start after no live server holds it.
 VIEWERS = "viewers"
 
 
