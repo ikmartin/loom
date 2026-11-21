@@ -8,7 +8,7 @@ import { anchorId, canonStem, canonUrl, keyFromParam, masterName, masterUrl, nod
 import { route } from '$lib/paths';
 import { placeParams, readKeys, type WorkLink } from '$lib/worklink';
 
-export type ItemKind = 'document' | 'work' | 'node' | 'context' | 'session' | 'page' | 'file' | 'pdf' | 'reading';
+export type ItemKind = 'document' | 'work' | 'node' | 'context' | 'session' | 'page' | 'file' | 'pdf' | 'reading' | 'notes';
 
 /** A place on a work's page: the work-link keys without the work's identifier, which the item already names. */
 export type Place = Omit<WorkLink, 'id'>;
@@ -112,6 +112,8 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 			return { kind: 'file', id: tail.split('/').map(safe).join('/'), ...(anchor ? { anchor } : {}) };
 		case 'reading':
 			return { kind: 'reading', id: safe(tail), ...(anchor ? { anchor } : {}) };
+		case 'notes':
+			return { kind: 'notes', id: 'all' };
 		case 'pdf': {
 			const at = tail.split('/').map(safe).join('/');
 			return { kind: 'pdf', id: (m?.masters ?? []).find((d) => masterName(d.path) === at)?.path ?? at, ...(anchor ? { anchor } : {}) };
@@ -164,6 +166,8 @@ export function pathFor(m: Documents | null, item: Item): string {
 			return pdfRoute(item.id) + hash;
 		case 'reading':
 			return route('/reading/' + encodeURIComponent(item.id)) + hash;
+		case 'notes':
+			return route('/notes');
 	}
 }
 

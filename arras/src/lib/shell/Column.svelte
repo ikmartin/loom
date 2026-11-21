@@ -17,6 +17,7 @@
 	import { wb } from '$lib/views/web/state.svelte';
 	import { docsState } from '$lib/views/docs/docs.svelte';
 	import Picker from '$lib/views/docs/Picker.svelte';
+	import { workspace } from '$lib/workspace/store.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
@@ -230,6 +231,7 @@
 						{#if docsState.served}
 							<div class="colbtns">
 								<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>
+								<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>
 							</div>
 						{/if}
 					</div>

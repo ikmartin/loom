@@ -421,3 +421,33 @@ export interface WebGraph extends Gen {
 	more: { back: number; uses: number; used_by: number };
 	edges: { from: string; to: string; proof: boolean }[];
 }
+
+// ---- the notes tab (`docs/specs/library-views.md` §6.3) ----
+
+/** A note as the notes tab draws it; `at_place` null for one that lost its place. */
+export interface Note {
+	annotation: string;
+	color: string;
+	quote: string;
+	message: string;
+	by: string;
+	at: string;
+	tags: string[];
+	at_place: { doc: string; key: string } | { ref: string; page: number; short?: string } | null;
+	was?: string;
+}
+
+export interface NotesGroup {
+	group: { doc: string } | { ref: string; short: string } | 'orphaned';
+	n: number;
+	notes: Note[];
+	more: number;
+}
+
+/** `notes`: by work, the groups, three notes a group; by date, twenty notes at a time; a group asked for with `offset`, its rest. */
+export interface NotesAnswer extends Gen {
+	orphaned?: number;
+	groups?: NotesGroup[];
+	notes?: Note[];
+	more?: number;
+}

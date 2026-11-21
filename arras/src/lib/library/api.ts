@@ -5,7 +5,7 @@ import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { discardChanges, keepChanges, type ChangeAnswer } from '$lib/review/history.svelte';
-import type { DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
+import type { NotesAnswer, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
 
 export interface ApiError {
 	code: string;
@@ -136,6 +136,8 @@ export const webGroup = (w: InScope, group: string, s?: number) => call<WebGroup
 export const webSearch = (w: InScope, q: string) => call<WebSearch>('web-search', { ...scoped(w), q, limit: 50 });
 export const webFocus = (w: InScope, result: string, more: boolean, s?: number) => call<WebFocus>('web-focus', { ...scoped(w), result, ...(more ? { more: true } : {}), ...since(s) });
 export const webGraph = (w: InScope, result: string, s?: number) => call<WebGraph>('web-graph', { ...scoped(w), result, ...since(s) });
+export const notes = (sort: 'work' | 'date', orphaned: boolean, more?: { group?: string; offset: number }, s?: number) => call<NotesAnswer>('notes', { sort, orphaned, ...(more?.group ? { group: more.group } : {}), ...(more ? { offset: more.offset } : {}), ...since(s) });
+export const deleteNote = (annotation: string) => call<WriteDone>('delete', { annotation });
 export const reviewCounts = (doc?: string, s?: number) => call<ReviewCounts>('review-counts', { ...(doc ? { doc } : {}), ...since(s) });
 export const reviewList = (kind: ReviewKind | 'all' | 'agents', doc?: string, s?: number) => call<ReviewList>('review-list', { kind, ...(doc ? { doc } : {}), ...since(s) });
 export const reviewRow = (row: string, s?: number, node?: string) => call<ReviewBody>('review-row', { row, ...(node ? { node } : {}), ...since(s) });

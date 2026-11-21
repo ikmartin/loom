@@ -3,6 +3,7 @@
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { notesAnswer } from './notes6';
 import { webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
 import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
 import type { ReviewKind, TaskRow, WebScope } from '../types';
@@ -40,6 +41,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			const pdf = f.works.find((w) => w.ref === b.ref)?.holds.pdf ?? '';
 			return ok({ pdf, hits: [{ page: 1, rects: [[72, 140, 300, 156]] }], pages: 24 });
 		},
+		notes: (b) => ok(notesAnswer(f.notes, b as { sort: string; orphaned?: boolean; group?: string; offset?: number })),
 		'web-list': (b) => ok(webList(REF, b as { scope: WebScope; doc?: string; sort: string; open?: string[]; offset?: number })),
 		'web-group': (b) => ok({ rows: webGroup(REF, b as { scope: WebScope; doc?: string; group: string }) }),
 		'web-search': (b) => ok(webSearch(REF, b as { scope: WebScope; doc?: string; q: string })),
@@ -111,6 +113,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			return ok({ annotation: mark });
 		},
 		delete: (b) => {
+			f.notes = f.notes.filter((n) => n.annotation !== b.annotation);
 			for (const ms of Object.values(f.marks)) {
 				const i = ms.findIndex((m) => m.mark === b.annotation);
 				if (i >= 0) ms.splice(i, 1);

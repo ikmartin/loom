@@ -69,3 +69,31 @@ test("a citation's card shows the cited result and opens its work beside the dra
 	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read it.');
 	await expect(page).toHaveURL(/\/master\//);
 });
+
+test('the notes tab lists every note by work, the orphaned first, and by date; an orphan is deleted, a group shows the rest, and a note on a work opens it beside the draft', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('docs-notes').click();
+	const tab = page.getByTestId('notes-tab');
+	await expect(page.getByRole('tab', { name: /All notes/ })).toBeVisible();
+	const groups = tab.getByTestId('notes-group');
+	await expect(groups.first()).toContainText('Orphaned · their document is gone, or their words are not found');
+	await expect(groups.first().getByTestId('note')).toHaveCount(2);
+	await expect(groups.first()).toContainText('was on old-intro.tex, deleted 14 Nov');
+	await expect(tab).toContainText('show orphaned notes (2)');
+	const head = (name: string) => groups.filter({ has: page.locator('h2', { hasText: new RegExp(`^${name}`) }) });
+	const main = head('main.tex');
+	await expect(main.getByTestId('note')).toHaveCount(3);
+	await main.getByRole('button', { name: '6 more' }).click();
+	await expect(main.getByTestId('note')).toHaveCount(9);
+	await expect(head('Arden 2024')).toContainText('summary');
+	await groups.first().getByTestId('note').first().getByRole('button', { name: 'delete' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Note deleted.');
+	await expect(groups.first().getByTestId('note')).toHaveCount(1);
+	await tab.getByTestId('notes-orphaned').uncheck();
+	await expect(groups.first()).not.toContainText('Orphaned');
+	await tab.getByRole('button', { name: 'date' }).click();
+	await expect(tab.getByTestId('note').first()).toContainText('is saturated by Proposition 2.6');
+	await tab.getByTestId('note').filter({ hasText: 'whose coordinates sum to zero' }).getByRole('button').first().click();
+	await expect(page.getByTestId('reading-item')).toBeVisible();
+	await expect(page).toHaveURL(/\/notes|\/master\//);
+});

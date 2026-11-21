@@ -48,7 +48,33 @@ export const docs = {
 	},
 	notes: {
 		/** The button in Docs' column that opens the notes tab. */
-		open: 'Notes'
+		open: 'Notes',
+		/** The notes tab's name. */
+		tab: 'All notes',
+		/** Before the two orders. */
+		sortBy: 'sort by',
+		work: 'work',
+		date: 'date',
+		/** The box that shows or hides the notes that lost their place. */
+		showOrphaned: (n: number) => `show orphaned notes (${n})`,
+		/** The head over the notes that lost their place. */
+		orphaned: 'Orphaned · their document is gone, or their words are not found',
+		/** Under a group: the notes it holds beyond those shown, which a click shows. */
+		more: (n: number) => `${n} more`,
+		/** Under the notes by date. */
+		older: (n: number) => `${n} more, older`,
+		/** Who wrote a note and when. */
+		byAt: (by: string, at: string) => `${by} · ${at}`,
+		/** Where an orphaned note was. */
+		was: (where: string) => `was on ${where}`,
+		/** On an orphaned note: anchors it again. */
+		place: 'place it again',
+		/** The column's message after "place it again", until placing is built. */
+		placeHow: 'Click where the note belongs, or select its words.',
+		/** Deletes a note. */
+		delete: 'delete',
+		/** The column's message after deleting. */
+		deleted: 'Note deleted.'
 	},
 	column: {
 		/** The label over the focused document's sections, low in Docs' column. */
