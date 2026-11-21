@@ -360,8 +360,14 @@ def run_import(
                 )
     original = (plan.paper_dir / plan.master_rel).read_text(encoding="utf-8", errors="replace")
     name = slug(Path(plan.dest_rel).stem)
-    # read under the lock, so a step recorded elsewhere meanwhile cannot refuse this one after its document is written
-    with locked(quilt.history_dir / LEDGER):
+    from loom import writes
+
+    # one act through the door: the import's step and the config's main; the history is read under its lock, so a step recorded elsewhere meanwhile cannot refuse this one after its document is written
+    with (
+        writes.act(root, quilt.history_dir, "import", actor_for(root)) as w,
+        writes.staging(w),
+        locked(quilt.history_dir / LEDGER),
+    ):
         entry = write_step(
             load_history(quilt.history_dir),
             "import",
@@ -378,7 +384,7 @@ def run_import(
             document_text=plan.text,
             document_name=f"{name}.tex",
         )
-    main_set = set_main(load_quilt(root), plan.dest_rel)
+        main_set = set_main(load_quilt(root), plan.dest_rel)
     after = scan(load_quilt(root))
     wrote = [Item(f"{plan.master_rel} -> {plan.dest_rel}, {len(draft.insertions)} ids inserted")]
     wrote += [Item(f"{src} -> {dest}") for src, dest in arrows if dest in written]

@@ -864,8 +864,12 @@ def _linearize(
                 + diffs
             )
         checked = identity_said(ident, "it", spine_rel)
-    entry = append_entry(result.quilt.history_dir, "linearize", record, actor_for(root))
-    main_moved = main in superseded and set_main_forced(result.quilt, to_rel)
+    from loom import writes
+
+    # one act through the door: the history's line of the flat copy and the config's main
+    with writes.act(root, result.quilt.history_dir, "linearize", actor_for(root)) as w, writes.staging(w):
+        entry = append_entry(result.quilt.history_dir, "linearize", record, actor_for(root))
+        main_moved = main in superseded and set_main_forced(result.quilt, to_rel)
     progress.next_stage(f"scanning with {to_rel}")
     # what a linearize refuses to bring in is by code (`gates`), so a regrade never lets through what it refused
     had = {(d.code, d.message) for d in result.lint if gates(d)}
