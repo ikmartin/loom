@@ -29,6 +29,19 @@ def test_alloc_sees_references_and_never_reuses(tmp_path: Path) -> None:
     assert r.output.startswith("dm-0021 "), r.output
 
 
+def test_alloc_sees_the_library_s_nodes_and_their_tags(tmp_path: Path) -> None:
+    """The library's stems share the quilt's prefix, so `loom new` passes a node's file and an id only the tag log still names."""
+    from loom.paths import LIBRARY_NODES, TAG_LOG
+
+    q = demo(tmp_path)
+    (q / LIBRARY_NODES).mkdir(parents=True)
+    (q / LIBRARY_NODES / "dm-0030-ref.node").write_text("+++\n")
+    assert ok("new", "lemma", cwd=q).output.startswith("dm-0031 ")
+    (q / TAG_LOG).parent.mkdir(parents=True)
+    (q / TAG_LOG).write_text('{"event": "tag", "node": "dm-0040-proof00", "tag": "x"}\n')
+    assert ok("new", "lemma", cwd=q).output.startswith("dm-0041 ")
+
+
 def test_a_labelling_run_carries_its_patch_in_json_and_says_how_to_apply_it(tmp_path: Path) -> None:
     """T8: `id FILE --json` was refused, though the text has a patch to carry; T3: the patch came with no word on applying it."""
     q = demo(tmp_path)

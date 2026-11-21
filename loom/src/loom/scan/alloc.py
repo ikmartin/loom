@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
+import contextlib
+import os
 import re
 import subprocess
 
-from loom.paths import ANNOTATION_LOG, LEDGER
+from loom.paths import ANNOTATION_LOG, LEDGER, LIBRARY_NODES, TAG_LOG
 from loom.scan.labels import LOOMLOCAL
 from loom.scan.scan import ScanResult
 
 
 def visible_locals(result: ScanResult, prefix: str) -> set[str]:
-    """Every local part under `prefix` that anything can point at: ids in source, the acceptance ledger's keys, the history ledger's keys and every file name under its steps (an id the history has recorded is never allocated again), annotation targets, references anywhere (dangling included), and git history. A command that writes the id it draws from these holds the id lock from before its scan (`cli._quilt.draws_ids`)."""
+    """Every local part under `prefix` that anything can point at: ids in source, the acceptance ledger's keys, the history ledger's keys and every file name under its steps (an id the history has recorded is never allocated again), annotation targets, the library's nodes and the tags on them, references anywhere (dangling included), and git history. A command that writes the id it draws from these holds the id lock from before its scan (`cli._quilt.draws_ids`); one that mints a library node's stem draws from these too, since the library and the author's sources share the prefix."""
     pat = re.compile(r"\b" + re.escape(prefix) + r"-([0-9A-Z]{4})\b")
     found: set[str] = set()
     for src in result.files.values():
@@ -26,9 +28,11 @@ def visible_locals(result: ScanResult, prefix: str) -> set[str]:
         for step in history.iterdir():
             if step.is_dir() and step.name != "texts":
                 found.update(pat.findall(" ".join(p.name for p in step.iterdir())))
-    log = root / ANNOTATION_LOG
-    if log.is_file():
-        found.update(pat.findall(log.read_text(encoding="utf-8", errors="replace")))
+    for log in (root / ANNOTATION_LOG, root / TAG_LOG):
+        if log.is_file():
+            found.update(pat.findall(log.read_text(encoding="utf-8", errors="replace")))
+    with contextlib.suppress(FileNotFoundError, NotADirectoryError):
+        found.update(pat.findall(" ".join(os.listdir(root / LIBRARY_NODES))))
     from loom import gitprog
 
     try:
