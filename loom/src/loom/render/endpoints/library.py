@@ -236,10 +236,11 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
             items = body.get("items")
             if not isinstance(items, list) or not items:
                 raise ApiError("missing-field", "items is required: the files received and the texts pasted")
-            if not quilt.config.online_asked:
+            online = _allowance(body)
+            if online is None and not quilt.config.online_asked:
                 raise ApiError(
                     "network-unasked",
-                    "this quilt has not said whether loom may look papers up online: ask once, and save the answer as library.online",
+                    "this quilt has not said whether loom may look papers up online: take it again with online false, or ask once and save the answer as library.online",
                     status=409,
                 )
             taken: list[Item] = []
@@ -255,7 +256,9 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
                     taken.append(Item(text=text))
                 else:
                     raise ApiError("bad-field", "each item is {incoming, for?} or {text}")
-            rows = take(root, taken, by=who, online=quilt.config.online, result=_scan(root))
+            rows = take(
+                root, taken, by=who, online=quilt.config.online if online is None else online, result=_scan(root)
+            )
             counts = {s: sum(1 for r in rows if r.state == s) for s in ("added", "here", "question", "cannot")}
             said = ", ".join(f"{n} {s}" for s, n in counts.items() if n)
             return {"ok": True, "result": f"took in {len(rows)}: {said}", "rows": [r.to_json() for r in rows]}
@@ -266,7 +269,15 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
             same = body["same"]
             if same is not None and not isinstance(same, str):
                 raise ApiError("bad-field", "same must be a reference or null")
-            row = answer(root, question, same, by=who, online=quilt.config.online, result=_scan(root))
+            online = _allowance(body)
+            row = answer(
+                root,
+                question,
+                same,
+                by=who,
+                online=quilt.config.online if online is None else online,
+                result=_scan(root),
+            )
             return {"ok": True, "result": f"{row.name}: {row.state}", "row": row.to_json()}
         if endpoint == "library-undo":
             drop = _str(body, "id", required=True) or ""
@@ -280,6 +291,14 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
         return {"ok": True, "result": f"took the {which} off {ref}; it waits to be taken in", **off}
     except IntakeRefused as exc:
         raise _refused(exc) from exc
+
+
+def _allowance(body: dict[str, Any]) -> bool | None:
+    """The person's allowance of the network for this one act, `online` in the body, or None when the quilt's setting decides."""
+    online = body.get("online")
+    if online is not None and not isinstance(online, bool):
+        raise ApiError("bad-field", "online is true or false: the network allowed or not for this one act")
+    return online
 
 
 def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -308,10 +327,12 @@ def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
         ref = _str(body, "ref", required=True) or ""
         if endpoint == "library-look-up":
             quilt = load_quilt(root)
-            if not quilt.config.online:
+            # `online: true` is the person's word for this one look-up, the question a row asks right after a drop on a quilt with the network off
+            allowed = _allowance(body)
+            if not (quilt.config.online if allowed is None else allowed):
                 raise ApiError(
-                    "network-unasked" if not quilt.config.online_asked else "offline",
-                    "a look-up needs the network, which this quilt has not allowed: ask once, and save the answer as library.online",
+                    "network-unasked" if allowed is None and not quilt.config.online_asked else "offline",
+                    "a look-up needs the network, which this quilt has not allowed: allow it for this one look-up with online true, or save library.online",
                     status=409,
                 )
             look_up(root, ref, by=who, kind="person")

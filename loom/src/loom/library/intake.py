@@ -90,6 +90,7 @@ class Row:
     tex: bool = False
     unconfirmed: bool = False
     under: bool = False
+    identifier: str = ""
     why: str = ""
     code: str = ""
     question: str = ""
@@ -103,7 +104,13 @@ class Row:
         if self.state in ("added", "here"):
             out.update(ref=self.ref, short=self.short, title=self.title, authors=self.authors, year=self.year)
         if self.state == "added":
-            out.update(found_by=self.found_by, tex=self.tex, unconfirmed=self.unconfirmed, under=self.under)
+            out.update(
+                found_by=self.found_by,
+                tex=self.tex,
+                unconfirmed=self.unconfirmed,
+                under=self.under,
+                identifier=self.identifier or None,
+            )
             if self.act:
                 out["act"] = self.act
         if self.state == "question":
@@ -597,6 +604,7 @@ def _add_new(t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: 
             found_by=found_by,
             tex=which == "tex",
             unconfirmed=found_by in log.LOOKABLE and not looked,
+            identifier=_identifier(text),
         )
     _store(t.root, f, which)
     try:
@@ -619,6 +627,7 @@ def _add_new(t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: 
         found_by=found_by,
         tex=which == "tex",
         unconfirmed=found_by in log.LOOKABLE and not looked,
+        identifier=_identifier(text),
         act=act,
     )
 
@@ -807,6 +816,7 @@ def _add_entry(t: _Take, n: int, rid: str, name: str, text: str, found_by: str, 
             year=year(fields),
             found_by=found_by,
             unconfirmed=unconfirmed,
+            identifier=_identifier(text),
         )
     try:
         node = make(
@@ -823,7 +833,23 @@ def _add_entry(t: _Take, n: int, rid: str, name: str, text: str, found_by: str, 
     except NodeRefused as exc:
         return Row(rid, n, name, "cannot", code="refused", why=str(exc))
     t.lib = Library.read(t.root)
-    return Row(rid, n, name, "added", **t.lib.shown(node.id), found_by=found_by, unconfirmed=unconfirmed)
+    return Row(
+        rid,
+        n,
+        name,
+        "added",
+        **t.lib.shown(node.id),
+        found_by=found_by,
+        unconfirmed=unconfirmed,
+        identifier=_identifier(text),
+    )
+
+
+def _identifier(text: str) -> str:
+    """The first identifier an entry states (`arxiv:2209.01234v2`, `doi:…`), which a look-up would ask; '' when it states none."""
+    entry = read_entry(text)
+    stated = identifiers(entry.fields) if entry else []
+    return stated[0] if stated else ""
 
 
 # ---- the question, undo and unfile --------------------------------------------------------------------------------

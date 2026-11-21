@@ -383,9 +383,16 @@ def _library_take(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         "author-only",
         "only the author",
     )
+    refuses(
+        s, "library-take", {"items": [{"text": ENTRY}], "online": "yes"}, 400, "bad-field", "online is true or false"
+    )
     config = q / "config.toml"
     config.write_text(config.read_text().replace("online = false", ""))
-    refuses(s, "library-take", {"items": [{"incoming": asked}]}, 409, "network-unasked", "has not said")
+    refuses(s, "library-take", {"items": [{"incoming": asked}]}, 409, "network-unasked", "online false")
+    # made again without the network: each work added names the identifier found, which its row offers to look up this once
+    row = succeeds(s, "library-take", {"items": [{"text": "arXiv:2209.01234v2"}], "online": False})["rows"][0]
+    assert (row["state"], row["unconfirmed"], row["identifier"]) == ("added", True, "arxiv:2209.01234v2"), row
+    assert rows[0]["identifier"] is None, "a work found by its title alone states none"
 
 
 @case("library-answer")
@@ -469,6 +476,9 @@ def _library_look_up(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     man12 = _pasted(s, MAN12)
     plain = _pasted(s, "@misc{Notes, title = {Notes with no identifier}}\n")
     refuses(s, "library-look-up", {"ref": man12}, 409, "offline", "needs the network")
+    # the person's yes for this one look-up passes a quilt with the network off; `plain` states nothing to look up
+    refuses(s, "library-look-up", {"ref": plain, "online": True}, 409, "no-identifier", "states no")
+    refuses(s, "library-look-up", {"ref": man12, "online": False}, 409, "offline", "online true")
     config = q / "config.toml"
     config.write_text(config.read_text().replace("online = false", "online = true"))
     refuses(s, "library-look-up", {"ref": plain}, 409, "no-identifier", "states no")
