@@ -124,7 +124,7 @@ Loom runs the check itself, fenced, so that "Lean accepted this" is something lo
 
 ## The views
 
-Four views, each for one kind of work, as the author set them on 2026-11-20 after the first mock-up.
+Four views, each for one kind of work, as the author set them on 2026-11-20 after the first mock-up. The mock-up he settled on 2026-11-21 as the one to build from, its sixth round, is kept at [`mockups/library-round-6/`](mockups/library-round-6/README.md) with his marks and the rulings on them; where this section and that mock-up differ on what a screen shows, the mock-up and its rulings are the later word until this section is rewritten from them.
 
 - **Docs** is for drafting and editing. A work still opens beside a document there: the library is a control that opens a compact picker over the view, a list or thumbnails sorted by author or by title, and all notes is a control that opens their page as a tab.
 - **The Library** is for works: the list of them, as a reference manager has it, the digestion of each managed work by work, and reading. It has its own tabs, the list of works the leftmost, and a work opens in a tab there. It repeats some of Docs on purpose: Docs is made for writing and the Library for reading. The reader of a PDF is the same in both, with the same notes and marks.
