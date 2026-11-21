@@ -62,6 +62,8 @@ The viewer draws `matches` as round six's filled circle ("matches the paper"), `
 
 **Who writes.** Every write this page adds is the person's and is refused to a declared agent with `author-only` (403), as the intake's are (`write-api.md` §6); the built writes it uses keep their own rules. An agent changes the web by its own commands (`library.md`, "What an agent can do to the web"). Errors are the write API's: a name that is not there answers 404 with `no-such-` and what it named (`no-such-ref`, `no-such-node`, `no-such-result`, `no-such-row`, `no-such-task`), a request refused on its merits 400, a conflict with the quilt's state 409.
 
+**A quilt an earlier loom made.** Where `GET /_api` answers `format.found` below `format.reads` (`write-api.md` §1), the publisher waits on the quilt and serves only `library-upgrade`, and the frame draws only the column's head, one sentence, "This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.", and one button, `upgrade the quilt`, which is `library-upgrade`. While it runs, and if it is refused, a sentence of the viewer's says so ("Only the quilt's author can upgrade it.", for `author-only`), never the publisher's message, which names files and a command. An upgrade whose `carried.problems` is not empty says how many things could not be carried over, and the button then opens the quilt; otherwise the page loads again at once, and the publisher builds the quilt as it does any.
+
 ## 3. The Library
 
 ### 3.1 The works list (1, 1 thumbs, 1 add, 1 digest, 1c, 1d)

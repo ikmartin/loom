@@ -150,3 +150,44 @@ test("an undo by keyboard hands the keyboard to the foot's next control, and a m
 	await page.mouse.move(700, 600);
 	await expect(page.getByTestId('column-message-dot')).toHaveCount(0, { timeout: 9000 });
 });
+
+test("a quilt an earlier loom made: the frame's head, one sentence and one button, said while it runs and when it fails, and the quilt itself once upgraded", async ({ page }) => {
+	// a publisher waiting on a quilt in an earlier layout, as `write-api.md` §1 has it: only the upgrade served
+	let found = 1;
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: found < 2 ? ['library-upgrade'] : [], format: { found, reads: 2 }, token: 't' } }));
+	const answers: (() => Promise<void>)[] = [];
+	await page.route('**/_api/library-upgrade', (route) => new Promise<void>((done) => answers.push(() => route.fulfill(next()).then(done))));
+	let next: () => { status: number; json: unknown } = () => ({ status: 409, json: { error: { code: 'format-unknown', message: "this quilt's .loom/format says 7, and this loom reads format 2" } } });
+	await servePapers(page);
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/');
+	const old = page.getByTestId('format-old');
+	await expect(old).toBeVisible();
+	await expect(page.getByTestId('format-old-said')).toHaveText('This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.');
+	// only the head: no view names, no files, no foot
+	await expect(page.getByTestId('quilt-name')).toHaveText('loom');
+	for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`primary-${v}`)).toHaveCount(0);
+	await expect(page.getByTestId('session-footer')).toHaveCount(0);
+	await expect(page.locator('main code')).toHaveCount(0);
+	// while it runs, then refused: a sentence of loom's, never the publisher's message or a command
+	const button = page.getByTestId('format-old-upgrade');
+	await button.click();
+	await expect(page.getByTestId('format-old-said')).toHaveText('Upgrading the quilt and carrying its papers over…');
+	await expect(button).toBeDisabled();
+	await expect.poll(() => answers.length).toBe(1);
+	await answers.shift()!();
+	await expect(page.getByTestId('format-old-said')).toHaveText('This quilt was made by a version of loom this one cannot upgrade from.');
+	await expect(old).not.toContainText('.loom');
+	await expect(old).not.toContainText('loom upgrade');
+	// carried, but not all of it: said, and the button opens the quilt
+	next = () => ({ status: 200, json: { ok: true, result: 'brought the quilt forward', carried: { references: 3, documents: 1, notes_rekeyed: 0, overviews: 0, links_rewritten: 0, removed: [], problems: ['one entry could not be read'] } } });
+	await button.click();
+	await expect.poll(() => answers.length).toBe(1);
+	found = 2;
+	await answers.shift()!();
+	await expect(page.getByTestId('format-old-said')).toHaveText('The quilt is upgraded, but one thing could not be carried over.');
+	await expect(button).toHaveText('open the quilt');
+	await button.click();
+	await expect(old).toHaveCount(0);
+	await expect(page.getByTestId('primary-docs')).toBeVisible();
+});

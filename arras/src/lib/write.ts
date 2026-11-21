@@ -7,6 +7,7 @@
 import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { judge } from '$lib/outOfStep.svelte';
+import { judgeFormat } from '$lib/shell/upgrade.svelte';
 
 export interface Capabilities {
 	write_api: number;
@@ -23,6 +24,8 @@ export interface Capabilities {
 	stale?: boolean;
 	/** The origin an HTML file is framed from, never the viewer's own; absent where none runs, and a page is then drawn with no script. */
 	frames?: string;
+	/** The layout the publisher found the quilt in and the one this loom reads; `found` below `reads` while it waits on a quilt an earlier loom made (shell/upgrade.svelte.ts). */
+	format?: { found: number; reads: number };
 }
 
 /** The versions of the write API this viewer knows how to speak. */
@@ -49,6 +52,7 @@ export function capabilities(): Promise<Capabilities | null> {
 	})().then((caps) => {
 		settled = caps;
 		judge(caps);
+		judgeFormat(caps);
 		for (const watch of watchers) watch(caps);
 		return caps;
 	});

@@ -89,6 +89,24 @@ export const frame = {
 		/** Where the publisher answered with no reason a person can read. */
 		failed: 'Loom could not do that.'
 	},
+	/** A quilt an earlier loom made, while the publisher waits on it: the one sentence, its button, and what is said while it runs and if it fails. */
+	upgrade: {
+		said: 'This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.',
+		button: 'upgrade the quilt',
+		running: 'Upgrading the quilt and carrying its papers over…',
+		/** Said after an upgrade that could not carry everything; the button then opens the quilt. */
+		problems: (n: number) => `The quilt is upgraded, but ${n === 1 ? 'one thing' : `${n} things`} could not be carried over.`,
+		open: 'open the quilt',
+		/** Why an upgrade did not happen, by the publisher's refusal; the button stays, to try again. */
+		failed: (code: string) =>
+			code === 'author-only'
+				? "Only the quilt's author can upgrade it."
+				: code === 'format-unknown'
+					? 'This quilt was made by a version of loom this one cannot upgrade from.'
+					: code === 'unreachable'
+						? 'Loom could not be reached, so the quilt was not upgraded.'
+						: 'The upgrade did not finish; try it again.'
+	},
 	page: {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',

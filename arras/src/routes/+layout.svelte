@@ -31,6 +31,9 @@
 	import { startReporting } from '$lib/here.svelte';
 	import { frame } from '$lib/words/frame';
 	import { chooseSource } from '$lib/library/source';
+	import OldFormat from '$lib/shell/OldFormat.svelte';
+	import { upgrade } from '$lib/shell/upgrade.svelte';
+	import { capabilities } from '$lib/write';
 
 	let { children } = $props();
 
@@ -40,6 +43,8 @@
 		sessionView.load();
 		store.start(1000);
 		void listen();
+		// asked at once, so a quilt an earlier loom made is known before anything else is drawn of it
+		void capabilities();
 	});
 
 	// A stored selection the corpus no longer lists is dropped once, on the first manifest; after that a session just made with `+ new` is briefly missing from the manifest and must survive it.
@@ -145,6 +150,10 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+<!-- a quilt an earlier loom made: the frame's head, one sentence and one button, and nothing else until it is upgraded -->
+{#if upgrade.waiting}
+	<OldFormat />
+{:else}
 <Column
 	label={m ? m.corpus.name : frame.column.unnamed}
 	primary={primaryOf(page.route.id)}
@@ -187,3 +196,4 @@
 <DeletedBar />
 <OutOfStep />
 <Toast />
+{/if}
