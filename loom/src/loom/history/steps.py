@@ -181,8 +181,9 @@ def refuse_stale(history: History) -> None:
     EnvError
         When another step has been recorded since `history` was read.
     """
-    now = load_history(history.dir).next_step()
-    if now != history.next_step():
+    # by the ledger's steps alone: `next_step` also counts the step folders on disk, which a stale reading sees too
+    now = max((e.step or 0 for e in load_history(history.dir).entries), default=0) + 1
+    if now != max((e.step or 0 for e in history.entries), default=0) + 1:
         from loom.errors import EnvError
 
         raise EnvError(
