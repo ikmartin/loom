@@ -7,14 +7,21 @@ from __future__ import annotations
 
 import contextlib
 import os
+import re
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from loom.library import ids
 from loom.library.checks import check_file, diagnostics
 from loom.library.index import NodeIndex
 from loom.library.node import SUFFIX, Node, Problem, file_name, node_bytes, node_hash, read_node
 from loom.locks import locked
-from loom.paths import LIBRARY_LOCK, LIBRARY_NODES
+from loom.paths import ANNOTATION_LOG, LEDGER, LIBRARY_LOCK, LIBRARY_NODES, TAG_LOG
+from loom.scan.alloc import git_mentions, visible_locals
 from loom.scan.model import Diagnostic
+
+if TYPE_CHECKING:
+    from loom.scan.scan import ScanResult
 
 
 class NodeRefused(ValueError):
@@ -65,6 +72,48 @@ def read(root: Path, node_id: str) -> Node | None:
     except FileNotFoundError:
         return None
     return read_node(data, file_name(node_id))
+
+
+def next_stem(result: ScanResult) -> str:
+    """A new stem for a library node: one past the largest local part anything in the quilt names under its prefix, the author's sources, records, the library and git history among them, as `loom id --next` draws.
+
+    A writer draws it under the id lock (`loom.locks`, `paths.ID_LOCK`), held from before its scan, as the commands that draw an author's id do.
+
+    Parameters
+    ----------
+    result : ScanResult
+        The quilt's scan.
+
+    Returns
+    -------
+    str
+        `prefix-XXXX`.
+    """
+    prefix = result.quilt.config.prefix
+    return ids.mint_stem(prefix, [f"{prefix}-{local}" for local in visible_locals(result, prefix)])
+
+
+def next_proof(root: Path, statement: str) -> str:
+    """A new proof's id under `statement`: one past the largest proof number the library's files, the tag log, the annotation log, the acceptance ledger and git history name under it, so a number seen anywhere is not given again.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    statement : str
+        The statement's id.
+
+    Returns
+    -------
+    str
+        `statement-proofNN`.
+    """
+    seen = [file_name(n) for n in node_ids(root)]
+    for record in (TAG_LOG, ANNOTATION_LOG, LEDGER):
+        with contextlib.suppress(FileNotFoundError):
+            seen.append((root / record).read_text(encoding="utf-8", errors="replace"))
+    seen.append(git_mentions(root, rf"{re.escape(statement)}-proof[0-9A-Z]{{2}}"))
+    return ids.mint_proof(statement, seen)
 
 
 def write_node(root: Path, node: Node) -> str:
@@ -119,7 +168,7 @@ def write_node(root: Path, node: Node) -> str:
             finally:
                 with contextlib.suppress(FileNotFoundError):
                     temporary.unlink()
-            index.refresh()
+            index.take([name])
     return node_hash(data)
 
 

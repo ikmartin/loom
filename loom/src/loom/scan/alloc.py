@@ -6,6 +6,7 @@ import contextlib
 import os
 import re
 import subprocess
+from pathlib import Path
 
 from loom.paths import ANNOTATION_LOG, LEDGER, LIBRARY_NODES, TAG_LOG
 from loom.scan.labels import LOOMLOCAL
@@ -33,11 +34,20 @@ def visible_locals(result: ScanResult, prefix: str) -> set[str]:
             found.update(pat.findall(log.read_text(encoding="utf-8", errors="replace")))
     with contextlib.suppress(FileNotFoundError, NotADirectoryError):
         found.update(pat.findall(" ".join(os.listdir(root / LIBRARY_NODES))))
+    found.update(pat.findall(git_mentions(root, rf"{re.escape(prefix)}-[0-9A-Z]{{4}}")))
+    return {x for x in found if LOOMLOCAL.match(x)}
+
+
+def git_mentions(root: Path, pattern: str) -> str:
+    """Every match of the extended regular expression `pattern`, as a whole word, in the files of the quilt's newest 500 commits on any ref, one a line; empty without git or a repository.
+
+    The word is `git grep -w`'s, since `\\b` is a GNU extension Apple's git does not read: a pattern holding one matches nothing there.
+    """
     from loom import gitprog
 
     try:
         if not gitprog.usable():
-            raise FileNotFoundError("git")
+            return ""
         revs = subprocess.run(
             ["git", "-C", str(root), "rev-list", "--all", "--max-count=500"],
             capture_output=True,
@@ -46,26 +56,16 @@ def visible_locals(result: ScanResult, prefix: str) -> set[str]:
             timeout=20,
             check=False,
         )
-        if revs.returncode == 0 and revs.stdout.strip():
-            out = subprocess.run(
-                [
-                    "git",
-                    "-C",
-                    str(root),
-                    "grep",
-                    "-h",
-                    "-o",
-                    "-E",
-                    rf"\b{re.escape(prefix)}-[0-9A-Z]{{4}}\b",
-                    *revs.stdout.split(),
-                ],
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=60,
-                check=False,
-            )
-            found.update(pat.findall(out.stdout))
+        if revs.returncode != 0 or not revs.stdout.strip():
+            return ""
+        out = subprocess.run(
+            ["git", "-C", str(root), "grep", "-h", "-o", "-w", "-E", pattern, *revs.stdout.split()],
+            capture_output=True,
+            text=True,
+            errors="replace",
+            timeout=60,
+            check=False,
+        )
+        return out.stdout
     except (OSError, subprocess.SubprocessError):
-        pass
-    return {x for x in found if LOOMLOCAL.match(x)}
+        return ""

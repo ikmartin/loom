@@ -42,6 +42,31 @@ def test_alloc_sees_the_library_s_nodes_and_their_tags(tmp_path: Path) -> None:
     assert ok("new", "lemma", cwd=q).output.startswith("dm-0041 ")
 
 
+def test_alloc_sees_an_id_only_git_history_holds(tmp_path: Path) -> None:
+    """An id committed and then removed is not given again: on Apple's git too, which reads no `\\b` in a pattern."""
+    import subprocess
+
+    import pytest
+
+    from loom.gitprog import usable
+
+    if not usable():
+        pytest.skip("no git")
+    q = demo(tmp_path)
+    (q / "drafting" / "nodes" / "gone.tex").write_text("\\begin{lemma}\\label{dm-0060}\nx\n\\end{lemma}\n")
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=q, check=True, capture_output=True
+        )
+
+    git("init", "-q")
+    git("add", ".")
+    git("commit", "-qm", "with dm-0060")
+    (q / "drafting" / "nodes" / "gone.tex").unlink()
+    assert ok("new", "lemma", cwd=q).output.startswith("dm-0061 ")
+
+
 def test_a_labelling_run_carries_its_patch_in_json_and_says_how_to_apply_it(tmp_path: Path) -> None:
     """T8: `id FILE --json` was refused, though the text has a patch to carry; T3: the patch came with no word on applying it."""
     q = demo(tmp_path)

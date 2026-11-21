@@ -61,6 +61,7 @@ CREATE INDEX nodes_taxon ON nodes(taxon);
 CREATE INDEX nodes_number ON nodes(number);
 CREATE INDEX nodes_citekey ON nodes(citekey COLLATE NOCASE);
 CREATE INDEX nodes_folded ON nodes(id COLLATE NOCASE);
+CREATE INDEX nodes_stubs ON nodes(source) WHERE kind = 'statement' AND empty = 1;
 CREATE TABLE edges(src TEXT NOT NULL, kind TEXT NOT NULL, dst TEXT NOT NULL, PRIMARY KEY (src, kind, dst)) WITHOUT ROWID;
 CREATE INDEX edges_dst ON edges(dst, kind);
 CREATE TABLE anchors(owner TEXT NOT NULL, anchor TEXT NOT NULL, PRIMARY KEY (owner, anchor)) WITHOUT ROWID;
@@ -143,6 +144,7 @@ class NodeIndex:
     def __init__(self, root: Path, db: sqlite3.Connection) -> None:
         self.root = root
         self.db = db
+        self._works: dict[str, str] = {}
 
     # ---- making and keeping ------------------------------------------------------------------------------------------
 
@@ -251,34 +253,79 @@ class NodeIndex:
     def refresh(self) -> Refreshed:
         """Bring the index up to date with the files and the tag log.
 
+        The folder is looked at once, without the write lock; only when something differs is the lock taken, and what was seen is read under it. The time of the update is taken before the look, so a file that changes while it is read is read again at the next.
+
+        Returns
+        -------
+        Refreshed
+            What was read and changed.
+        """
+        started = time.time_ns()
+        present = _scan(self.root / LIBRARY_NODES)
+        if self._unchanged(present):
+            return Refreshed(0, 0, 0, False)
+        return self._update(present, started, None)
+
+    def take(self, names: Iterable[str]) -> Refreshed:
+        """Bring the index up to date for the files `names` alone, which a writer has just written or removed; the rest waits for the next update, which reads them again since they were written after the last.
+
+        Parameters
+        ----------
+        names : iterable of str
+            File names, `<id>.node`.
+
         Returns
         -------
         Refreshed
             What was read and changed.
         """
         folder = self.root / LIBRARY_NODES
-        started = time.time_ns()
+        only = set(names)
+        present: dict[str, os.stat_result] = {}
+        for name in only:
+            with contextlib.suppress(FileNotFoundError):
+                present[name] = (folder / name).stat()
+        return self._update(present, time.time_ns(), only)
+
+    def _update(self, present: dict[str, os.stat_result], started: int, only: set[str] | None) -> Refreshed:
+        self._works = {}
         self.db.execute("BEGIN IMMEDIATE")
         try:
-            done = self._refresh(folder, started)
+            done = self._refresh(present, started, only)
             self.db.execute("COMMIT")
         except BaseException:
             self.db.execute("ROLLBACK")
             raise
         return done
 
-    def _refresh(self, folder: Path, started: int) -> Refreshed:
+    def _unchanged(self, present: dict[str, os.stat_result]) -> bool:
+        """Whether nothing needs reading: the same files with the same sizes and times, none written within `RACY` of the last update, and the tag log as it was."""
         last = int(self._meta("refreshed") or 0)
-        known = {
-            name: (size, mtime, digest)
-            for name, size, mtime, digest in self.db.execute("SELECT name, size, mtime_ns, hash FROM files")
-        }
-        present: dict[str, os.stat_result] = {}
-        with contextlib.suppress(FileNotFoundError, NotADirectoryError):
-            with os.scandir(folder) as entries:
-                for entry in entries:
-                    if entry.name.endswith(SUFFIX) and entry.is_file():
-                        present[entry.name] = entry.stat()
+        if not last:
+            return False
+        known = {name: (size, mtime) for name, size, mtime in self.db.execute("SELECT name, size, mtime_ns FROM files")}
+        if len(known) != len(present):
+            return False
+        for name, st in present.items():
+            if known.get(name) != (st.st_size, st.st_mtime_ns) or st.st_mtime_ns >= last - RACY:
+                return False
+        return self._tags_due(last) is None
+
+    def _tags_due(self, last: int) -> str | None:
+        """The tag log's stamp when it must be replayed, its size and time differing from the last replay's or written within `RACY` of the last update; None when it need not be."""
+        try:
+            st = (self.root / TAG_LOG).stat()
+            stamp, racy = f"{st.st_size}:{st.st_mtime_ns}", st.st_mtime_ns >= last - RACY
+        except FileNotFoundError:
+            stamp, racy = "none", False
+        return stamp if self._meta("tags") != stamp or racy else None
+
+    def _refresh(self, present: dict[str, os.stat_result], started: int, only: set[str] | None) -> Refreshed:
+        """Read what differs among `present` under the write lock; `only` limits the update to those files, and then neither the tags nor the time of the last update move."""
+        folder = self.root / LIBRARY_NODES
+        last = int(self._meta("refreshed") or 0)
+        rows = self.db.execute("SELECT name, size, mtime_ns, hash FROM files")
+        known = {name: (size, mtime, digest) for name, size, mtime, digest in rows if only is None or name in only}
         read = changed = 0
         works: set[str] = set()
         fresh: set[str] = set()
@@ -300,7 +347,8 @@ class NodeIndex:
                 )
                 continue
             changed += 1
-            works |= self._forget(name)
+            if was:
+                works |= self._forget(name)
             node = None
             with contextlib.suppress(NodeUnreadable):
                 node = read_node(data, name)
@@ -317,6 +365,8 @@ class NodeIndex:
             removed += 1
         if works:
             self._rework(works, fresh)
+        if only is not None:
+            return Refreshed(read, changed, removed, False)
         tags = self._retag(last)
         self._set_meta("refreshed", str(started))
         return Refreshed(read, changed, removed, tags)
@@ -335,6 +385,7 @@ class NodeIndex:
         self.db.execute("DELETE FROM nodes WHERE id = ?", (node_id,))
         self.db.execute("DELETE FROM edges WHERE src = ?", (node_id,))
         self.db.execute("DELETE FROM anchors WHERE owner = ?", (node_id,))
+        self._works.pop(node_id, None)
         return {node_id} if was[1] == ids.REFERENCE else set()
 
     def _remember(self, node: Node, digest: str) -> set[str]:
@@ -367,14 +418,18 @@ class NodeIndex:
         return {node.id} if node.kind == ids.REFERENCE else set()
 
     def _work_words(self, source: str | None) -> str:
+        """The words a search of `source`'s work matches, read once an update."""
         if not source:
             return ""
-        row = self.db.execute("SELECT body FROM nodes WHERE id = ?", (source,)).fetchone()
-        return _work(row[0])[1] if row else ""
+        if source not in self._works:
+            row = self.db.execute("SELECT body FROM nodes WHERE id = ?", (source,)).fetchone()
+            self._works[source] = _work(row[0])[1] if row else ""
+        return self._works[source]
 
     def _rework(self, works: set[str], fresh: set[str]) -> None:
         """Make again the work words of every node read from one of `works`, whose entries changed, but those put in by this pass, which have them."""
         for work in works:
+            self._works.pop(work, None)
             text = self._work_words(work)
             rows = self.db.execute(
                 "SELECT rowid, id FROM nodes WHERE source = ? AND kind IN ('statement', 'proof')", (work,)
@@ -384,13 +439,9 @@ class NodeIndex:
             )
 
     def _retag(self, last: int) -> bool:
-        """Replay the tag log into the index when it changed since the last update, by its size and time, or was written within `RACY` of it; whether it was."""
-        try:
-            st = (self.root / TAG_LOG).stat()
-            stamp, racy = f"{st.st_size}:{st.st_mtime_ns}", st.st_mtime_ns >= last - RACY
-        except FileNotFoundError:
-            stamp, racy = "none", False
-        if self._meta("tags") == stamp and not racy:
+        """Replay the tag log into the index when `_tags_due` says so; whether it was."""
+        stamp = self._tags_due(last)
+        if stamp is None:
             return False
         tags = replay(self.root)
         self.db.execute("DELETE FROM tags")
@@ -572,23 +623,20 @@ class NodeIndex:
             where.append("n.source = ?")
             args.append(ref)
         if taxon:
-            where.append(
-                "(n.taxon = ? OR (n.kind = 'proof' AND (SELECT taxon FROM nodes p WHERE p.id = n.parent) = ?))"
-            )
-            args += [taxon, taxon]
+            of_taxon = "(SELECT id FROM nodes WHERE taxon = ?)"
+            where.append(f"(n.taxon = ? OR n.parent IN {of_taxon})" if proofs else "n.taxon = ?")
+            args += [taxon] * (2 if proofs else 1)
         if tag:
-            where.append(
-                "(SELECT 1 FROM tags t WHERE t.folded = ? AND t.node = (CASE n.kind WHEN 'proof' THEN n.parent ELSE n.id END))"
-            )
-            args.append(tag.casefold())
+            tagged = "(SELECT node FROM tags WHERE folded = ?)"
+            where.append(f"(n.id IN {tagged} OR n.parent IN {tagged})" if proofs else f"n.id IN {tagged}")
+            args += [tag.casefold()] * (2 if proofs else 1)
         for number in numbers:
-            where.append(
-                "(CASE n.kind WHEN 'proof' THEN (SELECT number FROM nodes p WHERE p.id = n.parent) ELSE n.number END) = ?"
-            )
-            args.append(number)
+            numbered = "(SELECT id FROM nodes WHERE number = ?)"
+            where.append(f"(n.number = ? OR n.parent IN {numbered})" if proofs else "n.number = ?")
+            args += [number] * (2 if proofs else 1)
         if terms:
             query = " ".join(f'"{t}"' for t in terms[:-1]) + f' "{terms[-1]}"*'
-            sql = f"SELECT {', '.join('n.' + c.strip() for c in _ROW.split(','))}, bm25(words, 1.0, 4.0, 2.0, 1.0) AS score FROM words JOIN nodes n ON n.rowid = words.rowid WHERE words MATCH ? AND {' AND '.join(where)} ORDER BY score"
+            sql = f"SELECT {', '.join('n.' + c.strip() for c in _ROW.split(','))}, bm25(words, 1.0, 4.0, 2.0, 1.0) AS score FROM words CROSS JOIN nodes n ON n.rowid = words.rowid WHERE words MATCH ? AND {' AND '.join(where)} ORDER BY score"
             found = self.db.execute(sql, [query, *args]).fetchall()
         else:
             sql = f"SELECT {', '.join('n.' + c.strip() for c in _ROW.split(','))}, 0 FROM nodes n WHERE {' AND '.join(where)} ORDER BY n.source, n.numkey IS NULL, n.numkey, n.id"
@@ -634,6 +682,17 @@ class NodeIndex:
 
     def _rows(self, sql: str, args: Iterable[Any]) -> list[Row]:
         return [_row(r) for r in self.db.execute(sql, tuple(args))]
+
+
+def _scan(folder: Path) -> dict[str, os.stat_result]:
+    """Each node file directly in `folder`, by name, with its `stat`; empty when there is no folder."""
+    present: dict[str, os.stat_result] = {}
+    with contextlib.suppress(FileNotFoundError, NotADirectoryError):
+        with os.scandir(folder) as entries:
+            for entry in entries:
+                if entry.name.endswith(SUFFIX) and entry.is_file():
+                    present[entry.name] = entry.stat()
+    return present
 
 
 def _row(record: Any) -> Row:

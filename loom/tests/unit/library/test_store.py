@@ -112,3 +112,51 @@ def test_a_write_touches_the_node_the_lock_and_the_index_alone(tmp_path: Path) -
         ".loom/local/library.lock",
     ]
     assert not [m for m in made if m.endswith(".tmp")]
+
+
+def test_a_proof_s_number_is_one_past_the_largest_seen(tmp_path: Path) -> None:
+    from loom.library.store import next_proof
+    from loom.library.tags import tag
+
+    root = quilt(tmp_path)
+    assert next_proof(root, "tq-00K3") == "tq-00K3-proof01"
+    assert next_proof(root, "tq-00A4") == "tq-00A4-proof00"
+    tag(root, "tq-00K3-proof00", "short", by="Isaac", kind="person")
+    remove_node(root, "tq-00K3-proof00")
+    assert next_proof(root, "tq-00K3") == "tq-00K3-proof01", "the tag log still names proof00"
+
+
+def test_a_proof_git_remembers_is_not_given_again(tmp_path: Path) -> None:
+    import subprocess
+
+    from loom.gitprog import usable
+    from loom.library.store import next_proof
+
+    if not usable():
+        pytest.skip("no git")
+    root = quilt(tmp_path)
+    write_node(root, Node(id="tq-00K3-proof01", taxon="proof", source="tq-00A1-ref", pages="14", body="Another way.\n"))
+
+    def git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=root, check=True, capture_output=True
+        )
+
+    git("init", "-q")
+    git("add", ".")
+    git("commit", "-qm", "nodes")
+    remove_node(root, "tq-00K3-proof01")
+    assert next_proof(root, "tq-00K3") == "tq-00K3-proof02"
+
+
+def test_a_library_stem_is_drawn_from_everything_loom_id_counts(tmp_path: Path) -> None:
+    """A stem the author's sources hold, and one only the library holds, are both passed."""
+    from loom.library.store import next_stem
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.unit._quilts import demo
+
+    q = demo(tmp_path)
+    (q / LIBRARY_NODES).mkdir(parents=True)
+    (q / LIBRARY_NODES / "dm-0050-ref.node").write_text("+++\n")
+    assert next_stem(scan(load_quilt(q))) == "dm-0051"
