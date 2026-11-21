@@ -15,10 +15,11 @@ from loom.paths import (
     AI,
     ANNOTATION_TYPES,
     ANNOTATIONS,
+    ASKS,
     CACHE,
     COPIES,
     EDITS,
-    FORMAL,
+    EVIDENCE,
     FORMAT,
     LEDGER,
     LIBRARY,
@@ -46,7 +47,7 @@ AGENT_PLACES = (SESSIONS, COPIES, SCRATCH)
 #: Files inside `.loom/` an agent may edit: the annotation types, which a quilt grows with its agents.
 AGENT_FILES = (ANNOTATION_TYPES,)
 #: Loom's directories under `.loom/`, each named, since a Claude Code deny of `.loom/` or of `.loom/records/` would beat the places' and the annotation types' allows; the history is the quilt's `[quilt] history` beside them.
-LOOM_DIRS = (ANNOTATIONS, EDITS, RETIRED, LOOKED, FORMAL, TAGS, LIBRARY, AI, LOCAL, CACHE)
+LOOM_DIRS = (ANNOTATIONS, EDITS, RETIRED, LOOKED, EVIDENCE, ASKS, TAGS, LIBRARY, AI, LOCAL, CACHE)
 #: Loom's files under `.loom/`, each named for the same reason.
 LOOM_FILES = (
     FORMAT,

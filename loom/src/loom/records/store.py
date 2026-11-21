@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from loom.clock import today
-from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, EDIT_LOG, LINKS, REVIEW_OBSERVATIONS
+from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, ASK_LOG, EDIT_LOG, EVIDENCE_LOG, LINKS, REVIEW_OBSERVATIONS
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
@@ -843,6 +843,16 @@ class Records:
 
         for p in replay_edits(self.root)[1]:
             diags.append(Diagnostic("warning", "loom:foreign-annotations", f"not a valid suggested edit: {p}", []))
+        from loom.evidence import asks, log
+
+        for p in log.replay(self.root).problems:
+            diags.append(
+                Diagnostic("warning", "loom:foreign-evidence", f"not a record of evidence: {p}", [], subject="record")
+            )
+        for p in asks.replay(self.root).problems:
+            diags.append(
+                Diagnostic("warning", "loom:foreign-asks", f"not an ask or its event: {p}", [], subject="record")
+            )
         # a missing file is the defaults, which loses nothing, so it is said quietly; one that cannot be read is a warning
         missing = not (self.root / ANNOTATION_TYPES).is_file()
         for p in self.types.problems:
@@ -852,6 +862,8 @@ class Records:
             (EDIT_LOG, ("created",)),
             (SESSION_INDEX, ("created",)),
             (LINKS, ()),
+            (EVIDENCE_LOG, ()),
+            (ASK_LOG, ("asked",)),
         ):
             for _line, said in repeated(self.root, rel, events):
                 diags.append(Diagnostic("warning", "loom:repeated-id", f"{rel}: {said}", [], subject="record"))

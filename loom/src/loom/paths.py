@@ -57,11 +57,12 @@ TAGS = f"{RECORDS}/tags"
 TAG_LOG = f"{TAGS}/log.jsonl"
 #: The default of `[quilt] history`; code reads the setting, never this.
 HISTORY = f"{RECORDS}/history"
-#: Reserved for work not built yet (docs/specs/reserved.md): nothing writes these, and an agent is already kept from them.
-#: Formal evidence, and the person's attestations.
-FORMAL = f"{RECORDS}/formal"
-FORMAL_EVIDENCE = f"{FORMAL}/evidence.jsonl"
-FORMAL_ATTESTED = f"{FORMAL}/attest.toml"
+#: What is known of a result: who digested it, compared it with its paper, what Lean said and who attested it (`evidence/log.py`, `docs/specs/evidence.md`).
+EVIDENCE = f"{RECORDS}/evidence"
+EVIDENCE_LOG = f"{EVIDENCE}/log.jsonl"
+#: What a person asked of an agent and an agent of a person: tasks, questions and papers to fetch (`evidence/asks.py`).
+ASKS = f"{RECORDS}/asks"
+ASK_LOG = f"{ASKS}/log.jsonl"
 
 # ---- the library ------------------------------------------------------------------------------------------------------
 

@@ -95,16 +95,16 @@ What is true of a node is kept apart from the kinds of edge. "Depends on somethi
 
 ## Evidence
 
-Nothing about a node's standing is stored as a verdict. It is computed from records of what someone did, each naming the node's text by its hash, so that a change to the text makes what was said of the old text stale (P3, P15).
+Nothing about a node's standing is stored as a verdict. It is computed from records of what someone did, each naming the node's text by its hash, so that a change to the text makes what was said of the old text stale (P3, P15). A draft's result is named the same way, by its label and the hash of its statement. The records' formats are [`docs/specs/evidence.md`](../specs/evidence.md).
 
 - **Digested**: by whom, from what, and how, mechanically from TeX or by an agent from pages.
-- **Transcription verified**: a person compared the node with its place in the source and found it faithful. This says nothing about the mathematics.
+- **Compared with the paper**: a person compared the node with its place in the source and found it faithful, which the viewer words "matches the paper". This says nothing about the mathematics.
 - **Lean observed**: loom ran the check itself, and records what it ran, on which versions of the node and of the Lean project, and what Lean said: the declarations, the axioms each used, the kernel's replay.
 - **Attested**: a person says the Lean statement means what the node says.
 
 So a node is known in three ways that are not confused with one another: by the literature, where it is published; by the person, who has read it, accepted it, or attested to it; and by the machine.
 
-**An attestation holds for a statement together with everything it uses.** Take a definition, "a widget is a compact set with property P", and a proposition that uses it, "every widget is bounded". The author attests that a Lean theorem says what the proposition says. If the definition is later corrected to "a closed set with property P", the proposition's own words have not changed and it now claims something else. So an attestation names the statement and every node its statement uses, and what those use in turn, and goes stale when any of them changes. Notation that a work's macros typeset and no node defines has a row of its own in what is attested, and attesting does not wait for it to be digested.
+**An attestation holds for a statement together with everything it uses.** Take a definition, "a widget is a compact set with property P", and a proposition that uses it, "every widget is bounded". The author attests that a Lean theorem says what the proposition says. If the definition is later corrected to "a closed set with property P", the proposition's own words have not changed and it now claims something else. So an attestation names the statement and every node its statement uses, and what those use in turn, and goes stale when any of them changes. Notation that a work's macros or a draft's preamble typeset and no node defines has a row of its own in what is attested, and attesting does not wait for it to be digested. That row is attested of the notation's definition and not of the statement: once attested it holds wherever the definition is used, until the definition changes, so each command a person defined costs one look in all.
 
 ## Formalization
 
