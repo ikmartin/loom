@@ -5,6 +5,7 @@ Serves the arras bundle at / (with index.html as the fallback for any path that 
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import json
@@ -154,7 +155,15 @@ def write_serve_json(root: Path, port: int) -> str:
     from loom.machine import write_token
 
     token = secrets.token_urlsafe(24)
-    write_token(root, token)
+    try:
+        write_token(root, token)
+    except OSError as exc:
+        from loom.errors import EnvError
+        from loom.machine import token_file
+
+        raise EnvError(
+            f"cannot keep the server's write token in {token_file(root).parent}: {exc.strerror or exc}; make that folder writable, then start the server again"
+        ) from exc
     p = root / SERVE_JSON
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
@@ -235,10 +244,18 @@ def code_stamp() -> tuple[int, int]:
     return len(times), max(times, default=0)
 
 
+class CannotBind(Exception):
+    """The server's port could not be bound: taken, or refused; `why` is what the system said."""
+
+    def __init__(self, port: int, why: str) -> None:
+        super().__init__(f"cannot bind port {port}: {why}")
+        self.port, self.why = port, why
+
+
 class HeldBundle:
     """The viewer a server started with, held aside and served from there, and whether loom on disk has moved on since.
 
-    `loom serve` keeps the Python it started with, so serving the bundle from where it is vendored would hand a newer viewer to an older server once it is vendored again. What is held is the machine's one copy of that version, shared by every server of it (`hold_viewer`); a server killed outright leaves only its mark, which the next server to start removes. `stale()` is what `/_api` reports, so a viewer can say to restart.
+    `loom serve` keeps the Python it started with, so serving the bundle from where it is vendored would hand a newer viewer to an older server once it is vendored again. What is held is the machine's one copy of that version, shared by every server of it (`hold_viewer`). A server stopped, cleanly or outright, leaves its mark and, where it held the last one, the copy, until the next server to start removes both. `stale()` is what `/_api` reports, so a viewer can say to restart.
     """
 
     def __init__(self, source: Path) -> None:
@@ -256,10 +273,17 @@ class HeldBundle:
         self._mark.unlink(missing_ok=True)
 
 
+#: How many times a start copies a bundle that changes while it is copied, and how long it waits between, before it stops.
+_COPIES, _REST = 5, 0.5
+#: A folder of `machine.viewers()` named as a version (`_viewer_key`); one being made or being removed, with its maker's pid.
+_VERSION = re.compile(r"[a-z0-9][a-z0-9._+-]{0,63}")
+_ASIDE = re.compile(r"\.(staged|removing)-([0-9]+)-[0-9a-f]{8}")
+
+
 def hold_viewer(source: Path) -> tuple[Path, Path]:
     """The machine's copy of the viewer at `source`, made when it is not there, and this process's mark that it holds it.
 
-    Copies are kept in `machine.viewers()`, one folder a version (`viewer_version`) holding the copy, `viewer/`, and a mark for each process that holds it, `held/<pid>`. A copy is made beside the others and renamed into place, so no server ever serves half of one. Under the folder's lock, a process marks what it holds, then lets go of what no live process holds: the marks of processes gone, every version left unmarked, and copies half made by processes gone. A viewer that names no version is held as a copy of this process's alone, `unversioned-<pid>`, let go the same way.
+    Copies are kept in `machine.viewers()`, one folder a version (`viewer_version`) holding the copy, `viewer/`, and a mark for each process that holds it, `held/<pid>`. A folder under a version's name is always whole: a copy is made in a staged folder beside the others, from a bundle that stood still while it was copied (`_copy_at_rest`), and renamed into place; a version is removed by renaming it aside first. Under the folder's lock, a process marks what it holds, then lets go of what no live process holds (`_let_go`). A viewer that names no version is held as a copy of this process's alone, `unversioned-<pid>`, let go the same way.
 
     Parameters
     ----------
@@ -270,69 +294,190 @@ def hold_viewer(source: Path) -> tuple[Path, Path]:
     -------
     tuple of Path
         The copy to serve, and the mark to remove when the server stops (`HeldBundle.close`).
+
+    Raises
+    ------
+    EnvError
+        Where loom cannot write its folder of viewers, where a version's name there is taken by something loom did not make, or where the bundle changed every time it was copied.
     """
     import shutil
     import uuid
 
+    from loom.errors import EnvError
     from loom.locks import locked
     from loom.machine import viewers
 
     home = viewers()
-    home.mkdir(parents=True, exist_ok=True)
     pid = os.getpid()
-    with locked(home / ".lock"):
-        key = _viewer_key(viewer_version(source), pid)
-        if not (home / key / "viewer").is_dir():
-            staged = home / f".staged-{pid}-{uuid.uuid4().hex[:8]}"
-            shutil.copytree(source, staged / "viewer")
-            # named by what was copied, which a bundle vendored again while it was copied may not have been
-            key = _viewer_key(viewer_version(staged / "viewer"), pid)
-            if (home / key / "viewer").is_dir():
-                shutil.rmtree(staged, ignore_errors=True)
-            else:
-                shutil.rmtree(home / key, ignore_errors=True)
-                staged.rename(home / key)
-        mark = home / key / "held" / str(pid)
-        mark.parent.mkdir(exist_ok=True)
-        mark.touch()
-        _let_go(home)
+    try:
+        home.mkdir(parents=True, exist_ok=True)
+        with locked(home / ".lock"):
+            key = _viewer_key(viewer_version(source), pid)
+            if not _is_version(home / key):
+                staged = home / f".staged-{pid}-{uuid.uuid4().hex[:8]}"
+                try:
+                    _copy_at_rest(source, staged / "viewer")
+                except BaseException:
+                    # a start that stops leaves nothing of its own behind
+                    shutil.rmtree(staged, ignore_errors=True)
+                    raise
+                # named by what was copied, which a bundle vendored again before it was copied may not have been
+                key = _viewer_key(viewer_version(staged / "viewer"), pid)
+                if _is_version(home / key):
+                    shutil.rmtree(staged, ignore_errors=True)
+                elif os.path.lexists(home / key):
+                    shutil.rmtree(staged, ignore_errors=True)
+                    raise EnvError(
+                        f"{home / key} is not a viewer loom kept; move it out of {home}, then start the server again"
+                    )
+                else:
+                    staged.rename(home / key)
+            mark = home / key / "held" / str(pid)
+            mark.parent.mkdir(exist_ok=True)
+            mark.touch()
+            aside = _let_go(home)
+    except OSError as exc:
+        why = exc.strerror or (
+            exc.args[0][0][2] if isinstance(exc, shutil.Error) and exc.args and exc.args[0] else str(exc)
+        )
+        raise EnvError(
+            f"cannot keep the viewer in {home}: {why}; make that folder writable, with room for about 11 MB, then start the server again"
+        ) from exc
+    for folder in aside:
+        shutil.rmtree(folder, ignore_errors=True)
     return home / key / "viewer", mark
 
 
+def _copy_at_rest(source: Path, dest: Path) -> None:
+    """Copy the bundle at `source` to `dest`, keeping the copy only if the bundle's listing, each file's path, size and modification time, is the same after the copy as before it; a bundle changed meanwhile, being vendored, is copied again after a rest, `_COPIES` times at most."""
+    import shutil
+
+    from loom.errors import EnvError
+
+    def listing() -> list[tuple[str, int, int]]:
+        return sorted(
+            (os.path.relpath(os.path.join(folder, name), source), st.st_size, st.st_mtime_ns)
+            for folder, _dirs, files in os.walk(source)
+            for name in files
+            for st in [os.lstat(os.path.join(folder, name))]
+        )
+
+    for attempt in range(_COPIES):
+        if attempt:
+            time.sleep(_REST)
+        before = listing()
+        shutil.copytree(source, dest)
+        if listing() == before:
+            return
+        shutil.rmtree(dest, ignore_errors=True)
+    raise EnvError(
+        f"the viewer at {source} changed each of the {_COPIES} times loom copied it; start the server again once it has been vendored or built"
+    )
+
+
 def _viewer_key(version: str, pid: int) -> str:
-    """A version's folder in `machine.viewers()`: the version where it is a plain name, else a digest of it; `unversioned-<pid>` for a viewer that names none."""
+    """A version's folder in `machine.viewers()`: the version where it is a short plain name in small letters, else a digest of it, so that two versions never share a folder on a disk that does not tell case apart; `unversioned-<pid>` for a viewer that names none."""
     if not version:
         return f"unversioned-{pid}"
-    if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._+-]*", version):
+    if _VERSION.fullmatch(version):
         return version
     return "v-" + hashlib.sha256(version.encode("utf-8")).hexdigest()[:16]
 
 
-def _let_go(home: Path) -> None:
-    """Remove from `home` what no live process holds: a mark whose process is gone, a version with no mark left, a copy half made by a process gone. Called under `home`'s lock."""
-    import shutil
+def _real_folder(path: Path) -> bool:
+    """Whether `path` is a folder itself, not a link to one."""
+    import stat
 
-    for entry in home.iterdir():
-        if entry.name.startswith(".staged-"):
-            maker = entry.name.split("-")[1]
-            if not (maker.isdigit() and _alive(int(maker))):
-                shutil.rmtree(entry, ignore_errors=True)
+    try:
+        return stat.S_ISDIR(os.lstat(path).st_mode)
+    except OSError:
+        return False
+
+
+def _holds_only(path: Path, names: set[str]) -> bool:
+    """Whether `path` is a real folder holding nothing but real folders named in `names`: what loom makes, looked at without following a link."""
+    if not _real_folder(path):
+        return False
+    try:
+        with os.scandir(path) as entries:
+            return all(e.name in names and e.is_dir(follow_symlinks=False) for e in entries)
+    except OSError:
+        return False
+
+
+def _is_version(path: Path) -> bool:
+    """Whether `path` is a version as loom keeps one: a real folder named as a version, holding its whole copy `viewer/` and its marks `held/`, both real folders, and nothing else."""
+    return (
+        bool(_VERSION.fullmatch(path.name)) and _holds_only(path, {"viewer", "held"}) and _real_folder(path / "viewer")
+    )
+
+
+def _pid(name: str) -> int | None:
+    """The process a mark or an aside folder names: a positive decimal pid in range; None for any other name, which names no process."""
+    if not (name.isascii() and name.isdigit()) or name.startswith("0") or len(name) > 10:
+        return None
+    pid = int(name)
+    return pid if 0 < pid < 2**31 else None
+
+
+def _let_go(home: Path) -> list[Path]:
+    """Under `home`'s lock, take aside what no live process holds, and return it to be deleted once the lock is let go.
+
+    A version with no mark of a live process, a staged copy whose maker is gone, a folder a remover now gone was deleting: each is renamed to a removing folder of this process's, so a deletion cut short leaves nothing under a version's name and a later start finishes it. A mark of a process gone is removed. Only what has loom's own shape is touched, looked at without following a link; anything else in the folder, a link, a person's file, a mark whose name is no pid, is left where it is, and a folder that is itself a link is left whole. A removal that fails is left for a later start.
+    """
+    import uuid
+
+    if not _real_folder(home):
+        return []
+    aside: list[Path] = []
+
+    def take(path: Path) -> None:
+        to = home / f".removing-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        try:
+            path.rename(to)
+        except OSError:
+            return
+        aside.append(to)
+
+    try:
+        with os.scandir(home) as found:
+            entries = [e.name for e in found]
+    except OSError:
+        return []
+    for name in entries:
+        path = home / name
+        side = _ASIDE.fullmatch(name)
+        if side is not None:
+            owner = _pid(side.group(2))
+            if owner is not None and not _alive(owner) and _holds_only(path, {"viewer", "held"}):
+                take(path)
             continue
-        if not entry.is_dir() or entry.name.startswith("."):
+        if not _is_version(path):
             continue
         held = False
-        for mark in (entry / "held").glob("*") if (entry / "held").is_dir() else ():
-            if mark.name.isdigit() and _alive(int(mark.name)):
-                held = True
-            else:
-                mark.unlink(missing_ok=True)
+        try:
+            with os.scandir(path / "held") as marks:
+                for mark in list(marks):
+                    owner = _pid(mark.name)
+                    if owner is None or not mark.is_file(follow_symlinks=False):
+                        continue
+                    if _alive(owner):
+                        held = True
+                    else:
+                        with contextlib.suppress(OSError):
+                            os.unlink(mark.path)
+        except FileNotFoundError:
+            pass
+        except OSError:
+            continue
         if not held:
-            shutil.rmtree(entry, ignore_errors=True)
+            take(path)
+    return aside
 
 
 def _alive(pid: int) -> bool:
-    """Whether a process `pid` is running; another user's counts as running. A pid the system has given again to another process keeps a copy while that process runs."""
-    if pid == os.getpid():
+    """Whether a process `pid` is running; another user's counts as running. A pid the system has given again to another process keeps a copy while that process runs. On Windows, where asking a process with a signal ends it, every mark counts as held."""
+    if pid == os.getpid() or sys.platform == "win32":
         return True
     try:
         os.kill(pid, 0)
@@ -368,7 +513,7 @@ class LiveBundle:
 
 class LoomHandler(SimpleHTTPRequestHandler):
     bundle_dir: Path = Path(".")
-    #: The viewer copied aside at start, which `/_api` reports on; None where the bundle is served from where it lies.
+    #: The viewer held at start (`HeldBundle`) or served from where it lies (`LiveBundle`), which `/_api` reports on; None outside a server.
     held: HeldBundle | LiveBundle | None = None
     build_dir: Path = Path(".")
     #: The compile folders, which `/build/tex/` answers from.
@@ -1200,7 +1345,10 @@ class ServeSession:
 
         offer_scan(self.quilt.root, self._current_scan)
         offer_jobs(self.quilt.root, self.jobs)
-        self.httpd = ThreadingHTTPServer(("127.0.0.1", self.port), handler)
+        try:
+            self.httpd = ThreadingHTTPServer(("127.0.0.1", self.port), handler)
+        except OSError as exc:
+            raise CannotBind(self.port, exc.strerror or str(exc)) from exc
         self.port = self.httpd.server_address[1]
         from loom.machine import quilt_id
 

@@ -140,3 +140,194 @@ def test_a_viewer_that_names_no_version_is_its_servers_alone(
     killed(proc)
     HeldBundle(source)
     assert held() == {f"unversioned-{os.getpid()}": [str(os.getpid())]}
+
+
+#: A server that, letting go of what no one holds, deletes half of it and dies there: as a kill, a Ctrl-C or a power cut in the removal leaves it.
+DIES_REMOVING = """
+import os, shutil, sys
+from pathlib import Path
+def half(path, *a, **k):
+    files = sorted(p for p in Path(path).rglob('*') if p.is_file())
+    for p in files[: len(files) // 2]:
+        p.unlink()
+    os._exit(9)
+shutil.rmtree = half
+from loom.render.serve import HeldBundle
+HeldBundle(Path(sys.argv[1]))
+"""
+
+
+def many(where: Path, version: str) -> Path:
+    """A bundle of forty files, so that a removal cut short leaves part of a copy."""
+    bundle(where, version)
+    for n in range(40):
+        (where / "_app" / f"chunk{n}.js").write_text(f"chunk {n}\n")
+    return where
+
+
+def test_a_version_removed_part_way_is_never_served_as_whole(tmp_path: Path) -> None:
+    """A version is renamed aside before it is deleted, so a removal killed half way leaves nothing under the version's name: the next server of that version makes it again, whole, and the half deleted folder goes."""
+    old = many(tmp_path / "old", "700")
+    HeldBundle(old).close()
+    dying = subprocess.run([sys.executable, "-c", DIES_REMOVING, str(many(tmp_path / "new", "701"))], check=False)
+    assert dying.returncode == 9
+    again = HeldBundle(old)
+    assert sorted(p.relative_to(again.path) for p in again.path.rglob("*")) == sorted(
+        p.relative_to(old) for p in old.rglob("*")
+    )
+    assert not [p for p in viewers().iterdir() if p.name.startswith(".removing-")]
+
+
+@pytest.mark.parametrize("where", ["a version", "held/", "viewers itself"])
+def test_a_start_removes_nothing_through_a_link(tmp_path: Path, where: str) -> None:
+    """A link planted in loom's folder, at a version's place, at a version's `held/`, or as the folder itself: a start removes nothing it reaches through it, and leaves the link."""
+    outside = tmp_path / "outside"
+    (outside / "held").mkdir(parents=True)
+    (outside / "viewer").mkdir()
+    (outside / "mydata").mkdir()
+    # shaped as loom keeps a version, so that a start reaching it would let it go
+    (outside / "123" / "viewer").mkdir(parents=True)
+    for f in (
+        "held/keep.txt",
+        "held/12345678",
+        "held/99999",
+        "viewer/index.html",
+        "mydata/notes.txt",
+        "123/viewer/index.html",
+    ):
+        (outside / f).write_text("the person's\n")
+    before = sorted(p.relative_to(outside) for p in outside.rglob("*"))
+    if where == "a version":
+        viewers().mkdir(parents=True, exist_ok=True)
+        (viewers() / "evil").symlink_to(outside, target_is_directory=True)
+    elif where == "held/":
+        HeldBundle(bundle(tmp_path / "old", "800")).close()
+        (viewers() / "800" / "held").rmdir()
+        (viewers() / "800" / "held").symlink_to(outside / "held", target_is_directory=True)
+    else:
+        viewers().parent.mkdir(parents=True, exist_ok=True)
+        viewers().symlink_to(outside, target_is_directory=True)
+    HeldBundle(bundle(tmp_path / "new", "801"))
+    after = sorted(
+        p.relative_to(outside) for p in outside.rglob("*") if "801" not in p.parts and ".lock" not in p.parts
+    )
+    assert after == before
+    assert (viewers() / "evil").is_symlink() if where == "a version" else True
+
+
+@pytest.mark.parametrize("name", ["²", "99999999999999999999", "0", "007", "-1", "a folder"])
+def test_a_mark_that_names_no_process_holds_nothing_and_stops_no_start(tmp_path: Path, name: str) -> None:
+    """A mark is a file named by a pid: one whose name is no positive decimal pid in range, or a folder in `held/`, holds nothing, so its version is let go, and no start fails on it."""
+    HeldBundle(bundle(tmp_path / "old", "900")).close()
+    if name == "a folder":
+        # named by a live process, so that it would hold the version were a folder taken for a mark
+        (viewers() / "900" / "held" / str(os.getppid())).mkdir()
+    else:
+        (viewers() / "900" / "held" / name).write_text("")
+    HeldBundle(bundle(tmp_path / "new", "901"))
+    assert "900" not in held()
+
+
+@pytest.mark.parametrize(
+    "name", [".staged-²-0000abcd", ".staged-99999999999999999999-0000abcd", ".removing-0-0000abcd"]
+)
+def test_a_folder_aside_that_names_no_process_is_left_and_stops_no_start(tmp_path: Path, name: str) -> None:
+    (viewers() / name / "viewer").mkdir(parents=True)
+    HeldBundle(bundle(tmp_path / "bundle", "950"))
+    assert (viewers() / name / "viewer").is_dir()
+
+
+def test_a_copy_of_a_bundle_changed_while_it_is_copied_is_taken_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bundle being vendored, half old and half new, is not kept as the machine's copy of its version: a copy is kept only once the bundle's listing is the same after it as before."""
+    import shutil
+
+    from loom.render import serve
+
+    source = bundle(tmp_path / "bundle", "1000", "half vendored")
+    copy, copies = shutil.copytree, []
+
+    def vendored_meanwhile(src, dst, *a, **k):  # type: ignore[no-untyped-def]
+        """`copytree` calls itself for each folder within; only the bundle's own copy counts, and the first changes the bundle as it ends."""
+        out = copy(src, dst, *a, **k)
+        if Path(src) == source:
+            copies.append(1)
+            if len(copies) == 1:
+                (source / "index.html").write_text("<p>vendored whole</p>\n")
+        return out
+
+    monkeypatch.setattr(shutil, "copytree", vendored_meanwhile)
+    monkeypatch.setattr(serve, "_REST", 0.0)
+    now = HeldBundle(source)
+    assert (now.path / "index.html").read_text() == "<p>vendored whole</p>\n" and len(copies) == 2
+
+
+def test_a_bundle_never_at_rest_stops_the_start_and_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import shutil
+
+    from loom.errors import EnvError
+    from loom.render import serve
+
+    source = bundle(tmp_path / "bundle", "1100")
+    copy = shutil.copytree
+
+    def always_changing(src, dst, *a, **k):  # type: ignore[no-untyped-def]
+        out = copy(src, dst, *a, **k)
+        if Path(src) == source:
+            (source / "index.html").write_text(f"<p>{os.urandom(4).hex()}</p>\n")
+        return out
+
+    monkeypatch.setattr(shutil, "copytree", always_changing)
+    monkeypatch.setattr(serve, "_REST", 0.0)
+    with pytest.raises(EnvError, match="changed each of the 5 times"):
+        HeldBundle(source)
+    assert held() == {}
+
+
+@pytest.mark.parametrize("what", ["the viewers", "the token", "the port"])
+def test_a_server_that_cannot_start_names_what_it_could_not_do(tmp_path: Path, what: str) -> None:
+    """A folder of loom's that cannot be written is named, with why; only a port that cannot be bound is blamed on the port."""
+    import socket
+
+    from loom.machine import data_dir
+    from tests.unit._quilts import demo
+
+    q = demo(tmp_path)
+    env = {**os.environ, "LOOM_ARRAS_BUNDLE": str(bundle(tmp_path / "bundle", "1200"))}
+    port = "0"
+    taken = None
+    if what == "the viewers":
+        viewers().mkdir(parents=True)
+        viewers().chmod(0o500)
+    elif what == "the token":
+        # loom makes its token folder closed to others itself, so a folder of tokens made read-only is opened again; a file in its place is not
+        data_dir().mkdir(parents=True, exist_ok=True)
+        (data_dir() / "tokens").write_text("not a folder\n")
+    else:
+        taken = socket.socket()
+        taken.bind(("127.0.0.1", 0))
+        taken.listen()
+        port = str(taken.getsockname()[1])
+    try:
+        said = subprocess.run(
+            [sys.executable, "-m", "loom", "serve", "--port", port, "--no-compile", "--quilt", str(q)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+            env=env,
+        )
+    finally:
+        viewers().chmod(0o700) if what == "the viewers" else None
+        if taken is not None:
+            taken.close()
+    assert said.returncode == 2, said.stdout + said.stderr
+    if what == "the port":
+        assert f"cannot listen on port {port}" in said.stderr
+    else:
+        said_it = " ".join(said.stderr.split())
+        if what == "the viewers":
+            assert f"cannot keep the viewer in {viewers()}" in said_it, said.stderr
+        else:
+            assert f"cannot keep the server's write token in {data_dir() / 'tokens'}" in said_it, said.stderr
+        assert "cannot listen on port" not in said_it
