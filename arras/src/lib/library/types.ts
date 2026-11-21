@@ -183,3 +183,170 @@ export interface FindAnswer extends Gen {
 export interface WriteDone extends Gen {
 	[key: string]: unknown;
 }
+
+// ---- Review (`docs/specs/library-views.md` §4; which rows each kind holds, and the asks' shapes, are `evidence.md`'s) ----
+
+/** A kind of row waiting for the person; the tasks waiting for an agent are `agents`, apart from these. */
+export type ReviewKind = 'accepted-changed' | 'questions' | 'attested-changed' | 'cited' | 'check' | 'attest' | 'fetch' | 'edits';
+
+/** What the column counts (`review-counts`): a row once whatever it holds; a draft the rows that concern it. */
+export interface ReviewCounts extends Gen {
+	everything: number;
+	kinds: Partial<Record<ReviewKind, number>>;
+	agents: number;
+	drafts: { doc: string; n: number }[];
+}
+
+interface RowBase {
+	/** Made from what the row is about, so it stays the same while that waits and an open row stays open. */
+	row: string;
+	/** The drafts it concerns. */
+	docs: string[];
+}
+
+/** A text drawn in a body: a fragment of the build, by its path, a change in it marked as a pending change's is (`span.change[data-side]`). */
+export interface Statement {
+	fragment: string;
+}
+
+export interface AcceptedChangedRow extends RowBase {
+	kind: 'accepted-changed';
+	key: string;
+	name: string;
+	doc: string;
+}
+
+/** Where an agent's question was asked: a place, and the work it was digesting when it asked, where it was. */
+export interface AskedOn {
+	digesting?: string;
+	ref?: string;
+	short?: string;
+	page?: number;
+	node?: string;
+	doc?: string;
+	key?: string;
+	name?: string;
+}
+
+export interface QuestionRow extends RowBase {
+	kind: 'questions';
+	task: string;
+	by: string;
+	on: AskedOn;
+	text: string;
+	choices: string[];
+}
+
+export interface AttestedChangedRow extends RowBase {
+	kind: 'attested-changed';
+	result: string;
+	name: string;
+	title?: string;
+	doc: string;
+	attested_at: string;
+	changed: 'statement' | 'used';
+	resting: number;
+}
+
+/** A stub a draft cites, in a cited row. */
+export interface CitedStub {
+	node: string;
+	name: string;
+	rests: { docs: string[] };
+	not_in_source: boolean;
+	marked: boolean;
+}
+
+/** A work with stubs the drafts cite, or (`citation` set) a citation that names no result. */
+export type CitedRow =
+	| (RowBase & { kind: 'cited'; ref: string; short: string; holds: { pdf: boolean; tex: boolean }; stubs: CitedStub[]; citation?: undefined })
+	| (RowBase & { kind: 'cited'; citation: string; doc: string; key: string; where: string; ref: string; short: string; citekey: string });
+
+/** A digested node to check, in a check row. */
+export interface CheckNode {
+	node: string;
+	name: string;
+	/** Its number as its source prints it, which the row puts first ("3.2 Lemma"). */
+	number?: string;
+	title?: string;
+	rests: { docs: string[]; through?: string };
+	how: How;
+}
+
+/** A work's digested results to check, or (`correction` set) an agent's correction to a node the person compared. */
+export type CheckRow =
+	| (RowBase & { kind: 'check'; ref: string; short: string; pdf: Hash | null; nodes: CheckNode[]; correction?: undefined })
+	| (RowBase & { kind: 'check'; correction: string; node: string; name: string; ref: string; short: string; by: string });
+
+export interface AttestRow extends RowBase {
+	kind: 'attest';
+	result: string;
+	name: string;
+	title?: string;
+	source: { doc: string } | { ref: string; short: string };
+	what: 'statement and proof' | 'statement only';
+	paper: Paper | null;
+}
+
+export interface FetchRow extends RowBase {
+	kind: 'fetch';
+	task: string;
+	ref: string;
+	short: string;
+	title: string;
+	link: string;
+	by: string;
+}
+
+export interface EditRow extends RowBase {
+	kind: 'edits';
+	change: string;
+	type: 'suggested' | 'edit';
+	doc: string;
+	key: string;
+	where: string;
+	by: string;
+	broke: { line: number; error: string } | null;
+}
+
+export type ReviewRow = AcceptedChangedRow | QuestionRow | AttestedChangedRow | CitedRow | CheckRow | AttestRow | FetchRow | EditRow;
+
+/** What a task waiting for an agent was asked of (`evidence.md` §4.1's `what`) and the names its sentence needs. */
+export interface TaskRow extends RowBase {
+	kind: 'agents';
+	task: string;
+	what: string;
+	on: {
+		ref?: string;
+		short?: string;
+		scope?: 'uses' | 'marked' | 'chosen' | 'all';
+		count?: number;
+		names?: string[];
+		page?: number;
+		doc?: string;
+		key?: string;
+		name?: string;
+		where?: string;
+	};
+	text?: string;
+	working: { by: string } | null;
+	asked_at: string;
+}
+
+/** One group of the list (`review-list`), in the order the list draws them. */
+export interface ReviewGroup {
+	kind: ReviewKind | 'agents';
+	rows: (ReviewRow | TaskRow)[];
+}
+
+export interface ReviewList extends Gen {
+	groups: ReviewGroup[];
+}
+
+/** A row's body (`review-row`), its fields by its kind. */
+export interface ReviewBody extends Gen {
+	row: string;
+	/** accepted-changed and edits: the text with its change marked. */
+	statement?: Statement;
+	[field: string]: unknown;
+}

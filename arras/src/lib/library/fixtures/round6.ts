@@ -1,6 +1,7 @@
 // Round six's data (`docs/design/mockups/library-round-6/`), answering the reads of `docs/specs/library-views.md` as the backend will, so each view is built and tested before its backend exists. The 300 works come from the prototype's own generator and seed, so the list is the one the author marked; Smith 2024, Okafor 2022, Arden 2024 and 2025, Jones, Ostrander, Lindqvist and the dropped scan are its fixed works. Writes change the data in memory and raise the generation, as the publisher will. Written from the spec, before any read exists: where a backend answer differs, the backend's is right and this is corrected.
 
-import type { DigestMark, LeanStatus, NodeAnswer, OutlineItem, Paper, Place, Section, Work, WorkAnswer } from '../types';
+import type { CheckRow, DigestMark, LeanStatus, NodeAnswer, OutlineItem, Paper, Place, Section, Work, WorkAnswer } from '../types';
+import { ask, review6, type ReviewFixture } from './review6';
 
 // ---- the prototype's generator, as it wrote it, so the same seed gives the same 300 works ----
 
@@ -78,7 +79,7 @@ const PROTOS: Proto[] = [...FIXED];
 // ---- ids: opaque, as the node store mints them, and never drawn ----
 
 const b36 = (n: number) => n.toString(36).toUpperCase().padStart(4, '0');
-const REF: Record<string, string> = {};
+export const REF: Record<string, string> = {};
 PROTOS.forEach((w, i) => (REF[w.id] = `tq-${b36(100 + i)}-ref`));
 const PROTO_OF: Record<string, Proto> = Object.fromEntries(PROTOS.map((w) => [REF[w.id], w]));
 
@@ -207,7 +208,8 @@ export interface Fixture {
 	marks: Record<string, DigestMark[]>;
 	overlayPlaced: Record<string, Place[]>;
 	deleted: Record<string, { work: Work; at: number }>;
-	tasks: string[];
+	/** Review's rows and the tasks waiting for an agent (`review6.ts`). */
+	review: ReviewFixture;
 }
 
 export function round6(): Fixture {
@@ -216,7 +218,7 @@ export function round6(): Fixture {
 	const okaforRef = REF.okafor;
 	const results: Record<string, Res[]> = { [smithRef]: SMITH.map((r) => ({ ...r })), [REF.arden24]: ARDEN.map((r) => ({ ...r })) };
 	const marks: Record<string, DigestMark[]> = { [okaforRef]: [{ mark: 'a-2026-11-20-okf6', page: 6, words: 'Lemma 2.4. Let ⪯ be a median order…' }] };
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, tasks: [] };
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review: review6(REF) };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];
@@ -338,11 +340,7 @@ export function digest(f: Fixture, refs: string[] | 'all', scope: string, chosen
 		if (!row || (!row.holds.pdf && !row.holds.tex)) continue;
 		const list = f.results[ref];
 		if (!row.holds.tex || !list) {
-			if (refs !== 'all' || scope === 'used') {
-				const task = `t-${f.tasks.length + 1}`;
-				f.tasks.push(task);
-				tasks.push(task);
-			}
+			if (refs !== 'all' || scope === 'used') tasks.push(ask(f.review, 'digest', { ref, short: row.short, scope: scope as 'uses' | 'marked' | 'chosen' | 'all', count: scope === 'marked' ? (f.marks[ref]?.length ?? 0) : chosen.length }, row.used_in));
 			continue;
 		}
 		list.forEach((r, i) => {
@@ -383,4 +381,29 @@ export function addWork(f: Fixture, name: string): Work {
 	f.works.push(w);
 	f.gen++;
 	return w;
+}
+
+/** What rests on a digested result, by its node: the draft, and the result it rests on it through where it is not used directly. */
+const RESTS: Record<string, { docs: string[]; through?: string }> = { 'tq-00K3': { docs: ['drafting/bounds.tex'], through: 'Proposition 3.4' }, 'tq-020G': { docs: ['drafting/main.tex'] } };
+
+/** Review's rows of digested results to check from the works whose TeX source loom read: a row a work, its results not yet compared in paper order. */
+export function checkRows(f: Fixture): CheckRow[] {
+	const rows: CheckRow[] = [];
+	// round six's order: what a draft rests on first, Smith 2024 before Arden 2024
+	const order = [REF.smith, REF.arden24];
+	for (const w of [...f.works].sort((a, b) => (order.indexOf(a.ref) + 1 || 99) - (order.indexOf(b.ref) + 1 || 99))) {
+		const nodes = (f.results[w.ref] ?? []).filter((r) => r.p === 'unchecked' && r.node);
+		if (!nodes.length) continue;
+		const rests = nodes.map((r) => RESTS[r.node!] ?? { docs: [] });
+		rows.push({
+			row: `check:${w.ref}`,
+			kind: 'check',
+			docs: [...new Set([...w.used_in, ...rests.flatMap((x) => x.docs)])],
+			ref: w.ref,
+			short: w.short,
+			pdf: w.holds.pdf,
+			nodes: nodes.map((r, i) => ({ node: r.node!, name: `${r.tax} ${r.num}`, number: r.num, ...(r.title ? { title: r.title } : {}), rests: rests[i], how: BODY[r.node!]?.how ?? 'extracted' }))
+		});
+	}
+	return rows;
 }

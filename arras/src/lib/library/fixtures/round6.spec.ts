@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { shown } from '$lib/views/library/works';
 import { library } from '$lib/words/library';
 import type { Answer } from '../api';
-import type { Gen, WorkAnswer, WorksAnswer } from '../types';
+import type { Gen, ReviewCounts, ReviewList, WorkAnswer, WorksAnswer } from '../types';
 import { fixtureSource } from './source';
 
 const ok = <T>(r: Answer<Gen>): T => {
@@ -55,4 +55,21 @@ describe("round six's fixture", () => {
 		expect(ok<{ made: number }>(await src.call('library-digest', { refs: [smith.ref], scope: 'chosen', chosen })).made).toBe(3);
 		expect(ok<{ tasks: string[] }>(await src.call('library-digest', { refs: [okafor.ref], scope: 'marked' })).tasks).toHaveLength(1);
 	});
+
+	it("counts Review as round six does: 29 for the person, 6 for an agent, 20 on main.tex and 9 on bounds.tex, listed by who is waiting", async () => {
+		const src = fixtureSource();
+		const c = ok<ReviewCounts>(await src.call('review-counts', {}));
+		expect([c.everything, c.agents]).toEqual([29, 6]);
+		expect(c.kinds).toEqual({ questions: 2, fetch: 3, cited: 4, check: 5, attest: 2, 'accepted-changed': 6, 'attested-changed': 2, edits: 5 });
+		expect(c.drafts).toEqual([{ doc: 'drafting/main.tex', n: 20 }, { doc: 'drafting/bounds.tex', n: 9 }]);
+		const l = ok<ReviewList>(await src.call('review-list', { kind: 'all' }));
+		expect(l.groups.map((g) => g.kind)).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'attested-changed', 'edits', 'agents']);
+		expect(ok<ReviewCounts>(await src.call('review-counts', { doc: 'drafting/bounds.tex' })).everything).toBe(9);
+		// a yes in the Library leaves Review's row of that work
+		await src.call('library-check', { node: 'tq-00K3', hash: 'sha256:x' });
+		const after = ok<ReviewList>(await src.call('review-list', { kind: 'check' }));
+		expect(after.groups[0].rows.map((r) => r.row).join(' ')).toContain('check:');
+		expect(ok<ReviewCounts>(await src.call('review-counts', {})).kinds.check).toBe(5);
+	});
 });
+

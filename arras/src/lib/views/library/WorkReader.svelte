@@ -83,7 +83,7 @@
 		offered = null;
 		asking = false;
 		question = '';
-		const done = await api.call('review-task', { kind: 'ask', on: { ref, page: o.page, quote: o.text }, text });
+		const done = await api.ask('ask', { ref, page: o.page }, { text, quote: o.text }, lib.works.value?.works.find((w) => w.ref === ref)?.used_in ?? []);
 		if (!done.ok) message.post(done.error.message);
 	}
 

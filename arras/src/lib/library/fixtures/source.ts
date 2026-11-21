@@ -2,7 +2,9 @@
 
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
-import { addWork, check, digest, fixturePdfUrl, nodeAnswer, placesOf, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { ask, body, close, counts, fragmentOf, list } from './review6';
+import type { ReviewKind, TaskRow } from '../types';
 
 type Body = Record<string, unknown>;
 
@@ -32,7 +34,21 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'library-find': (b) => {
 			const pdf = f.works.find((w) => w.ref === b.ref)?.holds.pdf ?? '';
 			return ok({ pdf, hits: [{ page: 1, rects: [[72, 140, 300, 156]] }], pages: 24 });
+		},
+		'review-counts': (b) => ok(counts(f.review, checkRows(f), b.doc as string | undefined)),
+		'review-list': (b) => ok(list(f.review, checkRows(f), b.kind as ReviewKind | 'all' | 'agents', b.doc as string | undefined)),
+		'review-row': (b) => {
+			const a = body(f.review, b.row as string);
+			return a ? ok(a) : no('no-such-row');
 		}
+	};
+
+	/** Closes the row `test` finds, raising the generation; `no-such-row` where nothing waits there any more. */
+	const closing = (test: Parameters<typeof close>[1]) => {
+		if (!close(f.review, test)) return no('no-such-row');
+		f.gen++;
+		changed();
+		return ok({});
 	};
 
 	const writes: Record<string, (b: Body) => Answer<Gen>> = {
@@ -82,12 +98,21 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			changed();
 			return ok({});
 		},
-		'review-task': () => {
-			f.tasks.push(`t-${f.tasks.length + 1}`);
+		'review-task': (b) => {
+			// the task's sentence needs the work's words, which the publisher adds from the reference the ask names
+			const on = { ...(b.on as TaskRow['on']) };
+			const w = f.works.find((x) => x.ref === on.ref);
+			if (w) on.short = w.short;
+			const task = ask(f.review, b.what as string, on, (b.from as string[]) ?? [], (b.text as string) || (b.words as string) || undefined);
 			f.gen++;
 			changed();
-			return ok({ task: f.tasks[f.tasks.length - 1] });
+			return ok({ task });
 		},
+		'review-answer': (b) => closing((r) => r.kind === 'questions' && r.task === b.task),
+		'review-task-delete': (b) => closing((r) => r.kind === 'agents' && r.task === b.task),
+		'change-keep': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
+		'change-discard': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
+		'review-accept': (b) => closing((r) => r.kind === 'accepted-changed' && (b.keys as string[]).includes(r.key)),
 		'library-look-up': () => ok({}),
 		'library-undo': () => ok({}),
 		'library-take': (b) => {
@@ -115,6 +140,12 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		},
 		async receive(file: File) {
 			return { ok: true as const, value: { incoming: `f-${f.gen}-${file.name}`, name: file.name, size: file.size } };
+		},
+		async serves(name: string) {
+			return name in reads || name in writes;
+		},
+		async fragment(path: string) {
+			return fragmentOf(f.review, path);
 		},
 		pdfUrl: fixturePdfUrl,
 		drawnUrl: () => null,

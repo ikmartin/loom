@@ -83,6 +83,7 @@ LEGACY = (
     "arras/src/lib/review/SideList.svelte",
     "arras/src/lib/review/TypeList.svelte",
     "arras/src/lib/review/VersionView.svelte",
+    "arras/src/lib/review/YourChanges.svelte",
     "arras/src/lib/sessions/DeleteSession.svelte",
     "arras/src/lib/sessions/SessionFooter.svelte",
     "arras/src/lib/sessions/SessionPicker.svelte",
@@ -128,7 +129,6 @@ LEGACY = (
     "arras/src/routes/+page.svelte",
     "arras/src/routes/graph/+page.svelte",
     "arras/src/routes/loose/+page.svelte",
-    "arras/src/routes/review/+page.svelte",
     "arras/src/routes/review/problems/+page.svelte",
     "arras/src/routes/review/proposed/+page.svelte",
     "arras/src/routes/review/record/+layout.svelte",
@@ -494,6 +494,17 @@ def legacy_at(base: str) -> set[str] | None:
     return None
 
 
+def moved_since(base: str) -> dict[str, str]:
+    """The components git sees as moved since `base`, each old path to its new one, so that one on LEGACY keeps its place when it moves; a move whose old path now holds something new is a copy to git, so copies count, each mapped onto its new path."""
+    shown_ = subprocess.run(["git", "diff", "-C", "-C", "--name-status", base, "--", "arras/src"], cwd=ROOT, capture_output=True, text=True)
+    moved: dict[str, str] = {}
+    for line in shown_.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3 and parts[0][:1] in ("R", "C"):
+            moved[parts[1]] = parts[2]
+    return moved
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     # CI sets HARDWRAP_BASE to the push's or pull request's base, and this check takes it too, since a clean checkout has nothing added since HEAD
@@ -519,7 +530,7 @@ def main() -> int:
         return 0
     gone = [] if args.file else [p for p in LEGACY if not (ROOT / p).is_file()]
     before = None if args.file else legacy_at(args.base)
-    added = [] if before is None else sorted(legacy - before)
+    added = [] if before is None else sorted(legacy - {moved_since(args.base).get(p, p) for p in before})
     clean = [] if args.file else [p for p in LEGACY if (ROOT / p).is_file() and not holds_words((ROOT / p).read_text(encoding="utf-8"))]
     read = args.file or [p for p in components if rel(p) not in legacy]
     bad = report(read)
