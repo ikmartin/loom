@@ -179,9 +179,71 @@ export const review = {
 	},
 	attest: {
 		/** An attest row's quiet line: what Lean states of the result. */
-		what: { 'statement and proof': 'statement and proof', 'statement only': 'statement only' }
+		what: { 'statement and proof': 'statement and proof', 'statement only': 'statement only' } as Record<string, string>,
+		/** Over the result's whole statement. */
+		asWritten: (where: string) => `${where}, as you wrote it`,
+		/** Over the table of parts. */
+		partByPart: (by: string) => `Part by part: what you wrote, the Lean that states it, and ${by}'s reading of the Lean`,
+		/** The table's heads. */
+		draft: 'your draft',
+		lean: 'Lean, as Lean prints it',
+		reading: (by: string) => `${by}’s reading`,
+		/** Over a part of notation the statement defines. */
+		inStatement: 'defined in the statement:',
+		/** For notation from the person's macros. */
+		fromMacros: 'notation from your macros, defined by no result',
+		/** A fold: the results the statement uses that the person attested already. */
+		usesAttested: (names: string, date: string) => `It uses ${names}, which you attested on ${date}.`,
+		/** A fold: the declarations that serve only the proof. */
+		supporting: (n: number) => (n === 1 ? '1 supporting declaration serves the proof. Lean accepted it; it is not what you attest.' : `${n} supporting declarations serve the proof. Lean accepted them; they are not what you attest.`),
+		/** Before an agent's note of a difference between the draft and the Lean. */
+		found: (by: string) => `${by} found`,
+		/** The question. */
+		ask: 'Does the Lean say what you wrote?',
+		/** The person's yes. */
+		yes: 'yes, I attest it',
+		/** The person's no, which opens a field for what differs. */
+		no: 'no, it differs…',
+		/** Beside the yes: what it covers. */
+		covers: (parts: string[], notation: string[], name: string) => `Yes covers ${parts.length === 1 ? 'part' : 'parts'} ${listed(parts)}${notation.length ? `, ${listed(notation)}` : ''}. ${name} then reads formalized.`,
+		/** Beside the yes, for a statement in one part. */
+		coversAll: (name: string) => `Yes covers the statement as written. ${name} then reads formalized.`,
+		/** The field after "no, it differs…". */
+		differs: 'what the Lean gets wrong',
+		/** The column's message after the yes. */
+		attested: (name: string) => `${name} attested.`
+	},
+	restate: {
+		/** Sends what differs, asking an agent to restate the Lean. */
+		ask: 'ask an agent to restate',
+		/** The column's message after asking. */
+		asked: 'Asked an agent to restate it in Lean.'
 	},
 	attested: {
+		/** The first step's head. */
+		then: (date: string) => `What you attested, on ${date}`,
+		/** Over the Lean the person attested. */
+		leanThen: 'the Lean you attested, as Lean prints it',
+		/** The second step's head. */
+		now: 'How it reads now',
+		/** The third step's head. */
+		ask: 'Does the Lean still say this?',
+		/** The person's word that it still does. */
+		still: 'still states it',
+		/** Under the third step, where only the statement changed. */
+		leanSame: 'The Lean above has not changed; only your statement has.',
+		/** Under the third step, for a definition results rest on. */
+		eachAgain: (name: string) => `If it still states it, each result resting on ${name} is still asked about below, one by one.`,
+		/** Over the results resting on a changed definition. */
+		resting: (name: string, n: number) => `Resting on ${name} · ${n} · their words are unchanged, but what they mean has changed, so you attest each again`,
+		/** A resting result's quiet line. */
+		again: 'to attest again',
+		/** A resting result's quiet line once attested again. */
+		done: 'attested again',
+		/** The question on a resting result. */
+		askResting: (name: string) => `Does the Lean still say this, with ${name} as it reads now?`,
+		/** The column's message after "still states it". */
+		attestedAgain: 'Attested again.',
 		/** An attested-changed row's quiet line, where the result's own statement changed. */
 		statement: (date: string) => `its statement changed since you attested it, ${date}`,
 		/** An attested-changed row's quiet line, where a definition changed that results rest on. */

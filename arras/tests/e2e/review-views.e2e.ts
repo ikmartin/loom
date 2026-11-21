@@ -171,6 +171,55 @@ test('a citation that names no result says what to add, and is asked about or re
 	await expect(bare).toHaveCount(0);
 });
 
+test('a Lean statement to attest shows it part by part beside the Lean and the agent\'s reading, and the yes attests it', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-attest').click();
+	const lemma = page.getByTestId('review-row').filter({ hasText: 'main.tex · Lemma 3.3' });
+	await expect(lemma).toContainText('statement and proof');
+	await lemma.getByRole('button', { expanded: false }).first().click();
+	await expect(lemma).toContainText('main.tex, as you wrote it');
+	await expect(lemma.locator('table.att tbody tr')).toHaveCount(4);
+	await expect(lemma.locator('table.att')).toContainText('theorem Weighting.IsBalanced.eq_zero_of_isForest');
+	await expect(lemma.locator('table.att')).toContainText('notation from your macros, defined by no result');
+	await lemma.getByRole('button', { name: /It uses Definitions 2.1 and 2.3, which you attested on 12 Nov./ }).click();
+	await expect(lemma).toContainText('Definition 2.3, Balanced');
+	await expect(lemma).toContainText('Claude Code found');
+	await expect(lemma).toContainText('Yes covers parts (i) and (ii), ε and supp. Lemma 3.3 then reads formalized.');
+	await lemma.getByRole('button', { name: 'no, it differs…' }).click();
+	await lemma.getByPlaceholder('what the Lean gets wrong').fill('(ii) should fix a₀ first');
+	await lemma.getByRole('button', { name: 'ask an agent to restate' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to restate it in Lean.');
+	await lemma.getByRole('button', { name: 'yes, I attest it' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Lemma 3.3 attested.');
+	await expect(lemma).toHaveCount(0);
+	await expect(count(page, 'review-kind-attest')).toHaveText('1');
+});
+
+test('an attested definition that changed is asked about in three steps, and each result resting on it again', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-attested-changed').click();
+	const def = page.getByTestId('review-row').filter({ hasText: 'main.tex · Definition 3.7, Connected' });
+	await expect(def).toContainText('changed since you attested it · 2 results rest on it');
+	await def.getByRole('button', { expanded: false }).first().click();
+	await expect(def).toContainText('What you attested, on 12 Nov');
+	await expect(def).toContainText("def Quiver'.Connected");
+	await expect(def.locator('[data-side="new"]')).toHaveText('after its loops are removed');
+	await expect(def).toContainText('Resting on Definition 3.7 · 2 · their words are unchanged, but what they mean has changed, so you attest each again');
+	const p38 = def.getByTestId('review-sub').filter({ hasText: 'Proposition 3.8' });
+	await expect(p38).toContainText('to attest again');
+	await p38.getByRole('button', { expanded: false }).click();
+	await expect(p38).toContainText('Does the Lean still say this, with Definition 3.7 as it reads now?');
+	await p38.getByRole('button', { name: 'still states it' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Attested again.');
+	await expect(p38).toContainText('attested again');
+	await def.getByRole('button', { name: 'still states it' }).first().click();
+	await expect(def).toHaveCount(0);
+	const cor = page.getByTestId('review-row').filter({ hasText: 'main.tex · Corollary 3.5' });
+	await expect(cor).toContainText('its statement changed since you attested it, 20 Nov');
+	await cor.getByRole('button', { expanded: false }).first().click();
+	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
+});
+
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-agents').click();

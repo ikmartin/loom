@@ -86,6 +86,53 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	bodies[`cited:${refs.arden25}#tq-04B1`] = { cite: { doc: MAIN, key: 'sec:intro', where: 'main.tex, Section 1', fragment: cite('t62', p(`The extension criterion ${c('3', 'Theorem 6.2')} appears only in the second arXiv version of that paper.`)), nth: 0 }, find: { query: 'Theorem 6.2', hits: [], pages: 31 } };
 	bodies[`cited:${refs.smith}#tq-04C1`] = { cite: { doc: BOUNDS, key: 'thm:radius/proof', where: 'bounds.tex, proof of Theorem 1', fragment: cite('l82', p(`…by the thinness bound ${c('Smi24', 'Lemma 8.2')}, applied to each widget.`)), nth: 0 }, find: { query: 'Lemma 8.2', hits: [{ page: 2, rects: [[72, 610, 160, 624]] }], pages: 31 } };
 	bodies['cited:m-2026-11-21-oka22'] = { cite: { doc: MAIN, key: 'thm:count/proof', where: 'main.tex, proof of Theorem 3.4', fragment: cite('bare', p(`Each interval ${m('[u, v]')} is a box <span class="cite"><a>[2]</a></span>, so the count over intervals is a sum of products.`)), nth: 0 } };
+	// the Lean kinds: what the agent wrote of its formalization, what loom observed, and the person's last word
+	const frag = (key: string, html: string) => {
+		fragments[`fixture/lean/${key}.html`] = html;
+		return { fragment: `fixture/lean/${key}.html` };
+	};
+	bodies['attest:lem:forest'] = {
+		observation: 'ev-2026-11-21-l3an9e',
+		statement: frag('lem-forest', p(`<b>Lemma 3.3.</b> <em>Let ${m('w')} be a balanced weighting of a quiver ${m('Q')}. Then (i) if ${m('\\operatorname{supp} w')} is a forest, then ${m('w = 0')}; and (ii) if the underlying graph of ${m('Q')} is a cycle, then ${m('w(a) = \\varepsilon(a)\\, w(a_0)')} for every arrow ${m('a')}, where ${m('\\varepsilon(a) = \\pm 1')} as ${m('a')} agrees with the orientation of ${m('a_0')} round the cycle.</em>`)),
+		parts: [
+			{ part: '(i)', draft: String.raw`if $\operatorname{supp} w$ is a forest, then $w = 0$;`, lean: "theorem Weighting.IsBalanced.eq_zero_of_isForest\n    {Q : Quiver'} {w : Q.Weighting}\n    (hw : w.IsBalanced)\n    (hF : (Q.restrict (Function.support w)).IsForest) :\n    w = 0", reading: String.raw`If $w$ is balanced and the arrows where $w$ is not zero form a forest, then $w$ is zero on every arrow.`, by: 'Claude Code' },
+			{ part: '(ii)', draft: String.raw`if the underlying graph of $Q$ is a cycle, then $w(a) = \varepsilon(a)\, w(a_0)$ for every arrow $a$.`, lean: "theorem Weighting.IsBalanced.eq_cycleSign_mul\n    {Q : Quiver'} {w : Q.Weighting}\n    (hw : w.IsBalanced) (hC : Q.underlying.IsCycle)\n    (a₀ : Q.Arrow) :\n    ∀ a, w a = Q.cycleSign a₀ a * w a₀", reading: String.raw`If the underlying graph of $Q$ is a single cycle, then for any arrow $a_0$, each arrow carries $\pm$ the weight of $a_0$, the sign saying whether it points the same way round the cycle.`, by: 'Claude Code' }
+		],
+		notation: [
+			{ part: 'ε', draft: String.raw`$\varepsilon(a) = \pm 1$ as $a$ agrees with the orientation of $a_0$ round the cycle`, lean: "def Quiver'.cycleSign (Q : Quiver')\n    (a₀ a : Q.Arrow) : ℤ", reading: String.raw`$+1$ if $a$ and $a_0$ run the same way round the cycle, $-1$ otherwise.`, from: 'statement' },
+			{ part: 'supp', lean: 'Function.support w     -- Mathlib', reading: String.raw`The arrows on which $w$ is not zero, as Mathlib defines the support of a function.`, from: 'macros' }
+		],
+		uses_attested: [{ result: 'def:quiver', name: 'Definition 2.1', title: 'Quiver', at: '2026-11-12T10:40:00Z' }, { result: 'def:balanced', name: 'Definition 2.3', title: 'Balanced', at: '2026-11-12T10:40:00Z' }],
+		supporting: ['Weighting.exists_leaf_of_isForest', 'Weighting.IsBalanced.restrict', "Quiver'.cycleSign_mul_self"],
+		difference: { by: 'Claude Code', text: 'One difference. The draft fixes no a₀ in (ii); Lean takes a₀ as given. The statement holds for every choice of a₀, so the two say the same if (ii) is read “for any arrow a₀”.' }
+	};
+	bodies['attest:tq-00K5'] = {
+		observation: 'ev-2026-11-21-k5ob2q',
+		statement: frag('smith-34', p(`<b>Proposition 3.4.</b> <em>Let ${m('W')} be a widget as in Definition 2.1. Then ${m('W')} lies in a ball about the origin.</em>`)),
+		parts: [{ part: '', draft: String.raw`Let $W$ be a widget as in Definition 2.1. Then $W$ lies in a ball about the origin.`, lean: 'theorem Smith.widget_bounded (W : Widget) :\n    ∃ r, W.carrier ⊆ Metric.ball 0 r', reading: String.raw`Every widget is contained in some ball centred at the origin.`, by: 'Claude Code' }],
+		notation: [],
+		uses_attested: [],
+		supporting: []
+	};
+	bodies['attested-changed:cor:cycle'] = {
+		observation: 'ev-2026-11-20-c35obs',
+		at: '2026-11-20T16:02:00Z',
+		then: frag('cor-then', p(`<b>Corollary 3.5.</b> <em>A connected quiver has a nonzero balanced weighting if and only if its underlying graph has a cycle.</em>`)),
+		now: frag('cor-now', p(`<b>Corollary 3.5.</b> <em>A connected quiver has a nonzero balanced weighting if and only if its underlying graph has a cycle${ch('m', '', ' of length at least 2')}.</em>`)),
+		lean: 'theorem Showcase.exists_ne_zero_balanced_iff\n    (Q : Quiver\') (hQ : Q.Connected) :\n    (∃ w : Q.Weighting, w.IsBalanced ∧ w ≠ 0)\n      ↔ Q.underlying.HasCycle',
+		resting: []
+	};
+	bodies['attested-changed:def:connected'] = {
+		observation: 'ev-2026-11-12-d37obs',
+		at: '2026-11-12T10:40:00Z',
+		then: frag('def-then', p(`<b>Definition 3.7.</b> A quiver is <em>connected</em> if its underlying graph is connected.`)),
+		now: frag('def-now', p(`<b>Definition 3.7.</b> A quiver is <em>connected</em> if its underlying graph is connected${ch('n', '', ' after its loops are removed')}.`)),
+		lean: "def Quiver'.Connected (Q : Quiver') : Prop :=\n  Q.underlying.Connected",
+		resting: [
+			{ result: 'prop:tree', name: 'Proposition 3.8', statement: frag('p38', p(`<b>Proposition 3.8.</b> <em>A connected quiver whose underlying graph is a tree has no nonzero balanced weighting.</em>`)), lean: 'theorem Showcase.balanced_eq_zero_of_isTree …', attested_again: false },
+			{ result: 'lem:bridge', name: 'Lemma 3.9', statement: frag('l39', p(`<b>Lemma 3.9.</b> <em>Removing a bridge from a connected quiver leaves two connected quivers.</em>`)), lean: 'theorem Showcase.connected_of_removeBridge …', attested_again: false }
+		]
+	};
 	const attest: AttestRow[] = [
 		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null },
 		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches' }
@@ -177,4 +224,15 @@ export const fragmentOf = (r: ReviewFixture, path: string): string | null => r.f
 /** Marks the cited result `node` as placed by the person, as a mark to digest naming it does. */
 export function markStub(r: ReviewFixture, node: string): void {
 	for (const row of r.rows) if (row.kind === 'cited' && row.citation === undefined) for (const s of row.stubs) if (s.node === node) s.marked = true;
+}
+
+/** Records the person's attestation of `result`: a row waiting on it closes, or a result resting on a changed definition reads attested again. */
+export function attest(r: ReviewFixture, result: string): boolean {
+	const i = r.rows.findIndex((x) => (x.kind === 'attest' || x.kind === 'attested-changed') && x.result === result);
+	if (i >= 0) {
+		r.rows.splice(i, 1);
+		return true;
+	}
+	for (const b of Object.values(r.bodies)) for (const x of (b.resting as { result: string; attested_again: boolean }[] | undefined) ?? []) if (x.result === result) return (x.attested_again = true);
+	return false;
 }

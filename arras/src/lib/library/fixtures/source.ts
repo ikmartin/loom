@@ -3,7 +3,7 @@
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, round6, scopesOf, workAnswer, type Fixture } from './round6';
-import { ask, body, close, counts, fragmentOf, list, markStub } from './review6';
+import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
 import type { ReviewKind, TaskRow } from '../types';
 
 type Body = Record<string, unknown>;
@@ -131,6 +131,12 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'review-task-delete': (b) => closing((r) => r.kind === 'agents' && r.task === b.task),
 		'change-keep': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
 		'change-discard': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
+		'formal-attest': (b) => {
+			if (!attest(f.review, b.result as string)) return no('no-such-result');
+			f.gen++;
+			changed();
+			return ok({});
+		},
 		'library-mention': (b) => closing((r) => r.kind === 'cited' && r.citation === b.citation),
 		'review-accept': (b) => closing((r) => r.kind === 'accepted-changed' && (b.keys as string[]).includes(r.key)),
 		'library-correction-take': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),

@@ -38,6 +38,7 @@
 	}
 	.statement :global(p) {
 		margin: 0;
+		text-indent: 0;
 	}
 	.statement :global(span.cite.hot) {
 		background: var(--link-wash);

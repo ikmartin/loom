@@ -12,6 +12,8 @@
 	import Correction from './rows/Correction.svelte';
 	import Cited from './rows/Cited.svelte';
 	import Citation from './rows/Citation.svelte';
+	import Attest from './rows/Attest.svelte';
+	import AttestedChanged from './rows/AttestedChanged.svelte';
 
 	let { row }: { row: ReviewRow } = $props();
 	const open = $derived(rv.open.has(row.row));
@@ -42,7 +44,7 @@
 	{/if}
 	{#if open}
 		<div class="rr-b">
-			{#if row.kind === 'questions'}<Question {row} />{:else if row.kind === 'edits' || row.kind === 'accepted-changed'}<Change {row} />{:else if row.kind === 'check' && row.correction !== undefined}<Correction {row} />{:else if row.kind === 'check'}<Check {row} />{:else if row.kind === 'cited' && row.citation !== undefined}<Citation {row} />{:else if row.kind === 'cited'}<Cited {row} />{/if}
+			{#if row.kind === 'questions'}<Question {row} />{:else if row.kind === 'edits' || row.kind === 'accepted-changed'}<Change {row} />{:else if row.kind === 'check' && row.correction !== undefined}<Correction {row} />{:else if row.kind === 'check'}<Check {row} />{:else if row.kind === 'cited' && row.citation !== undefined}<Citation {row} />{:else if row.kind === 'cited'}<Cited {row} />{:else if row.kind === 'attest'}<Attest {row} />{:else if row.kind === 'attested-changed'}<AttestedChanged {row} />{/if}
 		</div>
 	{/if}
 </div>

@@ -77,7 +77,7 @@ export function marks(r: ReviewRow): [MarkKind | null, MarkKind | null] {
 }
 
 /** The kinds whose rows open in this build; a papers-to-fetch row never does. */
-const OPENS = new Set<ReviewRow['kind']>(['questions', 'accepted-changed', 'edits', 'check', 'cited']);
+const OPENS = new Set<ReviewRow['kind']>(['questions', 'accepted-changed', 'edits', 'check', 'cited', 'attest', 'attested-changed']);
 export const opens = (r: ReviewRow): boolean => OPENS.has(r.kind);
 
 /** A task's sentence, from what was asked and of what; an ask of a kind loom does not make here is drawn with the words it carries. */

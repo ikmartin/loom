@@ -144,6 +144,7 @@ export const undoTake = (id: string, act?: string) => call<WriteDone>('library-u
 export const answer = (task: string, choice: number | null, words: string) => call<WriteDone>('review-answer', { task, ...(choice === null ? {} : { choice }), words });
 export const takeCorrection = (correction: string) => call<WriteDone>('library-correction-take', { correction });
 export const declineCorrection = (correction: string) => call<WriteDone>('library-correction-decline', { correction });
+export const attest = (result: string, observation: string) => call<WriteDone>('formal-attest', { result, observation });
 export const mention = (citation: string) => call<WriteDone>('library-mention', { citation });
 export const withdraw = (task: string) => call<WriteDone>('review-task-delete', { task });
 /** Asks an agent (`review-task`): an `asked` line of the asks log (`evidence.md` §4.1), `fields` those of its `what`, `from` the drafts it is asked for. */
