@@ -4,7 +4,7 @@ Tested at 71621877 on scratch copies of seven papers, with a prototype in a sepa
 
 **Verdict: not safe as proposed; safe with changes.** Label keys are a large gain. The file-wide quote search makes things worse: it puts records on the wrong block more often than today's code does (255 against 160 of 4,693 record placements), and it puts six times as many suggested edits in the wrong block (43 against 7), which Keep would then write into the wrong text. The design that is safe adds three things the audit did not mention. First, every record must store where its block stood among its neighbours, and whether another block reads like it. Second, any block found by its text must be checked against that record. Third, a quote may place a record on its own only where that quote stood once in the whole quilt. On the same 4,693 placements that design put 15 on the wrong block, all of them whole-block notes on a label that a co-author had reused for a different statement. With label keys also checked against the text (verify mode), it put none on the wrong block. Effort is about 4-5 coding-agent sessions, against the audit's 2-3 days.
 
-Prototype: `spikes/labels.patch` (applies to 71621877; the code changes plus the harness under `loom/scripts/spikes/labels/`). Scratch work: `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/check-labels/` (`runs/summary.txt` holds the full tables).
+Prototype: `spikes/labels.patch` (applies to 71621877; the code changes plus the harness under `loom/scripts/spikes/labels/`). Scratch work: `<scratch>/study/check-labels/` (`runs/summary.txt` holds the full tables).
 
 | # | finding | weight |
 |---|---|---|

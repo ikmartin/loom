@@ -1,5 +1,5 @@
 // node shot.mjs URL OUT.png [waitMs] [w] [h] -- screenshot a page; prints title, console errors and visible text head
-import { chromium } from '/Users/isaac/dev/loom-arras/arras/node_modules/playwright/index.mjs';
+const { chromium } = await import(`${process.env.HOME}/dev/loom-arras/arras/node_modules/playwright/index.mjs`);
 const [url, out, wait = '4000', w = '1440', h = '900'] = process.argv.slice(2);
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: +w, height: +h } });

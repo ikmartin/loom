@@ -1,6 +1,6 @@
 #!/bin/bash
 # Time the agent-facing commands three times each in quilt $1; prints "seconds  command".
-Q="$1"; L=/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom
+Q="$1"; L=$HOME/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom
 cd "$Q" || exit 1
 export AI_AGENT=1
 run() {

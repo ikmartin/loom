@@ -1,5 +1,5 @@
 // The person's open tab: node holder.mjs URL MINUTES; then write $S/holder/cmd-N.json = [[op,arg],...] and read $S/holder/out-N.txt
-import { chromium } from '/Users/isaac/dev/loom-arras/arras/node_modules/playwright/index.mjs';
+const { chromium } = await import(`${process.env.HOME}/dev/loom-arras/arras/node_modules/playwright/index.mjs`);
 import fs from 'fs';
 const [url, minutes] = process.argv.slice(2);
 const dir = process.env.HOLDER_DIR;

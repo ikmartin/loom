@@ -1,6 +1,6 @@
 # v0.1 study, walk2: first-time user walk through the showcase quilt
 
-Tester: a first-time user (mathematics graduate student), reporting only from what the running application and the project folder showed. I did not read loom source, docs, tests or other testers' reports. The only loom command run was `loom serve --port 48160` in a copy of demos/showcase, with XDG_CONFIG_HOME set to a folder inside my test folder. Browser at 1440 px wide. Screenshots are in /private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/walk2/shots/ and my running log is /private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/walk2/log.md.
+Tester: a first-time user (mathematics graduate student), reporting only from what the running application and the project folder showed. I did not read loom source, docs, tests or other testers' reports. The only loom command run was `loom serve --port 48160` in a copy of demos/showcase, with XDG_CONFIG_HOME set to a folder inside my test folder. Browser at 1440 px wide. Screenshots are in <scratch>/study/walk2/shots/ and my running log is <scratch>/study/walk2/log.md.
 
 Action counts are approximate (clicks, drags, typing, and reads of the screen counted together).
 

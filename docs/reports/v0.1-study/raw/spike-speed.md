@@ -1,6 +1,6 @@
 # Spike: does relloc's save-to-seen reach 3-4 s?
 
-Spike lead: speed. Throwaway prototype on a shared clone of the repository at 71621877 (`spike-speed/repo`, worktrees `mod` and `stage`), measured on APFS copies of the audit's own relloc copy (`speed/relloc`), with the audit's harness (`serveprobe.py`, `probe.py`, a variant of `viewer.cjs`). Everything lives in `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/spike-speed/` (`tools/`, `logs/`). The whole change is `docs/reports/v0.1-study/spikes/speed.patch` (six commits squashed, 351 lines of diff). Nothing here is meant to merge.
+Spike lead: speed. Throwaway prototype on a shared clone of the repository at 71621877 (`spike-speed/repo`, worktrees `mod` and `stage`), measured on APFS copies of the audit's own relloc copy (`speed/relloc`), with the audit's harness (`serveprobe.py`, `probe.py`, a variant of `viewer.cjs`). Everything lives in `<scratch>/study/spike-speed/` (`tools/`, `logs/`). The whole change is `docs/reports/v0.1-study/spikes/speed.patch` (six commits squashed, 351 lines of diff). Nothing here is meant to merge.
 
 ## How this was measured, and what to distrust
 

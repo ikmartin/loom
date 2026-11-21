@@ -270,7 +270,7 @@ Verdict: the plan's goals and gates are sound, but its execution layer is not re
 - **Evidence.**
   - The harness's `analyze.py` counted 5 of 200 sequences as damaged after the door; all were refused concurrent Keeps that lost nothing, found by inspection (DOOR-2). An agent applying "no damage" literally cannot pass.
   - CRLF restores still flag (RTX-16).
-  - The anchoring harness exists only inside `spikes/labels.patch`, beside the prototype's production code. It imports symbols X1 moves (RTX-3) and reads its seven papers from the main checkout's gitignored `tests/fixtures/` (`.gitignore:1`; the papers are present only at `/Users/isaac/dev/loom-arras/tests/fixtures/`), plus relloc and quant, which are the author's. A lane's worktree has none of them.
+  - The anchoring harness exists only inside `spikes/labels.patch`, beside the prototype's production code. It imports symbols X1 moves (RTX-3) and reads its seven papers from the main checkout's gitignored `tests/fixtures/` (`.gitignore:1`; the papers are present only at `~/dev/loom-arras/tests/fixtures/`), plus relloc and quant, which are the author's. A lane's worktree has none of them.
   - "No record on the wrong block" contradicts the recommended trust mode (RTX-18).
   - The harness's acts are keep, discard, undo, restore, tick, hand edits and settings. They do not cover adopt, sync, `mv`, import, `init --from` or the agent layer, which DOOR-4 lists as not routed. So the gate passes with those writers unsafe.
 - **How bad.** Would waste days.
