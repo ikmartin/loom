@@ -217,11 +217,13 @@ EXERCISES = (
     "\\begin{{{env}}}\\label{{{p}-9X03}}\nEvery planar graph is five colourable, by a counting argument on degrees.\n\\end{{{env}}}\n"
     "\\begin{{proof}}\nInduct on vertices: a vertex of degree at most five exists, remove it, colour the rest, and recolour along a Kempe chain.\n\\end{{proof}}\n"
     "\\begin{{proof}}\nUse the discharging method with charges six minus degree on every vertex, and reduce to unavoidable configurations.\n\\end{{proof}}\n\n"
+    "\\begin{{{env}}}\\label{{{p}-9X04}}\nLet f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is injective then f is an isomorphism.\n\\end{{{env}}}\n\n"
+    "\\begin{{{env}}}\nLet f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is surjective then f is an isomorphism.\n\\end{{{env}}}\n\n"
 )
 
 
 def add_exercises(root: Path, targets: list[Target], main: str) -> None:
-    """Two exercises with ids and empty answers, and a theorem with an id and two proofs, put at the end of the main file's body before any record is filed; the second empty answer (`id-empty`) and the theorem's first proof (`id-proof`) become targets. What an id's proofs, numbered by their place, and empty answers, all alike, ask of placement."""
+    """Two exercises with ids and empty answers, a theorem with an id and two proofs, and a lemma with an id and a look-alike after it, put at the end of the main file's body before any record is filed; the second empty answer (`id-empty`), the theorem's first proof (`id-proof`) and the lemma (`id-lookalike`) become targets. What an id's proofs, numbered by their place, empty answers, all alike, and a look-alike beside an id's block ask of placement."""
     if not main:
         return
     q = load_quilt(root)
@@ -247,22 +249,28 @@ def add_exercises(root: Path, targets: list[Target], main: str) -> None:
         targets.append(
             Target("id-empty1", "id-empty", empty.key, empty.key, empty.file, empty.start, empty.end, -1, "")
         )
-    if first is not None:
-        own, pieces = Records.own_pieces(result, first)
+    for tid, kind, n in (
+        ("id-proof1", "id-proof", first),
+        ("id-lookalike1", "id-lookalike", result.nodes.get(f"{q.config.prefix}-9X04")),
+    ):
+        if n is None:
+            continue
+        own, pieces = Records.own_pieces(result, n)
         span = _plain_window(own)
         fs = Records.to_file_span(pieces, span) if span else None
         if span and fs:
             targets.append(
                 Target(
-                    "id-proof1",
-                    "id-proof",
-                    first.key,
-                    first.key,
-                    first.file,
-                    first.start,
-                    first.end,
+                    tid,
+                    kind,
+                    n.key,
+                    n.key,
+                    n.file,
+                    n.start,
+                    n.end,
                     fs[0],
                     own[span[0] : span[1]],
+                    labels=list(n.labels),
                 )
             )
 
@@ -780,6 +788,9 @@ SCENARIOS = {
     "comment-out-input": ["comment_input"],
     # with `--pretwin`: each statement's twin deleted, its own block untouched
     "delete-twin": ["delete_twin"],
+    # each statement with an id copied, its labels left out, right below or above it, and the original then edited where it stands, keeping its id
+    "copy-below-then-edit": ["copy_below"],
+    "copy-above-then-edit": ["copy_above"],
 }
 
 
@@ -881,14 +892,14 @@ def backup(ws: WS, targets: list[Target]) -> None:
 def label_move(ws: WS, targets: list[Target]) -> None:
     """Each id or section label moved off its block onto the next block of its file."""
     for t in targets:
-        if t.kind not in ("stmt-id", "sec-label"):
+        if t.kind not in ("stmt-id", "sec-label", "id-lookalike"):
             continue
         sa = ws.anchors.get(f"blk:{t.tid}")
         if sa is None:
             continue
         path, s = sa
         text = ws.load(path)
-        e = _stmt_end(text, s) if t.kind == "stmt-id" else text.find("\n", s)
+        e = text.find("\n", s) if t.kind == "sec-label" else _stmt_end(text, s)
         m = re.search(r"\\label\{([^}]*)\}", text[s:e])
         nxt = _later_block(text, e)
         if not m or nxt is None:
@@ -908,6 +919,27 @@ def delete_twins(ws: WS) -> None:
         path, s = at
         text = ws.load(path)
         ws.replace(path, s, _stmt_end(text, s), "")
+
+
+def copy_beside(ws: WS, targets: list[Target], below: bool) -> None:
+    """Each statement with an id copied, its labels left out, right below or above it to make a variant, and the original then edited, a sentence added at the end of its body: the id never moved."""
+    for t in targets:
+        if t.kind not in ("stmt-id", "id-lookalike"):
+            continue
+        sa = ws.anchors.get(f"blk:{t.tid}")
+        if sa is None:
+            continue
+        path, s = sa
+        text = ws.load(path)
+        e = _stmt_end(text, s)
+        copy = re.sub(r"\\label\{[^}]*\}", "", text[s:e])
+        ws.insert(path, e if below else s, ("\n" + copy + "\n") if below else (copy + "\n\n"))
+        path, s = ws.anchors[f"blk:{t.tid}"]
+        text = ws.load(path)
+        a, b = _body_of(text, s)
+        while b > a and text[b - 1] in " \n\t":
+            b -= 1
+        ws.insert(path, b, " Indeed, a co-author added this sentence.")
 
 
 def comment_out_input(ws: WS, targets: list[Target], cfg_main: str) -> None:
@@ -968,6 +1000,8 @@ def apply_scenario(root: Path, name: str, targets: list[Target], result, cfg_mai
             split_file(ws, targets, doc or cfg_main)
         elif step == "delete_twin":
             delete_twins(ws)
+        elif step in ("copy_below", "copy_above"):
+            copy_beside(ws, targets, below=step == "copy_below")
         elif step == "comment_input":
             comment_out_input(ws, targets, doc or cfg_main)
         elif step == "label_reused":
