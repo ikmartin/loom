@@ -2,7 +2,7 @@
 
 This page specifies two logs loom keeps under `.loom/records/`: the **evidence log**, what someone did to a text (digested it, compared it with its paper, ran Lean on it, attested it), and the **asks log**, what a person asked of an agent and an agent of a person. It wins over `docs/design/library.md` about a shape, as that wins about what a record means. The node files these records speak of are `nodes.md`'s.
 
-What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). A library node's status waits for the node store, and Review's lists are not built yet; nothing yet writes a record but the tests.
+What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). A library node's status waits for the node store, and Review's lists and the viewer's reads and writes are not built yet; nothing writes a record of evidence yet but the tests.
 
 ## 1. Files
 
@@ -167,6 +167,44 @@ A person withdraws any ask and an agent only its own; an agent's withdrawal of a
 {"at":"2026-11-21T12:00:40Z","by":{"kind":"person","name":"A. Author"},"choice":1,"event":"answered","task":"t-2026-11-21-w2c6ga","words":"and note that 2.5 is only a remark"}
 {"at":"2026-11-21T12:10:00Z","by":{"kind":"person","name":"A. Author"},"event":"withdrawn","task":"t-2026-11-21-7h3qfw"}
 ```
+
+### 4.3 What closes an ask
+
+An ask is open until what it asked for exists, whoever made it; an agent's `done` says what it made and closes nothing by itself. Computed each time it is asked (`asks.standing`), never written:
+
+| `what` | closed when |
+| --- | --- |
+| `read` | every stub it names has a body |
+| `digest` | every node it names has a body; for marks, until loom finds a node's place on a page, the nodes a `done` names exist with bodies |
+| `ask`, `question` | it is answered |
+| `correct` | a `digested` or a `proposed` on the node is written after it |
+| `restate` | loom observes the target's Lean after it, standing (§5.1), with statements other than the person's last attestation's |
+| `which-result` | the person says only a mention (§3.7) of that block and work, or an agent files a suggested edit on that block after it |
+| `formalize` | loom observes the target's Lean after it, standing, and Lean accepts it |
+| `paper` | the work holds the document wanted |
+
+Every ask is closed once withdrawn. One that a node would close stays open while nothing can say of the node, as before the node store. An ask taken (`took`) is **working** while an agent server alive now (`presence.live`) is in the session that took it, and waiting otherwise, so a session that has ended does not look busy.
+
+### 4.4 A dropped paper
+
+When the person drops a file, the intake reads the identifiers it states, in its name, its metadata or on its first page, and asks `asks.waiting_for` which works waiting for a paper they name. `waiting_for` is built; the intake's call to it, and the drop on a row, come with the references (not built yet). Identifiers are read only where written as identifiers, normalised as `arxiv:2401.01234` with no version (an old-style `arxiv:math/0601001` too) and `doi:` lower-cased, and a number inside a DOI is not taken for an arXiv one; nothing is matched by title or author. A work's identifiers are those of the link its request names and, with the node store, of its entry. One work found: the file is attached to it. Several: the intake's one question. None: an ordinary drop. A file dropped on the request's row in Review is attached to that work without a match.
+
+### 4.5 An agent's commands
+
+Each is also its MCP tool, as every agent command is. An agent names itself with `--as`, a name with Agent or AI in it; a person acts in the viewer, and no command here does a person's act.
+
+| command | does |
+| --- | --- |
+| `loom tasks [--all]` | what is open for agents, each with its place and whether a session is on it, and what agents asked of the person that waits, with its answers; `--all` adds what is closed |
+| `loom tasks take TASK` | says the active session is working on it |
+| `loom tasks done TASK --made ID…` | says what the agent made |
+| `loom tasks answer TASK TEXT` | answers a person's `ask` |
+| `loom tasks withdraw TASK` | withdraws one of its own asks |
+| `loom ask TEXT --on PLACE [--choice C]…` | asks the person a `question`; PLACE is a draft's label or a block's key, a node's id, a work's id with `:PAGE`, or a document's path, a draft's label first since a draft's id has a node's shape |
+| `loom ask --paper REF --link URL [--want pdf\|tex] [TEXT]` | asks the person for a paper it could not fetch |
+| `loom evidence NAME` | a result's status and every record and ask about it; NAME is a draft's label or a node's id |
+
+`loom ai orient` says how many asks are open when any are.
 
 ## 5. Status
 

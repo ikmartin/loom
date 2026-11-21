@@ -7,15 +7,17 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
 from loom.clock import stamp
-from loom.evidence.log import AT
+from loom.evidence.log import AT, Evidence, Record
+from loom.evidence.status import statements_of
 from loom.evidence.subjects import HASH, NODE, REFERENCE, Subject, Who, label_problem
+from loom.evidence.web import Here, Web
 from loom.locks import locked
 from loom.paths import ASK_LOG
 from loom.records.ids import ASK, SESSION, draw
@@ -488,3 +490,245 @@ def say(root: Path, by: Who, event: str, task: str, **fields: Any) -> Ask:
 def _copy(found: Ask) -> Ask:
     """An ask to try an event on without touching the memoised replay."""
     return Ask(**{**found.__dict__, "took": [], "done": [], "answers": [], "withdrawn": None})
+
+
+# ---- what is still open ---------------------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Standing:
+    """An ask as it stands now: whether it is open, why not, and whether a live session has taken it."""
+
+    ask: Ask
+    open: bool
+    why: str
+    working: bool
+
+
+def standing(
+    found: Ask,
+    evidence: Evidence,
+    web: Web,
+    *,
+    sessions: frozenset[str] = frozenset(),
+    edits: list[Any] | None = None,
+    lean_now: Callable[[Record], bool] | None = None,
+) -> Standing:
+    """Whether an ask is still open, computed from what exists now (`docs/specs/evidence.md` §4.3).
+
+    Parameters
+    ----------
+    found : Ask
+        The ask, replayed.
+    evidence : Evidence
+        The replayed evidence log.
+    web : Web
+        The texts now.
+    sessions : frozenset of str, default empty
+        The loom sessions of the agent servers alive now (`presence.live`); an ask taken in one of them is being worked on.
+    edits : list, optional
+        The suggested edits (`records.edits.replay`), for a `which-result`.
+    lean_now : callable, optional
+        Whether a `lean` record's Lean is unchanged (`status.files_unchanged`); default every record stands.
+
+    Returns
+    -------
+    Standing
+        `why` is `withdrawn`, `answered` or `produced` for a closed ask, '' for an open one.
+    """
+    working = any(str(t.get("session")) in sessions for t in found.took)
+    if found.withdrawn is not None:
+        return Standing(found, False, "withdrawn", False)
+    if found.what in ANSWERED:
+        return Standing(found, not found.answers, "answered" if found.answers else "", working and not found.answers)
+    done = _produced(found, evidence, web, edits or [], lean_now or (lambda _r: True))
+    return Standing(found, not done, "produced" if done else "", working and not done)
+
+
+def _bodied(web: Web, ids: Iterable[str]) -> bool:
+    """Every node named exists with a body; a node the web cannot say of keeps the ask open."""
+    ids = list(ids)
+    return bool(ids) and all(web.stub(Here("node", i)) is False for i in ids)
+
+
+def _produced(found: Ask, evidence: Evidence, web: Web, edits: list[Any], lean_now: Callable[[Record], bool]) -> bool:
+    """Whether what the ask asked for exists now."""
+    what = found.what
+    if what == "read":
+        return _bodied(web, found.get("nodes", []))
+    if what == "digest":
+        if found.get("nodes"):
+            return _bodied(web, found.get("nodes"))
+        made = [m for event in found.done for m in event.get("made", [])]
+        return _bodied(web, made)
+    if what == "paper":
+        return web.holds(str(found.get("ref")), str(found.get("want"))) is True
+    if what in ("formalize", "restate"):
+        target = Subject.from_dict(found.get("target"), ("node", "label"))
+        after = [
+            r for r in evidence.about(*target.key, of="lean") if r.at >= found.at and lean_now(r) and _states(r, target)
+        ]
+        if what == "formalize":
+            return any(r.get("ok") for r in after)
+        before = [r for r in evidence.about(*target.key, of="attested") if r.by.kind == "person" and r.at <= found.at]
+        attested = dict(before[-1].get("statements", {})) if before else None
+        return any(attested is None or statements_of(r) != attested for r in after)
+    if what == "correct":
+        node = str(found.on["node"])
+        return any(r.at >= found.at for r in evidence.about("node", node) if r.kind in ("digested", "proposed"))
+    if what == "which-result":
+        block = found.on["block"]
+        cites = found.get("cites")
+        if mention_holds(evidence, block["key"], str(cites)):
+            return True
+        return any(
+            getattr(e, "author_kind", "") == "agent" and e.target_key == block["key"] and e.created >= found.at
+            for e in edits
+        )
+    return False
+
+
+def _states(record: Record, target: Subject) -> bool:
+    """Whether a `lean` record has a declaration stating `target`."""
+    return any(
+        d.get("role") == "states" and d.get("names") == {target.kind: target.name}
+        for d in record.get("declarations", [])
+    )
+
+
+def mention_holds(evidence: Evidence, key: str, cites: str) -> bool:
+    """Whether the person's last word on a citation of `cites` in the block at `key` is that it is only a mention."""
+    said = [r for r in evidence.of_kind("mention") if r.get("cites") == cites and r.get("block", {}).get("key") == key]
+    return bool(said) and not said[-1].get("undo")
+
+
+def live_sessions(root: Path) -> frozenset[str]:
+    """The loom sessions of the agent servers alive now."""
+    from loom.presence import live
+
+    return frozenset(str(r["session"]) for r in live(root) if r.get("session"))
+
+
+# ---- a dropped paper ---------------------------------------------------------------------------------------------------
+
+_ARXIV_NEW = re.compile(r"(?<![\d.])(\d{4}\.\d{4,5})(?:v\d+)?(?!\d)")
+_ARXIV_OLD = re.compile(r"\b([a-z-]+(?:\.[A-Z]{2})?/\d{7})(?:v\d+)?(?!\d)", re.I)
+_DOI = re.compile(r"\b(10\.\d{4,9}/[^\s\"<>]+)", re.I)
+#: The DOI arXiv gives each paper, which names its arXiv number too.
+_ARXIV_DOI = re.compile(r"10\.48550/arxiv\.(.+)", re.I)
+
+
+def identifiers(text: str) -> frozenset[str]:
+    """The identifiers a link, an entry's field or a file's name states, normalised: `arxiv:2401.01234` with no version, `doi:` lower-cased.
+
+    Only what is written in the form of an identifier is read, and a number inside a DOI is not taken for an arXiv one; nothing is guessed from a title or an author.
+    """
+    out: set[str] = set()
+    rest = text
+    for m in _DOI.finditer(text):
+        doi = m.group(1).rstrip(".,;)]").lower()
+        out.add("doi:" + doi)
+        arxiv = _ARXIV_DOI.fullmatch(doi)
+        if arxiv:
+            out |= {"arxiv:" + n.group(1).lower() for n in _ARXIV_NEW.finditer(arxiv.group(1))}
+        rest = rest.replace(m.group(1), " ")
+    for pattern in (_ARXIV_NEW, _ARXIV_OLD):
+        out |= {"arxiv:" + n.group(1).lower() for n in pattern.finditer(rest)}
+    return frozenset(out)
+
+
+def waiting_for(root: Path, found: frozenset[str], known: Mapping[str, frozenset[str]] | None = None) -> list[str]:
+    """The works a paper waits for that a dropped file's identifiers name.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    found : frozenset of str
+        The identifiers the intake read in the file, as `identifiers` normalises them.
+    known : mapping, optional
+        Each reference's identifiers from its entry, by its id (the node store's); the link the agent could not fetch from is always read.
+
+    Returns
+    -------
+    list of str
+        The references waiting, in the order asked, whose identifiers meet `found`: one is attached, several is the intake's question, none is an ordinary drop.
+    """
+    out: list[str] = []
+    for a in replay(root).asks.values():
+        if a.what != "paper" or a.withdrawn is not None:
+            continue
+        ref = str(a.get("ref"))
+        theirs = identifiers(str(a.get("link"))) | (known or {}).get(ref, frozenset())
+        if theirs & found and ref not in out:
+            out.append(ref)
+    return out
+
+
+def open_asks(root: Path, *, closed: bool = False, web: Web | None = None) -> list[Standing]:
+    """Every ask of the quilt as it stands now, in the order asked.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    closed : bool, default False
+        Include the asks that are closed or withdrawn.
+    web : Web, optional
+        The texts now; default one that knows no node, which keeps open every ask a node would close.
+
+    Returns
+    -------
+    list of Standing
+    """
+    from loom.evidence.log import replay as replay_evidence
+    from loom.evidence.status import files_unchanged
+    from loom.evidence.web import Blank
+    from loom.records.edits import replay as replay_edits
+
+    evidence = replay_evidence(root)
+    sessions = live_sessions(root)
+    edits = replay_edits(root)[0]
+    now = files_unchanged(root)
+    out = [
+        standing(a, evidence, web or Blank(), sessions=sessions, edits=edits, lean_now=now)
+        for a in replay(root).asks.values()
+    ]
+    return [s for s in out if closed or s.open]
+
+
+def place_of(quilt: Any, text: str) -> tuple[dict[str, Any], list[str]]:
+    """The place a person or an agent names in a command, and the documents that read it.
+
+    A draft's label or a block's key first, since a draft's id has the shape of a node's; then a work's id with `:PAGE`, a node's id, and a document's path.
+
+    Raises
+    ------
+    ContentError
+        When nothing of the quilt is named so.
+    """
+    from loom.errors import ContentError
+    from loom.evidence.web import DraftWeb
+    from loom.records.locate import block_hash, context_of
+    from loom.scan.scan import scan
+
+    result = scan(quilt)
+    web = DraftWeb(result)
+    name = text.strip()
+    if name in web.bearing:
+        readers = sorted({d for n in web.bearing[name] for d in n.reached_by})
+        return {"label": name}, readers
+    node = result.nodes.get(name)
+    if node is not None and node.kind not in ("master", "file"):
+        block = {"key": node.key, "hash": block_hash(result, node.key), "context": context_of(result, node)}
+        return {"block": block}, sorted(node.reached_by)
+    ref, _, page = name.partition(":")
+    if REFERENCE.fullmatch(ref) and (not page or page.isdigit()):
+        return ({"ref": ref, "page": int(page)} if page else {"ref": ref}), []
+    if NODE.fullmatch(name):
+        return {"node": name}, []
+    if name in result.masters:
+        return {"document": name}, [name]
+    raise ContentError(
+        f"nothing of this quilt is named {name}: give a result's label or key, a node's id, a work's id, or a document's path"
+    )

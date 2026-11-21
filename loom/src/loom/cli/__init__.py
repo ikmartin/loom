@@ -37,6 +37,7 @@ from loom.cli.session import session
 from loom.cli.since_cmd import since_command
 from loom.cli.suggest import suggest_command
 from loom.cli.sync import sync
+from loom.cli.tasks_cmd import ask_command, evidence_command, tasks
 from loom.cli.upgrade import upgrade
 from loom.version import __version__
 
@@ -96,5 +97,8 @@ main.add_command(since_command)
 main.add_command(changes_command)
 main.add_command(mcp_command)
 main.add_command(sync)
+main.add_command(tasks)
+main.add_command(ask_command)
+main.add_command(evidence_command)
 
 __all__ = ["main"]
