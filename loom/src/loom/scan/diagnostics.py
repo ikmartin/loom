@@ -126,6 +126,8 @@ LOOM: dict[str, Code] = {
     "loom:node-incomplete": Code("error", INTERNAL),
     # a line of the tag log that is neither a tag nor an untag, skipped as `loom:foreign-annotations` skips one of the annotation log
     "loom:foreign-tags": Code("warning", INTERNAL),
+    # a line of the library's log that is no act on a work, skipped as above
+    "loom:foreign-library-acts": Code("warning", INTERNAL),
 }
 
 #: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case; `loom:document-gone` of class `LATEX` where annotations are on the document, which the person is shown nowhere else.

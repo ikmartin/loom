@@ -130,6 +130,7 @@ The library's nodes, each a failure of one of the checks of [`nodes.md`](nodes.m
 - `loom:node-macros` (error, internal, subject `record`): check 10. A macros node holds text, or a command that neither loads a package nor defines one (the list is `library/body.py`'s `ARGUMENTS`); the message names the command.
 - `loom:node-incomplete` (error, internal, subject `record`): check 11. A pointer, a proof with no text, without `source` or `pages`; or a stub, a statement with no text, without `source`.
 - `loom:foreign-tags` (warning, internal, subject `record`): a line of `.loom/records/tags/log.jsonl` that is neither a tag nor an untag. It is skipped and the rest of the log still loads.
+- `loom:foreign-library-acts` (warning, internal, subject `record`): a line of `.loom/records/library/log.jsonl` that is no act on a work. It is skipped and the rest of the log still loads.
 
 Compiles:
 
