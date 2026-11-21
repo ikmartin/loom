@@ -70,6 +70,11 @@ MACHINES = {
     "dvisvgm refusing its Ghostscript, no mutool": (("dvisvgm-refusing",), ("/x/libgs.dylib", 1, 2), False),
     "dvisvgm with a Ghostscript it accepts, failing": (("dvisvgm-failing",), ("/x/libgs.dylib", 1, 2), True),
     "dvisvgm with mutool, failing": (("dvisvgm-failing", "mutool"), None, True),
+    "dvisvgm refusing its Ghostscript, with a mutool it cannot use": (
+        ("dvisvgm-refusing", "mutool-failing"),
+        ("/x/libgs.dylib", 1, 2),
+        False,
+    ),
     "pdftocairo, failing": (("pdftocairo-failing",), None, True),
 }
 

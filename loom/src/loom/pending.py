@@ -130,6 +130,8 @@ def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
 
 #: A range is searched by window (`_longest_by_window`) where its old words occur, counted over the whole of the new text, more than this many times per word of the two ranges: a bound above what difflib's search would look at, which stops at the range's end. Both searches answer the same, so it decides time alone.
 _CHEAP = 8
+#: What follows a run, in words of the two ranges, short enough to look for more runs as long in it at once (`_runs_after`); past it they are looked for only once a step has found a run as long as the one before it, so a recursion that never repeats a length pays no pass.
+_NEAR = 256
 #: The window hash: a polynomial in the words' numbers, modulo a Mersenne prime, its base drawn once a process above every word's number, so that no text can be written to collide and send the listing down `_cut_by_difflib`'s path.
 _HASH_MOD = (1 << 61) - 1
 _HASH_BASE = secrets.randbelow(_HASH_MOD - (1 << 32)) + (1 << 32)
@@ -142,7 +144,7 @@ class _Inexact(Exception):
 def _matching(a: list[str], b: list[str]) -> list[tuple[int, int, int]]:
     """`difflib.SequenceMatcher(None, a, b, autojunk=False)`'s matching blocks, without its closing one, as triples in order.
 
-    Its own recursion, each step's longest shared run found by difflib where that is cheap and by `_longest_by_window` where its search would look at every recurrence of a frequent word, the cost that grows with the square of how often a word recurs; and after each, the runs as long that difflib would take one step at a time on what follows (`_runs_after`), the cost of an edit of one shape on every line, found in one pass. Each gives difflib's run, so the blocks are difflib's; raises `_Inexact` where a hash collides.
+    Its own recursion, each step's longest shared run found by difflib where that is cheap and by `_longest_by_window` where its search would look at every recurrence of a frequent word, the cost that grows with the square of how often a word recurs; and, once a step's run is as long as the one before it, the runs as long that difflib would take one step at a time on what follows (`_runs_after`), the cost of an edit of one shape on every line, found in one pass. A step whose run is shorter pays nothing for it, so a recursion that never repeats a length costs what difflib's does. Each gives difflib's run, so the blocks are difflib's; raises `_Inexact` where a hash collides.
     """
     import difflib
     from collections import Counter
@@ -154,11 +156,16 @@ def _matching(a: list[str], b: list[str]) -> list[tuple[int, int, int]]:
     na = [numbers.setdefault(w, len(numbers) + 1) for w in a]
     nb = [numbers.setdefault(w, len(numbers) + 1) for w in b]
     count = Counter(nb)
-    queue = [(0, len(a), 0, len(b))]
+    # how often the words of a's first x words occur in b, so that a range's estimate is one subtraction
+    occurs = [0]
+    for x in na:
+        occurs.append(occurs[-1] + count[x])
+    # each range with the length of the run just before it, where it is what follows that run
+    queue = [(0, len(a), 0, len(b), 0)]
     blocks = []
     while queue:
-        alo, ahi, blo, bhi = queue.pop()
-        if sum(count.get(x, 0) for x in na[alo:ahi]) <= _CHEAP * (ahi - alo + bhi - blo):
+        alo, ahi, blo, bhi, before = queue.pop()
+        if occurs[ahi] - occurs[alo] <= _CHEAP * (ahi - alo + bhi - blo):
             i, j, k = sm.find_longest_match(alo, ahi, blo, bhi)
         else:
             i, j, k = _longest_by_window(na, nb, alo, ahi, blo, bhi)
@@ -166,16 +173,17 @@ def _matching(a: list[str], b: list[str]) -> list[tuple[int, int, int]]:
             continue
         blocks.append((i, j, k))
         if alo < i and blo < j:
-            queue.append((alo, i, blo, j))
-        # the next steps difflib takes on what follows, while it holds a run as long, each the earliest after the one before: found in one pass
+            queue.append((alo, i, blo, j, 0))
         at_a, at_b = i + k, j + k
-        for x, y in _runs_after(na, nb, at_a, ahi, at_b, bhi, k):
-            blocks.append((x, y, k))
-            if at_a < x and at_b < y:
-                queue.append((at_a, x, at_b, y))
-            at_a, at_b = x + k, y + k
+        if k == before or (ahi - at_a) + (bhi - at_b) <= _NEAR:
+            # a run as long as the one before it, so difflib is taking runs of one length one step at a time, or what follows is short enough that a pass costs little: the rest of the runs as long are found in one pass
+            for x, y in _runs_after(na, nb, at_a, ahi, at_b, bhi, k):
+                blocks.append((x, y, k))
+                if at_a < x and at_b < y:
+                    queue.append((at_a, x, at_b, y, 0))
+                at_a, at_b = x + k, y + k
         if at_a < ahi and at_b < bhi:
-            queue.append((at_a, ahi, at_b, bhi))
+            queue.append((at_a, ahi, at_b, bhi, k))
     blocks.sort()
     return blocks
 

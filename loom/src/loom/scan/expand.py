@@ -76,10 +76,11 @@ class Expansion:
 def _kpsewhich(name: str, cwd: Path) -> bool:
     """Whether the distribution resolves `name`, asked of the `kpsewhich` on PATH now from `cwd`, the document's directory, as a compile there would ask.
 
-    Memoised, since a subprocess per unresolved inclusion was 86 ms of a 166 ms scan on the Manolache import; keyed by executable, TEXINPUTS and directory as well as name, so a run under another installation is never answered from this one's memo. A name found is believed while the file `kpsewhich` named is there, one `stat`; a name not found is asked about again once `AGAIN` seconds have passed, whatever way a file can arrive (`tlmgr`, a copy, a link, a folder `TEXINPUTS` names), so for that long a file that has just arrived can still be called missing.
+    Memoised, since a `kpsewhich` run was 86 ms of a 166 ms scan on the Manolache import; keyed by executable, TEXINPUTS and directory as well as name, so a run under another installation is never answered from this one's memo. A name found is believed while the file `kpsewhich` named is there, one `stat`; a name not found is asked about again at the first lookup `AGAIN` seconds or more after it was last asked, whatever way a file can arrive (`tlmgr`, a copy, a link, a folder `TEXINPUTS` names), so until then a file that has just arrived is called missing, and a server at rest looks nothing up. Every name not found in the same directory whose time has come is asked in the same run, which loads the databases once.
     """
     exe = shutil.which("kpsewhich")
-    key = (exe, os.environ.get("TEXINPUTS", ""), name, str(cwd))
+    texinputs = os.environ.get("TEXINPUTS", "")
+    key = (exe, texinputs, name, str(cwd))
     found = _FOUND.get(key)
     if found is not None:
         if os.path.exists(found):
@@ -91,13 +92,22 @@ def _kpsewhich(name: str, cwd: Path) -> bool:
             return False
     # the time before asking, so a file that arrives while kpsewhich runs is asked about at the next interval
     now = _clock()
-    path = _probe(*key)
-    if path is not None:
-        _FOUND[key] = path
-        _MISSING.pop(key, None)
-        return True
-    _MISSING[key] = now
-    return False
+    due = [
+        name,
+        *(
+            k[2]
+            for k, t in _MISSING.items()
+            if k[:2] == key[:2] and k[3] == key[3] and k[2] != name and now - t >= AGAIN
+        ),
+    ]
+    for asked_name, path in _probe(exe, texinputs, due, str(cwd)).items():
+        k = (exe, texinputs, asked_name, str(cwd))
+        if path is not None:
+            _FOUND[k] = path
+            _MISSING.pop(k, None)
+        else:
+            _MISSING[k] = now
+    return key in _FOUND
 
 
 #: Seconds a name `kpsewhich` did not find is believed missing before it is asked about again.
@@ -109,13 +119,17 @@ _FOUND: dict[tuple[str | None, str, str, str], str] = {}
 _MISSING: dict[tuple[str | None, str, str, str], float] = {}
 
 
-def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> str | None:
-    """One `kpsewhich NAME` in `cwd`: the file it names, read against `cwd`, or None; `texinputs` is only part of the memo's key, since the subprocess inherits the environment it names."""
+def _probe(exe: str | None, texinputs: str, names: list[str], cwd: str) -> dict[str, str | None]:
+    """One `kpsewhich` of `names` in `cwd`: the file each is found at, read against `cwd`, or None; `texinputs` is only part of the memo's key, since the subprocess inherits the environment it names.
+
+    `kpsewhich` prints the files it found in the order it was given the names, and nothing for one it did not find; each line is the next name it ends with. Where a line could be either of two names (`x.tex` and `sub/x.tex`), each name is asked alone.
+    """
+    out: dict[str, str | None] = dict.fromkeys(names)
     if not exe:
-        return None
+        return out
     try:
         proc = subprocess.run(
-            [exe, name],
+            [exe, *names],
             capture_output=True,
             text=True,
             errors="replace",
@@ -124,9 +138,23 @@ def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> str | None:
             cwd=cwd if Path(cwd).is_dir() else None,
         )
     except (OSError, subprocess.SubprocessError):
-        return None
-    named = proc.stdout.strip().splitlines()[0].strip() if proc.returncode == 0 and proc.stdout.strip() else ""
-    return str(Path(cwd) / named) if named else None
+        return out
+    at = 0
+    for line in (ln.strip() for ln in proc.stdout.splitlines()):
+        if not line:
+            continue
+        while at < len(names) and not _names(line, names[at]):
+            at += 1
+        if at == len(names) or any(_names(line, other) for other in names[at + 1 :]):
+            return out if len(names) == 1 else {n: _probe(exe, texinputs, [n], cwd)[n] for n in names}
+        out[names[at]] = str(Path(cwd) / line)
+        at += 1
+    return out
+
+
+def _names(line: str, name: str) -> bool:
+    """Whether a file `kpsewhich` printed is one for `name`: the name itself, or the name with `.tex` added, which is what `kpsewhich` looks for, as TeX does, where a name's suffix is not one it knows (`pgfplots.revision`)."""
+    return any(line == asked or line.endswith("/" + asked) for asked in (name, name + ".tex"))
 
 
 def resolve_inclusion(

@@ -134,14 +134,23 @@ class _Kpsewhich:
         self.now = 0.0
 
     def run(self, cmd, **kw):  # type: ignore[no-untyped-def]
-        self.calls.append(cmd[1])
-        name = cmd[1]
-        found = [
-            *(Path(d) / f for d, _, fs in os.walk(self.home, followlinks=True) for f in fs if f == name),
-            *([self.dist / name] if name in (self.dist / "ls-R").read_text().split() else []),
-            *([self.inputs / name] if (self.inputs / name).is_file() else []),
-        ]
-        return subprocess.CompletedProcess(cmd, 0 if found else 1, stdout="".join(f"{f}\n" for f in found), stderr="")
+        """Each name found printed as its first file, in the order given; a name not found prints nothing."""
+        self.calls.append(cmd[1] if len(cmd) == 2 else " ".join(cmd[1:]))
+        lines = []
+        for name in cmd[1:]:
+            # a name whose suffix kpsewhich does not know is looked for with `.tex` added, as TeX does
+            for asked in (name, name + ".tex") if name.rsplit(".", 1)[-1] not in ("tex", "sty", "cls") else (name,):
+                found = [
+                    *(Path(d) / f for d, _, fs in os.walk(self.home, followlinks=True) for f in fs if f == asked),
+                    *([self.dist / asked] if asked in (self.dist / "ls-R").read_text().split() else []),
+                    *([self.inputs / asked] if (self.inputs / asked).is_file() else []),
+                ]
+                if found:
+                    lines.append(f"{found[0]}\n")
+                    break
+        return subprocess.CompletedProcess(
+            cmd, 0 if len(lines) == len(cmd) - 1 else 1, stdout="".join(lines), stderr=""
+        )
 
 
 @pytest.fixture
@@ -207,3 +216,51 @@ def test_a_file_found_is_believed_only_while_it_is_there(tmp_path: Path, kpsewhi
     installed.unlink()
     assert resolve_inclusion(root, "reviewextra") == (None, "missing")
     assert kpsewhich.calls == ["reviewextra.tex", "reviewextra.tex"]
+
+
+def test_every_name_due_in_a_folder_is_asked_of_one_kpsewhich(tmp_path: Path, kpsewhich: _Kpsewhich) -> None:
+    """Five names missing cost one `kpsewhich` run every `AGAIN` seconds of scanning, not five: the first due name asks for all the others in its folder, and the scan's lookups after it are answered from the memo."""
+    from loom.scan.expand import AGAIN
+
+    root = tmp_path / "quilt"
+    root.mkdir()
+    names = [f"gone{n}" for n in range(5)]
+    for n in names:
+        assert resolve_inclusion(root, n) == (None, "missing")
+    assert len(kpsewhich.calls) == 5
+    (kpsewhich.home / "gone3.tex").write_text("Words.\n")
+    kpsewhich.now += AGAIN
+    assert [resolve_inclusion(root, n)[1] for n in names] == ["missing", "missing", "missing", "system", "missing"]
+    assert kpsewhich.calls[5:] == ["gone0.tex gone1.tex gone2.tex gone3.tex gone4.tex"]
+    kpsewhich.now += AGAIN - 1
+    assert [resolve_inclusion(root, n)[1] for n in names] == ["missing", "missing", "missing", "system", "missing"]
+    assert len(kpsewhich.calls) == 6
+
+
+def test_a_file_two_names_could_be_is_asked_about_alone(tmp_path: Path, kpsewhich: _Kpsewhich) -> None:
+    """`x.tex` and `sub/x.tex` both end a line `kpsewhich` prints for `sub/x.tex`: rather than guess, each name is asked alone, and each answer is its own."""
+    from loom.scan import expand
+
+    (kpsewhich.inputs / "sub").mkdir()
+    (kpsewhich.inputs / "sub" / "x.tex").write_text("Words.\n")
+    got = expand._probe("/usr/bin/kpsewhich", "", ["x.tex", "sub/x.tex"], str(tmp_path))
+    assert got["x.tex"] is None and got["sub/x.tex"] is not None and got["sub/x.tex"].endswith("sub/x.tex")
+    assert kpsewhich.calls == ["x.tex sub/x.tex", "x.tex", "sub/x.tex"]
+
+
+def test_a_dotted_name_kpsewhich_finds_with_tex_added_is_a_system_file(tmp_path: Path, kpsewhich: _Kpsewhich) -> None:
+    """`\\input{pgfplots.revision}` reads `pgfplots.revision.tex`, which kpsewhich prints for the name as asked: that line is the name's answer, alone and in a folder's one run, and does not send the folder back to a run a name."""
+    from loom.scan.expand import AGAIN
+
+    (kpsewhich.home / "pgfplots.revision.tex").write_text("% the revision\n")
+    root = tmp_path / "quilt"
+    root.mkdir()
+    assert resolve_inclusion(root, "gone") == (None, "missing")
+    assert resolve_inclusion(root, "pgfplots.revision") == (None, "system")
+    (kpsewhich.home / "pgfplots.revision.tex").unlink()
+    assert resolve_inclusion(root, "pgfplots.revision") == (None, "missing")
+    (kpsewhich.home / "pgfplots.revision.tex").write_text("% the revision\n")
+    kpsewhich.now += AGAIN
+    assert resolve_inclusion(root, "gone") == (None, "missing")
+    assert resolve_inclusion(root, "pgfplots.revision") == (None, "system")
+    assert kpsewhich.calls == ["gone.tex", "pgfplots.revision", "pgfplots.revision", "gone.tex pgfplots.revision"]

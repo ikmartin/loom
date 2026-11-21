@@ -321,14 +321,14 @@ def test_the_listing_is_todays_on_edits_of_one_shape_on_every_line(by_window: No
 
 
 def test_a_table_with_every_row_changed_is_listed_in_one_pass_per_run(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A table computed again holds `\\\\ \\hline` on every row and nothing else in common: each run after the first is taken by `_runs_after`, not searched for again, and the listing is today's."""
+    """A table computed again holds `\\\\ \\hline` on every row and nothing else in common: once two runs as long follow each other, each after them is taken by `_runs_after`, not searched for again, and the listing is today's."""
     old = "".join(f"{i}.1 & {i}.2 & {i}.3 \\\\ \\hline\n" for i in range(120))
     new = "".join(f"{i}.7 & {i}.8 & {i}.9 \\\\ \\hline\n" for i in range(120))
     taken: list[int] = []
     after = pending._runs_after
     monkeypatch.setattr(pending, "_runs_after", lambda *a: (taken.append(1) or x for x in after(*a)))
     assert pending.cut(old, new) == pending._cut_by_difflib(old, new)
-    assert len(taken) >= 119
+    assert len(taken) >= 118
 
 
 def _merged(blocks: list[tuple[int, int, int]]) -> list[tuple[int, int, int]]:
@@ -368,3 +368,15 @@ def test_the_blocks_are_difflibs_on_lists_of_few_words(by_window: None) -> None:
         )
         differ += _merged(pending._matching(a, b)) != want
     assert differ == 0
+
+
+def test_a_staircase_pays_no_pass_where_no_run_as_long_follows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each shared run one word shorter than the one before, each the longest of what follows: difflib's recursion never repeats a length, so `_runs_after` is never called on what follows a run, and the listing is today's."""
+    old = "".join(" ".join(f"s{i}_{t}" for t in range(60 - i)) + f" X{i}\n" for i in range(60))
+    new = old.replace(" X", " Y")
+    called: list[int] = []
+    after = pending._runs_after
+    monkeypatch.setattr(pending, "_NEAR", 0)
+    monkeypatch.setattr(pending, "_runs_after", lambda *a: called.append(1) or after(*a))
+    assert pending.cut(old, new) == pending._cut_by_difflib(old, new)
+    assert called == []
