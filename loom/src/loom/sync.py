@@ -805,7 +805,13 @@ def incorporate(quilt: Quilt, state: SyncState, actor: str | None = None) -> dic
     try:
         # one act through the door: the files the pull changes, the landmarks that keep each document as it was, the records of what moved and the sync record are written together or not at all, and a crash is finished or put back whole by recovery (`docs/design/writes.md`)
         with writes.act(root, quilt.history_dir, "pull", who) as w, writes.staging(w):
-            return _incorporate(quilt, state, w, who)
+            # the record read again under the lock: a pull another process took in since leaves nothing to take
+            now = SyncState.read(root)
+            if now.incoming != state.incoming or now.incoming == now.integrated:
+                raise SyncError("there is no incoming revision to incorporate; it was taken in already")
+            said = _incorporate(quilt, now, w, who)
+            state.__dict__.update(now.__dict__)
+            return said
     except ValueError as exc:
         if isinstance(exc, SyncError):
             raise

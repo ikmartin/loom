@@ -284,6 +284,22 @@ def test_a_pull_is_one_act(tmp_path: Path, compiled: list[str]) -> None:  # noqa
     assert "zk-0001}B" in (q.root / "drafting/main.tex").read_text()
 
 
+def test_a_second_pull_of_one_revision_is_refused_as_taken_in_and_writes_nothing(
+    tmp_path: Path,
+    compiled: list[str],  # noqa: F811
+) -> None:
+    """Both read the record before either took the lock: the second reads it again under the lock and finds the revision taken in, rather than advising the person to remove what the first brought (D-7)."""
+    q, state = pulled(tmp_path)
+    stale = SyncState(**state.__dict__)
+    sync.incorporate(q, state)
+    text = (q.root / "drafting/main.tex").read_bytes()
+    ledger = (q.history_dir / "ledger.jsonl").read_bytes()
+    with pytest.raises(SyncError, match="taken in already"):
+        sync.incorporate(q, stale)
+    assert (q.root / "drafting/main.tex").read_bytes() == text
+    assert (q.history_dir / "ledger.jsonl").read_bytes() == ledger
+
+
 def test_a_pull_that_moves_the_main_document_changes_the_config_in_the_same_act(
     tmp_path: Path,
     compiled: list[str],  # noqa: F811

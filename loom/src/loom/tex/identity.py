@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -60,14 +61,17 @@ def identity_test(
     engine: str = "pdflatex",
     *,
     base: str | None = None,
+    after_overlay: Mapping[str, bytes] | None = None,
 ) -> IdentityResult:
-    """Whether two documents typeset to the same text, each compiled from `base`, default its own directory (P12); an agent copy passes its source's."""
+    """Whether two documents typeset to the same text, each compiled from `base`, default its own directory (P12); an agent copy passes its source's. `after_overlay` holds files of the second not yet written (`compile_document`'s `overlay`), so a command tests what it would write before it writes anything."""
     if shutil.which("pdftotext") is None:
         return IdentityResult(True, skipped="pdftotext is not installed")
     before_base = document_dir(before_rel) if base is None else base
     after_base = document_dir(after_rel) if base is None else base
     b = compile_document(before_root, before_base, before_rel, scratch / "before", engine, halt_on_error=False)
-    a = compile_document(after_root, after_base, after_rel, scratch / "after", engine, halt_on_error=False)
+    a = compile_document(
+        after_root, after_base, after_rel, scratch / "after", engine, halt_on_error=False, overlay=after_overlay
+    )
     res = IdentityResult(False, before=b, after=a)
     if b.pdf is None or a.pdf is None:
         res.skipped = "a document did not compile: " + (b.first_error if b.pdf is None else a.first_error)

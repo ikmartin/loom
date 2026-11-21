@@ -509,10 +509,10 @@ def _flush_dir(d: Path) -> None:
         os.close(fd)
 
 
-def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None) -> None:
+def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None, mode: int | None = None) -> None:
     """Make `rel` hold `data` (None removes it), whole or not at all, refusing (`changed`) when it no longer holds `expect`.
 
-    The temp is written and flushed beside the target, the target read once more, the mode kept, then the rename: the window in which a save can be lost is the instant between the read and the rename. A temp is removed when this fails and left by a crash, for recovery.
+    The temp is written and flushed beside the target, the target read once more, the mode kept (`mode` for a file this makes, else the umask's), then the rename: the window in which a save can be lost is the instant between the read and the rename. A temp is removed when this fails and left by a crash, for recovery.
     """
     if data is None:
         if _read(root, rel) != expect:
@@ -521,18 +521,27 @@ def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None) -> 
         _flush_dir((root / rel).parent)
         return
     target = _target(root, rel)
+    if expect is not None and not os.access(target, os.W_OK):
+        raise WriteRefused("not-writable", f"{rel} is read-only, so loom writes nothing into it; nothing was written")
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(f".{target.name}.{secrets.token_hex(6)}{TEMP}")
     try:
-        with tmp.open("wb") as fh:
-            fh.write(data)
-            _flush(fh)
+        try:
+            with tmp.open("wb") as fh:
+                fh.write(data)
+                _flush(fh)
+        except PermissionError as exc:
+            raise WriteRefused(
+                "not-writable",
+                f"loom cannot write {rel}: its folder does not let loom make a file beside it ({exc.strerror}); nothing was written",
+            ) from exc
         try:
             mode = target.stat().st_mode & 0o7777
         except FileNotFoundError:
-            umask = os.umask(0)
-            os.umask(umask)
-            mode = 0o666 & ~umask
+            if mode is None:
+                umask = os.umask(0)
+                os.umask(umask)
+                mode = 0o666 & ~umask
         os.chmod(tmp, mode)
         if _read(root, rel) != expect:
             raise WriteRefused("changed", f"{rel} changed while loom was writing it; nothing was written")
@@ -1109,6 +1118,7 @@ class Act:
         self.before: dict[str, bytes | None] = {}
         self.after: dict[str, bytes | None] = {}
         self.splices: dict[str, list[dict[str, Any]]] = {}
+        self.modes: dict[str, int] = {}
         self.edits: list[str] = []
         self.undone: list[str] = []
         self.look: dict[str, Any] | None = None
@@ -1162,14 +1172,28 @@ class Act:
 
     # what the caller stages
 
-    def replace(self, rel: str, data: bytes | None, splices: list[dict[str, Any]] | None = None) -> None:
-        """Stage `data` as the file's new bytes (None removes it); `splices` say what replaced what, for an undo."""
+    def replace(
+        self, rel: str, data: bytes | None, splices: list[dict[str, Any]] | None = None, *, mode: int | None = None
+    ) -> None:
+        """Stage `data` as the file's new bytes (None removes it); `splices` say what replaced what, for an undo; `mode` is a file this makes, as a move carries its source's (an existing file keeps its own)."""
         rel = contained(self.root, rel)
         if rel not in self.before:
             self.read(rel)
         self.after[rel] = data
         if splices:
             self.splices.setdefault(rel, []).extend(splices)
+        if mode is not None:
+            self.modes[rel] = mode
+
+    def move(self, old: str, new: str) -> None:
+        """Stage moving `old` to `new`, its bytes and its mode, decided under the lock: refused (`exists`) when `new` is there, and (`gone`) when `old` is not."""
+        data = self.read(old)
+        if data is None:
+            raise WriteRefused("gone", f"{old} is not there any more; nothing was moved", status=409)
+        if self.read(new) is not None:
+            raise WriteRefused("exists", f"{new} exists already; nothing was moved", status=409)
+        self.replace(new, data, mode=os.stat(_target(self.root, contained(self.root, old))).st_mode & 0o7777)
+        self.replace(old, None)
 
     def wrote(self, gen: str) -> None:
         """Name a suggested edit's `<edit>:<generation>` as one this act writes."""
@@ -1239,7 +1263,7 @@ class Act:
         guarded = [r for r in self.records if "at" in r]
         try:
             for rel, data in changed.items():
-                _install(self.root, rel, data, self.before.get(rel))
+                _install(self.root, rel, data, self.before.get(rel), self.modes.get(rel))
                 done.append(rel)
             # a guarded line refused (another writer moved its log on) puts the whole act back, files with it
             _append_guarded(self.root, guarded)
