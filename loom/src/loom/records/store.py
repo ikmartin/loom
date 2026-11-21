@@ -138,6 +138,17 @@ def placed_key(result: ScanResult, ann: Annotation) -> str | None:
     return held[2].get(ann.id, ann.target_key)
 
 
+def _why_unplaced(result: ScanResult, key: str) -> str:
+    """Why a note on `key` is on no block, in words: its key names nothing, or a block in a file no document reads now, or a block that no longer holds its text."""
+    owner = result.assembly.regions[key].container if key in result.assembly.regions else key
+    node = result.nodes.get(owner)
+    if node is None:
+        return "its key names no block now"
+    if node.kind not in ("master", "file") and not node.reached_by:
+        return "its block is in a file no document reads now"
+    return "its key names a block that no longer holds the text it was written on, and nothing says which block does"
+
+
 def written_in(result: ScanResult, ann: Annotation) -> str:
     """The document a note on no block is listed in and opened from: the one it names (`in`), else the first that read its block's file when it was written and is a document still (`context.documents`), else one that reads the block its key names now, or the document its key is, else the quilt's default document; '' in a quilt with none.
 
@@ -1118,9 +1129,7 @@ class Records:
                 "id": res.annotation.id,
                 "key": res.annotation.target_key,
                 "document": written_in(result, res.annotation),
-                "why": "its key names a block that no longer holds the text it was written on, and nothing says which block does"
-                if res.annotation.target_key in result.nodes or res.annotation.target_key in result.assembly.regions
-                else "its key names no block now",
+                "why": _why_unplaced(result, res.annotation.target_key),
             }
             for res in resolved
             if res.unplaced and res.annotation.in_reply_to is None
