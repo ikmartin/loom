@@ -160,8 +160,9 @@ def id_command(
     ins = plan_insertions(planning, [rel], pre, next_local(visible_locals(planning, pre)), sections, all_levels)
     after = apply_insertions(anchored, ins)
     if out is not None:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(after, encoding="utf-8")
+        from loom.writes import save
+
+        save(result.quilt.root, result.quilt.history_dir, out, after.encode("utf-8"), kind="id")
         shown = quilt_relative(result.quilt, out)
         Report(f"wrote {shown}: {rel} with {counted(len(ins), 'label')} inserted; {rel} is unchanged").emit(as_json)
         return
@@ -877,8 +878,9 @@ def deloom_command(
             )
         raise ContentError("\n".join(lines))
     if not dry_run:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(done.text, encoding="utf-8")
+        from loom.writes import save
+
+        save(result.quilt.root, result.quilt.history_dir, target, done.text.encode("utf-8"), kind="deloom")
     groups = []
     if done.kept_ids:
         groups.append(

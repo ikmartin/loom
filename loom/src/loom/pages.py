@@ -5,7 +5,6 @@ The person edits a page directly; an agent writes one through `loom write`, neve
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -90,7 +89,7 @@ def linked(result: Any, root: Path, text: str) -> dict[str, dict[str, str]]:
 def write(result: Any, page: Page, text: str, *, actor: str, session: str | None) -> Any:
     """Write `page` and record it; the checks (`--base`, links) are the caller's, made first.
 
-    The file is replaced whole and atomically, then the history line is appended last, so an interrupted write leaves the record saying nothing that did not happen. `outside` says the file had changed since the last recorded write: the person's own edit, which the trail would otherwise not show.
+    The file and the history's line of it are one act through the door (`loom.writes`), so an interrupted write is finished or put back whole by recovery. `outside` says the file had changed since the last recorded write: the person's own edit, which the trail would otherwise not show.
     """
     from loom.history.ledger import append_entry
     from loom.records.snapshots import write_raw
@@ -103,11 +102,6 @@ def write(result: Any, page: Page, text: str, *, actor: str, session: str | None
     links = linked(result, root, text)
     from_hash = write_raw(root, current, history_dir) if current is not None else None
     to_hash = write_raw(root, text, history_dir)
-    p = root / page.path
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".loom-tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, p)
     data: dict[str, Any] = {
         "page": page.kind,
         "path": page.path,
@@ -120,7 +114,12 @@ def write(result: Any, page: Page, text: str, *, actor: str, session: str | None
         data["work"] = page.work
     if session:
         data["session"] = session
-    return append_entry(history_dir, ACTION, data, actor)
+    from loom import writes as door
+
+    # one act through the door: the page and the history's line of it, together or not at all
+    with door.act(root, history_dir, "page", actor) as w, door.staging(w):
+        w.replace(page.path, text.encode("utf-8"))
+        return append_entry(history_dir, ACTION, data, actor)
 
 
 def published(result: Any, page: Page) -> dict[str, Any] | None:

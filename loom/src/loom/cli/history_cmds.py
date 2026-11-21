@@ -415,8 +415,16 @@ def fork(
         verdict = f"would fork {plan.node_id} as {plan.new_id} for {plan.doc}{where}, with this patch for {plan.doc}"
     else:
         if target is not None:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(plan.node_text, encoding="utf-8")
+            from loom.writes import save
+
+            save(
+                result.quilt.root,
+                result.quilt.history_dir,
+                target,
+                plan.node_text.encode("utf-8"),
+                kind="fork",
+                actor=actor_for(result.quilt.root),
+            )
         append_entry(
             result.quilt.history_dir,
             "fork",
@@ -830,9 +838,9 @@ def _linearize(
             groups=groups,
             data={"action": "linearize", **record},
         )
-    dest = root / to_rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(text, encoding="utf-8")
+    from loom.writes import put
+
+    put(root, result.quilt.history_dir, to_rel, text.encode("utf-8"), kind="linearize", actor=actor_for(root))
     checked = (
         "not compared with it, as --no-check asked"
         if no_check
@@ -845,7 +853,7 @@ def _linearize(
                 root, spine_rel, root, to_rel, Path(tmp), engine_for(result, spine_rel), base=result.base_of(spine_rel)
             )
         if not ident.passed and not ident.skipped:
-            dest.unlink(missing_ok=True)
+            put(root, result.quilt.history_dir, to_rel, None, kind="linearize", actor=actor_for(root))
             diffs = "\n".join(f"  {i.text}" + (f"  {i.key}" if i.key else "") for i in identity_group(ident)[0].items)
             raise ContentError(
                 f"the flat copy does not typeset as {spine_rel}; {to_rel} was removed and nothing was recorded. Pass --no-check to write it anyway.\n"
@@ -1087,8 +1095,9 @@ def _restore(name: str, to: str, dry_run: bool, as_json: bool, quilt_path: str |
         after = scan(quilt, overlay={dest_rel: plan.text})
         data: dict[str, Any] = {"action": "restore", **record}
     else:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(plan.text, encoding="utf-8")
+        from loom.writes import put
+
+        put(root, quilt.history_dir, dest_rel, plan.text.encode("utf-8"), kind="restore-to", actor=actor_for(root))
         entry = append_entry(quilt.history_dir, "restore", record, actor_for(root))
         after = scan(load_quilt(root))
         data = {**entry.to_dict(), "line": entry.line}

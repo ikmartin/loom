@@ -1288,6 +1288,88 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
         a._commit()
 
 
+def put(
+    root: Path,
+    history: Path,
+    rel: str,
+    data: bytes | None,
+    *,
+    kind: str,
+    actor: str | None = None,
+    new: bool = False,
+) -> None:
+    """Write one person's file whole through the door: as part of the act staging on this thread when one is, else as an act of its own.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    history : Path
+        Its history directory.
+    rel : str
+        The file, relative to the quilt.
+    data : bytes or None
+        Its new bytes; None removes it.
+    kind : str
+        The act's kind, for the journal, when it is an act of its own.
+    actor : str, optional
+        Who asked for it.
+    new : bool, default False
+        Refuse (`exists`) when the file is there already, as a command that makes a new file must.
+
+    Raises
+    ------
+    WriteRefused
+        `exists`, `outside-quilt`, or `changed` from the commit.
+    """
+    with act(root, history, kind, actor) as w:
+        if new and w.read(rel) is not None:
+            raise WriteRefused("exists", f"{rel} exists already; nothing was written", status=409)
+        w.replace(rel, data)
+
+
+def save(
+    root: Path,
+    history: Path,
+    path: Path,
+    data: bytes,
+    *,
+    kind: str,
+    actor: str | None = None,
+    new: bool = False,
+) -> None:
+    """Write a file a person named (`--to`, `--output`): through the door (`put`) when it lies in the quilt, as an ordinary file when it lies outside, where it is no person's file of the quilt.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    history : Path
+        Its history directory.
+    path : Path
+        Where to write, absolute.
+    data : bytes
+        What to write.
+    kind : str
+        The act's kind, for the journal.
+    actor : str, optional
+        Who asked for it.
+    new : bool, default False
+        Refuse a file that is there already.
+    """
+    target = Path(os.path.abspath(path))
+    rel = os.path.relpath(target, os.path.realpath(root)) if target.is_relative_to(os.path.realpath(root)) else None
+    if rel is None and target.is_relative_to(os.path.abspath(root)):
+        rel = os.path.relpath(target, os.path.abspath(root))
+    if rel is not None:
+        put(root, history, Path(rel).as_posix(), data, kind=kind, actor=actor, new=new)
+        return
+    if new and target.exists():
+        raise WriteRefused("exists", f"{path} exists already; nothing was written", status=409)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(data)
+
+
 #: The act on this thread that takes loom's own records (`staging`); None when no act does.
 _STAGING: ContextVar[Act | None] = ContextVar("loom_writes_staging", default=None)
 
