@@ -38,11 +38,13 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
     result = open_scan(str(root))
     given = body.get("changes")
+    first = []
     if body.get("all") is True:
         document = _str(body, "document")
         if endpoint == "change-keep" and who and read_look(root, who) is None:
+            # with no look nothing in place waits, so what Keep all keeps after taking it is the suggestions
             keep_all(result.quilt, who)
-            return {"ok": True, "result": "took your first look", "done": [], "refused": []}
+            first = ["took your first look"]
         ids = [c.id for c in pending(result, who) if document is None or document in c.documents]
     elif isinstance(given, list) and given and all(isinstance(i, str) for i in given):
         ids = list(given)
@@ -59,10 +61,10 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     except (PendingRefused, WriteRefused) as exc:
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
     verb = "kept" if endpoint == "change-keep" else "discarded"
-    parts = [f"{verb} {len(done)} change{'s' if len(done) != 1 else ''}"]
+    parts = [f"{verb} {len(done)} change{'s' if len(done) != 1 else ''}"] if ids or not first else []
     if refused:
         parts.append(f"{len(refused)} could not be")
-    said = "; ".join([*parts, *versions])
+    said = "; ".join([*first, *parts, *versions])
     return {"ok": True, "result": said, "done": done, "refused": refused}
 
 

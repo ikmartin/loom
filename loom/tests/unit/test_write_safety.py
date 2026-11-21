@@ -27,7 +27,7 @@ WORDS = "orbit group action finite widget lemma bound measure compact dense clos
 
 @pytest.fixture
 def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A copy of the synthetic quilt, edits tracked, with a Markdown task list; the person is `Pat`, and no agent marker is set."""
+    """A copy of the synthetic quilt with a Markdown task list; the person is `Pat`, and no agent marker is set."""
     return synthetic(tmp_path, monkeypatch)
 
 
@@ -44,7 +44,10 @@ def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (root / "tasks.md").write_text(
         "# Tasks\n\n- [ ] read the first proof again\n- [x] write the second answer\n", encoding="utf-8"
     )
-    call(root, "change-keep", {"all": True})  # the first look
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt
+
+    take(load_quilt(root), "Pat")  # the first look, the quilt's suggested edits left open
     return root
 
 

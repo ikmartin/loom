@@ -21,7 +21,7 @@ ANSWER = "e-2026-09-16-r2hw0m"
 
 @pytest.fixture
 def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A copy of the synthetic quilt as the write-safety test makes it: edits tracked, the person `Pat`, a first look taken."""
+    """A copy of the synthetic quilt as the write-safety test makes it: the person `Pat`, a first look taken."""
     return synthetic(tmp_path, monkeypatch)
 
 
@@ -560,6 +560,7 @@ def plant(q: Path, before: bytes, after: bytes, splices: list[dict], gen: str) -
             + "\n"
         )
     act = {"act": "keep:feedfacefeedface", "kind": "keep", "actor": "Pat", "when": "x"}
+    (q / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
     with (q / JOURNAL).open("a") as fh:
         line = {
             **act,

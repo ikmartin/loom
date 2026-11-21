@@ -37,7 +37,7 @@ def _short(text: str | None, n: int = 40) -> str:
 @click.option(
     "--keep-all",
     is_flag=True,
-    help="Keep every change; with no look of yours yet, take it.",
+    help="Keep every change; with no look of yours yet, take it first.",
 )
 @click.option("--discard-all", is_flag=True, help="Discard every change.")
 @click.option("--why", default=None, help="With a discard, why, which the agent that suggested an edit reads.")
@@ -80,10 +80,11 @@ def changes_command(
         refuse_under_agent(
             "Keeping and discarding a change", "Keep and discard in a terminal of your own, or in the viewer."
         )
+        first = ""
         if keep_all and who and read_look(root, who) is None:
+            # with no look nothing in place waits, so what Keep all keeps after taking it is the suggestions
             take_all(result.quilt, who)
-            Report("took your first look at the open files", data={"done": [], "refused": []}).emit(as_json)
-            return
+            first = "took your first look at the open files"
         listed = pending(result, who)
         named = keeping or discarding
         ids = [c.id for c in listed] if keep_all or discard_all else _ids(listed, named)
@@ -99,6 +100,8 @@ def changes_command(
             ) from None
         verb = "kept" if keeping or keep_all else "discarded"
         said = f"{verb} {counted(len(done), 'change')}" if done else f"{verb} nothing"
+        if first:
+            said = f"{first}; {said}" if ids else first
         lines = [f"  {r['id']} not {verb}: {r['why']}" for r in refused]
         Report(said, ok=not refused, lines=lines, data={"done": done, "refused": refused}).emit(as_json)
         return
