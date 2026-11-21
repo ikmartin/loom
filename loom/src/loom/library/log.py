@@ -1,6 +1,6 @@
 """The library's log, `.loom/records/library/log.jsonl`: one line for every act on a work, with who and when, appended and never rewritten.
 
-It holds what a reference's file does not (`docs/specs/nodes.md` §10): how the reference was made and from what, whether its details were looked up, who edited it, the documents given to it and taken off it, and its deletion and restoring. A reference made from an identifier with no look-up after it reads as unconfirmed (`library-views.md` Open 7); gathering does not make again a key whose work the person deleted, and stops following a `.bib` entry once the person edits the reference in loom. A line that is no act is skipped and reported (`loom:foreign-library-acts`).
+It holds what a reference's file does not (`docs/specs/nodes.md` §10): how the reference was made and from what, whether its details were looked up, who edited it, the documents given to it and taken off it, its deletion and restoring, and an intake's add taken back (`undone`), which, unlike a delete, leaves gathering free to make its key. A reference made from an identifier with no look-up after it reads as unconfirmed (`library-views.md` Open 7); gathering does not make again a key whose work the person deleted, and stops following a `.bib` entry once the person edits the reference in loom. A line that is no act is skipped and reported (`loom:foreign-library-acts`).
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ EVENTS: dict[str, tuple[str, ...]] = {
     "unfiled": ("which", "hash"),
     "deleted": ("key", "undo"),
     "restored": ("undo",),
+    "undone": ("act",),
 }
 #: How a reference was made.
 HOW = ("drop", "paste", "gather", "carry", "source")
