@@ -82,7 +82,7 @@ class Evidence:
         self.records.append(record)
         self._ids[record.id] = record
         if record.on is not None:
-            # by when it was written, not where a merge put it; a line of the same second after those before it in the file
+            # by when it was written, not where a merge put it; records of one second keep the log's order
             bisect.insort_right(self._about.setdefault(record.on.key, []), record, key=lambda r: r.at)
         if record.kind == "declined":
             self._declined.setdefault(str(record.get("proposal")), record)

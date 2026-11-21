@@ -463,7 +463,7 @@ def test_a_result_assumed_in_lean_must_be_compared_and_its_own_lean_attested(roo
     )
     write(root, "attested", PERSON, on=node, lean=axiom.id, statements={"B8": H2}, closure=[], rulings=[])
     found = _gated(root, library)
-    assert found.lean == "formalized" and found.relative_to == (node,)
+    assert found.lean == "formalized" and found.relative_to == (node.key,)
 
 
 def test_before_attesting_what_waits_is_said_beside_unattested(root: Path) -> None:

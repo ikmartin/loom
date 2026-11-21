@@ -270,17 +270,24 @@ def test_done_names_only_nodes_and_suggested_edits(root: Path) -> None:
 # ---- the agents' commands --------------------------------------------------------------------------------------------
 
 
-def test_an_agent_asks_takes_and_withdraws_in_the_session_it_names(tmp_path: Path) -> None:
+def test_an_agent_asks_takes_and_withdraws_in_the_session_its_transport_names(tmp_path: Path) -> None:
     q = demo(tmp_path)
     mine, other = new_session(q, "asking", AGENT.name), new_session(q, "elsewhere", AGENT.name)
-    task = json_of("ask", "Why?", "--on", "dm-0003", "--session", mine, "--as", AGENT.name, "--json", cwd=q)["task"]
+    as_mine, as_other = {"LOOM_MCP_SESSION": mine}, {"LOOM_MCP_SESSION": other}
+    task = json_of("ask", "Why?", "--on", "dm-0003", "--as", AGENT.name, "--json", cwd=q, env=as_mine)["task"]
     assert asks.replay(q).asks[task].get("session") == mine
-    refused("tasks", "withdraw", task, "--session", other, "--as", AGENT.name, cwd=q, code=1, match="may not withdraw")
-    ok("tasks", "withdraw", task, "--session", mine, "--as", AGENT.name, cwd=q)
+    refused("tasks", "withdraw", task, "--as", AGENT.name, cwd=q, env=as_other, code=1, match="may not withdraw")
+    ok("tasks", "withdraw", task, "--as", AGENT.name, cwd=q, env=as_mine)
     assert asks.replay(q).asks[task].withdrawn is not None
     read = ask(q, PERSON, "read", "agent", {"node": "dm-00B7"}, nodes=["dm-00B7"])
-    ok("tasks", "take", read.id, "--session", other, "--as", AGENT.name, cwd=q)
+    ok("tasks", "take", read.id, "--as", AGENT.name, cwd=q, env=as_other)
     assert asks.replay(q).asks[read.id].took[0]["session"] == other
+
+
+def test_no_argument_names_the_session_an_agent_asks_takes_or_withdraws_in(tmp_path: Path) -> None:
+    q = demo(tmp_path)
+    for words in (("ask", "Why?", "--on", "dm-0003"), ("tasks", "take", "t-2026-11-21-aaaaaa"), ("tasks", "withdraw", "t-2026-11-21-aaaaaa")):  # fmt: skip
+        refused(*words, "--session", "s-2026-11-21-aaaaaa", "--as", AGENT.name, cwd=q, code=2, match="No such option")
 
 
 def test_another_agent_in_the_shared_session_of_a_shell_may_not_withdraw_an_agents_ask(tmp_path: Path) -> None:
@@ -392,11 +399,19 @@ def test_a_mark_to_digest_takes_no_reply(tmp_path: Path) -> None:
 # ---- the MCP server --------------------------------------------------------------------------------------------------
 
 
-def test_the_mcp_server_gives_ask_take_and_withdraw_its_bound_session() -> None:
-    from loom.mcp.server import INTO
-    from loom.mcp.tools import tools
+def test_the_mcp_server_sets_the_session_of_ask_take_and_withdraw_and_a_call_cannot() -> None:
+    from loom.mcp.server import BOUND, INTO
+    from loom.mcp.tools import CallRefused, argv, tools
 
-    assert {"ask", "tasks take", "tasks withdraw"} <= INTO
+    assert BOUND == {"ask", "tasks take", "tasks withdraw"} and not BOUND & INTO
     specs = {s.path: s for s in tools()}
     for path in INTO:
         assert "session" in [p.name for p in specs[path].params], path
+    for path in BOUND:
+        assert "session" not in [p.name for p in specs[path].params], path
+    with pytest.raises(CallRefused, match="takes no session"):
+        argv(
+            specs["tasks withdraw"],
+            {"task": "t-2026-11-21-aaaaaa", "session": "s-2026-11-21-bbbbbb"},
+            as_name=AGENT.name,
+        )

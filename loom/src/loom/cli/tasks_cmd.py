@@ -15,13 +15,8 @@ from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted
 from loom.errors import ContentError, EnvError
 
-SESSION_OPTION = click.option(
-    "--session",
-    "session",
-    default=None,
-    metavar="ID",
-    help="The loom session you work in, by which loom tells your asks from another conversation's; default the active one.",
-)
+#: The variable the MCP server sets on each command it runs for a conversation, naming that conversation's session; a command line has no option for it.
+BOUND_SESSION = "LOOM_MCP_SESSION"
 AS_OPTION = click.option(
     "--as", "declared", default=None, metavar="NAME", help="Who acts; an agent names itself, including Agent or AI."
 )
@@ -41,12 +36,17 @@ def _agent(root: Path, declared: str | None) -> Any:
     return Who("agent", name)
 
 
-def _session(root: Path, given: str | None) -> str | None:
-    """The session an agent's command acts in: the one it names, else the quilt's active one, else none."""
-    from loom.cli._common import find_session
-    from loom.sessions import active
+def _session(root: Path) -> str | None:
+    """The session an agent's command acts in, from the transport and never from an argument: over MCP the conversation's, which the server sets in `BOUND_SESSION`; in a shell, which binds nothing, the quilt's active one; else none.
 
-    return str(find_session(root, given).id) if given else active(root)
+    In a shell the session is a guard against mistakes, not against an agent that means to pass for another: the variable is the server's to set, and a shell can set it too.
+    """
+    import os
+
+    from loom.sessions import ID, active
+
+    bound = os.environ.get(BOUND_SESSION, "")
+    return bound if ID.fullmatch(bound) else active(root)
 
 
 def _refused(exc: Exception) -> ContentError:
@@ -174,14 +174,13 @@ def _say(
 
 @tasks.command(name="take")
 @click.argument("task")
-@SESSION_OPTION
 @AS_OPTION
 @JSON_OPTION
 @quilt_option
-def take_command(task: str, session: str | None, declared: str | None, as_json: bool, quilt_path: str | None) -> None:
-    """Say that your session is working on TASK, so the person sees it taken; refused while a live session of another works on it."""
+def take_command(task: str, declared: str | None, as_json: bool, quilt_path: str | None) -> None:
+    """Say that your session is working on TASK, so the person sees it taken; refused while a live session of another works on it. Over MCP your session is your conversation's; in a shell, the active one."""
     root = open_quilt(quilt_path).root
-    session = _session(root, session)
+    session = _session(root)
     if not session:
         raise EnvError("no session is active; open one with `loom session new` and take the task again")
     _say("took", task, declared, as_json, quilt_path, "{id}: taken by this session", session=session)
@@ -217,15 +216,12 @@ def answer_command(task: str, text: str, declared: str | None, as_json: bool, qu
 
 @tasks.command(name="withdraw")
 @click.argument("task")
-@SESSION_OPTION
 @AS_OPTION
 @JSON_OPTION
 @quilt_option
-def withdraw_command(
-    task: str, session: str | None, declared: str | None, as_json: bool, quilt_path: str | None
-) -> None:
-    """Withdraw TASK, a question or a paper you asked of the person and no longer need: one you asked, under your name, and in your session where it was asked in one."""
-    session = _session(open_quilt(quilt_path).root, session)
+def withdraw_command(task: str, declared: str | None, as_json: bool, quilt_path: str | None) -> None:
+    """Withdraw TASK, a question or a paper you asked of the person and no longer need: one you asked, under your name, and in your session where it was asked in one (over MCP your conversation's; in a shell, the active one)."""
+    session = _session(open_quilt(quilt_path).root)
     _say(
         "withdrawn", task, declared, as_json, quilt_path, "{id}: withdrawn", **({"session": session} if session else {})
     )
@@ -274,7 +270,6 @@ def withdraw_command(
     metavar="DOC",
     help="A draft it is asked for, so the person can see it with that draft's; default the documents that read the place.",
 )
-@SESSION_OPTION
 @AS_OPTION
 @JSON_OPTION
 @quilt_option
@@ -286,7 +281,6 @@ def ask_command(
     link: str | None,
     want: str,
     drafts: tuple[str, ...],
-    session: str | None,
     declared: str | None,
     as_json: bool,
     quilt_path: str | None,
@@ -301,7 +295,7 @@ def ask_command(
     quilt = open_quilt(quilt_path)
     root = quilt.root
     who = _agent(root, declared)
-    session = _session(root, session)
+    session = _session(root)
     stray = [d for d in drafts if d not in scan(quilt).masters] if drafts else []
     if stray:
         raise ContentError(f"{stray[0]} is not a document of this quilt; --for names a draft by its path")
@@ -394,7 +388,7 @@ def _status_row(here: Any, s: Any) -> dict[str, Any]:
         "reading": s.reading,
         "lean": s.lean,
         "role": s.role,
-        "relative_to": [x.to_dict() for x in s.relative_to],
+        "relative_to": [{kind: name} for kind, name in s.relative_to],
         "causes": [{"changed": {c.key[0]: c.key[1]}, "then": c.then, "now": c.now} for c in s.causes],
         "unattested_notation": list(s.unattested_notation),
         "accepted": s.accepted,

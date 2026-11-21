@@ -337,3 +337,122 @@ def test_an_attestation_that_leaves_out_a_member_of_the_closure_now_does_not_hol
     write(root, "attested", PERSON, on=a, lean=record.id, statements={"r": h("1")}, closure=[], rulings=[])  # type: ignore[attr-defined]
     s = status(replay(root), Library(), Here("node", "tq-00A1"), lean_now=files_unchanged(root))
     assert s.lean == "changed" and [(c.key, c.then) for c in s.causes] == [(("node", "tq-00B2"), None)]
+
+
+def _axiom(name: str, names: dict[str, str]) -> dict[str, object]:
+    return {"name": name, "kind": "axiom", "role": "states", "names": names, "statement": h("7"), "axioms": [], "sorry": False}  # fmt: skip
+
+
+def _attest_record(root: Path, subject: Subject, record: object) -> None:
+    """The person's attestation of every statement `record` makes, with nothing in its closure."""
+    statements = {d["name"]: d["statement"] for d in record.get("declarations") if d["role"] == "states"}  # type: ignore[attr-defined]
+    write(root, "attested", PERSON, on=subject, lean=record.id, statements=statements, closure=[], rulings=[])  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize(
+    ("axiom", "reads"),
+    [
+        (
+            {
+                "name": "cheat",
+                "kind": "axiom",
+                "role": "supports",
+                "names": None,
+                "statement": h("7"),
+                "axioms": [],
+                "sorry": False,
+            },
+            "failed",
+        ),  # fmt: skip
+        (
+            {
+                "name": "cheat",
+                "kind": "theorem",
+                "role": "supports",
+                "names": None,
+                "statement": h("7"),
+                "axioms": [],
+                "sorry": False,
+            },
+            "failed",
+        ),  # fmt: skip
+        (None, "failed"),
+    ],
+    ids=["a supporting axiom", "a name that is no axiom", "an axiom the record does not declare"],
+)
+def test_lean_resting_on_an_axiom_nothing_accounts_for_is_not_a_proof(
+    root: Path, axiom: dict | None, reads: str
+) -> None:
+    put(root, {M: doc("", TWO_LEMMAS)})
+    w = web(root)
+    subject = w.subject(here_of(w, "lem:r", M))
+    assert subject is not None
+    stating = {"name": "r", "kind": "theorem", "role": "states", "names": {"label": "lem:r"}, "statement": h("1"), "axioms": ["propext", "cheat"], "sorry": False}  # fmt: skip
+    record = lean(root, subject, declarations=[stating, *([axiom] if axiom else [])])
+    _attest_record(root, subject, record)
+    assert lean_of(root, "lem:r", M) == reads
+
+
+def test_a_result_of_the_persons_stated_as_its_own_axiom_is_not_proved(root: Path) -> None:
+    put(root, {M: doc("", TWO_LEMMAS)})
+    w = web(root)
+    subject = w.subject(here_of(w, "lem:r", M))
+    assert subject is not None
+    record = lean(root, subject, declarations=[_axiom("r", {"label": "lem:r"})])
+    _attest_record(root, subject, record)
+    assert lean_of(root, "lem:r", M) == "failed"
+
+
+ASSUMING = (
+    r"\begin{lemma}\label{lem:a}Every widget is finite.\end{lemma}"
+    + "\n"
+    + r"\begin{lemma}\label{lem:b}Every gadget is finite.\end{lemma}"
+)
+
+
+def test_a_result_of_the_persons_its_lean_assumes_is_settled_once_its_own_statement_is_attested(root: Path) -> None:
+    put(root, {M: doc("", ASSUMING)})
+    w = web(root)
+    a, b = w.subject(here_of(w, "lem:a", M)), w.subject(here_of(w, "lem:b", M))
+    assert a is not None and b is not None
+    stating = {"name": "a", "kind": "theorem", "role": "states", "names": {"label": "lem:a"}, "statement": h("1"), "axioms": ["ax_b"], "sorry": False}  # fmt: skip
+    _attest_record(root, a, lean(root, a, declarations=[stating, _axiom("ax_b", {"label": "lem:b"})]))
+    s = status(replay(root), w, here_of(w, "lem:a", M), lean_now=files_unchanged(root))
+    assert s.lean == "waiting" and s.relative_to == (("label", "lem:b"),)
+    assert [(x.key, x.why) for x in s.waiting_on] == [(("label", "lem:b"), "unattested")]
+    # its own Lean, with a sorry still, its statement attested: assumed for now, and the result verified relative to it
+    _attest_record(root, b, lean(root, b, sorry=True, axioms=["sorryAx"]))
+    assert lean_of(root, "lem:b", M) == "failed"
+    s = status(replay(root), w, here_of(w, "lem:a", M), lean_now=files_unchanged(root))
+    assert s.lean == "formalized" and s.relative_to == (("label", "lem:b"),)
+
+
+def test_a_library_node_stated_as_an_axiom_is_gated_though_the_record_does_not_list_it(root: Path) -> None:
+    put(root, {M: doc("", TWO_LEMMAS)})
+    w = web(root)
+    subject = w.subject(here_of(w, "lem:r", M))
+    assert subject is not None
+    stating = {"name": "r", "kind": "theorem", "role": "states", "names": {"label": "lem:r"}, "statement": h("1"), "axioms": ["ax_n"], "sorry": False}  # fmt: skip
+    _attest_record(root, subject, lean(root, subject, declarations=[stating, _axiom("ax_n", {"node": "tq-00B2"})]))
+    s = status(replay(root), w, here_of(w, "lem:r", M), lean_now=files_unchanged(root))
+    assert s.lean == "waiting" and s.relative_to == (("node", "tq-00B2"),)
+    assert [(x.key, x.why) for x in s.waiting_on] == [(("node", "tq-00B2"), "unknown")]
+
+
+def test_a_statement_citing_a_work_with_no_locator_waits_until_the_library_can_answer(root: Path) -> None:
+    put(root, {M: doc("", r"\begin{lemma}\label{lem:r}By \cite{Calloway14}, every cog is finite.\end{lemma}")})
+    lean_and_attest(root, "lem:r", M)
+    w = web(root)
+    s = status(replay(root), w, here_of(w, "lem:r", M), lean_now=files_unchanged(root))
+    assert s.lean == "waiting" and [(x.key, x.why) for x in s.waiting_on] == [(("cite", "Calloway14"), "unknown")]
+
+
+def test_a_library_node_never_reads_formalized_until_compared_itself(root: Path) -> None:
+    b2 = Subject("node", "tq-00B2", h("b"))
+    record = lean(root, b2, declarations=[_axiom("ax", {"node": "tq-00B2"})])
+    _attest_record(root, b2, record)
+    s = status(replay(root), Library(), Here("node", "tq-00B2"), lean_now=files_unchanged(root))
+    assert s.lean == "waiting" and s.role == "assumed"
+    assert [(x.key, x.why) for x in s.waiting_on] == [(("node", "tq-00B2"), "unchecked")]
+    write(root, "compared", PERSON, on=b2, **{"with": {"ref": "tq-00A1-ref", "pdf": h("9")}})
+    assert status(replay(root), Library(), Here("node", "tq-00B2"), lean_now=files_unchanged(root)).lean == "formalized"

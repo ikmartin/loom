@@ -27,10 +27,10 @@ _COMMAND = re.compile(r"\\([A-Za-z@]+|[^A-Za-z@\s])")
 _BEGIN = re.compile(r"\\begin\s*\{([A-Za-z@*]+)\}")
 #: An environment a person defines.
 _NEWENV = re.compile(r"\\(?:re)?newenvironment\*?\s*\{([A-Za-z@*]+)\}")
-#: A citation with a locator, its optional arguments and its keys: the last optional argument is the locator.
+#: A citation, its optional arguments and its keys: the last optional argument, where there is one, is the locator.
 _CITE = re.compile(
     r"\\(?:cite|parencite|textcite|autocite|citep|citet|Cite|Parencite|Textcite|footcite)\*?\s*"
-    r"((?:\[[^\]]*\]\s*){1,2})\{([^}]*)\}"
+    r"((?:\[[^\]]*\]\s*){0,2})\{([^}]*)\}"
 )
 
 
@@ -67,7 +67,10 @@ class Web(Protocol):
         """Whether the work `ref` holds its `pdf` or `tex`; None when this web cannot say."""
 
     def cited(self, here: Here) -> list[str]:
-        """Each citation of one result of a work, a locator given, that the statement at `here` or its closure makes and no node yet answers, as `KEY LOCATOR`."""
+        """Each citation the statement at `here` or its closure makes that no node yet answers: `KEY LOCATOR` for one result of a work, `KEY` for a work with no result named."""
+
+    def holder(self, key: tuple[str, str], near: Here) -> Here | None:
+        """The block bearing a label as `near` reads it, where one text answers; None otherwise and for anything but a label."""
 
 
 class Blank:
@@ -96,6 +99,9 @@ class Blank:
 
     def cited(self, here: Here) -> list[str]:
         return []
+
+    def holder(self, key: tuple[str, str], near: Here) -> Here | None:
+        return None
 
 
 class Joined:
@@ -133,6 +139,9 @@ class Joined:
 
     def cited(self, here: Here) -> list[str]:
         return self._for(here).cited(here)
+
+    def holder(self, key: tuple[str, str], near: Here) -> Here | None:
+        return self.draft.holder(key, near) if key[0] == "label" else None
 
 
 def fold(text: str) -> str:
@@ -199,6 +208,35 @@ def environments(clean: str) -> dict[str, tuple[str, str]]:
 def label_of(node: NodeRec) -> str | None:
     """The label a record names a block by: its id where it has one, else its first `\\label`; None for none."""
     return node.labels[0] if node.labels else None
+
+
+def rests_on(result: ScanResult, key: str, results: frozenset[str] | set[str]) -> list[str]:
+    """The results, among `results`, that the text at `key` (a statement or a proof) uses directly: the targets of its references, a display followed both to the block that holds it and through it to what it refers to, and what a result nested in it uses.
+
+    The one walk for status's closure (`DraftWeb.uses`) and the Web's cards and graph (`webview`), so the two never disagree about what rests on what.
+    """
+    deps = result.dependencies
+    node = result.nodes.get(key)
+    out: list[str] = []
+    seen: set[str] = set()
+    todo = list(deps.direct(key))
+    for child in node.claimants if node is not None else []:
+        if child in results:
+            out.append(child)
+            todo.extend(deps.direct(child))
+    while todo:
+        target = todo.pop(0)
+        if target in seen:
+            continue
+        seen.add(target)
+        if target.startswith("equation:"):
+            owner = deps.owners.get(target)
+            if owner:
+                out.append(owner)
+            todo.extend(deps.direct(target))
+        else:
+            out.append(target)
+    return list(dict.fromkeys(k for k in out if k in results and k != key))
 
 
 class DraftWeb:
@@ -298,32 +336,9 @@ class DraftWeb:
         return hashes.pop() if len(hashes) == 1 else None
 
     def uses(self, here: Here) -> list[Here]:
-        """The results the statement at `here` uses directly: the targets of its references, a display followed both to the block that holds it and through it to what it refers to, and what a result nested in it uses."""
+        """The results the statement at `here` uses directly (`rests_on`)."""
         node = self._node(here)
-        if node is None:
-            return []
-        deps = self.result.dependencies
-        out: list[str] = []
-        seen: set[str] = set()
-        todo = list(deps.direct(node.key))
-        for child in node.claimants:
-            if child in self._keys:
-                out.append(child)
-                todo.extend(deps.direct(child))
-        while todo:
-            target = todo.pop(0)
-            if target in seen:
-                continue
-            seen.add(target)
-            if target.startswith("equation:"):
-                owner = deps.owners.get(target)
-                if owner:
-                    out.append(owner)
-                todo.extend(deps.direct(target))
-            else:
-                out.append(target)
-        found = dict.fromkeys(k for k in out if k in self._keys and k != node.key)
-        return [Here("block", k) for k in found]
+        return [Here("block", k) for k in rests_on(self.result, node.key, self._keys)] if node is not None else []
 
     def closure(self, here: Here) -> dict[tuple[str, str], str]:
         """What the statement at `here` uses, and what those use in turn, by label with each one's hash now; a result with no label is left out, since nothing could name it."""
@@ -404,19 +419,31 @@ class DraftWeb:
         return {name: _together(hashes) for name, hashes in sorted(rows.items())}
 
     def cited(self, here: Here) -> list[str]:
-        """Each citation of one result of a work, its locator given, in the statement or a text of its closure: a use of a library result no node answers for until citations resolve to nodes (`KEY LOCATOR`)."""
+        """Each citation in the statement or a text of its closure, which no node answers for until citations resolve to nodes: `KEY LOCATOR` for one result of a work, `KEY` for a work with no result named, which a `mention` will let go once it can name the work."""
         from loom.scan.source import blank_comments
 
         out: list[str] = []
         for text in self._texts_of(here):
             for m in _CITE.finditer(blank_comments(text)):
-                locator = re.findall(r"\[([^\]]*)\]", m.group(1))[-1].strip()
-                if not locator:
-                    continue
+                given = re.findall(r"\[([^\]]*)\]", m.group(1))
+                locator = given[-1].strip() if given else ""
                 for key in m.group(2).split(","):
                     if key.strip():
-                        out.append(f"{key.strip()} {locator}")
+                        out.append(f"{key.strip()} {locator}".strip())
         return list(dict.fromkeys(out))
+
+    def holder(self, key: tuple[str, str], near: Here) -> Here | None:
+        """The block bearing a label as `near` reads it: the one text in a document that reads `near`, else the quilt's one; None where none or two texts answer."""
+        kind, name = key
+        if kind != "label":
+            return None
+        holders = self.bearing.get(name, [])
+        mine = self._node(near)
+        if mine is not None:
+            holders = [n for n in holders if set(n.reached_by) & set(mine.reached_by)] or holders
+        if len({self._hash(n) for n in holders}) != 1:
+            return None
+        return Here("block", holders[0].key)
 
     @cached_property
     def _accepted(self) -> dict[str, str]:
