@@ -3,6 +3,9 @@
 import type { Note, NotesAnswer, NotesGroup } from '../types';
 
 const MAIN = 'drafting/main.tex';
+
+/** A moment of November 2026, as an annotation's `at` holds it. */
+const utc = (day: number, hour: number) => new Date(Date.UTC(2026, 10, day, hour)).toISOString().replace('.000Z', 'Z');
 const BOUNDS = 'drafting/bounds.tex';
 
 /** Round six's notes, newest first, and the older ones a group holds beyond them. */
@@ -18,9 +21,9 @@ export function notes6(refs: Record<string, string>): Note[] {
 		n('a-n3', 'rgb(116 67 204)', 'a loop counting as one arrow', 'Fine.', 'Claude Code', '2026-11-18T11:00:00Z', { doc: MAIN, key: 'conv:finite' }),
 		n('a-n4', 'rgb(218 172 0)', 'whose coordinates sum to zero on each component', 'This is the form main.tex uses.', 'you', '2026-11-18T10:00:00Z', arden),
 		n('a-s1', '#b4b2a9', '', 'A short paper fixing notation for cycle spaces; Sections 2 and 5 are what main.tex uses.', 'Claude Code', '2026-11-18T09:00:00Z', arden, { tags: ['summary'] }),
-		...Array.from({ length: 6 }, (_, i) => n(`a-m${i}`, 'rgb(218 172 0)', `an older passage of main.tex, ${i + 1}`, '', 'you', `2026-11-0${i + 1}T10:00:00Z`, { doc: MAIN, key: 'sec:intro' })),
+		...Array.from({ length: 6 }, (_, i) => n(`a-m${i}`, 'rgb(218 172 0)', `an older passage of main.tex, ${i + 1}`, '', 'you', utc(i + 1, 10), { doc: MAIN, key: 'sec:intro' })),
 		n('a-a9', 'rgb(26 111 196)', 'an older passage of Arden 2024', '', 'you', '2026-11-02T10:00:00Z', arden),
-		...Array.from({ length: 3 }, (_, i) => n(`a-b${i}`, 'rgb(204 28 28)', `a passage of bounds.tex, ${i + 1}`, '', 'you', `2026-11-1${i}T08:00:00Z`, { doc: BOUNDS, key: 'thm:radius' }))
+		...Array.from({ length: 3 }, (_, i) => n(`a-b${i}`, 'rgb(204 28 28)', `a passage of bounds.tex, ${i + 1}`, '', 'you', utc(10 + i, 8), { doc: BOUNDS, key: 'thm:radius' }))
 	];
 }
 
