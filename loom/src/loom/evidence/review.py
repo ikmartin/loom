@@ -71,12 +71,13 @@ def _ordered(rows: list[Row]) -> list[Row]:
 
 
 def _name(manifest: dict[str, Any], key: str, doc: str | None) -> str:
-    """A result as the person reads it: its taxon's word and its number in `doc`, as the manifest has them; the word alone when unnumbered."""
+    """A result as the person reads it: its taxon's word and its number in `doc`, as the manifest publishes them (`numbers[doc].number`); in another document that numbers it when `doc` does not; the word alone when unnumbered."""
     node = manifest.get("nodes", {}).get(key, {})
-    taxon = str(node.get("taxon") or node.get("kind") or "")
+    taxon = str(node.get("taxon") or "")
     numbers = node.get("numbers") or {}
-    number = numbers.get(doc) if doc else None
-    number = number or next(iter(numbers.values()), None)
+    given = numbers.get(doc) if doc else None
+    given = given or next(iter(numbers.values()), None)
+    number = given.get("number") if isinstance(given, dict) else given
     return f"{taxon} {number}".strip() if number else taxon
 
 

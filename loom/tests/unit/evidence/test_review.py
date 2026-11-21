@@ -198,7 +198,8 @@ def test_an_accepted_result_that_changed_is_listed_from_the_published_ledger(roo
     _edit(root, "on a tree vanishes", "on a forest vanishes")
     manifest = build(load_quilt(root)).manifest
     [row] = _rows(_gather(root, manifest), "accepted-changed")
-    assert row["key"] == key and row["doc"] == DOC and row["name"].startswith("Lemma")
+    # numbered where the compile numbered it (the fake TeX of the unit tier numbers nothing)
+    assert row["key"] == key and row["doc"] == DOC and row["name"] in ("Lemma", "Lemma 1")
 
 
 def test_an_agents_suggested_edit_is_a_proposed_edit(root: Path) -> None:
@@ -231,3 +232,16 @@ def test_everything_is_in_rank_order_counts_are_the_rows_and_a_draft_narrows_bot
     assert counted["drafts"] == [{"doc": DOC, "n": 3}, {"doc": "drafting/other.tex", "n": 1}]
     assert [len(grp["rows"]) for grp in review.listed(g, "all", DOC)] == [1, 1, 1]
     assert review.find(g, groups[0]["rows"][0]["row"]) is not None
+
+
+def test_a_result_is_named_by_its_taxon_and_the_number_the_build_published() -> None:
+    manifest = {
+        "nodes": {
+            "k": {
+                "taxon": "Lemma",
+                "numbers": {"a.tex": {"number": "3.3", "page": 2}, "b.tex": {"number": "1", "page": 1}},
+            }
+        }
+    }
+    assert review._name(manifest, "k", "b.tex") == "Lemma 1" and review._name(manifest, "k", "c.tex") == "Lemma 3.3"
+    assert review._name({"nodes": {"k": {"taxon": "Remark", "numbers": {}}}}, "k", "a.tex") == "Remark"
