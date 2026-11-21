@@ -67,6 +67,10 @@ class Item:
     path: Path | None = None
     text: str = ""
     work: str = ""
+    #: A work of its own, whatever the file states (`loom library add --new`).
+    new: bool = False
+    #: Filed under `work` on the person's word, whatever the file states (`loom library add --for --force`).
+    force: bool = False
 
 
 @dataclass
@@ -418,12 +422,28 @@ def take(
             if item.text:
                 rows.extend(_take_text(t, n, item.text))
             else:
-                drop = item.drop or (receive_file(root, item.path) if item.path is not None else "")
-                rows.extend(_take_drop(t, n, drop, item.work))
+                fresh = False
+                drop = item.drop
+                if not drop and item.path is not None:
+                    drop = _sha_of(item.path)
+                    fresh = not (incoming(root) / drop).is_dir()
+                    receive_file(root, item.path)
+                rows.extend(_take_drop(t, n, drop, item.work, new=item.new, force=item.force))
+                if fresh and not write:
+                    # a dry run leaves no drop behind that it made itself
+                    shutil.rmtree(incoming(root) / drop, ignore_errors=True)
     return rows
 
 
-def _take_drop(t: _Take, n: int, drop: str, work: str) -> list[Row]:
+def _sha_of(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while chunk := fh.read(CHUNK):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _take_drop(t: _Take, n: int, drop: str, work: str, *, new: bool = False, force: bool = False) -> list[Row]:
     d = drop_dir(t.root, drop)
     f = waiting_file(d)
     arrived = _read_json(d / ARRIVED) or {}
@@ -432,7 +452,16 @@ def _take_drop(t: _Take, n: int, drop: str, work: str) -> list[Row]:
         # a drop taken already, its bytes held under a work: the same file given again is here
         held = t.lib.by_doc.get("sha256:" + drop)
         if held is not None and _acts(d):
-            return [Row(drop, n, name, "here", **t.lib.shown(held), why=f"loom holds these very bytes as {t.lib.shown(held)['short']}'s")]
+            return [
+                Row(
+                    drop,
+                    n,
+                    name,
+                    "here",
+                    **t.lib.shown(held),
+                    why=f"loom holds these very bytes as {t.lib.shown(held)['short']}'s",
+                )
+            ]
         raise IntakeRefused("no-such-incoming", f"nothing waits as {drop[:12]}: drop it again", 404)
     if work and work not in t.lib.refs:
         raise IntakeRefused("no-such-work", f"the library has no work {work}", 404)
@@ -461,7 +490,11 @@ def _take_drop(t: _Take, n: int, drop: str, work: str) -> list[Row]:
             )
         ]
     stated = _stated(f, name, which)
-    others = [r for r in t.lib.stating(stated) if r != work and r not in (arrived.get("not") or [])]
+    others = (
+        []
+        if new or (work and force)
+        else [r for r in t.lib.stating(stated) if r != work and r not in (arrived.get("not") or [])]
+    )
     if work and not others:
         return [_file_under(t, n, d, f, name, which, digest, work)]
     if others:
