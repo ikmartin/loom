@@ -1,6 +1,6 @@
 # The library: import, keys, matching, states, scale, Zotero
 
-Investigator's raw report for the v0.1 study. Checkout: `v0.1-study` at `71621877`. Everything below was checked against the code or done on copies: `quant` (copied from the author's quilt), `showcase` (from `demos/showcase`), a showcase copy with 1,000 synthetic entries, and relloc's bibliography read in place. Scratch: `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/library` (abbreviated `$S` below; screenshots in `$S/shots/`, scripts in `$S/scripts/`). Online lookups used only Perelman's two Ricci-flow papers (arXiv math/0211159, math/0303109) and Hamilton 1982, on the showcase copy.
+Investigator's raw report for the v0.1 study. Checkout: `v0.1-study` at `71621877`. Everything below was checked against the code or done on copies: `quant` (copied from the author's quilt), `showcase` (from `demos/showcase`), a showcase copy with 1,000 synthetic entries, and relloc's bibliography read in place. Scratch: `<scratch>/study/library` (abbreviated `$S` below; screenshots in `$S/shots/`, scripts in `$S/scripts/`). Online lookups used only Perelman's two Ricci-flow papers (arXiv math/0211159, math/0303109) and Hamilton 1982, on the showcase copy.
 
 ## Verdict in five lines
 

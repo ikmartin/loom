@@ -1,6 +1,6 @@
 #!/bin/bash
 # `loom status` as an agent calls it, alternating code trees: usage status.sh QUILT TREE...
-SP=/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/spike-speed
+SP=${SCRATCH:?}/study/spike-speed
 export XDG_CONFIG_HOME=$SP/xdg AI_AGENT=1
 Q=$1; shift
 cd $Q || exit 1

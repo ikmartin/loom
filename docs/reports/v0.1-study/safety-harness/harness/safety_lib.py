@@ -26,7 +26,7 @@ from typing import Any
 for _m in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
     os.environ.pop(_m, None)
 
-LOOM_VENV = Path("/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin")
+LOOM_VENV = Path("~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin").expanduser()
 AGENT = "Agent Smith"
 PERSON_ENV = {k: v for k, v in os.environ.items()}
 

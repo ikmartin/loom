@@ -31,7 +31,7 @@ The register predates the last round. Eight later reports are not in it and win 
 - `harnesses/`: the scripts behind the other trials, among them the browser driver the first-time-user walks used (`harnesses/walk/driver.mjs` with `DRIVER.md`), the history replay behind `check-changed.md`, and the timing scripts.
 - `shots/`: the trials' screenshots. They are large and need not be committed.
 
-The quilt copies the trials ran on were in a session's scratch directory and are gone; the papers the anchoring harness used are not in git.
+The quilt copies the trials ran on were in a session's scratch directory and are gone; the papers the anchoring harness used are not in git. The reports write that directory `<scratch>` and the home folder `~`, and the scripts read the directory from `SCRATCH`, stopping when it is unset, and find the checkout and Playwright under the home folder.
 
 ## Limits to keep in mind
 

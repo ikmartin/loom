@@ -11,8 +11,8 @@ import sys
 import time
 from pathlib import Path
 
-LOOM = "/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom"
-LOGS = Path("/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/tinytex/logs")
+LOOM = os.path.expanduser("~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom")
+LOGS = Path(os.environ["SCRATCH"], "study/tinytex/logs")
 
 PATTERNS = [
     (re.compile(r"! LaTeX Error: File `([^']+)' not found"), None),

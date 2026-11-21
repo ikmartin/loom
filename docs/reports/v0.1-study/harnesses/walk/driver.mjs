@@ -7,7 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 
-const require = createRequire('/Users/isaac/dev/loom-arras/arras/node_modules/');
+const require = createRequire(`${process.env.HOME}/dev/loom-arras/arras/node_modules/`);
 const { chromium } = require('playwright');
 
 const PORT = Number(process.argv[2] || 48199);

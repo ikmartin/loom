@@ -152,7 +152,7 @@ The showcase quilt copied to `$F/tex/quilt`; its `drafting/main.tex` uses BibTeX
 | `tex7` | `xcrun`'s cache read-only (biber passed, same `.bbl`), biber's folder writable only in `thin/` | all four passed, but biber unpacked 202 MB into `TMPDIR` on every run, and failed when its standard output was a file outside the run |
 | `tex8` | biber's folder neither read nor written: loom clones it into the run's folder and points `PAR_GLOBAL_TMPDIR` there | **all four passed; `.aux`, `.bbl` (both) and `.html` byte-identical to unfenced; nothing unpacked into `TMPDIR`** |
 
-`tex8`, the profile to build, in full. Its parameters for this machine: `STAGE` the run's folder, `TEXROOT=/usr/local/texlive`, `TEXMFVAR` and `TEXMFHOME` the decoy's (`Library/texlive/2024/texmf-var` and `Library/texmf` under it), `DEVDIR=/Applications/Xcode.app` (the bundle, since `xcrun` reads its `Info.plist` and frameworks), `USERTMP=/private/var/folders/xh/br51g1_j71sdmy2fqdss_blh0000gn/T`.
+`tex8`, the profile to build, in full. Its parameters for this machine: `STAGE` the run's folder, `TEXROOT=/usr/local/texlive`, `TEXMFVAR` and `TEXMFHOME` the decoy's (`Library/texlive/2024/texmf-var` and `Library/texmf` under it), `DEVDIR=/Applications/Xcode.app` (the bundle, since `xcrun` reads its `Info.plist` and frameworks), `USERTMP=/private/var/folders/…/T`.
 
 ```scheme
 ;; A TeX compile, fenced: latexmk with pdflatex, bibtex or biber, and make4ht, in a staged copy of the document's directory.

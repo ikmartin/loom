@@ -205,7 +205,7 @@ Sentences that read as verified when they are not, beyond the rows above:
 - **P's relative paths resolve only from the study directory.** P cites `raw/…` and `spikes/…` relative to `docs/reports/v0.1-study/` without saying so; from `docs/plans/` they do not resolve. Once (P:27) it uses the full path for `safety-harness/`. Say once where `raw/` and `spikes/` are.
 - **Paths missing without a "(new)" mark:** `scripts/install.sh` (P:90) and `assets/lean-skills/` (P:103). `src/app/` (P:90) is ambiguous: under the register's convention it means `loom/src/loom/app/`, and it is new. The paths marked new (`writes.py`, `presence.py`, `tex/private.py`, `records/formal.py`, `cli/formal.py`, `formal/`) are correctly absent. `scripts/regen` is a goal.
 - **"the Markdown renderer" (P:95) names no file.** Candidates I found: `loom/src/loom/raw_html.py`, the sanitiser, which SEC-6a also touches, and `arras/src/lib/workspace/items/FileItem.svelte`, unconfirmed. Name the files.
-- **Most harnesses live in a temporary directory.** Only `safety-harness/` and the three patches are in the repository. These all sit in `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/` (20 GB):
+- **Most harnesses live in a temporary directory.** Only `safety-harness/` and the three patches are in the repository. These all sit in `<scratch>/study/` (20 GB):
   - the walk drivers;
   - check-changed's replay scripts (`scripts/replay.py`, `simulate.py`, `units.py`);
   - spike-speed's tools (`seen.cjs`, `builds.py`, `stale.py`);
