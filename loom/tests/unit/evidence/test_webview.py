@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
 
 from loom.evidence import webview
+from loom.evidence.log import write
+from loom.evidence.subjects import Subject, Who
+from loom.evidence.web import Here
 from loom.evidence.webview import ScopeError, drafts
+from loom.render.endpoints import base
+from loom.render.endpoints.web import _drafts
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
@@ -112,7 +118,8 @@ def test_search_finds_a_name_first_then_words_of_a_statement_with_the_words_arou
     found = webview.search(d, "all", None, "polynomial in")
     [hit] = found["hits"]
     assert hit["row"]["result"] == _key(d, "thm:count") and hit["snippet"]["match"] == "polynomial in"
-    assert "height at most" in hit["snippet"]["before"] and hit["snippet"]["after"].startswith(" $h$")
+    # the snippet is cut from the statement's plain words: no dollar, tie or reference in it
+    assert "height at most h is a" in hit["snippet"]["before"] and hit["snippet"]["after"] == " h, by Lemma."
     named = webview.search(d, "draft", DOC, "lemma")
     # the name is found first; the theorem, whose statement says "Lemma", after it, with its words
     assert [h["row"]["result"] for h in named["hits"]] == [_key(d, "lem:balanced"), _key(d, "thm:count")]
@@ -165,3 +172,163 @@ def test_by_status_what_waits_on_the_person_comes_first(root: Path) -> None:
     d._status[_key(d, "thm:count")] = "unattested"  # as a Lean record accepted and not attested would make it
     listed = webview.listing(d, "draft", DOC, sort="status")
     assert listed["rows"][0]["result"] == _key(d, "thm:count") and listed["more"] == 0 and listed["count"] == 4
+
+
+PREAMBLE = r"""\documentclass{article}
+\usepackage{amsmath}
+\newtheorem{lemma}{Lemma}
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+\begin{document}
+"""
+SHARED = r"""\begin{definition}\label{def:rank}
+The rank of a quiver is
+\begin{equation}\label{eq:rank}
+r(Q) = a - v + c.
+\end{equation}
+\end{definition}
+\begin{lemma}\label{lem:shared}
+The rank in \eqref{eq:rank} is never negative.
+\end{lemma}
+"""
+TWO_MAIN = (
+    PREAMBLE
+    + r"""\input{shared}
+\begin{theorem}\label{thm:main}
+A theorem of the main draft alone.
+\end{theorem}
+\begin{proof}
+Count as in \eqref{eq:rank}.
+\end{proof}
+\end{document}
+"""
+)
+TWO_BOUNDS = (
+    PREAMBLE
+    + r"""\input{shared}
+\begin{lemma}\label{lem:bound}
+A bound of the second draft alone, by Lemma~\ref{lem:shared}.
+\end{lemma}
+\end{document}
+"""
+)
+BOUNDS_DOC = "drafting/bounds.tex"
+PERSON, LOOM = Who("person", "A. Author"), Who("loom")
+
+
+@pytest.fixture
+def two(tmp_path: Path) -> Path:
+    """Two drafts that both input a file holding a definition with a display and a lemma citing it."""
+    root = tmp_path / "q"
+    ok("init", str(root), "--demo", cwd=tmp_path)
+    track_edits(root, on=False)
+    (root / "drafting/shared.tex").write_text(SHARED, encoding="utf-8")
+    (root / DOC).write_text(TWO_MAIN, encoding="utf-8")
+    (root / BOUNDS_DOC).write_text(TWO_BOUNDS, encoding="utf-8")
+    return root
+
+
+def test_a_display_a_statement_or_proof_cites_is_a_use_of_the_block_holding_it_as_status_reads_it(two: Path) -> None:
+    d = _d(two)
+    rank, shared, main = _key(d, "def:rank"), _key(d, "lem:shared"), _key(d, "thm:main")
+    card = webview.focus(d, "all", None, shared)
+    assert [r["result"] for r in card["uses"]["statement"]] == [rank]
+    assert [r["result"] for r in webview.focus(d, "all", None, main)["uses"]["proof"]] == [rank]
+    used = webview.focus(d, "all", None, rank)["used_by"]["rows"]
+    assert {r["result"] for r in used} == {shared, main}
+    # what a statement uses on its card is what status's closure walks, for every result
+    for n in d.results:
+        assert d.uses(n.key)[0] == [h.name for h in d.web.uses(Here("block", n.key)) if d.node(h.name)]
+
+
+def test_a_result_two_drafts_read_is_in_the_group_of_each_in_the_list_as_when_a_group_is_opened(two: Path) -> None:
+    d = _d(two)
+    shared = _key(d, "lem:shared")
+    listed = webview.listing(d, "all", None, opened=[DOC, BOUNDS_DOC])
+    groups = {g["group"]: g for g in listed["sections"][0]["groups"]}
+    for doc in (DOC, BOUNDS_DOC):
+        opened = webview.group(d, "all", None, doc)
+        assert groups[doc]["n"] == opened["n"] and groups[doc]["rows"] == opened["rows"]
+        assert shared in [r["result"] for r in opened["rows"]]
+        # a row under a draft's group names that draft as its source
+        assert {r["source"]["doc"] for r in opened["rows"]} == {doc}
+    # the count is the results, each once, though the groups hold one of them twice
+    assert listed["count"] == len(d.results) == sum(g["n"] for g in groups.values()) - 2
+
+
+def _lean(root: Path, on: Subject, states: dict[str, str], *, ok: bool = True) -> str:
+    """A `lean` record on `on`, each of `states` a declaration stating the label it names; its id."""
+    lean = root / "lean" / "A.lean"
+    lean.parent.mkdir(exist_ok=True)
+    lean.write_text("theorem a : True := trivial\n", encoding="utf-8")
+    digest = "sha256:" + hashlib.sha256(lean.read_bytes()).hexdigest()
+    declarations = [
+        {"name": name, "kind": "theorem", "role": "states", "names": {"label": label}, "statement": digest}
+        | {"axioms": [], "sorry": False}
+        for name, label in states.items()
+    ]
+    return write(
+        root,
+        "lean",
+        LOOM,
+        on=on,
+        project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": digest},
+        files={"lean/A.lean": digest},
+        declarations=declarations,
+        assumed=[],
+        uses=[],
+        replay={"tool": "leanchecker", "exit": 0, "output": ""},
+        ok=ok,
+    ).id
+
+
+def test_search_matches_the_words_of_a_statement_never_its_latex(root: Path) -> None:
+    d = _d(root)
+    for q in ("label", "begin", "ref", "lem:balanced", "$h$", "definition}", "support", "nomial"):
+        # a command, a label, an environment's name, a dollar, a proof's words, or the inside of a word
+        assert webview.search(d, "all", None, q)["count"] == 0, q
+    assert [h["snippet"]["match"] for h in webview.search(d, "all", None, "poly")["hits"]] == ["polynomial"]
+    [hit] = webview.search(d, "all", None, "underlying graph")["hits"]
+    assert hit["row"]["result"] == _key(d, "def:connected")
+    assert hit["snippet"] == {
+        "before": "A quiver is connected if its ",
+        "match": "underlying graph",
+        "after": " is connected.",
+    }
+
+
+def test_a_cards_fold_reads_only_the_records_on_its_own_text(root: Path) -> None:
+    d = _d(root)
+    key = _key(d, "lem:balanced")
+    subject = d.web.subject(Here("block", key))
+    assert subject is not None
+    _lean(root, subject, {"balanced_here": "lem:balanced", "count_here": "thm:count"})
+    # later, a run and an attestation on another text of the label: another document's, or one since edited
+    other = Subject("label", "lem:balanced", "sha256:" + "0" * 64)
+    there = _lean(root, other, {"balanced_there": "lem:balanced"})
+    said = {"balanced_there": "sha256:" + "1" * 64}
+    write(root, "attested", PERSON, on=other, lean=there, statements=said, closure=[], rulings=[])
+    folded = webview.focus(_d(root), "all", None, key, more=True)["more"]
+    assert folded["lean"] == ["balanced_here"]
+    assert [(r["act"], r["by"]) for r in folded["record"]] == [("lean-accepted", "loom")]
+
+
+def test_a_read_under_the_same_scan_and_unchanged_files_answers_from_the_last(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    kept = scan(load_quilt(root))
+    monkeypatch.setitem(base._SCANS, root.resolve(), lambda: kept)
+    first = _drafts(root)
+    assert _drafts(root) is first
+    _lean(root, Subject("label", "lem:balanced", "sha256:" + "0" * 64), {"b": "lem:balanced"}, ok=False)
+    # a record written is read, and so is a Lean file changed
+    second = _drafts(root)
+    assert second is not first and len(second.evidence.records) == len(first.evidence.records) + 1
+    assert _drafts(root) is second
+    (root / "lean" / "A.lean").write_text("theorem a : 1 = 1 := rfl\n", encoding="utf-8")
+    third = _drafts(root)
+    assert third is not second
+    # and a scan made afresh
+    fresh = scan(load_quilt(root))
+    monkeypatch.setitem(base._SCANS, root.resolve(), lambda: fresh)
+    assert _drafts(root) is not third

@@ -59,14 +59,14 @@ def _gather(root: Path, manifest: dict | None = None) -> review.Gathered:
     return review.gather(root, scan(load_quilt(root)), manifest or {})
 
 
-def _key(root: Path, label: str) -> str:
-    [node] = DraftWeb(scan(load_quilt(root))).bearing[label]
+def _key(root: Path, label: str, doc: str | None = None) -> str:
+    [node] = [n for n in DraftWeb(scan(load_quilt(root))).bearing[label] if doc is None or doc in n.reached_by]
     return node.key
 
 
-def _lean(root: Path, label: str) -> None:
+def _lean(root: Path, label: str, doc: str | None = None) -> None:
     web = DraftWeb(scan(load_quilt(root)))
-    subject = web.subject(Here("block", _key(root, label)))
+    subject = web.subject(Here("block", _key(root, label, doc)))
     assert subject is not None
     digest = "sha256:" + hashlib.sha256((root / "lean" / "A.lean").read_bytes()).hexdigest()
     write(
@@ -94,12 +94,12 @@ def _lean(root: Path, label: str) -> None:
     )
 
 
-def _attest(root: Path, label: str) -> None:
+def _attest(root: Path, label: str, doc: str | None = None) -> None:
     web = DraftWeb(scan(load_quilt(root)))
-    here = Here("block", _key(root, label))
+    here = Here("block", _key(root, label, doc))
     subject = web.subject(here)
     assert subject is not None
-    lean = [r for r in replay(root).about("label", label, of="lean")][-1]
+    lean = [r for r in replay(root).about("label", label, of="lean") if r.on and r.on.hash == subject.hash][-1]
     closure = [{k[0]: k[1], "hash": h} for k, h in sorted(web.closure(here).items())]
     statements = {d["name"]: d["statement"] for d in lean.get("declarations")}
     write(root, "attested", PERSON, on=subject, lean=lean.id, statements=statements, closure=closure, rulings=[])
@@ -107,10 +107,10 @@ def _attest(root: Path, label: str) -> None:
         write(root, "attested", PERSON, on=Subject("macro", name, digest))
 
 
-def _edit(root: Path, old: str, new: str) -> None:
-    text = (root / DOC).read_text(encoding="utf-8")
+def _edit(root: Path, old: str, new: str, doc: str = DOC) -> None:
+    text = (root / doc).read_text(encoding="utf-8")
     assert old in text
-    (root / DOC).write_text(text.replace(old, new), encoding="utf-8")
+    (root / doc).write_text(text.replace(old, new), encoding="utf-8")
 
 
 def _rows(g: review.Gathered, kind: str) -> list[dict]:
@@ -149,7 +149,7 @@ def test_a_paper_waits_until_withdrawn_or_held_and_a_task_until_it_produces_or_i
     g = _gather(root)
     assert [r["link"] for r in _rows(g, "fetch")] == ["https://doi.org/10.1000/x.17"]
     [waiting] = _rows(g, review.AGENTS)
-    assert waiting["task"] == task.id and waiting["kind"] == "read" and waiting["working"] is None
+    assert waiting["task"] == task.id and waiting["what"] == "read" and waiting["working"] is None
     say(root, AGENT, "withdrawn", paper.id)
     say(root, PERSON, "withdrawn", task.id)
     g = _gather(root)
@@ -186,6 +186,112 @@ def test_a_result_changed_through_a_definition_nobody_attested_is_a_row_of_its_o
     assert [c["changed"] for c in row["causes"]] == [{"label": "def:connected"}]
 
 
+BOUNDS = "drafting/bounds.tex"
+TWIN = r"""\documentclass{article}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+\begin{lemma}\label{lem:balanced}
+A twin of the lemma, in other words.
+\end{lemma}
+\begin{lemma}\label{lem:twinned}
+By Lemma~\ref{lem:balanced}, every twin is balanced.
+\end{lemma}
+\end{document}
+"""
+
+
+def test_one_label_on_two_texts_in_two_documents_is_two_rows_each_with_what_rests_on_it(root: Path) -> None:
+    (root / BOUNDS).write_text(TWIN, encoding="utf-8")
+    for label, doc in (("lem:balanced", DOC), ("lem:balanced", BOUNDS), ("lem:twinned", BOUNDS)):
+        _lean(root, label, doc)
+        _attest(root, label, doc)
+    assert _rows(_gather(root), "attested-changed") == []
+    _edit(root, "on a tree vanishes", "on a forest vanishes")
+    _edit(root, "in other words", "in yet other words", BOUNDS)
+    rows = {r["result"]: r for r in _rows(_gather(root), "attested-changed")}
+    here, there = _key(root, "lem:balanced", DOC), _key(root, "lem:balanced", BOUNDS)
+    assert sorted(rows) == sorted([here, there])
+    assert rows[here]["resting"] == [] and rows[here]["docs"] == [DOC]
+    assert [u["result"] for u in rows[there]["resting"]] == [_key(root, "lem:twinned")]
+
+
+def test_a_result_rests_under_a_member_whose_own_words_changed_never_under_one_resting_itself(root: Path) -> None:
+    for label in ("def:connected", "def:cycle", "lem:balanced"):
+        _lean(root, label)
+        _attest(root, label)
+    # the cycle's words change and it is attested again; the lemma, attested on its first words, is not
+    _edit(root, "is the kernel.", "is the kernel of the boundary.")
+    _lean(root, "def:cycle")
+    _attest(root, "def:cycle")
+    # then what both rest on changes: the cycle rests on it, and the lemma names the cycle first among its causes
+    _edit(root, "is connected.", "is connected after its loops are removed.")
+    [row] = _rows(_gather(root), "attested-changed")
+    assert row["result"] == _key(root, "def:connected")
+    assert sorted(u["result"] for u in row["resting"]) == sorted(_key(root, x) for x in ("def:cycle", "lem:balanced"))
+
+
+def test_a_result_citing_a_result_of_a_work_no_node_answers_for_is_not_offered_to_attest(root: Path) -> None:
+    cited = "\\begin{lemma}\\label{lem:cited}\nBy \\cite[Theorem 2.1]{Calloway14}, every cog is finite.\n\\end{lemma}\n"
+    _edit(root, "\\end{document}", cited + "\\end{document}")
+    _lean(root, "lem:cited")
+    _lean(root, "lem:balanced")
+    assert [r["result"] for r in _rows(_gather(root), "attest")] == [_key(root, "lem:balanced")]
+
+
+def _served(root: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[list[object], list[int]]:
+    """The publisher's kept scan offered for `root`, one scan object until the test swaps it, and `gather`'s calls counted."""
+    from loom.render.endpoints import base
+
+    held: list[object] = [scan(load_quilt(root))]
+    monkeypatch.setitem(base._SCANS, root.resolve(), lambda: held[0])
+    calls: list[int] = []
+    real = review.gather
+    monkeypatch.setattr(review, "gather", lambda *a, **k: calls.append(1) or real(*a, **k))
+    return held, calls
+
+
+def test_a_read_under_the_same_scan_and_files_answers_from_the_last(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.looks import keep_all, take
+    from loom.render.endpoints.review import _gathered
+    from loom.scan.quilt import save_author
+
+    save_author("A. Author")
+    track_edits(root)
+    take(load_quilt(root), "A. Author")
+    _edit(root, "on a tree vanishes", "on a forest vanishes")
+    held, calls = _served(root, monkeypatch)
+    [change] = _gathered(root)[2].of("edits")
+    assert _gathered(root)[2].of("edits") == [change] and len(calls) == 1
+    # the person's look takes the change in: the same scan, another look
+    keep_all(load_quilt(root), "A. Author")
+    assert _gathered(root)[2].of("edits") == [] and len(calls) == 2
+    ask(root, AGENT, "question", "person", {"label": "lem:balanced"}, origin=[DOC], text="Both?")
+    assert len(_gathered(root)[2].of("questions")) == 1 and len(calls) == 3
+    held[0] = scan(load_quilt(root))
+    _gathered(root)
+    assert len(calls) == 4
+
+
+def test_an_ask_reads_working_while_the_session_that_took_it_is_alive_on_a_kept_read_too(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.evidence import asks
+    from loom.render.endpoints.review import _gathered
+
+    task = ask(root, PERSON, "read", "agent", {"node": "dm-00B7"}, origin=[DOC], nodes=["dm-00B7"])
+    say(root, AGENT, "took", task.id, session="s-2026-11-21-a8k2rx")
+    _held, calls = _served(root, monkeypatch)
+    alive: list[frozenset[str]] = [frozenset()]
+    monkeypatch.setattr(asks, "live_sessions", lambda _root: alive[0])
+    [row] = _gathered(root)[2].of(review.AGENTS)
+    assert row.fields["working"] is None
+    alive[0] = frozenset({"s-2026-11-21-a8k2rx"})
+    [row] = _gathered(root)[2].of(review.AGENTS)
+    assert row.fields["working"] == {"by": "Probe Agent"} and len(calls) == 1
+
+
 def test_an_accepted_result_that_changed_is_listed_from_the_published_ledger(root: Path) -> None:
     from loom.cli.review import write_acceptance
     from loom.render.build import build
@@ -206,7 +312,18 @@ def test_an_agents_suggested_edit_is_a_proposed_edit(root: Path) -> None:
     key = _key(root, "lem:balanced")
     ok("suggest", key, "--with", "Every balanced weighting", "--quote", "Every", "--as", "Probe Agent", cwd=root)
     [row] = _rows(_gather(root), "edits")
-    assert row["kind"] == "suggested" and row["key"] == key and row["by"] == "Probe Agent"
+    assert row["type"] == "suggested" and row["key"] == key and row["by"] == "Probe Agent"
+
+
+def test_a_rows_kind_is_its_kind_and_no_field_of_its_own_overwrites_it(root: Path) -> None:
+    key = _key(root, "lem:balanced")
+    ok("suggest", key, "--with", "Every balanced weighting", "--quote", "Every", "--as", "Probe Agent", cwd=root)
+    ask(root, PERSON, "read", "agent", {"node": "dm-00B7"}, origin=[DOC], nodes=["dm-00B7"])
+    g = _gather(root)
+    assert [(r["kind"], r["type"]) for r in _rows(g, "edits")] == [("edits", "suggested")]
+    assert [(r["kind"], r["what"]) for r in _rows(g, review.AGENTS)] == [(review.AGENTS, "read")]
+    with pytest.raises(ValueError, match="kind"):
+        review.Row("edits:e-1", "edits", (DOC,), fields={"kind": "suggested"}).to_dict()
 
 
 def test_everything_is_in_rank_order_counts_are_the_rows_and_a_draft_narrows_both(root: Path) -> None:

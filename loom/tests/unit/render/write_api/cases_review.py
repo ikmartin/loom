@@ -80,7 +80,8 @@ def _review_list(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     [group] = listed["groups"]
     assert group["kind"] == "questions" and group["rows"][0]["question"] == question
     agents = succeeds(s, "review-list", {"kind": "agents"})
-    assert agents["groups"][0]["rows"][0]["kind"] == "read"
+    [row] = agents["groups"][0]["rows"]
+    assert row["kind"] == "agents" and row["what"] == "read"
     refuses(s, "review-list", {"kind": "problems"}, 400, "bad-field", "kind is")
 
 
@@ -99,9 +100,14 @@ def _review_answer(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     s, root, question = _asked(serve, tmp_path)
     agent = {"question": question, "choice": 0, "author": "Referee (Agent)"}
     refuses(s, "review-answer", agent, 403, "author-only", "the person's")
-    succeeds(s, "review-answer", {"question": question, "choice": 1, "text": "and say why"})
+    # another person named is recorded as the reviewer, and the answer says so
+    said = succeeds(
+        s, "review-answer", {"question": question, "choice": 1, "text": "and say why", "author": "B. Other"}
+    )
+    assert said["result"] == "answered as The synthetic quilt, the reviewer"
     answer = replay(root).asks[question].answers[0]
-    assert answer["choice"] == 1 and answer["words"] == "and say why" and answer["by"]["kind"] == "person"
+    assert answer["choice"] == 1 and answer["words"] == "and say why"
+    assert answer["by"] == {"kind": "person", "name": "The synthetic quilt"}
     refuses(s, "review-answer", {"question": question, "text": "again"}, 409, "closed", "answered")
 
 
@@ -117,7 +123,16 @@ def _review_task(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     )
     found = replay(root).asks[made["task"]]
     assert found.what == "ask" and found.to == "agent" and found.on["block"]["key"] == "sy-0001"
+    assert made["result"] == "asked" and found.origin == ("drafting/main.tex",)
     refuses(s, "review-task", {"kind": "formalize", "on": {"result": "sy-0001"}}, 400, "bad-field", "formal-ask")
+    # the drafts it is for are the person's documents, named by path: not a path that is no document, nor an agent's copy
+    stray = {"kind": "ask", "on": {"key": "sy-0001"}, "text": "Is this used?", "docs": ["not/a/doc.tex"]}
+    refuses(s, "review-task", stray, 400, "bad-field", "not/a/doc.tex is not one of your documents")
+    copy = {**stray, "docs": [".loom/agents/copies/aidoc.tex"]}
+    refuses(s, "review-task", copy, 400, "bad-field", "aidoc.tex is not one of your documents")
+    refuses(s, "review-task", {**stray, "docs": "drafting/talk.tex"}, 400, "bad-field", "docs is a list")
+    named = succeeds(s, "review-task", {**stray, "docs": ["drafting/talk.tex"]})
+    assert replay(root).asks[named["task"]].origin == ("drafting/talk.tex",)
 
 
 @case("review-task-delete")

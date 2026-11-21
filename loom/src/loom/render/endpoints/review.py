@@ -56,15 +56,25 @@ def _review_accept(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _gathered(root: Path) -> tuple[Any, dict[str, Any], Any]:
-    """The scan, the published manifest ({} before a first build) and every list's rows, for one read."""
+    """The scan, the published manifest ({} before a first build) and every list's rows, for one read.
+
+    Kept while the scan is the publisher's same one and no file `review.files_read` names changed (`memo.kept`); asks to agents marked by the servers alive now on every read, which no file says.
+    """
     import json
 
-    from loom.evidence.review import gather
+    from loom.evidence.asks import live_sessions
+    from loom.evidence.memo import kept
+    from loom.evidence.review import files_read, gather, working
 
     result = _scan(root)
-    path = root / MANIFEST
-    manifest = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    return result, manifest, gather(root, result, manifest)
+
+    def make() -> tuple[dict[str, Any], Any]:
+        path = root / MANIFEST
+        manifest = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        return manifest, gather(root, result, manifest)
+
+    manifest, gathered = kept(root, "review", result, lambda: files_read(root), make)
+    return result, manifest, working(gathered, live_sessions(root))
 
 
 def _review_counts(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -72,8 +82,13 @@ def _review_counts(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     from loom.evidence.review import counts
 
     result, _manifest, gathered = _gathered(root)
-    documents = sorted(m for m in result.masters if result.document_role(m) == "person")
+    documents = _persons(result)
     return {"ok": True, **counts(gathered, documents)}
+
+
+def _persons(result: Any) -> list[str]:
+    """The person's documents, by path: the scan's documents whose role is `person`, never an agent's copy."""
+    return sorted(m for m in result.masters if result.document_role(m) == "person")
 
 
 def _review_list(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -115,6 +130,12 @@ def _person(root: Path, body: dict[str, Any]) -> Any:
     return Who("person", reviewer)
 
 
+def _as(body: dict[str, Any], who: Any) -> str:
+    """' as NAME, the reviewer' when the body names another person as `author`, for the answer to say whose name the record carries; '' otherwise."""
+    author = _str(body, "author")
+    return f" as {who.name}, the reviewer" if author and author != who.name else ""
+
+
 def _refused(exc: Exception, task: str) -> ApiError:
     """An ask's refusal as the write API answers it: an ask the log does not hold is 404, anything else 409."""
     message = str(exc)
@@ -124,7 +145,7 @@ def _refused(exc: Exception, task: str) -> ApiError:
 
 
 def _review_answer(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`review-answer`: the person answers an agent's question, with one of its choices, words of their own, or both."""
+    """`review-answer`: the person answers an agent's question, with one of its choices, words of their own, or both; recorded as the reviewer whatever `author` names, which the answer says."""
     from loom.evidence.asks import AskRefused, replay, say
 
     who = _person(root, body)
@@ -146,11 +167,11 @@ def _review_answer(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         )
     except AskRefused as exc:
         raise _refused(exc, question) from exc
-    return {"ok": True, "result": "answered"}
+    return {"ok": True, "result": "answered" + _as(body, who)}
 
 
 def _review_task(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`review-task`: the person asks an agent; `on` holds the place and what the kind needs (`docs/specs/evidence.md` §7)."""
+    """`review-task`: the person asks an agent; `on` holds the place and what the kind needs, `docs` the person's documents it is for, by default those that read the place (`docs/specs/evidence.md` §7)."""
     from loom.evidence.asks import AskRefused, ask
 
     who = _person(root, body)
@@ -158,13 +179,29 @@ def _review_task(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     on = body.get("on")
     if not isinstance(on, dict):
         raise ApiError("bad-field", "on is an object naming the place and what the task needs")
+    docs = _docs(root, body.get("docs"))
     place, fields, readers = _task(root, kind, on, _str(body, "text") or "")
-    origin = [d for d in body.get("docs") or readers if isinstance(d, str)]
     try:
-        made = ask(root, who, kind, "agent", place, origin=origin, **fields)
+        made = ask(root, who, kind, "agent", place, origin=docs or readers, **fields)
     except AskRefused as exc:
         raise ApiError("refused", str(exc), status=400) from exc
-    return {"ok": True, "result": "asked", "task": made.id}
+    return {"ok": True, "result": "asked" + _as(body, who), "task": made.id}
+
+
+def _docs(root: Path, docs: Any) -> list[str]:
+    """`review-task`'s `docs`, each one of the person's documents (`_persons`), else `bad-field`; [] when none is given.
+
+    An agent's copy or a path that is no document is refused, as `review-counts` never lists them.
+    """
+    if docs is None:
+        return []
+    if not isinstance(docs, list) or not all(isinstance(d, str) for d in docs):
+        raise ApiError("bad-field", "docs is a list of paths of your documents")
+    mine = _persons(_scan(root))
+    stray = [d for d in docs if d not in mine]
+    if stray:
+        raise ApiError("bad-field", f"{stray[0]} is not one of your documents; docs names a draft by its path")
+    return list(docs)
 
 
 def _task(root: Path, kind: str, on: dict[str, Any], text: str) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
@@ -222,7 +259,7 @@ def _target(root: Path, result_key: str) -> tuple[Any, list[str]]:
 
 
 def _review_task_delete(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`review-task-delete`: the person withdraws an ask, which is deleting it from what waits."""
+    """`review-task-delete`: the person withdraws an ask, which is deleting it from what waits; recorded as the reviewer whatever `author` names, which the answer says."""
     from loom.evidence.asks import AskRefused, replay, say
 
     who = _person(root, body)
@@ -234,7 +271,7 @@ def _review_task_delete(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         say(root, who, "withdrawn", task)
     except AskRefused as exc:
         raise _refused(exc, task) from exc
-    return {"ok": True, "result": "withdrawn"}
+    return {"ok": True, "result": "withdrawn" + _as(body, who)}
 
 
 HANDLERS: dict[str, Handler] = {

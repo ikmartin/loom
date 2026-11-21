@@ -56,7 +56,8 @@ def kept(root: Path, what: str, scan: Any, paths: Callable[[], Iterable[Path]], 
     if held is not None and held[1] is scan and held[0] == marks:
         return held[2]  # type: ignore[no-any-return]
     value = make()
-    _KEPT[key] = (stamps(paths()), scan, value)
+    # the files as they stood before `make` read them: one changed while it ran is seen as changed next time
+    _KEPT[key] = (marks, scan, value)
     return value
 
 

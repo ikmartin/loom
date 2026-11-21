@@ -1,12 +1,12 @@
 """Review's lists: each kind a rule over the evidence, the asks, the scan and the manifest, saying what puts a row in and what takes it out (`docs/specs/evidence.md` §6).
 
-Computed each time they are read, never stored. A row is what one decision is about; it carries the ids it is addressed by and the fields its words are drawn from, never words of loom's own. `cited` and `check` are a library's, and are empty until the node store gives a web of nodes.
+Computed when they are read, never stored; a read under the same scan and the same files as the last answers from what it computed (`memo.kept`, over `files_read`). A row is what one decision is about; it carries the ids it is addressed by and the fields its words are drawn from, never words of loom's own. `cited` and `check` are a library's, and are empty until the node store gives a web of nodes.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -31,13 +31,15 @@ KINDS: tuple[str, ...] = (
 )
 #: What waits for an agent, apart from the kinds.
 AGENTS = "agents"
+#: The keys every row has; no kind's field is named for one.
+ROW_KEYS = frozenset({"row", "kind", "docs"})
 
 
 @dataclass
 class Row:
     """One row of a list.
 
-    `row` is its id, made from what it is about so it stays the same while that waits; `docs` the drafts it concerns; `waits` `agent` when an agent is stopped until the person acts, else `person`; `rests` whether a draft rests on it; `since` when what put it in was written.
+    `row` is its id, made from what it is about so it stays the same while that waits; `docs` the drafts it concerns; `waits` `agent` when an agent is stopped until the person acts, else `person`; `rests` whether a draft rests on it; `since` when what put it in was written; `took`, for an ask to an agent, each session that took it with the agent's name, by which `working` marks it and never sent.
     """
 
     row: str
@@ -47,9 +49,13 @@ class Row:
     rests: bool = False
     since: str = ""
     fields: dict[str, Any] = field(default_factory=dict)
+    took: tuple[tuple[str, str], ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
-        """As `review-list` sends it."""
+        """As `review-list` sends it; a field named for one of `ROW_KEYS` is refused (ValueError) rather than let it overwrite the row's own."""
+        clash = ROW_KEYS & self.fields.keys()
+        if clash:
+            raise ValueError(f"{self.row}: a field may not be named {sorted(clash)[0]}, which is the row's own")
         return {"row": self.row, "kind": self.kind, "docs": list(self.docs), **self.fields}
 
 
@@ -131,31 +137,51 @@ def _fetch(asks: list[Standing]) -> list[Row]:
 
 
 def _agents(asks: list[Standing]) -> list[Row]:
-    """What a person asked of an agent and no agent has produced; oldest first, as `_ordered` leaves them."""
+    """What a person asked of an agent and no agent has produced; oldest first, as `_ordered` leaves them.
+
+    `working` is left null for `working` to mark by the servers alive now; the ask's own fields go first, so none of them overwrites a field the row names.
+    """
     out = []
     for s in asks:
         a = s.ask
         if a.to != "agent":
             continue
-        took = [t["by"].get("name") for t in a.took]
-        fields = {k: v for k, v in a.fields.items() if k not in ("event", "id", "at", "by", "to", "from", "on", "what")}
+        took = tuple((str(t.get("session")), str((t.get("by") or {}).get("name") or "")) for t in a.took)
+        skip = {"event", "id", "at", "by", "to", "from", "on", "what", *ROW_KEYS}
+        own = {k: v for k, v in a.fields.items() if k not in skip}
         out.append(
             Row(
                 f"agents:{a.id}",
                 AGENTS,
                 a.origin,
                 since=a.at,
-                fields={
-                    "task": a.id,
-                    "kind": a.what,
-                    "on": dict(a.on),
-                    "working": {"by": took[-1]} if s.working and took else None,
-                    "asked_at": a.at,
-                    **fields,
-                },
+                fields={**own, "task": a.id, "what": a.what, "on": dict(a.on), "working": None, "asked_at": a.at},
+                took=took,
             )
         )
     return out
+
+
+def working(gathered: Gathered, sessions: frozenset[str]) -> Gathered:
+    """Each ask to an agent marked by the agent servers alive now.
+
+    Parameters
+    ----------
+    gathered : Gathered
+        The rows, as `gather` computed them now or for an earlier read; never changed.
+    sessions : frozenset of str
+        The loom sessions of the agent servers alive now (`asks.live_sessions`).
+
+    Returns
+    -------
+    Gathered
+        The same rows, each of `agents` with `working` `{by}`, the agent whose live session took it last, or null where no live session took it. Whether a server is alive changes with no file changing, so a kept read is marked again each time.
+    """
+    marked = []
+    for row in gathered.rows.get(AGENTS, []):
+        live = [by for session, by in row.took if session in sessions]
+        marked.append(replace(row, fields={**row.fields, "working": {"by": live[-1]} if live else None}))
+    return Gathered({**gathered.rows, AGENTS: marked})
 
 
 def _accepted_changed(manifest: dict[str, Any], result: ScanResult) -> list[Row]:
@@ -217,22 +243,28 @@ def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], boo
 
 
 def _attested_changed(results: list[_Result], manifest: dict[str, Any]) -> list[Row]:
-    """A result whose attestation no longer holds. One changed only through a member of its closure is nested under the first such member, in the order its attestation names them, that is itself listed; otherwise it is a row of its own, its own text, a notation row, or a member not listed being what changed."""
+    """A result whose attestation no longer holds, each keyed by its result (its first block), so one label on two texts is two rows.
+
+    One whose own text or a notation row changed is a row of its own. One changed only through members of its closure rests under the first of its `causes` that is such a row, matched by the member's label and its hash now, so under the text it reads by that label; where none is, it is a row of its own.
+    """
     changed = [r for r in results if r.status.lean == "changed"]
-    listed = {r.label for r in changed}
+    own = {r.key: [c for c in r.status.causes if c.key == ("label", r.label) or c.key[0] == "macro"] for r in changed}
+    # a result whose own words changed, by the label and the hash its text has now, as a cause names it
+    heads: dict[tuple[str, str | None], str] = {
+        (r.label, r.status.subject.hash): r.key for r in changed if own[r.key] and r.status.subject is not None
+    }
     rows: dict[str, Row] = {}
     nested: dict[str, list[_Result]] = {}
     for r in changed:
-        own = [c for c in r.status.causes if c.key == ("label", r.label) or c.key[0] == "macro"]
         under = next(
-            (c.key[1] for c in r.status.causes if c.key[0] == "label" and c.key[1] in listed and c.key[1] != r.label),
+            (heads[(c.key[1], c.now)] for c in r.status.causes if c.key[0] == "label" and (c.key[1], c.now) in heads),
             None,
         )
-        if not own and under is not None:
+        if not own[r.key] and under is not None:
             nested.setdefault(under, []).append(r)
             continue
         doc = r.docs[0] if r.docs else None
-        rows[r.label] = Row(
+        rows[r.key] = Row(
             f"attested-changed:{r.key}",
             "attested-changed",
             r.docs,
@@ -241,15 +273,14 @@ def _attested_changed(results: list[_Result], manifest: dict[str, Any]) -> list[
                 "result": r.key,
                 "name": _name(manifest, r.key, doc),
                 "doc": doc,
-                "changed": "statement" if own else "used",
+                "changed": "statement" if own[r.key] else "used",
                 "causes": [{"changed": {c.key[0]: c.key[1]}, "then": c.then, "now": c.now} for c in r.status.causes],
                 "attestation": r.status.attestation,
+                "resting": [],
             },
         )
-    for label, resting in nested.items():
-        row = rows.get(label)
-        if row is None:
-            continue
+    for key, resting in nested.items():
+        row = rows[key]
         row.fields["resting"] = [
             {"result": u.key, "name": _name(manifest, u.key, u.docs[0] if u.docs else None)} for u in resting
         ]
@@ -260,13 +291,17 @@ def _attested_changed(results: list[_Result], manifest: dict[str, Any]) -> list[
 def _attest(
     results: list[_Result], manifest: dict[str, Any], evidence: Evidence, web: Web, lean_now: Callable[[Record], bool]
 ) -> list[Row]:
-    """A result Lean accepted on its text now that waits for the person's word, and that may be attested now: no node of its closure is unread or uncompared. What it assumes in Lean does not hold it back from being attested, only from reading formalized."""
+    """A result Lean accepted on its text now that waits for the person's word, and that may be attested now: no node of its closure is unread or uncompared, and no citation of one result of a work is left that no node answers for. What it assumes in Lean does not hold it back from being attested, only from reading formalized."""
     out = []
+    # a web written before citations were asked of it cites nothing, as `status` reads it
+    cited = getattr(web, "cited", None)
     for r in results:
         if r.status.lean != "unattested":
             continue
-        uses = [k[1] for k in web.closure(Here("block", r.key)) if k[0] == "node"]
-        if gate(evidence, web, uses, [], lean_now):
+        here = Here("block", r.key)
+        uses = [k[1] for k in web.closure(here) if k[0] == "node"]
+        cites = list(cited(here)) if cited is not None else []
+        if gate(evidence, web, uses, [], lean_now, cites=cites):
             continue
         doc = r.docs[0] if r.docs else None
         out.append(
@@ -305,7 +340,7 @@ def _edits(result: ScanResult, reviewer: str | None, manifest: dict[str, Any]) -
                 since=p.created or "",
                 fields={
                     "change": p.id,
-                    "kind": p.kind,
+                    "type": p.kind,
                     "doc": doc,
                     "key": p.key,
                     "where": _name(manifest, p.key, doc) if p.key else None,
@@ -339,7 +374,13 @@ def gather(
     Returns
     -------
     Gathered
+        Each ask to an agent marked by the servers alive now (`working`).
+
+    See Also
+    --------
+    files_read : What it reads beside the scan, for a caller that keeps it (`memo.kept`).
     """
+    from loom.evidence import asks as asks_log
     from loom.evidence.log import replay
     from loom.evidence.status import files_unchanged
 
@@ -363,7 +404,32 @@ def gather(
         AGENTS: _agents(asks),
     }
     gathered.rows = {k: _ordered(v) for k, v in gathered.rows.items()}
-    return gathered
+    return working(gathered, asks_log.live_sessions(root))
+
+
+def files_read(root: Path) -> list[Path]:
+    """Every file `gather` reads beside the scan, for a read kept while none changes (`memo.kept`).
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+
+    Returns
+    -------
+    list of Path
+        `memo.read_files` (the logs, the manifest, the Lean files records name); every person's look, since whose is read from the manifest, and the folder they are in; the door's journal and its index, by which a suggested edit reads `taken`; the acceptance ledger; and the person's configuration, which names the reviewer before a build does. Which agent servers are alive is not a file's, and `working` marks it on every read.
+    """
+    from loom.evidence.memo import read_files
+    from loom.paths import JOURNAL, JOURNAL_INDEX, LEDGER, LOOKED
+    from loom.scan.quilt import user_config_path
+
+    looks = root / LOOKED
+    try:
+        each = sorted(looks.iterdir())
+    except OSError:
+        each = []
+    return [*read_files(root), looks, *each, root / JOURNAL, root / JOURNAL_INDEX, root / LEDGER, user_config_path()]
 
 
 def counts(gathered: Gathered, documents: list[str]) -> dict[str, Any]:

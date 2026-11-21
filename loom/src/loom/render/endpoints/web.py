@@ -10,14 +10,20 @@ from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
 
 
 def _drafts(root: Path) -> Any:
-    """The drafts' results for one read: the publisher's scan, its last manifest ({} before a first build) and the evidence."""
+    """The drafts' results for a read: the publisher's scan, its last manifest ({} before a first build) and the evidence, kept from the last read while that scan is the same object and no file read is changed (`memo.kept`)."""
     import json
 
+    from loom.evidence.memo import kept, read_files
     from loom.evidence.webview import drafts
 
-    path = root / MANIFEST
-    manifest = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
-    return drafts(_scan(root), manifest, root)
+    scan = _scan(root)
+
+    def make() -> Any:
+        path = root / MANIFEST
+        manifest = json.loads(path.read_text(encoding="utf-8")) if path.is_file() else {}
+        return drafts(scan, manifest, root)
+
+    return kept(root, "web", scan, lambda: read_files(root), make)
 
 
 def _scope(body: dict[str, Any]) -> tuple[str, str | None]:

@@ -1,6 +1,6 @@
 """The Web's reads over the drafts: their results listed by document or by status, a search in their statements, a result's neighbourhood and its graph (`docs/design/library.md`, "The views"; `docs/specs/evidence.md` §8).
 
-A result is a theorem-like block of a document of the person's, named by its key as the manifest names it, drawn from the manifest's numbers and fragments and the scan's edges, its `lean` from the evidence (§5). The library's nodes join these lists with the node store; until then a scope that asks for them finds none, and nothing here guesses them.
+A result is a theorem-like block of a document of the person's, named by its key as the manifest names it, drawn from the manifest's numbers and fragments and the scan's edges, its `lean` from the evidence (§5). What it uses is status's own walk (`web.rests_on`), so the Web and status never disagree about what rests on what. The library's nodes join these lists with the node store; until then a scope that asks for them finds none, and nothing here guesses them.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from loom.evidence.log import Evidence, Record
-from loom.evidence.status import status
-from loom.evidence.web import DraftWeb, Here
+from loom.evidence.status import states, status
+from loom.evidence.web import DraftWeb, Here, rests_on
 
 if TYPE_CHECKING:
     from loom.scan.nodes import NodeRec
@@ -27,13 +27,16 @@ _BY_STATUS = {"unattested": 2, "changed": 2, "waiting": 2, "none": 3, "rerun": 3
 USED_BY = 50
 #: The most rows of a column of the graph drawn; a longer one draws one fewer and counts the rest.
 COLUMN = 6
-#: What an excerpt leaves out whole: an environment's head and foot with its options, a label, a reference or a citation with its argument; then any command, brace, dollar or tie.
+#: What an excerpt leaves out whole: an environment's head and foot with its options, a label, a `\uses`, a reference or a citation with its arguments; then any command or escaped character, brace, dollar or tie.
 _FRAME = re.compile(
     r"\\(?:begin|end)\s*\{[^}]*\}(?:\s*\[[^\]]*\])?"
-    r"|\\(?:label|[a-zA-Z]*ref|[cC]ref|cite[a-z]*)\*?\s*(?:\[[^\]]*\]\s*)?\{[^}]*\}"
+    r"|\\(?:label|uses|[a-zA-Z]*ref|[cC]ref|cite[a-z]*)\*?\s*(?:\[[^\]]*\]\s*)*\{[^}]*\}"
 )
-_COMMAND = re.compile(r"\\[A-Za-z@]+\*?|[{}$~]")
+_COMMAND = re.compile(r"\\(?:[A-Za-z@]+\*?|[^A-Za-z@\s])|[{}$~]")
 _SPACE = re.compile(r"\s+")
+_EMPTY = re.compile(r"\(\s*\)")
+#: Where a word of a search may start and where one before the last must end, not inside a run of letters and digits; the last runs on to the end of the word it starts.
+_START, _END, _REST = r"(?<![^\W_])", r"(?![^\W_])", r"[^\W_]*"
 
 
 class ScopeError(ValueError):
@@ -44,7 +47,7 @@ class ScopeError(ValueError):
 class Drafts:
     """The drafts' results as the Web reads them, from one scan, the published manifest and the evidence.
 
-    Every question is memoised on the instance, which lives for one read.
+    Every question is memoised on the instance, which the endpoints keep while its scan and every file it read are unchanged (`memo.kept`), so nothing it hands out may be changed by a caller.
     """
 
     result: ScanResult
@@ -52,6 +55,10 @@ class Drafts:
     evidence: Evidence
     lean_now: Callable[[Record], bool]
     _status: dict[str, str] = field(default_factory=dict, repr=False)
+    _rests: dict[str, list[str]] = field(default_factory=dict, repr=False)
+    _uses: dict[str, tuple[list[str], list[tuple[str, int]]]] = field(default_factory=dict, repr=False)
+    _words: dict[str, str] = field(default_factory=dict, repr=False)
+    _scopes: dict[tuple[str, str | None], list[str]] = field(default_factory=dict, repr=False)
 
     @cached_property
     def web(self) -> DraftWeb:
@@ -74,6 +81,15 @@ class Drafts:
         return {n.key: n for n in self.results}
 
     @cached_property
+    def _blocks(self) -> frozenset[str]:
+        return frozenset(n.key for n in self.web.blocks)
+
+    @cached_property
+    def _homes(self) -> dict[str, list[str]]:
+        mine = set(self.documents)
+        return {n.key: sorted(set(n.reached_by) & mine) for n in self.results}
+
+    @cached_property
     def position(self) -> dict[str, int]:
         """Each result's place in document order."""
         return {n.key: i for i, n in enumerate(self.results)}
@@ -81,6 +97,10 @@ class Drafts:
     def node(self, key: str) -> NodeRec | None:
         """A result of the drafts by its key; None for anything else."""
         return self._keys.get(key)
+
+    def homes(self, key: str) -> list[str]:
+        """The person's documents that read a result, in path order: the groups it is listed in."""
+        return self._homes[key]
 
     @cached_property
     def _formal(self) -> set[str]:
@@ -99,21 +119,24 @@ class Drafts:
                 self._status[key] = status(self.evidence, self.web, Here("block", key), lean_now=self.lean_now).lean
         return self._status[key]
 
-    def row(self, key: str) -> dict[str, Any]:
-        """A result as a list sends it (`ROW`): its key, its name and title, its taxon's word, its document, `paper` null for a draft's, and its `lean`."""
+    def row(self, key: str, doc: str | None = None) -> dict[str, Any]:
+        """A result as a list sends it (`ROW`): its key, its name and title, its taxon's word, its document, `paper` null for a draft's, and its `lean`.
+
+        Its document is `doc` where that reads it, else the first of its `homes`; its number is the one the build published for that document.
+        """
         node = self._keys[key]
         published = self.manifest.get("nodes", {}).get(key, {})
         taxon = str(published.get("taxon") or node.taxon or "")
-        doc = next((d for d in node.reached_by if d in self.documents), node.reached_by[0] if node.reached_by else None)
+        home = doc if doc is not None and doc in node.reached_by else self.homes(key)[0]
         numbers = published.get("numbers") or {}
-        given = numbers.get(doc) or next(iter(numbers.values()), None)
+        given = numbers.get(home) or next(iter(numbers.values()), None)
         number = given.get("number") if isinstance(given, dict) else None
         return {
             "result": key,
             "name": f"{taxon} {number}".strip() if number else taxon,
             "title": published.get("title") or node.title,
             "taxon": taxon.lower(),
-            "source": {"doc": doc},
+            "source": {"doc": home},
             "paper": None,
             "lean": self.lean(key),
         }
@@ -122,12 +145,17 @@ class Drafts:
         """The keys a scope holds: one draft's results, those with every result they use by statement or proof, every draft's, or the library's (none before the node store)."""
         if scope not in SCOPES:
             raise ScopeError(f"scope is one of {', '.join(SCOPES)}")
+        if scope in ("draft", "deps") and not doc:
+            raise ScopeError(f"the scope {scope} names a draft in doc")
+        if (scope, doc) not in self._scopes:
+            self._scopes[scope, doc] = self._scope(scope, doc)
+        return self._scopes[scope, doc]
+
+    def _scope(self, scope: str, doc: str | None) -> list[str]:
         if scope == "library":
             return []
         if scope == "all":
             return [n.key for n in self.results]
-        if not doc:
-            raise ScopeError(f"the scope {scope} names a draft in doc")
         own = [n.key for n in self.results if doc in n.reached_by]
         if scope == "draft":
             return own
@@ -140,20 +168,23 @@ class Drafts:
                     todo.append(used)
         return [n.key for n in self.results if n.key in seen]
 
-    def _targets(self, key: str) -> list[str]:
-        return [t for t in self.result.dependencies.review_targets(key) if t in self._keys and t != key]
+    def rests(self, key: str) -> list[str]:
+        """The results the statement or proof at `key` uses directly, by status's own walk (`rests_on`) over every block of the drafts, kept to the Web's results."""
+        if key not in self._rests:
+            self._rests[key] = [k for k in rests_on(self.result, key, self._blocks) if k in self._keys]
+        return self._rests[key]
 
     def uses(self, key: str) -> tuple[list[str], list[tuple[str, int]]]:
         """What a result's statement uses, and what each of its proofs uses as `(key, proof's number among them)`."""
-        node = self._keys[key]
-        statement = self._targets(key)
-        proofs: list[tuple[str, int]] = []
-        for n, proof in enumerate(node.proofs):
-            for t in self._targets(proof):
-                # a proof's own statement is what it proves, not what it uses
-                if t != key and t not in [p for p, _ in proofs]:
-                    proofs.append((t, n))
-        return statement, proofs
+        if key not in self._uses:
+            proofs: list[tuple[str, int]] = []
+            for n, proof in enumerate(self._keys[key].proofs):
+                for t in self.rests(proof):
+                    # a proof's own statement is what it proves, not what it uses
+                    if t != key and t not in [p for p, _ in proofs]:
+                        proofs.append((t, n))
+            self._uses[key] = (self.rests(key), proofs)
+        return self._uses[key]
 
     def uses_all(self, key: str) -> list[str]:
         """Everything a result uses, by statement or by proof."""
@@ -174,11 +205,17 @@ class Drafts:
         return out
 
     def text(self, key: str) -> str:
-        """A result's statement as written, comments blanked: what search reads and a snippet is cut from."""
+        """A result's statement as written, comments blanked: what its words and an excerpt are made from."""
         from loom.scan.owntext import own_text
         from loom.scan.source import blank_comments
 
         return blank_comments(own_text(self.result, self._keys[key]))
+
+    def words(self, key: str) -> str:
+        """A result's statement as search reads it (`_statement_words`)."""
+        if key not in self._words:
+            self._words[key] = _statement_words(self.text(key))
+        return self._words[key]
 
 
 def drafts(result: ScanResult, manifest: dict[str, Any], root: Any) -> Drafts:
@@ -216,20 +253,24 @@ def listing(
     Returns
     -------
     dict
-        `{count, sections, undigested}` by document; `{count, rows, more}` by status.
+        `{count, sections, undigested}` by document; `{count, rows, more}` by status. `count` is the results the scope holds, each once, though a result two documents read is in the group of each.
     """
     keys = d.scope(scope, doc)
     if sort == "status":
         ordered = sorted(keys, key=lambda k: (_status_order(d, k), d.position[k]))
         page = ordered[offset : offset + 200]
-        return {"count": len(keys), "rows": [d.row(k) for k in page], "more": max(0, len(ordered) - offset - len(page))}
+        return {
+            "count": len(keys),
+            "rows": [d.row(k, doc) for k in page],
+            "more": max(0, len(ordered) - offset - len(page)),
+        }
     opened = opened or []
     if scope in ("draft", "deps"):
         own = [k for k in keys if doc in d.node(k).reached_by]  # type: ignore[union-attr]
-        sections: list[dict[str, Any]] = [{"head": "draft", "doc": doc, "rows": [d.row(k) for k in own]}]
+        sections: list[dict[str, Any]] = [{"head": "draft", "doc": doc, "rows": [d.row(k, doc) for k in own]}]
         if scope == "deps":
-            others = [k for k in keys if k not in own]
-            sections.append({"head": "uses", "doc": doc, "groups": _groups(d, others, opened, open_all=True)})
+            groups = _groups(d, _grouped(d, scope, doc), opened, open_all=True)
+            sections.append({"head": "uses", "doc": doc, "groups": groups})
         return {"count": len(keys), "sections": sections, "undigested": 0}
     sections = [{"head": "drafts", "groups": _groups(d, keys, opened, open_all=False)}]
     if scope == "all":
@@ -237,51 +278,104 @@ def listing(
     return {"count": len(keys), "sections": sections, "undigested": 0}
 
 
+def _grouped(d: Drafts, scope: str, doc: str | None) -> list[str]:
+    """The keys a scope lists in groups by document: under `deps` those its draft does not read, else all of them.
+
+    `web-list` and `web-group` both read this, so a group opened later holds what the list counted in it.
+    """
+    keys = d.scope(scope, doc)
+    if scope == "deps":
+        return [k for k in keys if doc not in d.node(k).reached_by]  # type: ignore[union-attr]
+    return keys
+
+
 def _groups(d: Drafts, keys: list[str], opened: list[str], *, open_all: bool) -> list[dict[str, Any]]:
-    """The keys by the document that holds them, each group's rows sent only when it is open."""
+    """The keys in a group for each of the person's documents that reads them (`homes`), a group's rows sent only when it is open.
+
+    A result two documents read is in both groups, its row in each naming that document.
+    """
     by_doc: dict[str, list[str]] = {}
     for k in keys:
-        node = d.node(k)
-        home = next((x for x in node.reached_by if x in d.documents), "") if node else ""
-        by_doc.setdefault(home, []).append(k)
+        for home in d.homes(k):
+            by_doc.setdefault(home, []).append(k)
     out = []
     for home in sorted(by_doc):
         group: dict[str, Any] = {"group": home, "n": len(by_doc[home])}
         if open_all or home in opened:
-            group["rows"] = [d.row(k) for k in by_doc[home]]
+            group["rows"] = [d.row(k, home) for k in by_doc[home]]
         out.append(group)
     return out
 
 
 def group(d: Drafts, scope: str, doc: str | None, home: str) -> dict[str, Any]:
-    """`web-group`: one document's results within a scope, for a group opened after the list was sent."""
-    keys = [k for k in d.scope(scope, doc) if home in d.node(k).reached_by]  # type: ignore[union-attr]
-    return {"group": home, "n": len(keys), "rows": [d.row(k) for k in keys]}
+    """`web-group`: one document's group within a scope, as `web-list` counts it, for a group opened after the list was sent.
+
+    Parameters
+    ----------
+    d : Drafts
+        The drafts as read now.
+    scope : str
+        One of `SCOPES`.
+    doc : str, optional
+        The draft `draft` and `deps` are of.
+    home : str
+        The document whose group is opened.
+
+    Returns
+    -------
+    dict
+        `{group, n, rows}`: every result of the scope's groups (`_grouped`) that `home` reads, each row naming `home`.
+    """
+    keys = [k for k in _grouped(d, scope, doc) if home in d.homes(k)]
+    return {"group": home, "n": len(keys), "rows": [d.row(k, home) for k in keys]}
 
 
 def _plain(text: str) -> str:
-    """A statement in plain words for an excerpt: its environment's head and foot and its labels, then commands, braces and ties dropped, spaces made one."""
-    words = _SPACE.sub(" ", _COMMAND.sub(" ", _FRAME.sub(" ", text))).strip()
+    """A statement in plain words for an excerpt: its environment's head and foot, its labels, uses, references and citations, then commands, braces and ties dropped, the parentheses a reference leaves empty with them, spaces made one."""
+    words = _SPACE.sub(" ", _EMPTY.sub(" ", _COMMAND.sub(" ", _FRAME.sub(" ", text)))).strip()
     return re.sub(r" ([,.;:)])", r"\1", words)
 
 
-def search(d: Drafts, scope: str, doc: str | None, q: str, *, limit: int = 50) -> dict[str, Any]:
-    """`web-search`: results whose number, name or title holds the query, then those whose statement's words do, each statement hit with the words around it.
+def _statement_words(text: str) -> str:
+    """The words of a statement that search matches and a snippet is cut from: its plain words, as an excerpt shows them (`_plain`)."""
+    return _plain(text)
 
-    Words are compared without regard to case; a query of several words must find them in order, spaces between them read as any space. A hit's `snippet` is cut from the statement's LaTeX at spaces, about sixty characters either side.
+
+def search(d: Drafts, scope: str, doc: str | None, q: str, *, limit: int = 50) -> dict[str, Any]:
+    """`web-search`: results whose number, name or title holds the query, then those whose statement's words do (`_statement_words`), each statement hit with the words around it.
+
+    Words are compared without regard to case, in order, any space between them, each at the start of a word and each but the last a whole word, as the node index matches them: `label` finds neither `\\label` nor "unlabelled", and `poly` finds "polynomial", the whole word being the match. A hit's `snippet` is cut from the statement's words at spaces, about sixty characters either side; no command, label or environment's name is among them.
+
+    Parameters
+    ----------
+    d : Drafts
+        The drafts as read now.
+    scope : str
+        One of `SCOPES`.
+    doc : str, optional
+        The draft `draft` and `deps` are of.
+    q : str
+        The words searched for; blank finds nothing.
+    limit : int, default 50
+        The most hits sent.
+
+    Returns
+    -------
+    dict
+        `{count, hits: [{row, snippet}]}`, `count` every hit, `snippet` null for a hit on the name or title and `{before, match, after}` for one in the statement.
     """
     words = q.split()
     if not words:
         return {"count": 0, "hits": []}
-    pattern = re.compile(r"\s+".join(re.escape(w) for w in words), re.I)
+    pattern = re.compile(_START + (_END + r"\s+").join(re.escape(w) for w in words) + _REST, re.I)
     named: list[dict[str, Any]] = []
     in_text: list[dict[str, Any]] = []
     for key in d.scope(scope, doc):
-        row = d.row(key)
+        row = d.row(key, doc)
         if any(pattern.search(str(row.get(f) or "")) for f in ("name", "title")):
             named.append({"row": row, "snippet": None})
             continue
-        text = d.text(key)
+        text = d.words(key)
         found = pattern.search(text)
         if found:
             before = text[max(0, found.start() - 60) : found.start()]
@@ -307,21 +401,21 @@ def focus(d: Drafts, scope: str, doc: str | None, key: str, *, more: bool = Fals
     users_in = [u for u, _p in users if u in inside]
     lean = d.lean(key)
     answer: dict[str, Any] = {
-        "row": d.row(key),
+        "row": d.row(key, doc),
         "statement": {"fragment": d.manifest.get("nodes", {}).get(key, {}).get("fragment")},
         "relative_to": [] if lean == "formalized" else None,
         "rests_on": [],
-        "more": _more(d, key) if more else None,
+        "more": _more(d, key, doc) if more else None,
         "uses": {
-            "statement": [d.row(k) for k in statement if k in inside],
-            "proof": [{**d.row(k), **({"proof": n + 1} if many else {})} for k, n in proofs if k in inside],
+            "statement": [d.row(k, doc) for k in statement if k in inside],
+            "proof": [{**d.row(k, doc), **({"proof": n + 1} if many else {})} for k, n in proofs if k in inside],
             "outside": {
                 "statement": sum(1 for k in statement if k not in inside),
                 "proof": sum(1 for k, _n in proofs if k not in inside),
             },
         },
         "used_by": {
-            "rows": [d.row(k) for k in users_in[:USED_BY]],
+            "rows": [d.row(k, doc) for k in users_in[:USED_BY]],
             "outside": len(users) - len(users_in),
             "more": max(0, len(users_in) - USED_BY),
         },
@@ -329,25 +423,34 @@ def focus(d: Drafts, scope: str, doc: str | None, key: str, *, more: bool = Fals
     return answer
 
 
-def _more(d: Drafts, key: str) -> dict[str, Any]:
-    """The fold of a result's card: its proofs with what each uses, the Lean declarations that state it, and the record of what was done to it."""
+def _more(d: Drafts, key: str, doc: str | None) -> dict[str, Any]:
+    """The fold of a result's card: its proofs with what each uses, the Lean declarations that state it, and the record of what was done to it.
+
+    Only records on this block's own text (its subject's hash) count, as in status: the declarations are the current `lean` record's (the last standing one on this text that states it), the acts those on this text.
+    """
     node = d.node(key)
     assert node is not None
-    proofs = []
-    for proof in node.proofs:
-        uses = [t for t in d.result.dependencies.review_targets(proof) if d.node(t) is not None and t != key]
-        proofs.append({"where": d.result.nodes[proof].file, "uses": [d.row(t) for t in uses]})
+    proofs = [
+        {"where": d.result.nodes[proof].file, "uses": [d.row(t, doc) for t in d.rests(proof) if t != key]}
+        for proof in node.proofs
+    ]
+    subject = d.web.subject(Here("block", key))
+    if subject is None:
+        return {"proofs": proofs, "lean": [], "record": []}
+    names = {subject.kind: subject.name}
+    mine = [r for r in d.evidence.about(*subject.key) if r.on is not None and r.on.hash == subject.hash]
+    current = [r for r in mine if r.kind == "lean" and states(r, subject) and d.lean_now(r)]
+    lean = [
+        x["name"]
+        for x in (current[-1].get("declarations", []) if current else [])
+        if x.get("role") == "states" and x.get("names") == names
+    ]
     acts = {"lean": "lean-accepted", "attested": "attested", "compared": "verified", "digested": "digested"}
-    record = []
-    lean: list[str] = []
-    for label in node.labels:
-        for r in d.evidence.about("label", label):
-            if r.kind == "lean" and r.get("ok"):
-                lean = [x["name"] for x in r.get("declarations", []) if x.get("role") == "states"]
-            if r.kind in acts and (r.kind != "lean" or r.get("ok")):
-                record.append(
-                    {"act": acts[r.kind], "by": "you" if r.by.kind == "person" else (r.by.name or "loom"), "at": r.at}
-                )
+    record = [
+        {"act": acts[r.kind], "by": "you" if r.by.kind == "person" else (r.by.name or "loom"), "at": r.at}
+        for r in mine
+        if r.kind in acts and (r.kind != "lean" or r.get("ok"))
+    ]
     return {"proofs": proofs, "lean": lean, "record": record}
 
 
@@ -377,12 +480,12 @@ def graph(d: Drafts, scope: str, doc: str | None, key: str) -> dict[str, Any]:
             if t in drawn and t not in statement:
                 edges.append({"from": src, "to": t, "proof": True})
     return {
-        "focus": d.row(key),
+        "focus": d.row(key, doc),
         "excerpt": _plain(d.text(key))[:200],
         "columns": {
-            "back": [d.row(k) for k in back_drawn],
-            "uses": [d.row(k) for k in uses_drawn],
-            "used_by": [d.row(k) for k in by_drawn],
+            "back": [d.row(k, doc) for k in back_drawn],
+            "uses": [d.row(k, doc) for k in uses_drawn],
+            "used_by": [d.row(k, doc) for k in by_drawn],
         },
         "more": {"back": back_more, "uses": uses_more, "used_by": by_more},
         "edges": edges,
