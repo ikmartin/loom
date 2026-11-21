@@ -1,13 +1,16 @@
-"""The library: adding, filing, deleting and ignoring works, verifying and discarding a proposed result, a library run, and the anchor of a selection on a work's page."""
+"""The library: adding, filing, deleting and ignoring works, verifying and discarding a proposed result, a library run, the anchor of a selection on a work's page, and bringing forward a quilt an earlier loom made."""
 
 from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loom.paths import INCOMING
 from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain, said
+
+if TYPE_CHECKING:
+    from loom.library.carry import Carried
 
 #: The publisher's library runs (`loom.jobs.Jobs`), offered by `offer_jobs`: `loom serve` offers its own, and nothing else runs them.
 _JOBS: dict[Path, Any] = {}
@@ -425,6 +428,59 @@ def _library(root: Path, endpoint: str, body: dict[str, Any]) -> str:
         raise ApiError("no-such-node", str(exc), status=404) from exc
 
 
+def _library_upgrade(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-upgrade`: bring a quilt an earlier loom made forward, its library carried into the node store and this loom's number stamped, as `loom upgrade` does; the author's.
+
+    The carry holds the id lock and the library's lock itself, and carries nothing a second time, so a `loom upgrade` beside it does no harm. A quilt already in this loom's layout carries nothing and is answered `already current`; one in a layout this loom neither reads nor carries is refused `format-unknown`.
+    """
+    from loom import layout
+    from loom.cli.report import counted
+    from loom.identity import is_agent
+    from loom.library.carry import carry
+    from loom.scan.quilt import load_quilt, reviewer_identity
+    from loom.scan.scan import scan
+
+    if is_agent(_str(body, "author") or reviewer_identity(root)[0]):
+        raise ApiError(
+            "author-only", "An agent reads and annotates; only the author brings the quilt forward", status=403
+        )
+    if not layout.carriable(root):
+        why = layout.refusal(root)
+        if why is not None:
+            raise ApiError("format-unknown", why, status=409)
+        return {"ok": True, "result": "already current", "carried": _carried(None)}
+    done = carry(root, scan(load_quilt(root, older=True)), write=True)
+    layout.stamp(root)
+    return {
+        "ok": True,
+        "result": f"brought the quilt forward to format {layout.NUMBER}, {counted(len(done.references), 'work')} carried into the library",
+        "carried": _carried(done),
+    }
+
+
+def _carried(done: Carried | None) -> dict[str, Any]:
+    """`library-upgrade`'s `carried`: what `library.carry.carry` did, its works counted; None, nothing carried, is all zeros."""
+    if done is None:
+        return {
+            "references": 0,
+            "documents": 0,
+            "notes_rekeyed": 0,
+            "overviews": 0,
+            "links_rewritten": 0,
+            "removed": [],
+            "problems": [],
+        }
+    return {
+        "references": len(done.references),
+        "documents": done.documents,
+        "notes_rekeyed": done.notes_rekeyed,
+        "overviews": done.overviews,
+        "links_rewritten": done.links_rewritten,
+        "removed": list(done.removed),
+        "problems": list(done.problems),
+    }
+
+
 def _locate(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """Turn a reader's selection on a page into the anchor loom would record (plan 0.13 item 2).
 
@@ -501,12 +557,13 @@ HANDLERS: dict[str, Handler] = {
     "library-answer": _intake,
     "library-undo": _intake,
     "library-unfile": _intake,
+    "library-upgrade": plain(_library_upgrade),
     "locate": plain(_locate),
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
 READS: tuple[str, ...] = ("locate", "library-recognise", "library-lookup", "library-works")
-#: The ones the publisher does not rebuild after: the reads, and the two whose run or filing publishes what it changes.
-NO_REBUILD: tuple[str, ...] = (*READS, "library-update", "library-upload", "library-receive")
+#: The ones the publisher does not rebuild after: the reads, those whose run or filing publishes what it changes, and the upgrade, after which a waiting publisher builds as it starts (`ServeSession.bring_forward`).
+NO_REBUILD: tuple[str, ...] = (*READS, "library-update", "library-upload", "library-receive", "library-upgrade")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ()
 #: The ones that take the library's lock themselves, once every lookup has answered, and so run outside the publication's lock: a slow service holds up no rebuild and no other write.

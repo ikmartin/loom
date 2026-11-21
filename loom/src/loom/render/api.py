@@ -25,6 +25,7 @@ __all__ = [
     "OWN_LOCK",
     "READS",
     "RECORD_WRITES",
+    "UPGRADE",
     "WRITE_API_VERSION",
     "ApiError",
     "discovery",
@@ -41,6 +42,8 @@ FAMILIES = (annotating, changes, library, agents, sync, review, files)
 HANDLERS: dict[str, Handler] = {name: serve for family in FAMILIES for name, serve in family.HANDLERS.items()}
 #: What this publisher serves. A viewer reads this rather than assuming the specification's table, so an endpoint that is not here answers 404 and a viewer that hides the affordance is right to. `open` is not here: `discovery` offers it only where loom can open an application.
 CAPABILITIES = [name for name in HANDLERS if name != "open"]
+#: The one write a publisher serves while its quilt is in an earlier layout (`ServeSession.older`): it brings the quilt forward, and every other endpoint answers `format-old` until it has.
+UPGRADE = "library-upgrade"
 
 WRITE_API_VERSION = 1
 

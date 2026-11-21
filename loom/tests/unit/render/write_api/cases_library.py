@@ -10,7 +10,7 @@ import pytest
 
 from loom.render.serve import ServeSession
 from tests.helpers import the
-from tests.unit._quilts import mapped, propose, showcase
+from tests.unit._quilts import demo, mapped, propose, showcase
 from tests.unit.render._serve import get
 from tests.unit.render.write_api._cases import (
     WHO,
@@ -519,3 +519,94 @@ def _library_restore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
     }
     refuses(s, "library-restore", {"undo": undo}, 404, "no-such-undo", "names no delete")
     refuses(s, "library-restore", {"undo": "../x"}, 404, "no-such-undo", "names no delete")
+
+
+def _older(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The demo as an earlier loom left it: format 1, where this loom is made to read 2 and to carry 1."""
+    from loom import layout
+    from loom.paths import FORMAT
+
+    q = demo(tmp_path)
+    monkeypatch.setattr(layout, "NUMBER", 2)
+    monkeypatch.setattr(layout, "CARRIES", frozenset({"1"}))
+    (q / FORMAT).write_text("1\n", encoding="utf-8")
+    return q
+
+
+def _files(q: Path) -> dict[str, int]:
+    """Every file of the quilt, with when it was last written."""
+    return {p.relative_to(q).as_posix(): p.stat().st_mtime_ns for p in sorted(q.rglob("*")) if p.is_file()}
+
+
+@case("library-upgrade")
+def _library_upgrade(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quilt an earlier loom made is served waiting: the viewer's files, `GET /_api` with its format, the stream and `library-upgrade`, and nothing else until the upgrade carries its library, after which the server builds as it starts. The `serve` fixture loads a quilt in this loom's layout only, so this case starts its own server."""
+    import urllib.request
+
+    from loom.cli.report import counted
+    from loom.paths import FORMAT, SERVE_JSON
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import PATIENCE
+    from tests.unit.render._serve import fake_bundle
+
+    q = _older(tmp_path, monkeypatch)
+    before = _files(q)
+    s = ServeSession(
+        load_quilt(q, older=True), fake_bundle(tmp_path / "older"), port=0, compile_masters=False, interval=0.2
+    )
+    assert s.older == 1
+    s.start()
+    stream = None
+    try:
+        status, _, raw = get(s.url + "_api")
+        said = json.loads(raw)
+        assert status == 200 and said["format"] == {"found": 1, "reads": 2}, said
+        assert said["capabilities"] == ["library-upgrade"] and said["token"] and said["stream"], said
+        # the frame is the viewer's own, served as always
+        assert get(s.url)[0] == 200 and get(s.url + "node/dm-0003")[0] == 200
+        # any other request is the quilt's, which this loom cannot read yet
+        refuses(s, "library-take", {"items": [{"text": MAN12}]}, 409, "format-old", "made by an earlier loom")
+        refuses(s, "library-works", {}, 409, "format-old", "library-upgrade")
+        assert get(s.url + "build/manifest.json")[0] == 409 and get(s.url + "_api/jobs")[0] == 409
+        refuses(s, "library-upgrade", {"author": "Referee (Agent)"}, 403, "author-only", "only the author")
+        assert s.builds == 0 and s.watcher is None and s.frames is None
+        # nothing is written but the server's own record
+        assert {k: v for k, v in _files(q).items() if k != SERVE_JSON} == before
+
+        stream = urllib.request.urlopen(s.url + "_api/stream", timeout=PATIENCE)
+        assert stream.readline() == b": open\n"
+        done = succeeds(s, "library-upgrade", {})
+        carried = done["carried"]
+        assert (q / FORMAT).read_text(encoding="utf-8") == "2\n"
+        assert set(carried) == {
+            "references",
+            "documents",
+            "notes_rekeyed",
+            "overviews",
+            "links_rewritten",
+            "removed",
+            "problems",
+        }, done
+        # the demo's cited works become references, its old library files go
+        assert carried["references"] >= 1 and carried["removed"] and carried["problems"] == [], done
+        assert (
+            done["result"]
+            == f"brought the quilt forward to format 2, {counted(carried['references'], 'work')} carried into the library"
+        ), done
+        assert not (q / ".loom" / "library" / "bibliography.bib").exists()
+        # served again as soon as it answers, and built after
+        assert succeeds(s, "library-works", {})["works"]
+        line = b""
+        while line != b"event: manifest\n":
+            line = stream.readline()
+            assert line, "the stream ended before the first build was published"
+        assert get(s.url + "build/manifest.json")[0] == 200 and s.builds >= 1
+        said = json.loads(get(s.url + "_api")[2])
+        assert said["format"] == {"found": 2, "reads": 2} and "library-take" in said["capabilities"], said
+        assert said["frames"], said
+        again = succeeds(s, "library-upgrade", {})
+        assert again["result"] == "already current" and again["carried"]["references"] == 0, again
+    finally:
+        if stream is not None:
+            stream.close()
+        s.stop()

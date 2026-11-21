@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
+from loom import layout
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
 from loom.paths import COMPILES, SERVE_JSON, SITE, STORE_ADDRESS, TEX, TEX_ADDRESS, document_build, document_page
@@ -580,10 +581,37 @@ class LoomHandler(SimpleHTTPRequestHandler):
     shown: Shown | None = None
     #: The frames origin's address, which `GET /_api` gives the viewer; '' when there is none.
     frames: str = ""
+    #: The earlier layout the quilt is in while the server waits for it to be brought forward (`ServeSession.older`); None once it is in this loom's.
+    older: int | None = None
+    #: What the publisher does once `library-upgrade` has answered: `ServeSession.bring_forward`; None outside a server.
+    brought_forward: Callable[[], None] | None = None
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         if os.environ.get("LOOM_SERVE_LOG"):
             super().log_message(format, *args)
+
+    def _held_back(self, path: str) -> bool:
+        """Whether a waiting server answers `path` with `format-old`: all but the viewer's own files, `GET /_api` and the stream.
+
+        `/build/`, the store, the project's files and every other `/_api/` address read what this loom's layout names, which an earlier one's quilt does not hold.
+        """
+        return (
+            self.older is not None
+            and path.startswith((BUILD_URL, STORE_URL, FILES_URL, "/_api/"))
+            and path != "/_api/stream"
+        )
+
+    def _format_old(self) -> None:
+        """Answer a request a waiting server does not serve: 409 `format-old`."""
+        self._json(
+            HTTPStatus.CONFLICT,
+            {
+                "error": {
+                    "code": "format-old",
+                    "message": f"this quilt was made by an earlier loom, in format {self.older}, and this loom reads format {layout.NUMBER}: library-upgrade, or loom upgrade, brings it forward",
+                }
+            },
+        )
 
     def parse_request(self) -> bool:
         """Refuse, before any method answers it, a request that names another host (`addressed_here`): the token at `/_api` and every file the server reads out would otherwise go to a rebinding domain's page."""
@@ -684,7 +712,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         """The write API (specs/write-api.md). Localhost only, like everything else this server does."""
-        from loom.render.api import NO_REBUILD, OWN_LOCK, RECORD_WRITES, ApiError, handle
+        from loom.render.api import NO_REBUILD, OWN_LOCK, RECORD_WRITES, UPGRADE, ApiError, handle
 
         path = self.path.split("?", 1)[0]
         if not path.startswith("/_api/") or self.quilt_root is None:
@@ -697,6 +725,9 @@ class LoomHandler(SimpleHTTPRequestHandler):
         refused = self._csrf()
         if refused:
             self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": refused}})
+            return
+        if self.older is not None and path != f"/_api/{UPGRADE}":
+            self._format_old()
             return
         try:
             length = int(self.headers.get("Content-Length") or 0)
@@ -734,6 +765,9 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 # The viewer's refresh finds the write immediately. Reads need no rebuild; review decisions already published queue metadata without touching document renderings. Published under the hold that wrote it: a watcher that saw the write while the request held the lock would otherwise publish it first, and the request would build it a second time before it answered.
                 if self.rebuild is not None and endpoint not in NO_REBUILD:
                     self.rebuild(records=endpoint in RECORD_WRITES)
+                # the quilt is in this loom's layout now, so the server stops waiting before it answers, and the viewer's next request is served
+                if endpoint == UPGRADE and self.brought_forward is not None:
+                    self.brought_forward()
             self._json(HTTPStatus.OK, answer)
         except ApiError as exc:
             self._json(exc.status, exc.answer())
@@ -757,13 +791,16 @@ class LoomHandler(SimpleHTTPRequestHandler):
             if self.token and self.headers.get("X-Loom-Token") != self.token
             else ""
         )
-        if refused:
+        if refused or self.older is not None:
             from loom.refs.intake import _drain
 
             self.close_connection = True
             told = self.headers.get("Content-Length") or "0"
             _drain(self.rfile, int(told) if re.fullmatch(r"[0-9]+", told) else 0)  # so the sender reads why
-            self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": refused}})
+            if refused:
+                self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": refused}})
+            else:
+                self._format_old()
             return
         told = (self.headers.get("Content-Length") or "").strip()
         if not re.fullmatch(r"[0-9]+", told):
@@ -844,6 +881,9 @@ class LoomHandler(SimpleHTTPRequestHandler):
         return True
 
     def do_GET(self) -> None:  # noqa: N802
+        if self._held_back(self.path.split("?", 1)[0]):
+            self._format_old()
+            return
         if self._page():
             return
         if self.path.split("?", 1)[0] == "/_api/events":
@@ -859,7 +899,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
             self._jobs()
             return
         if self.path.split("?", 1)[0] == "/_api":
-            from loom.render.api import discovery
+            from loom.render.api import UPGRADE, discovery
 
             if self.quilt_root is None:
                 self.send_error(HTTPStatus.NOT_FOUND)
@@ -876,10 +916,14 @@ class LoomHandler(SimpleHTTPRequestHandler):
             connected = (
                 {"connected": json.loads(self.publications.connected_state)} if self.publications is not None else {}
             )
+            # the layout the quilt is in and the one this loom reads: a waiting server serves `library-upgrade` alone
+            found = self.older if self.older is not None else layout.NUMBER
+            served_api = discovery() if self.older is None else {**discovery(), "capabilities": [UPGRADE]}
             self._json(
                 HTTPStatus.OK,
                 {
-                    **discovery(),
+                    **served_api,
+                    "format": {"found": found, "reads": layout.NUMBER},
                     "token": self.token,
                     **({"quilt": self.quilt_id} if self.quilt_id else {}),
                     "stream": self.publications is not None,
@@ -999,6 +1043,9 @@ class LoomHandler(SimpleHTTPRequestHandler):
             return
 
     def do_HEAD(self) -> None:  # noqa: N802
+        if self._held_back(self.path.split("?", 1)[0]):
+            self.send_error(HTTPStatus.CONFLICT)
+            return
         target = self._resolve()
         if target is None:
             self.send_error(HTTPStatus.NOT_FOUND)
@@ -1125,6 +1172,11 @@ class ServeSession:
     ) -> None:
         self.quilt = quilt
         self.bundle_dir = bundle_dir
+        #: The earlier layout the quilt is in when this loom can bring it forward (`layout.carriable`): the server then waits, serving the viewer's files, `GET /_api`, the stream and `library-upgrade` and answering anything else `format-old`, and builds, compiles and watches nothing until `bring_forward`; None for a quilt in this loom's layout.
+        self.older: int | None = int(layout.found(quilt.root) or 0) if layout.carriable(quilt.root) else None
+        #: Held while the server stops waiting, and while a start begins its watchers, so that a stop never leaves one running.
+        self._starting = threading.Lock()
+        self._handler: type[LoomHandler] | None = None
         #: Serve the bundle from where it lies, read on every request (`LiveBundle`), in place of a copy held from the start.
         self.live = live
         self.port = port
@@ -1387,7 +1439,7 @@ class ServeSession:
         self.publications.compiled(state.encode("utf-8"))
 
     def listen(self) -> None:
-        """Bind the port and start serving. The build has not run yet, so until `start` finishes it `/build/` serves what an earlier build left, or 404."""
+        """Bind the port and start serving. The build has not run yet, so until `start` finishes it `/build/` serves what an earlier build left, or 404; a waiting server (`older`) opens no frames origin and no watcher until `bring_forward`."""
         self.held = LiveBundle(self.bundle_dir) if self.live else HeldBundle(self.bundle_dir)
         handler = type(
             "Handler",
@@ -1404,6 +1456,8 @@ class ServeSession:
                 "publication_lock": self.lock,
                 "publications": self.publications,
                 "jobs": self.jobs,
+                "older": self.older,
+                "brought_forward": self.bring_forward,
             },
         )
         from loom.render.api import offer_jobs, offer_scan
@@ -1420,6 +1474,17 @@ class ServeSession:
         handler.token = write_serve_json(self.quilt.root, self.port)  # type: ignore[attr-defined]
         # which quilt this is, for a viewer that keeps something per quilt; a digest of where it lies, not the place
         handler.quilt_id = quilt_id(self.quilt.root)  # type: ignore[attr-defined]
+        self._handler = handler
+        if self.older is None:
+            self._open()
+        threading.Thread(target=self.httpd.serve_forever, name="loom-http", daemon=True).start()
+
+    def _open(self) -> None:
+        """Open the frames origin and take the watcher's first look at the files, before any client can change them.
+
+        From `listen`, or for a waiting server from `bring_forward` once the quilt is in this loom's layout. The watcher's look comes before the first build, so a change made during it is seen afterwards.
+        """
+        assert self._handler is not None
         shown = self.shown
         frames = type(
             "Frames",
@@ -1427,17 +1492,23 @@ class ServeSession:
             {"shown": shown, "viewers": (f"http://127.0.0.1:{self.port}", f"http://localhost:{self.port}")},
         )
         self.frames = ThreadingHTTPServer(("127.0.0.1", 0), frames)
-        handler.shown = shown  # type: ignore[attr-defined]
-        handler.frames = f"http://127.0.0.1:{self.frames.server_address[1]}"  # type: ignore[attr-defined]
+        self._handler.shown = shown
+        self._handler.frames = f"http://127.0.0.1:{self.frames.server_address[1]}"
         threading.Thread(target=self.frames.serve_forever, name="loom-frames", daemon=True).start()
-        # Capture inputs before clients can change them, including during the first build.
         self.watcher = Watcher(self.quilt.root, self.rebuild, self.interval, shown)
-        threading.Thread(target=self.httpd.serve_forever, name="loom-http", daemon=True).start()
 
     def start(self) -> None:
-        """Listen, then run the first build and begin watching. A cold first build can take a while, so callers that want the URL early call `listen` first."""
+        """Listen, then run the first build and begin watching. A cold first build can take a while, so callers that want the URL early call `listen` first; a waiting server (`older`) only listens, and the rest follows `bring_forward`."""
         if self.httpd is None:
             self.listen()
+        if self.older is None:
+            self._begin()
+
+    def _begin(self) -> None:
+        """What a start runs once the server listens: settle what a crash left, take the first look, build, then start the watcher and the look at who is connected.
+
+        On the caller's thread from `start`, on its own after `bring_forward`; a server that stopped meanwhile starts no watcher.
+        """
         from loom.writes import recover
 
         # what a crash left is settled before anything is built or written
@@ -1445,10 +1516,27 @@ class ServeSession:
             print(f"loom serve: {said}", file=sys.stderr)
         self.first_look()
         self.first_build()
-        assert self.watcher is not None
-        self.watcher.start()
-        self.presence = Watch(self.quilt.root, self.publications.told_connected)
-        self.presence.start()
+        with self._starting:
+            if self._stopping:
+                return
+            assert self.watcher is not None
+            self.watcher.start()
+            self.presence = Watch(self.quilt.root, self.publications.told_connected)
+            self.presence.start()
+
+    def bring_forward(self) -> None:
+        """Stop waiting, once `library-upgrade` has put the quilt in this loom's layout, and start as a server does.
+
+        The frames origin and the watcher's look are taken and every request is served again before the answer goes out; the first build, the compiles and the watchers follow on a thread of their own, so the stream's usual events come after the answer. Nothing happens on a server that is not waiting, that is stopping, or whose quilt is still not in this loom's layout.
+        """
+        with self._starting:
+            if self.older is None or self._stopping or layout.refusal(self.quilt.root) is not None:
+                return
+            assert self._handler is not None
+            self._open()
+            self.older = self._handler.older = None
+        print(f"loom serve: the quilt is in format {layout.NUMBER} now; building it", file=sys.stderr, flush=True)
+        threading.Thread(target=self._begin, name="loom-start", daemon=True).start()
 
     def first_look(self) -> None:
         """Take the reviewer's first look at the open files when they have none and the quilt tracks edits, so an agent's first edits show in Review's Your Changes; nothing without a reviewer name."""
@@ -1488,7 +1576,9 @@ class ServeSession:
         )
 
     def stop(self) -> None:
-        self._stopping = True
+        with self._starting:
+            # a start under way after `bring_forward` starts no watcher from here on
+            self._stopping = True
         with self._settling_lock:
             if self._settling is not None:
                 self._settling.cancel()
