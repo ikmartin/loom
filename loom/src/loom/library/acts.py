@@ -170,10 +170,10 @@ def delete(root: Path, ref: str, *, by: str, kind: str) -> str:
         entry = read_entry(node.body)
         undo = "u-" + secrets.token_hex(6)
         home = root / LIBRARY_UNDO / undo
-        (home / "nodes").mkdir(parents=True)
+        home.mkdir(parents=True)
         taken = _taken_with(root, ref)
         for node_id in taken:
-            shutil.copyfile(folder(root) / f"{node_id}{SUFFIX}", home / "nodes" / f"{node_id}{SUFFIX}")
+            shutil.copyfile(folder(root) / f"{node_id}{SUFFIX}", home / f"{node_id}{SUFFIX}")
         on = set(taken)
         records, _problems = replay_notes(root)
         ids = sorted({a.id for r in records for a in r.annotations if a.target_key in on})
@@ -221,13 +221,13 @@ def restore(root: Path, undo: str, *, by: str, kind: str) -> str:
         record = json.loads((home / "undo.json").read_text(encoding="utf-8"))
         for node_id in record["nodes"]:
             here = folder(root) / f"{node_id}{SUFFIX}"
-            if here.is_file() and here.read_bytes() != (home / "nodes" / here.name).read_bytes():
+            if here.is_file() and here.read_bytes() != (home / here.name).read_bytes():
                 raise ActRefused("changed", f"{node_id} has been written again since the delete")
         folder(root).mkdir(parents=True, exist_ok=True)
         for node_id in record["nodes"]:
             target = folder(root) / f"{node_id}{SUFFIX}"
             temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
-            shutil.copyfile(home / "nodes" / target.name, temporary)
+            shutil.copyfile(home / target.name, temporary)
             os.replace(temporary, target)
         if record.get("notes"):
             notes.restore(root, record["notes"])
