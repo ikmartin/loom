@@ -1,0 +1,281 @@
+{
+ "answer": {
+  "groups": [
+   {
+    "kind": "questions",
+    "rows": [
+     {
+      "by": "Probe Agent",
+      "choices": [
+       "the maps",
+       "the involutions"
+      ],
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "kind": "questions",
+      "on": {
+       "label": "sy-0007"
+      },
+      "question": "t-2026-09-16-zrp6q0",
+      "quote": null,
+      "row": "questions:t-2026-09-16-zrp6q0",
+      "text": "The lemma's composite: of the two maps or of their involutions?",
+      "under": {
+       "on": {
+        "node": "sy-00B7"
+       },
+       "ref": null,
+       "task": "t-2026-09-16-vh9bks",
+       "what": "read"
+      }
+     }
+    ]
+   },
+   {
+    "kind": "fetch",
+    "rows": [
+     {
+      "by": "Probe Agent",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "kind": "fetch",
+      "link": "https://doi.org/10.1000/example.1999.2",
+      "ref": "sy-00A1-ref",
+      "row": "fetch:t-2026-09-16-f4gt5j",
+      "task": "t-2026-09-16-f4gt5j",
+      "want": "pdf",
+      "words": "The publisher's page asks for a login."
+     }
+    ]
+   },
+   {
+    "kind": "attest",
+    "rows": [
+     {
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "kind": "attest",
+      "lean": {
+       "lean": "unattested",
+       "role": "proved",
+       "waiting_on": []
+      },
+      "name": "Lemma 2.5",
+      "paper": null,
+      "reading": null,
+      "record": "ev-2026-09-16-t7q6g3",
+      "result": "sy-0202",
+      "row": "attest:sy-0202",
+      "source": {
+       "doc": "drafting/main.tex"
+      },
+      "what": "statement and proof"
+     }
+    ]
+   },
+   {
+    "kind": "accepted-changed",
+    "rows": [
+     {
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "key": "sy-0001",
+      "kind": "accepted-changed",
+      "lean": {
+       "lean": "none",
+       "role": null,
+       "waiting_on": []
+      },
+      "name": "Definition 1.1",
+      "reading": null,
+      "row": "accepted-changed:sy-0001"
+     },
+     {
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex",
+       "drafting/talk.tex"
+      ],
+      "key": "sy-0002",
+      "kind": "accepted-changed",
+      "lean": {
+       "lean": "none",
+       "role": null,
+       "waiting_on": []
+      },
+      "name": "Lemma 1.2",
+      "reading": null,
+      "row": "accepted-changed:sy-0002"
+     },
+     {
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex",
+       "drafting/talk.tex"
+      ],
+      "key": "sy-0002/proof",
+      "kind": "accepted-changed",
+      "lean": {
+       "lean": "none",
+       "role": null,
+       "waiting_on": []
+      },
+      "name": "",
+      "reading": null,
+      "row": "accepted-changed:sy-0002/proof"
+     },
+     {
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "key": "sy-0004",
+      "kind": "accepted-changed",
+      "lean": {
+       "lean": "none",
+       "role": null,
+       "waiting_on": []
+      },
+      "name": "Proof 2",
+      "reading": null,
+      "row": "accepted-changed:sy-0004"
+     },
+     {
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "key": "sy-0005",
+      "kind": "accepted-changed",
+      "lean": {
+       "lean": "none",
+       "role": null,
+       "waiting_on": []
+      },
+      "name": "Proof 2",
+      "reading": null,
+      "row": "accepted-changed:sy-0005"
+     }
+    ]
+   },
+   {
+    "kind": "attested-changed",
+    "rows": [
+     {
+      "attestation": "ev-2026-09-16-czt81y",
+      "attested_at": "2026-09-16T00:00:00Z",
+      "causes": [
+       {
+        "changed": {
+         "label": "sy-0001"
+        },
+        "now": "sha256:82b543a99a381579805073f55d6b139b7c7746567af05abb14fe1d0b5d2f8e66",
+        "then": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+       }
+      ],
+      "changed": "used",
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "kind": "attested-changed",
+      "lean": {
+       "lean": "changed",
+       "role": "proved",
+       "waiting_on": []
+      },
+      "name": "Lemma 2.3",
+      "reading": null,
+      "resting": [],
+      "result": "sy-0007",
+      "row": "attested-changed:sy-0007"
+     }
+    ]
+   },
+   {
+    "kind": "edits",
+    "rows": [
+     {
+      "broke": null,
+      "by": null,
+      "change": "c-0f621ccf",
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "key": "sy-0001",
+      "kind": "edits",
+      "row": "edits:c-0f621ccf",
+      "state": "ready",
+      "type": "edit",
+      "where": "Definition 1.1"
+     },
+     {
+      "broke": null,
+      "by": "agent",
+      "change": "e-2026-09-16-r2hw0m",
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "key": "sy-0004",
+      "kind": "edits",
+      "row": "edits:e-2026-09-16-r2hw0m",
+      "state": "ready",
+      "type": "suggested",
+      "where": "Proof 2"
+     },
+     {
+      "broke": null,
+      "by": "agent",
+      "change": "e-2026-09-17-zwvx4m",
+      "doc": "drafting/main.tex",
+      "docs": [
+       "drafting/main.tex",
+       "drafting/talk.tex"
+      ],
+      "key": "sy-0002",
+      "kind": "edits",
+      "row": "edits:e-2026-09-17-zwvx4m",
+      "state": "ready",
+      "type": "suggested",
+      "where": "Lemma 1.2"
+     }
+    ]
+   },
+   {
+    "kind": "agents",
+    "rows": [
+     {
+      "asked_at": "2026-09-16T00:00:00Z",
+      "docs": [
+       "drafting/main.tex"
+      ],
+      "kind": "agents",
+      "nodes": [
+       "sy-00B7"
+      ],
+      "on": {
+       "node": "sy-00B7"
+      },
+      "row": "agents:t-2026-09-16-vh9bks",
+      "task": "t-2026-09-16-vh9bks",
+      "what": "read",
+      "words": "",
+      "working": null
+     }
+    ]
+   }
+  ],
+  "ok": true
+ },
+ "endpoint": "review-list",
+ "request": {
+  "doc": "drafting/main.tex"
+ }
+}
