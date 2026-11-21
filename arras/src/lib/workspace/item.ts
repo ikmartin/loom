@@ -15,7 +15,7 @@ export type Place = Omit<WorkLink, 'id'>;
 
 export interface Item {
 	kind: ItemKind;
-	/** A document's path, a work's citekey, a node's key, a session's id, a project file's path; a compiled PDF's is its document's. */
+	/** A document's path, a work's reference, a node's key, a session's id, a project file's path; a compiled PDF's is its document's. */
 	id: string;
 	/** An internal view: a session's `did`; absent means the first. */
 	view?: string;

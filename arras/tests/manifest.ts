@@ -1,4 +1,4 @@
-// The conformance fixture's manifest, and the fakes the default suite builds on it: an edited copy served in its place, a session's Chat holding a message, and a paper filed where the fixture files none.
+// The conformance fixture's manifest, and the fakes the default suite builds on it: an edited copy served in its place, a session's Chat holding a message, and the bytes of a PDF to serve.
 
 import type { Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
@@ -36,23 +36,10 @@ export async function saying(page: Page, html: string): Promise<void> {
 	);
 }
 
-/** The smallest PDF a browser accepts: one letter-sized page, so a work has something real to load and draw. */
+/** The smallest PDF a browser accepts: one letter-sized page, so a PDF item has something real to load and draw. */
 export const PDF = `%PDF-1.4
 1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
 2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
 3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj
 trailer<</Root 1 0 R>>
 %%EOF`;
-
-/** Five blank letter-sized pages: a paper long enough that landing on page 4 is not landing on page 1. */
-export const PDF5 = `%PDF-1.4
-1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
-2 0 obj<</Type/Pages/Kids[3 0 R 4 0 R 5 0 R 6 0 R 7 0 R]/Count 5>>endobj
-${[3, 4, 5, 6, 7].map((n) => `${n} 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]>>endobj`).join('\n')}
-trailer<</Root 1 0 R>>
-%%EOF`;
-
-/** Answer every filed paper with `body`, by default `PDF`; the manifest must also say the paper is filed (`artifacts.pdf`), which `serve` does. */
-export async function servePapers(page: Page, body: string = PDF): Promise<void> {
-	await page.route('**/paper.pdf', (route) => route.fulfill({ body, contentType: 'application/pdf' }));
-}

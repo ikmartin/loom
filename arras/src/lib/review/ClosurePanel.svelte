@@ -34,7 +34,7 @@
 						<a href={keyUrl(m, m.keys[k]?.node ?? k)}>{node?.taxon ?? ''} {node?.title ?? k}</a>
 						<code>{k}</code>
 					</p>
-					{#if node?.fragment}<Fragment path={node.fragment} macroSet={node.digest ?? ''} />{/if}
+					{#if node?.fragment}<Fragment path={node.fragment} />{/if}
 				</li>
 			{/each}
 		</ol>

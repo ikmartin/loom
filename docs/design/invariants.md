@@ -473,7 +473,7 @@ Two differences are known and allowed: the blank space two runs of TeX over one 
 
 **Open.** The rule above holds for what loom renders, not for what an agent edits after it. What loom derives, `.loom/cache/`, is not among an agent's places, so loom's commands and Claude Code refuse an agent an edit there; but the other apps leave that list to the agent, and the boundary is not a security boundary (`agents.md`). The viewer inserts a body or a manifest's `body_html` as it reads them, so one edited there directly runs as the viewer and can read the token (reproduced 2026-11-04 against a real `loom serve`, with a handler in a file's body under what was then `.loom/build/files/`, now `.loom/cache/site/files/`). A `Content-Security-Policy` on the viewer's own page that refuses inline script, or a viewer that filters what it inserts, would close it; document fragments reach the page the same way.
 
-**2026-11-21.** `/digests/storage/` is gone with today's library (plan 0.32, the library's phase 2); a work's documents are served by hash at `/_api/library/pdf/<hex>` and `/_api/library/thumb/<hex>.png`, sandboxed as `/build/` is, which `test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers` holds. The rule is unchanged.
+**2026-11-21.** `/digests/storage/` is gone with today's library (plan 0.32, the library's phase 2); a work's documents are served by hash at `/_api/library/pdf/<hex>` and `/_api/library/thumb/<hex>.png`, sandboxed as `/build/` is, which `test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers` holds, and `origin.e2e.ts` plants its page there, as a stored PDF, in place of `/digests/storage/`. The rule is unchanged.
 
 ### Loom opens only documents in their application
 

@@ -1,14 +1,13 @@
 // Where a followed link opens (plan 0.14): **one rule, for every link in the viewer.** A link names an item and a place in it. If the item is already open, in either pane, it is brought to the front of its pane at that place and the pane takes focus — a document's links to its own content are the same case. If it is not open, it opens as a new tab in the pane the reader is not in, so both ends of the connection stay on screen (V5); with one pane, the second is made. A click outside every pane — the side panel, the rail — is a choice of what to read, and opens in the focused pane.
 //
-// Two link forms name things (specs/dialect.md §2.13): `quilt:KEY[#PLACE]` for what the quilt owns — a node, a document, an annotation, a session, a project file by its path — and `cited:SCHEME:VALUE` for a place in a cited work. The viewer's own paths are read too. `app:NAME` asks the publisher to open an application, on this click; any other scheme opens outside the viewer, whose tab it never replaces.
+// Two link forms name things (specs/dialect.md §2.13): `quilt:KEY[#PLACE]` for what the quilt owns — a node, a document, an annotation, a session, a project file by its path — and `cited:SCHEME:VALUE` for a place in a work, which opens at the identifier's own service, outside the viewer, since nothing the manifest says names the work's pages. The viewer's own paths are read too. `app:NAME` asks the publisher to open an application, on this click; any other scheme opens outside the viewer, whose tab it never replaces.
 //
 // One capture-phase listener for the whole viewer, so no renderer decides for itself and a link the router would otherwise follow is answered before it does.
 
 import { goto } from '$app/navigation';
 import type { Manifest } from '$lib/manifest/types';
-import { pdf } from '$lib/pdf.svelte';
 import { sessionView } from '$lib/sessions/sessions.svelte';
-import { isWorkLink, locate, parseWorkLink, resultPlace } from '$lib/worklink';
+import { externalUrl, isWorkLink, parseWorkLink } from '$lib/worklink';
 import { anchorId, keyTarget, keyUrl, nodeUrl } from '$lib/nav';
 import { isDocument } from '$lib/review/run';
 import { documentOf } from '$lib/review/annotating.svelte';
@@ -29,20 +28,13 @@ export function paneOfElement(el: Element | null): number {
 }
 
 /**
- * The item a link names, or null when it names nothing to read.
+ * The item a link names, or null when it names nothing to read in the viewer.
  *
- * A `cited:` link names a place in a work by the work's identifier; it is an item only when the copy on file is the very artifact the identifier names.
+ * A `cited:` link names a place in a work by the work's identifier, which no item answers: it opens outside (`outsideOf`).
  */
 export function itemForHref(m: Manifest, href: string): Item | null {
 	if (href.startsWith('quilt:')) return itemForQuilt(m, href.slice('quilt:'.length));
-	if (isWorkLink(href)) {
-		const link = parseWorkLink(href);
-		const where = link ? locate(m, link) : null;
-		if (!link || !where?.local || !where.ref) return null;
-		// a quote with no page is looked for across the work's pages, so the page is left unnamed rather than taken as the first
-		const { id: _id, ...place } = link;
-		return { kind: 'work', id: where.ref.citekey, place };
-	}
+	if (isWorkLink(href)) return null;
 	let url: URL;
 	try {
 		url = new URL(href, location.href);
@@ -68,8 +60,6 @@ export function itemForQuilt(m: Manifest, body: string): Item | null {
 	if (isDocument(m, key)) return { kind: 'document', id: key, ...(place ? { anchor: anchorId(place) } : {}) };
 	const file = m.files?.find((f) => f.path === key);
 	if (file && LINKED.has(file.kind)) return { kind: 'file', id: key, ...(place ? { anchor: place } : {}) };
-	const paper = paperAt(m, key);
-	if (paper) return paper;
 	const at = itemFromPath(m, keyUrl(m, key));
 	if (!at) return null;
 	if (!place) return at;
@@ -87,8 +77,6 @@ function quiltParts(body: string): { key: string; place: string } {
 /**
  * What a hover card shows for a key: the node that holds it, at the display's anchor where the key is a region of it.
  *
- * **A digest node previews the paper, not the digest**: a result read off a cited work is a transcription of a page, and a reader hovering a citation wants the page, the one a click opens (`paperAt`). With no paper to open at a page, the transcription is the best there is.
- *
  * Parameters
  * ----------
  * m : Manifest
@@ -98,7 +86,7 @@ function quiltParts(body: string): { key: string; place: string } {
  * Returns
  * -------
  * Item | null
- *     A node item, or a work at a page; null where the manifest holds no node for the key.
+ *     A node item; null where the manifest holds no node for the key.
  *
  * See Also
  * --------
@@ -109,7 +97,7 @@ export function previewOfKey(m: Manifest, key: string): Item | null {
 	const k = region ? region.container : key;
 	const n = m.keys[k]?.node ?? k;
 	if (!m.nodes[n]) return null;
-	return paperAt(m, n) ?? { kind: 'node', id: n, ...(region ? { anchor: anchorId(key) } : {}) };
+	return { kind: 'node', id: n, ...(region ? { anchor: anchorId(key) } : {}) };
 }
 
 /**
@@ -150,27 +138,26 @@ export async function openOutside(target: { app: string } | { file: string }): P
 	return done.ok ? '' : (done.error?.message ?? 'loom could not open it');
 }
 
-/** Follow a link a framed page handed over (`HtmlFrame`): a `quilt:` or `cited:` link as any link in the viewer, an `app:` one by the publisher; nothing else. */
+/** The address a `cited:` link opens outside the viewer, its identifier's own service; '' for a scheme none resolves, or an href that is no `cited:` link. */
+export function outsideOf(href: string): string {
+	const link = parseWorkLink(href);
+	return (link && externalUrl(link)) || '';
+}
+
+/** Follow a link a framed page handed over (`HtmlFrame`): a `quilt:` link as any link in the viewer, a `cited:` one at its identifier's service, an `app:` one by the publisher; nothing else. */
 export function followFromFrame(m: Manifest, href: string, from: number): void {
 	if (/^app:/i.test(href)) {
 		void openOutside({ app: decodeURIComponent(href.slice(4)) });
 		return;
 	}
-	if (!/^(quilt|cited):/i.test(href)) return;
+	if (isWorkLink(href)) {
+		const out = outsideOf(href);
+		if (out) window.open(out, '_blank', 'noopener');
+		return;
+	}
+	if (!/^quilt:/i.test(href)) return;
 	const item = itemForHref(m, href);
 	if (item) follow(item, from, m);
-	else if (isWorkLink(href)) {
-		const link = parseWorkLink(href);
-		if (link) pdf.open(link);
-	}
-}
-
-/**
- * A result read off a cited work, as the paper at the page it is printed on (`resultPlace`): what a citation of it opens, so every link to it opens the same place (study F9). Null for anything else, or where the result has no paper to open at a page.
- */
-export function paperAt(m: Manifest, key: string): Item | null {
-	const at = resultPlace(m, key);
-	return at ? { kind: 'work', id: at.citekey, place: { page: at.page, result: at.result } } : null;
 }
 
 /** The note a reply answers, and so on up: a box opens on a thread, by the note that began it. */
@@ -186,19 +173,17 @@ function threadOf(m: Manifest, id: string): string {
 	return at;
 }
 
-/** Where an annotation is read: its target, with the annotation to open there. One on a project PDF opens the file at its page; one on a cited work its page, or the work itself for one on the whole work. A box round an equation is filed under the region's key (`KEY#label`), and is read in the node that holds it. */
-function noteItem(m: Manifest, id: string, target: { key: string; page?: number | null; file?: string | null }): Item | null {
+/** Where an annotation is read: its target, with the annotation to open there. One on a project PDF opens the file at its page; one on a work, by its reference, the work at its page, or the work itself for one on the whole work. A box round an equation is filed under the region's key (`KEY#label`), and is read in the node that holds it. */
+function noteItem(m: Manifest, id: string, target: { key: string; work?: string | null; page?: number | null; file?: string | null }): Item | null {
 	if (target.file) return { kind: 'file', id: target.file, ...(target.page ? { anchor: `page=${target.page}` } : {}), note: id };
-	// a note on no block names no key: it opens in the document it was written in, beside its card in the list; '' never matches a reference with no identifier
+	if (target.work) return target.page ? { kind: 'work', id: target.work, place: { page: target.page, annot: id } } : { kind: 'work', id: target.work };
+	// a note on no block names no key: it opens in the document it was written in, beside its card in the list
 	if (!target.key) {
 		const a = m.annotations[id];
 		const doc = a ? documentOf(m, a) : '';
 		return isDocument(m, doc) ? { kind: 'document', id: doc, note: id } : null;
 	}
-	const work = Object.values(m.references).find((r) => r.work === target.key || r.works?.includes(target.key));
-	if (work) return target.page ? { kind: 'work', id: work.citekey, place: { page: target.page, annot: id } } : { kind: 'work', id: work.citekey };
 	if (isDocument(m, target.key)) return { kind: 'document', id: target.key, note: id };
-	// a note on a cited result is on loom's record of it, so it opens there rather than on the paper
 	const key = m.regions?.[target.key]?.container ?? target.key;
 	const at = itemFromPath(m, keyTarget(m, key) ?? nodeUrl(key));
 	return at ? { ...at, note: id } : null;
@@ -326,17 +311,10 @@ export function interceptLinks(active: () => boolean, manifest: () => Manifest |
 			return;
 		}
 		if (isWorkLink(href)) {
+			// a work by its identifier, at that identifier's own service: never in the viewer's tab
 			e.preventDefault();
-			const item = itemForHref(m, href);
-			// no copy of that artifact here: the modal says so and offers the source
-			if (!item) {
-				const link = parseWorkLink(href);
-				if (link) pdf.open(link);
-				return;
-			}
-			// from outside reading mode, into it: arriving opens the work in the focused pane
-			if (active()) follow(item, from, m);
-			else void goto(pathFor(m, item));
+			const out = outsideOf(href);
+			if (out) window.open(out, '_blank', 'noopener');
 			return;
 		}
 		const quilt = href.startsWith('quilt:');

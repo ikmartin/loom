@@ -6,11 +6,7 @@
 
 import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
-import { sessionView, writable } from '$lib/sessions/sessions.svelte';
 import { judge } from '$lib/outOfStep.svelte';
-
-/** The endpoints that record work into a session, and therefore must name one. An annotation belongs to no session, so its endpoints are not among them; nor are the session verbs, which carry their own subject, nor `locate`, which reads. */
-const SESSIONED = new Set(['library-verify', 'library-discard']);
 
 export interface Capabilities {
 	write_api: number;
@@ -102,15 +98,6 @@ export async function write(endpoint: string, body: Record<string, unknown>): Pr
 		if (endpoint === 'review-accept' || endpoint.startsWith('adopt-') || endpoint === 'sync-preview' || endpoint === 'sync-incorporate') {
 			body = { reviewer: store.manifest?.reviewer?.name ?? '', ...body };
 		}
-		// **Every write names its session, and one place puts it there** (plan 0.13.1). The session travels with the
-		// write from the writer's own context rather than from a pointer the publisher keeps: a call site that forgot
-		// would fall back to that pointer and file work wherever it happened to point. Refusing here rather than at the
-		// publisher makes a mis-wired button fail where it was wired, not somewhere in the log.
-		if (SESSIONED.has(endpoint) && body.session === undefined) {
-			const why = writable(store.manifest);
-			if (why) return { ok: false, error: { code: 'no-session', message: why } };
-			body = { ...body, session: sessionView.selected };
-		}
 		// The token is CSRF protection and not a login: a browser blocks a cross-origin response and never the
 		// request, so any page the author happens to be reading could otherwise POST into the corpus they are
 		// serving. A cross-site form post cannot set a custom header, which is what makes carrying one enough.
@@ -143,23 +130,4 @@ export async function write(endpoint: string, body: Record<string, unknown>): Pr
 /** Forget the probe, for when the publisher may have changed underneath. */
 export function forgetCapabilities(): void {
 	probe = null;
-}
-
-/** A read from the publisher that only the viewer may make, carrying the token as a write does: `/jobs`. `null` when no publisher serves it or it refuses. A 403 is re-probed and tried once more, as a write is. */
-export async function read<T>(path: string): Promise<T | null> {
-	try {
-		const get = async () => {
-			const caps = await capabilities();
-			if (!caps) return null;
-			return fetch(apiUrl(path), { headers: caps.token ? { 'X-Loom-Token': caps.token } : {} });
-		};
-		let res = await get();
-		if (res?.status === 403) {
-			forgetCapabilities();
-			res = await get();
-		}
-		return res?.ok ? ((await res.json()) as T) : null;
-	} catch {
-		return null;
-	}
 }

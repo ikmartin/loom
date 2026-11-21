@@ -3,7 +3,7 @@
 import { test as base, expect, type TestInfo } from '@playwright/test';
 import { spawn, execFileSync, type ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { cpSync, createWriteStream, existsSync, readFileSync, realpathSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, createWriteStream, existsSync, readdirSync, readFileSync, realpathSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -54,9 +54,17 @@ export function compileFolder(root: string, doc: string): string {
 	return join(root, '.loom/cache/tex', `${name.split('/').pop()}-${createHash('sha256').update(name).digest('hex').slice(0, 8)}`);
 }
 
-/** A work's folder in a copy of the quilt's store, from the address the manifest's `artifacts.dir` gives it (`loom.paths.STORE_ADDRESS`). */
-export function storeDir(root: string, address: string): string {
-	return join(root, '.loom/library/storage', address.replace(/^\/?digests\/storage\/?/, ''));
+/** A work in a copy of the quilt's library, by the key its entry has: its reference's id and the path of the PDF it holds, read off its node (`specs/nodes.md` §7); null for a key no reference has. */
+export function workOf(root: string, key: string): { ref: string; pdf: string | null } | null {
+	const dir = join(root, '.loom/library/nodes');
+	for (const name of readdirSync(dir).filter((n) => n.endsWith('-ref.node'))) {
+		const text = readFileSync(join(dir, name), 'utf8');
+		if (!new RegExp(`^@\\w+\\{${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')},`, 'm').test(text)) continue;
+		const ref = /^id = "([^"]+)"$/m.exec(text)![1];
+		const pdf = /^pdf = "sha256:([0-9a-f]{64})"$/m.exec(text)?.[1];
+		return { ref, pdf: pdf ? join(root, '.loom/library/documents', `${pdf}.pdf`) : null };
+	}
+	return null;
 }
 
 export function scratchDir(suite: Suite): string {

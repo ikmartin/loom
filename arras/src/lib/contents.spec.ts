@@ -3,7 +3,7 @@ import { contentsOf } from './contents';
 import type { Manifest } from './manifest/types';
 
 function section(id: string, level: number, title: string, number = '') {
-	return { id, kind: 'section', level, title, taxon: 'section', aliases: [], tags: [], file: 'f', src: [0, 1], fragment: 'x', numbers: number ? { 'm.tex': { number } } : {}, reached_by: [], parent: {}, children: [], proofs: [], external: false, digest: null, incomplete: [], state: 'draft', derived: {} };
+	return { id, kind: 'section', level, title, taxon: 'section', aliases: [], tags: [], file: 'f', src: [0, 1], fragment: 'x', numbers: number ? { 'm.tex': { number } } : {}, reached_by: [], parent: {}, children: [], proofs: [], external: false, incomplete: [], state: 'draft', derived: {} };
 }
 
 // One section, a file included inside it, a subsection, a paragraph unit, and a second top-level section.
@@ -13,7 +13,7 @@ const m = {
 		s2: section('s2', 2, 'Consequences', '1.1'),
 		s3: section('s3', 4, 'A paragraph unit'),
 		s4: section('s4', 1, 'Results', '2'),
-		e1: { id: 'e1', kind: 'environment', taxon: 'Lemma', aliases: [], tags: [], file: 'f', src: [0, 1], fragment: 'x', numbers: {}, reached_by: [], parent: {}, children: [], proofs: [], external: false, digest: null, incomplete: [], state: 'draft', derived: {} }
+		e1: { id: 'e1', kind: 'environment', taxon: 'Lemma', aliases: [], tags: [], file: 'f', src: [0, 1], fragment: 'x', numbers: {}, reached_by: [], parent: {}, children: [], proofs: [], external: false, incomplete: [], state: 'draft', derived: {} }
 	},
 	inclusion: {
 		'm.tex': {

@@ -3,7 +3,6 @@
 import type { Manifest } from '$lib/manifest/types';
 import { isAgentDocument } from '$lib/manifest/documents';
 import { route } from '$lib/paths';
-import { placeParams, resultPlace } from '$lib/worklink';
 export function nodeUrl(key: string): string {
 	return route('/node/' + key.split('/').map(encodeURIComponent).join('/'));
 }
@@ -35,9 +34,9 @@ export function canonUrl(path: string): string {
 	return route('/canon/' + encodeURIComponent(canonStem(path)));
 }
 
-/** A cited work's page in the Library, which is where its digest, its proposals, its links and the paper itself are read. */
-export function workUrl(citekey: string): string {
-	return route('/library/' + encodeURIComponent(citekey));
+/** A work's address, by its reference: the work item, whose pages are read beside a draft. */
+export function workUrl(ref: string): string {
+	return route('/library/' + encodeURIComponent(ref));
 }
 
 export function tagUrl(tag: string): string {
@@ -75,20 +74,18 @@ export function reviewReadUrl(masterPath: string, key: string, cause?: number): 
 }
 
 /**
- * Where a link to `key` goes: a cited result to its paper at its page, anything else to its page, resolved through its owner when the key has no page of its own.
+ * Where a link to `key` goes: its page, resolved through its owner when the key has no page of its own.
  *
- * An unlabelled proof gets a review key but no node entry, so linking it directly lands on "Unknown key"; `keys[key].node` names the statement that owns it, and the proof is an anchor within that page. A result with no paper to open at a page goes to its digest node's page, which is also where `nodeUrl` always goes.
+ * An unlabelled proof gets a review key but no node entry, so linking it directly lands on "Unknown key"; `keys[key].node` names the statement that owns it, and the proof is an anchor within that page.
  */
 export function keyUrl(m: KeyIndex | null, key: string): string {
-	const at = resultPlace(m, key);
-	if (at) return workUrl(at.citekey) + '?' + placeParams({ page: at.page, result: at.result }).toString();
 	return keyTarget(m, key) ?? nodeUrl(key);
 }
 
-type KeyIndex = Pick<Manifest, 'nodes'> & Partial<Pick<Manifest, 'keys' | 'references'>>;
+type KeyIndex = Pick<Manifest, 'nodes'> & Partial<Pick<Manifest, 'keys'>>;
 
 /**
- * Where Review opens `key`: in the document that reads it, at its place (V7), with the annotation `note` open there when one is named; a key that is a document opens the document; a cited result, or one no live document reads, goes where `keyUrl` sends it.
+ * Where Review opens `key`: in the document that reads it, at its place (V7), with the annotation `note` open there when one is named; a key that is a document opens the document; one no live document reads goes where `keyUrl` sends it.
  *
  * The document is the first live document that reaches the key: `within` when it does (the document an annotation names, `in`), else the person's own, the default one leading, then an agent's copy, for a result of the copy's own. A proof with no node of its own is read through the statement that owns it.
  */

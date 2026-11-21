@@ -10,7 +10,6 @@
 	import DropZone from '$lib/components/DropZone.svelte';
 	import Palette from '$lib/components/Palette.svelte';
 	import LinkPreview from '$lib/components/LinkPreview.svelte';
-	import PdfViewer from '$lib/components/PdfViewer.svelte';
 	import DeletedBar from '$lib/review/DeletedBar.svelte';
 	import OutOfStep from '$lib/components/OutOfStep.svelte';
 	import Toast from '$lib/review/Toast.svelte';
@@ -183,7 +182,6 @@
 <Palette />
 <DropZone />
 <LinkPreview />
-<PdfViewer />
 <DeletedBar />
 <OutOfStep />
 <Toast />

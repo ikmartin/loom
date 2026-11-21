@@ -1,12 +1,12 @@
 // The frame at each width the layout defines: the column open beside two panes; the column folded to its strip below 1200px; one pane below the workspace's two-pane width. At each, what must stay in reach does, every pane draws its toolbar, and nothing scrolls sideways.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane } from '../workspace';
-import { servePapers } from '../manifest';
+import { PDF } from '../manifest';
 
 async function open(page: Page, width: number): Promise<void> {
-	await servePapers(page);
+	await page.route('**/_files/drafting/figures/fig.pdf', (route) => route.fulfill({ body: PDF, contentType: 'application/pdf' }));
 	await page.setViewportSize({ width, height: 900 });
-	await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+	await page.goto('/master/drafting/main' + beside('/file/drafting/figures/fig.pdf'));
 	await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
 }
 

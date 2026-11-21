@@ -13,12 +13,11 @@ const m = {
 	nodes: { 'q-0001': { kind: 'environment', taxon: 'lemma', numbers: {}, reached_by: ['paper/main.tex'] } },
 	keys: {},
 	regions: {},
-	references: { Arden24: { citekey: 'Arden24', work: 'arXiv:2401.00001', bib: { title: 'A work' }, artifacts: { pdf: true } } },
 	annotations: {
 		'a-2026-10-01-7r1qv5': { id: 'a-2026-10-01-7r1qv5', type: 'suggestion', target: { key: 'q-0001' }, status: 'open', in_reply_to: null },
 		'a-2026-10-01-5qj7dk': { id: 'a-2026-10-01-5qj7dk', type: 'revision', target: { key: 'q-0001' }, status: 'open', in_reply_to: null },
 		'a-2026-10-01-pdf001': { id: 'a-2026-10-01-pdf001', type: null, target: { key: 'notes/a.pdf', file: 'notes/a.pdf', page: 2 }, status: 'open', in_reply_to: null, mark: 'box', rects: [[1, 2, 3, 4]] },
-		'a-2026-10-01-work01': { id: 'a-2026-10-01-work01', type: null, target: { key: 'arXiv:2401.00001', work: 'Arden24', page: null }, status: 'open', in_reply_to: null }
+		'a-2026-10-01-work01': { id: 'a-2026-10-01-work01', type: null, target: { key: 'q-0099-ref', work: 'q-0099-ref', page: null }, status: 'open', in_reply_to: null }
 	},
 	suggested_edits: {
 		'e-2026-10-01-cvhc9q': { id: 'e-2026-10-01-cvhc9q', target: { key: 'q-0001', hash: '' }, quote: 'Every orbit', with: 'Each orbit', placement: 'replace', answers: 'a-2026-10-01-7r1qv5', status: 'open', created: '2026-10-01T10:00:00Z' },
@@ -54,8 +53,8 @@ describe('Review as the meta view', () => {
 });
 
 describe('an annotation on a PDF', () => {
-	it("opens a project PDF at its page with its mark, and a cited work when it is on the whole work", () => {
+	it("opens a project PDF at its page with its mark, and a work, by its reference, when it is on the whole work", () => {
 		expect(itemForQuilt(m, 'a-2026-10-01-pdf001')).toEqual({ kind: 'file', id: 'notes/a.pdf', anchor: 'page=2', note: 'a-2026-10-01-pdf001' });
-		expect(itemForQuilt(m, 'a-2026-10-01-work01')).toEqual({ kind: 'work', id: 'Arden24' });
+		expect(itemForQuilt(m, 'a-2026-10-01-work01')).toEqual({ kind: 'work', id: 'q-0099-ref' });
 	});
 });

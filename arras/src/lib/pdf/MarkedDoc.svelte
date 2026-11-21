@@ -122,7 +122,7 @@
 		return true;
 	}
 
-	/** Open the popup on an annotation just written, once it is drawn. A work's sidecar places its words after the manifest that holds it arrives, so this keeps trying for a few seconds. */
+	/** Open the popup on an annotation just written, once it is drawn, which is once the manifest that holds it arrives, so this keeps trying for a few seconds. */
 	function showWhenDrawn(id: string, tries = 60): void {
 		if (show(id) || tries <= 0) return;
 		setTimeout(() => showWhenDrawn(id, tries - 1), 100);

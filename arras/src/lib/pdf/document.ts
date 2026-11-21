@@ -20,7 +20,7 @@ export function pdfjs(): Promise<Pdfjs> {
 
 const open = new Map<string, Promise<PDFDocumentProxy>>();
 
-/** One document per URL, shared between everything that draws it: the pane, a preview, the proposal box.
+/** One document per URL, shared between everything that draws it: the pane and a preview.
  *
  * Everything PDF.js fetches besides the worker is served from this bundle's own `static/`, staged there by `scripts/pdfjs-assets.mjs`: the standard fonts and CMaps, the decoders for a scan's JPEG 2000 and JBIG2 images and for ICC colour, and the CMYK profile. Each is fetched per document and only when one needs it, so they cost package weight and nothing at load. A deployed corpus must render offline, and a viewer that silently falls back to another font or leaves out an image is worse than a larger one, because a reader cannot see what moved or went missing.
  */
@@ -57,10 +57,7 @@ export function forget(url?: string): void {
 /**
  * A rectangle in loom's space — points, origin top left — as CSS percentages of the page it sits on.
  *
- * Geometry is recorded in the space `pdftotext -bbox-layout` emits, which is what the sidecar publishes. PDF user space
- * has its origin at the bottom left, so a viewer that hands these to PDF.js's own transform draws every highlight
- * mirrored; percentages of the page box avoid the question entirely and survive zoom, which is why the conversion
- * happens once here and nowhere else.
+ * Geometry is recorded in the space `pdftotext -bbox-layout` emits, which is what loom's anchors are in. PDF user space has its origin at the bottom left, so a viewer that hands these to PDF.js's own transform draws every highlight mirrored; percentages of the page box avoid the question entirely and survive zoom, which is why the conversion happens once here and nowhere else.
  */
 export function asPercent(
 	quad: readonly number[],

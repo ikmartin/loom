@@ -1,7 +1,7 @@
 // The graph by section: one card per section holding its results in document order, and one edge per pair of sections carrying the dependencies behind it.
 
 import type { Manifest } from '$lib/manifest/types';
-import { colorOf, graphInput, PAPER, sectionOf, type Filters } from './layout';
+import { colorOf, graphInput, sectionOf, type Filters } from './layout';
 import { shortLabel } from './local';
 import { documentOrder, placeOf } from './order';
 
@@ -45,7 +45,7 @@ export interface Sections {
 const ROW = 16;
 const HEAD = 24;
 const CARD_W = 200;
-/** Results with no section of their own: papers drawn as one node, and anything outside every section. */
+/** Results with no section of their own: anything outside every section. */
 const LOOSE = 'loose:';
 
 /**
@@ -72,12 +72,12 @@ export async function sectionLayout(m: Manifest, f: Filters): Promise<Sections> 
 	const results = nodes.filter((n) => n.kind !== 'section');
 	results.sort((a, b) => placeOf(order, a.id) - placeOf(order, b.id) || a.id.localeCompare(b.id));
 	for (const n of results) {
-		const card = n.id.startsWith(PAPER) ? LOOSE + 'papers' : sectionOf(m, n.id, master) || LOOSE + 'rest';
+		const card = sectionOf(m, n.id, master) || LOOSE + 'rest';
 		cardOf.set(n.id, card);
 		const list = rows.get(card) ?? rows.set(card, []).get(card)!;
 		list.push({
 			id: n.id,
-			label: clip(n.id.startsWith(PAPER) ? (n.title ?? n.id) : shortLabel(m, n.id, master), 26),
+			label: clip(shortLabel(m, n.id, master), 26),
 			color: colorOf(m, n.state),
 			external: n.external,
 			dy: HEAD + list.length * ROW + ROW - 5
@@ -100,7 +100,6 @@ export async function sectionLayout(m: Manifest, f: Filters): Promise<Sections> 
 				}
 			}
 	const label = (id: string) => {
-		if (id === LOOSE + 'papers') return 'cited papers';
 		if (id === LOOSE + 'rest') return 'outside every section';
 		const n = m.nodes[id];
 		const number = n?.numbers[master]?.number;
@@ -115,7 +114,7 @@ export async function sectionLayout(m: Manifest, f: Filters): Promise<Sections> 
 		const b = cardOf.get(e.to);
 		if (!a || !b || a === b) continue;
 		// every kind between two sections is one line; a reference in prose stays distinct, since it is not a dependency
-		const kind = e.kind === 'prose' ? 'prose' : e.kind === 'cites' ? 'cites' : 'statement';
+		const kind = e.kind === 'prose' ? 'prose' : 'statement';
 		const key = `${a}>${b}>${kind}`;
 		const cur = agg.get(key) ?? agg.set(key, { from: a, to: b, kind, count: 0, members: [], points: [] }).get(key)!;
 		cur.count++;

@@ -1,6 +1,6 @@
-// What a reader does with the annotations on one PDF's pages: which are drawn and how, which are listed because they have no place on a page, the writes Annotate and the drawing tools make in the look in hand, a mark moved, and the copy and the taking-in. The surfaces that show a PDF (a cited work's pages, a project PDF) each make one and hand it to `MarkedDoc`; the page components stay dumb and report what the reader did.
+// What a reader does with the annotations on one PDF's pages: which are drawn and how, which are listed because they have no place on a page, the writes Annotate and the drawing tools make in the look in hand, a mark moved, and the copy and the taking-in. The surfaces that show a PDF (a work's pages, a project PDF) each make one and hand it to `MarkedDoc`; the page components stay dumb and report what the reader did.
 //
-// **Every annotation on the pages is drawn here**, on words or drawn with a tool, in its own look: a project PDF's record says where each stands now, and a cited work's sidecar places one its words or a box anchor. Every write goes through the history (`review/history.svelte.ts`), so the toolbar's Undo takes it back.
+// **Every annotation on the pages is drawn here**, on words or drawn with a tool, in its own look, where its record says it stands now. Every write goes through the history (`review/history.svelte.ts`), so the toolbar's Undo takes it back.
 //
 // **A mark shows at once.** A write publishes a new manifest only after a moment, and a mark that appeared a second after the press would read as a press that failed. So what has been written but not yet published is held here and drawn with the rest, and each is let go once the manifest says the same.
 
@@ -19,12 +19,10 @@ type Place = Pick<PageMark, 'rects' | 'strokes'>;
 
 /** What a desk works on. A function, since it follows a component's props. */
 export interface Surface {
-	/** What a write names: a project PDF's path or a citekey. */
+	/** What a write names: a project PDF's path or a work's reference. */
 	on: string;
 	/** Whether an annotation is on this PDF's pages. */
 	owns: (a: Annotation) => boolean;
-	/** Where an annotation stands when its record does not say: a cited work's sidecar places one by its words or a box. */
-	rectsOf?: (a: Annotation) => number[][] | undefined;
 	/** Where the PDF is served. */
 	url: string;
 	/** Its name, for a saved copy. */
@@ -69,7 +67,7 @@ export class MarkDesk {
 	/** The top-level annotations on this PDF's pages, as published. */
 	rows = $derived<Annotation[]>(Object.values(store.manifest?.annotations ?? {}).filter((a) => !a.in_reply_to && (a.target.page ?? 0) > 0 && this.#surface().owns(a)));
 	/** Each annotation on the pages with where it is drawn, or null for one with no place on a page now. */
-	placed = $derived<{ a: Annotation; m: PageMark | null }[]>(this.rows.map((a) => ({ a, m: markOf(a, this.#surface().rectsOf?.(a)) })));
+	placed = $derived<{ a: Annotation; m: PageMark | null }[]>(this.rows.map((a) => ({ a, m: markOf(a) })));
 
 	/** What is drawn: every annotation with a place, under the item's filter and the pane's hiding, with what is on its way laid over them. A resolved one is drawn while settled annotations are shown. */
 	marks = $derived.by<PageMark[]>(() => {
@@ -85,7 +83,7 @@ export class MarkDesk {
 		return [...out, ...this.#pending.filter((m) => !have.has(m.id)), ...(this.lit ? [this.lit] : [])];
 	});
 
-	/** The annotations on the pages with no place on one now: detached on a changed file, or a box whose words the sidecar has not placed. Listed, never drawn. */
+	/** The annotations on the pages with no place on one now: detached on a changed file, or one whose record says no place. Listed, never drawn. */
 	detached = $derived<Annotation[]>(this.placed.filter((p) => !p.m).map((p) => p.a));
 
 	/** The annotations in the file that one of loom's stands for, by reference; the pages leave them undrawn. */
@@ -98,7 +96,7 @@ export class MarkDesk {
 		const changed: Record<string, Partial<PageMark>> = {};
 		for (const [id, over] of Object.entries(this.#changed)) {
 			const row = live.get(id);
-			const now = row ? markOf(row, this.#surface().rectsOf?.(row)) : null;
+			const now = row ? markOf(row) : null;
 			const same = now && (over.rects === undefined || JSON.stringify(now.rects) === JSON.stringify(over.rects)) && (over.strokes === undefined || JSON.stringify(now.strokes) === JSON.stringify(over.strokes));
 			if (row && !same) changed[id] = over;
 		}

@@ -1,4 +1,4 @@
-// Links: one form for what the quilt owns, `quilt:`, beside `cited:` and the citations a document makes, and one rule for where every link opens: revealed where it is already open, otherwise a new tab in the pane the reader is not in. An empty link is named by the viewer, and resting on a link previews what it names. Each test is named for the rule it holds.
+// Links: one form for what the quilt owns, `quilt:`, beside `cited:` for a work by its identifier, and one rule for where every link in the viewer opens: revealed where it is already open, otherwise a new tab in the pane the reader is not in. An empty link is named by the viewer, and resting on a link previews what it names. Each test is named for the rule it holds.
 import { expect, test } from '@playwright/test';
 import { beside, pane } from '../workspace';
 import { REFEREE, saying, serve } from '../manifest';
@@ -176,36 +176,26 @@ test.describe('the one rule', () => {
 	});
 });
 
-test.describe('cited works', () => {
-	test('a citation with no digest result behind it links to its reference', async ({ page }) => {
+test.describe('works', () => {
+	test('a citation is the text the document prints, linking nowhere and previewing nothing', async ({ page }) => {
+		await page.clock.install();
 		await page.goto('/master/drafting/main');
+		await page.waitForSelector('.fragment mjx-container'); // typesetting reflows the text, which would move the citation out from under the pointer
 		const cite = page.locator('.fragment span.cite[data-citekey="Har77"]').first();
-		await expect(cite.locator('a')).toHaveAttribute('href', '/library/Har77');
+		await expect(cite).toBeVisible();
+		await expect(cite.locator('a')).toHaveCount(0);
+		await cite.hover();
+		await page.clock.runFor(500);
+		await expect(page.getByTestId('link-preview')).toHaveCount(0);
 	});
 
-	test('a citation opens the cited paper at the result, not the digest node', async ({ page }) => {
-		// `[1, Theorem 2.1]` names a theorem in a paper, so where a copy is filed the link goes to the paper at that result; the digest node's page is loom's record of it, a thing to go and look at and not what the citation names
-		await serve(page, (m) => (m.references.Kre99.artifacts.pdf = true));
-		await page.goto('/master/drafting/main');
-		await page.waitForSelector('.fragment mjx-container');
-		await expect(page.locator('span.cite[data-target="Kre99-thm-2.1"] a').first()).toHaveAttribute('href', /\/library\/Kre99\?page=4&result=Kre99-thm-2\.1$/);
-
-		// with no copy filed there is no page to open, so the record is the best there is and the link goes to the node
-		await page.unroute('**/build/manifest.json');
-		await page.goto('/master/drafting/main');
-		await page.waitForSelector('.fragment mjx-container');
-		await expect(page.locator('span.cite[data-target="Kre99-thm-2.1"] a').first()).toHaveAttribute('href', /\/node\/Kre99-thm-2\.1$/);
-	});
-
-	test('a link to a result of a cited work opens the paper at its page, as a citation of it does', async ({ page }) => {
-		await serve(page, (m) => (m.references.Kre99.artifacts.pdf = true));
-		await saying(page, '<p>See <a href="quilt:Kre99-thm-2.1"></a>.</p>');
-		await page.goto('/master/drafting/main' + beside('/session/' + REFEREE));
-		const link = pane(page, 1).getByTestId('message-1').locator('a');
-		await expect(link).toHaveText('Kre99 · Thm 2.1');
-		await link.click();
-		await expect.poll(() => new URL(page.url()).pathname).toBe('/library/Kre99');
-		await expect.poll(() => new URL(page.url()).searchParams.get('page')).toBe('4');
+	test('a cited: link opens its identifier at its own service, in a tab of its own, and the viewer stays where it was', async ({ page, context }) => {
+		await context.route('https://arxiv.org/**', (route) => route.fulfill({ body: 'the paper', contentType: 'text/plain' }));
+		await saying(page, '<p>See <a href="cited:arxiv:math/9810166v2?page=4">Kresch, Theorem 2.1</a>.</p>');
+		await page.goto('/session/' + REFEREE);
+		const [tab] = await Promise.all([context.waitForEvent('page'), page.getByTestId('message-1').getByRole('link', { name: 'Kresch, Theorem 2.1' }).click()]);
+		await expect.poll(() => tab.url()).toBe('https://arxiv.org/pdf/math/9810166v2#page=4');
+		expect(new URL(page.url()).pathname).toBe('/session/' + REFEREE);
 	});
 });
 
@@ -265,37 +255,6 @@ test.describe('previews', () => {
 		await doc.hover();
 		await page.clock.runFor(600);
 		await expect(page.getByTestId('link-preview')).toHaveCount(0);
-	});
-
-	test('a citation previews the page at the place it names, and nothing where the place is unknown', async ({ page }) => {
-		// a hover over a citation shows the paper, not a card about it; with no copy on this machine there is no page to show, so nothing opens
-		// the card's delay runs on the page's clock, so each absence below is asserted after moving that clock past it
-		await page.clock.install();
-		await page.goto('/master/drafting/main');
-		await page.waitForSelector('.fragment mjx-container'); // typesetting reflows the text, which would move the link out from under the pointer
-		await page.locator('.fragment span.cite[data-citekey="Har77"] a').first().hover();
-		await page.clock.runFor(500);
-		await expect(page.getByTestId('link-preview')).toHaveCount(0);
-
-		await serve(page, (m) => {
-			m.references.Har77.artifacts.pdf = true;
-			m.references.Kre99.artifacts.pdf = true;
-		});
-		await page.reload();
-		await page.waitForSelector('.fragment mjx-container');
-
-		// a postnote names a place, so a copy being filed is not on its own a reason to open one: `[Har77, Chapter II]` knows no page, and the front page of Hartshorne is not Chapter II
-		await page.locator('.fragment span.cite[data-citekey="Har77"] a').first().hover();
-		await page.clock.runFor(500);
-		await expect(page.getByTestId('link-preview')).toHaveCount(0);
-
-		// where the postnote carries its own page, that is the place, and the card is the page and nothing else
-		await page.goto('/node/Kre99-thm-2.1');
-		await page.waitForSelector('.fragment mjx-container');
-		await page.locator('.fragment span.cite[data-postnote="Theorem 2.1, p.~4"] a').first().hover();
-		await expect(page.getByTestId('preview-page')).toBeVisible();
-		// the card is the paper, not text about it; its one line is the `open here` every card carries, and the renderer's own load notice is not text about the work
-		await expect(page.getByTestId('link-preview').locator('p:not(.opens):not(.problem)')).toHaveCount(0);
 	});
 
 	test("a link to a document at a result previews the result, in a transcript and in a Markdown file, and `open here` opens the document there", async ({ page }) => {

@@ -33,7 +33,7 @@ export function remember(corpus: string, address: string): void {
 	}
 }
 
-/** The address remembered for this corpus, when what its first pane opens is still in it; `''` otherwise, so a deleted draft or a removed work falls through to the default. */
+/** The address remembered for this corpus, when what its first pane opens is still in it; `''` otherwise, so a deleted draft falls through to the default, as a work does, which nothing the manifest says confirms. */
 export function rememberedIn(m: Manifest): string {
 	const at = remembered(m.corpus.name);
 	const it = at ? itemFromPath(m, at) : null;
@@ -44,7 +44,7 @@ export function rememberedIn(m: Manifest): string {
 			: it.kind === 'pdf'
 				? m.masters.some((x) => x.path === it.id && !!x.pdf)
 			: it.kind === 'work'
-				? !!m.references?.[it.id]
+				? false
 				: it.kind === 'session'
 					? (m.sessions ?? []).some((x) => x.id === it.id) || !!m.threads[it.id]
 					: it.kind === 'page'

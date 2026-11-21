@@ -67,7 +67,6 @@ export const SETTINGS: Setting[] = [
 	{ id: 'review.track_edits', section: 'agents', name: 'Review edits made in place', what: 'List every edit to an open file since your last look in Your Changes, to keep or undo, as well as suggested edits: for a quilt where agents edit your files in place. Turned on, it takes your look then. Off, only suggestions and the mathematics wait there.', key: '[review] track_edits' },
 	{ id: 'agents.apps', section: 'agents', name: 'Apps', what: 'Which agent apps start loom here. Claude Code refuses a denied path itself; the others are told the list, and loom still refuses their writes through it.' },
 	{ id: 'library.online', section: 'library', name: 'Use the network', what: 'Let the library look identifiers up (zbMATH Open, Crossref) and fetch papers from arXiv. Off, it uses only what is on this computer.', key: '[library] online' },
-	{ id: 'library.contact', section: 'library', name: 'Contact address', what: 'Given to the lookup services, as they ask.', key: '[library] contact' },
 	{ id: 'sync', section: 'overleaf', name: 'Overleaf project', what: "The clone of a Git workspace, such as an Overleaf project, that coauthors edit. Loom runs Git only in that folder, and never changes the quilt's files without you." }
 ];
 

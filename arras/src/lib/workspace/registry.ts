@@ -5,7 +5,7 @@ import type { Manifest } from '$lib/manifest/types';
 import { titleOf } from '$lib/sessions/sessions.svelte';
 import { regionAt, type Item, type ItemKind } from './item';
 import { landmarkName } from './history';
-import { documentLabel, pdfName, shortLocator } from './names';
+import { documentLabel, pdfName } from './names';
 import type { View } from './views';
 import DocumentItem from './items/DocumentItem.svelte';
 import DocumentControls from './items/DocumentControls.svelte';
@@ -22,7 +22,6 @@ import CompiledControls from './items/CompiledControls.svelte';
 import PlainControls from './items/PlainControls.svelte';
 import FileControls from './items/FileControls.svelte';
 import NodePreview from './items/NodePreview.svelte';
-import WorkPreview from './items/WorkPreview.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { store } from '$lib/manifest/client.svelte';
 
@@ -38,8 +37,6 @@ export interface Kind {
 	views?(item: Item, m: Manifest): View[];
 	/** The item rendered small, for a hover card (H1–H7); a kind without one previews nothing rather than something made up (V3). `onresize` asks the card to place itself again once the content has its size. */
 	preview?: Component<{ item: Item; onresize: () => void }>;
-	/** The small render is its own frame and runs to the card's edge, as a page does (H3). */
-	bleeds?: boolean;
 	/** Start fetching what the small render needs while the pointer waits out the card's delay. */
 	prefetch?(item: Item, m: Manifest): void;
 }
@@ -50,11 +47,10 @@ function documentTab(item: Item, m: Manifest): string {
 	return c ? landmarkName(m, c) : documentLabel(m.masters, item.id);
 }
 
-/** A node by how a reader refers to it: its taxon and number where the default document numbers it; a result read off a cited work as that work's citekey and the result's short name; else its id. */
+/** A node by how a reader refers to it: its taxon and number where the default document numbers it, else its id. */
 function nodeTab(id: string, m: Manifest): string {
 	const n = m.nodes[id];
 	if (!n) return id;
-	if (n.digest && n.locator) return `${n.digest} · ${shortLocator(n.locator)}`;
 	const main = m.masters.find((x) => x.default)?.path;
 	const number = main ? n.numbers[main]?.number : undefined;
 	return number ? `${n.taxon[0].toUpperCase()}${n.taxon.slice(1)} ${number}` : id;
@@ -62,18 +58,8 @@ function nodeTab(id: string, m: Manifest): string {
 
 export const kinds: Record<ItemKind, Kind> = {
 	document: { tab: documentTab, renderer: DocumentItem, controls: DocumentControls },
-	work: {
-		// the citekey, and the result it is at when there is one: `Arden24 · Prop 2.1` says which paper and where
-		tab: (item, m) => {
-			const r = item.place?.result;
-			const at = r ? m.nodes[r] : undefined;
-			return at?.locator ? `${item.id} · ${shortLocator(at.locator)}` : item.id;
-		},
-		renderer: WorkItem,
-		controls: WorkControls,
-		preview: WorkPreview,
-		bleeds: true
-	},
+	// a work by its reference; it previews nothing, since nothing the manifest says names its pages
+	work: { tab: (item) => item.id, renderer: WorkItem, controls: WorkControls },
 	node: {
 		tab: (item, m) => nodeTab(item.id, m),
 		renderer: NodeItem,

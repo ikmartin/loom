@@ -349,7 +349,7 @@ export function says(a: Annotation): boolean {
 	return plain(a.body_html) !== '';
 }
 
-/** The document `a` is read in, as Review's To do groups it: the document it names; else, for a key, the document it is, or the first that reaches its node; a cited work's citekey; a project PDF's path. A note on no block is in the document the manifest gives it (`unplaced[].document`), and a note on a block no document reads under the default document, so no group is ever headed by a bare key. */
+/** The document `a` is read in, as Review's To do groups it: the document it names; else, for a key, the document it is, or the first that reaches its node; a work's reference; a project PDF's path. A note on no block is in the document the manifest gives it (`unplaced[].document`), and a note on a block no document reads under the default document, so no group is ever headed by a bare key. */
 export function documentOf(m: Manifest, a: Annotation): string {
 	if (a.in) return a.in;
 	if (a.target.file) return a.target.file;

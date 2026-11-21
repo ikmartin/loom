@@ -2,9 +2,7 @@
 	type Box = { left: number; top: number; width: number; height: number };
 	// One page of a PDF: the canvas, PDF.js's text layer over it, and loom's rectangles over that.
 	//
-	// **A dumb renderer** (plan 0.13 §6). It is given a document, a page and the rectangles to draw, and it reports what
-	// the reader did. It fetches no annotations, knows nothing of sessions, and decides nothing about what a highlight
-	// means — which is what lets the same component serve the pane, the modal, the proposal box and a preview.
+	// **A dumb renderer** (plan 0.13 §6). It is given a document, a page and the rectangles to draw, and it reports what the reader did. It fetches no annotations, knows nothing of sessions, and decides nothing about what a highlight means — which is what lets the same component serve the pane and a preview.
 	//
 	// **`render` is the virtualisation seam.** A page outside the window keeps its size and loses its canvas, its text
 	// layer and its overlay; the parent decides which pages are in, and this decides nothing about scrolling.
