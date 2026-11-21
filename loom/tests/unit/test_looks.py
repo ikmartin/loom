@@ -187,6 +187,20 @@ def test_a_save_after_the_scan_is_the_next_scans_change(q: Path) -> None:
     assert {c.path: c.new for c in in_place(scan(load_quilt(q)), "Tester")}[path] == "never more,"
 
 
+def test_a_look_under_a_name_no_longer_resolved_is_not_read(q: Path) -> None:
+    """A look is the person's under the name they review as: another name has no look until it takes one, and the first is read again under its own."""
+    from loom.scan.quilt import save_author
+
+    ok("changes", "--keep-all", cwd=q)
+    (q / "notes/a.md").write_text("# A\n\nsecond\n", encoding="utf-8")
+    assert changes(q) == {"notes/a.md": "second"}
+    save_author("Other")
+    listed = json_of("changes", "--json", cwd=q)
+    assert listed["look"] is None and not [c for c in listed["changes"] if c["kind"] == "edit"]
+    save_author("Tester")
+    assert changes(q) == {"notes/a.md": "second"}
+
+
 def test_a_new_quilt_keeps_the_look_with_no_setting(tmp_path: Path) -> None:
     """`loom init` writes no setting for the look, and an edit in place since it waits in Your Changes."""
     from loom.scan.quilt import save_author

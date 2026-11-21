@@ -119,6 +119,46 @@ def test_the_git_name_is_asked_of_git_once_until_a_file_it_comes_from_changes(
     assert len(asked) == 4
 
 
+def test_the_user_configs_name_is_read_once_until_its_file_changes(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A process resolves the person's name once: the user config is read again only when its file changes, as a name saved in Settings changes it."""
+    from loom.scan import quilt as module
+    from loom.scan.quilt import save_author
+
+    read: list[int] = []
+    real = module.load_user_config
+    monkeypatch.setattr(module, "load_user_config", lambda: read.append(1) or real())
+    save_author("First")
+    assert [resolve_author(None, tmp_path)[0] for _ in range(3)] == ["First"] * 3
+    assert len(read) == 1
+    save_author("Second")
+    assert [resolve_author(None, tmp_path)[0] for _ in range(3)] == ["Second"] * 3
+    assert len(read) == 2
+
+
+def test_status_says_whose_states_it_gives_and_when_git_gave_the_name(
+    home: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A look and an acceptance are kept under the name, so a name git gives is said; one the person set is not."""
+    from loom.scan.quilt import save_author
+    from tests.helpers import json_of, ok
+    from tests.unit._quilts import demo
+
+    q = demo(tmp_path)
+    globl = home / "status.gitconfig"
+    globl.write_text("[user]\n\tname = Git Person\n", encoding="utf-8")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(globl))
+    said = json_of("status", "--json", cwd=q)
+    assert said["reviewer"] == {"name": "Git Person", "source": "git config user.name"}
+    assert [n for n in said["notes"] if "Git Person's, the name git gives" in n]
+    assert "the name git gives" in ok("status", cwd=q).stderr
+    save_author("Set Person")
+    said = json_of("status", "--json", cwd=q)
+    assert said["reviewer"] == {"name": "Set Person", "source": "local user configuration"}
+    assert not [n for n in said["notes"] if "git gives" in n]
+
+
 def test_with_apples_git_stub_there_is_no_name_and_git_is_never_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

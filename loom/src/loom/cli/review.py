@@ -34,7 +34,7 @@ from loom.records.types import COLORS, STYLES, WEIGHTS, drawn_look, load_types, 
 from loom.render.fragments import plain_title
 from loom.scan.hashing import normalize, sha256
 from loom.scan.owntext import key_hash, own_text
-from loom.scan.quilt import NoAuthorError, resolve_author
+from loom.scan.quilt import FROM_GIT, NoAuthorError, resolve_author, user_config_path
 from loom.scan.scan import ScanResult
 from loom.tex.runner import compile_document
 
@@ -1696,6 +1696,8 @@ def status(
     records = Records(result.quilt.root)
     log_run(run_dir, "loom status", result.quilt.root)
     payload = status_payload(result, records)
+    # whose states these are, as the manifest says it: a look and an acceptance are kept under the name
+    payload["reviewer"] = {"name": records.reviewer, "source": records.reviewer_source}
     # A digest holds every result of a cited paper; the handful the author's own arguments reach are work, and the
     # rest are the literature. Reachedness is the line arras's review panel has drawn since 0.9 (DR-172).
     reached = reached_external(result, payload["keys"])
@@ -1784,6 +1786,11 @@ def status(
         )
     else:
         out = _status_report(result, payload, filtered, f_digests, hidden)
+    if records.reviewer_source == FROM_GIT:
+        out.notes.append(
+            f"the states are {records.reviewer}'s, the name git gives, under which a look and an acceptance are kept; "
+            f"set your own name in the viewer's Settings › Profile, or as [author] name in {user_config_path()}"
+        )
     out.data = payload
     out.emit(as_json)
 

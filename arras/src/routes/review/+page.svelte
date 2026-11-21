@@ -225,6 +225,8 @@
 	</ActionBar>
 	<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: suggestions not yet kept or discarded, and every edit made in your files since your look{since ? ` of ${since}` : ''}. <b>Keep</b> one to take it into your text, or <b>Discard</b> it to put your words back or drop the suggestion; neither says whether the mathematics is right.</p>
 
+	{#if reviewer && m.reviewer?.source === 'git config user.name'}<p class="muted" data-testid="review-name-from-git">You review as <b>{reviewer}</b>, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.</p>{/if}
+
 	<h2 class="part">Waiting to be accepted</h2>
 	{#if !reviewer}<p class="muted" data-testid="review-no-reviewer">Choose your reviewer name in Settings to accept.</p>
 	{:else if !served}<p class="muted" data-testid="review-read-only">This copy of the quilt only reads; accepting needs the quilt served for writing.</p>{/if}

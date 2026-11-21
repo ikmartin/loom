@@ -13,8 +13,9 @@ def _author(root: Path, body: dict[str, Any]) -> tuple[str, tuple[str, str]]:
     from loom.cli.review import _annotator
     from loom.errors import ContentError, EnvError
     from loom.identity import is_agent
+    from loom.scan.quilt import reviewer_identity
 
-    who = reviewer_identity_of(root)
+    who = reviewer_identity(root)[0]
     if is_agent(_str(body, "author") or who):
         raise ApiError(
             "author-only", "An agent suggests and annotates; only the author keeps or discards a change", status=403
@@ -91,13 +92,6 @@ def _undo(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     if refused:
         parts.append(f"{len(refused)} could not be")
     return {"ok": True, "result": "; ".join([*parts, *versions]), "done": done, "refused": refused}
-
-
-def reviewer_identity_of(root: Path) -> str:
-    """The reviewer name Review resolves, whose look the changes are since; '' when there is none."""
-    from loom.scan.quilt import reviewer_identity
-
-    return reviewer_identity(root)[0] or ""
 
 
 def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, Any]:

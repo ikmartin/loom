@@ -199,14 +199,12 @@ class Records:
         # the history wherever `[quilt] history` puts it, read from the quilt's config when the caller has not
         self.history_dir = history_dir if history_dir is not None else load_quilt(root).history_dir
         self.rows = read_ledger(root)
-        from loom.scan.quilt import reviewer_identity
+        from loom.scan.quilt import FROM_GIT, reviewer_identity
 
         local, source = reviewer_identity(root)
         self.reviewer = local if reviewer is None else reviewer
         self.reviewer_source = (
-            (source if source in ("", "git config user.name") else "local user configuration")
-            if reviewer is None
-            else "--as"
+            (source if source in ("", FROM_GIT) else "local user configuration") if reviewer is None else "--as"
         )
         self.latest = latest_rows(self.rows, self.reviewer)
         self.shared_latest = latest_rows(self.rows)

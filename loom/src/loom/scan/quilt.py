@@ -351,22 +351,46 @@ def _git_user_name(here: Path) -> tuple[str | None, tuple[Path, ...]]:
     return name, tuple(sorted(watch))
 
 
+#: `resolve_author`'s source for a name git gives: Review and `loom status` say so, since a look and an acceptance are kept under the name.
+FROM_GIT = "git config user.name"
+
+
 def resolve_author(explicit: str | None, cwd: Path | None = None) -> tuple[str, str]:
-    """Resolve a human identity locally; tracked quilt authors never identify its reader."""
+    """The person's name and where it comes from: `--as`, then the user config's `[author] name`, then git's `user.name`.
+
+    The one resolver of a person's name; a quilt's own `[author]` never names its reader. Each source is read once per process and again only when its files change (`_user_author`, `git_user_name`), so a process asks git nothing per call and sees a name saved in Settings at once. Raises NoAuthorError when no source gives one.
+    """
     if explicit and explicit.strip():
         return explicit.strip(), "--as"
-    author = load_user_config().get("author", {})
-    name = author.get("name") if isinstance(author, dict) else None
-    if isinstance(name, str) and name.strip():
-        return name.strip(), str(user_config_path())
+    name = _user_author()
+    if name:
+        return name, str(user_config_path())
     git_name = git_user_name(cwd)
     if git_name:
-        return git_name, "git config user.name"
+        return git_name, FROM_GIT
     raise NoAuthorError(NO_AUTHOR_MESSAGE)
 
 
+#: The user config's author name by the config's path and stamp, so it is read once until the file changes.
+_USER_AUTHOR: dict[Path, tuple[tuple[tuple[int, int] | None, ...], str]] = {}
+
+
+def _user_author() -> str:
+    """`[author] name` from the user config, '' when unset; read again only when the file's stamp changes."""
+    path = user_config_path()
+    stamp = _stamps((path,))
+    kept = _USER_AUTHOR.get(path)
+    if kept is not None and kept[0] == stamp:
+        return kept[1]
+    author = load_user_config().get("author", {})
+    name = author.get("name") if isinstance(author, dict) else None
+    out = name.strip() if isinstance(name, str) else ""
+    _USER_AUTHOR[path] = (stamp, out)
+    return out
+
+
 def reviewer_identity(cwd: Path) -> tuple[str, str]:
-    """Reading without a configured identity is allowed; acceptance writes still refuse."""
+    """The reviewer's name and its source as `resolve_author` gives them, `('', '')` when there is none: reading goes on without a name, and acceptance refuses."""
     try:
         return resolve_author(None, cwd)
     except NoAuthorError:
