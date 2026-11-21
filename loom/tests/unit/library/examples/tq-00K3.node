@@ -1,0 +1,19 @@
++++
+schema = 1
+id = "tq-00K3"
+taxon = "lemma"
+number = "3.2"
+title = "Test lemma"
+source = "tq-00A1-ref"
+label = "lem:test"
+pages = "12"
+uses = ["tq-00A4"]
++++
+Let $W$ be a widget (Definition~\ref{tq-00A4}). Then
+\begin{enumerate}
+\item $\diam W < \infty$; and
+\item for every $x_0 \in W$, each point $x$ of $W$ satisfies
+\begin{equation}\label{tq-00K3-eq00}
+  |x| \le \diam W + |x_0| .
+\end{equation}
+\end{enumerate}
