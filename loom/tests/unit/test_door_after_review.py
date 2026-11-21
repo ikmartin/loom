@@ -1,0 +1,502 @@
+"""What the independent review of the door's sixth step found, each held by a test: commands made of several writes are one act, a move keeps the file's mode and decides again under the lock, and a refusal names the person's file in words they can act on."""
+
+from __future__ import annotations
+
+import json
+import os
+import stat
+from pathlib import Path
+
+import pytest
+
+from tests.helpers import ok, refused
+from tests.unit._quilts import demo
+
+
+@pytest.fixture
+def q(tmp_path: Path) -> Path:
+    return demo(tmp_path)
+
+
+def begun(root: Path, kind: str) -> list[dict]:
+    p = root / ".loom/local/writes.jsonl"
+    lines = [json.loads(x) for x in p.read_text().splitlines()] if p.is_file() else []
+    return [e for e in lines if e["event"] == "begin" and e["kind"] == kind]
+
+
+def history_lines(act: dict) -> list[str]:
+    """The history's actions an act's journal line carries as its own records."""
+    return [json.loads(r["line"])["action"] for r in act.get("records") or [] if r["log"].endswith("ledger.jsonl")]
+
+
+# ---- D-8: one act, not two ------------------------------------------------------------------------------------
+
+
+def test_a_restore_to_a_new_file_is_one_act_with_its_history_line(q: Path) -> None:
+    ok("history", "restore", "widgets-v1", "--to", "drafting/restored.tex", cwd=q)
+    (act,) = begun(q, "restore-to")
+    assert "drafting/restored.tex" in act["files"] and history_lines(act) == ["restore"]
+
+
+def test_a_flat_copy_is_one_act_with_its_history_line(q: Path) -> None:
+    ok("linearize", "drafting/main.tex", "--to", "drafting/flat.tex", "--no-check", "--keep-shared", cwd=q)
+    (act,) = begun(q, "linearize")
+    assert "drafting/flat.tex" in act["files"] and history_lines(act) == ["linearize"]
+
+
+def test_atomize_writes_its_files_retires_its_source_and_records_it_in_one_act(q: Path) -> None:
+    ok("atomize", "drafting/main.tex", "--to", "drafting/spine.tex", "--retire", cwd=q)
+    (act,) = begun(q, "atomize")
+    files = set(act["files"])
+    assert {"drafting/spine.tex", "drafting/main.tex", ".loom/records/retired/drafting/main.tex"} <= files
+    assert history_lines(act) == ["atomize"]
+
+
+def test_a_fork_is_one_act_with_its_node_file_and_history_line(q: Path) -> None:
+    main = (q / "drafting/main.tex").read_text()
+    (q / "drafting/talk.tex").write_text(
+        main[: main.index("\\begin{document}")] + "\\begin{document}\n\\input{nodes/dm-0001}\n\\end{document}\n"
+    )
+    ok("fork", "dm-0001", "--in", "drafting/talk.tex", cwd=q)
+    (act,) = begun(q, "fork")
+    assert any(f.startswith("drafting/nodes/") for f in act["files"]) and history_lines(act) == ["fork"]
+
+
+def test_an_import_writes_its_assets_its_draft_and_its_step_in_one_act(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tests.unit.test_paper import paper_dir
+
+    p = paper_dir(tmp_path)
+    ok(
+        "init",
+        str(tmp_path / "q"),
+        "--from",
+        str(p / "main.tex"),
+        "--prefix",
+        "pp",
+        "--ai",
+        "none",
+        "--yes",
+        cwd=tmp_path,
+    )
+    (act,) = begun(tmp_path / "q", "import")
+    assert "main/main.tex" in act["files"] and "main/figures/fig.pdf" in act["files"]
+    assert history_lines(act) == ["import"]
+
+
+# ---- D-4: what the history's store holds ----------------------------------------------------------------------
+
+
+def test_an_imported_figure_is_journalled_by_its_digest_and_not_kept_in_the_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom import writes
+    from tests.unit.test_paper import paper_dir
+
+    p = paper_dir(tmp_path)
+    figure = b"%PDF-1.4\n\xff\xfe" + bytes(range(256)) * 64
+    (p / "figures" / "fig.pdf").write_bytes(figure)
+    ok(
+        "init",
+        str(tmp_path / "q"),
+        "--from",
+        str(p / "main.tex"),
+        "--prefix",
+        "pp",
+        "--ai",
+        "none",
+        "--yes",
+        cwd=tmp_path,
+    )
+    q = tmp_path / "q"
+    (act,) = begun(q, "import")
+    assert act["files"]["main/figures/fig.pdf"] == [None, writes.digest(figure)]
+    hexd = writes.digest(figure).split(":", 1)[1]  # type: ignore[union-attr]
+    assert not list((q / ".loom/records/history/texts").glob(f"{hexd}.*"))
+
+
+def test_an_act_cut_short_after_making_a_binary_file_is_undone_by_its_digest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root = demo(tmp_path)
+    hist = load_quilt(root).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(root, hist, "pdf-save") as w:
+            w.replace("drafting/fig.bin", b"\xff\x00binary")
+            w.replace("drafting/notes.md", b"# Notes\n")
+    restore()
+    assert (root / "drafting/fig.bin").is_file()
+    said = writes.recover(root, hist)
+    assert said and said[0].startswith("undid pdf-save:")
+    assert not (root / "drafting/fig.bin").exists() and not (root / "drafting/notes.md").exists()
+
+
+# ---- D-6 and D-14: a move ---------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("mode", [0o600, 0o664])
+def test_a_move_keeps_the_document_s_mode(q: Path, mode: int) -> None:
+    os.chmod(q / "drafting/main.tex", mode)
+    ok("mv", "drafting/main.tex", "drafting/paper.tex", cwd=q)
+    assert stat.S_IMODE((q / "drafting/paper.tex").stat().st_mode) == mode
+
+
+def test_a_move_decides_again_under_the_lock(tmp_path: Path) -> None:
+    """A file put at the new path, or the old one taken away, after the command looked and before the act: refused, nothing moved (D-14)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = demo(tmp_path)
+    quilt = load_quilt(root)
+    (root / "drafting/paper.tex").write_text("someone's file\n")
+    with pytest.raises(writes.WriteRefused, match="exists already"):
+        with writes.act(root, quilt.history_dir, "mv") as w:
+            w.move("drafting/main.tex", "drafting/paper.tex")
+    assert (root / "drafting/paper.tex").read_text() == "someone's file\n" and (root / "drafting/main.tex").is_file()
+    with pytest.raises(writes.WriteRefused, match="not there any more"):
+        with writes.act(root, quilt.history_dir, "mv") as w:
+            w.move("drafting/gone.tex", "drafting/other.tex")
+    assert not (root / "drafting/other.tex").exists()
+
+
+def test_a_restore_to_a_file_put_there_since_it_looked_is_refused(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The person saves a file at the path after the command looked and before its act: refused under the lock, theirs kept (D-14)."""
+    from loom import writes
+
+    real = writes.act
+    done: list[bool] = []
+
+    def act(*a: object, **k: object):  # type: ignore[no-untyped-def]
+        if not done:
+            done.append(True)
+            (q / "drafting/restored.tex").write_text("the person's\n")
+        return real(*a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(writes, "act", act)
+    refused("history", "restore", "widgets-v1", "--to", "drafting/restored.tex", cwd=q, code=1, match="exists already")
+    assert (q / "drafting/restored.tex").read_text() == "the person's\n"
+
+
+# ---- D-13: refusals a person can act on ------------------------------------------------------------------------
+
+
+def test_a_read_only_file_is_refused_by_name(tmp_path: Path) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = demo(tmp_path)
+    doc = root / "drafting/main.tex"
+    os.chmod(doc, 0o444)
+    try:
+        with pytest.raises(writes.WriteRefused, match="drafting/main.tex is read-only"):
+            writes.put(root, load_quilt(root).history_dir, "drafting/main.tex", b"x\n", kind="settings")
+    finally:
+        os.chmod(doc, 0o644)
+
+
+def test_a_folder_that_lets_no_file_be_made_is_refused_by_the_file_s_name(tmp_path: Path) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = demo(tmp_path)
+    folder = root / "drafting"
+    os.chmod(folder, 0o555)
+    try:
+        with pytest.raises(writes.WriteRefused) as refusal:
+            writes.put(root, load_quilt(root).history_dir, "drafting/main.tex", b"x\n", kind="settings")
+    finally:
+        os.chmod(folder, 0o755)
+    assert "drafting/main.tex" in str(refusal.value) and "loom-tmp" not in str(refusal.value)
+
+
+# ---- D-12: an act cut short through a link out of the quilt ----------------------------------------------------
+
+
+def test_an_act_left_on_a_link_out_of_the_quilt_names_the_file_and_claims_nothing_untouched(tmp_path: Path) -> None:
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = demo(tmp_path)
+    outside = tmp_path / "outside.tex"
+    outside.write_text("the outside file\n")
+    doc = root / "drafting/main.tex"
+    doc.unlink()
+    doc.symlink_to(outside)
+    hist = load_quilt(root).history_dir
+    a, b = writes.store(hist, b"before\n"), writes.store(hist, b"after\n")
+    journal = root / ".loom/local/writes.jsonl"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    line = {"event": "begin", "act": "keep:0123456789abcdef", "kind": "keep", "actor": "Pat", "when": "x"}
+    journal.write_text(json.dumps({**line, "files": {"drafting/main.tex": [a, b]}, "records": []}) + "\n")
+    ((kind, files, why, _kept),) = writes.left(root, hist)
+    assert "drafting/main.tex" in why and "a link to a file outside the quilt" in why
+    said = json.loads(ok("lint", "--json", cwd=root).stdout)["diagnostics"]
+    (left,) = [d for d in said if d["code"] == "loom:write-left"]
+    assert "drafting/main.tex" in left["message"] and "No file of yours was touched" not in left["message"]
+
+
+# ---- R-1: a later act over a left one ---------------------------------------------------------------------------
+
+
+def test_a_left_act_whose_files_a_later_act_wrote_is_left_and_the_later_act_stands(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An import cut short after one of its files, that file changed by the person, the import run again: the next recovery would see the first act's files holding its bytes, which are the second's, and put it back over the second. It leaves it (R-1)."""
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_paper import bare_quilt, paper_dir
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    p = paper_dir(tmp_path)
+    q = bare_quilt(tmp_path)
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+    restore()
+    written = q / "main/refs.bib"  # the file the act wrote before it was cut short
+    assert written.is_file()
+    written.write_bytes(b"% the person's own bibliography\n")
+    monkeypatch.setenv(
+        "LOOM_FIXED_TIME", "2026-11-22T09:00:00Z"
+    )  # a later moment, so its history line is not the first's
+    ok("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+    hist = load_quilt(q).history_dir
+    said = writes.recover(q, hist)
+    assert said and said[0].startswith("left import:") and "a later act wrote" in said[0]
+    assert (q / "main/main.tex").is_file() and (q / "main/figures/fig.pdf").is_file() and written.is_file()
+    h = load_history(hist)
+    assert all((hist / e.dir).is_dir() for e in h.entries if e.dir)
+
+
+# ---- R-8: a later act itself cut short --------------------------------------------------------------------------
+
+#: The file-system calls a kill can fall before or after, as the review's kill harness counts them.
+STEPS = ("replace", "rename", "unlink", "remove", "rmdir", "fsync", "mkdir", "chmod")
+
+
+def dying_at_step(mp: pytest.MonkeyPatch, root: Path, k: int) -> list[int]:
+    """Make the process die at the `k`-th file-system step it takes holding `root`'s door lock, just before or just after a call of `STEPS` or a full flush (0: never); returns the count, which a run that never dies reads for its number of steps."""
+    import fcntl
+
+    from loom.locks import holding
+    from loom.paths import WRITES_LOCK
+    from tests.unit.test_write_safety import Died
+
+    lock = root / WRITES_LOCK
+    count = [0]
+
+    def point() -> None:
+        if holding(lock):
+            count[0] += 1
+            if count[0] == k:
+                raise Died
+
+    def wrapped(real):  # type: ignore[no-untyped-def]
+        def call(*a, **kw):  # type: ignore[no-untyped-def]
+            point()
+            out = real(*a, **kw)
+            point()
+            return out
+
+        return call
+
+    for name in STEPS:
+        mp.setattr(os, name, wrapped(getattr(os, name)))
+    real_fcntl = fcntl.fcntl
+    full = getattr(fcntl, "F_FULLFSYNC", None)
+    mp.setattr(fcntl, "fcntl", lambda fd, cmd, *a: (wrapped(real_fcntl) if cmd == full else real_fcntl)(fd, cmd, *a))
+    return count
+
+
+def test_a_left_act_is_never_put_back_over_a_later_act_cut_short_at_any_of_its_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-1's sequence with the second import itself killed, at each step it takes holding the door: recovery finishes the second act, puts it back or leaves it, and never puts the left act back over a file the second wrote; the history names only folders that stand, and the draft is there exactly when the history says the paper came in (R-8)."""
+    import shutil
+
+    from loom import writes
+    from loom.history.ledger import load_history
+    from tests.helpers import run
+    from tests.unit.test_paper import bare_quilt, paper_dir
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    p = paper_dir(tmp_path)
+    base = bare_quilt(tmp_path)
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=base)
+    restore()
+    (base / "main/refs.bib").write_bytes(b"% the person's own bibliography\n")
+    (first,) = begun(base, "import")
+    # a later moment, so the second import's history line is not the first's
+    monkeypatch.setenv("LOOM_FIXED_TIME", "2026-11-22T09:00:00Z")
+
+    def second(k: int) -> Path:
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q, symlinks=True)
+        with pytest.MonkeyPatch.context() as mp:
+            count = dying_at_step(mp, q, k)
+            try:
+                run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+            except Died:
+                pass
+        assert k or count[0] > 20, count  # the whole import, counted
+        steps.append(count[0])
+        return q
+
+    steps: list[int] = []
+    second(0)
+    for k in range(1, steps[0] + 1):
+        q = second(k)
+        later = [e for e in begun(q, "import") if e["act"] != first["act"]]
+        files = later[0]["files"] if later else {}
+        held = {rel: (q / rel).read_bytes() if (q / rel).is_file() else None for rel in files}
+        hist = q / ".loom/records/history"
+        said = writes.recover(q, hist)
+        assert not any(s.startswith(f"undid {first['act']}") for s in said), (k, said)
+        events = {e["event"] for e in writes_lines(q) if later and e["act"] == later[0]["act"]}
+        for rel, (before, after) in files.items():
+            if "done" in events:
+                assert writes._holds(q, rel, after), (k, rel, said)
+            elif "aborted" in events:
+                assert not (q / rel).exists() if before is None else writes._holds(q, rel, before), (k, rel, said)
+            else:
+                assert ((q / rel).read_bytes() if (q / rel).is_file() else None) == held[rel], (k, rel, said)
+        h = load_history(hist)
+        assert all((hist / e.dir).is_dir() for e in h.entries if e.dir), (k, said)
+        assert any(e.action == "import" for e in h.entries) == (q / "main/main.tex").is_file(), (k, said)
+        shutil.rmtree(q)
+
+
+def writes_lines(root: Path) -> list[dict]:
+    p = root / ".loom/local/writes.jsonl"
+    return [json.loads(x) for x in p.read_text().splitlines()] if p.is_file() else []
+
+
+# ---- a file only this machine reads ------------------------------------------------------------------------------
+
+
+def test_an_agent_app_s_mcp_file_keeps_its_texts_on_this_machine_and_none_in_the_history(tmp_path: Path) -> None:
+    """An MCP file names this machine's loom and the quilt's absolute path: its texts stay beside the journal, so the committed history carries no machine's paths, and a quilt made twice, as the generated quilts are, is the same."""
+    from loom import writes
+    from loom.ai.clients import PROJECT_FILES
+
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "none", "--yes", cwd=tmp_path)
+    ok("ai", "init", cwd=root)  # through the door, as the generator writes them
+    written = [rel for rel in PROJECT_FILES if (root / rel).is_file()]
+    assert len(written) == len(PROJECT_FILES), written
+    hist, here = root / ".loom/records/history", root / ".loom/local"
+    for rel in written:
+        d = writes.digest((root / rel).read_bytes())
+        assert d is not None and writes.fetch(hist, d) is None and writes.fetch(here, d) is not None, rel
+    places = {str(root), os.path.realpath(root)}
+    named = [p.name for p in (hist / "texts").iterdir() if any(x in p.read_text(errors="replace") for x in places)]
+    assert named == []
+
+
+def test_an_act_cut_short_on_an_mcp_file_is_put_back_from_this_machine_s_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recovery reads the texts kept beside the journal as it reads the history's, so an MCP file an act replaced comes back whole."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    before = (root / ".mcp.json").read_bytes()
+    hist = load_quilt(root).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(root, hist, "agents") as w:
+            w.replace(".mcp.json", before.replace(b"loom", b"loom-elsewhere", 1))
+            w.replace("notes.md", b"# Notes\n")
+    restore()
+    assert (root / ".mcp.json").read_bytes() != before
+    said = writes.recover(root, hist)
+    assert said and said[0].startswith("undid agents:"), said
+    assert (root / ".mcp.json").read_bytes() == before
+
+
+# ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
+
+
+def test_a_left_act_whose_made_file_was_changed_says_removing_it_settles_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file the act made needs no text to be undone, so the advice is not that the history lacks one (R-3)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root = demo(tmp_path)
+    hist = load_quilt(root).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(root, hist, "pdf-save") as w:
+            w.replace("drafting/fig.bin", b"\xff\x00binary")
+            w.replace("drafting/notes.md", b"# Notes\n")
+    restore()
+    made = next(rel for rel in ("drafting/fig.bin", "drafting/notes.md") if (root / rel).is_file())
+    (root / made).write_bytes(b"the person's own\n")
+    ((_, _, _, settles),) = writes.left(root, hist)
+    assert f"For {made}, which the act made, removing it does that" in settles
+    assert "texts the history lacks" not in settles
+    (root / made).unlink()
+    assert writes.recover(root, hist)[0].startswith("undid pdf-save:")
+
+
+def test_a_skill_saved_while_loom_waited_is_never_written_over(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The skill writer passes what it read, as every other writer of the agent layer does (R-4)."""
+    from loom import writes
+    from loom.ai.clients import chosen
+    from loom.ai.skills import write_skills
+
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    skill = next(p for p in root.rglob("SKILL.md") if ".claude" in p.parts)
+    rel = skill.relative_to(root).as_posix()
+    skill.unlink()  # gone, so the next write makes it again
+    real = writes.act
+    done: list[bool] = []
+
+    def act(*a: object, **k: object):  # type: ignore[no-untyped-def]
+        if not done:
+            done.append(True)
+            skill.write_text("the person's own skill\n")
+        return real(*a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(writes, "act", act)
+    with pytest.raises(writes.WriteRefused, match="changed since loom read it"):
+        write_skills(root, chosen(root, None))
+    assert skill.read_text() == "the person's own skill\n", rel
+
+
+def test_an_import_put_back_leaves_no_empty_folder_it_made(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The folders an act makes are in its journal line, and putting it back takes away those it leaves empty (R-5); a folder of the person's stays."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_paper import bare_quilt, paper_dir
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    p = paper_dir(tmp_path)
+    q = bare_quilt(tmp_path)
+    (q / "notes").mkdir()  # the person's own empty folder
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+    restore()
+    assert (q / "main").is_dir()
+    said = writes.recover(q, load_quilt(q).history_dir)
+    assert said and said[0].startswith("undid import:")
+    assert not (q / "main").exists() and (q / "notes").is_dir()

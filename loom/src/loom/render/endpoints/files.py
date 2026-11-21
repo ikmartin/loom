@@ -38,9 +38,15 @@ def _pdf_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("bad-field", "data is not base64") from exc
     if not raw.startswith(b"%PDF-"):
         raise ApiError("bad-field", "data is not a PDF")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("xb") as fh:
-        fh.write(raw)
+    from loom.writes import WriteRefused, put
+
+    quilt = load_quilt(root)
+    try:
+        put(root, quilt.history_dir, rel, raw, kind="pdf-save", new=True)
+    except WriteRefused as exc:
+        if exc.code == "exists":
+            raise ApiError("exists", f"{rel} already exists; a saved PDF never replaces a file", status=409) from None
+        raise
     return {"ok": True, "result": f"saved {rel}", "path": rel, "bytes": len(raw)}
 
 

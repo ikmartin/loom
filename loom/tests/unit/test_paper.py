@@ -254,6 +254,43 @@ def test_import_outside_tree_warning_and_in_place(tmp_path: Path) -> None:
     assert "\\input{../elsewhere}" in (p / "main" / "main.tex").read_text()
 
 
+def test_a_paper_folder_made_a_quilt_keeps_the_person_s_files_and_writes_into_them_through_the_door(
+    tmp_path: Path, monkeypatch
+) -> None:  # type: ignore[no-untyped-def]
+    """`init --from` a paper inside the folder: the person's README stays, and the agent layer's lines go into their files as acts of the door (D-3)."""
+    p = paper_dir(tmp_path)
+    (p / "README.md").write_text("# My paper\n\nNotes for my coauthors.\n")
+    (p / "CLAUDE.md").write_text("Write in British English.\n")
+    (p / ".gitignore").write_text("*.aux\n")
+    ok("init", str(p), "--from", str(p / "main.tex"), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    assert (p / "README.md").read_text() == "# My paper\n\nNotes for my coauthors.\n"
+    assert (p / "CLAUDE.md").read_text().startswith("Write in British English.\n")
+    assert (p / ".gitignore").read_text().startswith("*.aux\n")
+    journal = [json.loads(x) for x in (p / ".loom/local/writes.jsonl").read_text().splitlines()]
+    written = {f for e in journal if e["event"] == "begin" for f in e.get("files", {})}
+    assert {"CLAUDE.md", ".gitignore"} <= written
+
+
+def test_init_refuses_a_config_that_is_not_a_quilt_s_and_writes_nothing(tmp_path: Path) -> None:
+    p = paper_dir(tmp_path)
+    (p / "config.toml").write_text("[tool]\nname = 'theirs'\n")
+    before = sorted(x.relative_to(p).as_posix() for x in p.rglob("*"))
+    refused(
+        "init",
+        str(p),
+        "--from",
+        str(p / "main.tex"),
+        "--prefix",
+        "pp",
+        "--yes",
+        cwd=tmp_path,
+        code=2,
+        match="is not a quilt's",
+    )
+    assert (p / "config.toml").read_text() == "[tool]\nname = 'theirs'\n"
+    assert sorted(x.relative_to(p).as_posix() for x in p.rglob("*")) == before
+
+
 def test_id_prints_patch_and_to_writes_copy(tmp_path: Path) -> None:
     q = imported(tmp_path)
     (q / "main" / "nodes").mkdir(exist_ok=True)

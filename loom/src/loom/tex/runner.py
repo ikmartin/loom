@@ -12,7 +12,7 @@ import shutil
 import signal
 import subprocess
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -194,8 +194,9 @@ def compile_document(
     halt_on_error: bool = True,
     timeout: int = 600,
     started: Callable[[subprocess.Popen[str]], None] | None = None,
+    overlay: Mapping[str, bytes] | None = None,
 ) -> CompileResult:
-    """Compile a document from `base`, the quilt-relative directory it compiles from (P12), in a clean copy of that directory (`stage_document`).
+    """Compile a document from `base`, the quilt-relative directory it compiles from (P12), in a clean copy of that directory (`stage_document`), with `overlay`'s files (quilt-relative) written into the copy: a document not yet written, compiled as it would be.
 
     A document's directory holds whatever its author's editor left there, and latexmk reads a `.bcf`, `.aux` or `.toc` it finds in its working directory and runs biber there even under `-outdir`; compiling the directory in place both depends on those leftovers and writes into it. The log's relative names are the document's directory's, which `CompileResult.cwd` says.
 
@@ -223,14 +224,16 @@ def compile_document(
     """
     tex_rel = Path(tex).relative_to(root).as_posix() if Path(tex).is_absolute() else Path(tex).as_posix()
     with tempfile.TemporaryDirectory(prefix="loom-compile-") as tmp:
-        stage = stage_document(root, base, [tex_rel], Path(tmp))
+        stage = stage_document(root, base, [tex_rel], Path(tmp), overlay)
         cwd = stage / base
         res = compile_tex(cwd, os.path.relpath(stage / tex_rel, cwd), outdir, engine, halt_on_error, timeout, started)
     res.cwd = root / base
     return res
 
 
-def stage_document(root: Path, base: str, extra: list[str], dest: Path) -> Path:
+def stage_document(
+    root: Path, base: str, extra: list[str], dest: Path, overlay: Mapping[str, bytes] | None = None
+) -> Path:
     """A copy of the document directory `base` under `dest`, at its quilt-relative place, for latexmk to run in; returns `dest`.
 
     Left out: build products (`BUILD_PRODUCTS`; a `.bbl` stays when the directory has no `.bib`, as an arXiv source ships only that), hidden directories, the directories never read as a document's (`scan.source.SKIP_DIRS`), and the sync directory. `extra` (quilt-relative files, the document itself when it sits elsewhere, as an agent copy or a closure does) is copied to its own place. Files are copied, never linked, since a package may rewrite a file in its working directory (a TikZ externalisation, a `filecontents`).
@@ -254,7 +257,12 @@ def stage_document(root: Path, base: str, extra: list[str], dest: Path) -> Path:
                 skip.add(n)
         return skip
 
-    shutil.copytree(top, dest / base, ignore=ignore, dirs_exist_ok=True)
+    if top.is_dir():
+        shutil.copytree(top, dest / base, ignore=ignore, dirs_exist_ok=True)
+    (dest / base).mkdir(parents=True, exist_ok=True)
+    for rel, data in (overlay or {}).items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        (dest / rel).write_bytes(data)
     for rel in extra:
         target = dest / rel
         if (root / rel).is_file() and not target.exists():

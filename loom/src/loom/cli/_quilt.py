@@ -48,12 +48,23 @@ def open_scan(quilt_path: str | None) -> ScanResult:
 
 @contextmanager
 def drawing_ids(quilt_path: str | None) -> Iterator[None]:
-    """Hold the quilt's id lock, showing that a wait is alive (T6); outside any quilt, the refusal `open_quilt` gives."""
-    from loom.cli.report import Progress
+    """Hold the door's lock and then the quilt's id lock, showing that a wait is alive (T6); outside any quilt, the refusal `open_quilt` gives.
 
-    lock = open_quilt(quilt_path).root / ID_LOCK
-    with locked(lock, patience=lambda: Progress("waiting for another loom writing to this quilt")):
-        yield
+    The door's lock first, in the order every holder takes them (`docs/design/writes.md`, "One lock"), so a command that draws an id may write a person's file through the door, and a history step it records never takes the number an act of the door was planned with.
+    """
+    from loom.cli.report import Progress
+    from loom.paths import WRITES_LOCK
+    from loom.writes import recover
+
+    quilt = open_quilt(quilt_path)
+    root = quilt.root
+    wait = lambda: Progress("waiting for another loom writing to this quilt")  # noqa: E731
+    with locked(root / WRITES_LOCK, patience=wait):
+        # what a crash left is settled first, as every act settles it, so no step is read or numbered against an act in flight
+        for said in recover(root, quilt.history_dir):
+            click.echo(f"loom: {said}", err=True)
+        with locked(root / ID_LOCK, patience=wait):
+            yield
 
 
 def draws_ids(command: Callable[..., Any]) -> Callable[..., Any]:

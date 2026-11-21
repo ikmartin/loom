@@ -15,7 +15,7 @@ from typing import Any
 
 from loom.history.ledger import History, append_entry, load_history
 from loom.history.steps import free_name, plan_freeze, slug, stamp_document, text_hash, write_step
-from loom.paths import ADOPTION_DECISIONS, ADOPTION_PREVIEWS, REVIEW_ORIGINS, documents_named, under
+from loom.paths import ADOPTION_DECISIONS, ADOPTION_PREVIEWS, documents_named, under
 from loom.reshape.linearize import flatten
 from loom.scan.diagnostics import gates
 from loom.scan.hashing import pair_hash
@@ -316,14 +316,17 @@ def comparison(result: ScanResult, copy: str) -> dict[str, Any]:
         "merged_document": merged,
         "baseline": baseline,
     }
-    # Pin every scanned source, config and ledger: edits to dependencies or allocation inputs invalidate previews too.
+    # Pin the comparison's own inputs, so a save to an unrelated file keeps a saved choice and the preview: the copy and its baseline (in `comparison`), the target document's files and preamble, the one config key allocation reads, the history's entries for this copy, and the context's inputs. Taking it in decides again under the lock, so an id taken or a dependency changed elsewhere since is still refused there (`_incorporate`).
+    from loom.history.steps import document_files
+
     data["fingerprint"] = _digest(
         {
-            "files": {k: v.text for k, v in result.files.items()},
-            "config": (result.quilt.root / "config.toml").read_text(),
-            "history": [e.to_dict() for e in _history(result).entries],
+            "files": {k: result.files[k].text for k in document_files(result, source) if k in result.files},
+            "copy": (result.quilt.root / copy).read_text(),
+            "prefix": result.quilt.config.prefix,
+            "history": [e.to_dict() for e in _history(result).entries if _about_copy(e.data, copy)],
             "comparison": data,
-            "preambles": {name: closure.raw_text() for name, closure in result.closures.items()},
+            "preamble": result.closures[source].raw_text() if source in result.closures else None,
             "context_inputs": {
                 name: hashlib.sha256((result.quilt.root / name).read_bytes()).hexdigest()
                 if (result.quilt.root / name).is_file()
@@ -718,6 +721,8 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
     """
     if not re.fullmatch("[0-9a-f]{64}", token):
         raise SyncError("Invalid preview token")
+    from loom import writes
+
     root = result.quilt.root
     path = root / ADOPTION_PREVIEWS / (token + ".json")
     if not path.is_file():
@@ -726,8 +731,32 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
     supplied = saved.pop("token")
     if supplied != token or _digest(saved) != token:
         raise SyncError("Preview changed; inspect the contribution again")
-    data = comparison(result, copy)
     who = resolve_author(reviewer, root)[0]
+    try:
+        # one act through the door: the person's files, the landmark that keeps the document as it was, the adopt step and the review origins are written together or not at all, and a crash is finished or put back whole by recovery (`docs/design/writes.md`)
+        with writes.act(root, result.quilt.history_dir, "adopt", who) as w, writes.staging(w):
+            done = _incorporate(scan(result.quilt), w, copy, token, saved, who)
+    except ValueError as exc:
+        if isinstance(exc, SyncError):
+            raise
+        raise SyncError(str(exc)) from exc
+    if done.get("step") is not None:
+        # applied: the preview is spent, and a second apply is refused for want of it
+        from loom.lifetimes import drop_preview
+
+        drop_preview(root, ADOPTION_PREVIEWS, token)
+    return done
+
+
+def _incorporate(result: ScanResult, w: Any, copy: str, token: str, saved: dict[str, Any], who: str) -> dict[str, Any]:
+    """`incorporate` under the door's lock: decided again from `result`, the quilt as scanned under the lock, and staged into the act `w`, which stages loom's records (`writes.staging`).
+
+    A preview made from another state of the quilt, of the copy or of the selection is refused, as is a file of the document that changed since this scan; the document is written whole with its own line endings, and a file that is not UTF-8 is refused (`not-utf8`), as every act refuses one.
+    """
+    from loom.writes import scan_reading, with_endings
+
+    root = result.quilt.root
+    data = comparison(result, copy)
     if data["copy"] != saved["copy"] or data["fingerprint"] != saved["fingerprint"] or who != saved["reviewer"]:
         if who != saved["reviewer"]:
             raise SyncError("Reviewer changed; reload Review and preview again")
@@ -749,20 +778,31 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
     for rel in saved["paths"]:
         if rel not in result.files and (root / rel).exists():
             raise SyncError(f"{rel} appeared after the preview; inspect the contribution again")
-    # Everything incorporation may write, as it was: restored byte for byte if any step fails.
-    touched_files = [
-        root / REVIEW_ORIGINS,
-        history.dir / "ledger.jsonl",
-        *(root / p for p in saved["paths"]),
-    ]
-    snapshots = {p: p.read_bytes() if p.exists() else None for p in touched_files}
-    kept_entries = {p.name for p in history.dir.iterdir()} if history.dir.is_dir() else set()
     source_stem = Path(data["source"]).stem
     landmark = free_name(history, slug(f"{source_stem} before adopt {Path(data['copy']).stem}", limit=120))
+    stamp_document(
+        result,
+        history,
+        data["source"],
+        landmark,
+        f"Before taking changes from the copy “{Path(data['copy']).stem}”",
+        who,
+        kept_for="adopt",
+    )
+    for rel, text in saved["overlay"].items():
+        before = w.text(rel)
+        if (before is None and rel in result.files) or (
+            before is not None
+            and (rel not in result.files or scan_reading(before.encode("utf-8")) != result.files[rel].text)
+        ):
+            raise SyncError(f"{rel} changed since loom read it; nothing was written, preview again")
+        # the merge is in the scan's reading; each line the merge leaves keeps its own ending
+        w.replace(rel, (with_endings(before, text) if before is not None else text).encode("utf-8"))
 
     def finish() -> dict[str, Any]:
-        history = _history(result)  # re-read: the landmark's stamp step is now the latest
-        after = scan(result.quilt)
+        history = _history(result)  # re-read: the landmark's stamp step, staged in the act, is now the latest
+        # the quilt as the act will leave it, scanned before anything is written so the records go with the files
+        after = scan(result.quilt, overlay=saved["overlay"])
         freeze = plan_freeze(after, history, document=data["source"], narrow_to=data["source"])
         freeze.removed = []
         touched = {
@@ -888,39 +928,7 @@ def incorporate(result: ScanResult, copy: str, token: str, reviewer: str | None 
             "message": f"Changes incorporated; {source_stem} as it was is landmark {landmark}; mathematics remains to be reviewed",
         }
 
-    try:
-        stamp_document(
-            result,
-            history,
-            data["source"],
-            landmark,
-            f"Before taking changes from the copy “{Path(data['copy']).stem}”",
-            who,
-            kept_for="adopt",
-        )
-        for rel, text in saved["overlay"].items():
-            target = root / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(text)
-        done = finish()
-    except Exception as exc:
-        import shutil
-
-        for file, content in snapshots.items():
-            if content is None:
-                file.unlink(missing_ok=True)
-            else:
-                file.write_bytes(content)
-        for made in (e for e in history.dir.iterdir() if e.name not in kept_entries and e.is_dir()):
-            shutil.rmtree(made)
-        if isinstance(exc, ValueError):
-            raise SyncError(str(exc)) from exc
-        raise
-    # applied: the preview is spent, and a second apply is refused for want of it
-    from loom.lifetimes import drop_preview
-
-    drop_preview(root, ADOPTION_PREVIEWS, token)
-    return done
+    return finish()
 
 
 def refresh(result: ScanResult, copy: str, *, write: bool = True) -> dict[str, Any]:
@@ -1088,6 +1096,11 @@ def decisions(
             if k not in valid
         ],
     }
+
+
+def _about_copy(data: dict[str, Any], copy: str) -> bool:
+    """Whether a history entry's data is about the agent's copy `copy`: the step that made it, one that took it in, or one moved from it."""
+    return any(data.get(k) == copy for k in ("to", "copy", "from"))
 
 
 def choice_signatures(data: dict[str, Any]) -> dict[str, str]:

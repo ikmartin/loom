@@ -196,8 +196,9 @@ def status_sync(patch: bool, to: Path | None, as_json: bool, quilt_path: str | N
         diff = _run(lambda: incoming_patch(quilt, SyncState.read(quilt.root)))
         assert isinstance(diff, bytes)
         if target is not None:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(diff)
+            from loom.writes import save
+
+            save(quilt.root, quilt.history_dir, target, diff, kind="patch")
             Report(f"wrote the incoming patch to {to}", data={"to": str(to), "bytes": len(diff)}).emit(as_json)
         elif as_json:
             text = diff.decode("utf-8", errors="replace")

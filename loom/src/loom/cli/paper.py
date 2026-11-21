@@ -160,8 +160,9 @@ def id_command(
     ins = plan_insertions(planning, [rel], pre, next_local(visible_locals(planning, pre)), sections, all_levels)
     after = apply_insertions(anchored, ins)
     if out is not None:
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_text(after, encoding="utf-8")
+        from loom.writes import save
+
+        save(result.quilt.root, result.quilt.history_dir, out, after.encode("utf-8"), kind="id")
         shown = quilt_relative(result.quilt, out)
         Report(f"wrote {shown}: {rel} with {counted(len(ins), 'label')} inserted; {rel} is unchanged").emit(as_json)
         return
@@ -338,27 +339,35 @@ def run_import(
             note("Nothing written yet; the import would write:\n" + "\n".join(proposed))
             click.confirm("Apply?", abort=True)
         refuse_interrupted(load_history(quilt.history_dir))  # before anything is written
-        written = apply_import(quilt, plan)
-        drafted = root / plan.dest_rel
-        drafted.parent.mkdir(parents=True, exist_ok=True)
-        drafted.write_text(draft.text, encoding="utf-8")
-        written.append(plan.dest_rel)
         if check and untypeset is None:
+            # the draft and its assets compiled as they would be written, before anything is
+            overlay = {plan.dest_rel: draft.text.encode("utf-8")} | {
+                dest: Path(src).read_bytes() for dest, src in plan.assets.items()
+            }
             with Progress("checking that the draft typesets as the paper"):
-                ident = identity_test(staged, plan.master_rel, root, plan.dest_rel, scratch, quilt.config.engine)
+                ident = identity_test(
+                    staged, plan.master_rel, root, plan.dest_rel, scratch, quilt.config.engine, after_overlay=overlay
+                )
             if not ident.passed and not ident.skipped:
-                drafted.unlink(missing_ok=True)
                 diffs = "\n".join(
                     f"  {i.text}" + (f"  {i.key}" if i.key else "") for i in identity_group(ident)[0].items
                 )
                 raise ContentError(
-                    f"the drafted document does not typeset as the original; {plan.dest_rel} was removed and nothing was recorded. Pass --no-check to keep it anyway.\n"
+                    "the drafted document does not typeset as the original, so nothing was written. Pass --no-check to write it anyway.\n"
                     + diffs
                 )
     original = (plan.paper_dir / plan.master_rel).read_text(encoding="utf-8", errors="replace")
     name = slug(Path(plan.dest_rel).stem)
-    # read under the lock, so a step recorded elsewhere meanwhile cannot refuse this one after its document is written
-    with locked(quilt.history_dir / LEDGER):
+    from loom import writes
+
+    # one act through the door: the paper's assets, the drafted document, the import's step and the config's main, together or not at all; the history is read under its lock
+    with (
+        writes.act(root, quilt.history_dir, "import", actor_for(root)) as w,
+        writes.staging(w),
+        locked(quilt.history_dir / LEDGER),
+    ):
+        written = apply_import(quilt, plan)
+        w.replace(plan.dest_rel, draft.text.encode("utf-8"))
         entry = write_step(
             load_history(quilt.history_dir),
             "import",
@@ -375,7 +384,8 @@ def run_import(
             document_text=plan.text,
             document_name=f"{name}.tex",
         )
-    main_set = set_main(load_quilt(root), plan.dest_rel)
+        main_set = set_main(load_quilt(root), plan.dest_rel)
+    written.append(plan.dest_rel)
     after = scan(load_quilt(root))
     wrote = [Item(f"{plan.master_rel} -> {plan.dest_rel}, {len(draft.insertions)} ids inserted")]
     wrote += [Item(f"{src} -> {dest}") for src, dest in arrows if dest in written]
@@ -596,15 +606,9 @@ def _atomize(
     progress.next_stage("writing" if not dry_run else "checking", len(plans))
     for plan in plans:
         progress.item(plan.dest)
-        if dry_run:
-            taken = [m.target for m in plan.moves if (root / m.target).exists()]
-            if taken:
-                raise ContentError(f"loom:atomize-target-exists: {taken[0]} exists")
-        else:
-            try:
-                write_atomize(result, plan)
-            except FileExistsError as exc:
-                raise ContentError(f"loom:atomize-target-exists: {exc} exists") from exc
+        taken = [m.target for m in plan.moves if (root / m.target).exists()]
+        if taken:
+            raise ContentError(f"loom:atomize-target-exists: {taken[0]} exists")
         deferred = sum(1 for m in plan.moves if ".proof" in m.target)
         moved_sections = sum(
             1 for m in plan.moves if result.nodes.get(m.key) is not None and result.nodes[m.key].kind == "section"
@@ -637,17 +641,34 @@ def _atomize(
     }
     moved = sum(len(pl.moves) for pl in plans)
     ident: IdentityResult | None = None
+    main_moved: dict[str, bool] = {}
     if not dry_run:
+        from loom import writes
+
         progress.next_stage(f"identity test: compiling {plan.src} and {plan.dest}")
-        ident = _identity_for(result, root, plan.src, plan.dest)
-        for pl in plans if retire else []:
-            target_path = root / RETIRED / pl.src
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(root / pl.src), str(target_path))
-        append_entry(result.quilt.history_dir, "atomize", record, actor_for(root))
+        # the spine and its node files compiled as they would be written, before anything is
+        overlay = {m.target: m.text.encode("utf-8") for m in plan.moves} | {plan.dest: plan.spine.encode("utf-8")}
+        ident = _identity_for(result, root, plan.src, plan.dest, overlay)
+        # one act through the door: the node files and spines, each source retired into loom's records, the history's line and the config's main, together or not at all
+        try:
+            with writes.act(root, result.quilt.history_dir, "atomize", actor_for(root)) as w, writes.staging(w):
+                for pl in plans:
+                    write_atomize(result, pl)
+                for pl in plans if retire else []:
+                    w.move(pl.src, f"{RETIRED}/{pl.src}")
+                append_entry(result.quilt.history_dir, "atomize", record, actor_for(root))
+                for pl in plans:
+                    main_moved[pl.dest] = result.quilt.config.main in (
+                        pl.src,
+                        f"{RETIRED}/{pl.src}",
+                    ) and set_main_forced(result.quilt, pl.dest)
+        except FileExistsError as exc:
+            raise ContentError(f"loom:atomize-target-exists: {exc} exists") from exc
     for pl in plans:
-        if result.quilt.config.main in (pl.src, f"{RETIRED}/{pl.src}") and (
-            result.quilt.config.main != pl.dest if dry_run else set_main_forced(result.quilt, pl.dest)
+        if (
+            result.quilt.config.main in (pl.src, f"{RETIRED}/{pl.src}") and result.quilt.config.main != pl.dest
+            if dry_run
+            else main_moved[pl.dest]
         ):
             wrote.append(Item(f"config.toml: main = {pl.dest}"))
     would = "would be " if dry_run else ""
@@ -775,11 +796,15 @@ def _atomized_before(result: ScanResult, src_rel: str, keys: list[str], proofs: 
     return report, diff
 
 
-def _identity_for(result: ScanResult, root: Path, src_rel: str, dest_rel: str) -> IdentityResult | None:
-    """Identity test for a rewrite of SRC into DEST: a master SRC is compiled directly; otherwise the first master reaching SRC is compiled in a scratch copy of the quilt where DEST's text stands at SRC's path. None when no master reaches SRC."""
+def _identity_for(
+    result: ScanResult, root: Path, src_rel: str, dest_rel: str, overlay: dict[str, bytes]
+) -> IdentityResult | None:
+    """Identity test for a rewrite of SRC into DEST, whose files (`overlay`) are not yet written: a master SRC is compiled directly; otherwise the first master reaching SRC is compiled in a scratch copy of the quilt where DEST's text stands at SRC's path. None when no master reaches SRC."""
     if src_rel in result.masters:
         with tempfile.TemporaryDirectory(prefix="loom-identity-") as tmp:
-            return identity_test(root, src_rel, root, dest_rel, Path(tmp), engine_for(result, src_rel))
+            return identity_test(
+                root, src_rel, root, dest_rel, Path(tmp), engine_for(result, src_rel), after_overlay=overlay
+            )
     node = result.nodes.get(src_rel)
     masters = node.reached_by if node else []
     if not masters:
@@ -789,7 +814,10 @@ def _identity_for(result: ScanResult, root: Path, src_rel: str, dest_rel: str) -
         scratch = Path(tmp)
         after = scratch / "quilt"
         shutil.copytree(root, after, ignore=copy_ignore(root, ".git", LOOM))
-        (after / src_rel).write_text((root / dest_rel).read_text(encoding="utf-8"), encoding="utf-8")
+        for rel, data in overlay.items():
+            (after / rel).parent.mkdir(parents=True, exist_ok=True)
+            (after / rel).write_bytes(data)
+        (after / src_rel).write_bytes(overlay[dest_rel])
         return identity_test(root, master, after, master, scratch, engine_for(result, master))
 
 
@@ -877,8 +905,9 @@ def deloom_command(
             )
         raise ContentError("\n".join(lines))
     if not dry_run:
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(done.text, encoding="utf-8")
+        from loom.writes import save
+
+        save(result.quilt.root, result.quilt.history_dir, target, done.text.encode("utf-8"), kind="deloom")
     groups = []
     if done.kept_ids:
         groups.append(

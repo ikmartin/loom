@@ -138,13 +138,23 @@ def new(
     rel = path.relative_to(result.quilt.root.resolve() if to else result.quilt.root).as_posix()
     name = result.taxa[env].name if env in result.taxa else env
     if not dry_run:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # exclusively, so a file that arrived since the check above is refused and never overwritten, lock or no lock
+        from loom.writes import WriteRefused, save
+
+        # through the door, refused when a file arrived since the check above, so one is never overwritten
         try:
-            with path.open("x", encoding="utf-8") as fh:
-                fh.write(skeleton(result, node_id, env, title, author))
-        except FileExistsError:
-            raise EnvError(f"{path} already exists") from None
+            save(
+                result.quilt.root,
+                result.quilt.history_dir,
+                path,
+                skeleton(result, node_id, env, title, author).encode("utf-8"),
+                kind="new",
+                actor=author,
+                new=True,
+            )
+        except WriteRefused as exc:
+            if exc.code == "exists":
+                raise EnvError(f"{path} already exists") from None
+            raise
     named = rel.removeprefix(f"{base}/") if base else rel
     line = f"\\input{{{named.removesuffix('.tex')}}}"
     Report(

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path, PurePosixPath
@@ -235,9 +236,13 @@ def landmark_documents(quilt: Quilt) -> list[str]:
 
 
 def scan(
-    quilt: Quilt, overlay: dict[str, str] | None = None, *, bases: dict[str, str] | None = None, copy: bool = False
+    quilt: Quilt,
+    overlay: Mapping[str, str | None] | None = None,
+    *,
+    bases: dict[str, str] | None = None,
+    copy: bool = False,
 ) -> ScanResult:
-    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`). `copy` says `quilt` is a copy made of another (a temporary directory, a saved context).
+    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved, and None stands for a file that is not there, so a write planned to remove one is scanned before it is made. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`). `copy` says `quilt` is a copy made of another (a temporary directory, a saved context).
 
     A scan is a `memo.reading`: when it ends, unless a build or another reading that began before it is still open, what the scanner remembers of a text it did not read is forgotten. A scan of a copy keeps instead: it forgets only what it made, so the quilt it was made from keeps its entries.
     """
@@ -245,14 +250,14 @@ def scan(
         return _scan(quilt, overlay, bases)
 
 
-def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | None) -> ScanResult:
+def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[str, str] | None) -> ScanResult:
     root = quilt.root
     result = ScanResult(quilt=quilt, base_overrides=dict(bases or {}))
     overlay = overlay or {}
     skip = skipped_dirs(quilt)
-    paths = list(discover_files(root, skip))
+    paths = [rel for rel in discover_files(root, skip) if not (rel in overlay and overlay[rel] is None)]
     for extra in sorted(overlay):
-        if extra not in paths and not extra.startswith(tuple(f"{d}/" for d in skip)):
+        if overlay[extra] is not None and extra not in paths and not extra.startswith(tuple(f"{d}/" for d in skip)):
             paths.append(extra)
     result.canon_files = landmark_documents(quilt)
     for rel in paths:

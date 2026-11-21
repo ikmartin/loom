@@ -5,7 +5,6 @@ The person edits a page directly; an agent writes one through `loom write`, neve
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -87,40 +86,49 @@ def linked(result: Any, root: Path, text: str) -> dict[str, dict[str, str]]:
     return out
 
 
-def write(result: Any, page: Page, text: str, *, actor: str, session: str | None) -> Any:
+#: `write`'s `seen` when the caller read nothing to check (`--base` absent on a new page).
+UNSEEN: Any = object()
+
+
+def write(result: Any, page: Page, text: str, *, actor: str, session: str | None, seen: str | None = UNSEEN) -> Any:
     """Write `page` and record it; the checks (`--base`, links) are the caller's, made first.
 
-    The file is replaced whole and atomically, then the history line is appended last, so an interrupted write leaves the record saying nothing that did not happen. `outside` says the file had changed since the last recorded write: the person's own edit, which the trail would otherwise not show.
+    The file and the history's line of it are one act through the door (`loom.writes`), so an interrupted write is finished or put back whole by recovery. `seen` is the page as the caller checked `--base` against it, None for none: under the act's lock the page must still read so, or nothing is written (`changed`), and `from` and `outside` are of what the act read. `outside` says the file had changed since the last recorded write: the person's own edit, which the trail would otherwise not show.
     """
     from loom.history.ledger import append_entry
     from loom.records.snapshots import write_raw
 
     root, history_dir = result.quilt.root, result.quilt.history_dir
-    current = read(root, page)
-    before = writes(root, history_dir, page)
-    last_to = before[-1].get("to") if before else None
-    outside = current is not None and text_hash(current) != last_to
     links = linked(result, root, text)
-    from_hash = write_raw(root, current, history_dir) if current is not None else None
     to_hash = write_raw(root, text, history_dir)
-    p = root / page.path
-    p.parent.mkdir(parents=True, exist_ok=True)
-    tmp = p.with_name(p.name + ".loom-tmp")
-    tmp.write_text(text, encoding="utf-8")
-    os.replace(tmp, p)
-    data: dict[str, Any] = {
-        "page": page.kind,
-        "path": page.path,
-        "from": from_hash,
-        "to": to_hash,
-        "outside": outside,
-        "links": links,
-    }
-    if page.work:
-        data["work"] = page.work
-    if session:
-        data["session"] = session
-    return append_entry(history_dir, ACTION, data, actor)
+    from loom import writes as door
+
+    # one act through the door: the page and the history's line of it, together or not at all
+    with door.act(root, history_dir, "page", actor) as w, door.staging(w):
+        held = w.read(page.path)
+        current = held.decode("utf-8", errors="replace") if held is not None else None
+        if seen is not UNSEEN and current != seen:
+            now = f"it is now {text_hash(current)}" if current is not None else "it is gone"
+            raise door.WriteRefused(
+                "changed",
+                f"{page.name} has changed since you read it; {now}. Read it again, and write over what is there now.",
+            )
+        before = writes(root, history_dir, page)
+        last_to = before[-1].get("to") if before else None
+        data: dict[str, Any] = {
+            "page": page.kind,
+            "path": page.path,
+            "from": write_raw(root, current, history_dir) if current is not None else None,
+            "to": to_hash,
+            "outside": current is not None and text_hash(current) != last_to,
+            "links": links,
+        }
+        if page.work:
+            data["work"] = page.work
+        if session:
+            data["session"] = session
+        w.replace(page.path, text.encode("utf-8"))
+        return append_entry(history_dir, ACTION, data, actor)
 
 
 def published(result: Any, page: Page) -> dict[str, Any] | None:

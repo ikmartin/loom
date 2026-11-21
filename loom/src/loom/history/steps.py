@@ -127,10 +127,11 @@ def refuse_interrupted(history: History) -> None:
 
     A step cut short before its ledger line leaves a directory nothing reads, numbered as the next step will be; writing beside it would give two directories one number, and writing over it would repair the record behind the person's back (P13). So every command that records a step refuses first, naming the directory and the command that clears it, and changes nothing. Call it before anything else is written.
 
-    Read fresh under the ledger's lock: a step another process is writing this moment also has a directory and no line yet, and telling someone to remove that one would destroy it. An absent ledger has no writer, since `write_step` makes it before anything else.
+    Read fresh under the ledger's lock: a step another process is writing this moment also has a directory and no line yet, and telling someone to remove that one would destroy it. An absent ledger has no writer, since `write_step` makes it before anything else. A folder an unsettled act of the door wrote is the door's to settle, not stray (`_door_owns`).
     """
     with locked(history.ledger) if history.ledger.exists() else nullcontext():
-        stray = load_history(history.dir).unrecorded_dirs()
+        owned = _door_owns(history)
+        stray = [d for d in load_history(history.dir).unrecorded_dirs() if d.name not in owned]
     if not stray:
         return
     from loom.errors import EnvError
@@ -148,6 +149,23 @@ def refuse_interrupted(history: History) -> None:
     )
 
 
+def _door_owns(history: History) -> set[str]:
+    """The step folders an act of the door journalled and has not settled (`writes.unsettled`): recovery finishes or puts each back with its act, so none is the person's to remove."""
+    from loom.paths import LOOM
+    from loom.writes import unsettled
+
+    root = next((p for p in history.dir.parents if (p / LOOM).is_dir()), None)
+    if root is None:
+        return set()
+    names: set[str] = set()
+    for entry in unsettled(root, history.dir):
+        for rel in entry.get("files") or {}:
+            path = root / str(rel)
+            if path.parent.parent == history.dir:
+                names.add(path.parent.name)
+    return names
+
+
 def refuse_stale(history: History) -> None:
     """Refuse a step planned from a `history` the ledger has moved past.
 
@@ -163,8 +181,9 @@ def refuse_stale(history: History) -> None:
     EnvError
         When another step has been recorded since `history` was read.
     """
-    now = load_history(history.dir).next_step()
-    if now != history.next_step():
+    # by the ledger's steps alone: `next_step` also counts the step folders on disk, which a stale reading sees too
+    now = max((e.step or 0 for e in load_history(history.dir).entries), default=0) + 1
+    if now != max((e.step or 0 for e in history.entries), default=0) + 1:
         from loom.errors import EnvError
 
         raise EnvError(
@@ -186,19 +205,32 @@ def write_step(
 
     All under the ledger's lock, so two processes never draw one step number; a `history` the ledger has moved past is refused (`refuse_stale`).
     """
+    from loom.writes import is_staging, settle_for_history, stage, stages
+
+    if not is_staging():
+        # what a crash left is settled first; where that recorded a step, the plan is stale and refused below
+        settle_for_history(history.dir)
     refuse_interrupted(history)
     with locked(history.ledger):
         refuse_stale(history)
         n = history.next_step()
         dirname = step_dirname(n, stem)
         step_dir = history.dir / dirname
-        step_dir.mkdir(parents=True)
-        for key, text in plan.texts.items():
-            (step_dir / version_filename(key)).write_text(text, encoding="utf-8")
+        files = {version_filename(key): text for key, text in plan.texts.items()}
         if plan.preamble:
-            (step_dir / "preamble.tex").write_text(plan.preamble_text, encoding="utf-8")
+            files["preamble.tex"] = plan.preamble_text
         if document_text is not None and document_name:
-            (step_dir / document_name).write_text(document_text, encoding="utf-8")
+            files[document_name] = document_text
+        if step_dir.exists():
+            raise FileExistsError(f"{step_dir} exists already")
+        if stages(step_dir):
+            # inside an act that stages loom's records the step's files go with it, written when it is (`writes.staging`)
+            for name, text in files.items():
+                stage(step_dir / name, text.encode("utf-8"))
+        else:
+            step_dir.mkdir(parents=True)
+            for name, text in files.items():
+                (step_dir / name).write_text(text, encoding="utf-8")
         data: dict[str, Any] = {"step": n, "dir": dirname}
         data.update(extra or {})
         data["froze"] = dict(sorted(plan.froze.items()))
