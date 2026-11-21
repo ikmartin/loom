@@ -1,5 +1,6 @@
 <script lang="ts">
 	// The list of works (1, 1 thumbs, 1 add, 1 digest, 1c): a search over titles and authors, the list or its thumbnails, `add work…` and `digest…` over every work, then the works as the column's filter, the search and the sort leave them. An empty library is a box to drop papers in.
+	import { said } from '$lib/library/said';
 	import { library as words } from '$lib/words/library';
 	import { lib } from './state.svelte';
 	import { menus } from './menus.svelte';
@@ -14,7 +15,7 @@
 </script>
 
 {#if lib.works.error && !lib.works.value}
-	<p class="note" role="alert" data-testid="works-failed">{words.works.failed(lib.works.error.message)}</p>
+	<p class="note" role="alert" data-testid="works-failed">{lib.works.error.code === 'not-served' ? words.works.notServed : words.works.failed(said(lib.works.error))}</p>
 {:else if !lib.works.value}
 	<p class="note grey">{words.works.loading}</p>
 {:else if all.length === 0}

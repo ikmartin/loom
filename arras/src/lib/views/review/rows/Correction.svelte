@@ -1,5 +1,6 @@
 <script lang="ts">
 	// An agent's correction to a result the person compared, open: the two texts as one, what it takes out struck and what it puts in marked, each run drawn as a result's text is; the text compared stands until the person takes it, or declines it.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -33,7 +34,7 @@
 		busy = true;
 		const done = take ? await api.takeCorrection(row.correction) : await api.declineCorrection(row.correction);
 		busy = false;
-		message.post(done.ok ? (take ? words.check.taken(row.name) : words.check.declined) : done.error.message);
+		message.post(done.ok ? (take ? words.check.taken(row.name) : words.check.declined) : said(done.error));
 	}
 </script>
 

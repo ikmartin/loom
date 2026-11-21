@@ -6,10 +6,15 @@
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { library as words } from '$lib/words/library';
 	import { lib } from './state.svelte';
+	import { page } from '$app/state';
 	import { menus } from './menus.svelte';
 	import WorksTab from './WorksTab.svelte';
 	import WorkTab from './WorkTab.svelte';
 
+	// the tab the address names
+	$effect(() => {
+		lib.arrive(page.url.searchParams.get('work') ?? 'works');
+	});
 	$effect(() => {
 		void gen.gen;
 		void lib.works.load('works', (s) => api.works(undefined, s));
@@ -32,11 +37,11 @@
 
 <main class="lv" data-testid="library-view">
 	<div class="tabs" role="tablist">
-		<button type="button" class="tab pin" class:on={lib.tab === 'works'} role="tab" aria-selected={lib.tab === 'works'} data-testid="library-tab-works" onclick={() => (lib.tab = 'works')}>{words.tabs.works}</button>
+		<button type="button" class="tab pin" class:on={lib.tab === 'works'} role="tab" aria-selected={lib.tab === 'works'} data-testid="library-tab-works" onclick={() => lib.show('works')}>{words.tabs.works}</button>
 		{#each lib.open as ref (ref)}
 			{@const w = byRef.get(ref)}
 			<div class="tab" class:on={lib.tab === ref} role="tab" tabindex="-1" aria-selected={lib.tab === ref} title={w?.title} data-testid="library-tab">
-				<button type="button" class="linkish name" onclick={() => (lib.tab = ref)}>{w?.short ?? ''}</button>
+				<button type="button" class="linkish name" onclick={() => lib.show(ref)}>{w?.short ?? ''}</button>
 				<button type="button" class="ib x" title={words.tabs.close} aria-label={words.tabs.close} onclick={() => lib.closeWork(ref)}><Icon name="close" size={16} /></button>
 			</div>
 		{/each}

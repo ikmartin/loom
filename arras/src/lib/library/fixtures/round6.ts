@@ -215,6 +215,10 @@ export interface Fixture {
 	checked: string[];
 	/** The notes tab's notes (`notes6.ts`). */
 	notes: Note[];
+	/** Whether the quilt has said loom may use the network; `unasked` refuses a take that does not go without it. */
+	network: 'asked' | 'unasked';
+	/** The work each taken row added, by the row's id, which `library-undo` takes back out. */
+	taken: Record<string, string>;
 }
 
 export function round6(): Fixture {
@@ -223,7 +227,7 @@ export function round6(): Fixture {
 	const okaforRef = REF.okafor;
 	const results: Record<string, Res[]> = { [smithRef]: SMITH.map((r) => ({ ...r })), [REF.arden24]: ARDEN.map((r) => ({ ...r })) };
 	const marks: Record<string, DigestMark[]> = { [okaforRef]: [{ mark: 'a-2026-11-20-okf6', page: 6, words: 'Lemma 2.4. Let ⪯ be a median order…' }] };
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review: review6(REF), checked: [], notes: notes6(REF) };
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review: review6(REF), checked: [], notes: notes6(REF), network: 'asked', taken: {} };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];
@@ -421,9 +425,11 @@ export function check(f: Fixture, node: string): boolean {
 }
 
 /** A work the fixture's intake adds: named by an arXiv number it is round six's Gadget towers, found by that number with its TeX source; any other is a work titled by its file's name. */
-export function addWork(f: Fixture, name: string): Work {
+export function addWork(f: Fixture, name: string, offline = false): Work {
 	const arxiv = /^\d{4}\.\d{4,5}/.test(name);
-	const w: Work = arxiv
+	const w: Work = arxiv && offline
+		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: '', title: `arXiv ${name}`, authors: [], year: '', holds: { pdf: null, tex: false }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: { state: 'unconfirmed', identifier: `arXiv ${name}` }, cited_as: null }
+		: arxiv
 		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: 'Halberd and Ravel 2021', title: 'Gadget towers', authors: ['Halberd', 'Ravel'], year: '2021', holds: { pdf: hashOf('halberd' + f.gen), tex: true }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: null, cited_as: null }
 		: { ref: `tq-${b36(900 + f.gen)}-ref`, short: name, title: name, authors: [], year: '', holds: { pdf: hashOf(name + f.gen), tex: false }, digested: null, used_in: [], link: null, version: null, lookup: null, cited_as: null };
 	if (w.holds.pdf) PAPER_OF[w.holds.pdf] = PAPERS[0];
@@ -457,4 +463,14 @@ export function checkRows(f: Fixture): CheckRow[] {
 		});
 	}
 	return rows;
+}
+
+/** A work looked up: the one an arXiv number names, round six's Gadget towers. */
+export function lookUp(f: Fixture, ref: string): boolean {
+	const w = f.works.find((x) => x.ref === ref);
+	if (!w?.lookup) return false;
+	Object.assign(w, { short: 'Halberd and Ravel 2021', title: 'Gadget towers', authors: ['Halberd', 'Ravel'], year: '2021', holds: { pdf: hashOf('halberd' + ref), tex: true }, lookup: null });
+	if (w.holds.pdf) PAPER_OF[w.holds.pdf] = PAPERS[0];
+	f.gen++;
+	return true;
 }

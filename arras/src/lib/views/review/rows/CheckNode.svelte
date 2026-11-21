@@ -1,5 +1,6 @@
 <script lang="ts">
 	// One digested result open under its work: how its text was made and so how to compare it, its name, its text rendered or plain, "Does loom's copy match the paper?" with the person's yes and no; beside it the paper cropped at the result's place.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -36,7 +37,7 @@
 		busy = true;
 		const done = await api.check(n.node, n.hash);
 		busy = false;
-		message.post(done.ok ? words.check.matched(n.name) : done.error.message);
+		message.post(done.ok ? words.check.matched(n.name) : said(done.error));
 	}
 </script>
 

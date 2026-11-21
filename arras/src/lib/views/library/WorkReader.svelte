@@ -1,5 +1,6 @@
 <script lang="ts">
-	// A work's paper in the one reader (`pdf/MarkedDoc`), in a Library tab or beside a draft in Docs, where it draws no digest marks: today's toolbar and annotation tools, and the Library's own: a `view` menu holding the digest marks, which, while on, draw beside each node of the work on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), and on words selected with no tool in hand, round six's popup: mark to digest, highlight, note, ask an agent. Places are asked for only while the marks are on, for the page in view and its neighbours.
+	// A work's paper in the one reader (`pdf/MarkedDoc`), in a Library tab or beside a draft in Docs, where it draws no digest marks: today's toolbar and annotation tools, and the Library's own: a `view` menu holding the digest marks, which, while on, draw beside each node of the work on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), and on words selected with no tool in hand, round six's popup: mark to digest, highlight, ask an agent (a note beside the words comes with the reader's own annotations re-keyed to the work). Places are asked for only while the marks are on, for the page in view and its neighbours.
+	import { said } from '$lib/library/said';
 	import { untrack } from 'svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { paperMark } from '$lib/marks/marks';
@@ -63,7 +64,7 @@
 		if (!o) return;
 		offered = null;
 		const done = await api.call<{ gen: number; annotation?: string }>('annotate', { target: ref, page: o.page, quote: o.text, rects: o.rects, purpose: 'to-digest' });
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		const id = done.value.annotation;
 		message.post(words.reader.marked(o.page), id ? () => api.call('delete', { annotation: id }) : undefined);
 	}
@@ -73,7 +74,7 @@
 		if (!o) return;
 		offered = null;
 		const done = await api.call('annotate', { target: ref, page: o.page, quote: o.text, rects: o.rects });
-		if (!done.ok) message.post(done.error.message);
+		if (!done.ok) message.post(said(done.error));
 	}
 
 	async function ask(e: SubmitEvent): Promise<void> {
@@ -85,8 +86,11 @@
 		asking = false;
 		question = '';
 		const done = await api.ask('ask', { ref, page: o.page }, { text, quote: o.text }, lib.works.value?.works.find((w) => w.ref === ref)?.used_in ?? []);
-		if (!done.ok) message.post(done.error.message);
+		message.post(done.ok ? words.reader.asked : said(done.error));
 	}
+
+	/** Gives the keyboard to the field as it appears, which `autofocus` does not once the page has loaded. */
+	const focused = (el: HTMLElement) => void queueMicrotask(() => el.focus());
 
 	const bar = (rects: Rect[]) => {
 		const top = Math.min(...rects.map((r) => r[1]));
@@ -132,12 +136,10 @@
 			<div class="selpop" style:left="{offered.at.left}px" style:top="{offered.at.top + offered.at.height + 8}px" data-testid="selection-popup">
 				<button type="button" class="pri" onclick={() => void mark()} data-testid="mark-to-digest"><Mark kind="marked" size={11} /> {words.reader.mark}</button>
 				<button type="button" onclick={() => void highlight()}>{words.reader.highlight}</button>
-				<button type="button" onclick={() => void highlight()}>{words.reader.note}</button>
 				<button type="button" onclick={() => (asking = !asking)}>{words.reader.ask}</button>
 				{#if asking}
 					<form class="askrow" onsubmit={(e) => void ask(e)}>
-						<!-- svelte-ignore a11y_autofocus -->
-						<input class="search" type="text" bind:value={question} placeholder={words.reader.askPlaceholder} autofocus />
+						<input class="search" type="text" bind:value={question} placeholder={words.reader.askPlaceholder} aria-label={words.reader.askPlaceholder} use:focused data-testid="ask-field" />
 						<button type="submit" class="pri">{words.reader.send}</button>
 					</form>
 				{/if}

@@ -1,5 +1,6 @@
 <script lang="ts">
 	// An attested result that changed, open (4i, 4j), in three steps: what the person attested, on its date, beside the Lean they attested; how it reads now, the change marked; and whether the Lean still says it. For a changed definition, the results resting on it below, apart, each asked again one by one.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -34,7 +35,7 @@
 		busy = true;
 		const done = await api.attest(result, b.observation);
 		busy = false;
-		message.post(done.ok ? (result === row.result ? words.attest.attested(name) : words.attested.attestedAgain) : done.error.message);
+		message.post(done.ok ? (result === row.result ? words.attest.attested(name) : words.attested.attestedAgain) : said(done.error));
 	}
 </script>
 

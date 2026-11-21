@@ -137,8 +137,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		padding: 0;
 	}
 	.tool.on {
@@ -146,8 +146,8 @@
 		color: var(--ink);
 	}
 	.step {
-		width: 20px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		padding: 0;
 		font-size: 1.1em;
 		line-height: 1;

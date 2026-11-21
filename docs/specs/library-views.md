@@ -107,7 +107,7 @@ From: index (the references and a count of nodes by `source`), evidence (`compar
 
 **The empty library (1c).** A box: "Drop papers here to start your library", "PDFs, TeX sources, or a .bib file", and the same panel as `add work…`. **Open 6**, closed: the intake takes a dropped `.bib`, an entry a row, and a TeX source, a `.tex` file or an archive, besides PDFs and pasted identifiers (`write-api.md` §6); nothing is matched by title or author.
 
-**A work found while the network is off (1d).** Right after a drop, the row reads "arXiv 2209.01234v2 · look it up on arXiv this once?" with `yes` and `not now`; otherwise, "details unconfirmed · look up". The publisher sends `lookup.state` `unconfirmed` for a reference made from an identifier with no look-up, and `looking` while one runs; whether to ask "this once?" is the viewer's, which asks only right after a drop of its own whose row said `unconfirmed`. `yes` and `look up` are `library-look-up`; `not now` writes nothing. **Open 7.** What makes a reference unconfirmed is not a field of its file, which holds no status. Proposal: the intake's record of the act that made the reference says how its details were found (`found_by`, §3.5) and whether they were looked up; the reference reads `unconfirmed` until a look-up's record follows.
+**A work found while the network is off (1d).** Right after a drop, the row reads "arXiv 2209.01234v2 · look it up on arXiv this once?" with `yes` and `not now`; otherwise, "details unconfirmed · look up". The publisher sends `lookup.state` `unconfirmed` for a reference made from an identifier with no look-up, and `looking` while one runs; whether to ask "this once?" is the viewer's, which asks only right after a drop of its own whose row said `unconfirmed`, naming the row's `identifier` ("arXiv 2209.01234v2"). `yes` is `library-look-up` with `"online": true`, the network for this look-up alone on a quilt that has not said whether loom may use it; `look up` is `library-look-up`; `not now` writes nothing. **Open 7.** What makes a reference unconfirmed is not a field of its file, which holds no status. Proposal: the intake's record of the act that made the reference says how its details were found (`found_by`, §3.5) and whether they were looked up; the reference reads `unconfirmed` until a look-up's record follows.
 
 ### 3.2 A work's tab (2, 2 digest, 2 choose, 3)
 
@@ -226,7 +226,7 @@ Ruled with the spec's merge: nothing is matched by title or author. A dropped fi
 
 **Open 19.** The intake's `question` row ("is this one of these works?") and its `cannot` row have no drawing in round six. Proposal: each is a column message, the question with its candidates as choices and "a work of its own", the cannot with its reason; the `arriving` rows keep them across a reload, as today.
 
-**Open 36.** A drop on a quilt that has not said whether loom may use the network: `library-take` refuses it `network-unasked` (409) and the files wait (`write-api.md` §6). Round six draws no such question, and the viewer asks it nowhere. Proposal: the column's message asks it once ("May loom look papers up on the internet?"), the answer is saved with `settings-save` (`library.online`), and the take is made again.
+**Open 36.** A drop on a quilt that has not said whether loom may use the network: `library-take` refuses it `network-unasked` (409) and the files wait (`write-api.md` §6). Round six draws no such question, and the viewer asked it nowhere. Built in the viewer, as ruled after review: the viewer makes the take again with `"online": false`, which takes the files in without the network, each reference made from an identifier found with its details unconfirmed and its row carrying `unconfirmed: true` and `identifier`; each such row then asks in the list, as 1d draws it, whether to look it up this once. The intake's side, `online` on the take and on `library-look-up`, is the node store's phase 2, which may word it otherwise.
 
 ## 4. Review
 
@@ -442,7 +442,7 @@ Every write the views make, in one place. "Built" marks one that exists today.
 | write | body | answer | what it does |
 | --- | --- | --- | --- |
 | `library-receive`, `library-take`, `library-answer`, `library-undo` | as `write-api.md` §6 | rows | built; the intake, its `added` row now making a reference, with `found_by`, `tex` and `unconfirmed` (§3.5) |
-| `library-look-up` | `{ref}` | `{gen, ref}` | looks up, once and with the network, the identifier the reference states, and writes its details from the record found, unless the person corrected the entry; `no-identifier` (409), `unreachable` (409) |
+| `library-look-up` | `{ref, online?}` | `{gen, ref}` | looks up, once and with the network, the identifier the reference states, and writes its details from the record found, unless the person corrected the entry; `no-identifier` (409), `unreachable` (409) |
 | `library-entry` | `{ref, bibtex}` | `{gen, ref}` | replaces the reference's body with one BibTeX entry (Open 4); `bad-entry` (400), `key-taken` (409) |
 | `library-delete` | `{ref}` | `{gen, undo}` | deletes the work as one act, never refused (§3.1) |
 | `library-restore` | `{undo}` | `{gen, ref}` | puts back what one delete took; `changed` (409) when something has since taken its place |

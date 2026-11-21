@@ -1,5 +1,6 @@
 <script lang="ts">
 	// The `digest…` menu (2 digest, 1 digest), on a work or over the whole list: items that finish the sentence, each with its count, and a quiet foot saying who does the work. Its counts are read when it opens. `results I choose…` starts choosing in the work's outline; the rest digest at once: loom writes the nodes now where it has the TeX source, and an agent is asked where it has only the PDF.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import type { DigestScope, DigestScopes, Work } from '$lib/library/types';
 	import { message } from '$lib/shell/message.svelte';
@@ -25,7 +26,7 @@
 		menus.open = null;
 		const refs = target === 'all' ? (scope === 'all' ? [...lib.multi] : 'all') : [target.ref];
 		const done = await api.digest(refs, scope);
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		const { made, tasks, job } = done.value;
 		message.post(job ? words.digest.reading : made ? words.digest.made(made) : words.digest.asked(tasks.length));
 	}

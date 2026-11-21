@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A proposed edit, or an accepted result that changed, open: the text with its change marked, and keep and discard (or undo the edit, for one an agent made in place), or accept. An edit after which its document stopped compiling says so, with TeX's reason in words.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -19,11 +20,11 @@
 		void body.load(id, (s) => api.reviewRow(id, s));
 	});
 
-	async function act(run: () => ReturnType<typeof api.keep>, said: string): Promise<void> {
+	async function act(run: () => ReturnType<typeof api.keep>, saying: string): Promise<void> {
 		busy = true;
 		const done = await run();
 		busy = false;
-		message.post(done.ok ? said : done.error.message);
+		message.post(done.ok ? saying : said(done.error));
 	}
 </script>
 

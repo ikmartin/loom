@@ -1,9 +1,10 @@
 <script lang="ts">
 	// The list of works drawn as a table (1): the columns the person keeps (Title, Authors, Year and Digested by default; Loom has and Used in from the columns menu), any of them sorting, the title breaking ties. A click opens a work in its tab; ⌘-click selects it for "everything in the papers I select". On a row, its own `digest…` and a menu: its source, its entry, delete. A row being looked up, or made while the network was off, says so in its title's place.
+	import { said } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import * as api from '$lib/library/api';
 	import type { Work } from '$lib/library/types';
-	import { lastAdded } from '$lib/library/added.svelte';
+	import { asking, lastAdded } from '$lib/library/added.svelte';
 	import { message } from '$lib/shell/message.svelte';
 	import { library as words } from '$lib/words/library';
 	import { COLUMNS, lib, type Column } from './state.svelte';
@@ -19,7 +20,7 @@
 		lib.sort = lib.sort.key === c ? { key: c, dir: lib.sort.dir === 1 ? -1 : 1 } : { key: c, dir: 1 };
 	}
 
-	function opened(e: MouseEvent, w: Work): void {
+	function opened(e: MouseEvent | KeyboardEvent, w: Work): void {
 		if (e.metaKey || e.ctrlKey || e.shiftKey) {
 			if (lib.multi.has(w.ref)) lib.multi.delete(w.ref);
 			else lib.multi.add(w.ref);
@@ -35,14 +36,15 @@
 	async function remove(w: Work): Promise<void> {
 		menus.open = null;
 		const done = await api.remove(w.ref);
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		lib.closeWork(w.ref);
 		message.post(words.works.deleted(w.short), () => api.restore(done.value.undo));
 	}
 
-	async function lookUp(w: Work): Promise<void> {
-		const done = await api.lookUp(w.ref);
-		if (!done.ok) message.post(done.error.message);
+	async function lookUp(w: Work, once = false): Promise<void> {
+		asking.delete(w.ref);
+		const done = await api.lookUp(w.ref, once);
+		if (!done.ok) message.post(said(done.error));
 	}
 </script>
 
@@ -77,13 +79,17 @@
 					{#each shownCols as c (c)}
 						{#if c === 'title'}
 							<td class="t">
-								{#if w.lookup?.state === 'looking'}
+								{#if asking.has(w.ref) && w.lookup?.state === 'unconfirmed'}
+									<span>{w.lookup.identifier}</span><span class="found ask">{words.works.lookAsk}</span>
+									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w, true); }} data-testid="look-yes">{words.works.yes}</button>
+									<button type="button" class="linkish small quiet" onclick={(e) => { e.stopPropagation(); asking.delete(w.ref); }} data-testid="look-not">{words.works.notNow}</button>
+								{:else if w.lookup?.state === 'looking'}
 									<span class="grey">{w.title}</span><span class="found">{words.works.lookingUp}</span>
 								{:else if w.lookup?.state === 'unconfirmed'}
 									<span>{w.lookup.identifier}</span><span class="found">{words.works.unconfirmed}</span>
 									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w); }}>{words.works.lookUp}</button>
 								{:else}
-									{w.title}{#if w.version}<span class="found">· {words.works.version(w.version)}</span>{/if}
+									<button type="button" class="open" onclick={(e) => { e.stopPropagation(); opened(e, w); }} data-testid="work-open">{w.title}</button>{#if w.version}<span class="found">· {words.works.version(w.version)}</span>{/if}
 								{/if}
 							</td>
 						{:else if c === 'authors'}
@@ -200,12 +206,33 @@
 		line-height: 0;
 		vertical-align: middle;
 	}
+	/* a row's own controls show on the row under the pointer or holding the keyboard, and are in the tab order always */
 	td.act .ctl {
-		visibility: hidden;
+		opacity: 0;
 	}
 	tr:hover td.act .ctl,
-	tr.hot td.act .ctl {
-		visibility: visible;
+	tr.hot td.act .ctl,
+	tr:focus-within td.act .ctl {
+		opacity: 1;
+	}
+	.open {
+		font: inherit;
+		color: inherit;
+		text-align: left;
+		padding: 0;
+		border: 0;
+		background: none;
+		cursor: pointer;
+	}
+	.open:focus-visible {
+		outline: 2px solid var(--link);
+		outline-offset: 2px;
+	}
+	.found.ask {
+		color: var(--ink);
+	}
+	.quiet {
+		color: var(--ink-faint);
 	}
 	.found {
 		font-family: var(--sans);

@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A work's tab (2, 3): the paper in the one reader, and beside it the result chosen in the outline or on the page. A work loom holds no document of says so, with its own page to open. Its outline is the column's (`shell/column/library/`).
+	import { said } from '$lib/library/said';
 	import { lib } from './state.svelte';
 	import { library as words } from '$lib/words/library';
 	import WorkReader from './WorkReader.svelte';
@@ -12,7 +13,7 @@
 </script>
 
 {#if lib.work.error && !w}
-	<p class="note" role="alert">{lib.work.error.message}</p>
+	<p class="note" role="alert">{said(lib.work.error)}</p>
 {:else if !w}
 	<p class="note grey">{words.works.loading}</p>
 {:else if !w.holds.pdf}

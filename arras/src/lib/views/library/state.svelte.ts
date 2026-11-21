@@ -1,6 +1,8 @@
-// What the Library remembers while the person moves between views: its tabs (the list of works, and a tab for each work open), the list's search, filter, sort, columns and selection, the result beside each work's page, what is being chosen to digest, and the reads on screen. Kept in this module, not the component, since the column and the view both draw from it and a view is taken down when another is shown. The list or thumbnails choice and the digest marks are remembered across visits, per viewer.
+// What the Library remembers while the person moves between views: its tabs (the list of works, and a tab for each work open), the list's search, filter, sort, columns and selection, the result beside each work's page, what is being chosen to digest, and the reads on screen. Kept in this module, not the component, since the column and the view both draw from it and a view is taken down when another is shown. The list or thumbnails choice, the sort, the columns and the digest marks are remembered across visits, per viewer.
 
 import { SvelteSet } from 'svelte/reactivity';
+import { goto } from '$app/navigation';
+import { route } from '$lib/paths';
 import { Annotating } from '$lib/review/annotating.svelte';
 import { PdfView } from '$lib/pdf/view.svelte';
 import { Read } from '$lib/library/read.svelte';
@@ -12,6 +14,19 @@ export const COLUMNS: Column[] = ['title', 'authors', 'year', 'digested', 'holds
 
 const LAYOUT = 'arras.library.layout';
 const OVERLAY = 'arras.library.overlay';
+const SORT = 'arras.library.sort';
+const OPEN = 'arras.library.open';
+
+/** The works open in this browser tab's visit before a reload. */
+function visited(): string[] {
+	try {
+		const v = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(OPEN);
+		return v ? (JSON.parse(v) as string[]) : [];
+	} catch {
+		return [];
+	}
+}
+const COLS = 'arras.library.columns';
 
 function remembered(key: string): string | null {
 	try {
@@ -28,6 +43,16 @@ function remember(key: string, value: string): void {
 	}
 }
 
+/** A choice kept as JSON, or `fallback` where none is kept or it cannot be read. */
+function kept<T>(key: string, fallback: T): T {
+	try {
+		const v = remembered(key);
+		return v ? { ...fallback, ...JSON.parse(v) } : fallback;
+	} catch {
+		return fallback;
+	}
+}
+
 /** What is beside a work's page: a node, or an item of its source not yet digested. */
 export type Beside = { node: string } | { item: string };
 
@@ -35,15 +60,42 @@ class LibraryState {
 	// the list
 	filter = $state<Filter>('all');
 	q = $state('');
-	sort = $state<{ key: Column; dir: 1 | -1 }>({ key: 'title', dir: 1 });
-	cols = $state<Record<Column, boolean>>({ title: true, authors: true, year: true, digested: true, holds: false, used: false });
+	#sort = $state<{ key: Column; dir: 1 | -1 }>(kept(SORT, { key: 'title', dir: 1 }));
+	#cols = $state<Record<Column, boolean>>(kept(COLS, { title: true, authors: true, year: true, digested: true, holds: false, used: false }));
+
+	get sort(): { key: Column; dir: 1 | -1 } {
+		return this.#sort;
+	}
+	set sort(v: { key: Column; dir: 1 | -1 }) {
+		this.#sort = v;
+		remember(SORT, JSON.stringify(v));
+	}
+	get cols(): Record<Column, boolean> {
+		return this.#cols;
+	}
+	set cols(v: Record<Column, boolean>) {
+		this.#cols = v;
+		remember(COLS, JSON.stringify(v));
+	}
 	#layout = $state<'list' | 'thumbs'>(remembered(LAYOUT) === 'thumbs' ? 'thumbs' : 'list');
 	/** Works selected with ⌘-click, for "everything in the papers I select". */
 	multi = new SvelteSet<string>();
 
-	// the tabs
-	open = $state<string[]>([]);
+	// the tabs: the works open, kept for the browser tab's visit so a reload keeps them, and the one shown, which the address says (`/library?work=…`)
+	#open = $state<string[]>(visited());
 	tab = $state<string>('works');
+
+	get open(): string[] {
+		return this.#open;
+	}
+	set open(v: string[]) {
+		this.#open = v;
+		try {
+			sessionStorage.setItem(OPEN, JSON.stringify(v));
+		} catch {
+			// a browser that keeps nothing forgets the open works on a reload
+		}
+	}
 
 	// a work's tab
 	beside = $state<Record<string, Beside | null>>({});
@@ -79,14 +131,26 @@ class LibraryState {
 	/** Opens a work in a tab of its own, or goes to its tab. */
 	openWork(ref: string): void {
 		if (!this.open.includes(ref)) this.open = [...this.open, ref];
-		this.tab = ref;
+		this.show(ref);
+	}
+
+	/** Shows a tab by going to its address, so Back and Forward move between the Library's tabs and a reload stays on it. */
+	show(tab: string): void {
+		this.tab = tab;
+		void goto(route('/library') + (tab === 'works' ? '' : `?work=${encodeURIComponent(tab)}`), { keepFocus: true, noScroll: true });
+	}
+
+	/** The tab the address names, opened where it is not: what a reload, Back, Forward or a link lands on. */
+	arrive(tab: string): void {
+		if (tab !== 'works' && !this.open.includes(tab)) this.open = [...this.open, tab];
+		this.tab = tab;
 	}
 
 	/** Closes a work's tab; the tab to its left, or the list, comes forward. */
 	closeWork(ref: string): void {
 		const at = this.open.indexOf(ref);
 		this.open = this.open.filter((r) => r !== ref);
-		if (this.tab === ref) this.tab = this.open[Math.max(0, at - 1)] ?? 'works';
+		if (this.tab === ref) this.show(this.open[Math.max(0, at - 1)] ?? 'works');
 		if (this.choosing === ref) this.stopChoosing();
 	}
 

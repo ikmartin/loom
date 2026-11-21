@@ -1,5 +1,6 @@
 <script lang="ts">
 	// An agent's question, open: its choices as buttons, and a field for an answer in the person's own words. Either answers it, and the agent is told.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import type { QuestionRow } from '$lib/library/types';
 	import { message } from '$lib/shell/message.svelte';
@@ -13,7 +14,7 @@
 		busy = true;
 		const done = await api.answer(row.task, choice, choice === null ? own.trim() : '');
 		busy = false;
-		message.post(done.ok ? words.questions.answered(row.by) : done.error.message);
+		message.post(done.ok ? words.questions.answered(row.by) : said(done.error));
 	}
 </script>
 

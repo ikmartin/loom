@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A Lean statement to attest, open (6): the whole statement as the draft has it; part by part what was written, the Lean that states it and the agent's reading; folded, what it uses that the person attested already and the declarations that serve only the proof; the agent's note of a difference; then "Does the Lean say what you wrote?" and what the yes covers.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -38,7 +39,7 @@
 		busy = true;
 		const done = await api.attest(row.result, b.observation);
 		busy = false;
-		message.post(done.ok ? words.attest.attested(row.name) : done.error.message);
+		message.post(done.ok ? words.attest.attested(row.name) : said(done.error));
 	}
 </script>
 

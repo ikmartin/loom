@@ -11,10 +11,13 @@ export function passes(w: Work, filter: Filter): boolean {
 	return true;
 }
 
-/** Whether a work's title or an author's name holds the words typed, ignoring case. */
+/** Text as search compares it: lower case, its accents taken off, so "kovac" finds "Kovač". */
+export const folded = (t: string): string => t.normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+
+/** Whether a work's title or an author's name holds the words typed, ignoring case and accents. */
 export function matches(w: Work, q: string): boolean {
-	const words = q.trim().toLowerCase();
-	return !words || `${w.title} ${w.authors.join(' ')}`.toLowerCase().includes(words);
+	const words = folded(q.trim());
+	return !words || folded(`${w.title} ${w.authors.join(' ')}`).includes(words);
 }
 
 /** What a column sorts a work by. */
@@ -31,6 +34,8 @@ function key(w: Work, col: Column): string | number {
 export function shown(works: readonly Work[], o: { filter: Filter; q: string; sort: { key: Column; dir: 1 | -1 } }): Work[] {
 	const out = works.filter((w) => passes(w, o.filter) && matches(w, o.q));
 	return out.sort((a, b) => {
+		// a work with no year stands after those with one, whichever way the years run
+		if (o.sort.key === 'year' && !Number(a.year) !== !Number(b.year)) return Number(a.year) ? -1 : 1;
 		const x = key(a, o.sort.key);
 		const y = key(b, o.sort.key);
 		return (x < y ? -1 : x > y ? 1 : 0) * o.sort.dir || a.title.localeCompare(b.title);

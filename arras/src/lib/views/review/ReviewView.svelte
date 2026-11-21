@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Review's list (`docs/specs/library-views.md` §4.2): under Everything a group for each kind, ordered by who is waiting, each folding, then a rule and the tasks waiting for an agent, folded; a kind alone when the column chooses one; narrowed to a draft when the column chooses one. Read again whenever the library's generation moves.
+	import { said } from '$lib/library/said';
 	import './review.css';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
@@ -29,7 +30,7 @@
 		{#if rv.kind === 'incoming'}
 			<Pull />
 		{:else if rv.list.error}
-			<p class="empty">{words.list.failed(rv.list.error.message)}</p>
+			<p class="empty">{rv.list.error.code === 'not-served' ? words.list.notServed : words.list.failed(said(rv.list.error))}</p>
 		{:else if !rv.list.value}
 			<p class="empty">{words.list.loading}</p>
 		{:else if !groups.length}

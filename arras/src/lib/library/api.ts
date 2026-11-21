@@ -50,9 +50,11 @@ export const server: Source = {
 				forgetCapabilities();
 				res = await send();
 			}
-			const payload = (await res.json().catch(() => ({}))) as T & { error?: ApiError };
+			// an answer that is not loom's JSON is a host that serves no write API: the read is not served here
+			const payload = (await res.json().catch(() => null)) as (T & { error?: ApiError }) | null;
+			if (!payload || payload.error?.code === 'unknown-endpoint') return { ok: false, error: { code: 'not-served', message: '' } };
 			if (res.ok && !payload.error) return { ok: true, value: payload };
-			return { ok: false, error: payload.error ?? { code: res.status === 404 ? 'not-served' : 'failed', message: `the publisher answered ${res.status}` } };
+			return { ok: false, error: payload.error ?? { code: 'failed', message: '' } };
 		} catch (err) {
 			return { ok: false, error: { code: 'unreachable', message: (err as Error).message } };
 		}
@@ -74,7 +76,7 @@ export const server: Source = {
 			}
 			const payload = (await res.json().catch(() => ({}))) as { incoming: string; name: string; size: number; error?: ApiError };
 			if (res.ok && !payload.error) return { ok: true as const, value: payload };
-			return { ok: false as const, error: payload.error ?? { code: 'failed', message: `the publisher answered ${res.status}` } };
+			return { ok: false as const, error: payload.error ?? { code: 'failed', message: '' } };
 		} catch (err) {
 			return { ok: false as const, error: { code: 'unreachable', message: (err as Error).message } };
 		}
@@ -151,8 +153,10 @@ export const digest = (refs: string[] | 'all', scope: DigestScope, chosen?: stri
 export const check = (node: string, hash: string) => call<WriteDone>('library-check', { node, hash });
 export const remove = (ref: string) => call<WriteDone & { undo: string }>('library-delete', { ref });
 export const restore = (undo: string) => call<WriteDone & { ref: string }>('library-restore', { undo });
-export const lookUp = (ref: string) => call<WriteDone>('library-look-up', { ref });
-export const take = (items: ({ incoming: string; for?: string } | { text: string })[]) => call<WriteDone & { rows: TakeRow[] }>('library-take', { items });
+/** Looks a work up by the identifier its reference states; `once`, with the network this once, on a quilt that has not said whether loom may use it. */
+export const lookUp = (ref: string, once = false) => call<WriteDone>('library-look-up', { ref, ...(once ? { online: true } : {}) });
+/** Takes received files and pasted works in; `online: false` takes them without the network, each reference's details unconfirmed. */
+export const take = (items: ({ incoming: string; for?: string } | { text: string })[], online?: false) => call<WriteDone & { rows: TakeRow[] }>('library-take', { items, ...(online === false ? { online } : {}) });
 export const undoTake = (id: string, act?: string) => call<WriteDone>('library-undo', { id, ...(act ? { act } : {}) });
 export const answer = (task: string, choice: number | null, words: string) => call<WriteDone>('review-answer', { task, ...(choice === null ? {} : { choice }), words });
 export const takeCorrection = (correction: string) => call<WriteDone>('library-correction-take', { correction });
@@ -168,7 +172,7 @@ async function built(name: string, body: Record<string, unknown>, send: () => Pr
 	await chosen;
 	if (source !== server) return source.call<WriteDone>(name, body);
 	const done = await send();
-	return done.ok ? { ok: true, value: { gen: 0 } } : { ok: false, error: done.error ?? { code: 'failed', message: name } };
+	return done.ok ? { ok: true, value: { gen: 0 } } : { ok: false, error: done.error ?? { code: 'failed', message: '' } };
 }
 /** Keep and discard answer `ok` with each change refused listed apart; one change refused is this act refused. */
 const one = async (sent: Promise<ChangeAnswer>) => {
@@ -191,6 +195,8 @@ export interface TakeRow {
 	short?: string;
 	title?: string;
 	found_by?: 'arxiv' | 'doi' | 'isbn' | 'entry' | 'row' | 'none';
+	/** The identifier loom found, as the row names it ("arXiv 2209.01234v2"). */
+	identifier?: string;
 	tex?: boolean;
 	unconfirmed?: boolean;
 	why?: string;

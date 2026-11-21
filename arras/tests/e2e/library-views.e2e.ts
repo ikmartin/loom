@@ -81,7 +81,9 @@ test("a work's tab: its outline, a result beside its page, and the person's yes"
 	await expect(page.getByTestId('node-side')).toContainText("Does loom's copy match the paper?");
 	await page.getByTestId('it-matches').click();
 	await expect(radius.locator('[data-mark="checked"]')).toHaveCount(1);
-	await expect(page.getByTestId('column-message')).toContainText('Definition 3.1 matches the paper');
+	// the yes opens the next result not compared, beside its page
+	await expect(page.getByTestId('column-message')).toContainText('Definition 3.1 matches the paper; the next not compared is open.');
+	await expect(page.getByTestId('node-side')).toContainText('Lemma 3.2');
 });
 
 test('results chosen in the outline are digested from the TeX source', async ({ page }) => {
@@ -152,4 +154,105 @@ test('no control in the Library changes view, and no id is drawn', async ({ page
 	}
 	const text = await page.locator('body').innerText();
 	expect(text).not.toMatch(/\btq-[0-9A-Z]{4}\b/);
+});
+
+test("a work's tab has an address: a reload keeps the open works, and Back stays within the Library", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page).toHaveURL(/\/library\?work=/);
+	await page.reload();
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await expect(page.getByTestId('library-tab')).toHaveCount(1);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/library(\?fixture=round6)?$/);
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await expect(page.getByTestId('library-tab')).toHaveCount(1);
+});
+
+test("the list works from the keyboard: a row's title opens its work, and its own controls show while it holds the keyboard", async ({ page }) => {
+	await open(page);
+	const smith = row(page, 'Widgets and their bounds');
+	await smith.getByTestId('work-open').focus();
+	await expect(smith.getByTestId('row-digest')).toHaveCSS('opacity', '1');
+	await page.keyboard.press('Tab');
+	await expect(smith.getByTestId('row-digest')).toBeFocused();
+	await smith.getByTestId('work-open').focus();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+});
+
+test('several files chosen at once are said together, and one undo takes every work back', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('choose-files-input').setInputFiles([
+		{ name: 'alpha.pdf', mimeType: 'application/pdf', buffer: PAPER },
+		{ name: 'beta.pdf', mimeType: 'application/pdf', buffer: PAPER },
+		{ name: 'gamma.pdf', mimeType: 'application/pdf', buffer: PAPER }
+	]);
+	await expect(page.getByTestId('column-message')).toContainText('Added 3 works.');
+	await expect(page.getByTestId('work-row')).toHaveCount(303);
+	await page.getByTestId('column-message-undo').click();
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+});
+
+test('on a quilt that has not said whether loom may use the network, a work added by an identifier asks in its row to be looked up this once', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6&network=unasked');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('2209.01234v2');
+	await page.getByTestId('paste-identifier').press('Enter');
+	const added = row(page, 'arXiv 2209.01234v2');
+	await expect(added).toContainText('look it up this once?');
+	await added.getByTestId('look-yes').click();
+	await expect(row(page, 'Gadget towers')).toBeVisible();
+	await expect(row(page, 'Gadget towers')).not.toContainText('look it up');
+});
+
+test('with no backend, the list says so in a sentence, with no name of an endpoint', async ({ page }) => {
+	await page.goto('/library');
+	await expect(page.getByTestId('works-failed')).toHaveText('This loom does not serve the Library yet.');
+});
+
+test('the chosen columns and the sort are kept across a reload', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('sort-year').click();
+	await page.getByTestId('works-columns').click();
+	await page.getByTestId('col-holds').click();
+	await page.reload();
+	await expect(page.getByTestId('sort-year').locator('xpath=..')).toHaveAttribute('aria-sort', 'ascending');
+	await expect(page.getByTestId('sort-holds')).toBeVisible();
+});
+
+test("words selected on a page offer no note yet, and an agent's question takes the keyboard and is said", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	const reader = page.getByTestId('work-reader');
+	await expect(reader.locator('.text span').first()).toBeAttached();
+	await reader.evaluate((box) => {
+		const span = [...box.querySelectorAll('.text span')].find((s) => (s.textContent ?? '').trim().length > 8)!;
+		const range = document.createRange();
+		range.selectNodeContents(span);
+		getSelection()!.removeAllRanges();
+		getSelection()!.addRange(range);
+		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+	const pop = page.getByTestId('selection-popup');
+	await expect(pop).toBeVisible();
+	await expect(pop.getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
+	await pop.getByRole('button', { name: 'ask an agent…' }).click();
+	await expect(page.getByTestId('ask-field')).toBeFocused();
+	await page.keyboard.type('Is this the bound used in Section 4?');
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('column-message')).toContainText('Added to agent tasks: a question on these words.');
+});
+
+test("the reader's zoom controls are 28 pixel targets", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	for (const id of ['zoom-fit', 'zoom-out', 'zoom-in']) {
+		const box = (await page.getByTestId('work-reader').getByTestId(id).boundingBox())!;
+		expect(Math.round(box.width)).toBeGreaterThanOrEqual(28);
+		expect(Math.round(box.height)).toBeGreaterThanOrEqual(28);
+	}
 });

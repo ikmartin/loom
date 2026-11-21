@@ -1,5 +1,6 @@
 <script lang="ts">
 	// `locate…` on a cited result: the draft's sentence that cites it, its citation marked; beside it a find bar filled with the result's name and what loom found, and the page, the words found washed. The person selects the passage and marks it to digest, which names the result, and in the same gesture asks an agent to read it from there; the result then waits for the agent, and the column says where it was marked.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -41,9 +42,9 @@
 		if (!c) return;
 		chosen = null;
 		const done = await api.call<{ gen: number; annotation?: string }>('annotate', { target: row.ref, page: c.page, quote: c.text, rects: c.rects, purpose: 'to-digest', node: stub.node });
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		const asked = await api.ask('read', { node: stub.node }, { nodes: [stub.node] }, stub.rests.docs);
-		message.post(asked.ok ? words.cited.markedOn(c.page) : asked.error.message);
+		message.post(asked.ok ? words.cited.markedOn(c.page) : said(asked.error));
 	}
 </script>
 

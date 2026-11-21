@@ -81,6 +81,14 @@ export const frame = {
 		/** A result's Lean mark, an outlined diamond. */
 		not: 'not formalized'
 	},
+	errors: {
+		/** Where the publisher does not serve what was asked of it yet. */
+		notServed: 'This loom does not serve that yet.',
+		/** Where the publisher could not be reached. */
+		unreachable: 'Loom could not be reached.',
+		/** Where the publisher answered with no reason a person can read. */
+		failed: 'Loom could not do that.'
+	},
 	page: {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',

@@ -42,7 +42,9 @@ export const web = {
 		/** While the first answer has not come. */
 		loading: 'Reading the web…',
 		/** Where the Web's reads failed, with the publisher's reason. */
-		failed: (why: string) => `The web could not be read: ${why}`
+		failed: (why: string) => `The web could not be read: ${why}`,
+		/** In place of the list where the publisher does not serve its reads yet. */
+		notServed: 'This loom does not serve the Web yet.'
 	},
 	choose: {
 		/** The box on a result of the person's not formalized, its accessible name. */

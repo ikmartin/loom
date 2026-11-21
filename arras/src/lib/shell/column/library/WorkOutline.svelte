@@ -54,6 +54,8 @@
 		const found = await api.find(ref, first.name);
 		if (found.ok && found.value.hits[0]) lib.go(ref, found.value.hits[0].page);
 	}
+	/** The person's marks in page order, whatever order they were made in. */
+	const byPage = $derived([...work.marks].sort((a, b) => a.page - b.page));
 </script>
 
 {#if outline?.from === 'tex'}
@@ -95,7 +97,7 @@
 	{#each pdfOwn.filter((e) => e.level === 1) as e, i (i)}
 		{@const at = pdfOwn.indexOf(e)}
 		<button type="button" class="osec" onclick={() => e.page && lib.go(ref, e.page)}>{e.title}{#if e.page}<span class="pg">{words.column.page(e.page)}</span>{/if}</button>
-		{@const marks = work.marks.filter((m) => sectionOf(pdfOwn, m.page) === at)}
+		{@const marks = byPage.filter((m) => sectionOf(pdfOwn, m.page) === at)}
 		{@const items = outline.items.filter((it) => it.page !== null && sectionOf(pdfOwn, it.page) === at)}
 		{#if marks.length || items.length}
 			<ul class="olist">
@@ -110,7 +112,7 @@
 	{/each}
 	{#if pdfOwn.length === 0 && work.marks.length}
 		<ul class="olist">
-			{#each work.marks as m (m.mark)}
+			{#each byPage as m (m.mark)}
 				<li><button type="button" class="row" onclick={() => lib.go(ref, m.page)} data-testid="outline-mark"><span class="slot"><Mark kind="marked" /></span><span class="slot"></span><span class="nm">{words.column.page(m.page)}</span><span class="mk">“{m.words}”</span></button></li>
 			{/each}
 		</ul>

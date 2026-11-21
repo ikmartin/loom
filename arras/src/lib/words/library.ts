@@ -80,7 +80,7 @@ export const library = {
 		editEntry: 'edit its entry…',
 		delete: 'delete',
 		/** A row looked up while the network is off: the identifier loom found, and the question. */
-		lookAsk: (identifier: string) => `${identifier} · look it up this once?`,
+		lookAsk: 'look it up this once?',
 		yes: 'yes',
 		notNow: 'not now',
 		/** A row whose details were not looked up. */
@@ -92,6 +92,8 @@ export const library = {
 		loading: 'Loading the library…',
 		/** The list when its read failed. */
 		failed: (why: string) => `The library could not be read: ${why}`,
+		/** In place of the list where the publisher does not serve its reads yet. */
+		notServed: 'This loom does not serve the Library yet.',
 		/** The column's message after a work was deleted. */
 		deleted: (short: string) => `Deleted ${short}, with its results and notes`
 	},
@@ -106,13 +108,21 @@ export const library = {
 		paste: 'or paste an arXiv number or DOI',
 		drop: 'or drop files anywhere in loom',
 		/** The column's message after a work was added: its title, its short name, and how it was known. */
-		added: (title: string, short: string, how: string, tex: boolean) => `Added ${title}, ${short}${how ? `, found by its ${how}` : ''}${tex ? ', with its TeX source' : ''}.`,
+		added: (title: string, short: string, how: string, tex: boolean) => `Added ${title}${short && short !== title ? `, ${short}` : ''}${how ? `, found by its ${how}` : ''}${tex ? ', with its TeX source' : ''}.`,
 		/** What a work was known by, in the message. */
 		foundBy: { arxiv: 'arXiv number', doi: 'DOI', isbn: 'ISBN', entry: 'entry', row: 'row', none: '' } as Record<string, string>,
 		/** The column's message when loom already holds the dropped file's work. */
 		here: (name: string, short: string) => `${name} is ${short}, already in your library.`,
 		/** The column's message when a drop could not be added. */
-		cannot: (name: string, why: string) => `${name} was not added: ${why}`
+		cannot: (name: string, why: string) => `${name} was not added: ${why}`,
+		/** The column's message after a drop of several: how many were added, then each that was not, joined by a semicolon. */
+		many: (added: number, others: string[]) => [added ? `Added ${added} ${added === 1 ? 'work' : 'works'}` : '', ...others].filter(Boolean).join('; ') + '.',
+		/** A file of such a drop that loom already held. */
+		hereShort: (name: string, short: string) => `${name} is ${short}, already in your library`,
+		/** A file of such a drop that was not added. */
+		cannotShort: (name: string, why: string) => `${name} was not added: ${why.replace(/\.$/, '')}`,
+		/** A file of a drop that loom has a question about, answered in its row. */
+		question: (name: string) => `${name} waits for your answer in its row`
 	},
 	drop: {
 		/** The cover over any view while a file is dragged over the window. */
@@ -166,6 +176,8 @@ export const library = {
 		highlight: 'highlight',
 		note: 'note',
 		ask: 'ask an agent…',
+		/** The column's message once a question on selected words is sent. */
+		asked: 'Added to agent tasks: a question on these words.',
 		/** The column's message after marking a place to digest. */
 		marked: (page: number) => `Marked on page ${page}, to digest`,
 		/** A work with no document, in place of the reader. */
@@ -197,6 +209,8 @@ export const library = {
 		/** The label over the results it uses. */
 		uses: 'uses',
 		/** The column's message after the yes. */
-		checked: (name: string) => `${name} matches the paper`
+		checked: (name: string) => `${name} matches the paper`,
+		/** The column's message after a yes that opened the next result not compared. */
+		checkedNext: (name: string) => `${name} matches the paper; the next not compared is open.`
 	}
 } as const;

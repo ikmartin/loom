@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A result beside its page (2): its name, where it stands and how loom has it, its statement rendered or plain, the question "Does loom's copy match the paper?" while it is not compared, its Lean mark, and what it uses, each with its mark; a use in another work opens that work in a Library tab at the use's place. A result of the source not digested yet, and a stub, offer `digest it`.
+	import { said } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { leanMark, paperMark } from '$lib/marks/marks';
@@ -28,17 +29,25 @@
 	const n = $derived(node.value);
 	const how = $derived(!n ? '' : !n.digested ? (n.paper === 'stub' ? words.side.how.stub : words.side.how.none) : words.side.how[n.digested.how]);
 
+	/** The person's yes, and the next result of the work not compared, in the outline's order after this one, opened beside its page. */
 	async function yes(): Promise<void> {
 		if (!n?.node || !n.hash) return;
-		const done = await api.check(n.node, n.hash);
-		if (!done.ok) return message.post(done.error.message);
-		message.post(words.side.checked(n.name));
+		const at = n.node;
+		const done = await api.check(at, n.hash);
+		if (!done.ok) return message.post(said(done.error));
+		const items = lib.work.value?.ref === ref ? (lib.work.value.outline?.items ?? []) : [];
+		const here = items.findIndex((i) => i.node === at);
+		const next = [...items.slice(here + 1), ...items.slice(0, Math.max(here, 0))].find((i) => i.node && i.node !== at && i.paper === 'unchecked');
+		if (!next?.node) return message.post(words.side.checked(n.name));
+		lib.beside = { ...lib.beside, [ref]: { node: next.node } };
+		if (next.page) lib.go(ref, next.page);
+		message.post(words.side.checkedNext(n.name));
 	}
 
 	async function digestIt(): Promise<void> {
 		const target = 'item' in beside ? beside.item : beside.node;
 		const done = await api.digest([ref], 'chosen', [target]);
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		message.post(done.value.job ? words.digest.reading : words.digest.made(done.value.made));
 	}
 
@@ -55,7 +64,7 @@
 <aside class="side" data-testid="node-side">
 	<button type="button" class="ib x" title={words.side.close} aria-label={words.side.close} onclick={() => (lib.beside = { ...lib.beside, [ref]: null })}><Icon name="close" size={16} /></button>
 	{#if node.error && !n}
-		<p class="grey small" role="alert">{node.error.message}</p>
+		<p class="grey small" role="alert">{said(node.error)}</p>
 	{:else if n}
 		<div class="nh">{n.name}{#if n.title}<span class="tl">{n.title}</span>{/if}</div>
 		<div class="nsrc">{words.side.where(n.pages ?? '', how)}</div>

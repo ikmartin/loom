@@ -48,7 +48,9 @@ export const review = {
 		/** The list while its first answer has not come. */
 		loading: 'Reading what waits for you…',
 		/** The list when Review's reads failed, with the publisher's reason. */
-		failed: (why: string) => `Review could not be read: ${why}`
+		failed: (why: string) => `Review could not be read: ${why}`,
+		/** In place of the list where the publisher does not serve its reads yet. */
+		notServed: "This loom does not serve Review's lists yet."
 	},
 	/** A row's first line: where it is, as "main.tex · Lemma 3.3" or "Smith 2024 · 9 results". */
 	at: (where: string, what: string) => `${where} · ${what}`,

@@ -31,4 +31,11 @@ describe('the list of works', () => {
 		// digested first, then by title
 		expect(by('digested', 1)).toEqual(['c', 'a', 'b']);
 	});
+
+	it('finds a name typed without its accents, and puts a work with no year last whichever way the years run', () => {
+		const ws = [work({ title: 'A', authors: ['Kovač'], year: '1982' }), work({ title: 'B', authors: ['Smith'] }), work({ title: 'C', authors: ['Arden'], year: '2024' })];
+		expect(shown(ws, { filter: 'all', q: 'kovac', sort: { key: 'title', dir: 1 } }).map((w) => w.title)).toEqual(['A']);
+		expect(shown(ws, { filter: 'all', q: '', sort: { key: 'year', dir: 1 } }).map((w) => w.title)).toEqual(['A', 'C', 'B']);
+		expect(shown(ws, { filter: 'all', q: '', sort: { key: 'year', dir: -1 } }).map((w) => w.title)).toEqual(['C', 'A', 'B']);
+	});
 });

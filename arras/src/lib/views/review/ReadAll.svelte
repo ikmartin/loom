@@ -1,5 +1,6 @@
 <script lang="ts">
 	// Over the cited results: `ask an agent to read all N`, a task for each.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import type { ReviewRow, TaskRow } from '$lib/library/types';
 	import { message } from '$lib/shell/message.svelte';
@@ -16,7 +17,7 @@
 			const done = await api.ask('read', { node: s.node }, { nodes: [s.node] }, s.docs);
 			if (!done.ok) {
 				busy = false;
-				return message.post(done.error.message);
+				return message.post(said(done.error));
 			}
 		}
 		busy = false;

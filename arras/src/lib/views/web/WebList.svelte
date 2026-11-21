@@ -1,5 +1,6 @@
 <script lang="ts">
 	// The Web's list (7a, 7a draft, 7a search): a search, how many results, and by document or by status. By document, the draft's results, then the library's it rests on a work at a time; under everything, the drafts and the works folded. A folded group is read when it opens (`web-group`). A search shows its hits, each with the words around the match.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import type { Row, WebGroup, WebSearch, WebSection } from '$lib/library/types';
@@ -69,7 +70,7 @@
 				{#if h.snippet}<p class="hit" data-testid="web-hit">{h.snippet.before}<mark>{h.snippet.match}</mark>{h.snippet.after}</p>{/if}
 			{:else}<p class="outscope">{words.list.nothing}</p>{/each}
 		{:else if wb.list.error}
-			<p class="outscope">{words.list.failed(wb.list.error.message)}</p>
+			<p class="outscope">{wb.list.error.code === 'not-served' ? words.list.notServed : words.list.failed(said(wb.list.error))}</p>
 		{:else if !list}
 			<p class="outscope">{words.list.loading}</p>
 		{:else if list.rows}

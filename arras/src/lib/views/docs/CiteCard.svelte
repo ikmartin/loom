@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A citation's card in a draft (8c): the cited result's name and title, its work and page, its marks with their words, its statement, and `open at its place`, which opens the work beside the draft there; on a stub, that loom knows it only by its number, `locate in PDF`, which opens the work where loom finds its name, and `ask an agent to read it`.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { Read } from '$lib/library/read.svelte';
 	import type { NodeAnswer } from '$lib/library/types';
@@ -43,7 +44,7 @@
 	}
 	async function ask(): Promise<void> {
 		const done = await api.ask('read', { node }, { nodes: [node] }, doc ? [doc] : []);
-		message.post(done.ok ? words.card.asked : done.error.message);
+		message.post(done.ok ? words.card.asked : said(done.error));
 		ondone();
 	}
 </script>

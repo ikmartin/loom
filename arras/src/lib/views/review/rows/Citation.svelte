@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A citation that names no result, open: the draft's sentence with the citation marked, what to add with an example in the person's own key, `ask an agent which result` (its answer comes back as a proposed edit) and `only a mention`, which is remembered.
+	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -23,13 +24,13 @@
 		busy = true;
 		const done = await api.ask('which-result', { citation: row.citation }, { cites: row.ref }, row.docs);
 		busy = false;
-		message.post(done.ok ? words.citation.askedWhich : done.error.message);
+		message.post(done.ok ? words.citation.askedWhich : said(done.error));
 	}
 	async function mention(): Promise<void> {
 		busy = true;
 		const done = await api.mention(row.citation);
 		busy = false;
-		message.post(done.ok ? words.citation.mentioned : done.error.message);
+		message.post(done.ok ? words.citation.mentioned : said(done.error));
 	}
 </script>
 

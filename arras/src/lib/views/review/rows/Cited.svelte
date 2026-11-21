@@ -1,5 +1,6 @@
 <script lang="ts">
 	// A work's cited results to digest, open: a row for each under it, tied by a line, each with `ask an agent to read it` and `locate…`, which opens the draft's sentence citing it beside the paper at what loom found of its name, where the person marks the passage.
+	import { said } from '$lib/library/said';
 	import Mark from '$lib/marks/Mark.svelte';
 	import * as api from '$lib/library/api';
 	import type { CitedRow } from '$lib/library/types';
@@ -14,7 +15,7 @@
 
 	async function read(node: string, docs: string[]): Promise<void> {
 		const done = await api.ask('read', { node }, { nodes: [node] }, docs);
-		message.post(done.ok ? words.cited.asked : done.error.message);
+		message.post(done.ok ? words.cited.asked : said(done.error));
 	}
 </script>
 

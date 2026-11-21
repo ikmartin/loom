@@ -2,7 +2,7 @@
 
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
-import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { addWork, check, checkRows, digest, fixturePdfUrl, lookUp, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
 import { notesAnswer } from './notes6';
 import { formalMarks, formalPlan, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
 import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
@@ -14,8 +14,9 @@ type Body = Record<string, unknown>;
 const CITED: Record<string, string> = { arden24: '[1]', okafor: '[2]', arden25: '[3]', vance: '[4]' };
 
 /** A source over a fresh copy of round six's data; `onChange` hears each write's new generation. */
-export function fixtureSource(onChange: (gen: number) => void = () => {}): Source & { data: Fixture } {
+export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'unasked' } = {}): Source & { data: Fixture } {
 	const f = round6();
+	if (o.network) f.network = o.network;
 	const ok = <T>(value: T): Answer<T & Gen> => ({ ok: true, value: { gen: f.gen, ...value } as T & Gen });
 	const no = (code: string, message = code) => ({ ok: false as const, error: { code, message } });
 	const changed = () => onChange(f.gen);
@@ -170,13 +171,32 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'review-accept': (b) => closing((r) => r.kind === 'accepted-changed' && (b.keys as string[]).includes(r.key)),
 		'library-correction-take': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),
 		'library-correction-decline': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),
-		'library-look-up': () => ok({}),
-		'library-undo': () => ok({}),
+		'library-look-up': (b) => {
+			if (f.network === 'unasked' && b.online !== true) return no('network-unasked', '');
+			if (!lookUp(f, b.ref as string)) return no('no-identifier', '');
+			changed();
+			return ok({ ref: b.ref });
+		},
+		// undoing an add takes the work it added back out
+		'library-undo': (b) => {
+			const ref = f.taken[b.id as string];
+			const i = f.works.findIndex((w) => w.ref === ref);
+			if (i >= 0) f.works.splice(i, 1);
+			delete f.taken[b.id as string];
+			f.gen++;
+			changed();
+			return ok({});
+		},
 		'library-take': (b) => {
+			const offline = b.online === false;
+			if (f.network === 'unasked' && !offline) return no('network-unasked', '');
 			const rows = ((b.items as { incoming?: string; text?: string; for?: string }[]) ?? []).map((it, item) => {
 				const name = it.incoming ? it.incoming.replace(/^f-\d+-/, '') : (it.text ?? '');
-				const added = addWork(f, name);
-				return { id: `d-${f.gen}-${item}`, item, name, state: 'added', act: 'add', ref: added.ref, short: added.short, title: added.title, found_by: /^\d{4}\.\d{4,5}/.test(name) ? 'arxiv' : 'none', tex: /^\d{4}\.\d{4,5}/.test(name), unconfirmed: false };
+				const arxiv = /^\d{4}\.\d{4,5}/.test(name);
+				const added = addWork(f, name, offline);
+				const id = `d-${f.gen}-${item}`;
+				f.taken[id] = added.ref;
+				return { id, item, name, state: 'added', act: 'add', ref: added.ref, short: added.short, title: added.title, found_by: arxiv ? 'arxiv' : 'none', tex: arxiv && !offline, unconfirmed: offline && arxiv, ...(offline && arxiv ? { identifier: `arXiv ${name}` } : {}) };
 			});
 			changed();
 			return ok({ rows });
