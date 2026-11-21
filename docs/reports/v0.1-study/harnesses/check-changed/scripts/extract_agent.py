@@ -12,14 +12,13 @@ import sys
 
 quilt = sys.argv[1]
 out = sys.argv[2]
+HOME = os.path.expanduser("~")
 roots = {
-    "relloc": ["/Users/isaac/quilts/relloc/", "/Users/isaac/notes/quilts/relloc/"],
-    "quant": ["/Users/isaac/quilts/quant/"],
+    "relloc": [f"{HOME}/quilts/relloc/", f"{HOME}/notes/quilts/relloc/"],
+    "quant": [f"{HOME}/quilts/quant/"],
 }[quilt]
-dirs = {
-    "relloc": ["-Users-isaac-quilts-relloc", "-Users-isaac-notes-quilts-relloc"],
-    "quant": ["-Users-isaac-quilts-quant"],
-}[quilt]
+# Claude Code names a project's transcript folder by its path with each / as -
+dirs = [r.rstrip("/").replace("/", "-") for r in roots]
 
 
 def rel(p):

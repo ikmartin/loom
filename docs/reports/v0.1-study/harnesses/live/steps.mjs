@@ -1,5 +1,5 @@
 // node steps.mjs URL step... ; steps: click=TEXT | clicksel=CSS | wait=MS | shot=PATH | text | url | eval=JS | select=TEXT (select words) | goto=URL
-import { chromium } from '/Users/isaac/dev/loom-arras/arras/node_modules/playwright/index.mjs';
+const { chromium } = await import(`${process.env.HOME}/dev/loom-arras/arras/node_modules/playwright/index.mjs`);
 const [url, ...steps] = process.argv.slice(2);
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });

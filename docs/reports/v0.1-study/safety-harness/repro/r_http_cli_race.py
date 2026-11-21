@@ -5,7 +5,7 @@ usage: r_http_cli_race.py SYNTHETIC_SRC WORK PORT TRIALS
 import json, os, shutil, subprocess, sys, threading, time, urllib.request
 from pathlib import Path
 for m in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"): os.environ.pop(m, None)
-BIN = Path("/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin")
+BIN = Path("~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin").expanduser()
 src, work, port, trials = Path(sys.argv[1]), Path(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 q = work / "q"; shutil.rmtree(q, ignore_errors=True); shutil.copytree(src, q, ignore=shutil.ignore_patterns("build"))
 NODE = q / "drafting/nodes/sy-000A.tex"

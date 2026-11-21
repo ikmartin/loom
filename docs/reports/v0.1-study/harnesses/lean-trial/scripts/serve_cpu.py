@@ -1,7 +1,7 @@
 """Start `loom serve --no-compile` on a port, let it settle, then measure its CPU seconds over a window; stop it. Usage: serve_cpu.py QUILT PORT LABEL SETTLE WINDOW"""
 import os, subprocess, sys, time, socket, signal
 quilt, port, label, settle, window = sys.argv[1], int(sys.argv[2]), sys.argv[3], float(sys.argv[4]), float(sys.argv[5])
-loom = "/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom"
+loom = os.path.expanduser("~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom")
 log = open(os.path.join(os.path.dirname(quilt), "logs", f"serve-{label}.log"), "w")
 t0 = time.time()
 p = subprocess.Popen([loom, "serve", "--no-compile", "--port", str(port)], cwd=quilt, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)

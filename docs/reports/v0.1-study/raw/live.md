@@ -1,6 +1,6 @@
 # v0.1 study: the install and the attach, done for real
 
-Auditor: live. Checkout `.claude/worktrees/v01-study` at 71621877. `$S` below is `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/live`; every screenshot is `$S/shots/*.png`, every Claude Code event stream `$S/sessions/*.jsonl`, every MCP exchange `$S/presence/<start>-<pid>/{meta,stdin.jsonl,stdout.jsonl}`, command transcripts `$S/logs/`. loom was installed into `$S/uv` with `UV_TOOL_DIR`, `UV_TOOL_BIN_DIR` and `XDG_*` in scratch; person commands ran through `$S/p.sh` (an `env -i` with no agent markers). Ports 48201-48220 only; at the end `lsof -iTCP -sTCP:LISTEN` shows nothing in 48200-48249 and no process from `$S` runs. `~/.claude.json` holds no entry for any scratch folder afterwards.
+Auditor: live. Checkout `.claude/worktrees/v01-study` at 71621877. `$S` below is `<scratch>/study/live`; every screenshot is `$S/shots/*.png`, every Claude Code event stream `$S/sessions/*.jsonl`, every MCP exchange `$S/presence/<start>-<pid>/{meta,stdin.jsonl,stdout.jsonl}`, command transcripts `$S/logs/`. loom was installed into `$S/uv` with `UV_TOOL_DIR`, `UV_TOOL_BIN_DIR` and `XDG_*` in scratch; person commands ran through `$S/p.sh` (an `env -i` with no agent markers). Ports 48201-48220 only; at the end `lsof -iTCP -sTCP:LISTEN` shows nothing in 48200-48249 and no process from `$S` runs. `~/.claude.json` holds no entry for any scratch folder afterwards.
 
 ## How the attach trial was run, and what it could not do
 
@@ -68,7 +68,7 @@ From an empty directory with loom installed and TeX present: `loom init mypaper 
 
 ### LIVE-5 · the interpreter uv chose · hurts · rec fix
 
-`$S/uv/tools/loomtex/bin/python -> /Users/isaac/miniconda3/bin/python3`: uv used the first `python3` on PATH. A pilot with conda, pyenv or a python.org Python gets loom tied to it, and loom breaks when that environment changes. **Rec:** `--managed-python --python 3.13` in the install line (INST-19 rank 1 already says so; confirmed needed).
+`$S/uv/tools/loomtex/bin/python -> ~/miniconda3/bin/python3`: uv used the first `python3` on PATH. A pilot with conda, pyenv or a python.org Python gets loom tied to it, and loom breaks when that environment changes. **Rec:** `--managed-python --python 3.13` in the install line (INST-19 rank 1 already says so; confirmed needed).
 
 ### LIVE-6 · PATH, as the apps really give it · hurts for a launcher · rec fix
 

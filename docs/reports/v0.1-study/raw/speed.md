@@ -8,9 +8,9 @@ Auditor: speed. Study checkout `v0.1-study` at 71621877 (equal to main). All num
 - `tools/parts.py`: unprofiled wall time of each named step of `build()` (`gone_annotations`, `attach_context`, …).
 - `tools/serveprobe.py`: `ServeSession` in process on ports 47810-47813 with timestamped events (watcher call, each build stage, publication, compile begin/end, make4ht begin/end) plus the subprocess log.
 - `tools/viewer.cjs`: headless Chromium through the main checkout's Playwright 1.63, read-only. It opens `/master/drafting/draft5`, waits for a phrase in the DOM, then writes an edit to the source and waits until the new words are in the DOM and the old ones gone (save to seen). It also records long tasks and every manifest fetch.
-- Scripts live in `/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/speed/tools/`, raw logs beside them in `logs/`.
+- Scripts live in `<scratch>/study/speed/tools/`, raw logs beside them in `logs/`.
 
-**Copy hygiene.** The relloc copy carried `.loom/serve.json` naming the author's live server (pid 23240, port 8791, its token, root `/Users/isaac/quilts/relloc`). Left in place, `loom serve` on the copy refuses to start (`cli/serve_cmd.py:40-43`) and `loom here` on the copy would talk to the author's server (`cli/here_cmd.py:30-40`). I deleted it in both copies. `.claude/settings.json` and `.codex/rules` hold only relative permissions; nothing else in the copy points back.
+**Copy hygiene.** The relloc copy carried `.loom/serve.json` naming the author's live server (pid 23240, port 8791, its token, root `~/quilts/relloc`). Left in place, `loom serve` on the copy refuses to start (`cli/serve_cmd.py:40-43`) and `loom here` on the copy would talk to the author's server (`cli/here_cmd.py:30-40`). I deleted it in both copies. `.claude/settings.json` and `.codex/rules` hold only relative permissions; nothing else in the copy points back.
 
 **Identity caveat.** My `XDG_CONFIG_HOME` has no loom author, so `resolve_author` falls back to `git config user.name` (`scan/quilt.py:231-241`). The author's own machine has `[author] name` set, so where it matters I measured both ways (`--cache-git` = one git call per process, as with a configured name). A new v0.1 user who has git configured but has never set a loom name is in the slow case.
 

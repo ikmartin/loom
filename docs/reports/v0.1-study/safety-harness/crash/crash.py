@@ -5,7 +5,7 @@ usage: crash.py SYNTHETIC_SRC WORK
 import json, os, shutil, subprocess, sys
 from pathlib import Path
 for m in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"): os.environ.pop(m, None)
-BIN = Path("/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin")
+BIN = Path("~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin").expanduser()
 src, work = Path(sys.argv[1]), Path(sys.argv[2])
 NODE = "drafting/nodes/sy-000A.tex"
 CASES = {
