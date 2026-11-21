@@ -227,7 +227,7 @@ THING is a node or any key in it, a document's path, an annotation id, a session
 
 ## Review
 
-Annotate, accept, keep or undo what changed, and see what rests on what.
+Annotate, accept, keep or undo what changed, see what rests on what, and what is known of a result.
 
 ### `loom annotate`
 
@@ -349,6 +349,17 @@ With --proofs, only the proofs that cite ID themselves: where a hypothesis or a 
 | `--proofs` | Only the proofs that cite ID directly, each with the statement it proves. |
 | `--json` | Print the report as one JSON object. |
 | `--session` `SESSION` | Log this call to the session. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom evidence`
+
+`loom evidence [OPTIONS] NAME`
+
+What is known of a result: its status, and every record about it. NAME is a draft's label or a node's id.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## History
@@ -785,7 +796,7 @@ Provenance names every party, not just the first: a record that credits an agent
 
 ## Agents
 
-Hand a document to an agent, take its changes back, the sessions you both work in, the pages you both keep, and where you are looking and what you did since an agent last looked.
+Hand a document to an agent, take its changes back, the sessions you both work in, the pages you both keep, where you are looking and what you did since an agent last looked, and what you and an agent ask of each other.
 
 ### `loom draft`
 
@@ -950,7 +961,7 @@ The viewer tab they touched last reports it to `loom serve`, which keeps it in m
 
 Report what people did since you last looked, and move your marker past it.
 
-People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
+People's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; their answers to the questions you asked with `loom ask`; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.
 
 | option | description |
 |---|---|
@@ -974,6 +985,93 @@ A page is a reading the person edits directly and an agent writes here, never by
 | `--as` | Who is writing. An agent names itself, including Agent or AI. |
 | `--session` | Log this call to the session. |
 | `--dry-run` | Check everything and write nothing. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom tasks`
+
+`loom tasks [OPTIONS]`
+
+`loom tasks [OPTIONS] [COMMAND] [ARGS]...`
+
+Run alone, `loom tasks` is a command; its subcommands follow its options.
+
+List what waits for an agent: what a person asked of agents, the questions and papers agents asked of the person, and each answer the person gave that the agent that asked has not seen since its last `loom since`.
+
+Nothing is assigned or ranked: take what you can do (`loom tasks take ID`), and say what you produced (`loom tasks done ID --made ID`). An ask closes by what it produces, a stub read or Lean run on its result, whoever produced it.
+
+| option | description |
+|---|---|
+| `--all` | Include asks that are closed or withdrawn. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom tasks answer`
+
+`loom tasks answer [OPTIONS] TASK TEXT`
+
+Answer TASK, a question the person asked of an agent, in TEXT.
+
+| option | description |
+|---|---|
+| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom tasks done`
+
+`loom tasks done [OPTIONS] TASK`
+
+Say what you produced for TASK. The task closes when what it asked for exists, which loom checks, not when you say so.
+
+| option | description |
+|---|---|
+| `--made` `ID` | What you produced: a node's id, a suggested edit's id. Repeat for each. |
+| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom tasks take`
+
+`loom tasks take [OPTIONS] TASK`
+
+Say that your session is working on TASK, so the person sees it taken; refused while a live session of another works on it. Over MCP your session is your conversation's; in a shell, the active one.
+
+| option | description |
+|---|---|
+| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom tasks withdraw`
+
+`loom tasks withdraw [OPTIONS] TASK`
+
+Withdraw TASK, a question or a paper you asked of the person and no longer need: one you asked, under your name, and in your session where it was asked in one (over MCP your conversation's; in a shell, the active one).
+
+| option | description |
+|---|---|
+| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom ask`
+
+`loom ask [OPTIONS] [TEXT]`
+
+Ask the person a question in TEXT, or with --paper for a paper you could not fetch.
+
+A question waits in Review with its choices and a field for the person's own words; once they answer, `loom tasks` shows the answer until your next `loom since`, which reports it. A paper waits in Review with its link, for the person to fetch and add; the request closes once the work holds the document.
+
+| option | description |
+|---|---|
+| `--choice` `TEXT` | One choice the person may pick; up to six. They may always answer in their own words. |
+| `--on` `PLACE` | What it is about: a result's label or id, a key, a work's id with :PAGE, or a document's path. |
+| `--paper` `REF` | Ask for a paper you could not fetch, by its reference's id; give --link. |
+| `--link` `URL` | With --paper: the http or https page you could not fetch it from, which the person opens. |
+| `--want` | With --paper: which document of the work. |
+| `--for` `DOC` | A draft it is asked for, so the person can see it with that draft's; default the documents that read the place. |
+| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
