@@ -25,7 +25,7 @@ def quilt_option(f: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def open_quilt(quilt_path: str | None, *, older: bool = False) -> Quilt:
-    """The quilt at `--quilt`, else the nearest one above the current directory; outside one, the refusal says how to get into one. `older` opens one in an earlier layout this loom brings forward, for `loom upgrade` alone."""
+    """The quilt at `--quilt`, else the nearest one above the current directory; outside one, the refusal says how to get into one. `older` opens one in an earlier layout this loom brings forward, for `loom upgrade` and the publisher's waiting mode alone."""
     try:
         return find_quilt(Path(quilt_path).expanduser() if quilt_path else None, older=older)
     except NoQuiltError as exc:
