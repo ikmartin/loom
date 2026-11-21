@@ -47,7 +47,9 @@ A draft's result still needs a name that lasts, because a Lean declaration and t
 
 A draft's edges into the library come from what it cites. `\cite[Lemma 2.1]{Jon19}` in a proof is a use of one result of one work; if that result has no node yet it gets a stub. This is how the library grows by loom's own hand: only what a draft depends on, one step out (P14). Everything further is the author's choice, made in the Library view: digest this paper, read this result, check this transcription.
 
-**Open.** A statement of a draft with no label has no lasting name. Anchoring finds it again by the text beside it; whether loom also offers to write a label, through the door and on the author's word (P7), is not decided.
+A label names its result across the whole quilt, not in one file, so a draft copied to a new file keeps what was said of the results it did not change (decided with the author, 2026-11-20).
+
+A statement of a draft with no label has no lasting name. Anchoring finds it again by the text beside it, and loom writes no label for it (decided with the author, 2026-11-20): where an act needs the name, as asking to formalize a result does, loom says that the result needs a label first, and the author adds it to his source by hand.
 
 ## Digesting and checking
 
