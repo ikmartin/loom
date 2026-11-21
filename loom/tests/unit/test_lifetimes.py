@@ -676,6 +676,22 @@ def test_a_stored_works_word_boxes_are_kept_while_the_work_is_in_the_store(tmp_p
     assert kept.is_file() and source.is_file() and not gone.exists()
 
 
+def test_the_node_index_is_kept_while_the_library_has_nodes(tmp_path: Path) -> None:
+    """It is made again from the files at will, but making it again costs every file's read, so the sweep leaves it, and its journal, while there are nodes."""
+    from loom.paths import LIBRARY_NODES, NODE_INDEX
+
+    q = demo(tmp_path)
+    ok("build", cwd=q)
+    index = _plant(q / NODE_INDEX)
+    journal = _plant(q / f"{NODE_INDEX}-journal")
+    (q / LIBRARY_NODES).mkdir(parents=True)
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert index.is_file() and journal.is_file()
+    (q / LIBRARY_NODES).rmdir()
+    sweep(q, scan(load_quilt(q)), index=on_disk(q))
+    assert not index.exists() and not journal.exists()
+
+
 def test_a_lookups_answer_is_kept_while_an_entry_of_the_library_asks_it(tmp_path: Path) -> None:
     """Answers can be made again only online."""
     from loom.refs.resolve import answer_names
