@@ -482,6 +482,9 @@ def _target(root: Path, rel: str) -> Path:
 def _read(root: Path, rel: str) -> bytes | None:
     t = _target(root, rel)
     try:
+        if not stat.S_ISREG(os.stat(t).st_mode):
+            # a FIFO, a socket or a device would block or never end; loom writes none of them
+            raise WriteRefused("not-a-file", f"{rel} is not a regular file; nothing was written")
         return t.read_bytes()
     except FileNotFoundError:
         return None
@@ -1290,7 +1293,7 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
 
 def put(
     root: Path,
-    history: Path,
+    history: Path | None,
     rel: str,
     data: bytes | None,
     *,
@@ -1304,8 +1307,8 @@ def put(
     ----------
     root : Path
         The quilt.
-    history : Path
-        Its history directory.
+    history : Path or None
+        Its history directory; None reads it from the quilt's config (`history_of`).
     rel : str
         The file, relative to the quilt.
     data : bytes or None
@@ -1322,10 +1325,22 @@ def put(
     WriteRefused
         `exists`, `outside-quilt`, or `changed` from the commit.
     """
-    with act(root, history, kind, actor) as w:
+    with act(root, history if history is not None else history_of(root), kind, actor) as w:
         if new and w.read(rel) is not None:
             raise WriteRefused("exists", f"{rel} exists already; nothing was written", status=409)
         w.replace(rel, data)
+
+
+def history_of(root: Path) -> Path:
+    """The quilt's history directory, by its config (`[quilt] history`); its default where the config cannot be read, as while `loom init` writes a quilt."""
+    from loom.paths import HISTORY
+
+    try:
+        from loom.scan.quilt import load_quilt
+
+        return load_quilt(root).history_dir
+    except Exception:  # noqa: BLE001 -- a quilt being made has no config yet; the default is where its history will be
+        return root / HISTORY
 
 
 def save(

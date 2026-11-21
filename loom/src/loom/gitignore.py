@@ -71,9 +71,10 @@ def ensure(root: Path) -> list[str]:
     lines = missing(root)
     if not lines:
         return []
+    from loom.writes import put
+
     p = root / ".gitignore"
     existing = p.read_text(encoding="utf-8") if p.is_file() else ""
-    p.write_text(
-        existing.rstrip("\n") + ("\n" if existing else "") + CLIENT_COMMENT + "\n".join(lines) + "\n", encoding="utf-8"
-    )
+    text = existing.rstrip("\n") + ("\n" if existing else "") + CLIENT_COMMENT + "\n".join(lines) + "\n"
+    put(root, None, ".gitignore", text.encode("utf-8"), kind="agents")
     return lines

@@ -143,7 +143,9 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
                 continue
             rep.removed.append(rel)
             if write:
-                p.unlink()
+                from loom.writes import put
+
+                put(root, None, rel, None, kind="agents")
                 try:
                     p.parent.rmdir()
                 except OSError:

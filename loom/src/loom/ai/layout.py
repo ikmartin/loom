@@ -297,27 +297,27 @@ def record_rules(root: Path, generated: str, *, before: list[str] | None = None)
 def _write(root: Path, rel: str, text: str) -> None:
     """Write one file of the agent layer whole or not at all, or refuse in a sentence where it cannot be written.
 
-    Written beside and moved into place, keeping the file's mode, so a write cut short (a full disk, a size limit) leaves the person's file as it was; a file without write permission is refused, as writing it in place would be.
+    A person's file goes through the door (`loom.writes.put`), loom's own record in `.loom/` beside it: each written beside and moved into place, keeping the file's mode, so a write cut short (a full disk, a size limit) leaves the person's file as it was; a file without write permission is refused, as writing it in place would be.
     """
     import errno
     import secrets
 
-    from loom.writes import WriteRefused
+    from loom.paths import LOOM
+    from loom.writes import WriteRefused, put
 
     p = root / rel
     tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}.tmp")
     try:
+        if not (rel == LOOM or rel.startswith(f"{LOOM}/")):
+            if p.exists() and not os.access(p, os.W_OK):
+                raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(p))
+            # a person's file: through the door, which writes it beside and moves it into place, keeping its mode
+            put(root, None, rel, text.encode("utf-8"), kind="agents")
+            return
+        # loom's own record of the layer, in `.loom/`, written beside and moved into place without reading what is there
         p.parent.mkdir(parents=True, exist_ok=True)
-        try:
-            mode: int | None = stat.S_IMODE(os.stat(p).st_mode)
-        except FileNotFoundError:
-            mode = None
-        if mode is not None and not os.access(p, os.W_OK):
-            raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(p))
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o666 if mode is None else mode)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o666)
         with os.fdopen(fd, "wb") as fh:
-            if mode is not None:
-                os.fchmod(fh.fileno(), mode)
             fh.write(text.encode("utf-8"))
         os.replace(tmp, p)
     except OSError as exc:
