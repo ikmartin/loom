@@ -274,14 +274,22 @@ def test_a_settings_save_and_a_restore_are_not_listed_back(person: Path) -> None
 
 def test_an_agent_s_edit_waiting_in_a_file_stays_listed_when_the_person_s_act_writes_it_too(person: Path) -> None:
     """The act's change is merged into the look by lines; the agent's, elsewhere in the file, still waits."""
-    from loom.config_edit import set_values
+    from loom import writes
     from loom.scan.quilt import load_quilt
 
-    cfg = person / "config.toml"
-    cfg.write_text(cfg.read_text().rstrip("\n") + "\n# an agent's line\n")
-    set_values(load_quilt(person), {"quilt.name": "Renamed"})
+    note = person / "notes/a.md"
+    note.write_text("# A\n\nfirst\n\nan agent's line\n", encoding="utf-8")
+    held = note.read_bytes()
+    writes.put(
+        person,
+        load_quilt(person).history_dir,
+        "notes/a.md",
+        held.replace(b"# A", b"# Renamed"),
+        kind="page",
+        expect=held,
+    )
     rows = [c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"]
-    assert [c["path"] for c in rows] == ["config.toml"] and "an agent's line" in rows[0]["new"]
+    assert [c["path"] for c in rows] == ["notes/a.md"] and "an agent's line" in rows[0]["new"]
     assert not any("Renamed" in c["new"] for c in rows)
 
 
@@ -356,3 +364,99 @@ def test_a_command_that_draws_an_id_says_a_left_act_once_though_its_act_settles_
     (q / "drafting/fig.bin").write_bytes(b"the person's own\n")  # so recovery leaves the act
     said = ok("new", "Lemma", "A new lemma", cwd=q).stderr
     assert said.count("loom: left pdf-save:") == 1, said
+
+
+# ---- the look watches only the places agents may edit (R2-1, R2-2) ----------------------------------------------
+
+#: The second look's session: the person's eight saves in their editor, then an agent's two edits in place.
+PERSON_SAVES = [
+    ("drafting/main.tex", "We fix conventions here", "We fix our conventions here [P1]"),
+    ("drafting/main.tex", "nice as one could hope", "nice as anyone could hope [P2]"),
+    ("drafting/nodes/dm-0003.tex", "\\begin{proof}", "\\begin{proof}\n% [P3] the person's plan for this proof"),
+    ("drafting/nodes/dm-0002.tex", "\\end{", "% [P4] a note to self\n\\end{"),
+    ("drafting/main.tex", "\\section{Results}", "\\section{Results [P5]}"),
+    ("drafting/outline.tex", "\\begin{document}", "\\begin{document}\n% [P6] reorder later"),
+    ("drafting/nodes/dm-0001.tex", "fixed locus", "fixed-point locus [P7]"),
+    ("drafting/main.tex", "\\bibliographystyle", "% [P8] check the bibliography style\n\\bibliographystyle"),
+]
+AGENT_EDITS = [
+    ("drafting/nodes/dm-0006.tex", "\\end{", "% [A1] the agent's claim: this also holds for finite widgets\n\\end{"),
+    ("drafting/nodes/dm-0007.tex", "\\end{", "% [A2] the agent's fix of a typo\n\\end{"),
+]
+THE_PERSON_S = [
+    "/drafting/main.tex",
+    "/drafting/outline.tex",
+    "/drafting/nodes/dm-0001.tex",
+    "/drafting/nodes/dm-0002.tex",
+    "/drafting/nodes/dm-0003.tex",
+]
+
+
+def _edit(q: Path, rel: str, old: str, new: str) -> None:
+    p = q / rel
+    text = p.read_text(encoding="utf-8")
+    assert old in text, (rel, old)
+    p.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
+def test_the_person_s_saves_in_places_agents_are_denied_are_never_listed(person: Path) -> None:
+    """The second look's session: the person saves eight edits in documents agents are denied, an agent edits two places open to it, the person takes in an agent's copy and saves a setting. Your Changes lists the agent's two edits and nothing of the person's, and says which places it leaves to them (R2-1)."""
+    from loom.config_edit import set_values
+    from loom.scan.quilt import load_quilt
+
+    set_values(load_quilt(person), {"agents.deny": THE_PERSON_S})
+    for rel, old, new in PERSON_SAVES + AGENT_EDITS:
+        _edit(person, rel, old, new)
+    ok("draft", "drafting/main.tex", "--ai", "prop", "--as", "Agent", cwd=person)
+    _edit(person, ".loom/agents/copies/prop.tex", "Closedness is where", "Closedness (agent) is where")
+    token = json_of("adopt", ".loom/agents/copies/prop.tex", "--json", cwd=person)["token"]
+    ok("adopt", ".loom/agents/copies/prop.tex", "--incorporate", token, cwd=person)
+    set_values(load_quilt(person), {"quilt.name": "Renamed"})
+    rows = [c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"]
+    assert sorted(c["path"] for c in rows) == ["drafting/nodes/dm-0006.tex", "drafting/nodes/dm-0007.tex"], rows
+    assert all("[A" in c["new"] for c in rows)
+    said = ok("changes", cwd=person).stdout
+    assert "your own, never listed: config.toml, /drafting/main.tex, /drafting/outline.tex" in " ".join(said.split())
+
+
+def test_the_deny_list_decides_and_a_waiting_change_outlives_closing_its_place(person: Path) -> None:
+    """The look watches by the predicate the door and the agents' permission files read (`agents.denied_by`). A place closed to agents keeps what the look held, so an agent's change waiting there is listed again once it is opened; a file made while it was the person's goes in as it stands when it is opened, and is listed from then on."""
+    from loom.agents import denied_by
+    from loom.config_edit import set_values
+    from loom.scan.quilt import load_quilt
+
+    note = person / "notes/a.md"
+    note.write_text("# A\n\nfirst\n\nan agent's line\n", encoding="utf-8")
+    assert edits(person) == ["notes/a.md"]
+    set_values(load_quilt(person), {"agents.deny": ["notes/"]})
+    assert denied_by(load_quilt(person).config, "notes/a.md") == "notes/"
+    assert edits(person) == []
+    made = person / "notes/b.md"
+    made.write_text("the person's own note\n", encoding="utf-8")
+    assert edits(person) == []
+    set_values(load_quilt(person), {"agents.deny": []})
+    rows = [c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"]
+    assert [c["path"] for c in rows] == ["notes/a.md"] and "an agent's line" in rows[0]["new"]
+    made.write_text("the person's own note\n\nan agent's word\n", encoding="utf-8")
+    assert edits(person) == ["notes/a.md", "notes/b.md"]
+
+
+def test_a_write_the_viewer_asks_for_is_the_person_s_whatever_shell_started_the_server(
+    person: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A `loom serve` started from an agent's terminal carries its markers; a restore the viewer asks for is still the person's act, so its words go into their look and its journal line says so (R2-2)."""
+    from loom.looks import take
+    from loom.render.api import handle
+    from loom.scan.quilt import load_quilt
+
+    # the document as the person last saw it differs from the version, so restoring it writes words the look must take
+    _edit(person, "drafting/main.tex", "We fix conventions here", "We fix our conventions here")
+    take(load_quilt(person), "Tester")
+    before = (person / "drafting/main.tex").read_text(encoding="utf-8")
+    monkeypatch.setenv("CLAUDECODE", "1")
+    handle(person, "history-restore", {"document": "drafting/main.tex", "version": "widgets-v1"})
+    monkeypatch.delenv("CLAUDECODE")
+    assert (person / "drafting/main.tex").read_text(encoding="utf-8") != before
+    assert edits(person) == []
+    lines = [json.loads(x) for x in (person / ".loom/local/writes.jsonl").read_text().splitlines()]
+    assert [e["by"] for e in lines if e["event"] == "begin" and e["kind"] == "restore"] == ["person"]

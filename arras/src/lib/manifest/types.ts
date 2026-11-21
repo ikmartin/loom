@@ -756,8 +756,8 @@ export interface Manifest {
   files?: ProjectFile[];
   /** Every pending change, edits since the reviewer's look and open suggested edits, in each file's order; absent before a first look. */
   changes?: PendingChange[];
-  /** The reviewer's look: when it was taken, and whose it was carried over from when their name had none. */
-  changes_since?: { who: string; when: string; carried?: string };
+  /** The reviewer's look: when it was taken, whose it was carried over from when their name had none, and the places it leaves to the person (the config and each `[agents] deny` entry), where a change is never listed. */
+  changes_since?: { who: string; when: string; carried?: string; unwatched?: string[] };
   /** The quilt's configuration, for Settings; absent from an older publisher. */
   config?: QuiltSettings;
   /** Asserted relations between two results, each with a reason. Nobody verifies these and every surface that shows one says so: they are navigation, not mathematics, and are never citable and never in a closure. */

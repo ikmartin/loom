@@ -149,9 +149,15 @@ def changes_command(
             for c in mine
         ]
         groups.append(Group(doc or "in no document", [Item(line) for line in table(cells)], limit=None))
+    from loom.looks import unwatched
+
+    # what the look leaves to the person, so a short list is not read as "nothing changed" there
+    left_to_you = unwatched(result.quilt.config)
+    watched = f"watching the places agents may edit; your own, never listed: {', '.join(left_to_you)}"
     data: dict[str, Any] = {"look": look.to_json() | {"files": len(look.files)} if look else None}
     data["changes"] = [c.to_dict() for c in listed]
-    Report(verdict, groups=groups, data=data).emit(as_json)
+    data["unwatched"] = left_to_you
+    Report(verdict, groups=groups, data=data, lines=[watched]).emit(as_json)
 
 
 def _ids(listed: list[Any], named: tuple[str, ...]) -> list[str]:

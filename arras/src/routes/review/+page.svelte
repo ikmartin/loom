@@ -54,6 +54,8 @@
 	const takenCount = $derived(y ? y.taken.reduce((n, t) => n + t.rows.length, 0) : 0);
 	const reviewer = $derived(m.reviewer?.name ?? '');
 	const since = $derived(m.changes_since ? m.changes_since.when.slice(0, 16).replace('T', ' ') + (m.changes_since.carried ? `, carried over from ${m.changes_since.carried}'s` : '') : '');
+	/** The places the look leaves to the person, where a change is never listed, named so an empty list is not read as nothing changed. */
+	const unwatched = $derived(m.changes_since?.unwatched ?? []);
 
 	let served = $state(false);
 	let writes = $state({ keep: false, discard: false });
@@ -223,7 +225,7 @@
 			{/if}
 		{/snippet}
 	</ActionBar>
-	<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: suggestions not yet kept or discarded, and every edit made in your files since your look{since ? ` of ${since}` : ''}. <b>Keep</b> one to take it into your text, or <b>Discard</b> it to put your words back or drop the suggestion; neither says whether the mathematics is right.</p>
+	<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: suggestions not yet kept or discarded, and every edit made since your look{since ? ` of ${since}` : ''} in the places agents may edit.{#if unwatched.length}<span data-testid="unwatched"> Your own places are not watched, so an edit there is never listed: {unwatched.join(', ')}.</span>{/if} <b>Keep</b> one to take it into your text, or <b>Discard</b> it to put your words back or drop the suggestion; neither says whether the mathematics is right.</p>
 
 	{#if reviewer && m.reviewer?.source === 'git config user.name'}<p class="muted" data-testid="review-name-from-git">You review as <b>{reviewer}</b>, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.</p>{/if}
 
@@ -279,7 +281,7 @@
 				{/if}
 			</section>
 		{:else}
-			<Empty text="No changes wait in your text." testid="changes-empty" />
+			<Empty text="No changes wait in the places agents may edit." testid="changes-empty" />
 		{/each}
 		{#if todoOn}
 			{#each todoAlone as t (t.path)}

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from loom.errors import EnvError
 
 #: Environment variables an agent's shell carries. `AI_AGENT` is the generic one; the rest name a particular tool.
-#: Loom reads them only to refuse what an agent may not do (the author's verbs, a protected path, a write signed with a name that does not say it is an agent's), never to change what any other command does.
+#: Loom reads them to refuse what an agent may not do (the author's verbs, a protected path, a write signed with a name that does not say it is an agent's), and to tell whose act a command run in that shell is (`agents_act`), never to change what any other command does.
 AGENT_MARKERS = ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI")
 
 
@@ -27,6 +30,29 @@ AGENT_NAMES = {
     "GEMINI_CLI": "Gemini CLI Agent",
     "AI_AGENT": "agent",
 }
+
+
+#: Set while a thread serves the viewer's request (`at_the_viewer`): a write over HTTP is a person at a browser, whatever shell started the server.
+_AT_VIEWER: ContextVar[bool] = ContextVar("loom_at_the_viewer", default=False)
+
+
+@contextmanager
+def at_the_viewer() -> Iterator[None]:
+    """Mark what this thread does as a request from the viewer, a person at a browser, for `agents_act`: the server's own shell, an agent's terminal perhaps, says nothing about who asked."""
+    token = _AT_VIEWER.set(True)
+    try:
+        yield
+    finally:
+        _AT_VIEWER.reset(token)
+
+
+def agents_act(actor: str | None) -> bool:
+    """Whether an act was an agent's: one made under a name that says so; never one the viewer asked for (`at_the_viewer`); else one made in a shell an agent runs (`agent_marker`), since a command there names the author by default (`history.ledger.actor_for`)."""
+    if actor and is_agent(actor):
+        return True
+    if _AT_VIEWER.get():
+        return False
+    return agent_marker() is not None
 
 
 def agent_name() -> str | None:

@@ -1117,11 +1117,15 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             said.append(f"finished {act_id}")
             said += _relook(root, act_id, e)
             if not e.get("look"):
+                from loom.identity import agents_act
+
                 texts = {
-                    rel: tuple(fetch(history, d) if d else None for d in ab)
+                    rel: tuple(_fetch(root, history, d) if d else None for d in ab)
                     for rel, ab in (e.get("files") or {}).items()
                 }
-                _follow_look(root, history, str(e.get("kind")), e.get("actor"), texts)  # type: ignore[arg-type]
+                # whose act it was is the line's, never the shell recovery runs in
+                agent = e["by"] == "agent" if e.get("by") in ("agent", "person") else agents_act(e.get("actor"))
+                _follow_look(root, history, str(e.get("kind")), agent, texts)  # type: ignore[arg-type]
             continue
         failed = [
             rel
@@ -1277,20 +1281,18 @@ def merge_lines(base: str, ours: str, theirs: str) -> str | None:
 
 
 def _follow_look(
-    root: Path, history: Path, kind: str, actor: str | None, files: dict[str, tuple[bytes | None, bytes | None]]
+    root: Path, history: Path, kind: str, agent: bool, files: dict[str, tuple[bytes | None, bytes | None]]
 ) -> None:
     """After an act the person made through loom, give the reviewer's look what it wrote, so the person's own act is never listed back to them as a change to keep (Keep, the undo, Discard and a tick do this themselves, `OWN_LOOK`).
 
-    A file the look held as it was before the act now holds what the act wrote; one with another change waiting in it gets the act's change merged in by lines, and keeps its look where the two meet (`merge_lines`), so nothing waiting is taken in unseen; a file the act made goes in when it is an open text file. An agent's act changes no look: the person has not seen it. Nothing before a first look. The act has happened whatever this does, so a failure here leaves the look as it was.
+    A file the look held as it was before the act now holds what the act wrote; one with another change waiting in it gets the act's change merged in by lines, and keeps its look where the two meet (`merge_lines`), so nothing waiting is taken in unseen; a file the act made goes in when it is an open text file. A file the look does not watch (`looks.watching`), one agents are denied, is left: nothing there is listed. An agent's act (`agent`, as the act's journal line records it) changes no look: the person has not seen it. Nothing before a first look. The act has happened whatever this does, so a failure here leaves the look as it was.
     """
-    from loom.identity import agent_marker, is_agent
-
-    if kind in OWN_LOOK or agent_marker() or (actor and is_agent(actor)):
+    if kind in OWN_LOOK or agent:
         return
     try:
         from loom.files import Shown, is_latex_aux
         from loom.looks import _write as write_look
-        from loom.looks import read_look
+        from loom.looks import read_look, watching
         from loom.records.snapshots import read_raw, write_raw
         from loom.scan.hashing import sha256
         from loom.scan.quilt import load_quilt, reviewer_identity
@@ -1299,16 +1301,18 @@ def _follow_look(
         look = read_look(root, who) if who else None
         if look is None:
             return
+        quilt = load_quilt(root)
+        watched = watching(quilt.config)
         shown: Any = None
         moved = False
         for rel, (before, after) in files.items():
             was, now = _text_of(before), _text_of(after)
-            if was is _NOT_TEXT or now is _NOT_TEXT or is_latex_aux(rel):
+            if was is _NOT_TEXT or now is _NOT_TEXT or is_latex_aux(rel) or not watched(rel):
                 continue
             held = look.files.get(rel)
             if held is None:
                 if was is None and now is not None:
-                    shown = shown or Shown.of(load_quilt(root))
+                    shown = shown or Shown.of(quilt)
                     if shown.is_shown(rel):
                         look.files[rel] = write_raw(root, now, history)
                         moved = True
@@ -1329,7 +1333,7 @@ def _follow_look(
             moved = True
         if moved:
             write_look(root, look)
-    except (OSError, ValueError):
+    except Exception:  # noqa: BLE001 -- the act's files are written; its look is a convenience, and recovery would only do the same again
         return
 
 
@@ -1556,6 +1560,10 @@ class Act:
             begin["undid"] = self.undone
         if self.look:
             begin["look"] = self.look
+        from loom.identity import agents_act
+
+        # whose act this is, as it is asked for: recovery reads it here, never from the shell it runs in
+        begin["by"] = "agent" if agents_act(self.actor) else "person"
         self.journal.append(self.root, begin, full=True)
         done: list[str] = []
         guarded = [r for r in self.records if "at" in r]
@@ -1581,16 +1589,17 @@ class Act:
             raise
         # every file holds its after bytes: the act has happened, and a failure from here on is recovery's to finish
         _append_records(self.root, [r for r in self.records if "at" not in r])
-        self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
-        _save_index(self.root, self.journal)
         if not self.look:
+            # before `done`, so a crash in between leaves the act for recovery to finish, which follows the look again
             _follow_look(
                 self.root,
                 self.history,
                 self.kind,
-                self.actor,
+                begin["by"] == "agent",
                 {rel: (self.before.get(rel), changed[rel]) for rel in changed},
             )
+        self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
+        _save_index(self.root, self.journal)
         self._follow()
 
     def _follow(self) -> None:

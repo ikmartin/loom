@@ -389,7 +389,7 @@ def look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, 
 
 def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, str | None]] | None:
     from loom.files import is_latex_aux
-    from loom.looks import open_texts, read_look
+    from loom.looks import read_look, watched_texts, watching
     from loom.records.snapshots import read_raw
     from loom.scan.hashing import sha256
 
@@ -397,7 +397,9 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     look = read_look(quilt.root, who) if who else None
     if look is None:
         return None
-    current = open_texts(quilt)
+    # only the places agents may edit: one they are denied is the person's own, and a change there is never listed
+    current = watched_texts(quilt)
+    watched = watching(quilt.config)
     # a file the scan read is as the scan read it: one saved since is the next build's, so a change is never cut from one reading of a file and drawn against another
     for rel, src in result.files.items():
         text = current.get(rel)
@@ -406,7 +408,7 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     then: dict[str, str] = {}
     now: dict[str, str | None] = {}
     # a look taken before LaTeX's auxiliary files were left out of it may still hold them
-    for rel in sorted(set(current) | {f for f in look.files if not is_latex_aux(f)}):
+    for rel in sorted(set(current) | {f for f in look.files if not is_latex_aux(f) and watched(f)}):
         held = look.files.get(rel)
         text = current.get(rel)
         if held == (sha256(text) if text is not None else None):
@@ -1331,13 +1333,13 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
 def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:
     """Give `who`'s look of `path` the undo's own change, with no listing of the person's changes: where the look held the file as it was before the undo, it holds the file now; else each stretch the undo wrote over is carried to its place in the look (`writes.carry`) and the same words put there. False when a stretch's place in the look is not established, for `absorb` to do it by listing."""
     from loom import writes
-    from loom.looks import _write, read_look
+    from loom.looks import _write, read_look, watching
     from loom.records.snapshots import read_raw, write_raw
     from loom.scan.hashing import sha256
 
     look = read_look(quilt.root, who)
-    if look is None:
-        return True
+    if look is None or not watching(quilt.config)(path):
+        return True  # no look yet, or a place agents are denied, where nothing is listed
     held = look.files.get(path)
     if held is None:
         return False
