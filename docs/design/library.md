@@ -49,6 +49,28 @@ A draft's edges into the library come from what it cites. `\cite[Lemma 2.1]{Jon1
 
 **Open.** A statement of a draft with no label has no lasting name. Anchoring finds it again by the text beside it; whether loom also offers to write a label, through the door and on the author's word (P7), is not decided.
 
+## Digesting and checking
+
+Loom calls no model (P9), so three hands digest, and each can do different things.
+
+- **Loom alone** does what is certain: a reference for each entry of a bibliography, a stub for each cited result, and the statements of a work whose TeX source it holds, extracted exactly. By its own hand it digests only what a draft depends on.
+- **An agent**, asked, does what needs reading: transcribing a statement from the pages of a PDF, which loom checks is on the page it names, and working out which result a citation with no number relies on. An agent can also find a fault in a digest loom made, and propose a node or a correction from a work's source.
+- **The person** chooses what is digested beyond the least, checks a node against its paper, and attests.
+
+**From a PDF alone loom digests nothing and marks nothing by guess** (the author, 2026-11-20). Its reading of a PDF is as likely wrong as right, and a wrong mark costs a person more than no mark. With only a PDF, what stands on the page is what is known: the nodes that exist and the places the person marked. Loom's one guess is where it already is: when a person asks to locate a result, the paper opens at loom's best guess and the person places it. With the TeX source loom knows every result exactly, and can show the ones not yet digested.
+
+**The person's tools are in the Library.** A work is digested by a scope: what my documents use, what I marked, or the whole work; the list of works offers the same for all of them. On a paper, a **digest overlay**, switched on from the view menu and off by default, marks which results are digested and checked, digested and not checked, stubs, and marked for digestion; a mark opens its node beside the page, and the person marks a place to have it digested. Where a work has only a PDF, digesting it is a task for an agent (below).
+
+**Checking is the approval, and it does not gate a node's existence.** A node an agent or loom made exists and reads as not checked (P15). What is gated is what rests on it: nothing is attested, and nothing is assumed in Lean, on a node nobody checked. A correction proposed to a node the person already checked waits as a proposal, and the checked text stands until it is taken.
+
+**The check shows the node and the paper in one place**: the paper at the node's place beside the node, which the person switches between rendered and plain, since only the plain text shows its macros and the ids it points at. So every node is made with its place recorded; a node whose place is unknown cannot be checked quickly. Three things keep the queue of checks usable if agents fill it: what a draft rests on comes first; checks are grouped by work, one row for a paper and not forty; and a node extracted from TeX source says so, since loom can confirm that mechanically and it needs a glance where a transcription from pages needs a reading.
+
+**Agent tasks.** Some work is an agent's by nature, and a person asks for it when no agent is there. What was asked waits in **agent tasks**: digest this work, read these stubs, answer this question on a passage. It is a stack an agent may take from, not a harness: nothing is assigned, ranked or scheduled. An agent that attaches is told what is open; one launched to work through the tasks does so, and one launched for something else need not, though it may offer. A task is tied to a place, shows when a session is working on it, closes by what it produces, and is withdrawn by deleting it. Most of it is computed from records, the stubs asked to be read and the questions not yet answered, and only the asking is recorded (P3). A question a person addresses to an agent is a task; a question to themselves or a coauthor is not.
+
+**What an agent can do to the web** is a small set of commands, the same in a shell and over MCP. To read: a node with its neighbours, what a node uses and what uses it, a search by work, taxon, number, text or tag, what a draft rests on, and the stubs. To write: fill a stub, propose a node at a place, propose a correction, and mark a reference as a mention. An agent writes no node file by hand, and loom checks each write.
+
+**Open.** Tags on nodes. The proposal: a tag is a record about a node, said by someone, and not part of its file, so that tagging changes no node's hash; tags are free words, with the existing ones offered before a new one is coined; a work's subject is read from its bibliography entry, and results that use one definition are already found by that edge. Not decided, and not on the pilot's path.
+
 ## Edges
 
 An edge runs from one node to another and has a kind. The vocabulary is small and closed, and each word means one thing.
@@ -108,7 +130,9 @@ A work also still opens beside a document in Docs, from a library control in the
 
 The Library has both of its representations: by work, and by dependency among the stable things it holds (the author, 2026-11-20). The Web is the same following of dependency with a draft's results let in.
 
-**Open.** Whether the Web is a view of its own beside the Library, or one view of dependency reached from the Library with the library's scope and from a draft with the draft's.
+**Open.** Whether the Web is a view of its own beside the Library, or one view of dependency reached from the Library with the library's scope and from a draft with the draft's. The author's intuition is the first: the Web is a thing of the whole quilt, distinct from Docs and from the Library, which can also show the library's web alone. It is left to the mock-ups.
+
+**Review** becomes one thing once the Library manages works: everything waiting for the person's decision. Edits an agent proposes to their text, what changed in their own text, nodes to check and corrections to nodes, formalizations to attest, questions an agent asks, and problems in their own text. It is needed because nothing unchecked may look checked (P15), so one place must list what is unchecked. Agent tasks is its mirror, everything waiting for an agent, and the two stand together. Each decision can also be made where its thing lives (V7); Review is the list across the quilt.
 
 Drawing the web waits for a second pass. At the size of the author's own quilt the whole graph was unreadable, so these views answer questions, and draw at most a neighbourhood.
 
@@ -118,6 +142,8 @@ The library is built so that it can reach the size of the Stacks project and so 
 
 - **One node a file**, so that two people do not conflict on different nodes.
 - **An index loom derives**, under `.loom/cache/`, so that no command reads every file.
+- **A node is drawn in the browser** (the author, 2026-11-20), with TeX run only for what a node needs it for, such as a diagram, and that result kept by the node's hash. A person's documents stay TeX's own output: that was chosen for speed and for faithfulness, after earlier versions of loom drew a paper's source in the browser very unfaithfully. A node's body is short prose and mathematics, the easy case, and it is to work well and fast or not be used; so it is compared with TeX's output on real statements before anything rests on it.
+- **Nothing is made before it is asked for** where that is possible: a node is typeset when it is first shown, a work's pages are read when it is opened, and the index follows the files that changed.
 - **The viewer is sent what it is showing, and no more.** Today the server sends the viewer one file listing every node of the quilt whenever anything changes, ten megabytes at the author's 2,354 nodes. For the library the viewer asks instead for what is on screen, a work's results, a node and what it uses, what a draft rests on, and is sent that.
 - **A number for the format in every file**, raised only when the format changes, since files travel without the loom that wrote them.
 - **Nothing local in a node but its prefix.** A quilt keeps the prefix it has; a clash between two quilts is settled when they are joined.
