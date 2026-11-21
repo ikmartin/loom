@@ -153,7 +153,7 @@ def _stable(
 ) -> NodeRec | None:
     """A stable key's record: on the block that carries its id or label, unless that label moved, or, for an id's proof (`ID/proof`, numbered by its place among the proofs), unless the proof at the key no longer holds its text and stands apart from its recorded neighbours.
 
-    The label moved only where the record's text, labels aside, stands in one other block between the record's recorded neighbours on both sides (the block now carrying the label left out of the count), a text long enough to be someone's and not a twin its context recorded: the record follows it there, never to a copy standing elsewhere. Otherwise the record stays on the key's block, marked rewritten where that block no longer reads like it (`rewritten`), or detached under `VERIFY`. A record with no context stays on the key's block, as loom always read it. An id two blocks define places none. A key whose block is in a file no document reads now is on no block until one reads it again, unless the record was written while none read it (`unread`), never looked for elsewhere.
+    The label moved only where the record's text, labels aside, stands in one other block between the record's recorded neighbours on both sides, a text long enough to be someone's, whatever twin its context recorded: the record follows it there, never to a copy standing elsewhere (`_moved`). Otherwise the record stays on the key's block, marked rewritten where that block no longer reads like it (`rewritten`), or detached under `VERIFY`. A record with no context stays on the key's block, as loom always read it. An id two blocks define places none. A key whose block is in a file no document reads now is on no block until one reads it again, unless the record was written while none read it (`unread`), never looked for elsewhere.
     """
     if node is None:
         return None
@@ -175,28 +175,32 @@ def _stable(
         # an id's proofs are numbered by their place among its proofs: a proof standing apart from the record's neighbours is another one, which took the key of one deleted
         return None
     if context and block_hash(result, node.key) != want:
-        moved = _moved(result, want, node, documents, context)
+        moved = _moved(result, want, node, documents, context, quote)
         if moved is not None:
             return moved
     return node if still or not VERIFY else None
 
 
 def _moved(
-    result: ScanResult, want: str, node: NodeRec, documents: list[NodeRec], context: dict[str, Any]
+    result: ScanResult, want: str, node: NodeRec, documents: list[NodeRec], context: dict[str, Any], quote: str
 ) -> NodeRec | None:
-    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, and standing between the record's recorded neighbours on both sides, `node` (the block that now carries the label) counted as the neighbour it was or left out, for a label moved onto the next block or onto one put in beside it; when that text is long enough to be someone's and its context recorded no twin. When an author moves a label, the block that lost it is still where it was; a copy standing elsewhere is never it."""
+    """Where a stable key's label went from: the one block other than `node` holding the record's text, labels aside, standing between the record's recorded neighbours on both sides, whatever twin its context recorded, for a text long enough to be someone's. When an author moves a label, the block that lost it still stands where it was; a copy standing elsewhere is never it.
+
+    `node`, the block that now carries the label, is counted as the neighbour it was while it still reads like the record (a label moved onto a look-alike beside it; a copy put beside a block then edited is not the record's); once it no longer reads like it, it may also be left out, as a block put in beside the old one with the label given to it.
+    """
     words = _own_words(_frozen(result, want))
-    if len(words) < TRIVIAL or context.get("twin") or int(context.get("copies") or 1) > 1:
+    if len(words) < TRIVIAL:
         return None
     bare = _bare_frozen(result, want)
-    found = [
-        n
-        for n in documents
-        if n is not node
-        and bare
-        and _bare_of(result, n) == bare
-        and max(_sides(result, n, context)[0], _sides(result, n, context, skip=node)[0]) == 2
-    ]
+    alike = _still(result, want, node, quote)
+
+    def between(n: NodeRec) -> bool:
+        held = _sides(result, n, context)[0]
+        if not alike:
+            held = max(held, _sides(result, n, context, skip=node)[0])
+        return held == 2
+
+    found = [n for n in documents if n is not node and bare and _bare_of(result, n) == bare and between(n)]
     return found[0] if len(found) == 1 else None
 
 

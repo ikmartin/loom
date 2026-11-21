@@ -511,8 +511,8 @@ def test_a_deleted_first_proofs_note_goes_to_no_second_proof(out: Path, second: 
     assert shown(out, a) is None
 
 
-def test_a_label_moved_to_a_look_alike_leaves_the_note_on_its_old_block(out: Path) -> None:
-    """B-4, `label_moved_to_like_block`: the old section, unlabelled now, holds the note's text word for word, and keeps it."""
+def test_a_label_given_to_a_look_alike_put_in_beside_its_block_keeps_the_note_with_the_label(out: Path) -> None:
+    """B-4 against D-2: a look-alike put in right after the section, and the label moved onto it, leaves the very file that a copy of the section put in above it, the section then edited, would leave. A record stays with its label's block while that block reads like it, so the note stays on the look-alike."""
     S0 = sec("Preliminaries", "Background on simplicial complexes and their homology.", "sec:pre")
     S1 = sec("Main results", "We prove the classification of compact surfaces by cutting along curves.", "sec:main")
     S1b = sec("Main results", "We prove the classification of compact surfaces by cutting along curves.")
@@ -523,7 +523,7 @@ def test_a_label_moved_to_a_look_alike_leaves_the_note_on_its_old_block(out: Pat
     a = note(out, "drafting/s1.tex#sec:main", "cite Zeeman's proof")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": S0 + S1b + S2})
     got = shown(out, a)
-    assert got is not None and got.startswith("\\section{Main results}\n")
+    assert got is not None and got.startswith("\\section{Main results, revisited}")
 
 
 @pytest.mark.parametrize("words", ["By induction on n.", "By induction, clearly."])
@@ -744,11 +744,11 @@ def test_an_ids_swapped_proofs_carry_no_acceptance_to_each_other(out: Path) -> N
 
 
 def test_an_acceptance_follows_its_statement_when_its_label_moves_to_a_block_put_in_beside_it(out: Path) -> None:
-    """C-6, the generator's label-move: the accepted lemma's id given to a lemma put in after it; the row stays with the text it was given on, and the newcomer reads accepted by nobody."""
+    """C-6, the generator's label-move: the accepted lemma's id given to a lemma put in after it, which reads nothing like it; the row stays with the text it was given on, and the newcomer reads accepted by nobody."""
     A = env("remark", "We fix notation.")
     X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.", "tq-0009")
     Xb = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
-    N = env("lemma", "Every finite graph with minimum degree three contains a cycle of length divisible by three.", "tq-0009")  # fmt: skip
+    N = env("lemma", "Every bounded sequence of reals has a convergent subsequence.", "tq-0009")
     B = env("remark", "The bound is sharp.")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B})
     accept(out, ["tq-0009"])
@@ -793,3 +793,38 @@ def test_a_deleted_statements_note_goes_to_no_twin_where_its_neighbours_went_too
     a = note(out, "drafting/s1.tex#lemma:1", "cite Erdos")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": C + D + X})
     assert shown(out, a) is None
+
+
+INJ = "Let f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is injective then f is an isomorphism."  # fmt: skip
+SUR = "Let f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is surjective then f is an isomorphism."  # fmt: skip
+
+
+def test_an_id_moved_onto_a_look_alike_beside_it_leaves_note_and_acceptance_with_the_lemma_it_left(out: Path) -> None:
+    """D-1, `label_between_lookalikes`: tq-0003 moved off the injective lemma onto its surjective look-alike after it. The injective lemma stands where it was, between both recorded neighbours, whatever twin was recorded: the note and the row follow it."""
+    A = env("remark", "We fix a field k throughout.")
+    B = env("remark", "Both fail in infinite dimension.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + env("lemma", INJ, "tq-0003") + env("lemma", SUR) + B})  # fmt: skip
+    a = note(out, "tq-0003", "the injective case needs rank-nullity")
+    accept(out, ["tq-0003"])
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + env("lemma", INJ) + env("lemma", SUR, "tq-0003") + B})  # fmt: skip
+    assert shown(out, a) == env("lemma", INJ).strip()
+    assert list(accepted(out)) == [env("lemma", INJ).strip()]
+
+
+@pytest.mark.parametrize("copy", ["below", "above"])
+def test_a_copy_put_beside_an_ids_block_then_edited_takes_none_of_its_records(out: Path, copy: str) -> None:
+    """D-2, `id_copy_beside_then_edit`: the lemma copied, unlabelled, right below or above it, and the original edited, keeping the id. While the id's block reads like the record, the record stays with it."""
+    A = env("remark", "We fix a field k throughout.")
+    P = env("lemma", "Every planar graph is five colourable by an easy induction on vertices.")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.", "tq-0004")
+    X0 = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    X2 = env("lemma", "Every finite graph with minimum degree at least three contains an even cycle through a given vertex.", "tq-0004")  # fmt: skip
+    N = env("lemma", "Every bounded sequence of reals has a convergent subsequence by bisection.")
+    B = env("remark", "Both fail in infinite dimension.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + P + X + N + B})
+    a = note(out, "tq-0004", "say which cycle")
+    accept(out, ["tq-0004"])
+    pair = X2 + X0 if copy == "below" else X0 + X2
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + P + pair + N + B})
+    assert shown(out, a) == X2.strip()
+    assert list(accepted(out)) == [X2.strip()]
