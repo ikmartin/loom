@@ -25,7 +25,7 @@ Field names are fixed; unknown fields must be ignored by viewers. All timestamps
   "inclusion": { "drafting/main.tex": { ... } },
   "states": { "labels": { ... } },
   "annotations": { "a-2026-09-16-xgtcve": { ... } },
-  "unplaced": [ { "id": "a-2026-09-16-xgtcve", "key": "drafting/main.tex#proof:3", "why": "..." } ],
+  "unplaced": [ { "id": "a-2026-09-16-xgtcve", "key": "drafting/main.tex#proof:3", "why": "...", "document": "drafting/main.tex" } ],
   "annotation_types": [ { "id": "revision", ... } ],
   "annotation_plain": { "color": "yellow", ... },
   "suggested_edits": { "e-2026-09-16-q4hd2r": { ... } },
@@ -338,7 +338,7 @@ Reserved colour classes: `neutral`, `positive`, `positive-strong`, `warning`, `n
 
 `resolved_why` is the text given when the annotation was resolved, or null; one resolved by keeping a suggested edit that answers it says so (§9.2).
 
-**[decided]** `unplaced` lists the annotations placed on no block: their key names a block that no longer holds the text they were written on, or no block, and nothing says where that text went (`records.locate.follow`; `docs/design/writes.md`, "Where a record goes"). Each is `{id, key, why}`: its id in `annotations`, the key it was written on, and why in words. Such an annotation stays in `annotations`, detached, with `target.key` `''`, which names no block, and is counted in no key's `reviews`, nor given a gone mark in any block, so the block now at the key it was written on is never said to hold it. A reply follows the annotation it answers and is not listed. A suggested edit placed on no block is listed among the changes, unplaced, with its why (§9.2).
+**[decided]** `unplaced` lists the annotations placed on no block: their key names a block that no longer holds the text they were written on, or no block, and nothing says where that text went (`records.locate.follow`; `docs/design/writes.md`, "Where a record goes"). Each is `{id, key, why, document}`: its id in `annotations`, the key it was written on, why in words, and the document a viewer lists it in and opens it from: the one it names (`in`), else the first that read its block's file when it was written and is a document still (its `context.documents`), else one that reads the block its key names now, or the document its key is, else the default document. Every one has a document, so none is left where no reader can find it. Such an annotation stays in `annotations`, detached, with `target.key` `''`, which names no block, and is counted in no key's `reviews`, nor given a gone mark in any block, so the block now at the key it was written on is never said to hold it. A reply follows the annotation it answers and is not listed. A suggested edit placed on no block is listed among the changes, unplaced, with its why (§9.2).
 
 ## 9.1 Sessions
 

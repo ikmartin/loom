@@ -528,7 +528,7 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
     Returns
     -------
     dict
-        `before` and `after`: the nearest block on each side whose text stands once in its file, as `{"hash", "gap"}` with `hash` its text without child markers (`_mark`) with `gap` 1 for the block beside it, or `{"edge": n}` where none does, `n` counting to the file's edge; `kind`, what `_sort` calls it; `copies`, how many blocks of the documents held its very text; `twin`, whether another block of its file reads `LIKE` alike it; `unread`, present and true where no document reads its file; and with a quote, `quote`, how many blocks of the documents it stands in.
+        `before` and `after`: the nearest block on each side whose text stands once in its file, as `{"hash", "gap"}` with `hash` its text without child markers (`_mark`) with `gap` 1 for the block beside it, or `{"edge": n}` where none does, `n` counting to the file's edge; `kind`, what `_sort` calls it; `copies`, how many blocks of the documents held its very text; `twin`, whether another block of its file reads `LIKE` alike it; `unread`, present and true where no document reads its file, else `documents`, those that read it; and with a quote, `quote`, how many blocks of the documents it stands in.
     """
     if node.kind in ("master", "file"):
         return {}
@@ -547,6 +547,9 @@ def context_of(result: ScanResult, node: NodeRec, quote: str = "") -> dict[str, 
     out["kind"] = _sort(node)
     if not any(n is node for n in _pool(result, node.file)):
         out["unread"] = True
+    elif node.reached_by:
+        # where a reader finds the record should it come to be on no block: the documents that read its file now
+        out["documents"] = list(node.reached_by)
     own = block_hash(result, node.key)
     out["copies"] = sum(1 for n in _documents(result) if block_hash(result, n.key) == own) or 1
     words = _words(result, node)

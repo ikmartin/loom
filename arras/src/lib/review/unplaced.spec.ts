@@ -31,7 +31,7 @@ function note(id: string, over: Partial<Annotation> = {}): Annotation {
 function withUnplaced(): Manifest {
 	const m = structuredClone(fixture);
 	m.annotations = { ...m.annotations, u: note('u') };
-	m.unplaced = [{ id: 'u', key: 'sy-0003', why: 'its block was deleted' }];
+	m.unplaced = [{ id: 'u', key: 'sy-0003', why: 'its block was deleted', document: 'drafting/main.tex' }];
 	m.references = { ...m.references, NoId: { ...Object.values(m.references)[0], citekey: 'NoId', work: '', works: [] } };
 	return m;
 }
@@ -61,5 +61,26 @@ describe('a note on no block', () => {
 		expect(notesApart(m, here).map((a) => a.id)).toEqual(['u']);
 		expect(notesHere(m, here)).toBe(1);
 		expect(placeOf(m, m.annotations.u)).toBe(APART);
+	});
+});
+
+describe('a note on no block whose written key names nothing now', () => {
+	it('is listed in, and opens from, the document the manifest gives it', () => {
+		const m = withUnplaced();
+		m.annotations.w = note('w');
+		m.unplaced = [...(m.unplaced ?? []), { id: 'w', key: 'drafting/sections/gone.tex#lemma:3', why: 'its key names no block now', document: 'drafting/talk.tex' }];
+		expect(documentOf(m, m.annotations.w)).toBe('drafting/talk.tex');
+		expect(apartIn(m, 'drafting/talk.tex')).toEqual(['w']);
+		expect(apartIn(m, 'drafting/main.tex')).toEqual(['u']);
+		expect(itemForQuilt(m, 'w')).toEqual({ kind: 'document', id: 'drafting/talk.tex', note: 'w' });
+	});
+
+	it('falls back to the default document where the manifest gives none', () => {
+		const m = withUnplaced();
+		m.annotations.w = note('w');
+		m.unplaced = [{ id: 'w', key: 'sy-0FFF', why: 'its key names no block now', document: '' }];
+		const main = m.masters.find((d) => d.default)?.path;
+		expect(main).toBeTruthy();
+		expect(documentOf(m, m.annotations.w)).toBe(main);
 	});
 });

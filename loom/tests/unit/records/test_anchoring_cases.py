@@ -853,3 +853,27 @@ def test_a_moved_statement_with_a_look_alike_beside_it_keeps_its_note_at_its_own
     a = note(out, "drafting/s1.tex#proposition:1", "cite rank-nullity")
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + B + env("lemma", SUR) + C + X})
     assert shown(out, a) == X.strip()
+
+
+def test_every_note_on_no_block_is_given_the_document_that_read_its_file_when_it_was_written(out: Path) -> None:
+    """D-3: a note on an id whose file's `\\input` is commented out, and one on a lemma by its place in a section file whose block is deleted, each written while `drafting/talk.tex` read that file; both are on no block, their keys name nothing a document reads, and the manifest gives each `talk.tex`, never the key's file."""
+    from loom.records.store import Records
+
+    PRE2 = "\\documentclass{article}\n\\newtheorem{lemma}{Lemma}\n\\newtheorem{theorem}{Theorem}\n\\begin{document}\n%s\\end{document}\n"
+    T = env("theorem", "Every compact orientable surface is a sphere with handles.", "tq-0007")
+    X = env("lemma", "Every finite graph with minimum degree three contains an even cycle.")
+    Y = env("lemma", "Every bounded sequence of reals has a convergent subsequence.")
+    on = PRE2 % "\\input{app}\n\\input{sec}\n"
+    files = {
+        "drafting/main.tex": main_with(),
+        "drafting/talk.tex": on,
+        "drafting/app.tex": T,
+        "drafting/sec.tex": X + Y,
+    }
+    write(out, files)
+    a = note(out, "tq-0007", "cite the classification")
+    b = note(out, "drafting/sec.tex#lemma:1", "say which cycle")
+    write(out, {**files, "drafting/talk.tex": on.replace("\\input{app}", "% \\input{app}"), "drafting/sec.tex": Y})
+    manifest: dict = {"nodes": {}, "keys": {}, "diagnostics": []}  # type: ignore[type-arg]
+    Records(out).apply(scanned(out), manifest)
+    assert {u["id"]: u["document"] for u in manifest["unplaced"]} == {a: "drafting/talk.tex", b: "drafting/talk.tex"}

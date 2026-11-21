@@ -169,7 +169,7 @@ An annotation and a suggested edit name a key, and hold the hash of their block'
 - `kind`, what sort of block it is;
 - `copies`: how many blocks of the documents held its very text;
 - `twin`: whether another block of its file read at least 0.6 alike, word for word;
-- `unread`, where no document read its file (a scratch file);
+- `unread`, where no document read its file (a scratch file), else `documents`, those that did, where a note that comes to be on no block is listed;
 - with a quote, `quote`: how many blocks of the person's files it stood in;
 - for an insertion beside a quote, `beside`: the file's own words beside the place, which a block kept there since changes though the block's own text does not.
 
@@ -185,7 +185,7 @@ One rule says which block a record is on now, for both (`records/locate.py`, `fo
   - **an edit** is never taken at its place on its quote and the line above alone: Keep writes only where the record's block is known, and a replacement only where the two words nearest its quote on one side at least are those it was suggested among. An edit placed on no block is listed on none (`loom changes`, Review's cards).
 - **Otherwise none.** An annotation is detached and names no block at all: the manifest lists it in `unplaced`, `target.key` empty, counted on no key and given no gone mark, so the block that took its key is never said to hold it. An edit is unplaced. Nothing looks for a quote outside the block a record is on, since a quote is unique in its block and not in its file (the study's `raw/check-labels.md`, KEY-5).
 
-Every place that says where a note is asks the same rule: the manifest, `loom status` (which lists a note on no block apart), `loom ai annotations`, a message and `loom since`, a key's context, and the viewer, which lists a note on no block in no key's context but at the end of the Comments and Notes of the document it was written in, by its own words, and opens it there; a link to it opens that document at it. A note edited or answered is restated on the block it is on now, which its key may no longer name, never on the block that took that key.
+Every place that says where a note is asks the same rule: the manifest, `loom status` (which lists a note on no block apart), `loom ai annotations`, a message and `loom since`, a key's context, and the viewer, which lists a note on no block in no key's context but at the end of the Comments and Notes of one document, by its own words, and opens it there: the document that read its file when it was written (the manifest's `unplaced[].document`), else the default one; a link to it, and Review's To do, open that document at it, and To do never heads a group with a bare key. A note edited or answered is restated on the block it is on now, which its key may no longer name, never on the block that took that key.
 
 An insertion whose `beside` no longer stands at its place is unplaced, so a second section suggested after the same quote is not written ahead of the first once the first is kept (decision 21's first choice).
 

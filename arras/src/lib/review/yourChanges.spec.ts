@@ -48,16 +48,17 @@ describe("the quilt's To do", () => {
 		expect(todo.every((g) => g.label && g.annotations.length)).toBe(true);
 	});
 
-	it('lists an open note on no block under the document it was written in, rather than throwing on it', () => {
+	it('lists an open note on no block under the document the manifest gives it, and heads no group with a bare key', () => {
 		const x = structuredClone(m);
 		const a = x.annotations['a-2026-09-16-ecnav2'];
-		const written = a.target.key;
 		a.target = { ...a.target, key: '' };
 		a.detached = true;
-		x.unplaced = [{ id: a.id, key: written, why: 'its key names no block now' }];
+		// its written key names nothing now: an id whose block went, in a file no document reads
+		x.unplaced = [{ id: a.id, key: 'sy-0FFF', why: 'its key names no block now', document: 'drafting/talk.tex' }];
 		const todo = todoOf(x);
-		expect(todo.flatMap((g) => g.annotations.map((n) => n.id))).toContain(a.id);
-		expect(todo.every((g) => g.label)).toBe(true);
+		const group = todo.find((g) => g.annotations.some((n) => n.id === a.id));
+		expect(group?.path).toBe('drafting/talk.tex');
+		expect(todo.every((g) => g.label && !g.label.startsWith('sy-'))).toBe(true);
 	});
 });
 

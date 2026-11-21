@@ -138,6 +138,28 @@ def placed_key(result: ScanResult, ann: Annotation) -> str | None:
     return held[2].get(ann.id, ann.target_key)
 
 
+def written_in(result: ScanResult, ann: Annotation) -> str:
+    """The document a note on no block is listed in and opened from: the one it names (`in`), else the first that read its block's file when it was written and is a document still (`context.documents`), else one that reads the block its key names now, or the document its key is, else the quilt's default document; '' in a quilt with none.
+
+    Every note on no block belongs to exactly one document, so no reader is left without a place to find it.
+    """
+    named = [ann.in_doc] if ann.in_doc else []
+    named += [str(d) for d in (ann.context or {}).get("documents") or []]
+    for path in named:
+        found = result.current_document(path)
+        if found:
+            return found
+    key = ann.target_key
+    if key in result.masters:
+        return key
+    owner = result.assembly.regions[key].container if key in result.assembly.regions else key
+    node = result.nodes.get(owner)
+    for path in node.reached_by if node is not None else []:
+        if path in result.masters:
+            return str(path)
+    return result.default_master or (result.masters[0] if result.masters else "")
+
+
 #: Acceptance states by (reviewer, the ledger as read), each kept for the one scan it was computed against; see `Records.key_states`.
 _ACCEPTANCE: dict[tuple[str | None, str], tuple[ScanResult, dict[str, KeyState], dict[str, str]]] = {}
 
@@ -1095,6 +1117,7 @@ class Records:
             {
                 "id": res.annotation.id,
                 "key": res.annotation.target_key,
+                "document": written_in(result, res.annotation),
                 "why": "its key names a block that no longer holds the text it was written on, and nothing says which block does"
                 if res.annotation.target_key in result.nodes or res.annotation.target_key in result.assembly.regions
                 else "its key names no block now",

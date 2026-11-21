@@ -737,8 +737,8 @@ export interface Manifest {
   inclusion: Record<string, InclusionNode>;
   states: States;
   annotations: Record<string, Annotation>;
-  /** The annotations placed on no block, each by id with the key it was written on and why; each stays in `annotations`, detached, with `target.key` '', and is counted on no key (specs/manifest.md §9). */
-  unplaced?: { id: string; key: string; why: string }[];
+  /** The annotations placed on no block, each by id with the key it was written on, why, and the document it is listed in and opened from; each stays in `annotations`, detached, with `target.key` '', and is counted on no key (specs/manifest.md §9). */
+  unplaced?: { id: string; key: string; why: string; document: string }[];
   /** Every suggested edit, by id (specs/manifest.md §9.2). */
   suggested_edits?: Record<string, SuggestedEdit>;
   /** The quilt's annotation types, in its file's order (specs/manifest.md §1). */
