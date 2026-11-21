@@ -10,6 +10,7 @@ preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843
 master = "drafting/main.tex"
 dependency_version = 1
 basis = "expository"
+context = "{\"after\":{\"gap\":1,\"hash\":\"sha256:5741c7a7cc47ab428e1dd131598f03f3eb361d903ec9f74c6211c001027117c2\"},\"before\":{\"gap\":1,\"hash\":\"sha256:7112d67cbaed25eac022b15614bb96a5d711e11d4ac1d97b91c3efffcc39f1c8\"},\"copies\":1,\"documents\":[\"drafting/main.tex\"],\"kind\":\"definition\",\"twin\":false}"
 [accept.closure]
 "equation:eq:prose" = "sha256:4b3d078e2a5d4d320b5a20dd5194dfa9b85cef432f34eae00280b996e21a8d80"
 [accept.direct]
@@ -24,6 +25,7 @@ preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843
 master = "drafting/main.tex"
 dependency_version = 1
 basis = "local-proof"
+context = "{\"after\":{\"gap\":1,\"hash\":\"sha256:aa3b7f987e5418f7ea3d77d6993dc05dd00990a83f458d14e43cde7e0262c89e\"},\"before\":{\"edge\":1},\"copies\":1,\"documents\":[\"drafting/main.tex\",\"drafting/talk.tex\"],\"kind\":\"lemma\",\"twin\":false}"
 [accept.closure]
 "equation:eq:fix" = "sha256:d163a45ef24c7772ac1c8ba1f50a5458a744874ae2f6ee60354533ba58d01a01"
 "equation:eq:prose" = "sha256:4b3d078e2a5d4d320b5a20dd5194dfa9b85cef432f34eae00280b996e21a8d80"
@@ -40,6 +42,7 @@ text = "sha256:57e15b9a88a2cb06719fc7d1dc7e1599e042189b955244fecd419d9e3497e57c"
 preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843e12"
 master = "drafting/main.tex"
 dependency_version = 1
+context = "{\"after\":{\"edge\":1},\"before\":{\"gap\":1,\"hash\":\"sha256:fbb5fe7d5d0837bbb20118e868c0a6fd4ddb813fbff0ddafdfd8fe2be74492e2\"},\"copies\":1,\"documents\":[\"drafting/main.tex\",\"drafting/talk.tex\"],\"kind\":\"proof\",\"twin\":false}"
 [accept.closure]
 "equation:eq:prose" = "sha256:4b3d078e2a5d4d320b5a20dd5194dfa9b85cef432f34eae00280b996e21a8d80"
 "equation:eq:fix" = "sha256:d163a45ef24c7772ac1c8ba1f50a5458a744874ae2f6ee60354533ba58d01a01"
@@ -58,6 +61,7 @@ preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843
 master = "drafting/main.tex"
 dependency_version = 1
 basis = "local-proof"
+context = "{\"after\":{\"gap\":1,\"hash\":\"sha256:51f70184d520e3b9e571a16f993643d05c92d30903ae20eec7110c8c026f4cc4\"},\"before\":{\"edge\":1},\"copies\":1,\"documents\":[\"drafting/main.tex\"],\"kind\":\"theorem\",\"twin\":false}"
 [accept.closure]
 [accept.direct]
 
@@ -69,6 +73,7 @@ text = "sha256:355d386b10af561f3182fb3c9138a3ae2bd30230a604508d3bc46f8f39f19dd4"
 preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843e12"
 master = "drafting/main.tex"
 dependency_version = 1
+context = "{\"after\":{\"gap\":1,\"hash\":\"sha256:5ee5070abf65dc58b8172e9df31c2d9323689f9e0589c480ba1917e14d526fcf\"},\"before\":{\"gap\":1,\"hash\":\"sha256:b5f0d780485d02593fd4d6cbc7d1e60da111f12502b7edb993918ac7ef8e7d58\"},\"copies\":1,\"documents\":[\"drafting/main.tex\"],\"kind\":\"proof\",\"twin\":false}"
 [accept.closure]
 "equation:eq:fix" = "sha256:d163a45ef24c7772ac1c8ba1f50a5458a744874ae2f6ee60354533ba58d01a01"
 "equation:eq:prose" = "sha256:4b3d078e2a5d4d320b5a20dd5194dfa9b85cef432f34eae00280b996e21a8d80"
@@ -87,6 +92,7 @@ text = "sha256:facfa8fd5344b1ccec44ce7b29ccb7a7ab832789095a309373c5a09328cbd7a1"
 preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843e12"
 master = "drafting/main.tex"
 dependency_version = 1
+context = "{\"after\":{\"edge\":1},\"before\":{\"gap\":1,\"hash\":\"sha256:51f70184d520e3b9e571a16f993643d05c92d30903ae20eec7110c8c026f4cc4\"},\"copies\":1,\"documents\":[\"drafting/main.tex\"],\"kind\":\"proof\",\"twin\":false}"
 [accept.closure]
 "equation:eq:fix" = "sha256:d163a45ef24c7772ac1c8ba1f50a5458a744874ae2f6ee60354533ba58d01a01"
 "equation:eq:prose" = "sha256:4b3d078e2a5d4d320b5a20dd5194dfa9b85cef432f34eae00280b996e21a8d80"
@@ -109,6 +115,7 @@ preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843
 master = "drafting/main.tex"
 dependency_version = 1
 basis = "local-proof"
+context = "{\"after\":{\"gap\":1,\"hash\":\"sha256:abc171e4736d2055d525d869127955cef7fcf06fc4c0a64b6ee0b05e50f01384\"},\"before\":{\"gap\":1,\"hash\":\"sha256:67709bef6e99a7b7390cec4aac9a59aa39e94a2145346cf5b2f8a576bd6bf928\"},\"copies\":1,\"documents\":[\"drafting/main.tex\"],\"kind\":\"lemma\",\"twin\":false}"
 [accept.closure]
 [accept.direct]
 
@@ -120,6 +127,7 @@ text = "sha256:ea642431f360d0d3227e6cce804ea09c1e0b6e29e2d4ee3767db4111bd83a007"
 preamble = "sha256:f2a57c6b6e3416f6d636b1958cb00596f9a6d939e22d2deba3424a4635843e12"
 master = "drafting/main.tex"
 dependency_version = 1
+context = "{\"after\":{\"edge\":1},\"before\":{\"gap\":1,\"hash\":\"sha256:5741c7a7cc47ab428e1dd131598f03f3eb361d903ec9f74c6211c001027117c2\"},\"copies\":2,\"documents\":[\"drafting/main.tex\"],\"kind\":\"proof\",\"twin\":false}"
 [accept.closure]
 "sy-000F" = "sha256:263b1e553735064c0cf0375e991ed3a71d9d451c2e39fb38261e10e225a54fb7"
 [accept.direct]
