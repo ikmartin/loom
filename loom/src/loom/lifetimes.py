@@ -34,7 +34,9 @@ from loom.paths import (
     INCORPORATION_PREVIEWS,
     KINDS,
     LIBRARY_CACHE,
+    LIBRARY_DOCUMENTS,
     LIBRARY_NODES,
+    LIBRARY_SOURCES,
     MARK_BOXES,
     MARKS,
     NODE_INDEX,
@@ -439,7 +441,7 @@ _FOLDERS = (
         within(CACHE, p)
         for p in (SITE, SITE_SVG, DRAFT_PREVIEWS, TEX, BLOCKS, SNIPPETS, BLOCK_PREVIEWS, BLOCK_SPANS, LIBRARY_CACHE)
     )
-    | frozenset(within(CACHE, p) for p in (STORE_BOXES, RESOLVED, MARKS, MARK_BOXES, REFOUND, CROPS, CLOSURES))
+    | frozenset(within(CACHE, p) for p in (STORE_BOXES, RESOLVED, LIBRARY_SOURCES, MARKS, MARK_BOXES, REFOUND, CROPS, CLOSURES))
     | {
         "site/compare",
         "site/incorporation-review",
@@ -448,8 +450,9 @@ _FOLDERS = (
 )
 
 
-#: The node index's name in `LIBRARY_CACHE`.
+#: The node index's name, and the folder of unpacked sources, in `LIBRARY_CACHE`.
 _NODE_INDEX = within(LIBRARY_CACHE, NODE_INDEX)
+_SOURCES = within(LIBRARY_CACHE, LIBRARY_SOURCES)
 
 
 class _Rules:
@@ -489,6 +492,9 @@ class _Rules:
             if first == "boxes" and len(PurePosixPath(name).parts) > 2:
                 # a stored work's word boxes, its source's among them, while the work's folder, `<scheme>/<id>`, is in the store
                 return (self.root / STORAGE).joinpath(*work).is_dir()
+            if first == _SOURCES:
+                # a stored source unpacked, while the store holds its tar
+                return (self.root / LIBRARY_DOCUMENTS / f"{PurePosixPath(name).parts[0]}.tar").is_file() if name else True
             if first in (_NODE_INDEX, f"{_NODE_INDEX}-journal"):
                 # the index of the library's nodes, and its journal while a write to it is under way, while the library has nodes
                 return (self.root / LIBRARY_NODES).is_dir()
