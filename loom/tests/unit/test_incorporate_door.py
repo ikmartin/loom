@@ -247,3 +247,50 @@ def test_a_pull_cut_short_between_its_files_is_put_back_whole(
     assert (q.root / ".loom/records/source-sync.json").read_bytes() == record
     assert len(load_history(q.history_dir).landmarks()) == landmarks
     assert load_history(q.history_dir).unrecorded_dirs() == []
+
+
+# ---- the other writers -----------------------------------------------------------------------------------------------
+
+
+def test_a_move_is_one_act_with_its_history_line_and_the_config_s_main(tmp_path: Path) -> None:
+    from tests.helpers import ok
+
+    q = made(tmp_path, TEXT)
+    ok("mv", DOC, "drafting/paper.tex", cwd=q.root)
+    (act,) = [e for e in begun(q.root) if e["kind"] == "mv"]
+    assert act["files"][DOC][1] is None and act["files"]["drafting/paper.tex"][0] is None
+    assert "config.toml" in act["files"] and [r for r in begun(q.root) if r["kind"] == "settings"] == []
+    (line,) = act["records"]
+    assert json.loads(line["line"])["action"] == "move" and "at" in line
+    assert (q.root / "drafting/paper.tex").read_text() == TEXT and not (q.root / DOC).exists()
+    assert load_quilt(q.root).config.main == "drafting/paper.tex"
+
+
+def test_the_root_gitignore_is_written_through_the_door(tmp_path: Path) -> None:
+    from loom.gitignore import ensure
+
+    q = made(tmp_path, TEXT)
+    assert ensure(q.root)
+    (act,) = begun(q.root)
+    assert act["kind"] == "agents" and list(act["files"]) == [".gitignore"]
+
+
+def test_a_file_named_outside_the_quilt_is_written_as_an_ordinary_file(tmp_path: Path) -> None:
+    (tmp_path / "q").mkdir()
+    q = made(tmp_path / "q", TEXT)
+    out = tmp_path / "elsewhere" / "pull.diff"
+    writes.save(q.root, q.history_dir, out, b"a patch\n", kind="patch")
+    assert out.read_bytes() == b"a patch\n" and begun(q.root) == []
+    writes.save(q.root, q.history_dir, q.root / "notes" / "pull.diff", b"inside\n", kind="patch")
+    (act,) = begun(q.root)
+    assert act["kind"] == "patch" and list(act["files"]) == ["notes/pull.diff"]
+
+
+def test_the_door_refuses_a_file_that_is_not_a_regular_file_without_waiting_on_it(tmp_path: Path) -> None:
+    import os
+
+    q = made(tmp_path, TEXT)
+    os.mkfifo(q.root / "drafting" / "pipe.tex")
+    with pytest.raises(writes.WriteRefused) as refused:
+        writes.put(q.root, None, "drafting/pipe.tex", b"text\n", kind="agents")
+    assert refused.value.code == "not-a-file" and begun(q.root) == []
