@@ -8,6 +8,11 @@ demos/mmp/
 demos/kpsv/
 .DS_Store
 /ai/
+# Python's compiled files, which name the path of the source they were compiled from
+__pycache__/
+*.py[cod]
+# build output at the root: the empty home demos/build.py runs the paper quilts in, and a rebuild's logs
+/build/
 # what loom ai init writes to start the loom MCP server in a quilt here (demos/demo, demos/showcase): it names this machine's paths
 **/.mcp.json
 **/.codex/config.toml
