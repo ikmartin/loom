@@ -41,7 +41,7 @@ Everything in the library is a **node**: one file, named by its id, with a small
 
 ## A draft is not in the library
 
-A draft changes daily, and the library is for what is stable. So a draft's results are read live from the draft, as loom reads them today, and are not copied into node files. They appear in the web under the same shape as a node, with the draft as their source and with no file. When a paper is finished and the author gives its source to the library on purpose, it is digested like any other work.
+A draft changes daily, and the library is for what is stable. So a draft's results are read live from the draft, as loom reads them today, and are not copied into node files. They are not shown in the Library. Where a draft's results and the library's are seen together is the Web ([below](#the-library-view)), in which a draft's result has the shape of a node, the draft as its source, and no file. When a paper is finished and the author gives its source to the library on purpose, it is digested like any other work.
 
 A draft's result still needs a name that lasts, because a Lean declaration and the author's attestation point at it. That name is its label in the source. This is the question anchoring calls label keys, and the answer here is yes.
 
@@ -104,14 +104,19 @@ The Library is a view of its own, beside Docs and Review. It lists works as a re
 
 A work also still opens beside a document in Docs, from a library control in the column, since a result is mostly wanted in the paper it lives in, next to what is being written.
 
-Drawing the web waits for a second pass. At the size of the author's own quilt the whole graph was unreadable, so the Library answers questions, and draws at most a neighbourhood.
+**The Web** is where dependency is followed across everything in the quilt, a draft's results and the library's alike, by a scope the person chooses: the library alone, a draft alone, a draft with what it depends on, or everything (the author, 2026-11-20). A draft with what it depends on is the scope a person formalizing a paper works in.
+
+**Open.** Whether the Library keeps a view by dependency of its own, or the Web is the one place dependency is followed and the Library is the works and their results.
+
+Drawing the web waits for a second pass. At the size of the author's own quilt the whole graph was unreadable, so these views answer questions, and draw at most a neighbourhood.
 
 ## Scale, and moving between quilts
 
 The library is built so that it can reach the size of the Stacks project and so that a library can pass from one quilt to another, though neither is built now.
 
 - **One node a file**, so that two people do not conflict on different nodes.
-- **An index loom derives**, under `.loom/cache/`, so that no command reads every file. The manifest carries every node today, ten megabytes at the author's 2,354; the web is served by question.
+- **An index loom derives**, under `.loom/cache/`, so that no command reads every file.
+- **The viewer is sent what it is showing, and no more.** Today the server sends the viewer one file listing every node of the quilt whenever anything changes, ten megabytes at the author's 2,354 nodes. For the library the viewer asks instead for what is on screen, a work's results, a node and what it uses, what a draft rests on, and is sent that.
 - **A number for the format in every file**, raised only when the format changes, since files travel without the loom that wrote them.
 - **Nothing local in a node but its prefix.** A quilt keeps the prefix it has; a clash between two quilts is settled when they are joined.
 - **Evidence travels as a claim.** An imported record that Lean accepted a node is a report until the loom that receives it runs the check, which is the reason a publisher runs the Lean again (P15).
