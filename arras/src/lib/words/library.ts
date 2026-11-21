@@ -1,16 +1,202 @@
 // The Library's words: its column, the list of works, a work's tab, the reader's overlay, a result beside its page, and the drop of a paper. Every sentence the viewer says is written in this folder (`frame.ts` says how); a component holds none.
 
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
 export const library = {
-	/** The Library's page until its list of works is built on this branch; taken out with it. */
-	placeholder: 'The Library is being built.',
 	work: {
 		/** A work's tab in Docs, opened by a link to a note on it, in place of its pages, which only the Library can open; taken out once it does. */
 		unread: "This work's pages open from the Library, which is being built.",
 		/** A work's toolbar, on `open the PDF` and the PDF's tools while no PDF is drawn. */
 		noPdf: 'No PDF of this work is open'
 	},
+	tabs: {
+		/** The first tab of the Library, always there: the list of works. */
+		works: 'Works',
+		/** The close button on a work's tab. */
+		close: 'close'
+	},
+	/** A work's authors as the list draws them: one, two joined, or the first and "et al." */
+	byline: (a: readonly string[]) => (!a.length ? '' : a.length === 1 ? a[0] : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a[0]} et al.`),
+	column: {
+		/** The four filters in the Library's column while the list of works is shown. */
+		filters: { all: 'All works', used: 'Used in your drafts', unchecked: 'Not yet compared', nodoc: 'No document' },
+		/** Accessible name of the filters' list. */
+		filtersLabel: 'Filters',
+		/** A work's head in the column: what loom holds of it, after its authors and year. */
+		holds: { both: 'PDF and TeX', pdf: 'PDF', tex: 'TeX', none: 'no document' },
+		/** The fold under a work's head that shows its BibTeX entry. */
+		entry: 'entry',
+		/** The label over a work's outline when it comes from its TeX source. */
+		contents: 'Contents',
+		/** The label over a work's outline when it comes from the PDF's own outline. */
+		contentsFromPdf: "Contents, from the PDF's outline",
+		/** A section's page at the right of its row in the outline. */
+		page: (n: number) => `p. ${n}`,
+		/** The label over a PDF-only work's stubs that have no place yet. */
+		unplaced: 'Cited, not yet placed',
+		/** Under the unplaced stubs: what they are, before the link. */
+		notRead: 'not read',
+		/** The link under the unplaced stubs that opens the paper at loom's best guess. */
+		locate: 'locate in PDF',
+		/** The outline of a work of which loom has a PDF and no outline, and nothing digested. */
+		nothingDigested: 'No results digested yet.',
+		/** The outline while the survey of a TeX source is still being read. */
+		reading: 'Reading the TeX source…',
+		/** The button under the outline that digests what was ticked. */
+		digestChosen: (n: number) => `digest ${n} chosen`,
+		/** The quiet link beside it that stops choosing. */
+		cancel: 'cancel'
+	},
+	works: {
+		/** The search over the list of works. */
+		search: 'find a work by title or author',
+		/** Beside the search while it narrows the list. */
+		narrowed: (n: number, of: number) => `${n} of ${of}`,
+		/** The link that clears the search. */
+		clear: 'clear',
+		/** The two ways the list is drawn. */
+		list: 'list',
+		thumbnails: 'thumbnails',
+		/** The buttons above the list. */
+		add: 'add work…',
+		digest: 'digest…',
+		/** The columns of the list, and the columns menu's head. */
+		cols: { title: 'Title', authors: 'Authors', year: 'Year', digested: 'Digested', holds: 'Loom has', used: 'Used in' },
+		colsHead: 'Columns',
+		/** The columns menu's button at the right of the list's head; its accessible name. */
+		colsOpen: 'columns',
+		/** The Digested column: how many results are digested, of how many the source holds, and how many are compared. */
+		digested: (n: number, of: number | null, compared: number) => `${of === null ? n : `${n} of ${of}`} · ${compared} compared`,
+		/** After a work's title: the words that tell a later version apart. */
+		version: (v: number | string) => (v === 2 ? 'second version' : typeof v === 'number' ? `version ${v}` : v),
+		/** A thumbnail's page for a work of which loom has no document. */
+		noDocument: 'no document',
+		/** Under the thumbnails while more are below. */
+		more: (n: number) => `${n} more as you scroll`,
+		/** The menu at a row's right; its accessible name. */
+		rowMenu: 'more',
+		/** The row menu's items. */
+		openSource: 'open its source ↗',
+		editEntry: 'edit its entry…',
+		delete: 'delete',
+		/** A row looked up while the network is off: the identifier loom found, and the question. */
+		lookAsk: (identifier: string) => `${identifier} · look it up this once?`,
+		yes: 'yes',
+		notNow: 'not now',
+		/** A row whose details were not looked up. */
+		unconfirmed: 'details unconfirmed ·',
+		lookUp: 'look up',
+		/** A row being looked up. */
+		lookingUp: 'looking up…',
+		/** The list while it loads, and when the library is empty. */
+		loading: 'Loading the library…',
+		/** The list when its read failed. */
+		failed: (why: string) => `The library could not be read: ${why}`,
+		/** The column's message after a work was deleted. */
+		deleted: (short: string) => `Deleted ${short}, with its results and notes`
+	},
+	empty: {
+		/** The box an empty library shows in place of the list. */
+		head: 'Drop papers here to start your library',
+		body: "PDFs, TeX sources, or a .bib file. A paper's arXiv number or DOI is enough: loom looks up the rest, and fetches the TeX source where arXiv has it."
+	},
+	add: {
+		/** The panel under `add work…`. */
+		choose: 'choose files…',
+		paste: 'or paste an arXiv number or DOI',
+		drop: 'or drop files anywhere in loom',
+		/** The column's message after a work was added: its title, its short name, and how it was known. */
+		added: (title: string, short: string, how: string, tex: boolean) => `Added ${title}, ${short}${how ? `, found by its ${how}` : ''}${tex ? ', with its TeX source' : ''}.`,
+		/** What a work was known by, in the message. */
+		foundBy: { arxiv: 'arXiv number', doi: 'DOI', isbn: 'ISBN', entry: 'entry', row: 'row', none: '' } as Record<string, string>,
+		/** The column's message when loom already holds the dropped file's work. */
+		here: (name: string, short: string) => `${name} is ${short}, already in your library.`,
+		/** The column's message when a drop could not be added. */
+		cannot: (name: string, why: string) => `${name} was not added: ${why}`
+	},
+	drop: {
+		/** The cover over any view while a file is dragged over the window. */
+		cover: 'Drop to add to your library.',
+		/** Its second line, only while papers wait for their file. */
+		waiting: (n: number) => `If it is one of the ${plural(n, 'paper', 'papers')} waiting to be fetched, it is attached to that paper.`
+	},
+	digest: {
+		/** The digest menu's head. */
+		head: 'Digest…',
+		/** A work's menu: what to digest, each finishing the sentence, with its count after it. */
+		used: 'results my drafts use',
+		marked: 'what I marked in this paper',
+		choose: 'results I choose…',
+		all: (short: string) => `everything in ${short}`,
+		/** The count after an item. */
+		count: (n: number) => `(${n})`,
+		/** The count after "everything in" for a work held only as a PDF. */
+		pages: (n: number) => `(${n} pages)`,
+		/** The list's menu: across every work, and over the works selected. */
+		usedEvery: 'results my drafts use, in every paper',
+		selected: 'everything in the papers I select',
+		selectedCount: (n: number) => `(${n} selected)`,
+		selectHint: '⌘-click papers in the list to select them',
+		/** The menu's foot line: who does the work. */
+		byLoom: 'Loom does this itself, now, from the TeX source.',
+		byAgent: 'An agent does this, from the PDF. It waits in Review, under Waiting for an agent.',
+		byEither: 'Loom does this itself, now, where it has a paper\'s TeX source. For a paper it has only as a PDF an agent does it, and it waits in Review.',
+		/** A work's menu when loom has no document of it. */
+		noDocument: 'Loom has no document of this work yet.',
+		/** The column's message after digesting. */
+		made: (n: number) => `Digested ${plural(n, 'result', 'results')} from the TeX source`,
+		asked: (n: number) => `Asked an agent to digest ${plural(n, 'paper', 'papers')}; it waits in Review`,
+		/** The column's message when the survey must first be read. */
+		reading: 'Reading the TeX source first; the results follow when it is done',
+		/** While choosing in the outline. */
+		chooseHint: 'Tick the results to digest in the outline, then digest them'
+	},
 	reader: {
 		/** The reader, in place of the pages, for a work holding no PDF. */
-		noPdf: 'Loom holds no PDF of this work.'
+		noPdf: 'Loom holds no PDF of this work.',
+		/** The Library's menu in the reader's toolbar, which holds the digest marks. */
+		view: 'view',
+		/** The field under "ask an agent…" in the selection popup, and its button. */
+		askPlaceholder: 'what to ask about these words',
+		send: 'send',
+		/** The reader's view menu item that shows the digest marks on the pages. */
+		overlay: 'digest marks',
+		/** The selection popup on a work's page. */
+		mark: 'mark to digest',
+		highlight: 'highlight',
+		note: 'note',
+		ask: 'ask an agent…',
+		/** The column's message after marking a place to digest. */
+		marked: (page: number) => `Marked on page ${page}, to digest`,
+		/** A work with no document, in place of the reader. */
+		noDocument: "Loom has this work's entry and no document. Drop its PDF anywhere to add it.",
+		/** The chip's accessible name beside a result on the page. */
+		chip: (name: string) => name
+	},
+	side: {
+		/** The close button of the result beside the page. */
+		close: 'close',
+		/** Under the result's name: its page, and how loom has it. */
+		where: (page: string, how: string) => (page ? `page ${page} · ${how}` : how),
+		how: { extracted: 'extracted exactly from the TeX source', transcribed: 'transcribed by an agent from the pages', read: 'read by an agent from the TeX source', corrected: 'corrected by an agent', written: 'written by you', stub: 'known from the TeX source, not read', none: 'not digested' },
+		/** The two ways the statement is shown. */
+		rendered: 'rendered',
+		plain: 'plain',
+		/** The question under a statement not yet compared, and its answers. */
+		ask: "Does loom's copy match the paper?",
+		yes: 'yes, it matches',
+		no: 'no, it differs…',
+		/** The message after "no, it differs…", until correcting is built. */
+		noLater: 'Correct it here, or ask an agent to',
+		/** A result of the source not digested yet. */
+		notDigested: 'Not digested. Loom has the TeX source, so it can extract this exactly, now.',
+		/** A stub of a work with its TeX source. */
+		stub: 'Known from the TeX source and not read.',
+		/** The button that digests one result. */
+		digestIt: 'digest it',
+		/** The label over the results it uses. */
+		uses: 'uses',
+		/** The column's message after the yes. */
+		checked: (name: string) => `${name} matches the paper`
 	}
 } as const;

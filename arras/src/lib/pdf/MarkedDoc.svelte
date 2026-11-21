@@ -36,7 +36,8 @@
 		onregion,
 		onpage,
 		onlink,
-		onmoved
+		onmoved,
+		overlay
 	}: {
 		desk: MarkDesk;
 		view: PdfView;
@@ -61,6 +62,8 @@
 		onpage?: DocProps['onpage'];
 		onlink?: DocProps['onlink'];
 		onmoved?: DocProps['onmoved'];
+		/** A layer the caller draws over each drawn page: the Library's digest marks. */
+		overlay?: DocProps['overlay'];
 	} = $props();
 
 	let paper = $state<HTMLElement | null>(null);
@@ -269,6 +272,7 @@
 			{onpage}
 			{onlink}
 			{onmoved}
+			{overlay}
 			ondraw={drawn}
 			onpick={(e) => (e.id && paper ? popup?.open(paper, e.id, false) : popup?.close())}
 			onmove={(e) => {

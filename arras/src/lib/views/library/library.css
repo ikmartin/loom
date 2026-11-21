@@ -1,0 +1,222 @@
+/* The Library's look, as round six draws it (`docs/design/mockups/library-round-6/`): its tabs, the list of works and its thumbnails, the menus and panels over them, and its buttons. Everything is under `.lv`, the Library's root, and its column's `.lv-col`. */
+
+.lv {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
+	position: relative;
+	background: var(--paper);
+	font-size: 13px;
+}
+.lv .tabs {
+	height: 32px;
+	flex: none;
+	display: flex;
+	background: var(--leaf);
+	border-bottom: 1px solid var(--rule);
+}
+.lv .tab {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 0 12px;
+	min-width: 110px;
+	color: var(--ink-faint);
+	border: 0;
+	border-right: 1px solid var(--rule);
+	white-space: nowrap;
+	cursor: pointer;
+	margin-bottom: -1px;
+	background: none;
+	font: inherit;
+}
+.lv .tab.on {
+	background: var(--paper);
+	color: var(--ink);
+}
+.lv .tab.pin {
+	min-width: 0;
+	font-weight: 500;
+}
+.lv .tab .x {
+	margin-left: auto;
+	margin-right: -8px;
+}
+.lv .ib,
+.lv-col .ib {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex: none;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--ink-faint);
+	cursor: pointer;
+}
+.lv .ib:hover,
+.lv-col .ib:hover {
+	color: var(--ink);
+	background: var(--ann-neutral-wash);
+}
+.lv .btn,
+.lv-col .btn {
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.3;
+	padding: 4px 11px;
+	border-radius: 7px;
+	border: 1px solid var(--rule);
+	background: var(--sheet);
+	color: var(--ink);
+	cursor: pointer;
+	white-space: nowrap;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.lv .btn:hover:not(:disabled),
+.lv-col .btn:hover:not(:disabled) {
+	background: var(--link-wash);
+}
+.lv .btn.primary,
+.lv-col .btn.primary {
+	background: var(--ink);
+	color: var(--sheet);
+	border-color: var(--ink);
+}
+.lv .btn:disabled,
+.lv-col .btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.lv .linkish,
+.lv-col .linkish {
+	font: inherit;
+	color: var(--link);
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+}
+.lv .linkish:hover,
+.lv-col .linkish:hover {
+	text-decoration: underline;
+}
+.lv .menuwrap,
+.lv-col .menuwrap {
+	position: relative;
+	display: inline-block;
+}
+.lv .menu,
+.lv-col .menu {
+	position: absolute;
+	z-index: 50;
+	background: var(--sheet);
+	border: 1px solid var(--rule);
+	border-radius: 10px;
+	box-shadow: var(--float-shadow);
+	padding: 6px 0;
+	min-width: 220px;
+	text-align: left;
+	white-space: normal;
+	line-height: 1.45;
+}
+.lv .menu .mh,
+.lv-col .menu .mh {
+	padding: 5px 14px 7px;
+	font-size: 11px;
+	color: var(--ink-faint);
+}
+.lv .menu .mi,
+.lv-col .menu .mi {
+	display: block;
+	width: 100%;
+	text-align: left;
+	font: inherit;
+	color: var(--ink);
+	background: none;
+	border: 0;
+	padding: 6px 14px;
+	cursor: pointer;
+	line-height: 1.35;
+}
+.lv .menu .mi:hover:not([disabled]),
+.lv-col .menu .mi:hover:not([disabled]) {
+	background: var(--leaf);
+}
+.lv .menu .mi[disabled],
+.lv-col .menu .mi[disabled] {
+	cursor: default;
+	color: var(--ink-faint);
+}
+.lv .menu .mi .s,
+.lv-col .menu .mi .s {
+	display: block;
+	color: var(--ink-faint);
+	font-size: 11px;
+	margin-top: 1px;
+}
+.lv .menu .grey,
+.lv-col .menu .grey {
+	color: var(--ink-faint);
+}
+.lv .menu hr,
+.lv-col .menu hr {
+	border: 0;
+	border-top: 1px solid var(--rule);
+	margin: 5px 0;
+}
+.lv .menu .chk {
+	display: inline-block;
+	width: 18px;
+}
+.lv .seg {
+	display: inline-flex;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	overflow: hidden;
+	background: var(--sheet);
+	vertical-align: middle;
+}
+.lv .seg button {
+	font: inherit;
+	border: 0;
+	background: none;
+	padding: 1px 9px;
+	font-size: 11px;
+	color: var(--ink-faint);
+	cursor: pointer;
+	white-space: nowrap;
+}
+.lv .seg button + button {
+	border-left: 1px solid var(--rule);
+}
+.lv .seg button.on {
+	background: var(--leaf);
+	color: var(--ink);
+	font-weight: 500;
+}
+.lv .search {
+	font: inherit;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	padding: 4px 10px;
+	width: 300px;
+	background: var(--sheet);
+	color: var(--ink);
+}
+.lv .search::placeholder {
+	color: var(--ink-faint);
+}
+.lv .small {
+	font-size: 11px;
+}
+.lv .grey {
+	color: var(--ink-faint);
+}

@@ -8,6 +8,7 @@
 	import AgentStatus from './column/AgentStatus.svelte';
 	import Legend from './column/Legend.svelte';
 	import Message from './column/Message.svelte';
+	import LibraryColumn from './column/library/LibraryColumn.svelte';
 	import DocumentList from './column/DocumentList.svelte';
 	import FilesShelf from './column/FilesShelf.svelte';
 	import ReviewNav from './column/ReviewNav.svelte';
@@ -201,6 +202,8 @@
 			<div class="sections" bind:this={sectionsBox}>
 				{#if primary === 'review'}
 					<ReviewNav {sections} />
+				{:else if primary === 'library'}
+					<LibraryColumn />
 				{/if}
 				{#if panel}
 					<p class="rail-label">{panelLabel}</p>
@@ -339,7 +342,7 @@
 		gap: var(--gap-hair);
 	}
 	/* A label keeps its own height; the documents and the outline take the rest and scroll apart, and a page's own panel takes all of it. */
-	.sections > :global(*:not(.page-panel):not(.part)) {
+	.sections > :global(*:not(.page-panel):not(.part):not(.lv-col)) {
 		flex: 0 0 auto;
 	}
 	/* folded: the fold, the four names, and at the foot a dot for the message and the session's */

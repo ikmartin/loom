@@ -42,14 +42,14 @@ Three of the views' rules reach the backend. No id and no command is drawn, so e
 
 A title and authors come from the reference's BibTeX body decoded: braces dropped, accents made characters (`Kova{\v{c}}` is "Kovač"), mathematics kept between `$` for the viewer to draw. Words that are loom's own, a hover card, a legend, an empty state, a confirmation, a task's sentence, are never sent: they are the viewer's, in `arras/src/lib/words/`, a file a view.
 
-**Status.** One vocabulary on every surface (`library.md`, "The views"), two marks a result:
+**Status.** One vocabulary on every surface (`library.md`, "The views"), two marks a result. A read passes on the status `evidence.md` §5 computes, and the viewer draws it in round six's marks; nothing here computes a status of its own:
 
-| field | values | meaning | from |
-| --- | --- | --- | --- |
-| `paper` | `checked`, `unchecked`, `stub`, `marked`, or null | a library node that matches its paper (a "transcription verified" record on its current hash); one digested and not compared yet; a stub, not read; a place the person marked and nothing read from it yet. Null for a draft's result, and for a survey item not digested | index, evidence |
-| `lean` | `formalized`, `attest`, `assumed`, `not`, or null | `formalized`: Lean accepted its proof, the person attested its statement, and everything it assumes in Lean is checked against its paper and attested, all on the current hashes (`library.md`, "Digesting and checking"). `attest`: Lean accepted a statement, proved or assumed, that waits for the person's word. `assumed`: stated in Lean as an assumption and attested. `not`: none of these. Null while formalization is off for the quilt | lean, evidence |
+| field | values | from |
+| --- | --- | --- |
+| `paper` | `evidence.md` §5.2's `reading`, `stub`, `unchecked` or `matches`, or `marked` for a place the person marked to digest and nothing read from yet; null for a draft's result and for a survey item not digested | evidence, annotations |
+| `lean` | `{"lean", "role", "waiting_on"}` as `evidence.md` §5.2 gives them, `lean` one of `none`, `rerun`, `failed`, `unattested`, `changed`, `waiting`, `formalized` and `role` one of `proved`, `unproved`, `assumed`, `defined`; null while formalization is off for the quilt | evidence |
 
-The words drawn for them ("matches the paper", "not compared yet", "not read", "marked by you", "formalized", "Lean accepted, not attested", "assumed in Lean", "not formalized") are the viewer's; "matches the paper", and "not compared yet" before it, were decided with the author for the person's yes to a transcription.
+The viewer draws `matches` as round six's filled circle ("matches the paper"), `unchecked` as the amber ring ("not compared yet"), `stub` as the dotted ring ("not read") and `marked` as the flag ("marked by you"); and `lean` as the filled diamond where it is `formalized` ("formalized") or the half-filled one where it is `formalized` with the role `assumed` ("assumed in Lean"), the amber diamond where it waits on the person: `unattested`, `changed`, or `waiting` with some `why` in `waiting_on` `unchecked` or `unattested` ("Lean accepted, not attested"); and the outlined one otherwise, `waiting` on reading alone among them ("not formalized"). Where a result itself is shown, the Web's focus card, Review's opened row for it and the formalize panel, `waiting_on` is said in words ("not formalized yet: Lemma 2.1 of Okafor 2022 is not compared with its paper"); in a list it is the mark alone. The words are the viewer's; "matches the paper", and "not compared yet" before it, were decided with the author for the person's yes to a transcription. `formalized` holds only when nothing the result rests on in Lean waits on the person (`library.md`, "Digesting and checking"), which `evidence.md` computes as `waiting`.
 
 **A result in a list.** Wherever results are listed (the Web, a neighbourhood, a node's uses, the formalize panel), a result is sent as `ROW`:
 
@@ -58,7 +58,7 @@ The words drawn for them ("matches the paper", "not compared yet", "not read", "
  "source": {"ref": "tq-00A1-ref", "short": "Smith 2024"}, "paper": "unchecked", "lean": null}
 ```
 
-`source` is `{"doc": "drafting/main.tex"}` for a draft's result. A work's outline is the exception, since it also lists what is not yet a node (§3.2), and so is a Review row (§4.2). A work's results are in paper order: where the survey places them, else by `pages` and place on the page, else by number read naturally (3.2 before 3.10 before A.1).
+`source` is `{"doc": "drafting/main.tex"}` for a draft's result. A work's outline is the exception, since it also lists what is not yet a node (§3.2), and so is a Review row (§4.2). A work's results are in paper order: by the place the placement records give, once digesting fills them; until then by the node index's rule, number read naturally (3.2 before 3.10 before A.1) before pages, since a stub has a number and no page (ruled with the node store).
 
 **Who writes.** Every write this page adds is the person's and is refused to a declared agent with `author-only` (403), as the intake's are (`write-api.md` §6); the built writes it uses keep their own rules. An agent changes the web by its own commands (`library.md`, "What an agent can do to the web"). Errors are the write API's: a name that is not there answers 404 with `no-such-` and what it named (`no-such-ref`, `no-such-node`, `no-such-result`, `no-such-row`, `no-such-task`), a request refused on its merits 400, a conflict with the quilt's state 409.
 
@@ -82,7 +82,7 @@ The words drawn for them ("matches the paper", "not compared yet", "not read", "
 ```
 
 - `holds.pdf` is the stored PDF's hash, which addresses its thumbnail and its document, or null; `holds.tex` says loom holds the work's TeX source.
-- `digested` is null when nothing of the work is digested. `statements` counts the work's statements that are not stubs, `compared` those whose `paper` is `checked`, `stubs` its stubs, and `of` the results its TeX source holds, from the survey (§3.2), null until a survey exists.
+- `digested` is null when nothing of the work is digested. `statements` counts the work's statements that are not stubs, `compared` those whose `paper` is `matches`, `stubs` its stubs, and `of` the results its TeX source holds, from the survey (§3.2), null until a survey exists.
 - `used_in` is the documents that cite the work, by an entry key their bibliography resolves to its reference.
 - `link` is the work's own page for `open its source ↗`: the entry's `url`, else its DOI's resolver, else its arXiv page; null when it states none.
 - `version` is Open 3; `lookup` is null or `{"state": "looking"|"unconfirmed", "identifier": "arXiv 2209.01234v2"}` (1d, below); `cited_as` is null here and is the picker's (§6.1).
@@ -132,7 +132,7 @@ From: index (the references and a count of nodes by `source`), evidence (`compar
 
 - `outline.from` is `tex` when loom holds the source, `pdf` when it holds only a PDF, and null with no document. For `tex`, `sections` and `items` come from the survey: an `item` is a result of the source whether or not it is digested, named by its label, else by `i` and its place among the source's results (stable for one source); `node` is the node made from it, or null; a stub of the work that the survey does not hold comes last with `item` null ("not found in its TeX source"). For `pdf`, `sections` is empty: the viewer reads the PDF's own outline from the document it already has (pdf.js), and places the work's nodes that have a place, and its marks, under the section their page falls in; `items` then holds those nodes, with `item` null.
 - `outline.state` is `ready`, or `reading` while the survey's compile runs (below).
-- `marks` are the person's marks to digest on this work, annotations of kind `to-digest` (§3.3), that nothing has been read from yet. `unplaced` is the work's stubs with no `pages` and no place.
+- `marks` are the person's marks to digest on this work, annotations whose `purpose` is `to-digest` (§3.3), that nothing has been read from yet. `unplaced` is the work's stubs with no `pages` and no place.
 
 From: index, evidence, store (the survey, the stored documents), annotations. Cost: about 15 KB for a work of 60 results; 10 ms once the survey exists. The first open of a work with a TeX source makes its survey.
 
@@ -142,7 +142,7 @@ From: index, evidence, store (the survey, the stored documents), annotations. Co
 
 **Open 9.** A page before the compile. Proposal: until the compile has run, an item's `page` is null and a click on it goes to its section's page, the section found by its heading in the page text; this is navigation, drawn as no mark and written into no node.
 
-**Open 10.** The order and sections of a work held only as a PDF. `nodes.md` keeps "the order of a work's nodes" with records not yet specified (§9). Proposal: by the node's place, page then top of its first rectangle, a node with no place by `pages` then number.
+The order of a work's nodes is the one §2 gives, ruled with the node store; a node of a work held only as a PDF stands under the section of the PDF's outline its page falls in.
 
 **Read `library-digest-scopes`.** Asked when a `digest…` menu opens. Given `{"ref": REF}` for a work's menu, answers `{"gen", "tex": true, "pdf": true, "used": 2, "marked": 0, "all": 51}`; given `{"all": true}` for the list's, answers `{"gen", "used": 14}`. `used` counts the results the drafts use, through their citations, that are not yet digested (the stubs, and for a work with a survey its items they cite); `marked` the work's marks not yet read; `all` the items of the source not yet digested, or for a work held only as a PDF its page count (2 digest draws "everything in Okafor 2022 (24 pages)"). The count of papers selected is the viewer's. From: scan, index, the marks, the survey. Cost: 10 ms; `all` for a work with a source and no survey starts the survey, and the menu draws that item without its count until the answer comes.
 
@@ -170,7 +170,7 @@ The overlay is off until a person turns it on, and the viewer remembers it once 
 
 **Writes.**
 
-- `mark to digest` is an annotation (ruled with the spec's merge): `annotate` on the work's page, with the same record and the same placing as a highlight on a PDF, so that it is found again on a changed PDF by the one mechanism, and with a kind of its own, which the lists of notes leave out. The kind is `to-digest`, agreed with the evidence lane, in an optional field `kind` of the annotation record apart from the person's `type` (proposed; the annotation format's owner confirms); an annotation with no `kind` is an ordinary note. The column's message ("Marked on page 7, to digest") offers `undo`, which is `delete`. A mark may name the stub whose place it is. Asking for a mark to be read makes a task that names it (`review-task`).
+- `mark to digest` is an annotation (ruled with the spec's merge): `annotate` on the work's page, with the same record and the same placing as a highlight on a PDF, so that it is found again on a changed PDF by the one mechanism, and with a purpose of its own, which the lists of notes leave out: `annotate` takes `purpose: "to-digest"`, an optional field of the annotation apart from the person's `type` and from the event's own `kind`, which says who wrote it (built by the evidence lane, `manifest.md` and `evidence.md`); an annotation with no `purpose` is an ordinary note. The column's message ("Marked on page 7, to digest") offers `undo`, which is `delete`. A mark may name the stub whose place it is. Asking for a mark to be read makes a task that names it (`review-task`).
 - `highlight` and `note` are `annotate`, as today.
 - `ask an agent…` is `review-task` with `{"kind": "ask", "on": {"ref", "page", "quote"}, "text"}` ("Added to agent tasks: a question on these words"). The field for the question is not drawn in round six; the viewer opens one under the popup.
 - The reader reports the person's place with `here`, as today, its item the reference.
@@ -184,25 +184,25 @@ The overlay is off until a person turns it on, and the viewer remembers it once 
 ```json
 {"gen": 41, "node": "tq-00K3", "hash": "sha256:…", "name": "Lemma 3.2", "title": "Test lemma", "taxon": "lemma",
  "work": {"ref": "tq-00A1-ref", "short": "Smith 2024", "pdf": "sha256:41b7…"}, "pages": "12",
- "digested": {"how": "tex", "by": "loom", "at": "2026-11-20T14:02:11Z"},
+ "digested": {"how": "extracted", "by": "loom", "at": "2026-11-20T14:02:11Z"},
  "paper": "unchecked", "lean": null,
  "body": "Let $W$ be a widget (Definition~\\ref{tq-00A4}). Then\n\\begin{enumerate}…",
  "macros": {"node": "tq-00A1-macros", "hash": "sha256:…", "body": "\\usepackage{amssymb}\n\\newcommand{\\Wid}{\\mathcal{W}}\n\\DeclareMathOperator{\\diam}{diam}"},
- "points": {"tq-00A4": {"name": "Definition 2.1", "number": "2.1", "paper": "checked"},
+ "points": {"tq-00A4": {"name": "Definition 2.1", "number": "2.1", "paper": "matches"},
             "tq-00K3-eq00": {"number": "3.3"}},
  "uses": [ROW], "mentions": [ROW],
  "proofs": [{"node": "tq-00K3-proof00", "source": null, "pages": "12-13", "pointer": false}],
  "used_by": {"docs": ["drafting/bounds.tex"], "nodes": 1}}
 ```
 
-- `digested.how` is `tex` (extracted exactly from the source), `agent` (transcribed from the pages by an agent, `by` its name) or `person`; null for an item not digested.
+- `digested` is the latest `digested` record on this very text, its `how` as `evidence.md` §3.1 has it (`extracted` from the TeX source by loom, `transcribed` from the pages or `read` from a source by an agent, `corrected` by an agent, `written` by a person) and `by` the name of who did it; null for an item not digested.
 - `macros` is the work's macros node, which the viewer applies to this node alone; null when the work has none.
 - `points` gives, for every id and anchor the body points at, what is drawn in its place: the rendered view draws `\ref{tq-00A4}` as "2.1" and `\eqref{tq-00K3-eq00}` as "(3.3)", and the plain view draws each pointer as a chip with the name and the target's mark. A use in the same work has `source` null in its `ROW`.
 - For `{ref, item}`: `{"gen", "name", "title", "taxon", "pages", "work", "digested": null, "paper": null}`, from the survey.
 
 From: index (the node, its edges, its proofs, what uses it), evidence (`digested`, `paper`, `lean`), the node's file (its body), the macros node's file, store (the survey, for an item), scan (the drafts that use it). Cost: two file reads and index lookups, 5 ms, under 8 KB.
 
-**Open 15.** Anchor numbers. "(3.3)" is the number the source prints for a labelled display, and `nodes.md` keeps it nowhere: an anchor is an id with no number. Proposal: the header gains `anchors`, a table from each anchor defined in the body to the number its source prints, since that is what the source says, as `number` is; a node carried into another quilt then draws the same.
+"(3.3)" is the number the source prints for a labelled display: the node's header holds it in `anchors`, a table from each anchor defined in its body to the number its source prints (ruled with the node store), and `points` passes it on.
 
 **Open 16.** Ids in the plain view. `library.md` says the plain view shows "the ids it points at"; the rule for the views is that no id is drawn, and round six puts the id in a chip's tooltip. Proposal: the chip names the result and draws its mark; the id appears nowhere, since the chip already shows what the pointer points at.
 
@@ -269,7 +269,7 @@ Each kind below: what its row draws, the fields it needs, its body, its writes. 
 
 **Open 22.** Naming a citation. `only a mention` must be remembered across edits of the draft, and a citation has no id. Proposal: `citation` is the document, the key cited and the words around the citation, found again as an annotation's quote is, and `library-mention` records it under `.loom/records/library/`; a citation so marked makes no stub and leaves the list.
 
-**`check`: Digested results to check (4 check).** A row a work: "Smith 2024 · 9 results", "bounds.tex rests on one"; "Arden 2025 · Theorem 5.1", "transcribed by an agent · main.tex rests on it". Inside, a row a node, "3.2 Lemma · Test lemma", "bounds.tex rests on it, through Proposition 3.4"; the first not yet compared opens: a line on how it was made ("extracted exactly from the TeX source, so compare it at a glance", or "transcribed by Claude Code from page 21, so read it closely"), the node with `rendered | plain`, "Does loom's copy match the paper?", and beside it the paper cropped at its place, "Smith 2024, page 12". Fields `{"ref", "short", "pdf", "nodes": [{"node", "name", "title", "rests": {"docs": [DOC…], "through"?: "Proposition 3.4"}, "how": "tex"|"agent"}]}`. A node's body is `library-node` (§3.4); the crop is `library-places` with `{node}`, drawn by the reader clipped to the place with lines above and below. `through` is the first result on a shortest path from a draft's result to the node, when no draft uses the node directly. A correction is a row of its own, "Arden 2024 · a correction to Definition 1.2", "proposed by Claude Code": fields `{"correction", "node", "name", "ref", "short", "by"}`, body `{"compared_at", "runs": [["=", "The \\emph{cycle space} …"], ["-", "of the divergence map"], ["+", "$\\mathcal{Z}(Q)$ of …"]]}`, the word diff of the two LaTeX bodies, which the viewer draws as it draws a node, "The text you compared on 18 Nov stands until you take this.", `take` and `decline`. Writes: `library-check`; `library-correction-take` and `library-correction-decline` with `{"correction"}`. From: index, evidence (how each was digested, verified records, corrections), scan (what rests on it), store (places). Order (`library.md`, "Digesting and checking"): what a draft rests on first, grouped by work, one row for a paper. Cost of `through`: a breadth-first walk up the reversed uses from the work's nodes, 5 ms.
+**`check`: Digested results to check (4 check).** A row a work: "Smith 2024 · 9 results", "bounds.tex rests on one"; "Arden 2025 · Theorem 5.1", "transcribed by an agent · main.tex rests on it". Inside, a row a node, "3.2 Lemma · Test lemma", "bounds.tex rests on it, through Proposition 3.4"; the first not yet compared opens: a line on how it was made ("extracted exactly from the TeX source, so compare it at a glance", or "transcribed by Claude Code from page 21, so read it closely"), the node with `rendered | plain`, "Does loom's copy match the paper?", and beside it the paper cropped at its place, "Smith 2024, page 12". Fields `{"ref", "short", "pdf", "nodes": [{"node", "name", "title", "rests": {"docs": [DOC…], "through"?: "Proposition 3.4"}, "how": "extracted"|"transcribed"|"read"|"corrected"|"written"}]}`. A node's body is `library-node` (§3.4); the crop is `library-places` with `{node}`, drawn by the reader clipped to the place with lines above and below. `through` is the first result on a shortest path from a draft's result to the node, when no draft uses the node directly. A correction is a row of its own, "Arden 2024 · a correction to Definition 1.2", "proposed by Claude Code": fields `{"correction", "node", "name", "ref", "short", "by"}`, body `{"compared_at", "runs": [["=", "The \\emph{cycle space} …"], ["-", "of the divergence map"], ["+", "$\\mathcal{Z}(Q)$ of …"]]}`, the word diff of the two LaTeX bodies, which the viewer draws as it draws a node, "The text you compared on 18 Nov stands until you take this.", `take` and `decline`. Writes: `library-check`; `library-correction-take` and `library-correction-decline` with `{"correction"}`. From: index, evidence (how each was digested, verified records, corrections), scan (what rests on it), store (places). Order (`library.md`, "Digesting and checking"): what a draft rests on first, grouped by work, one row for a paper. Cost of `through`: a breadth-first walk up the reversed uses from the work's nodes, 5 ms.
 
 **Open 23.** Whether taking a correction checks the node. Proposal: yes, a record of the person's verification on the new hash, since the person read the change against the text they had compared; the panel says so in its line.
 
@@ -399,7 +399,7 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
 
 **Writes.** `place it again`: the person clicks where the note belongs or selects its words, `place` with `{"annotation", "target", "quote"?, "page"?, "rects"?}`. `delete` is `delete`, as built. **Open 30.** Today's `edit` moves only a mark drawn on a PDF page. Proposal: `place`, beside `annotate` and `edit`, anchors a note again on any target by its quote, or on a page by its region, and records that it was placed again.
 
-**Open 31.** Tags on a note. Annotations have a type and no tags; `library.md` says what an agent wants to say of a work is "a note on the work, with tags". Proposal: an annotation gains `tags`, free words made lower-case as nodes' tags are, written by `annotate`; "summary" in 8b is such a tag.
+**Open 31.** Tags on a note. Annotations have a type and no tags; `library.md` says what an agent wants to say of a work is "a note on the work, with tags". Proposal: an annotation gains `tags`, written by `annotate`; "summary" in 8b is such a tag. As for a node's tags (ruled with the node store), a tag keeps the case it was typed in, two equal ignoring case are one tag, and it is shown as first written.
 
 ### 6.4 Lean marks in a draft's margin (8, 11a)
 
@@ -457,7 +457,7 @@ Every write the views make, in one place. "Built" marks one that exists today.
 | `formal-ask` | `{targets, assume}` | `{gen, tasks}` | a task for each target; `needs-label` (409) |
 | `formal-attest` | `{result, observation}` | `{gen}` | the person's word that the Lean statement says what the result says, naming the hashes it covers; `unchecked`, `changed` (409) |
 | `place` | `{annotation, target, quote?, page?, rects?}` | `{gen}` | anchors a note again (Open 30) |
-| `annotate`, `delete`, `here`, `settings-save` | as `write-api.md` | | built; `annotate` gains `kind`, `to-digest` for a mark to digest (§3.3), which may name a stub |
+| `annotate`, `delete`, `here`, `settings-save` | as `write-api.md` | | built; `annotate` gains `purpose`, `to-digest` for a mark to digest (§3.3), which may name a stub |
 | `change-keep`, `change-discard`, `review-accept` | as `write-api.md` | | built |
 
 ## 8. Costs at the sizes in use
@@ -496,12 +496,12 @@ The manifest carries nothing of the library (`library.md`, "Scale").
 | 7 | §3.1 | "details unconfirmed" | the intake's record of how the details were found |
 | 8 | §3.2 | matching the survey to nodes, and a stub the source lacks | by label, else printed number and taxon; never by guess |
 | 9 | §3.2 | an item's page before the survey's compile | null; a click goes to its section |
-| 10 | §3.2 | order and sections of a work held only as a PDF | by place, else pages and number |
+| 10 | §3.2 | order and sections of a work held only as a PDF | closed: §2's order, ruled with the node store; sections by the PDF's outline |
 | 11 | §3.3 | long PDFs | `Range` on the PDF's address, later |
 | 12 | §3.3 | annotations on a work keyed by identifier | closed: keyed by the reference's id, which the carry-over re-keys them to |
 | 13 | §3.3 | the overlay's default | closed: off, remembered once turned on |
-| 14 | §3.3 | where a mark to digest is kept | closed: an annotation of kind `to-digest` |
-| 15 | §3.4 | anchors' printed numbers | a header key `anchors` in `nodes.md` |
+| 14 | §3.3 | where a mark to digest is kept | closed: an annotation whose `purpose` is `to-digest` |
+| 15 | §3.4 | anchors' printed numbers | closed: the header key `anchors`, ruled with the node store |
 | 16 | §3.4 | ids in the plain view | a named chip; no id |
 | 17 | §3.4 | "no, it differs…" | the person corrects in place, checked at once, or asks an agent |
 | 18 | §3.5 | a drop meant for a paper waiting to be fetched | closed: by its identifier or by being dropped on its row; nothing matched by title or author |
@@ -517,7 +517,7 @@ The manifest carries nothing of the library (`library.md`, "Scale").
 | 28 | §6.1 | "[1]", the label a draft cites a work by | closed: `read_cite_labels` gives it |
 | 29 | §6.2 | a citation of a number the source does not print | a stub, "not found in its TeX source" |
 | 30 | §6.3 | placing a note again | `place` |
-| 31 | §6.3 | tags on a note | annotations gain `tags` |
+| 31 | §6.3 | tags on a note | annotations gain `tags`, kept in the case typed, equal ignoring case being one |
 | 32 | §6.4 | formalization on for a quilt | `formal-enable`, with a Lean project loom checks |
 | 33 | §6.6 | requesting a formalization over unchecked results | closed: ruled after round six, allowed; the gate is on what reads formalized |
 | 34 | §4.2 | Review's kinds against `library.md`'s list | closed: `evidence.md` writes the rule for each kind |

@@ -10,7 +10,7 @@
 	// It is deliberately NOT keyed on the manifest store: arras polls every second and swaps the manifest whenever its
 	// hash changes, so a pane that re-derived from it would re-render a page a second — the failure `Fragment.svelte`
 	// has been patched for twice.
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import { asPercent, document_, pdfjs } from './document';
 	import { markAt, type PageMark } from './marks';
 	import PageMarks, { type Drawn, type Moved } from './PageMarks.svelte';
@@ -39,7 +39,8 @@
 		ondraw,
 		onpick,
 		onmove,
-		onembedded
+		onembedded,
+		overlay
 	}: {
 		url: string;
 		page?: number;
@@ -78,6 +79,8 @@
 		onmove?: (e: Moved) => void;
 		/** The reader clicked an annotation the PDF holds. */
 		onembedded?: (e: Embedded & { client: Box }) => void;
+		/** What a caller draws over a drawn page, positioned by rectangles in loom's space through `at`: the Library's digest marks. */
+		overlay?: Snippet<[{ page: number; at: (r: Rect) => { left: string; top: string; width: string; height: string } }]>;
 	} = $props();
 
 	let host: HTMLDivElement;
@@ -374,6 +377,7 @@
 				{/each}
 			{/each}
 		</div>
+		{#if overlay}<div class="overlay">{@render overlay({ page, at: (r) => asPercent(r, box) })}</div>{/if}
 	{:else}
 		<div class="held" aria-hidden="true"></div>
 	{/if}
@@ -390,6 +394,12 @@
 </div>
 
 <style>
+	/* a caller's layer over the page, which takes the pointer only where what it draws does */
+	.overlay {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
 	.page {
 		position: relative;
 		background: var(--surface, #fff);

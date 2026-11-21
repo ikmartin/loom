@@ -78,4 +78,4 @@ Code prefixes: `loom:formal-` for formalization; `loom:markdown-` for the checks
 
 ## The viewer
 
-Routes: `/library`, the page of every work; `/activity`, what agents did; `/notes`, every note. In Review's list of proposals, the card kind `formal`; the badge `formalized`. What the column draws is under `arras/src/lib/shell/column/`, and the window's drop target is `arras/src/lib/components/DropZone.svelte`.
+Routes: `/activity`, what agents did; `/notes`, every note. In Review's list of proposals, the card kind `formal`; the badge `formalized`. What the column draws is under `arras/src/lib/shell/column/`, and the window's drop target is `arras/src/lib/components/DropZone.svelte`.

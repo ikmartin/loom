@@ -30,10 +30,12 @@
 	import { sessionView } from '$lib/sessions/sessions.svelte';
 	import { startReporting } from '$lib/here.svelte';
 	import { frame } from '$lib/words/frame';
+	import { chooseSource } from '$lib/library/source';
 
 	let { children } = $props();
 
 	onMount(() => {
+		void chooseSource();
 		prefs.load();
 		sessionView.load();
 		store.start(1000);

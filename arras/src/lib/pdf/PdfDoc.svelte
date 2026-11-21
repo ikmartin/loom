@@ -42,7 +42,8 @@
 		ondraw,
 		onpick,
 		onmove,
-		onembedded
+		onembedded,
+		overlay
 	}: {
 		url: string;
 		/** The page to open at; changing it scrolls there. */
@@ -84,6 +85,8 @@
 		onpick?: ComponentProps<typeof PdfPage>['onpick'];
 		onmove?: ComponentProps<typeof PdfPage>['onmove'];
 		onembedded?: ComponentProps<typeof PdfPage>['onembedded'];
+		/** A layer the caller draws over each drawn page (`PdfPage`'s `overlay`). */
+		overlay?: ComponentProps<typeof PdfPage>['overlay'];
 	} = $props();
 
 	// The renderer's own view, used when no caller supplied one; `v` is the one in force either way.
@@ -420,6 +423,7 @@
 					{onpick}
 					{onmove}
 					{onembedded}
+					{overlay}
 					ondrawn={() => { if (landed !== focus && (spans.some((s) => s.id === focus && s.page === n) || marks.some((m) => m.id === focus && m.page === n))) focusedRender++; }}
 					{onselect}
 					{onbox}
