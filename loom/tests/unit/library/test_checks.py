@@ -443,3 +443,14 @@ def test_check_9_an_abbreviation_left_unexpanded_is_refused_a_month_apart() -> N
         reference("@article{K1,\n  journal = jex # { Letters},\n}\n"), "loom:node-bibtex", "uses jex unexpanded"
     )
     assert check_store(reference("@article{K1,\n  month = jan,\n  year = 2019,\n}\n")) == []
+
+
+def test_check_10_the_definitions_real_preambles_hold_pass() -> None:
+    """N-16: the definitions a body can need that 162 of 178 of TeX Live's theorem-declaring documents were refused for."""
+    text = (
+        "\\PassOptionsToPackage{hyphens}{url}\n\\definecolor{dark}{rgb}{0,0,0.5}\\definecolor[named]{x}{gray}{0.5}\\colorlet{light}{dark!20}\n"
+        "\\numberwithin{equation}{section}\n\\newcounter{claim}[section]\\setcounter{claim}{0}\n\\newlength{\\gap}\\setlength{\\gap}{2pt}\n"
+        "\\newif\\ifdraft\n\\crefname{lemma}{lemma}{lemmas}\\Crefname{lemma}{Lemma}{Lemmas}\n"
+        '\\DeclareMathAlphabet{\\mathpzc}{OT1}{pzc}{m}{it}\n\\DeclareSymbolFont{AMSb}{U}{msb}{m}{n}\n\\DeclareMathSymbol{\\Bbbk}{\\mathord}{AMSb}{"7C}\n'
+    )
+    assert check_store(macros(text)) == []

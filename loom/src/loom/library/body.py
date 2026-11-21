@@ -250,7 +250,7 @@ def _bare_words(fields: str) -> tuple[str, ...]:
         pos = m.end()
         while True:
             p = skip_space(fields, pos)
-            if p < len(fields) and fields[p] in "{\"":
+            if p < len(fields) and fields[p] in '{"':
                 end = match_group(fields, p) if fields[p] == "{" else _quoted(fields, p)
                 if end < 0:
                     return tuple(out)
@@ -291,7 +291,7 @@ class Item:
     text: str = ""
 
 
-#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`. A starred form is its command's. Package loads, definitions, and the settings TikZ and pgfplots take in a preamble; nothing that typesets.
+#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`. A starred form is its command's. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets.
 ARGUMENTS = {
     "usepackage": "oom",
     "RequirePackage": "oom",
@@ -319,6 +319,20 @@ ARGUMENTS = {
     "usetikzlibrary": "m",
     "tikzset": "m",
     "pgfplotsset": "m",
+    "PassOptionsToPackage": "mm",
+    "definecolor": "ommm",
+    "colorlet": "omm",
+    "numberwithin": "omm",
+    "newcounter": "mo",
+    "setcounter": "mm",
+    "newlength": "n",
+    "setlength": "nm",
+    "newif": "n",
+    "crefname": "mmm",
+    "Crefname": "mmm",
+    "DeclareMathAlphabet": "nmmmm",
+    "DeclareSymbolFont": "mmmmm",
+    "DeclareMathSymbol": "nmmm",
 }
 _CS = re.compile(r"\\(?:[A-Za-z@]+|.)")
 #: The arguments read after a command `ARGUMENTS` does not know: its star, then every bracket and brace group that follows.
