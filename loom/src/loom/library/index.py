@@ -688,33 +688,42 @@ class NodeIndex:
             where.append(f"(n.number = ? OR n.parent IN {numbered})" if proofs else "n.number = ?")
             args += [number] * (2 if proofs else 1)
         columns = ", ".join("n." + c.strip() for c in _ROW.split(","))
-        named: set[str] = set()
+        width = len(_ROW.split(","))
+        # a statement found by a proof alone stands for that proof, so a search with proofs reads more rows than it returns
+        cap = limit * 4 if proofs else limit
         if terms:
             query = " ".join(f'"{t}"' for t in terms[:-1]) + f' "{terms[-1]}"*'
-            sql = f"SELECT {columns}, bm25(words, 4.0, 4.0, 2.0, 1.0) AS score FROM words CROSS JOIN nodes n ON n.rowid = words.rowid WHERE words MATCH ? AND {' AND '.join(where)} ORDER BY score"
-            found = self.db.execute(sql, [query, *args]).fetchall()
-            by_name = self.db.execute("SELECT rowid FROM words WHERE words MATCH ?", (f"{{name title}} : {query}",))
-            rowids = [r[0] for r in by_name]
-            if rowids:
-                marks = ",".join("?" * len(rowids))
-                named = {r[0] for r in self.db.execute(f"SELECT id FROM nodes WHERE rowid IN ({marks})", rowids)}
+            # one query: a match on the name or title is a sort key computed by SQLite, never a list of rows handed back to it
+            sql = (
+                f"SELECT {columns}, words.rowid IN (SELECT rowid FROM words WHERE words MATCH ?) AS named, "
+                f"bm25(words, 4.0, 4.0, 2.0, 1.0) AS score FROM words CROSS JOIN nodes n ON n.rowid = words.rowid "
+                f"WHERE words MATCH ? AND {' AND '.join(where)} ORDER BY named DESC, score LIMIT ?"
+            )
+            found = self.db.execute(sql, [f"{{name title}} : {query}", query, *args, cap]).fetchall()
+        elif text.strip() and not numbers:
+            # words that are no words, punctuation alone, find nothing rather than everything
+            return []
         else:
-            sql = f"SELECT {columns}, 0 FROM nodes n WHERE {' AND '.join(where)} ORDER BY n.source, n.numkey IS NULL, n.numkey, n.id"
-            found = self.db.execute(sql, args).fetchall()
+            sql = f"SELECT {columns}, 0, 0 FROM nodes n WHERE {' AND '.join(where)} ORDER BY n.source, n.numkey IS NULL, n.numkey, n.id LIMIT ?"
+            found = self.db.execute(sql, [*args, cap]).fetchall()
         # a statement's own match is kept over one in its proof, wherever each ranked
         own: dict[str, Row] = {}
         via: dict[str, str] = {}
         ranked: dict[str, None] = {}
+        named: set[str] = set()
         for record in found:
-            row = _row(record[:-1])
+            row = _row(record[:width])
             if row.kind == ids.STATEMENT:
                 own.setdefault(row.id, row)
                 ranked.setdefault(row.id)
+                if terms and record[width]:
+                    named.add(row.id)
             elif row.parent:
                 via.setdefault(row.parent, row.id)
                 ranked.setdefault(row.parent)
         on_name = [i for i in ranked if i in named or (numbers and not terms)]
-        chosen = [*on_name, *(i for i in ranked if i not in set(on_name))][:limit]
+        first = set(on_name)
+        chosen = [*on_name, *(i for i in ranked if i not in first)][:limit]
         hits: list[Hit] = []
         for statement in chosen:
             shown = own.get(statement) or self.row(statement)

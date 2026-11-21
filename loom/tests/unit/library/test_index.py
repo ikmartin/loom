@@ -332,3 +332,46 @@ def test_the_generation_moves_when_a_node_or_a_tag_changes_and_not_otherwise(tmp
         assert index.refresh().generation == first + 2, "a tag written again changes nothing"
         (root / LIBRARY_NODES / "tq-00K6.node").write_bytes(b"not a node\n")
         assert index.refresh().generation == first + 2, "a file that does not read changes no node"
+
+
+# ---- the review's findings ---------------------------------------------------------------------------------------------
+
+
+def _lemmas(root: Path, count: int) -> None:
+    """`count` lemmas named "Lemma", each a node of its own, written straight into the folder."""
+    for i in range(count):
+        put(
+            root,
+            Node(id=f"tq-{1000 + i:04d}", taxon="lemma", number=f"9.{i}", body=f"Lemma body {i} on compact sets.\n"),
+        )
+
+
+def test_a_search_on_a_common_name_reads_no_more_rows_than_it_returns(
+    root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N-1: a word on four hundred statements' names used to turn every one into a row in Python, and test each against a set made again for each."""
+    import loom.library.index as index_module
+
+    _lemmas(root, 400)
+    with NodeIndex.open(root) as index:
+        made: list[int] = []
+        real = index_module._row
+        monkeypatch.setattr(index_module, "_row", lambda record: (made.append(1), real(record))[1])
+        hits = index.search("lemma", limit=10)
+        assert len(hits) == 10 and {h.where for h in hits} == {"name"}
+        assert len(made) <= 10
+
+
+def test_a_search_matching_more_names_than_sqlite_takes_variables_answers(root: Path) -> None:
+    """N-2: the names matched used to go back to SQLite as one bound variable each, past the 32,766 the SQLite of CI's Pythons takes."""
+    _lemmas(root, 120)
+    with NodeIndex.open(root) as index:
+        index.db.setlimit(sqlite3.SQLITE_LIMIT_VARIABLE_NUMBER, 50)
+        assert len(index.search("lemma", limit=100)) == 100
+
+
+def test_punctuation_alone_finds_nothing(root: Path) -> None:
+    """N-22: a search of no words answered as the empty search does, every statement."""
+    with NodeIndex.open(root) as index:
+        assert index.search("*") == [] and index.search('"') == [] and index.search("\\") == []
+        assert len(index.search("")) == 4, "the empty search is every statement"
