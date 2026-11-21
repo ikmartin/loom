@@ -35,8 +35,10 @@ _FRAME = re.compile(
 _COMMAND = re.compile(r"\\(?:[A-Za-z@]+\*?|[^A-Za-z@\s])|[{}$~]")
 _SPACE = re.compile(r"\s+")
 _EMPTY = re.compile(r"\(\s*\)")
-#: Where a word of a search may start and where one before the last must end, not inside a run of letters and digits; the last runs on to the end of the word it starts.
-_START, _END, _REST = r"(?<![^\W_])", r"(?![^\W_])", r"[^\W_]*"
+#: A word, as the node index's tokenizer splits a body's or a search's words: a run of letters and digits.
+_TOKEN = re.compile(r"[^\W_]+")
+#: What a statement's block has and a node's body has not, left out before the node index's rules read it: the environment's head with its options and its foot, its labels, and loom's `\uses` with its labels, which the index does not know.
+_BLOCK = re.compile(r"\\begin\s*\{[^}]*\}(?:\s*\[[^\]]*\])?|\\end\s*\{[^}]*\}|\\(?:label|uses)\s*\{[^}]*\}")
 
 
 class ScopeError(ValueError):
@@ -337,14 +339,27 @@ def _plain(text: str) -> str:
 
 
 def _statement_words(text: str) -> str:
-    """The words of a statement that search matches and a snippet is cut from: its plain words, as an excerpt shows them (`_plain`)."""
-    return _plain(text)
+    """The words of a statement as the node index holds a body's (`library.index.words`): case and accents folded, comments, references, citations and labels left out, read from the block as a body (`_body`)."""
+    from loom.library.index import words
+
+    return words(_body(text))
+
+
+def _body(text: str) -> str:
+    """A statement's block as a node's body reads, its frame, labels and `\\uses` left out (`_BLOCK`)."""
+    return _BLOCK.sub(" ", text)
+
+
+def _holds(said: str, terms: list[str]) -> bool:
+    """Whether words hold every term as the node index matches a search: each a whole word, the last also as the start of a longer one, in any order."""
+    found = _TOKEN.findall(said)
+    return all(t in found for t in terms[:-1]) and any(w.startswith(terms[-1]) for w in found)
 
 
 def search(d: Drafts, scope: str, doc: str | None, q: str, *, limit: int = 50) -> dict[str, Any]:
     """`web-search`: results whose number, name or title holds the query, then those whose statement's words do (`_statement_words`), each statement hit with the words around it.
 
-    Words are compared without regard to case, in order, any space between them, each at the start of a word and each but the last a whole word, as the node index matches them: `label` finds neither `\\label` nor "unlabelled", and `poly` finds "polynomial", the whole word being the match. A hit's `snippet` is cut from the statement's words at spaces, about sixty characters either side; no command, label or environment's name is among them.
+    Matched as the node index matches a search (`library.index`): every word of the query among the statement's words (`_statement_words`), each a whole word and the last also the start of a longer one, case and accents folded, so `label` finds neither `\\label` nor "unlabelled" and `poly` finds "polynomial". A hit's `snippet` is the index's (`library.index.snippet`): the match as written in the statement's LaTeX, a formula whole, with about sixty characters either side cut at spaces outside mathematics, "…" marking a cut.
 
     Parameters
     ----------
@@ -364,27 +379,26 @@ def search(d: Drafts, scope: str, doc: str | None, q: str, *, limit: int = 50) -
     dict
         `{count, hits: [{row, snippet}]}`, `count` every hit, `snippet` null for a hit on the name or title and `{before, match, after}` for one in the statement.
     """
-    words = q.split()
-    if not words:
+    from loom.library.index import snippet, words
+
+    terms = _TOKEN.findall(words(q))
+    if not terms:
         return {"count": 0, "hits": []}
-    pattern = re.compile(_START + (_END + r"\s+").join(re.escape(w) for w in words) + _REST, re.I)
     named: list[dict[str, Any]] = []
     in_text: list[dict[str, Any]] = []
     for key in d.scope(scope, doc):
         row = d.row(key, doc)
-        if any(pattern.search(str(row.get(f) or "")) for f in ("name", "title")):
+        if _holds(words(f"{row.get('name') or ''} {row.get('title') or ''}"), terms):
             named.append({"row": row, "snippet": None})
             continue
-        text = d.words(key)
-        found = pattern.search(text)
-        if found:
-            before = text[max(0, found.start() - 60) : found.start()]
-            after = text[found.end() : found.end() + 60]
-            before = before[before.find(" ") + 1 :] if found.start() > 60 and " " in before else before
-            after = after[: after.rfind(" ")] if " " in after and found.end() + 60 < len(text) else after
-            in_text.append(
-                {"row": row, "snippet": {"before": before.lstrip(), "match": found.group(0), "after": after.rstrip()}}
+        if _holds(d.words(key), terms):
+            cut = snippet(_body(d.text(key)), terms)
+            where = (
+                {"before": cut.before, "match": cut.match, "after": cut.after}
+                if cut
+                else {"before": "", "match": terms[-1], "after": ""}
             )
+            in_text.append({"row": row, "snippet": where})
     hits = (named + in_text)[:limit]
     return {"count": len(named) + len(in_text), "hits": hits}
 

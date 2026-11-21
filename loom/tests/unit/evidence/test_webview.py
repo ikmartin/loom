@@ -117,9 +117,11 @@ def test_search_finds_a_name_first_then_words_of_a_statement_with_the_words_arou
     d = _d(root)
     found = webview.search(d, "all", None, "polynomial in")
     [hit] = found["hits"]
-    assert hit["row"]["result"] == _key(d, "thm:count") and hit["snippet"]["match"] == "polynomial in"
-    # the snippet is cut from the statement's plain words: no dollar, tie or reference in it
-    assert "height at most h is a" in hit["snippet"]["before"] and hit["snippet"]["after"] == " h, by Lemma."
+    # the node index's snippet: the first word found, from the statement's LaTeX, a formula whole and cut at spaces outside it
+    assert hit["row"]["result"] == _key(d, "thm:count") and hit["snippet"]["match"] == "polynomial"
+    assert hit["snippet"]["before"].endswith("height at most $h$ is a ") and hit["snippet"]["after"].startswith(
+        " in $h$"
+    )
     named = webview.search(d, "draft", DOC, "lemma")
     # the name is found first; the theorem, whose statement says "Lemma", after it, with its words
     assert [h["row"]["result"] for h in named["hits"]] == [_key(d, "lem:balanced"), _key(d, "thm:count")]
@@ -284,16 +286,16 @@ def _lean(root: Path, on: Subject, states: dict[str, str], *, ok: bool = True) -
 
 def test_search_matches_the_words_of_a_statement_never_its_latex(root: Path) -> None:
     d = _d(root)
-    for q in ("label", "begin", "ref", "lem:balanced", "$h$", "definition}", "support", "nomial"):
-        # a command, a label, an environment's name, a dollar, a proof's words, or the inside of a word
+    for q in ("label", "begin", "ref", "lem:balanced", "support", "nomial"):
+        # a command, a reference, an environment's name, a label, a proof's words, or the inside of a word
         assert webview.search(d, "all", None, q)["count"] == 0, q
     assert [h["snippet"]["match"] for h in webview.search(d, "all", None, "poly")["hits"]] == ["polynomial"]
     [hit] = webview.search(d, "all", None, "underlying graph")["hits"]
     assert hit["row"]["result"] == _key(d, "def:connected")
     assert hit["snippet"] == {
         "before": "A quiver is connected if its ",
-        "match": "underlying graph",
-        "after": " is connected.",
+        "match": "underlying",
+        "after": " graph is connected.",
     }
 
 
