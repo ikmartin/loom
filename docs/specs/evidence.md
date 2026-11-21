@@ -2,7 +2,7 @@
 
 This page specifies two logs loom keeps under `.loom/records/`: the **evidence log**, what someone did to a text (digested it, compared it with its paper, ran Lean on it, attested it), and the **asks log**, what a person asked of an agent and an agent of a person. It wins over `docs/design/library.md` about a shape, as that wins about what a record means. The node files these records speak of are `nodes.md`'s.
 
-What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), and the diagnostics for a line that cannot be read. A result's status, computed from the evidence, and Review's lists are not built yet, and nothing yet writes a record but the tests.
+What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). A library node's status waits for the node store, and Review's lists are not built yet; nothing yet writes a record but the tests.
 
 ## 1. Files
 
@@ -20,7 +20,7 @@ A **subject** is one text by its hash, written `{"<kind>": <name>, "hash": <hash
 | --- | --- | --- |
 | `node` | a node's id (`nodes.md` §3) | the node file's bytes (`nodes.md` §1) |
 | `label` | a draft's result by its label: the block's id where it has one (an id is a label, `source-contract.md` §3), else its first `\label` | the block's own text as the acceptance ledger hashes it (`records.locate.block_hash`): each child cut out and stood for by its marker, normalised (`scan.hashing.normalize`), so a line that is only a comment, spaces at a line's end and extra blank lines do not change it, and its title, its label and a comment at the end of a line do |
-| `macro` | a command a person defined, without its backslash, as `scan.macros` reads it | its definition as `scan.macros.parse_macros` reads it (not built yet) |
+| `macro` | a command a person defined, without its backslash, as `scan.macros` reads it | its definition as `scan.macros.parse_macros` reads it (§5.1) |
 
 A record about a label holds for every block of the quilt that bears that label and has that hash: a draft copied to a new file keeps what was said of the results it did not change, and of two blocks bearing one label, the one whose text changed no longer has it. A record about a macro holds wherever a definition with that hash is used. A block with no label has no lasting name, and nothing records about it.
 
@@ -167,3 +167,44 @@ A person withdraws any ask and an agent only its own; an agent's withdrawal of a
 {"at":"2026-11-21T12:00:40Z","by":{"kind":"person","name":"A. Author"},"choice":1,"event":"answered","task":"t-2026-11-21-w2c6ga","words":"and note that 2.5 is only a remark"}
 {"at":"2026-11-21T12:10:00Z","by":{"kind":"person","name":"A. Author"},"event":"withdrawn","task":"t-2026-11-21-7h3qfw"}
 ```
+
+## 5. Status
+
+A result's status is computed from the evidence and the texts now, and never stored (`loom/src/loom/evidence/status.py`). It is asked of a node by its id, or of a draft's block by its key; a record about a label speaks for each block that bears the label with that text, so two blocks bearing one label can stand differently.
+
+The function is built and answers for a draft's results now; it answers for a node of the library once the node store gives it the texts of the library (`LibraryWeb`), which is not built yet.
+
+### 5.1 What it reads
+
+- **The text now**: a node file's hash, or a block's label and the hash of its own text (§2).
+- **Its closure**: what the statement uses and what those use in turn. For a draft's result, the targets of its statement's references, through a display to the block that holds it (`Dependencies.review_targets`), each by its label and the hash of the block it resolves to in a document that reads the result; a result with no label is left out, since nothing could name it. For a node, its statement's `uses` that are statements, stubs included, and not works or proofs (with the node store). A label two blocks bear with two texts, neither in a document that reads the result, resolves to nothing.
+- **Its notation**: each command a person defined that the statement or any text of its closure uses, from the preamble of a document that reads the result or the macros node of the node's work, by its definition's hash: SHA-256 of `[kind, name, args, default, body]` as compact JSON (`json.dumps(…, ensure_ascii=False, separators=(",", ":"))`), as `scan.macros.parse_macros` reads the definition, so a comment or a space inside it does not change it. Loom's own commands (`\uses`, `\incomplete`, `\nest`) and the commands of LaTeX and of packages loom does not read are never rows.
+- **Whether a Lean record still stands**: every Lean file it names still has the hash it recorded. A change anywhere in such a file makes it stand no more, which sends loom to run the check again and never lets a stale record count.
+- **The acceptance ledger**, for a draft's result, through the resolver every record uses (`records.store`).
+
+### 5.2 What it says
+
+| field | values | |
+| --- | --- | --- |
+| `reading` | `stub`, `unchecked`, `matches`; none for a draft's result | a node: `stub` with an empty body; `matches` when a person's `compared` names its hash now; else `unchecked`, with `compared_before` when one named an earlier text |
+| `how`, `sought`, `proposal` | | the latest `digested` on this very text; a `sought` on it; an open `proposed` on it |
+| `lean` | `none`, `rerun`, `failed`, `unattested`, `changed`, `formalized` | below |
+| `role` | `proved`, `unproved`, `assumed`, `defined` | from the Lean record on the text now: the stating declaration is a theorem with no `sorry`, one with a `sorry`, an axiom, or a definition |
+| `relative_to` | subjects | the record's `assumed`: what its proof is verified relative to |
+| `causes` | `{changed, then, now}` | for `changed`: each subject whose hash is no longer the one attested, `now` null where it no longer resolves |
+| `unattested_notation` | command names | rows of its notation no person has attested in their definition now |
+| `accepted` | `fresh`, `changed`, none | a draft's result the reviewer accepted, from the ledger |
+
+`lean`, where the **standing** records are the `lean` records on this result whose Lean is unchanged, the **latest** is the last of them, and the **current** is the latest when it is on the text now:
+
+1. `none`: no `lean` record on this result at all.
+2. `rerun`: records, but none standing.
+3. When the person's last attestation on this result names the latest record's statements (the Lean is what they attested):
+   - `changed` when it no longer holds: its subject's hash, a member of its closure, or a row of notation the person attested in an earlier definition differs now;
+   - else `rerun` when there is no current record (the text changed and the person said the Lean still states it, so loom runs it on the text now);
+   - else `failed` when the current record's `ok` is false;
+   - else `unattested` while a row of its notation was never attested;
+   - else `formalized`.
+4. Otherwise (never attested, or attested of a statement the Lean no longer has): `rerun` with no current record, `failed` when its `ok` is false, else `unattested`.
+
+A row of notation is attested once, in its definition, and holds wherever that definition is used: a changed definition is looked at once, and every result using it holds again once it is. A changed definition of a result's closure is not: each result resting on it is attested again, one by one.
