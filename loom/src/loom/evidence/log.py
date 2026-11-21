@@ -141,7 +141,7 @@ _TAIL = 64
 
 
 def grown(path: Path, held: Read | None) -> tuple[bytes, int, bytes] | None:
-    """The bytes appended to `path` since `held` read it, as whole lines, and the offset they start at; None when the file is not that one grown (another inode, shorter, or changed before where the replay stopped), which is read again whole.
+    """The bytes appended to `path` since `held` read it, as whole lines, and the offset they start at; None when the file is not that one grown (another inode, shorter, or its last bytes read changed), which is read again whole. A line rewritten in place further back is not seen: the logs are appended to, never rewritten.
 
     A last line not yet ended is returned apart and not counted as read: a writer may be appending it now, and a line torn by a writer that died is ended by the next writer (`append_line` starts on a new line), then read and reported.
     """
