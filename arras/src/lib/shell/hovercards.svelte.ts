@@ -47,9 +47,10 @@ function where(owner: HTMLElement, place: Placement): { left: number; top: numbe
 
 export const hovercards = new HoverCards();
 
-/** The action that gives an element a hover card: `use:hovercard={{ text, place }}`. Focus shows it as a hover does. */
+/** The action that gives an element a hover card: `use:hovercard={{ text, place }}`. Focus shows it as a hover does, and the card's words are the element's description, so a screen reader is told what a view is for without waiting on the card. */
 export function hovercard(node: HTMLElement, params: { text: string; place?: Placement }) {
 	let current = params;
+	node.setAttribute('aria-description', params.text);
 	const arm = () => hovercards.arm(node, current.text, current.place ?? 'below');
 	const disarm = () => hovercards.disarm();
 	node.addEventListener('pointerenter', arm);
@@ -60,6 +61,7 @@ export function hovercard(node: HTMLElement, params: { text: string; place?: Pla
 	return {
 		update(next: { text: string; place?: Placement }) {
 			current = next;
+			node.setAttribute('aria-description', next.text);
 		},
 		destroy() {
 			node.removeEventListener('pointerenter', arm);

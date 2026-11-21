@@ -9,12 +9,12 @@
 	// One mark of the one vocabulary every surface uses: a circle for the reading of the paper, a diamond for Lean; filled for a person's yes, amber for what waits on a person, an outline for nothing yet. Its accessible name is the mark's words.
 	import { frame } from '$lib/words/frame';
 
-	let { kind, size = 12 }: { kind: MarkKind; size?: number } = $props();
+	let { kind, size = 12, hidden = false }: { kind: MarkKind; size?: number; /** Drawn beside its own words, as in the legend, so not read a second time. */ hidden?: boolean } = $props();
 	const words = $derived(frame.marks[kind]);
 </script>
 
-<svg class="mark {kind}" width={size} height={size} viewBox="0 0 12 12" role="img" aria-label={words} data-mark={kind}>
-	<title>{words}</title>
+<svg class="mark {kind}" width={size} height={size} viewBox="0 0 12 12" role={hidden ? undefined : 'img'} aria-label={hidden ? undefined : words} aria-hidden={hidden ? 'true' : undefined} data-mark={kind}>
+	{#if !hidden}<title>{words}</title>{/if}
 	{#if kind === 'checked'}
 		<circle cx="6" cy="6" r="5.4" class="fill" />
 		<path d="M3.3 6.1l1.8 1.9 3.6-3.8" class="tick" />

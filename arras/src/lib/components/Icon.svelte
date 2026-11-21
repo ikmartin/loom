@@ -37,8 +37,12 @@
 		<path d="m3 21 7-7" />
 	{:else if name === 'fold'}
 		<!-- the column's fold: two chevrons pointing the way it goes; the strip turns it round -->
-		<path d="m12.75 6-6 6 6 6" />
-		<path d="m18.75 6-6 6 6 6" />
+		<path d="m11.5 4.5-7.5 7.5 7.5 7.5" />
+		<path d="m20 4.5-7.5 7.5 7.5 7.5" />
+	{:else if name === 'gear'}
+		<!-- Settings: a wheel with eight spokes, as round six draws it -->
+		<circle cx="12" cy="12" r="3.6" />
+		<path d="M12 2.5v3.2M12 18.3v3.2M2.5 12h3.2M18.3 12h3.2M5.3 5.3l2.3 2.3M16.4 16.4l2.3 2.3M5.3 18.7l2.3-2.3M16.4 7.6l2.3-2.3" />
 	{:else if name === 'close'}
 		<path d="M18 6 6 18" />
 		<path d="m6 6 12 12" />

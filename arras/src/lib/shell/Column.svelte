@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls anywhere that change view; beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
+	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in; the Docs Library shelf's two links into Review go when Docs' Library button replaces that shelf); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
 	//
 	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, the sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`), the documents listed by name (`DocumentList`) and the Library (`LibraryShelf`, whose dialog is `LibraryAdd`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs. At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
@@ -67,7 +67,7 @@
 	// Review's sections, each with what waits for the author there
 	const sections = $derived(store.manifest ? sectionsOf(store.manifest) : []);
 
-	// Each view's name goes where that view was left: Docs to the reading address, Review to its landing, the Library and the Web to their own pages, which keep their place themselves. A corpus that declares no review has no Review; one that says nothing either way keeps it.
+	// Each view's name goes to its view: Docs to the reading address, where it was left; Review to its landing; the Library and the Web to their own pages, which keep their place themselves. A corpus that declares no review has no Review; one that says nothing either way keeps it.
 	const hrefOf = (v: Primary): string => (v === 'docs' ? docsHref || route('/') : v === 'review' ? reviewLanding(sections) : route(`/${v}`));
 	const shownViews = $derived(VIEWS.filter((v) => v !== 'review' || store.manifest?.publishes?.review !== false));
 
@@ -153,11 +153,14 @@
 
 <svelte:window bind:innerWidth={windowWidth} />
 
+<!-- what was just done, said to a screen reader whether the column is open or folded: the region stays mounted and only its words change -->
+<div class="sr-only" role="status" aria-live="polite" data-testid="column-message-live">{message.said?.text ?? ''}</div>
+
 <div class="shell-c" class:folded={!shown} style:--column-width="{width}px">
 	<div class="panel" class:away={!shown} data-testid="column" bind:this={panelBox}>
 		{#if !shown}
 			<!-- folded: the fold, then the four names one above the other with their cards beside the strip, and at its foot a dot for the message and the agent's -->
-			<button class="ib fold unfold" title={frame.column.show} aria-label={frame.column.show} aria-expanded="false" data-testid="panel-fold" onclick={fold}><Icon name="fold" size={16} /></button>
+			<button class="ib fold unfold" title={frame.column.show} aria-label={frame.column.show} aria-expanded="false" data-testid="panel-fold" onclick={fold}><Icon name="fold" size={18} /></button>
 			<nav class="strip" aria-label={frame.views.nav}>
 				{#each shownViews as v (v)}
 					<a
@@ -171,13 +174,15 @@
 					>
 				{/each}
 			</nav>
-			{#if message.said}<span class="said" title={message.said.text} data-testid="column-message-dot"></span>{/if}
+			{#if message.said}<button type="button" class="ib said" title={message.said.text} aria-label={message.said.text} data-testid="column-message-dot" onclick={fold}><span class="dot"></span></button>{/if}
 			<AgentStatus folded />
 		{:else}
 			<div class="head">
-				<a href={route('/')} class="name" data-testid="quilt-name">{label}</a>
-				<Settings {indexes} />
-				<button class="ib fold" title={frame.column.hide} aria-label={frame.column.hide} aria-expanded="true" data-testid="panel-fold" onclick={fold}><Icon name="fold" size={16} /></button>
+				<!-- the quilt's name is its name, not a way anywhere: only the four views' names change view -->
+				<span class="name" data-testid="quilt-name">{label}</span>
+				<!-- the development shelf's links open Docs' pages, so they are offered only in Docs, where following one does not change view -->
+				<Settings indexes={primary === 'docs' ? indexes : []} />
+				<button class="ib fold" title={frame.column.hide} aria-label={frame.column.hide} aria-expanded="true" data-testid="panel-fold" onclick={fold}><Icon name="fold" size={18} /></button>
 			</div>
 			<nav class="primary" aria-label={frame.views.nav}>
 				<!-- back to Docs returns to the workspace's address, which names the place a link last sent a tab to; each pane puts the reader back where they were, so neither scrolling nor focus is let go to that place first -->
@@ -368,12 +373,26 @@
 		font-weight: 500;
 		border-left-color: var(--accent);
 	}
+	/* folded, a message is a dot that opens the column on it, a 28px target */
 	.said {
 		margin-top: auto;
+	}
+	.said .dot {
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
 		background: var(--ink);
+	}
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+		border: 0;
 	}
 	.said + :global(.rail-foot) {
 		margin-top: var(--gap-tight);
@@ -422,10 +441,14 @@
 	.unfold {
 		transform: scaleX(-1);
 	}
-	/* the head's Settings toggle is a 28px target as the fold is */
+	/* the head's Settings toggle is a 28px target round its glyph, as the fold is */
 	.head :global(.toggle) {
 		width: 28px;
 		height: 28px;
+		padding: 0;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
 	}
 	/* the foot: the message and the legend, above the agent's row */
 	.foot {
@@ -440,9 +463,6 @@
 		font-size: 13px;
 		color: var(--ink);
 		font-weight: 500;
-	}
-	.head .name:hover {
-		text-decoration: none;
 	}
 	.head {
 		display: flex;

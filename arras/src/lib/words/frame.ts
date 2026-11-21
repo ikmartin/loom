@@ -26,7 +26,7 @@ export const frame = {
 			/** The fourth of the four view names. */
 			name: 'Review',
 			/** Hover card on the view name Review. */
-			hover: 'What waits for your decision: questions from agents, edits proposed to your text, results to compare with their papers, and formalizations to attest.'
+			hover: 'What waits for your decision: questions from agents, edits proposed to your text, digested results to check against their papers, and Lean statements to attest.'
 		}
 	},
 	column: {
@@ -40,14 +40,18 @@ export const frame = {
 		perspective: (name: string) => `Review status for ${name}`,
 		/** Under the quilt's name, in a read-only view whose reviewer is not named. */
 		perspectiveUnnamed: 'Review perspective unspecified',
-		/** The column's head while the manifest has not come yet, in place of the quilt's name. */
-		unnamed: 'arras'
+		/** The column's head while the manifest has not come yet, in place of the quilt's name; also the browser tab's title meanwhile. */
+		unnamed: 'loom'
 	},
 	message: {
+		/** The column's message, its accessible name as a group. */
+		label: 'What was just done',
 		/** The link in the column's message that takes back what was just done. */
 		undo: 'undo',
 		/** The close button on the column's message. */
-		dismiss: 'dismiss'
+		dismiss: 'Dismiss',
+		/** The column's message when an undo failed, with the publisher's reason. */
+		undoFailed: (why: string) => (why ? `It could not be undone: ${why}` : 'It could not be undone.')
 	},
 	legend: {
 		/** The quiet link in the column's foot that opens the legend of the marks. */

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The quiet link in the column's foot, "what the marks mean", and the legend it opens: the marks of a result's reading of its paper, of Lean, and the mark a person puts on a page. A click anywhere else closes it.
+	// The quiet link in the column's foot, "what the marks mean", and the legend it opens: the marks of a result's reading of its paper, of Lean, and the mark a person puts on a page. A click anywhere else, Escape, or the keyboard moving past it closes it.
 	import Mark, { type MarkKind } from '$lib/marks/Mark.svelte';
 	import { frame } from '$lib/words/frame';
 
@@ -11,22 +11,25 @@
 	function away(e: PointerEvent): void {
 		if (open && box && !box.contains(e.target as Node)) open = false;
 	}
+	function left(e: FocusEvent): void {
+		if (open && box && !box.contains(e.relatedTarget as Node | null)) open = false;
+	}
 </script>
 
-<svelte:window onpointerdown={away} />
+<svelte:window onpointerdown={away} onkeydown={(e) => e.key === 'Escape' && (open = false)} />
 
-<div class="legend" bind:this={box}>
+<div class="legend" bind:this={box} onfocusout={left}>
 	{#if open}
-		<div class="pop" data-testid="legend">
+		<div class="pop" id="marks-legend" data-testid="legend">
 			{frame.legend.head}
-			<div class="lg">{#each PAPER as k (k)}<Mark kind={k} size={14} /><span>{frame.marks[k]}</span>{/each}</div>
+			<div class="lg">{#each PAPER as k (k)}<Mark kind={k} size={14} hidden /><span>{frame.marks[k]}</span>{/each}</div>
 			{frame.legend.lean}
-			<div class="lg">{#each LEAN as k (k)}<Mark kind={k} size={14} /><span>{frame.marks[k]}</span>{/each}</div>
+			<div class="lg">{#each LEAN as k (k)}<Mark kind={k} size={14} hidden /><span>{frame.marks[k]}</span>{/each}</div>
 			{frame.legend.page}
-			<div class="lg last"><Mark kind="marked" size={14} /><span>{frame.marks.marked}</span></div>
+			<div class="lg last"><Mark kind="marked" size={14} hidden /><span>{frame.marks.marked}</span></div>
 		</div>
 	{/if}
-	<button type="button" class="open" aria-expanded={open} data-testid="legend-open" onclick={() => (open = !open)}>{frame.legend.open}</button>
+	<button type="button" class="open" aria-expanded={open} aria-controls="marks-legend" data-testid="legend-open" onclick={() => (open = !open)}>{frame.legend.open}</button>
 </div>
 
 <style>

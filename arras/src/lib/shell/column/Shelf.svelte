@@ -75,14 +75,20 @@
 		cursor: pointer;
 		text-align: left;
 	}
+	/* a 28px target round its glyph, as every icon control in the column */
 	.shelf-add {
 		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
 		border: 0;
 		background: none;
 		color: var(--ink-faint);
-		font-size: 15px;
+		font-size: 18px;
 		line-height: 1;
-		padding: 2px 7px;
+		padding: 0;
 		margin-right: 2px;
 		border-radius: var(--rad-control);
 		cursor: pointer;
