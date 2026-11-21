@@ -2,6 +2,7 @@
 
 import { can, capabilities, forgetCapabilities, write } from '$lib/write';
 import { base } from '$app/paths';
+import { libraryPdfUrl } from '$lib/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { discardChanges, keepChanges, type ChangeAnswer } from '$lib/review/history.svelte';
@@ -84,7 +85,7 @@ export const server: Source = {
 	},
 	serves: (name) => can(name),
 	fragment: (path) => fetchFragment(path, store.hash).catch(() => null),
-	pdfUrl: (hash) => `${base}/_api/library/pdf/${hex(hash)}`,
+	pdfUrl: (hash) => libraryPdfUrl(hash),
 	drawnUrl: (node, macros) => `${base}/_api/library/drawn/${hex(node)}-${macros ? hex(macros) : 'none'}.svg`,
 	thumbUrl: (hash) => `${base}/_api/library/thumb/${hex(hash)}.png`
 };
@@ -170,6 +171,12 @@ export const lookUp = (ref: string, once = false) => call<WriteDone>('library-lo
 /** Takes received files and pasted works in; `online: false` takes them without the network, each reference's details unconfirmed. */
 export const take = (items: ({ incoming: string; for?: string } | { text: string })[], online?: false) => call<WriteDone & { rows: TakeRow[] }>('library-take', { items, ...(online === false ? { online } : {}) });
 export const undoTake = (id: string, act?: string) => call<WriteDone>('library-undo', { id, ...(act ? { act } : {}) });
+/** Answers a drop's one question (`library-answer`): `same` the work it is, or null for a work of its own, which `online` lets be looked up this once. */
+export const answerDrop = (question: string, same: string | null, online?: boolean) => call<WriteDone & { row: TakeRow }>('library-answer', { question, same, ...(online === undefined ? {} : { online }) });
+/** Takes a work's PDF, or with `which` its TeX source, off it, to wait again as a drop (`library-unfile`). */
+export const unfile = (ref: string, which?: 'pdf' | 'tex') => call<WriteDone & { incoming: string; act: string; row: TakeRow }>('library-unfile', { ref, ...(which ? { which } : {}) });
+/** Replaces a work's entry with one BibTeX entry (`library-entry`). */
+export const entry = (ref: string, bibtex: string) => call<WriteDone & { ref: string }>('library-entry', { ref, bibtex });
 /** Answers an agent's question (`review-answer`): one of its choices, the person's words, or both. */
 export const answer = (question: string, choice: number | null, text: string) => call<WriteDone>('review-answer', { question, ...(choice === null ? {} : { choice }), ...(text ? { text } : {}) });
 export const takeCorrection = (correction: string) => call<WriteDone>('library-correction-take', { correction });
@@ -199,6 +206,7 @@ export const discard = (change: string) => built('change-discard', { changes: [c
 export const accept = (key: string) => built('review-accept', { keys: [key] }, () => write('review-accept', { keys: [key] }));
 
 /** A row the intake answers with (`write-api.md` §6), with what the message needs (§3.5 of the views' spec). */
+/** A row of the intake (`write-api.md` §6), in one of four states: `added` (the work, how it was found, its `act` for an undo), `here` (the work held already, and why), `question` (the file's own words and the works it may be), `cannot` (a code and why). */
 export interface TakeRow {
 	id: string;
 	item: number;
@@ -208,10 +216,18 @@ export interface TakeRow {
 	ref?: string;
 	short?: string;
 	title?: string;
-	found_by?: 'arxiv' | 'doi' | 'isbn' | 'entry' | 'row' | 'none';
-	/** The identifier loom found, `scheme:value` with the scheme lower-case (`arxiv:2209.01234v2`); null where none was found. */
-	identifier: string | null;
+	authors?: string[];
+	year?: string;
+	found_by?: 'arxiv' | 'doi' | 'zbl' | 'entry' | 'title' | 'none';
+	/** The identifier loom found, `scheme:value` with the scheme lower-case (`arxiv:2209.01234v2`); null where none was found. On an added row. */
+	identifier?: string | null;
 	tex?: boolean;
 	unconfirmed?: boolean;
+	/** Filed under a work the library had. */
+	under?: boolean;
 	why?: string;
+	code?: string;
+	question?: string;
+	document?: { name: string; kind: string; identifiers: string[] };
+	candidates?: { ref: string; short: string; title: string; authors: string[]; year: string; how: string }[];
 }

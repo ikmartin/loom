@@ -14,7 +14,7 @@ type Body = Record<string, unknown>;
 const CITED: Record<string, string> = { arden24: '[1]', okafor: '[2]', arden25: '[3]', vance: '[4]' };
 
 /** A source over a fresh copy of round six's data; `onChange` hears each write's new generation. */
-export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'unasked'; web?: 'large' } = {}): Source & { data: Fixture } {
+export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'off' | 'unasked'; web?: 'large' } = {}): Source & { data: Fixture } {
 	const f = round6();
 	if (o.network) f.network = o.network;
 	if (o.web === 'large') growWeb();
@@ -184,12 +184,14 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 		'library-correction-decline': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),
 		'library-look-up': (b) => {
 			if (f.network === 'unasked' && b.online !== true) return no('network-unasked', '');
+			if (f.network === 'off' && b.online !== true) return no('offline', '');
 			if (!lookUp(f, b.ref as string)) return no('no-identifier', '');
 			changed();
 			return ok({ ref: b.ref });
 		},
 		// undoing an add takes the work it added back out
 		'library-undo': (b) => {
+			if (!((b.id as string) in f.taken)) return no('no-such-intake', '');
 			const ref = f.taken[b.id as string];
 			const i = f.works.findIndex((w) => w.ref === ref);
 			if (i >= 0) f.works.splice(i, 1);
@@ -197,6 +199,31 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			f.gen++;
 			changed();
 			return ok({});
+		},
+		// a question no drop here asks; an answer of a work of its own adds it, as the intake does
+		'library-answer': (b) => {
+			if (b.same) return no('not-a-candidate', '');
+			const added = addWork(f, String(b.question), b.online !== true);
+			changed();
+			return ok({ row: { id: String(b.question), item: 0, name: added.title, state: 'added', act: `x-${f.gen}`, ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: 'none', tex: false, unconfirmed: false, identifier: null, under: false } });
+		},
+		// a work's PDF taken off it waits again as a drop
+		'library-unfile': (b) => {
+			const w = f.works.find((x) => x.ref === b.ref);
+			if (!w) return no('no-such-work', '');
+			if (!w.holds.pdf) return no('no-document', '');
+			const incoming = w.holds.pdf.replace(/^sha256:/, '');
+			w.holds = { ...w.holds, pdf: null };
+			f.gen++;
+			changed();
+			return ok({ incoming, act: `x-${f.gen}`, row: { id: incoming, item: 0, name: `${w.short}.pdf`, state: 'cannot', code: 'received', why: 'it waits to be taken' } });
+		},
+		'library-entry': (b) => {
+			const w = f.works.find((x) => x.ref === b.ref);
+			if (!w) return no('no-such-ref', '');
+			f.gen++;
+			changed();
+			return ok({ ref: w.ref });
 		},
 		'library-take': (b) => {
 			const offline = b.online === false;
@@ -207,7 +234,8 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 				const added = addWork(f, name, offline);
 				const id = `d-${f.gen}-${item}`;
 				f.taken[id] = added.ref;
-				return { id, item, name, state: 'added', act: 'add', ref: added.ref, short: added.short, title: added.title, found_by: arxiv ? 'arxiv' : 'none', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null };
+				// an added row as the intake sends it (`write-api.md` §6): a file is found by the identifier it states, else by its name
+				return { id, item, name, state: 'added', ...(it.text ? {} : { act: `x-${f.gen}-${item}` }), ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: arxiv ? 'arxiv' : it.text ? 'none' : 'title', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null, under: !!it.for };
 			});
 			changed();
 			return ok({ rows });
@@ -227,6 +255,8 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			return no('not-served', `the fixture does not answer ${name}`);
 		},
 		async receive(file: File) {
+			// a PDF, a .bib, a TeX file or an archive of a source, as the intake keeps
+			if (!/\.(pdf|bib|tex|tar|gz|tgz|zip)$/i.test(file.name)) return { ok: false as const, error: { code: 'not-a-document', message: '' } };
 			return { ok: true as const, value: { incoming: `f-${f.gen}-${file.name}`, name: file.name, size: file.size } };
 		},
 		async serves(name: string) {

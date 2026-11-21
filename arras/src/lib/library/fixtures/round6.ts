@@ -216,8 +216,8 @@ export interface Fixture {
 	checked: string[];
 	/** The notes tab's notes (`notes6.ts`). */
 	notes: Note[];
-	/** Whether the quilt has said loom may use the network; `unasked` refuses a take that does not go without it. */
-	network: 'asked' | 'unasked';
+	/** Whether the quilt has said loom may use the network: `asked` it may, `off` it may not, and `unasked` refuses a take that does not go without it. */
+	network: 'asked' | 'off' | 'unasked';
 	/** The work each taken row added, by the row's id, which `library-undo` takes back out. */
 	taken: Record<string, string>;
 }

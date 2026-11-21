@@ -1,4 +1,4 @@
-// Round six's fixture and the client against what loom sends, in both directions, so neither can wander from the backend: every generated sample of Review's and the Web's reads and writes (`docs/specs/fixture/views/`, made by `scripts/regen views` from `evidence.md` §6 to §8) passes through the client as a served answer would, the client sending exactly the sample's request; and every answer the fixture gives the same read or write has the sample's fields and types.
+// Round six's fixture and the client against what loom sends, in both directions, so neither can wander from the backend: every generated sample of Review's, the Web's and the Library's reads and writes (`docs/specs/fixture/views/`, made by `scripts/regen views` from `evidence.md` §6 to §8 and by `scripts/regen views-library` from `write-api.md` §2 and §6) passes through the client as a served answer would, the client sending exactly the sample's request; and every answer the fixture gives the same read or write has the sample's fields and types.
 import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { forgetCapabilities } from '$lib/write';
@@ -48,8 +48,8 @@ function differences(got: unknown, want: unknown, at = ''): string[] {
 		const items = want as unknown[];
 		if (!items.length) return [];
 		return got.flatMap((g, i) => {
-			// an item tagged by its kind, or a section by its head, against the sample's item of the same; an untagged one against the sample's item with the same fields where there is one (a folded group sends no rows), else its first
-			const tag = (x: unknown) => (x as { kind?: string })?.kind ?? (x as { head?: string })?.head;
+			// an item tagged by its kind, a section by its head or an intake's row by its state, against the sample's item of the same; an untagged one against the sample's item with the same fields where there is one (a folded group sends no rows), else its first
+			const tag = (x: unknown) => (x as { kind?: string })?.kind ?? (x as { head?: string })?.head ?? (x as { state?: string })?.state;
 			const keys = (x: unknown) => (x && typeof x === 'object' ? Object.keys(x).sort().join() : '');
 			const match = tag(g) === undefined ? (items.find((w) => keys(w) === keys(g)) ?? items[0]) : items.find((w) => tag(w) === tag(g));
 			return match === undefined ? [] : differences(g, match, `${at}[${i}]`);
@@ -107,7 +107,17 @@ const CALLS: Record<string, (r: Record<string, unknown>) => Promise<api.Answer<u
 	'web-group': (r) => api.webGroup({ scope: r.scope as never, doc: r.doc as string | undefined }, r.group as string),
 	'web-search': (r) => api.webSearch({ scope: r.scope as never, doc: r.doc as string | undefined }, r.q as string),
 	'web-focus': (r) => api.webFocus({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string, r.more === true),
-	'web-graph': (r) => api.webGraph({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string)
+	'web-graph': (r) => api.webGraph({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string),
+	'library-works': (r) => api.works(r.doc as string | undefined, r.since as number | undefined),
+	'library-receive': (r) => api.receive(new File([new Uint8Array(r.size as number)], r.name as string)),
+	'library-take': (r) => api.take(r.items as never, r.online as false | undefined),
+	'library-answer': (r) => api.answerDrop(r.question as string, r.same as string | null, r.online as boolean | undefined),
+	'library-undo': (r) => api.undoTake(r.id as string, r.act as string | undefined),
+	'library-unfile': (r) => api.unfile(r.ref as string, r.which as 'pdf' | 'tex' | undefined),
+	'library-look-up': (r) => api.lookUp(r.ref as string, r.online === true),
+	'library-entry': (r) => api.entry(r.ref as string, r.bibtex as string),
+	'library-delete': (r) => api.remove(r.ref as string),
+	'library-restore': (r) => api.restore(r.undo as string)
 };
 
 describe('every generated sample passes through the client as a served answer would', () => {
@@ -118,15 +128,17 @@ describe('every generated sample passes through the client as a served answer wo
 		sent = [];
 		vi.stubGlobal('fetch', async (url: string, init?: RequestInit) => {
 			if (!init) return Response.json({ write_api: 1, capabilities: Object.keys(CALLS), token: 't' });
-			sent.push({ url, body: JSON.parse(String(init.body)) });
+			// a received file is its bytes, its name in the address: the request a sample records is its name and size
+			sent.push({ url, body: init.body instanceof File || init.body instanceof Blob ? { name: new URL(url, 'http://x').searchParams.get('name'), size: (init.body as Blob).size } : JSON.parse(String(init.body)) });
 			const { status, ...rest } = answer;
 			return Response.json(rest, { status: status ?? 200 });
 		});
 	});
 	afterEach(() => vi.unstubAllGlobals());
 
-	it('finds the sixteen samples', () => {
-		expect(samples.length).toBe(16);
+	it("finds Review's and the Web's sixteen samples and the Library's", () => {
+		expect(samples.filter((s) => !s.endpoint.startsWith('library-')).length).toBe(16);
+		expect(samples.filter((s) => s.endpoint.startsWith('library-')).length).toBeGreaterThan(20);
 		for (const s of samples) expect(CALLS, s.endpoint).toHaveProperty([s.endpoint]);
 	});
 
@@ -135,7 +147,7 @@ describe('every generated sample passes through the client as a served answer wo
 			answer = s.answer;
 			const got = await CALLS[s.endpoint](s.request);
 			expect(sent).toHaveLength(1);
-			expect(sent[0].url).toBe(`/_api/${s.endpoint}`);
+			expect(sent[0].url.replace(/\?.*$/, '')).toBe(`/_api/${s.endpoint}`);
 			expect(sent[0].body).toEqual(s.request);
 			if (s.answer.status) expect(got).toEqual({ ok: false, error: s.answer.error });
 			else expect(got).toEqual({ ok: true, value: s.answer });
@@ -145,12 +157,25 @@ describe('every generated sample passes through the client as a served answer wo
 
 // ---- round six's fixture against each sample ----
 
-/** A sample's request with the fixture's own ids where it names one, so the fixture answers what loom answered. */
-function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Record<string, unknown> {
+/** The Library's samples whose state round six's fixture does not model, each with why; they are said here rather than passed. */
+const NOT_MODELLED: Record<string, string> = {
+	'library-entry.key-taken': 'the fixture keeps no entries whose keys could collide',
+	'library-undo.waits-again': 'the fixture files no document under a work, so no filing is undone',
+	'library-answer.same': "loom asks the question again where the person names a candidate (the node store's finding); the fixture holds no questions"
+};
+
+/** The fixture a sample is asked of: on a quilt that has not said whether loom may use the network, or has it off, where the sample's refusal needs one. */
+const fixtureFor = (s: Sample) => fixtureSource(undefined, s.name.endsWith('network-unasked') ? { network: 'unasked' } : s.name.endsWith('offline') ? { network: 'off' } : {});
+
+/** A sample's request with the fixture's own ids where it names one, so the fixture answers what loom answered; some first make what the request names (a delete before a restore, a take before an undo). */
+async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<Record<string, unknown>> {
 	const r = { ...s.request };
 	const review = f.data.review;
 	const question = review.rows.find((x) => x.kind === 'questions');
 	const task = review.tasks[0];
+	// a work holding a PDF, one found by an identifier and not yet looked up, and one stating none
+	const held = f.data.works.find((w) => w.holds.pdf)!.ref;
+	const unlooked = f.data.works.find((w) => !w.lookup)!.ref;
 	switch (s.endpoint) {
 		case 'review-row':
 			// the sample names its row's kind after the read's name, where it is not a question's
@@ -169,6 +194,24 @@ function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Record<string,
 		case 'web-focus':
 		case 'web-graph':
 			return { ...r, result: 'thm:count' };
+		case 'library-works':
+			return r.doc ? { ...r, doc: 'drafting/main.tex' } : r.since !== undefined ? { since: f.data.gen } : r;
+		case 'library-delete':
+		case 'library-unfile':
+		case 'library-entry':
+			return { ...r, ref: held };
+		case 'library-look-up':
+			return { ...r, ref: unlooked };
+		case 'library-restore': {
+			const del = await f.call<{ gen: number; undo: string }>('library-delete', { ref: held });
+			return { undo: del.ok ? del.value.undo : '' };
+		}
+		case 'library-undo': {
+			if (s.answer.status) return r;
+			const took = await f.call<{ gen: number; rows: { id: string; act?: string }[] }>('library-take', { items: [{ text: '2209.01234v2' }], online: false });
+			const row = took.ok ? took.value.rows[0] : { id: '' };
+			return { id: row.id, ...(row.act ? { act: row.act } : {}) };
+		}
 		default:
 			return r;
 	}
@@ -176,12 +219,18 @@ function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Record<string,
 
 describe("round six's fixture answers with loom's fields and types", () => {
 	for (const s of samples) {
+		if (NOT_MODELLED[s.name]) {
+			it.skip(`${s.name}: ${NOT_MODELLED[s.name]}`, () => {});
+			continue;
+		}
 		it(`${s.name}`, async () => {
-			const f = fixtureSource();
+			const f = fixtureFor(s);
+			const request = await adapted(s, f);
+			// a received file is the fixture's `receive`, the one request that is not JSON
+			const ask = () => (s.endpoint === 'library-receive' ? f.receive(new File([new Uint8Array(Number(request.size))], String(request.name))) : f.call(s.endpoint, request));
 			// a refusal is tried as the sample tried it: the same request twice where the first closes what it names
-			const request = adapted(s, f);
-			if (s.answer.status) await f.call(s.endpoint, request);
-			const got = await f.call(s.endpoint, request);
+			if (s.answer.status) await ask();
+			const got = await ask();
 			if (s.answer.status) {
 				expect(got.ok).toBe(false);
 				expect(!got.ok && got.error.code).toBe(s.answer.error?.code);
