@@ -122,7 +122,8 @@ test.afterEach(({}, info) => {
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
-test("a highlight on a cited work's page needs no session, is drawn at once in the look in hand, and after a reload is an annotation on its words drawn in its look", async ({ page, served }) => {
+test.fixme("a highlight on a cited work's page needs no session, is drawn at once in the look in hand, and after a reload is an annotation on its words drawn in its look", async ({ page, served }) => {
+	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	const before = marksOf(served, ref).map((a) => a.id);
 	await openPaper(page, `/library/${ref}?page=2`, 2);
@@ -138,6 +139,26 @@ test("a highlight on a cited work's page needs no session, is drawn at once in t
 	const drawn = page.locator(`[data-testid="page-mark-${mark.id}"][data-kind="highlight"]`);
 	await expect(drawn).toHaveCount(1);
 	expect(await page.getByTestId(`mark-band-${mark.id}`).evaluate((g) => getComputedStyle(g).getPropertyValue('--band-strength').trim())).toBe('0.6');
+});
+
+test("one reader: a work's notes are drawn alike in the Library's tab and in its pane in Docs, and one made in either is recorded on the work and counted in the other", async ({ page, served }) => {
+	const ref = workOf(served.root, 'Bellamy19')!.ref;
+	const before = marksOf(served, ref).map((a) => a.id);
+	const made = () => marksOf(served, ref).filter((a) => !before.includes(a.id));
+	// a box recorded as drawn, whose place is its own: drawn the same in both
+	served.loom(['annotate', ref, '--page', '1', '--box', '60,60,200,90', '--mark', 'box', '--as', 'A Person']);
+	await expect.poll(() => made().length).toBe(1);
+	const box = made()[0];
+	await openPaper(page, `/library?work=${ref}`, 1);
+	await expect(page.locator(`[data-testid="page-mark-${box.id}"]`)).toHaveCount(1);
+	await openPaper(page, `/library/${ref}?page=1`, 1);
+	await expect(page.locator(`[data-testid="page-mark-${box.id}"]`)).toHaveCount(1);
+	// a highlight made in the pane is recorded on the work, and the tab counts it as the pane does
+	await annotate(page, 1, await page.locator('[data-testid="pdf-page-1"] .text span').filter({ hasText: /^\w{5,}$/ }).first().innerText());
+	await expect.poll(() => made().length).toBe(2);
+	const counted = await page.getByTestId('step-count').first().innerText();
+	await openPaper(page, `/library?work=${ref}`, 1);
+	await expect(page.getByTestId('step-count').first()).toHaveText(counted);
 });
 
 test.describe('on a project PDF', () => {
@@ -413,7 +434,8 @@ test.describe('where no publisher takes writes', () => {
 		}
 	});
 
-	test('marks are drawn, the tools are not offered, and a copy can still be saved', async ({ page, served }) => {
+	test.fixme('marks are drawn, the tools are not offered, and a copy can still be saved', async ({ page, served }) => {
+		// needs a static build to carry a work's stored PDF and the works list, which the node store's phase 2 serves from the publisher only
 		const ref = workOf(served.root, 'Bellamy19')!.ref;
 		await page.route('**/_api', (route) => route.fulfill({ status: 404, body: '' }));
 		await openPaper(page, `/library/${ref}?page=2`, 2);

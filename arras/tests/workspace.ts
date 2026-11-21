@@ -41,6 +41,8 @@ export async function viewMenu(page: Page, index?: number): Promise<void> {
 
 /** Open an item in the focused pane as a link outside the panes does (the column's, the palette's): the column lists no results, so the link is made for the test and clicked. */
 export async function openHere(page: Page, href: string): Promise<void> {
+	// the frame is drawn once the page has started, which a navigation's end does not wait for
+	await page.getByTestId('column').waitFor({ state: 'attached' });
 	await page.evaluate((h) => {
 		const a = document.createElement('a');
 		a.href = h;

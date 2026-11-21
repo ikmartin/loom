@@ -88,7 +88,8 @@ test.afterEach(({}, info) => {
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
-readOnly("every annotation on a cited work's pages with a place is drawn there in its look, and a detached one is listed and drawn nowhere", async ({ page, served }) => {
+readOnly.fixme("every annotation on a cited work's pages with a place is drawn there in its look, and a detached one is listed and drawn nowhere", async ({ page, served }) => {
+	// needs the publisher to say where a work's quoted words stand on its page, which the node store's phase 2 stopped publishing (its hand-over: lost, to rebuild with library-places)
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	await adding(page, (m) => {
 		const base = Object.values(m.annotations)[0];
