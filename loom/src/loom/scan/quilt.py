@@ -176,15 +176,15 @@ def is_quilt_root(path: Path) -> bool:
     return isinstance(data.get("quilt"), dict)
 
 
-def find_quilt(start: Path | None = None) -> Quilt:
-    """Locate the quilt containing `start` (default: LOOM_QUILT or the current directory)."""
+def find_quilt(start: Path | None = None, *, older: bool = False) -> Quilt:
+    """Locate the quilt containing `start` (default: LOOM_QUILT or the current directory); `older` as `load_quilt` takes it."""
     if start is None:
         env = os.environ.get("LOOM_QUILT")
         start = Path(env).expanduser() if env else Path.cwd()
     start = start.resolve()
     for candidate in [start, *start.parents]:
         if is_quilt_root(candidate):
-            return load_quilt(candidate)
+            return load_quilt(candidate, older=older)
     # A `config.toml` that is there and will not parse is a different problem from one that is absent, and saying
     # "no config.toml" about a file the author is looking at sends them hunting for the wrong thing. Found by the
     # reading study, 2026-09-21, after a stray second `[author]` table made a quilt vanish.
@@ -201,8 +201,10 @@ def find_quilt(start: Path | None = None) -> Quilt:
     raise NoQuiltError(f"not inside a quilt: no config.toml with a [quilt] table above {start}")
 
 
-def load_quilt(root: Path) -> Quilt:
+def load_quilt(root: Path, *, older: bool = False) -> Quilt:
     """The quilt at `root`, its `.loom/` stamped with this loom's layout when it has none yet.
+
+    `older` opens a quilt in an earlier layout this loom can bring forward (`layout.CARRIES`), for `loom upgrade` and the publisher's waiting page alone.
 
     Raises
     ------
@@ -218,7 +220,7 @@ def load_quilt(root: Path) -> Quilt:
         except OSError:
             pass  # a quilt loom cannot write into is read as it is
     why = layout.refusal(root)
-    if why is not None:
+    if why is not None and not (older and layout.carriable(root)):
         raise LayoutError(why)
     config = QuiltConfig.from_dict(data, load_user_config())
     why = removed_in(root, config)
