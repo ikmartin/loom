@@ -211,8 +211,11 @@ The door is being built in the steps of `docs/reports/v0.1-study/raw/spike-door.
 | Keep of a suggested edit | 3 | yes |
 | undo of a Keep in one step (`pending.unkeep`), and a restore or put-back that reopens what it takes out and records what it brings back (`pending.follow_words`) | 5 | yes |
 | taking in an agent's copy (`adopt.incorporate`) and a pull (`sync.incorporate`), each one act with the records it writes ("Records an act writes") | 6 | yes |
-| `loom mv`, atomize, linearize, import and `init --from`, new files, pages, the agent layer and `.gitignore`; then a test that nothing else writes a person's file | 6 | not yet |
+| `loom mv` and atomize, each one act with its history line and the config's `main`; import and `init --from` (the assets and the draft); a new node, a fork, a flat copy, a version restored to a file, a page, a saved PDF, a `--to` or `--output` file in the quilt; the agent layer's files in the person's folders and the root `.gitignore` | 6 | yes |
+| a quilt `loom init` makes, which did not exist (`writes.making`): written straight, journalling nothing | 6 | no, by design |
 
 Step 4 is placement, not the door ("Where an edit goes").
+
+**Nothing else writes a person's file.** `tests/unit/test_one_door.py` reads every module of loom and fails on any call that writes, moves or removes a file outside `writes.py`, unless its module or function is listed as writing only loom's own places, each with why: the library's store, records under `.loom/`, the build's output, temporary trees, the machine's own places, the sync directory. A listing whose function no longer writes fails too. A command writes one file through `writes.put` (an act of its own, or part of one staging), a file the person named through `writes.save` (through the door inside the quilt, as an ordinary file outside it), and several as one act. A command that draws an id takes the door's lock before the id lock (`cli._quilt.drawing_ids`), in the order every holder takes them, so the history steps `loom stamp`, `draft`, `new`, `fork` and `history restore` record are never numbered against an act in flight. The door refuses a file that is not a regular file (a FIFO, a socket), which reading would block on (`not-a-file`).
 
 **Open.** The follow-ups run under the lock, so Keep holds it through two scans. Moving them out (making what they compute part of the plan) would shorten the hold for the rebuild; it waits until the rebuild's lock is measured.
