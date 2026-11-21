@@ -151,13 +151,15 @@ The library is built so that it can reach the size of the Stacks project and so 
 
 ## What this replaces
 
+Nothing of today's library is kept because it exists (the author, 2026-11-20). Every page, control, command, record and rule that belongs to the library as built is a candidate to be replaced or removed, a work's Info with its cards of results among them, and what stays, stays on its merits against this design. The old decisions were often made in passing, and this rework is not to be shaped by them. What follows is what is known to go; an inventory of the rest comes before the build is planned.
+
 - **Digests** as one LaTeX file for each work with a record beside it, and ids made from a citekey and the paper's number.
 - **The bibliography file as the place loom keeps its own facts.** A work is a node, so its id, its stored copies and its entry are one file; a bibliography for TeX is generated from the references.
 - **Work ids made from authors, title and year**, and the piece of 2026-11-20 that pinned them, which was stopped. Its lessons stay as rules: two entries are not one work unless the person says so, an entry a person corrected is not rewritten, and an entry is found where the parser reads it.
 
 The quilt's layout changes under `.loom/library/` alone, so the format number becomes 2. Works and their stored documents are carried into references. Digests are not converted: the author starts fresh.
 
-Two pieces built the same week are fitted to the new store and not thrown away: the tray, which is the way a work comes in and now makes a reference, and the tool that places a result in a paper, which records where a node stands.
+Two pieces built the same week have a place in the new design, the tray, which is the way a work comes in and now makes a reference, and the tool that places a result in a paper, which records where a node stands. Whether what was built of each is kept, changed or made again is judged like everything else.
 
 **A work that names itself is looked up, not typed** (the author, 2026-11-20). Where a dropped paper carries an identifier, in its file's name, in its own metadata or on its first page, the reference's authors, title and year come from that identifier's record, and the person is not asked to type what a look-up would give. Where the quilt does not allow the network, loom asks for that one look-up at the drop, naming the identifier it found; a reference made without it says its details are unconfirmed and offers the look-up later. Loom does not guess an author from a page's text. The case this comes from: on 2026-11-20 the author dropped an arXiv paper, named by its arXiv number, into a quilt with the network off; loom recognised the number and recorded it, took a title and a year from the PDF, looked nothing up, said nothing of the number, and showed an empty field for the author to type.
 
