@@ -1,0 +1,1 @@
+import{I as e,P as t,R as n,Z as r,_t as i,bt as a,gt as o,it as s,nt as c}from"../chunks/BKqcY2vx.js";import"../chunks/xihTtKlq.js";var l={placeholder:`The Library is being built.`},u=n(`<main class="page" data-testid="library-view"><p class="muted"> </p></main>`);function d(n,d){i(d,!0);var f=u(),p=c(f),m=s(p,!0);a(f),r(()=>t(m,l.placeholder)),e(n,f),o()}export{d as component};
