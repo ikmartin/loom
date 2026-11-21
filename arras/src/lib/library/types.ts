@@ -343,6 +343,12 @@ export interface ReviewList extends Gen {
 	groups: ReviewGroup[];
 }
 
+/** An agent's correction's body: the word diff of the two texts, each run kept (`=`), taken out (`-`) or put in (`+`), and when the person compared the text it corrects. */
+export interface CorrectionBody {
+	compared_at: string;
+	runs: ['=' | '-' | '+', string][];
+}
+
 /** A row's body (`review-row`), its fields by its kind. */
 export interface ReviewBody extends Gen {
 	row: string;

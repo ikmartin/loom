@@ -142,6 +142,8 @@ export const lookUp = (ref: string) => call<WriteDone>('library-look-up', { ref 
 export const take = (items: ({ incoming: string; for?: string } | { text: string })[]) => call<WriteDone & { rows: TakeRow[] }>('library-take', { items });
 export const undoTake = (id: string, act?: string) => call<WriteDone>('library-undo', { id, ...(act ? { act } : {}) });
 export const answer = (task: string, choice: number | null, words: string) => call<WriteDone>('review-answer', { task, ...(choice === null ? {} : { choice }), words });
+export const takeCorrection = (correction: string) => call<WriteDone>('library-correction-take', { correction });
+export const declineCorrection = (correction: string) => call<WriteDone>('library-correction-decline', { correction });
 export const withdraw = (task: string) => call<WriteDone>('review-task-delete', { task });
 /** Asks an agent (`review-task`): an `asked` line of the asks log (`evidence.md` §4.1), `fields` those of its `what`, `from` the drafts it is asked for. */
 export const ask = (what: string, on: Record<string, unknown>, fields: Record<string, unknown>, from: string[], words = '') => call<WriteDone & { task: string }>('review-task', { what, on, ...fields, from, words });

@@ -8,6 +8,8 @@
 	import { rv } from './state.svelte';
 	import Question from './rows/Question.svelte';
 	import Change from './rows/Change.svelte';
+	import Check from './rows/Check.svelte';
+	import Correction from './rows/Correction.svelte';
 
 	let { row }: { row: ReviewRow } = $props();
 	const open = $derived(rv.open.has(row.row));
@@ -38,7 +40,7 @@
 	{/if}
 	{#if open}
 		<div class="rr-b">
-			{#if row.kind === 'questions'}<Question {row} />{:else if row.kind === 'edits' || row.kind === 'accepted-changed'}<Change {row} />{/if}
+			{#if row.kind === 'questions'}<Question {row} />{:else if row.kind === 'edits' || row.kind === 'accepted-changed'}<Change {row} />{:else if row.kind === 'check' && row.correction !== undefined}<Correction {row} />{:else if row.kind === 'check'}<Check {row} />{/if}
 		</div>
 	{/if}
 </div>

@@ -4,6 +4,7 @@
 	import Mark from '$lib/marks/Mark.svelte';
 	import { leanMark, paperMark } from '$lib/marks/marks';
 	import NodeBody from '$lib/node/NodeBody.svelte';
+	import { THEOREMS } from '$lib/node/taxa';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -15,8 +16,6 @@
 
 	let { ref, beside }: { ref: string; beside: Beside } = $props();
 
-	/** The taxa amsthm's plain style sets in italic. */
-	const THEOREMS = new Set(['theorem', 'lemma', 'proposition', 'corollary', 'conjecture', 'claim']);
 
 	const node = new Read<NodeAnswer>();
 	$effect(() => {

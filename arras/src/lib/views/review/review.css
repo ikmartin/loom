@@ -181,3 +181,97 @@
 .rvw .hov:focus-visible {
 	visibility: visible;
 }
+.rvw .subtree {
+	margin: -8px 0 0 34px;
+	border-left: 1px solid var(--rule-strong);
+}
+.rvw .sr {
+	border-bottom: 1px solid var(--rule);
+}
+.rvw .sr:last-child {
+	border-bottom: 0;
+}
+.rvw .sr-h {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 28px;
+	padding: 0 6px 0 4px;
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	background: none;
+	border: 0;
+	cursor: pointer;
+}
+.rvw .sr-h:hover {
+	background: var(--ann-neutral-wash);
+}
+.rvw .sr.open > .sr-h {
+	background: var(--link-wash);
+}
+.rvw .sr-h .tl {
+	color: var(--ink-soft);
+}
+.rvw .sr-b {
+	padding: 10px 6px 16px 22px;
+}
+.rvw .cmp {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 24px;
+	align-items: start;
+}
+.rvw .note.how.agent {
+	color: var(--agent);
+}
+.rvw .nh {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+.rvw .nh .name {
+	flex: 1;
+	font-family: var(--font-text, serif);
+	font-size: 17px;
+}
+.rvw .nh .tl {
+	margin-left: 0.3em;
+	color: var(--ink-faint);
+}
+.rvw .seg {
+	display: inline-flex;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	overflow: hidden;
+	background: var(--sheet);
+}
+.rvw .seg button {
+	font: inherit;
+	border: 0;
+	background: none;
+	padding: 1px 9px;
+	font-size: 11px;
+	color: var(--ink-faint);
+	cursor: pointer;
+}
+.rvw .seg button + button {
+	border-left: 1px solid var(--rule);
+}
+.rvw .seg button.on {
+	background: var(--leaf);
+	color: var(--ink);
+	font-weight: 500;
+}
+.rvw .stmt {
+	margin: 0 0 14px;
+	padding-left: 12px;
+	border-left: 2px solid var(--ink-soft);
+	font-family: var(--font-text, serif);
+	font-size: 15.5px;
+	line-height: 1.55;
+}
+.rvw .ask {
+	margin: 0 0 8px;
+}

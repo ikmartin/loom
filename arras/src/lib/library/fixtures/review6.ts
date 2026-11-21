@@ -62,10 +62,19 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 		{ row: 'cited:m-2026-11-21-oka22', kind: 'cited', docs: [MAIN], citation: 'm-2026-11-21-oka22', doc: MAIN, key: 'thm:count/proof', where: 'the proof of Theorem 3.4', ref: refs.okafor, short: 'Okafor 2022', citekey: 'Oka22' }
 	];
 	const checks: CheckRow[] = [
-		{ row: `check:${refs.arden25}`, kind: 'check', docs: [MAIN], ref: refs.arden25, short: 'Arden 2025', pdf: null, nodes: [{ node: 'tq-05A1', name: 'Theorem 5.1', title: 'Extension criterion', rests: { docs: [MAIN] }, how: 'transcribed' }] },
-		{ row: `check:${refs.vance}`, kind: 'check', docs: [MAIN], ref: refs.vance, short: 'Vance et al. 2023', pdf: null, nodes: ['Theorem 1.4', 'Lemma 2.2', 'Proposition 3.1'].map((name, i) => ({ node: `tq-05B${i}`, name, rests: { docs: [] }, how: 'transcribed' as const })) },
+		{ row: `check:${refs.arden25}`, kind: 'check', docs: [MAIN], ref: refs.arden25, short: 'Arden 2025', pdf: null, nodes: [{ node: 'tq-05A1', name: 'Theorem 5.1', number: '5.1', title: 'Extension criterion', rests: { docs: [MAIN] }, how: 'transcribed' }] },
+		{ row: `check:${refs.vance}`, kind: 'check', docs: [MAIN], ref: refs.vance, short: 'Vance et al. 2023', pdf: null, nodes: ['Theorem 1.4', 'Lemma 2.2', 'Proposition 3.1'].map((name, i) => ({ node: `tq-05B${i}`, name, number: name.split(' ')[1], rests: { docs: [] }, how: 'transcribed' as const })) },
 		{ row: 'check:ev-2026-11-21-c8vz2a', kind: 'check', docs: [MAIN], correction: 'ev-2026-11-21-c8vz2a', node: 'tq-0201', name: 'Definition 1.2', ref: refs.arden24, short: 'Arden 2024', by: 'Claude Code' }
 	];
+	bodies['check:ev-2026-11-21-c8vz2a'] = {
+		compared_at: '2026-11-18T15:20:00Z',
+		runs: [
+			['=', String.raw`The \emph{cycle space} of a quiver $Q$ is the kernel`],
+			['-', 'of the divergence map'],
+			['+', String.raw`$\mathcal{Z}(Q)$ of the divergence map $\partial\colon \mathbb{Z}^{A(Q)} \to \mathbb{Z}^{V(Q)}$`],
+			['=', '.']
+		]
+	};
 	const attest: AttestRow[] = [
 		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null },
 		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches' }

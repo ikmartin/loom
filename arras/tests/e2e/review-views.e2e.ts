@@ -1,5 +1,9 @@
 // Review on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/review6.ts`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 4 to 12): the column's kinds, counts and drafts; the list by who is waiting; answering a question, keeping an edit, withdrawing a task; and the rules that hold everywhere: no control but the four view names changes view, and no id is drawn. Where Review's reads are not served, today's Review stands, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
+
+/** One of the showcase quilt's stored papers, which the fixture serves as every work's PDF. */
+const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
 
 async function open(page: Page): Promise<void> {
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -69,6 +73,45 @@ test('a proposed edit opens to its change and is kept; one made in place that br
 	await first.getByRole('button', { name: 'keep' }).click();
 	await expect(page.getByTestId('column-message')).toContainText('Kept.');
 	await expect(page.getByTestId('review-row')).toHaveCount(4);
+});
+
+test("a work's results to check open the first a draft rests on beside its page, and the yes takes it away", async ({ page }) => {
+	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
+	await open(page);
+	await page.getByTestId('review-kind-check').click();
+	const smith = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · ' });
+	await expect(smith).toContainText('Smith 2024 · 9 results');
+	await smith.getByRole('button', { expanded: false }).first().click();
+	const first = smith.getByTestId('review-sub').first();
+	await expect(first).toContainText('3.2 Lemma · Test lemma');
+	await expect(first).toContainText('bounds.tex rests on it, through Proposition 3.4');
+	await expect(first).toContainText('extracted exactly from the TeX source, so compare it at a glance');
+	await expect(first.getByTestId('review-crop')).toBeVisible();
+	await expect(first.getByTestId('review-crop').locator('canvas')).toBeVisible();
+	await first.getByRole('button', { name: 'yes, it matches' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Lemma 3.2 matches the paper.');
+	await expect(smith).toContainText('Smith 2024 · 8 results');
+	await expect(smith.getByTestId('review-sub').first()).toContainText('3.1 Definition · Radius');
+	await expect(smith.getByTestId('review-sub').first().getByRole('button', { name: 'yes, it matches' })).toBeVisible();
+	const arden = page.getByTestId('review-row').filter({ hasText: 'Arden 2025 · Theorem 5.1' });
+	await arden.getByRole('button', { expanded: false }).first().click();
+	await expect(arden).toContainText('transcribed by Claude Code from page 2, so read it closely');
+	await arden.getByRole('button', { name: 'yes, it matches' }).click();
+	await expect(arden).toHaveCount(0);
+	await expect(count(page, 'review-kind-check')).toHaveText('4');
+});
+
+test("an agent's correction to a compared result shows what it changes, and is taken or declined", async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-check').click();
+	const row = page.getByTestId('review-row').filter({ hasText: 'Arden 2024 · a correction to Definition 1.2' });
+	await expect(row).toContainText('proposed by Claude Code');
+	await row.getByRole('button', { expanded: false }).click();
+	await expect(row.getByTestId('review-correction').locator('[data-side="old"]')).toHaveText('of the divergence map');
+	await expect(row).toContainText('The text you compared on 18 Nov stands until you take this.');
+	await row.getByRole('button', { name: 'take' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Definition 1.2 corrected.');
+	await expect(row).toHaveCount(0);
 });
 
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {

@@ -113,6 +113,8 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'change-keep': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
 		'change-discard': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
 		'review-accept': (b) => closing((r) => r.kind === 'accepted-changed' && (b.keys as string[]).includes(r.key)),
+		'library-correction-take': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),
+		'library-correction-decline': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),
 		'library-look-up': () => ok({}),
 		'library-undo': () => ok({}),
 		'library-take': (b) => {

@@ -17,6 +17,10 @@ class ReviewState {
 	folded = new SvelteSet<string>(['agents']);
 	/** Rows open, by their ids, which stay the same while what they are about waits. */
 	open = new SvelteSet<string>();
+	/** Inside an open row of a work, the result open under it, by the row; a row not in here opens its first. */
+	sub = $state<Record<string, string | null>>({});
+	/** Whether results are shown as their LaTeX rather than drawn. */
+	plain = $state(false);
 	/** Whether the source answers Review's reads; null until it has said. */
 	served = $state<boolean | null>(null);
 

@@ -83,7 +83,48 @@ export const review = {
 		/** A check row's quiet line, where an agent transcribed its results from the pages of a PDF. */
 		transcribed: 'transcribed by an agent',
 		/** The row of an agent's correction to a result the person compared. */
-		correction: (name: string) => `a correction to ${name}`
+		correction: (name: string) => `a correction to ${name}`,
+		/** A result's row inside a work's: its number, then its name's word ("3.2 Lemma"). */
+		numbered: (number: string, name: string) => `${number} ${name.endsWith(number) ? name.slice(0, -number.length).trim() : name}`,
+		/** A result's quiet line inside a work's row: which drafts rest on it, and through which result where none uses it directly. */
+		rests: (docs: string[], through?: string) => (docs.length ? `${listed(docs.map(file))} ${docs.length === 1 ? 'rests' : 'rest'} on it${through ? `, through ${through}` : ''}` : ''),
+		/** Over an opened result: how its text was made, and so how to compare it. */
+		how: {
+			extracted: () => 'extracted exactly from the TeX source, so compare it at a glance',
+			transcribed: (by: string, page: string) => (page ? `transcribed by ${by} from page ${page}, so read it closely` : `transcribed by ${by}, so read it closely`),
+			read: (by: string) => `read by ${by} from the TeX source, so read it closely`,
+			corrected: (by: string) => `corrected by ${by}, so read it closely`,
+			written: () => 'written by you'
+		},
+		/** The two ways a result's text is shown. */
+		rendered: 'rendered',
+		plain: 'plain',
+		/** The question under a result's text. */
+		ask: "Does loom's copy match the paper?",
+		/** The person's yes. */
+		yes: 'yes, it matches',
+		/** The person's no. */
+		no: 'no, it differs…',
+		/** The column's message after "no, it differs…", until correcting is built. */
+		noLater: 'Correct it here, or ask an agent to',
+		/** The column's message after the yes. */
+		matched: (name: string) => `${name} matches the paper.`,
+		/** Over the crop of the paper beside a result. */
+		page: (short: string, page: number) => `${short}, page ${page}`,
+		/** In place of the crop where loom knows no place on the paper for the result. */
+		noPlace: 'Loom does not know where this stands on the paper yet.',
+		/** In place of a result's text that could not be read. */
+		missing: 'This result could not be read.',
+		/** Under an agent's proposed correction. */
+		stands: (date: string) => `The text you compared on ${date} stands until you take this.`,
+		/** Takes an agent's correction. */
+		take: 'take',
+		/** Declines it. */
+		decline: 'decline',
+		/** The column's message after taking one. */
+		taken: (name: string) => `${name} corrected.`,
+		/** The column's message after declining one. */
+		declined: 'Declined.'
 	},
 	attest: {
 		/** An attest row's quiet line: what Lean states of the result. */
