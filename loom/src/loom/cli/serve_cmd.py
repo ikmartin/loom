@@ -11,7 +11,7 @@ import click
 from loom.cli._common import note
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.errors import EnvError
-from loom.render.serve import BUILD_URL, DEFAULT_PORT, ServeSession, locate_bundle, open_url
+from loom.render.serve import BUILD_URL, DEFAULT_PORT, CannotBind, ServeSession, locate_bundle, open_url
 
 
 @click.command()
@@ -55,11 +55,14 @@ def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, q
     session = ServeSession(quilt, bundle, port, compile_masters=not no_compile, live=bool(viewer))
     try:
         session.listen()
-    except OSError as exc:
-        why = exc.strerror or str(exc)
+    except CannotBind as exc:
         raise EnvError(
-            f"cannot listen on port {port}: {why}; pass --port N for another, or stop what holds it"
+            f"cannot listen on port {port}: {exc.why}; pass --port N for another, or stop what holds it"
         ) from exc
+    except OSError as exc:
+        # anything else the start could not do: the quilt's record of the server, a folder of the machine's
+        where = f" ({exc.filename})" if exc.filename else ""
+        raise EnvError(f"cannot start the server: {exc.strerror or exc}{where}") from exc
     # the URL first: a cold first build compiles every block the converter cannot translate, and a silent wait looks like a hang
     note(f"loom serve: {session.url}  (build directory at {session.url.rstrip('/')}{BUILD_URL}; Ctrl-C to stop)")
     if open_browser:

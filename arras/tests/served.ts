@@ -133,7 +133,11 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 	const dir = scratchDir(suite);
 	const root = join(dir, 'quilts', name);
 	const logPath = `${root}.serve.log`;
+	// the server's temporary folder, beside its copy and thrown away with it: a server is killed outright, so what it had there is never removed by the server
+	const tmp = `${root}.tmp`;
 	rmSync(root, { recursive: true, force: true });
+	rmSync(tmp, { recursive: true, force: true });
+	mkdirSync(tmp, { recursive: true });
 	cpSync(join(dir, 'template'), root, { recursive: true });
 	const env = reviewerEnv(suite, `${root}.config`);
 	const loom: Served['loom'] = (args, overrides = {}) =>
@@ -148,7 +152,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 		const proc: ChildProcess = spawn(LOOM, ['serve', '--quilt', root, '--port', String(port), '--no-compile'], {
 			cwd: ARRAS,
 			detached: true,
-			env: { ...env, LOOM_ARRAS_BUNDLE: join(dir, 'bundle') },
+			env: { ...env, LOOM_ARRAS_BUNDLE: join(dir, 'bundle'), TMPDIR: tmp },
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
 		proc.stdout!.pipe(out);
@@ -231,7 +235,7 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 	throw new Error(`loom serve never published ${root}:\n${lastLog}`);
 }
 
-/** Keep a failed test's copy and attach its server log; remove a passing one's. */
+/** Keep a failed test's copy and attach its server log; remove a passing one's, with the home its server kept the viewer in and its temporary folder. */
 async function finish(running: Running, info: TestInfo): Promise<void> {
 	await running.stop();
 	if (info.status !== info.expectedStatus) {
@@ -239,7 +243,8 @@ async function finish(running: Running, info: TestInfo): Promise<void> {
 		await info.attach('quilt copy', { body: running.served.root, contentType: 'text/plain' });
 		return;
 	}
-	rmSync(running.served.root, { recursive: true, force: true });
+	const root = running.served.root;
+	for (const path of [root, `${root}.config`, `${root}.tmp`]) rmSync(path, { recursive: true, force: true });
 	rmSync(running.logPath, { force: true });
 }
 
