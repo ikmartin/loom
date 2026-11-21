@@ -205,8 +205,11 @@ def write_step(
 
     All under the ledger's lock, so two processes never draw one step number; a `history` the ledger has moved past is refused (`refuse_stale`).
     """
-    from loom.writes import stage, stages
+    from loom.writes import is_staging, settle_for_history, stage, stages
 
+    if not is_staging():
+        # what a crash left is settled first; where that recorded a step, the plan is stale and refused below
+        settle_for_history(history.dir)
     refuse_interrupted(history)
     with locked(history.ledger):
         refuse_stale(history)

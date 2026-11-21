@@ -438,8 +438,11 @@ def load_history(hist_dir: Path) -> History:
 
 def append_entry(hist_dir: Path, action: str, data: dict[str, Any], actor: str | None) -> Entry:
     """Append one line and return it as an Entry; `when` is the clock's (LOOM_FIXED_TIME honoured). Inside an act that stages loom's records (`writes.staging`), the line is staged into the act, to land right after the lines the ledger holds now, or the act is put back whole."""
-    from loom.writes import stage_line, staged_lines
+    from loom.writes import is_staging, settle_for_history, stage_line, staged_lines
 
+    if not is_staging():
+        # a line written from outside an act: what a crash left is settled first, so it never follows an act in flight
+        settle_for_history(hist_dir)
     ledger = hist_dir / LEDGER
     when = stamp()
     line: dict[str, Any] = {"when": when, "actor": actor, "action": action}

@@ -104,6 +104,13 @@ else:
 
 
 _mine = threading.local()
+
+
+def holding(path: Path) -> bool:
+    """Whether this thread holds the lock on `path` (`locked`)."""
+    return os.path.realpath(path) in _mine.__dict__.get("held", set())
+
+
 _warned = False
 
 

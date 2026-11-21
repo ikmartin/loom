@@ -203,7 +203,7 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
     from loom.writes import left
 
     out = []
-    for kind, files, why, kept in left(result.quilt.root, result.quilt.history_dir):
+    for kind, files, why, settles in left(result.quilt.root, result.quilt.history_dir):
         if not files:
             out.append(
                 Diagnostic(
@@ -215,11 +215,8 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
                 )
             )
             continue
-        # the wording is the author's to judge (handover): no command, no id
-        if kept:
-            goes = "This stays until each file reads exactly as before the act or as the act left it. Putting back the version The Record kept just before the act, where it kept one, does that, and keeps your text as it is now first."
-        else:
-            goes = "This stays unless each file comes to read exactly as the act left it, since loom cannot undo an act whose texts the history lacks."
+        # the wording is the author's to judge (handover): no command, no id; what settles it is the verdict's own (`writes._judge`)
+        goes = settles
         if kind == "a Keep":
             goes += " Until it is settled, loom will not keep again the suggestions this act records."
         out.append(

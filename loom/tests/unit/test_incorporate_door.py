@@ -156,11 +156,31 @@ def test_an_adoption_cut_short_is_put_back_once_the_history_has_moved_on(
     with pytest.raises(Died):
         incorporate(scan(q), COPY, token)
     monkeypatch.undo()
-    append_entry(q.history_dir, "move", {"from": "a.tex", "to": "b.tex", "moved": False}, "Tester")
+    by_hand(q)
     said = recovered(q)
     assert said and said[0].startswith("undid adopt:")
     assert (q.root / DOC).read_text() == TEXT and steps(q) == before
     assert [e.action for e in load_history(q.history_dir).entries][-1] == "move"
+
+
+def by_hand(q) -> None:  # type: ignore[no-untyped-def]
+    """A line put into the history by a writer that does not settle the journal first, as an older loom or a hand edit would."""
+    import json as _json
+
+    with (q.history_dir / "ledger.jsonl").open("a", encoding="utf-8") as fh:
+        fh.write(
+            _json.dumps(
+                {
+                    "when": "2026-11-21T00:00:00Z",
+                    "actor": "Tester",
+                    "action": "move",
+                    "from": "a.tex",
+                    "to": "b.tex",
+                    "moved": False,
+                }
+            )
+            + "\n"
+        )
 
 
 def recorded_folders_stand(q) -> bool:  # type: ignore[no-untyped-def]
@@ -208,10 +228,37 @@ def test_an_act_whose_history_lines_landed_and_were_followed_is_left_not_put_bac
     with pytest.raises(Died):
         incorporate(scan(q), COPY, token)
     monkeypatch.undo()
-    append_entry(q.history_dir, "move", {"from": "a.tex", "to": "b.tex", "moved": False}, "Tester")
+    by_hand(q)
     said = recovered(q)
     assert said and said[0].startswith("left adopt:") and "another step was recorded after them" in said[0]
     assert all((q.history_dir / e.dir).is_dir() for e in load_history(q.history_dir).entries if e.dir)
+    ((_, _, _, settles),) = writes.left(q.root, q.history_dir)
+    assert "settled by hand" in settles and "texts the history lacks" not in settles
+
+
+def test_a_history_line_loom_writes_after_a_crash_settles_the_act_first(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every writer of the history from outside an act settles what a crash left first, as `loom live`, a draft closed and Keep all's line do through `append_entry`, so none leaves an act stuck (R-2)."""
+    q, token = ready(tmp_path)
+    ledger_writes: list[Path] = []
+    real = writes._append_line
+
+    def second_dies(path: Path, text: str, full: bool = False) -> tuple[int, int]:
+        if path.name == "ledger.jsonl":
+            ledger_writes.append(path)
+            if len(ledger_writes) == 2:
+                raise Died
+        return real(path, text, full)
+
+    monkeypatch.setattr(writes, "_append_line", second_dies)
+    with pytest.raises(Died):
+        incorporate(scan(q), COPY, token)
+    monkeypatch.undo()
+    append_entry(q.history_dir, "live", {"path": "drafting/old.tex"}, "Tester")
+    assert not writes.read_journal(q.root).begun
+    assert [e.action for e in load_history(q.history_dir).entries][-3:] == ["stamp", "adopt", "live"]
+    assert recorded_folders_stand(q)
 
 
 def test_a_step_recorded_beside_a_left_act_takes_a_number_its_folders_do_not(

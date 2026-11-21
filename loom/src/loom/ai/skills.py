@@ -127,7 +127,8 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
         rep.written.append(rel)
         record[rel] = sha(text)
         if write:
-            _write(root, rel, text)
+            # written only while the file still reads as it was read here, so a save made since is never written over
+            _write(root, rel, text, expect=current)
     for d in sorted(mine):
         if not _plain(root, d, folder=True) or not (root / d).is_dir():
             continue

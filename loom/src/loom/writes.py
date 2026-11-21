@@ -18,7 +18,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from loom.errors import ContentError
@@ -635,6 +635,26 @@ def _prune(root: Path, history: Path, rels: list[str]) -> None:
             d = d.parent
 
 
+def _folders_made(root: Path, rels: list[str]) -> list[str]:
+    """The folders writing `rels`, files the act makes, will make in the quilt, deepest first: what putting the act back takes away again where it leaves them empty (`_remove_folders`)."""
+    out: set[str] = set()
+    for rel in rels:
+        d = PurePosixPath(rel).parent
+        while d.as_posix() not in (".", "") and not (root / d).exists():
+            out.add(d.as_posix())
+            d = d.parent
+    return sorted(out, key=lambda d: (-d.count("/"), d))
+
+
+def _remove_folders(root: Path, folders: list[str]) -> None:
+    """Remove each of `folders`, deepest first, where it is empty: the folders an act made, taken away with its files when it is put back. One holding anything stays."""
+    for d in sorted(folders, key=lambda d: (-d.count("/"), d)):
+        try:
+            (root / d).rmdir()
+        except OSError:
+            continue
+
+
 def _temps(root: Path, rel: str) -> list[Path]:
     t = _target(root, rel)
     return list(t.parent.glob(f".{t.name}.*{TEMP}")) if t.parent.is_dir() else []
@@ -645,11 +665,12 @@ def _temps(root: Path, rel: str) -> list[Path]:
 
 @dataclass
 class Journal:
-    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), and each `<edit>:<generation>` a done act wrote, with the offset of its `begin`."""
+    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act also names (`crossed`)."""
 
     offset: int = 0
     begun: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)
     wrote: dict[str, int] = field(default_factory=dict)
+    crossed: dict[str, list[str]] = field(default_factory=dict)
 
     def fold(self, at: int, entry: dict[str, Any]) -> None:
         """Take in the line at `at`."""
@@ -659,11 +680,21 @@ class Journal:
             self.begun[act] = (at, entry)
         elif event == "done":
             begun = self.begun.pop(act, None)
+            self.crossed.pop(act, None)
             if begun is not None:
                 for gen in begun[1].get("edits") or []:
                     self.wrote[str(gen)] = begun[0]
+                files = begun[1].get("files")
+                mine = set(files) if isinstance(files, dict) else set()
+                # an act still unsettled whose files this one, done after it, wrote too: what it would put back is now this act's
+                for other, (_, e) in self.begun.items():
+                    theirs = e.get("files")
+                    both = mine & set(theirs) if isinstance(theirs, dict) else set()
+                    if both:
+                        self.crossed[other] = sorted(set(self.crossed.get(other, [])) | both)
         elif event == "aborted":
             self.begun.pop(act, None)
+            self.crossed.pop(act, None)
 
     def append(self, root: Path, entry: dict[str, Any], *, full: bool = False) -> None:
         """Append `entry` to the quilt's journal and take it in; under the lock, so nothing else was appended since this was read."""
@@ -734,10 +765,13 @@ def entry_at(root: Path, offset: int) -> dict[str, Any] | None:
 def _load_index(root: Path) -> Journal | None:
     try:
         data = json.loads((root / JOURNAL_INDEX).read_text(encoding="utf-8"))
+        if "crossed" not in data:
+            return None  # an index from before it was kept: read the journal from its start
         return Journal(
             offset=int(data["offset"]),
             begun={str(k): (int(v[0]), dict(v[1])) for k, v in data["begun"].items()},
             wrote={str(k): int(v) for k, v in data["wrote"].items()},
+            crossed={str(k): [str(x) for x in v] for k, v in (data.get("crossed") or {}).items()},
         )
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return None
@@ -749,7 +783,14 @@ def _save_index(root: Path, j: Journal) -> None:
     tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}{TEMP}")
     try:
         tmp.write_text(
-            json.dumps({"offset": j.offset, "begun": {k: list(v) for k, v in j.begun.items()}, "wrote": j.wrote}),
+            json.dumps(
+                {
+                    "offset": j.offset,
+                    "begun": {k: list(v) for k, v in j.begun.items()},
+                    "wrote": j.wrote,
+                    "crossed": j.crossed,
+                }
+            ),
             encoding="utf-8",
         )
         os.replace(tmp, p)
@@ -955,27 +996,39 @@ class _Verdict:
     kept: bool = False
     #: each file the act made, by the digest it was made with: undone by removing it while it holds that
     made: dict[str, str] = field(default_factory=dict)
+    #: for an act left, what settles it, as the person reads it
+    settles: str = ""
 
 
-def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
-    """Recovery's judgement of one begun act, by its files' bytes now and the store; reads, never writes."""
+#: What settles an act nothing but a person's hand can: said where recovery leaves such an act.
+BY_HAND = "it stays until it is settled by hand, which loom does not yet do"
+
+
+def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] | tuple[str, ...] = ()) -> _Verdict:
+    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act done since wrote too (`Journal.crossed`); reads, never writes. A left act's verdict says what settles it (`settles`)."""
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
     files: dict[str, list[str | None]] = entry.get("files") or {}
     holds = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
-    guards_hold = all(
-        _guard_holds(root, log, at, lines) for log, (at, lines) in _guards(entry.get("records") or []).items()
-    )
+    guards = _guards(entry.get("records") or [])
+    guards_hold = all(_guard_holds(root, log, at, lines) for log, (at, lines) in guards.items())
     if all(after for _, after in holds.values()) and guards_hold:
         return _Verdict("finish", holds=holds)
-    if not guards_hold and any(
-        _tangled(root, log, at, lines) for log, (at, lines) in _guards(entry.get("records") or []).items()
-    ):
+    if not guards_hold and any(_tangled(root, log, at, lines) for log, (at, lines) in guards.items()):
         return _Verdict(
             "left",
             f"its history lines were written and another step was recorded after them, so putting it back would leave those lines naming what it removed, and recovery changed nothing: {_where(holds)}",
             holds,
+            settles=f"Its files are as it left them, but loom can neither record the rest of its history nor put it back, so {BY_HAND}.",
+        )
+    if crossed:
+        # a later act, done, wrote these files too: their bytes are that act's now, and putting this one back would take its work out
+        return _Verdict(
+            "left",
+            f"a later act wrote {_named(list(crossed))} since, so putting this one back would take that act's work out, and recovery changed nothing: {_where(holds)}",
+            holds,
+            settles=f"Loom will not put it back over that act, so {BY_HAND}.",
         )
     texts = {rel: [fetch(history, d) if d else None for d in ab] for rel, ab in files.items()}
     # a file the act made is undone by its digest alone (`_unkept`): only a file it replaced or removed needs its texts
@@ -990,15 +1043,24 @@ def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
             "left",
             f"the history lacks a text of {_named(lacking)}, so loom cannot tell what the act did and changed nothing: {_where(holds)}",
             holds,
+            settles="This stays unless each file comes to read exactly as the act left it, since loom cannot undo an act whose texts the history lacks.",
         )
     if any(not before and not after for before, after in holds.values()):
         # the texts are said to be kept only where the store holds each one, as it does not a file made by its digest alone
         kept = all(x is not None for rel, ab in files.items() for d, x in zip(ab, texts[rel], strict=True) if d)
+        made = sorted(rel for rel, ab in files.items() if ab[0] is None and not any(holds[rel]))
+        replaced = [rel for rel, ab in files.items() if ab[0] is not None and not any(holds[rel])]
+        settles = "This stays until each file reads exactly as before the act or as the act left it."
+        if made:
+            settles += f" For {_named(made)}, which the act made, removing it does that."
+        if replaced:
+            settles += " Putting back the version The Record kept just before the act, where it kept one, does that for a file it changed, and keeps your text as it is now first."
         return _Verdict(
             "left",
             f"a file of it has changed since, so recovery changed nothing: {_where(holds, kept=kept)}",
             holds,
             kept=kept,
+            settles=settles,
         )
     return _Verdict(
         "undo",
@@ -1014,7 +1076,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
 
     said: list[str] = []
     for act_id, (_, e) in list(j.begun.items()):
-        v = _judge(root, history, e)
+        v = _judge(root, history, e, j.crossed.get(act_id, ()))
         if v.how == "left":
             said.append(f"left {act_id}: {v.why}")
             continue
@@ -1038,6 +1100,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now, kept=True)}")
             continue
         _prune(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
+        _remove_folders(root, [str(d) for d in e.get("folders") or [] if _in_quilt(root, d)])
         j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
         said.append(f"undid {act_id}")
     return said
@@ -1070,7 +1133,7 @@ KINDS = {
 }
 
 
-def left(root: Path, history: Path) -> list[tuple[str, list[str], str, bool]]:
+def left(root: Path, history: Path) -> list[tuple[str, list[str], str, str]]:
     """The acts recovery would leave as they are, as the person should hear of them.
 
     Parameters
@@ -1082,16 +1145,17 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, bool]]:
 
     Returns
     -------
-    list of (str, list of str, str, bool)
-        For each such act: its kind as a person names it (`KINDS`), the files it names, why recovery leaves it with each file's state, and whether the store holds both texts of every file. A line `untrusted` refuses, such as one that came with a copied folder, names no file, since its paths are not believed. An act recovery would finish or undo is not among them, nor an act in progress, which is one of those until it ends.
+    list of (str, list of str, str, str)
+        For each such act: its kind as a person names it (`KINDS`), the files it names, why recovery leaves it with each file's state, and what settles it, in a sentence. A line `untrusted` refuses, such as one that came with a copied folder, names no file, since its paths are not believed. An act recovery would finish or undo is not among them, nor an act in progress, which is one of those until it ends.
 
     See Also
     --------
     recover : what settles the rest, and says these as it starts.
     """
-    out: list[tuple[str, list[str], str, bool]] = []
-    for _, e in read_journal(root).begun.values():
-        v = _judge(root, history, e)
+    out: list[tuple[str, list[str], str, str]] = []
+    j = read_journal(root)
+    for act_id, (_, e) in j.begun.items():
+        v = _judge(root, history, e, j.crossed.get(act_id, ()))
         if v.how != "left":
             continue
         if not v.trusted:
@@ -1101,9 +1165,9 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, bool]]:
                 if linked
                 else "the journal holds a record of a write that loom cannot trust, perhaps one that came with a copied folder, so loom changed nothing for it"
             )
-            out.append(("a write", [], why, False))
+            out.append(("a write", [], why, ""))
         else:
-            out.append((KINDS.get(str(e.get("kind")), "a write"), sorted(v.holds), v.why, v.kept))
+            out.append((KINDS.get(str(e.get("kind")), "a write"), sorted(v.holds), v.why, v.settles))
     return out
 
 
@@ -1350,6 +1414,11 @@ class Act:
             "edits": self.edits,
             "records": self.records,
         }
+        made = _folders_made(
+            self.root, [rel for rel in changed if self.before.get(rel) is None and changed[rel] is not None]
+        )
+        if made:
+            begin["folders"] = made
         if self.undone:
             begin["undid"] = self.undone
         if self.look:
@@ -1370,6 +1439,7 @@ class Act:
                 for tmp in _temps(self.root, rel):
                     tmp.unlink(missing_ok=True)
             _prune(self.root, self.history, [rel for rel in done if self.before.get(rel) is None and rel not in kept])
+            _remove_folders(self.root, made)
             if not kept:
                 why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
                 self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
@@ -1511,6 +1581,26 @@ def _make(root: Path, rel: str, data: bytes | None, new: bool) -> None:
         os.replace(tmp, p)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def is_staging() -> bool:
+    """Whether an act stages loom's own records on this thread (`staging`)."""
+    return _STAGING.get() is not None
+
+
+def settle_for_history(history: Path) -> list[str]:
+    """Settle what a crash left before a line goes into the history `history` from outside an act, as an act and `cli._quilt.drawing_ids` do, so no step is read or written against an act in flight; returns what was done, in words.
+
+    Nothing where this thread holds the door's lock already (it settled as it took it) or the ledger's, which comes after the door's in the order every holder takes them; nothing outside a quilt.
+    """
+    from loom.history.ledger import LEDGER
+    from loom.locks import holding
+    from loom.paths import LOOM
+
+    root = next((p for p in history.resolve().parents if (p / LOOM).is_dir() and (p / "config.toml").is_file()), None)
+    if root is None or holding(root / WRITES_LOCK) or holding(history / LEDGER):
+        return []
+    return recover(root, history)
 
 
 def history_of(root: Path) -> Path:
