@@ -339,16 +339,18 @@ def run_import(
             note("Nothing written yet; the import would write:\n" + "\n".join(proposed))
             click.confirm("Apply?", abort=True)
         refuse_interrupted(load_history(quilt.history_dir))  # before anything is written
-        written = apply_import(quilt, plan)
-        drafted = root / plan.dest_rel
-        drafted.parent.mkdir(parents=True, exist_ok=True)
-        drafted.write_text(draft.text, encoding="utf-8")
+        from loom import writes
+
+        # one act through the door: the paper's assets and the drafted document
+        with writes.act(root, quilt.history_dir, "import", actor_for(root)) as w, writes.staging(w):
+            written = apply_import(quilt, plan)
+            w.replace(plan.dest_rel, draft.text.encode("utf-8"))
         written.append(plan.dest_rel)
         if check and untypeset is None:
             with Progress("checking that the draft typesets as the paper"):
                 ident = identity_test(staged, plan.master_rel, root, plan.dest_rel, scratch, quilt.config.engine)
             if not ident.passed and not ident.skipped:
-                drafted.unlink(missing_ok=True)
+                writes.put(root, quilt.history_dir, plan.dest_rel, None, kind="import", actor=actor_for(root))
                 diffs = "\n".join(
                     f"  {i.text}" + (f"  {i.key}" if i.key else "") for i in identity_group(ident)[0].items
                 )

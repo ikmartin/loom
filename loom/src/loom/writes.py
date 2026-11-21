@@ -1325,10 +1325,44 @@ def put(
     WriteRefused
         `exists`, `outside-quilt`, or `changed` from the commit.
     """
+    if _MAKING.get() == os.path.realpath(root):
+        _make(root, contained(root, rel), data, new)
+        return
     with act(root, history if history is not None else history_of(root), kind, actor) as w:
         if new and w.read(rel) is not None:
             raise WriteRefused("exists", f"{rel} exists already; nothing was written", status=409)
         w.replace(rel, data)
+
+
+#: The quilt `loom init` is making on this thread (`making`), by its real path; None when none is.
+_MAKING: ContextVar[str | None] = ContextVar("loom_writes_making", default=None)
+
+
+@contextmanager
+def making(root: Path) -> Iterator[None]:
+    """While `loom init` makes the quilt `root`, which did not exist, `put` writes its files straight and journals nothing: there is no person's text in it yet to keep, and a new quilt starts with no journal of its own making."""
+    token = _MAKING.set(os.path.realpath(root))
+    try:
+        yield
+    finally:
+        _MAKING.reset(token)
+
+
+def _make(root: Path, rel: str, data: bytes | None, new: bool) -> None:
+    """A file of a quilt being made (`making`), written whole, beside and moved into place, or removed."""
+    p = root / rel
+    if data is None:
+        p.unlink(missing_ok=True)
+        return
+    if new and p.exists():
+        raise WriteRefused("exists", f"{rel} exists already; nothing was written", status=409)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}{TEMP}")
+    try:
+        tmp.write_bytes(data)
+        os.replace(tmp, p)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def history_of(root: Path) -> Path:

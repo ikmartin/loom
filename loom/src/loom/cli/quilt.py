@@ -301,8 +301,11 @@ def init(
     if dry_run:
         _init_dry_run(target, demo, chosen, choice, paper, fix_anchors, made_it, as_json)
         return
+    from loom.writes import making
+
     if demo:
-        write_demo_quilt(target)
+        with making(target):
+            write_demo_quilt(target)
     else:
         made = write_minimal_quilt(target, chosen)
     _write_user_config_template()
@@ -318,7 +321,8 @@ def init(
             undo_minimal_quilt(target, existed, made)
             raise
     # said only once the quilt is certain to outlive the command
-    _, said_ai = setup_ai(target, choice)
+    with making(target):
+        _, said_ai = setup_ai(target, choice)
     gitted = git_init and _git_init(target)
     groups = list(imported.groups) if imported else []
     setup = [Item(line) for line in said_ai]
