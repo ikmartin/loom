@@ -653,7 +653,9 @@ def ai_annotations(
             **(on_page(result, a) if a.annotation.page is not None or a.annotation.anchor is not None else {}),
         }
         for a in resolved
-        if (f_by is None or a.annotation.author_id == f_by)
+        # a mark to digest is a request, which an agent meets as a task (`loom tasks`), not a note
+        if a.annotation.purpose is None
+        and (f_by is None or a.annotation.author_id == f_by)
         and (f_target is None or f_target in (None if a.unplaced else (a.target or a.annotation.target_key), a.work))
     ]
     rows = [r for r in rows if (not type_id or r["type"] == type_id) and (not f_status or r["status"] == f_status)]

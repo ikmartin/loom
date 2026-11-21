@@ -70,6 +70,8 @@ const TITLES: Record<string, string> = {
 	'detached-annotation': 'Annotations lost their place',
 	'previous-key-match': 'An acceptance matches a renamed proof',
 	'foreign-annotations': 'An unreadable line in the annotation log',
+	'foreign-evidence': 'An unreadable line in the evidence log',
+	'foreign-asks': 'An unreadable line in the log of asks',
 	'unmatched-postnote': 'A citation names a result its digest lacks',
 	'undigested-citekey': 'A cited work has no digest',
 	'postnote-from-another-version': 'A citation answered by another version of the work',

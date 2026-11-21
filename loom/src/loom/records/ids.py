@@ -1,4 +1,4 @@
-"""The ids of what loom's shared logs hold: an annotation, a suggested edit, a session and a link.
+"""The ids of what loom's shared logs hold: an annotation, a suggested edit, a session, a link, a record of evidence and an ask.
 
 Clones of a quilt write apart and merge later, so a number counted from what one clone can see is the number another clone counts too. Each of these ids ends in a token drawn at random instead, so two clones draw two ids. A log's lock still keeps one clone's writers apart.
 
@@ -23,6 +23,8 @@ TOKEN = r"[0-9a-z]+"
 ANNOTATION = rf"a-{DAY}-{TOKEN}"
 EDIT = rf"e-{DAY}-{TOKEN}"
 SESSION = rf"s-{DAY}-{TOKEN}"
+EVIDENCE = rf"ev-{DAY}-{TOKEN}"
+ASK = rf"t-{DAY}-{TOKEN}"
 
 #: Crockford's base 32 in lower case: no `i`, `l`, `o` or `u`, so a token survives being read aloud and rarely spells a word.
 _ALPHABET = "0123456789abcdefghjkmnpqrstvwxyz"

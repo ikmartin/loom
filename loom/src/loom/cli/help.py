@@ -48,8 +48,8 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ),
     (
         "Review",
-        "Annotate, accept, keep or undo what changed, and see what rests on what.",
-        ("annotate", "suggest", "accept", "changes", "deps", "downstream"),
+        "Annotate, accept, keep or undo what changed, see what rests on what, and what is known of a result.",
+        ("annotate", "suggest", "accept", "changes", "deps", "downstream", "evidence"),
     ),
     (
         "History",
@@ -59,8 +59,8 @@ SECTIONS: list[tuple[str, str, tuple[str, ...]]] = [
     ("Library", "The papers you cite and the results taken from them.", ("library",)),
     (
         "Agents",
-        "Hand a document to an agent, take its changes back, the sessions you both work in, the pages you both keep, and where you are looking and what you did since an agent last looked.",
-        ("draft", "adopt", "session", "here", "since", "write", "ai", "mcp"),
+        "Hand a document to an agent, take its changes back, the sessions you both work in, the pages you both keep, where you are looking and what you did since an agent last looked, and what you and an agent ask of each other.",
+        ("draft", "adopt", "session", "here", "since", "write", "tasks", "ask", "ai", "mcp"),
     ),
     (
         "Publish",

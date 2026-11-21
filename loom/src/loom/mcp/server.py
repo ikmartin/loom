@@ -37,6 +37,8 @@ MAX_IMAGES = 8
 BINDS = frozenset({"write", "replace"})
 #: The commands that write into a session, or look as one, and are given the bound session where a call names none.
 INTO = frozenset({"session say", "library propose", "since"})
+#: The commands whose session is the conversation's and nothing a call sends: the server sets it in their environment (`cli.tasks_cmd.BOUND_SESSION`), and they take no session argument.
+BOUND = frozenset({"ask", "tasks take", "tasks withdraw"})
 #: The requests that are an agent's use of loom, and what the record's `last` calls each.
 CALLS = {"tools/call": "tool", "prompts/get": "prompt", "resources/read": "resource"}
 #: Where a client that sends no `initialize` puts who it is and the protocol it speaks: every request's `_meta`.
@@ -111,8 +113,9 @@ def serve(root: Path, name: str) -> None:
             if ACTS[spec.path] == "read":
                 done = await _run(root, words)
             else:
+                session = await anyio.to_thread.run_sync(bind) if spec.path in BOUND else None
                 async with lock:
-                    done = await _run(root, words)
+                    done = await _run(root, words, session)
             if opening and done.returncode == 0 and not arguments.get("no_use") and not arguments.get("dry_run"):
                 # the agent opened a session to work in: its later calls write there
                 made = _made(done.stdout.decode("utf-8", errors="replace"))
@@ -288,14 +291,20 @@ def _end_on_signals(here: Any) -> None:
             signal.signal(sig, handler)
 
 
-async def _run(root: Path, words: list[str]) -> subprocess.CompletedProcess[bytes]:
-    """`loom WORDS` in the quilt's root, as an agent: no progress lines, no log line of its own, and no standard input.
+async def _run(root: Path, words: list[str], session: str | None = None) -> subprocess.CompletedProcess[bytes]:
+    """`loom WORDS` in the quilt's root, as an agent: no progress lines, no log line of its own, no standard input, and `session`, the conversation's, for a command in `BOUND`.
 
     Python starts in safe-path mode (`-P`, and `PYTHONSAFEPATH` for any Python the command starts in turn): `-m` otherwise puts the working directory first on `sys.path`, and a `loom.py` or a `json.py` in the quilt's root, which an agent or a co-author can write, would run in loom's place on every call.
     """
     import anyio
 
+    from loom.cli.tasks_cmd import BOUND_SESSION
+
     env = {**os.environ, "AI_AGENT": "1", "LOOM_PROGRESS": "off", "LOOM_LOGGED": "1", "PYTHONSAFEPATH": "1"}
+    # the conversation's session, which a command that asks or withdraws as it takes from here and from no argument
+    env.pop(BOUND_SESSION, None)
+    if session:
+        env[BOUND_SESSION] = session
     return await anyio.run_process(
         [sys.executable, "-P", "-m", "loom", *words], cwd=root, env=env, check=False, stdin=subprocess.DEVNULL
     )
