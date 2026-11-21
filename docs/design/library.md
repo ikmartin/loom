@@ -160,9 +160,18 @@ Nothing of today's library is kept because it exists (the author, 2026-11-20). E
 - **The bibliography file as the place loom keeps its own facts.** A work is a node, so its id, its stored copies and its entry are one file; a bibliography for TeX is generated from the references.
 - **Work ids made from authors, title and year**, and the piece of 2026-11-20 that pinned them, which was stopped. Its lessons stay as rules: two entries are not one work unless the person says so, an entry a person corrected is not rewritten, and an entry is found where the parser reads it.
 
-The quilt's layout changes under `.loom/library/` alone, so the format number becomes 2. Works and their stored documents are carried into references. Digests are not converted: the author starts fresh.
+The quilt's layout changes under `.loom/library/` alone, so the format number becomes 2. Works and their stored documents are carried into references. Digests are not converted: the author starts fresh. Nothing else of the old library is carried or kept working: a link written to a work's old id is not honoured, and a quilt whose pages hold such links has them written again once (the author, 2026-11-20: "no need to support an old unreleased link format forever"). An existing quilt may break for this; the product is not held back to spare one.
 
 Two pieces built the same week have a place in the new design, the tray, which is the way a work comes in and now makes a reference, and the tool that places a result in a paper, which records where a node stands. Whether what was built of each is kept, changed or made again is judged like everything else.
+
+**Settled from the inventory of today's library** (the author, 2026-11-20).
+
+- **Deleting a work with results** is one act with one undo, and whatever used those results says they are gone.
+- **A work has no overview of its own.** What an agent wants to say of a work, so that later agents find it, is a note on the work, with tags.
+- **An entry that states no identifier is not matched to one by loom's own search.** A candidate is offered as a question and nothing is taken without an answer.
+- **A paper an agent cannot fetch is asked of the person.** An agent often cannot download what a person on a university's network can. What it needs then waits in Review as a request with the source's link; the person opens the link, and the paper they drop is matched to the work that was waiting for it, so that fetching several at once costs a click and a drop each and no typing.
+
+**Open.** A person cites the published paper and loom reads the arXiv source, whose numbering may differ. The proposal: two references joined as the same work, the result marked as read from another version, its number unconfirmed until it is checked against the version cited. The author agrees it is a tension and has not settled it.
 
 **A work that names itself is looked up, not typed** (the author, 2026-11-20). Where a dropped paper carries an identifier, in its file's name, in its own metadata or on its first page, the reference's authors, title and year come from that identifier's record, and the person is not asked to type what a look-up would give. Where the quilt does not allow the network, loom asks for that one look-up at the drop, naming the identifier it found; a reference made without it says its details are unconfirmed and offers the look-up later. Loom does not guess an author from a page's text. The case this comes from: on 2026-11-20 the author dropped an arXiv paper, named by its arXiv number, into a quilt with the network off; loom recognised the number and recorded it, took a title and a year from the PDF, looked nothing up, said nothing of the number, and showed an empty field for the author to type.
 
