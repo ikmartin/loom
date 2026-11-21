@@ -69,7 +69,7 @@ Loom calls no model (P9), so three hands digest, and each can do different thing
 
 **What an agent can do to the web** is a small set of commands, the same in a shell and over MCP. To read: a node with its neighbours, what a node uses and what uses it, a search by work, taxon, number, text or tag, what a draft rests on, and the stubs. To write: fill a stub, propose a node at a place, propose a correction, and mark a reference as a mention. An agent writes no node file by hand, and loom checks each write.
 
-**Open.** Tags on nodes. The proposal: a tag is a record about a node, said by someone, and not part of its file, so that tagging changes no node's hash; tags are free words, with the existing ones offered before a new one is coined; a work's subject is read from its bibliography entry, and results that use one definition are already found by that edge. Not decided, and not on the pilot's path.
+**Tags** (the author, 2026-11-20). A tag is a record about a node, said by someone, and not part of its file, so that tagging changes no node's hash. Tags are kept as a log under the quilt's records, one line for each tag put on a node or taken off it, with who and when, as annotations are, and a node's tags are computed from it. They are free words, made lower-case when written, and the ones in use are offered before a new one is coined; a person takes off any tag, an agent only its own. A search reads them from the index loom derives, which is rebuilt from the files and the logs at will and kept up in the background, together with the words of a statement, its taxon, number, work and standing, and what it uses. A work's subject is read from its bibliography entry, and the results that use one definition are found by that edge, so neither needs a tag. Tags are for what neither gives: what an agent learned as it read, and a person's own order. They are not on the pilot's first path.
 
 ## Edges
 
@@ -158,6 +158,8 @@ The library is built so that it can reach the size of the Stacks project and so 
 The quilt's layout changes under `.loom/library/` alone, so the format number becomes 2. Works and their stored documents are carried into references. Digests are not converted: the author starts fresh.
 
 Two pieces built the same week are fitted to the new store and not thrown away: the tray, which is the way a work comes in and now makes a reference, and the tool that places a result in a paper, which records where a node stands.
+
+**A work that names itself is looked up, not typed** (the author, 2026-11-20). Where a dropped paper carries an identifier, in its file's name, in its own metadata or on its first page, the reference's authors, title and year come from that identifier's record, and the person is not asked to type what a look-up would give. Where the quilt does not allow the network, loom asks for that one look-up at the drop, naming the identifier it found; a reference made without it says its details are unconfirmed and offers the look-up later. Loom does not guess an author from a page's text. The case this comes from: on 2026-11-20 the author dropped an arXiv paper, named by its arXiv number, into a quilt with the network off; loom recognised the number and recorded it, took a title and a year from the PDF, looked nothing up, said nothing of the number, and showed an empty field for the author to type.
 
 ## What the pilot builds
 
