@@ -288,7 +288,7 @@ test("the agents' config documents leave the tree when the reader hides them in 
 	await expect(tree.getByRole('link', { name: 'AGENTS.md', exact: true })).toBeVisible();
 });
 
-test('the project tree stands under Files, a shelf open by default that folds', async ({ page }) => {
+test('the project tree stands under a Files head, open by default; folded, it counts the files, a hover lets a short drawer down, and a click opens it all', async ({ page }) => {
 	await page.goto('/master/drafting/main');
 	const files = page.getByTestId('files-toggle');
 	await expect(files).toHaveAttribute('aria-expanded', 'true');
@@ -298,15 +298,18 @@ test('the project tree stands under Files, a shelf open by default that folds', 
 	await files.click();
 	await expect(files).toHaveAttribute('aria-expanded', 'false');
 	await expect(page.getByTestId('docs-tree')).toHaveCount(0);
+	await expect(files.locator('.count')).toHaveText(/^\d+$/);
+	await page.mouse.move(600, 400);
+	await files.hover();
+	const drawer = page.getByTestId('files-drawer');
+	await expect(drawer).toBeVisible();
+	await expect(drawer).toContainText('click Files to open them all');
+	await expect(drawer.getByTestId('docs-tree')).toBeVisible();
+	await page.mouse.move(600, 400);
+	await expect(drawer).toHaveCount(0);
 	await files.click();
 	await expect(page.getByTestId('docs-tree')).toBeVisible();
-	// open, the shelf is one box holding its head and the tree, whose top rows start where the head's caret does
-	const shelf = page.getByTestId('files-shelf');
-	await expect(shelf.getByTestId('files-toggle')).toBeVisible();
-	await expect(shelf.getByTestId('docs-tree')).toBeVisible();
-	const caret = (await files.locator('.caret').boundingBox())!.x;
-	const top = (await page.getByTestId('docs-tree').getByRole('link', { name: 'README.md', exact: true }).boundingBox())!.x;
-	expect(Math.abs(top - caret)).toBeLessThanOrEqual(2);
+	await expect(page.getByTestId('files-drawer')).toHaveCount(0);
 });
 
 test('each row says whether agents edit it too, and the mark says why under the pointer', async ({ page }) => {

@@ -97,7 +97,6 @@ LEGACY = (
     "arras/src/lib/shell/FileTree.svelte",
     "arras/src/lib/shell/Settings.svelte",
     "arras/src/lib/shell/column/DocumentList.svelte",
-    "arras/src/lib/shell/column/FilesShelf.svelte",
     "arras/src/lib/shell/settings/Agents.svelte",
     "arras/src/lib/shell/settings/Annotations.svelte",
     "arras/src/lib/shell/settings/Appearance.svelte",
