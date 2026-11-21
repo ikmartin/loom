@@ -1,6 +1,6 @@
 # The library as a web of results
 
-**Decided with the author on 2026-11-20 and not built yet** (see [README](README.md#decided-not-yet-built)). This document is the design of the library as it is to be rebuilt: what it is for, what a node is, how nodes are joined, how evidence about them is kept, and how formalization stands on it. The shape of the files is [`docs/specs/nodes.md`](../specs/nodes.md), which wins over this document about a shape, as this one wins about what a thing means. Until it is built, the library section of [`model.md`](model.md#the-library) and `docs/specs/digests.md` describe what loom does.
+**Decided with the author on 2026-11-20.** The node file, its checks, the index and the tag log are built (`loom/src/loom/library/`); the rest is not built yet (see [README](README.md#decided-not-yet-built)), and nothing makes a node from a work. This document is the design of the library as it is to be rebuilt: what it is for, what a node is, how nodes are joined, how evidence about them is kept, and how formalization stands on it. The shape of the files is [`docs/specs/nodes.md`](../specs/nodes.md), which wins over this document about a shape, as this one wins about what a thing means. Until it is built, the library section of [`model.md`](model.md#the-library) and `docs/specs/digests.md` describe what loom does.
 
 ## What it is for
 
@@ -34,8 +34,6 @@ Everything in the library is a **node**: one file, named by its id, with a small
 **The body is the content only, in LaTeX** (P1). It has no `\begin{lemma}`: the taxon, the number and the name are in the header, and loom supplies the heading when it typesets. So a body needs its paper's macros and not its paper's theorem environments. A body points at other nodes by their ids, `\ref{tq-00A4}` and not `\ref{def:widget}`, so that a node read alone or carried into another quilt still points at something, and two papers that both say `lem:main` do not collide. The source's own label is kept in the header.
 
 **Why this format.** The files are written and read by loom, seldom by hand, so the header is typed and validated, and the body is the text exactly, with no quoting. A LaTeX file with its header in comments cannot hold a list. JSON puts the LaTeX on one escaped line, so any change rewrites the whole body in a diff. Forester's own format was considered and its design is what this takes: an opaque address, one node a file, a small header, everything a node, views computed from links. Its body is its own markup, into which LaTeX goes as a picture, where loom needs words a note can be anchored to; it has no kinds of edge, no evidence and no way to keep two authors' addresses apart; and as a dependency it is another toolchain beside TeX.
-
-**Open.** P5 says the graph is defined by labels and environments, never by paths. It was written of an author's sources, where nothing may be inferred from where a file sits. A library node's id is its file's name by construction, which is a statement and not an inference; P5 takes a sentence saying so when this is built.
 
 **Open.** A node with no source, something stated in the quilt and read from no work, is specified only as far as a list of authors. What it is for, and whether a note that became durable is one, belongs with the notes beyond annotations in [`model.md`](model.md#notes).
 
@@ -71,7 +69,7 @@ Loom calls no model (P9), so three hands digest, and each can do different thing
 
 **What an agent can do to the web** is a small set of commands, the same in a shell and over MCP. To read: a node with its neighbours, what a node uses and what uses it, a search by work, taxon, number, text or tag, what a draft rests on, and the stubs. To write: fill a stub, propose a node at a place, propose a correction, and mark a reference as a mention. An agent writes no node file by hand, and loom checks each write.
 
-**Tags** (the author, 2026-11-20). A tag is a record about a node, said by someone, and not part of its file, so that tagging changes no node's hash. Tags are kept as a log under the quilt's records, one line for each tag put on a node or taken off it, with who and when, as annotations are, and a node's tags are computed from it. They are free words, made lower-case when written, and the ones in use are offered before a new one is coined; a person takes off any tag, an agent only its own. A search reads them from the index loom derives, which is rebuilt from the files and the logs at will and kept up in the background, together with the words of a statement, its taxon, number, work and standing, and what it uses. A work's subject is read from its bibliography entry, and the results that use one definition are found by that edge, so neither needs a tag. Tags are for what neither gives: what an agent learned as it read, and a person's own order. They are not on the pilot's first path.
+**Tags** (the author, 2026-11-20). A tag is a record about a node, said by someone, and not part of its file, so that tagging changes no node's hash. Tags are kept as a log under the quilt's records, one line for each tag put on a node or taken off it, with who and when, as annotations are, and a node's tags are computed from it. They are free words, kept in the case they were typed, since a person's tags include subject codes such as `14A20`; two equal ignoring case are one tag, shown as first written. The ones in use are offered before a new one is coined; a person takes off any tag, an agent only its own. A search reads them from the index loom derives, which is made again from the files and the logs at will and brought up to date whenever it is asked, together with the words of a statement, mathematics included, its taxon, number and work, and what it uses. Keeping it up in the background, and a node's standing in it, are not built yet. A work's subject is read from its bibliography entry, and the results that use one definition are found by that edge, so neither needs a tag. Tags are for what neither gives: what an agent learned as it read, and a person's own order. They are not on the pilot's first path.
 
 ## Edges
 
@@ -181,7 +179,7 @@ Two pieces built the same week have a place in the new design, the tray, which i
 
 One path through the model, enough for the first use.
 
-1. The node file and its checks, with the index.
+1. The node file and its checks, with the index (built).
 2. References and their macros, made from the works a quilt holds.
 3. Digest, as one act for any source, run by loom only on what a draft depends on.
 4. The Library view: works, a work's results beside its PDF, a result's page.
