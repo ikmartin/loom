@@ -1,36 +1,43 @@
 """The tag log, `.loom/records/tags/log.jsonl` (docs/design/library.md, "Digesting and checking"): one line for each tag put on a node or taken off it, with who and when, appended and never rewritten.
 
-A tag is a record about a node, so tagging changes no node's file and no hash. A node's tags are replayed from the log: a tag stays on while anyone who put it on still has it there; a person's untag takes it off for everyone, an agent's only its own. A tag keeps the case it was typed in, and two equal ignoring case are one tag, shown as it was first written. A line that is not a tag or an untag is skipped and reported (`loom:foreign-tags`), and the rest still loads.
+A tag is a record about a node, so tagging changes no node's file and no hash. A node's tags are replayed from the log: a tag stays on while anyone who put it on still has it there; a person's untag takes it off for everyone, an agent's only its own. A tag keeps the case it was typed in, composed (NFC), and two equal ignoring case are one tag, shown as it was first written. A line that is not a tag or an untag is skipped and reported (`loom:foreign-tags`), and the rest still loads.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from loom import clock
 from loom.library import ids
-from loom.library.node import file_name
 from loom.locks import locked
-from loom.paths import LIBRARY_NODES, TAG_LOG
+from loom.paths import TAG_LOG
 from loom.scan.model import Diagnostic, Location
 
 EVENTS = ("tag", "untag")
 KINDS = ("person", "agent")
 #: The longest tag, in characters.
 LONGEST = 64
-_CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+#: Control characters, but the whitespace a person types (tab, line feed, vertical tab, form feed, carriage return), which becomes a space.
+_CONTROL = re.compile(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]")
 
 
 class TagRefused(ValueError):
     """A tag or an untag loom will not write, with the sentence that says why."""
 
 
+def fold(tag: str) -> str:
+    """A tag as tags are compared: composed (NFC), then without case, so `café` typed either way is one tag."""
+    return unicodedata.normalize("NFC", tag).casefold()
+
+
 def normalise(word: str) -> str:
-    """A tag as it is written: stripped, each run of whitespace inside it one space, its case kept.
+    """A tag as it is written: composed (NFC), stripped, each run of whitespace inside it one space, its case kept.
 
     Parameters
     ----------
@@ -47,13 +54,13 @@ def normalise(word: str) -> str:
     TagRefused
         For an empty tag, one longer than `LONGEST`, or one holding a control character.
     """
-    tag = " ".join(word.split())
+    if _CONTROL.search(word):
+        raise TagRefused("a tag holds no control characters")
+    tag = unicodedata.normalize("NFC", " ".join(word.split()))
     if not tag:
         raise TagRefused("a tag has at least one character other than a space")
     if len(tag) > LONGEST:
         raise TagRefused(f"a tag is at most {LONGEST} characters, and {tag[:20]}… is {len(tag)}")
-    if _CONTROL.search(tag):
-        raise TagRefused("a tag holds no control characters")
     return tag
 
 
@@ -72,15 +79,15 @@ class Tags:
 
     def held(self, node: str, tag: str) -> set[str]:
         """Who has `tag` on `node`."""
-        return set(self.holders.get(node, {}).get(tag.casefold(), set()))
+        return set(self.holders.get(node, {}).get(fold(tag), set()))
 
     def nodes(self, tag: str) -> list[str]:
         """The nodes `tag` is on, in id order."""
-        folded = tag.casefold()
+        folded = fold(tag)
         return sorted(n for n, on in self.holders.items() if on.get(folded))
 
     def apply(self, event: dict[str, Any]) -> None:
-        folded = event["tag"].casefold()
+        folded = fold(event["tag"])
         on = self.holders.setdefault(event["node"], {})
         if event["event"] == "tag":
             self.spelled.setdefault(folded, event["tag"])
@@ -164,9 +171,13 @@ def problems(tags: Tags) -> list[Diagnostic]:
 
 
 def _append(root: Path, event: dict[str, Any]) -> None:
+    """Append one event as a line, after a line feed when the log's last line was cut short, so a crash mid-line costs that line alone."""
     path = root / TAG_LOG
-    with path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
+    with path.open("a+b") as fh:
+        cut = fh.tell() > 0 and os.pread(fh.fileno(), 1, fh.tell() - 1) != b"\n"
+        fh.write(
+            (b"\n" if cut else b"") + (json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")
+        )
 
 
 def tag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
@@ -193,7 +204,7 @@ def tag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
     Raises
     ------
     TagRefused
-        For a node not in the library, or a tag `normalise` refuses.
+        For what is no node's id, a node not in the library (an id in another case is not it), or a tag `normalise` refuses.
 
     See Also
     --------
@@ -201,7 +212,10 @@ def tag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
     """
     written = normalise(word)
     _who(by, kind)
-    if not (root / LIBRARY_NODES / file_name(node)).is_file():
+    _id(node)
+    from loom.library.store import exists  # the store reads the index, which replays this log
+
+    if not exists(root, node):
         raise TagRefused(f"{node} is not in the library, so it cannot be tagged")
     path = root / TAG_LOG
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -238,7 +252,7 @@ def untag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
     Raises
     ------
     TagRefused
-        When an agent takes off a tag it did not put on.
+        For what is no node's id, or when an agent takes off a tag it did not put on.
 
     See Also
     --------
@@ -246,6 +260,7 @@ def untag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
     """
     written = normalise(word)
     _who(by, kind)
+    _id(node)
     path = root / TAG_LOG
     path.parent.mkdir(parents=True, exist_ok=True)
     with locked(path):
@@ -262,6 +277,11 @@ def untag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
             root, {"event": "untag", "node": node, "tag": written, "by": by.strip(), "kind": kind, "at": clock.stamp()}
         )
     return True
+
+
+def _id(node: str) -> None:
+    if ids.parse_id(node) is None:
+        raise TagRefused(f"{node!r} is not a node's id, as tq-00K3 is")
 
 
 def _who(by: str, kind: str) -> None:

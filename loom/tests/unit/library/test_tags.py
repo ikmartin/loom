@@ -137,3 +137,56 @@ def test_a_line_that_is_not_a_tag_is_skipped_and_said(tmp_path: Path) -> None:
     assert [(d.code, d.locations[0].line) for d in said] == [("loom:foreign-tags", n) for n in (2, 3, 4, 5)]
     assert said[0].message == f"Line 2 of {TAG_LOG} is not a tag or an untag (it is not JSON), so it is skipped."
     assert {d.class_ for d in said} == {"internal"}
+
+
+# ---- the review's findings ---------------------------------------------------------------------------------------------
+
+
+def test_a_tag_composed_or_decomposed_is_one_tag(tmp_path: Path) -> None:
+    """N-8: `café` typed with é and with e and a combining accent."""
+    root = quilt(tmp_path)
+    assert tag(root, "tq-00K3", "café", **ME)
+    assert tag(root, "tq-00K3", "café", **AGENT) is not False or replay(root).held("tq-00K3", "café") == {
+        "Isaac Martin",
+        "Claude agent",
+    }
+    assert replay(root).of("tq-00K3") == ["café"]
+    assert untag(root, "tq-00K3", "CAFÉ", **ME)
+    assert replay(root).of("tq-00K3") == []
+
+
+@pytest.mark.parametrize("separator", ["\x1c", "\x1d", "\x1e", "\x1f", "\x85"])
+def test_a_tag_holding_a_separator_is_refused_not_spaced(separator: str) -> None:
+    """N-20: Python's `split` takes these for spaces; they are control characters."""
+    with pytest.raises(TagRefused, match="control"):
+        normalise(f"open{separator}problem")
+
+
+def test_an_id_in_the_wrong_case_is_not_tagged(tmp_path: Path) -> None:
+    """N-5: on a file system blind to case `TQ-00K3` finds `tq-00K3.node`, a file of another id."""
+    root = quilt(tmp_path)
+    with pytest.raises(TagRefused, match="not in the library"):
+        tag(root, "TQ-00K3", "bounds", **ME)
+    assert not (root / TAG_LOG).exists()
+
+
+@pytest.mark.parametrize("bad", ["../../victim", "tq-00K3/../tq-00K5", ""])
+def test_what_is_no_id_is_neither_tagged_nor_untagged(tmp_path: Path, bad: str) -> None:
+    """N-6."""
+    root = quilt(tmp_path)
+    (tmp_path / "victim.node").write_text("x")
+    for act in (tag, untag):
+        with pytest.raises(TagRefused, match="not a node's id"):
+            act(root, bad, "bounds", **ME)
+
+
+def test_a_line_cut_short_costs_that_line_alone(tmp_path: Path) -> None:
+    """N-20: a crash mid-append left half a line; the next tag starts a line of its own."""
+    root = quilt(tmp_path)
+    tag(root, "tq-00K3", "first", **ME)
+    with (root / TAG_LOG).open("a", encoding="utf-8") as fh:
+        fh.write('{"event": "tag", "node": "tq-00K5", "ta')
+    assert tag(root, "tq-00K5", "second", **ME)
+    tags = replay(root)
+    assert tags.of("tq-00K3") == ["first"] and tags.of("tq-00K5") == ["second"]
+    assert [n for n, _ in tags.skipped] == [2]

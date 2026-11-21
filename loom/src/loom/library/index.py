@@ -23,7 +23,7 @@ from typing import Any
 from loom.library import ids
 from loom.library.body import CITES, REFS, blank_comments, entry_of, labels
 from loom.library.node import SUFFIX, Node, NodeUnreadable, node_hash, read_node
-from loom.library.tags import replay
+from loom.library.tags import fold, replay
 from loom.paths import LIBRARY_NODES, NODE_INDEX, TAG_LOG
 from loom.scan.bib import parse_bib
 
@@ -740,7 +740,7 @@ class NodeIndex:
         if tag:
             tagged = "(SELECT node FROM tags WHERE folded = ?)"
             where.append(f"(n.id IN {tagged} OR n.parent IN {tagged})" if proofs else f"n.id IN {tagged}")
-            args += [tag.casefold()] * (2 if proofs else 1)
+            args += [fold(tag)] * (2 if proofs else 1)
         for number in numbers:
             numbered = "(SELECT id FROM nodes WHERE number = ?)"
             where.append(f"(n.number = ? OR n.parent IN {numbered})" if proofs else "n.number = ?")
@@ -810,7 +810,7 @@ class NodeIndex:
         """The nodes in the library with `tag`, in any case, in id order."""
         return self._rows(
             f"SELECT {', '.join('n.' + c.strip() for c in _ROW.split(','))} FROM tags t JOIN nodes n ON n.id = t.node WHERE t.folded = ? ORDER BY n.id",
-            (tag.casefold(),),
+            (fold(tag),),
         )
 
     def tags_in_use(self) -> list[tuple[str, int]]:
