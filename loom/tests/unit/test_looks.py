@@ -316,3 +316,43 @@ def test_a_copied_quilt_s_server_file_does_not_start_loom_on_the_original(tmp_pa
     shutil.copytree(original, copy)
     r = refused("mcp", "--as", "Codex Agent", "--quilt", str(original), cwd=copy, code=2, match="copied quilt")
     assert "loom ai init" in r.output
+
+
+def test_keep_all_from_the_shell_says_what_its_act_settled(q: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep's act settles what a crash left as it begins, and says so on stderr, as a writer of the history and a command that draws an id do."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    ok("changes", "--keep-all", cwd=q)
+    hist = load_quilt(q).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(q, hist, "pdf-save") as w:
+            w.replace("drafting/fig.bin", b"\xff\x00binary")
+            w.replace("drafting/notes.md", b"# Notes\n")
+    restore()
+    (q / "notes/a.md").write_text("# A\n\nan agent's edit\n", encoding="utf-8")
+    said = ok("changes", "--keep-all", cwd=q).stderr
+    assert said.count("loom: undid pdf-save:") == 1, said
+    assert not writes.read_journal(q).begun and not (q / "drafting/fig.bin").exists()
+
+
+def test_a_command_that_draws_an_id_says_a_left_act_once_though_its_act_settles_again(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`loom new` says what it settled as it takes the door's lock; the act it opens under that lock settles again and stays quiet."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    hist = load_quilt(q).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(q, hist, "pdf-save") as w:
+            w.replace("drafting/fig.bin", b"\xff\x00binary")
+            w.replace("drafting/notes.md", b"# Notes\n")
+    restore()
+    (q / "drafting/fig.bin").write_bytes(b"the person's own\n")  # so recovery leaves the act
+    said = ok("new", "Lemma", "A new lemma", cwd=q).stderr
+    assert said.count("loom: left pdf-save:") == 1, said

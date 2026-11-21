@@ -1628,11 +1628,17 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
         # an act opened inside one that stages loom's records joins it: one transaction, which the outer act commits
         yield outer
         return
+    from loom.locks import holding
+
+    # a thread holding the lock already settled, and said so, as it took it
+    already = holding(root / WRITES_LOCK)
     with locked(root / WRITES_LOCK):
         j = read_journal(root)
         if j.begun:
-            _settle(root, history, j)
+            said = _settle(root, history, j)
             _save_index(root, j)
+            if not already:
+                _say(said)
         a = Act(root, history, kind, actor, j)
         yield a
         a._commit()
@@ -1742,12 +1748,20 @@ def settle_for_history(history: Path) -> list[str]:
     if root is None or holding(root / WRITES_LOCK) or holding(history / LEDGER):
         return []
     said = recover(root, history)
+    _say(said)
+    return said
+
+
+def _say(said: list[str]) -> None:
+    """Print what settling did on stderr, a line each, as `cli._quilt.drawing_ids` does.
+
+    From an act and a writer of the history, which settle what a crash left without being asked, so the person hears of it from whatever command ran.
+    """
     if said:
         import click
 
         for line in said:
             click.echo(f"loom: {line}", err=True)
-    return said
 
 
 def history_of(root: Path) -> Path:
