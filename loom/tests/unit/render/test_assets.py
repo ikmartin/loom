@@ -62,18 +62,73 @@ def test_without_pdftocairo_dvisvgm_converts_and_without_either_it_is_an_error(
     )
 
 
-def test_only_a_figure_no_tool_here_converts_is_noted_as_passing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+#: Each machine a figure meets, as (the converters here, the Ghostscript `dvisvgm` is given), and whether an unconverted figure is noted passing: only where a converter that can read a PDF here ran and failed, which it may not do again; a converter missing, or a `dvisvgm` with neither `mutool` nor a Ghostscript it accepts, is a state of the machine a key names (`converters`). A tool marked `-failing` exits 1; `-refusing` is `dvisvgm` 3.2's answer to a Ghostscript from 10.01 on.
+MACHINES = {
+    "a converter that works": (("pdftocairo",), None, False),
+    "no converter": ((), None, False),
+    "dvisvgm with neither mutool nor a Ghostscript": (("dvisvgm-failing",), None, False),
+    "dvisvgm refusing its Ghostscript, no mutool": (("dvisvgm-refusing",), ("/x/libgs.dylib", 1, 2), False),
+    "dvisvgm with a Ghostscript it accepts, failing": (("dvisvgm-failing",), ("/x/libgs.dylib", 1, 2), True),
+    "dvisvgm with mutool, failing": (("dvisvgm-failing", "mutool"), None, True),
+    "pdftocairo, failing": (("pdftocairo-failing",), None, True),
+}
+
+
+@pytest.mark.parametrize("machine", sorted(MACHINES))
+def test_an_unconverted_figure_is_passing_only_when_a_converter_that_reads_pdf_here_failed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, machine: str
 ) -> None:
-    """A figure no tool on the machine converts is the machine's, noted `uses.PASSING` so that nothing made with it outlives the build; one converted, or one the quilt does not hold, is not."""
+    from loom.render import assets
     from loom.render.uses import PASSING, noting
 
     (tmp_path / "cone.pdf").write_bytes(b"%PDF-1.4\n%FAKE-LOOM\nx\n")
-    with noting() as converted:
-        publish_graphic(tmp_path, "cone", tmp_path / "svg1")
-    with noting() as absent:
-        publish_graphic(tmp_path, "nothing", tmp_path / "svg2")
-    monkeypatch.setattr(shutil, "which", lambda tool: None)
-    with noting() as unconverted:
-        publish_graphic(tmp_path, "cone", tmp_path / "svg3")
-    assert PASSING not in converted | absent and PASSING in unconverted
+    scripts = {
+        "failing": "#!/bin/sh\necho 'ERROR: something went wrong' >&2\nexit 1\n",
+        "refusing": "#!/bin/sh\necho 'ERROR: To process PDF files, either Ghostscript < 10.01.0 or mutool is required.' >&2\nexit 252\n",
+    }
+    for how, body in scripts.items():
+        (tmp_path / how).write_text(body)
+        (tmp_path / how).chmod(0o755)
+    tools, ghostscript, passing = MACHINES[machine]
+    real = shutil.which
+    here = {}
+    for t in tools:
+        tool, _, how = t.partition("-")
+        here[tool] = str(tmp_path / how) if how else (real(tool) or str(tmp_path / "failing"))
+    monkeypatch.setattr(shutil, "which", lambda tool: here.get(tool))
+    monkeypatch.setattr(assets, "_ghostscript", lambda: ghostscript)
+    with noting() as noted:
+        rel, _ = publish_graphic(tmp_path, "cone", tmp_path / "svg")
+    assert (rel is not None) == (machine == "a converter that works")
+    assert (PASSING in noted) == passing
+
+
+def test_the_converters_name_the_ghostscript_dvisvgm_is_given_by_its_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Ghostscript of another version is another file: the key changes when loom's, or the one `LIBGS` names, is replaced."""
+    from loom.render import assets
+    from loom.tex import private
+
+    monkeypatch.setattr(private, "ghostscript_library", lambda: None)
+    monkeypatch.delenv("LIBGS", raising=False)
+    assert assets._ghostscript() is None
+    lib = tmp_path / "libgs.dylib"
+    lib.write_bytes(b"10.06")
+    monkeypatch.setenv("LIBGS", str(lib))
+    first = assets._ghostscript()
+    assert first is not None and first[0] == str(lib)
+    lib.write_bytes(b"10.00.0")
+    assert assets._ghostscript() != first
+    shipped = tmp_path / "loom-libgs.dylib"
+    shipped.write_bytes(b"10.05")
+    monkeypatch.setattr(private, "ghostscript_library", lambda: shipped)
+    assert assets._ghostscript() is not None and assets._ghostscript()[0] == str(shipped)
+
+
+def test_a_graphic_the_quilt_does_not_hold_is_not_passing(tmp_path: Path) -> None:
+    from loom.render.uses import PASSING, noting
+
+    with noting() as noted:
+        assert publish_graphic(tmp_path, "nothing", tmp_path / "svg")[0] is None
+    assert PASSING not in noted

@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+import secrets
+from bisect import bisect_left
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -90,7 +93,213 @@ def cut(old: str, new: str) -> list[tuple[int, int, int, int]]:
     """The changes between two texts, by words: `(o0, o1, n0, n1)` each, the stretch of `old` and of `new` it replaces, from the end of the last word the two share before it to the start of the first they share after it.
 
     The diff runs over the words alone, so a change of spacing between words that stand is none. Two changes fewer than `NEAR` words apart are one, unless a blank line stands between them. Each stretch carries the space around its words, so putting one stretch in place of the other gives exactly either text.
+
+    The diff is difflib's (`SequenceMatcher`, no junk), its blocks found by `_matching`, which lists exactly what difflib lists without looking at every recurrence of a word; an input it cannot answer exactly is listed by `_cut_by_difflib`, today's listing, kept as the oracle the tests hold it to.
     """
+    left = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(old)]
+    right = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(new)]
+    try:
+        blocks = _matching([t[0] for t in left], [t[0] for t in right])
+    except _Inexact:
+        return _cut_by_difflib(old, new)
+    ops = []
+    i = j = 0
+    for ai, bj, size in [*blocks, (len(left), len(right), 0)]:
+        if i < ai or j < bj:
+            ops.append((i, ai, j, bj))
+        i, j = ai + size, bj + size
+    groups: list[list[int]] = []
+    for a, b, c, d in ops:
+        if groups:
+            pa, pb, pc, pd = groups[-1]
+            gap_old = old[left[pb - 1][2] if pb else 0 : left[a][1] if a < len(left) else len(old)]
+            gap_new = new[right[pd - 1][2] if pd else 0 : right[c][1] if c < len(right) else len(new)]
+            if a - pb < NEAR and not _BLANK.search(gap_old) and not _BLANK.search(gap_new):
+                groups[-1] = [pa, b, pc, d]
+                continue
+        groups.append([a, b, c, d])
+    out = []
+    for a, b, c, d in groups:
+        o0 = left[a - 1][2] if a else 0
+        o1 = left[b][1] if b < len(left) else len(old)
+        n0 = right[c - 1][2] if c else 0
+        n1 = right[d][1] if d < len(right) else len(new)
+        out.append((o0, o1, n0, n1))
+    return out
+
+
+#: A range is searched by window (`_longest_by_window`) where its old words occur, counted over the whole of the new text, more than this many times per word of the two ranges: a bound above what difflib's search would look at, which stops at the range's end. Both searches answer the same, so it decides time alone.
+_CHEAP = 8
+#: The window hash: a polynomial in the words' numbers, modulo a Mersenne prime, its base drawn once a process above every word's number, so that no text can be written to collide and send the listing down `_cut_by_difflib`'s path.
+_HASH_MOD = (1 << 61) - 1
+_HASH_BASE = secrets.randbelow(_HASH_MOD - (1 << 32)) + (1 << 32)
+
+
+class _Inexact(Exception):
+    """Two different runs of words share a window hash, so the window search cannot say which is which: the input is listed by `_cut_by_difflib`."""
+
+
+def _matching(a: list[str], b: list[str]) -> list[tuple[int, int, int]]:
+    """`difflib.SequenceMatcher(None, a, b, autojunk=False)`'s matching blocks, without its closing one, as triples in order.
+
+    Its own recursion, each step's longest shared run found by difflib where that is cheap and by `_longest_by_window` where its search would look at every recurrence of a frequent word, the cost that grows with the square of how often a word recurs; and after each, the runs as long that difflib would take one step at a time on what follows (`_runs_after`), the cost of an edit of one shape on every line, found in one pass. Each gives difflib's run, so the blocks are difflib's; raises `_Inexact` where a hash collides.
+    """
+    import difflib
+    from collections import Counter
+
+    if a == b:
+        return [(0, 0, len(a))] if a else []
+    sm = difflib.SequenceMatcher(None, a, b, autojunk=False)
+    numbers: dict[str, int] = {}
+    na = [numbers.setdefault(w, len(numbers) + 1) for w in a]
+    nb = [numbers.setdefault(w, len(numbers) + 1) for w in b]
+    count = Counter(nb)
+    queue = [(0, len(a), 0, len(b))]
+    blocks = []
+    while queue:
+        alo, ahi, blo, bhi = queue.pop()
+        if sum(count.get(x, 0) for x in na[alo:ahi]) <= _CHEAP * (ahi - alo + bhi - blo):
+            i, j, k = sm.find_longest_match(alo, ahi, blo, bhi)
+        else:
+            i, j, k = _longest_by_window(na, nb, alo, ahi, blo, bhi)
+        if not k:
+            continue
+        blocks.append((i, j, k))
+        if alo < i and blo < j:
+            queue.append((alo, i, blo, j))
+        # the next steps difflib takes on what follows, while it holds a run as long, each the earliest after the one before: found in one pass
+        at_a, at_b = i + k, j + k
+        for x, y in _runs_after(na, nb, at_a, ahi, at_b, bhi, k):
+            blocks.append((x, y, k))
+            if at_a < x and at_b < y:
+                queue.append((at_a, x, at_b, y))
+            at_a, at_b = x + k, y + k
+        if at_a < ahi and at_b < bhi:
+            queue.append((at_a, ahi, at_b, bhi))
+    blocks.sort()
+    return blocks
+
+
+def _runs_after(
+    a: list[int], b: list[int], alo: int, ahi: int, blo: int, bhi: int, k: int
+) -> Iterator[tuple[int, int]]:
+    """The runs of `k` words, `k` the longest the range before held, that difflib takes one after another on what follows: each the earliest in `a`, then in `b`, of those after the one before, while there is one.
+
+    A range left after a longest run holds none longer, so while it holds one as long, that is the one difflib takes next; and none as long lies between two that follow each other, so the stretch between them is searched as any range is. Raises `_Inexact` where a hash collides.
+    """
+    if k > ahi - alo or k > bhi - blo:
+        return
+    mod, base = _HASH_MOD, _HASH_BASE
+    top = pow(base, k - 1, mod)
+    places: dict[int, list[int]] = {}
+    h = 0
+    for x in b[blo : blo + k]:
+        h = (h * base + x) % mod
+    places[h] = [blo]
+    for p in range(blo + k, bhi):
+        h = ((h - b[p - k] * top) * base + b[p]) % mod
+        places.setdefault(h, []).append(p - k + 1)
+    at_b = blo
+    x = alo
+    while x + k <= ahi:
+        h = 0
+        for w in a[x : x + k]:
+            h = (h * base + w) % mod
+        while True:
+            ys = places.get(h)
+            if ys is not None:
+                q = bisect_left(ys, at_b)
+                if q < len(ys):
+                    y = ys[q]
+                    if a[x : x + k] != b[y : y + k]:
+                        raise _Inexact
+                    yield x, y
+                    at_b = y + k
+                    x += k
+                    break
+            if x + k >= ahi:
+                return
+            h = ((h - a[x] * top) * base + a[x + k]) % mod
+            x += 1
+
+
+def _longest_by_window(a: list[int], b: list[int], alo: int, ahi: int, blo: int, bhi: int) -> tuple[int, int, int]:
+    """`find_longest_match(alo, ahi, blo, bhi)` without junk: the longest run the two ranges share, of those the one starting earliest in `a`, then earliest in `b`.
+
+    The shared head and tail are runs both ranges hold; a longer run is looked for by its length, halving, each length one pass of window hashes over each range.
+    """
+    n = min(ahi - alo, bhi - blo)
+    head = _shared(a, b, alo, blo, n, ahead=True)
+    if head == n:
+        return alo, blo, head
+    tail = _shared(a, b, ahi, bhi, n, ahead=False)
+    longer = _first_run(a, b, alo, ahi, blo, bhi, max(head, tail) + 1)
+    if longer is None:
+        if head >= tail:
+            # starts where both ranges start, so earliest in each
+            return alo, blo, head
+        at = _first_run(a, b, alo, ahi, blo, bhi, tail)
+        assert at is not None, "the shared tail is a run both ranges hold"
+        return at[0], at[1], tail
+    lo, hi, best = max(head, tail) + 1, n, longer
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        at = _first_run(a, b, alo, ahi, blo, bhi, mid)
+        if at is None:
+            hi = mid - 1
+        else:
+            lo, best = mid, at
+    return best[0], best[1], lo
+
+
+def _shared(a: list[int], b: list[int], at_a: int, at_b: int, n: int, *, ahead: bool) -> int:
+    """How many words the ranges share at their head, from `at_a` and `at_b` on, or at their tail, up to them; at most `n`, found by halving with slice comparisons."""
+    lo, hi = 0, n
+    while lo < hi:
+        mid = (lo + hi + 1) // 2
+        same = a[at_a : at_a + mid] == b[at_b : at_b + mid] if ahead else a[at_a - mid : at_a] == b[at_b - mid : at_b]
+        if same:
+            lo = mid
+        else:
+            hi = mid - 1
+    return lo
+
+
+def _first_run(a: list[int], b: list[int], alo: int, ahi: int, blo: int, bhi: int, k: int) -> tuple[int, int] | None:
+    """Where the run of `k` words the ranges share starts that starts earliest in `a`, then earliest in `b`; None when they share none.
+
+    Each window of `b` is hashed once, its first place kept; the windows of `a` are hashed in order until one is found in `b`, and its words compared, so a collision raises `_Inexact` rather than answering.
+    """
+    if k > ahi - alo or k > bhi - blo:
+        return None
+    mod, base = _HASH_MOD, _HASH_BASE
+    top = pow(base, k - 1, mod)
+    seen: dict[int, int] = {}
+    h = 0
+    for x in b[blo : blo + k]:
+        h = (h * base + x) % mod
+    seen[h] = blo
+    for p in range(blo + k, bhi):
+        h = ((h - b[p - k] * top) * base + b[p]) % mod
+        seen.setdefault(h, p - k + 1)
+    h = 0
+    for x in a[alo : alo + k]:
+        h = (h * base + x) % mod
+    p = alo + k
+    while True:
+        j = seen.get(h)
+        if j is not None:
+            if a[p - k : p] != b[j : j + k]:
+                raise _Inexact
+            return p - k, j
+        if p >= ahi:
+            return None
+        h = ((h - a[p - k] * top) * base + a[p]) % mod
+        p += 1
+
+
+def _cut_by_difflib(old: str, new: str) -> list[tuple[int, int, int, int]]:
+    """`cut` as difflib finds it, every recurrence of a word looked at: the oracle `cut` lists exactly what it lists, and its path for an input the window search cannot answer exactly."""
     import difflib
 
     left = [(m.group(), m.start(), m.end()) for m in _WORD.finditer(old)]

@@ -2,7 +2,7 @@
 
 A reader of the cache calls `used` with each file or folder it read or wrote; whoever wants to know what a piece of work used wraps it in `noting`. The notes are per thread, since a build renders on a pool. A note that starts with `@` names a group: work several fragments share (a document's page, the nodes no document reaches, a digest), noted once in `FragmentRenderer.groups` and named by each fragment that took from it.
 
-Work that met something of the machine's that no cache remembers (a TeX run that made nothing and is not remembered, a figure no tool converted) calls `passing`, whose note `PASSING` says that what the work made serves the build that made it and is kept for no later one: a later run on the same inputs may come out otherwise.
+Work that met something of the machine's that no cache remembers (a TeX run that made nothing and is not remembered, a figure a converter here failed on) calls `passing`, whose note `PASSING` says that what the work made serves the build that made it and is kept for no later one: a later run on the same inputs may come out otherwise.
 """
 
 from __future__ import annotations

@@ -8,6 +8,8 @@ from __future__ import annotations
 import hashlib
 import re
 
+from loom.scan.memo import Memo
+
 _DIRECTIVE = re.compile(r"^\s*%\s*!LOOM\b")
 
 
@@ -37,7 +39,17 @@ def sha256(text: str) -> str:
 
 
 def hash_text(text: str) -> str:
-    return sha256(normalize(text))
+    """`sha256` of `text` normalised, made once for each text while builds ask for it (`_hashed`): a save hashes every key's own text again, and a word changes one or two.
+
+    Keyed by a digest of the text, so the memo names a key's whole text without holding it; a lone surrogate, which only a comment line `normalize` drops can carry into a hash, is digested as it stands.
+    """
+    return _hashed.get(
+        hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=16).digest(), lambda: sha256(normalize(text))
+    )
+
+
+#: Each text's hash, by a digest of the text.
+_hashed: Memo[bytes, str] = Memo(built=True)
 
 
 def child_marker(key: str) -> str:

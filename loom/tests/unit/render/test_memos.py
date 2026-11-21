@@ -5,7 +5,9 @@ The memos of whole parts of a build are tested beside their parts: an agent copy
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import fields, replace
+from typing import Any
 
 import pytest
 
@@ -89,3 +91,74 @@ def test_a_remembered_comparison_is_handed_out_as_a_copy(comparing: list[int]) -
     left.append([0, 1])
     left[0].append(99)
     assert review_compare._changed(BEFORE, AFTER) == review_compare.word_changes(BEFORE, AFTER, lambda word: word)
+
+
+@pytest.fixture
+def rendering(monkeypatch: pytest.MonkeyPatch) -> tuple[list[int], Callable[..., str]]:
+    """A memo of rendered bodies with nothing in it, a count of the bodies actually rendered, and the rendering itself."""
+    from loom.records import store
+
+    made: list[int] = []
+    real = store._render_markdown
+    monkeypatch.setattr(store, "_render_markdown", lambda *a: made.append(1) or real(*a))
+    store._rendered.clear()
+    return made, real
+
+
+def test_a_body_is_rendered_once_and_again_when_its_text_changes(
+    rendering: tuple[list[int], Callable[..., str]],
+) -> None:
+    from loom.records.store import render_markdown
+
+    made, real = rendering
+    first = render_markdown("A note on $x$, **bold**.")
+    assert render_markdown("A note on $x$, **bold**.") == first == real("A note on $x$, **bold**.", None, None)
+    assert len(made) == 1
+    again = render_markdown("A note on $y$, **bold**.")
+    assert len(made) == 2 and again == real("A note on $y$, **bold**.", None, None) != first
+
+
+@pytest.mark.parametrize("given", ["tokens", "raw"])
+def test_a_body_rendered_with_a_callable_is_rendered_every_time(
+    rendering: tuple[list[int], Callable[..., str]], given: str
+) -> None:
+    """What a callable does is not part of any key, so a body given one is never remembered."""
+    from loom.records.store import render_markdown
+
+    made, _ = rendering
+    kw: dict[str, Any] = (
+        {"tokens": lambda parsed: None} if given == "tokens" else {"raw": lambda piece, words: "<b>x</b>"}
+    )
+    render_markdown("A <i>note</i>.", **kw)
+    render_markdown("A <i>note</i>.", **kw)
+    assert len(made) == 2
+
+
+@pytest.fixture
+def hashing(monkeypatch: pytest.MonkeyPatch) -> list[int]:
+    """A memo of text hashes with nothing in it, and a count of the texts actually normalised."""
+    from loom.scan import hashing as H
+
+    made: list[int] = []
+    real = H.normalize
+    monkeypatch.setattr(H, "normalize", lambda text: made.append(1) or real(text))
+    H._hashed.clear()
+    return made
+
+
+def test_a_text_is_hashed_once_and_again_when_it_changes(hashing: list[int]) -> None:
+    from loom.scan.hashing import hash_text, normalize, sha256
+
+    text = "Let $x$ be a widget.\n% a comment\n\\label{a}\n"
+    first = hash_text(text)
+    assert hash_text(text) == first == sha256(normalize(text)) and len(hashing) == 2
+    changed = text.replace("$x$", "$y$")
+    assert hash_text(changed) == sha256(normalize(changed)) != first and len(hashing) == 4
+
+
+def test_a_text_with_a_lone_surrogate_in_a_comment_is_hashed_as_before(hashing: list[int]) -> None:
+    """`normalize` drops a comment line, so a surrogate there never reached the hash; the memo's key takes it too."""
+    from loom.scan.hashing import hash_text, normalize, sha256
+
+    text = "% a comment with a lone surrogate \udc80\nx\n"
+    assert hash_text(text) == sha256(normalize(text))

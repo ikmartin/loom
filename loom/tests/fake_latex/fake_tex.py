@@ -282,7 +282,11 @@ def run_kpsewhich(args: list[str]) -> int:
             sys.stdout.write(f"{Path(name).resolve()}\n")
             found = True
         elif name in SYSTEM_FILES:
-            sys.stdout.write(f"/fake/texmf/{name}\n")
+            # a file on disk, as a distribution's is: loom believes a found name while the file it was given is there
+            installed = Path(sys.argv[0]).resolve().parent / "texmf" / name
+            installed.parent.mkdir(exist_ok=True)
+            installed.touch()
+            sys.stdout.write(f"{installed}\n")
             found = True
     return 0 if found else 1
 

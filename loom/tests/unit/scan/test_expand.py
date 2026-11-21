@@ -1,9 +1,10 @@
+import os
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from loom.scan.expand import expand_master
+from loom.scan.expand import expand_master, resolve_inclusion
 from loom.scan.sections import find_sections, heading_labels
 from loom.scan.source import read_source
 
@@ -99,12 +100,14 @@ def test_kpsewhich_is_probed_once_per_name(tmp_path: Path, monkeypatch: pytest.M
     """The probe is a subprocess run once per unresolved inclusion, and a paper's unresolved names repeat; on the Manolache import it was 86 ms of a 166 ms scan."""
     from loom.scan import expand as expand_mod
 
-    expand_mod._probe.cache_clear()
+    installed = tmp_path / "texmf" / "amsmath.sty"
+    installed.parent.mkdir()
+    installed.write_text("% amsmath\n")
     calls: list[str] = []
 
     def fake(cmd, **kw):  # type: ignore[no-untyped-def]
         calls.append(cmd[1])
-        return subprocess.CompletedProcess(cmd, 0, stdout="/usr/share/x.sty\n", stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout=f"{installed}\n", stderr="")
 
     monkeypatch.setattr(expand_mod.shutil, "which", lambda _n: "/usr/bin/kpsewhich")
     monkeypatch.setattr(expand_mod.subprocess, "run", fake)
@@ -117,4 +120,90 @@ def test_kpsewhich_is_probed_once_per_name(tmp_path: Path, monkeypatch: pytest.M
     assert calls == ["amsmath.sty", "amsmath.sty"]
     monkeypatch.setattr(expand_mod.shutil, "which", lambda _n: None)
     assert expand_mod._kpsewhich("amsmath.sty", tmp_path) is False
-    expand_mod._probe.cache_clear()
+
+
+class _Kpsewhich:
+    """A `kpsewhich` over a person's trees, called through `subprocess.run`: TEXMFHOME searched on disk through any link, a distribution through its `ls-R`, and a folder `TEXINPUTS` names; with a clock `AGAIN` is counted on."""
+
+    def __init__(self, root: Path) -> None:
+        self.home, self.dist, self.inputs = root / "texmf", root / "texmf-dist", root / "inputs"
+        for folder in (self.home, self.dist, self.inputs):
+            folder.mkdir()
+        (self.dist / "ls-R").write_text("% ls-R\n")
+        self.calls: list[str] = []
+        self.now = 0.0
+
+    def run(self, cmd, **kw):  # type: ignore[no-untyped-def]
+        self.calls.append(cmd[1])
+        name = cmd[1]
+        found = [
+            *(Path(d) / f for d, _, fs in os.walk(self.home, followlinks=True) for f in fs if f == name),
+            *([self.dist / name] if name in (self.dist / "ls-R").read_text().split() else []),
+            *([self.inputs / name] if (self.inputs / name).is_file() else []),
+        ]
+        return subprocess.CompletedProcess(cmd, 0 if found else 1, stdout="".join(f"{f}\n" for f in found), stderr="")
+
+
+@pytest.fixture
+def kpsewhich(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Kpsewhich:
+    from loom.scan import expand as expand_mod
+
+    fake = _Kpsewhich(tmp_path)
+    monkeypatch.setattr(expand_mod.shutil, "which", lambda _n: "/usr/bin/kpsewhich")
+    monkeypatch.setattr(expand_mod.subprocess, "run", fake.run)
+    monkeypatch.setattr(expand_mod, "_clock", lambda: fake.now)
+    return fake
+
+
+@pytest.mark.parametrize(
+    "how",
+    [
+        "copied into TEXMFHOME by hand",
+        "installed, its ls-R written again",
+        "put in a folder TEXMFHOME reaches by a link",
+        "put in a folder TEXINPUTS names",
+    ],
+)
+def test_a_file_not_found_is_asked_about_again_after_the_interval(
+    tmp_path: Path, kpsewhich: _Kpsewhich, how: str
+) -> None:
+    """A server goes on scanning after a package arrives, by whatever way: a name `kpsewhich` did not find is asked about again once `AGAIN` seconds have passed, and not before, so a scan between costs no subprocess and walks no tree."""
+    from loom.scan.expand import AGAIN
+
+    root = tmp_path / "quilt"
+    root.mkdir()
+    assert resolve_inclusion(root, "reviewextra") == (None, "missing")
+    if how == "copied into TEXMFHOME by hand":
+        (kpsewhich.home / "tex" / "latex" / "reviewextra").mkdir(parents=True)
+        (kpsewhich.home / "tex" / "latex" / "reviewextra" / "reviewextra.tex").write_text("Words.\n")
+    elif how == "installed, its ls-R written again":
+        (kpsewhich.dist / "reviewextra.tex").write_text("Words.\n")
+        (kpsewhich.dist / "ls-R").write_text("% ls-R\nreviewextra.tex\n")
+    elif how == "put in a folder TEXMFHOME reaches by a link":
+        mine = tmp_path / "my-styles"
+        mine.mkdir()
+        (kpsewhich.home / "mine").symlink_to(mine, target_is_directory=True)
+        (mine / "reviewextra.tex").write_text("Words.\n")
+    else:
+        (kpsewhich.inputs / "reviewextra.tex").write_text("Words.\n")
+    kpsewhich.now += AGAIN - 1
+    assert resolve_inclusion(root, "reviewextra") == (None, "missing")
+    assert kpsewhich.calls == ["reviewextra.tex"]
+    kpsewhich.now += 1
+    assert resolve_inclusion(root, "reviewextra") == (None, "system")
+    assert resolve_inclusion(root, "reviewextra") == (None, "system")
+    assert kpsewhich.calls == ["reviewextra.tex", "reviewextra.tex"]
+
+
+def test_a_file_found_is_believed_only_while_it_is_there(tmp_path: Path, kpsewhich: _Kpsewhich) -> None:
+    """A package deleted, or removed by `tlmgr`, is missing at the next scan: the file `kpsewhich` named is looked at, and it is asked again when the file has gone."""
+    root = tmp_path / "quilt"
+    root.mkdir()
+    installed = kpsewhich.home / "reviewextra.tex"
+    installed.write_text("Words.\n")
+    assert resolve_inclusion(root, "reviewextra") == (None, "system")
+    assert resolve_inclusion(root, "reviewextra") == (None, "system")
+    assert kpsewhich.calls == ["reviewextra.tex"]
+    installed.unlink()
+    assert resolve_inclusion(root, "reviewextra") == (None, "missing")
+    assert kpsewhich.calls == ["reviewextra.tex", "reviewextra.tex"]

@@ -9,8 +9,8 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass, field
-from functools import cache
 from pathlib import Path
 
 from loom.paths import document_dir, under
@@ -76,16 +76,43 @@ class Expansion:
 def _kpsewhich(name: str, cwd: Path) -> bool:
     """Whether the distribution resolves `name`, asked of the `kpsewhich` on PATH now from `cwd`, the document's directory, as a compile there would ask.
 
-    Memoised, since a subprocess per unresolved inclusion was 86 ms of a 166 ms scan on the Manolache import; keyed by executable, TEXINPUTS and directory as well as name, so a run under another installation is never answered from this one's memo.
+    Memoised, since a subprocess per unresolved inclusion was 86 ms of a 166 ms scan on the Manolache import; keyed by executable, TEXINPUTS and directory as well as name, so a run under another installation is never answered from this one's memo. A name found is believed while the file `kpsewhich` named is there, one `stat`; a name not found is asked about again once `AGAIN` seconds have passed, whatever way a file can arrive (`tlmgr`, a copy, a link, a folder `TEXINPUTS` names), so for that long a file that has just arrived can still be called missing.
     """
-    return _probe(shutil.which("kpsewhich"), os.environ.get("TEXINPUTS", ""), name, str(cwd))
+    exe = shutil.which("kpsewhich")
+    key = (exe, os.environ.get("TEXINPUTS", ""), name, str(cwd))
+    found = _FOUND.get(key)
+    if found is not None:
+        if os.path.exists(found):
+            return True
+        del _FOUND[key]
+    else:
+        asked = _MISSING.get(key)
+        if asked is not None and _clock() - asked < AGAIN:
+            return False
+    # the time before asking, so a file that arrives while kpsewhich runs is asked about at the next interval
+    now = _clock()
+    path = _probe(*key)
+    if path is not None:
+        _FOUND[key] = path
+        _MISSING.pop(key, None)
+        return True
+    _MISSING[key] = now
+    return False
 
 
-@cache
-def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> bool:
-    """One `kpsewhich NAME` in `cwd`; `texinputs` is only a cache key, since the subprocess inherits the environment it names."""
+#: Seconds a name `kpsewhich` did not find is believed missing before it is asked about again.
+AGAIN = 10.0
+#: The clock `AGAIN` is counted on; a test gives its own.
+_clock = time.monotonic
+#: Each name `kpsewhich` found, by `_kpsewhich`'s key, with the file it named; and each it did not, with when it was asked.
+_FOUND: dict[tuple[str | None, str, str, str], str] = {}
+_MISSING: dict[tuple[str | None, str, str, str], float] = {}
+
+
+def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> str | None:
+    """One `kpsewhich NAME` in `cwd`: the file it names, read against `cwd`, or None; `texinputs` is only part of the memo's key, since the subprocess inherits the environment it names."""
     if not exe:
-        return False
+        return None
     try:
         proc = subprocess.run(
             [exe, name],
@@ -97,8 +124,9 @@ def _probe(exe: str | None, texinputs: str, name: str, cwd: str) -> bool:
             cwd=cwd if Path(cwd).is_dir() else None,
         )
     except (OSError, subprocess.SubprocessError):
-        return False
-    return proc.returncode == 0 and bool(proc.stdout.strip())
+        return None
+    named = proc.stdout.strip().splitlines()[0].strip() if proc.returncode == 0 and proc.stdout.strip() else ""
+    return str(Path(cwd) / named) if named else None
 
 
 def resolve_inclusion(

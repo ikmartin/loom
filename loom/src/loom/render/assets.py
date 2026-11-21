@@ -10,6 +10,7 @@ from pathlib import Path
 
 from loom.paths import under
 from loom.render.uses import passing
+from loom.tex import private
 from loom.tex.runner import tex_env
 
 
@@ -54,6 +55,7 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
         )
         if proc.returncode == 0 and out.exists():
             return f"svg/{out.name}", None
+    said = ""
     dvisvgm = shutil.which("dvisvgm")
     if dvisvgm:
         proc = subprocess.run(
@@ -66,9 +68,33 @@ def publish_graphic(root: Path, name: str, svg_dir: Path, base: str = "") -> tup
         )
         if proc.returncode == 0 and out.exists():
             return f"svg/{out.name}", None
-    # the machine's: a converter installed later converts it
-    passing()
+        said = proc.stdout + proc.stderr
+    if pdftocairo or (dvisvgm and _reads_pdf(said)):
+        # a converter that can read a PDF here failed, and may not fail again; one that cannot is a state of the machine a key names (`converters`)
+        passing()
     return None, f"could not convert {name} to SVG (pdftocairo or dvisvgm --pdf needed)"
+
+
+def converters() -> tuple[str | None, str | None, str | None, tuple[str, int, int] | None]:
+    """What decides whether a PDF figure converts here, for a key to name: where `pdftocairo`, `dvisvgm` and `mutool` are, and the Ghostscript `dvisvgm` is given (`_ghostscript`). `dvisvgm` reads a PDF with `mutool`, or with a Ghostscript older than 10.01, whose version is its file's."""
+    return shutil.which("pdftocairo"), shutil.which("dvisvgm"), shutil.which("mutool"), _ghostscript()
+
+
+def _ghostscript() -> tuple[str, int, int] | None:
+    """The Ghostscript library `dvisvgm` is given, loom's or else the one `LIBGS` names (`tex_env`), by its path, size and modification time; None where none is."""
+    named = private.ghostscript_library()
+    if named is None and os.environ.get("LIBGS"):
+        named = Path(os.environ["LIBGS"])
+    try:
+        st = named.stat() if named is not None else None
+    except OSError:
+        return None
+    return (str(named), st.st_size, st.st_mtime_ns) if st is not None else None
+
+
+def _reads_pdf(said: str) -> bool:
+    """Whether the `dvisvgm` here can read a PDF, as `converters` names the machine and as it said failing: with `mutool`, or with a Ghostscript it did not refuse as too new."""
+    return shutil.which("mutool") is not None or (_ghostscript() is not None and "mutool is required" not in said)
 
 
 def publish_picture(picture: Path, svg_dir: Path) -> str:
