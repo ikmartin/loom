@@ -4,7 +4,7 @@ import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
 import { notesAnswer } from './notes6';
-import { webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
+import { formalMarks, formalPlan, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
 import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
 import type { ReviewKind, TaskRow, WebScope } from '../types';
 
@@ -41,6 +41,8 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			const pdf = f.works.find((w) => w.ref === b.ref)?.holds.pdf ?? '';
 			return ok({ pdf, hits: [{ page: 1, rects: [[72, 140, 300, 156]] }], pages: 24 });
 		},
+		'formal-marks': (b) => ok({ on: true, marks: formalMarks(b.doc as string) }),
+		'formal-plan': (b) => ok(formalPlan(REF, b.targets as string[], (b.assume as string[]) ?? [])),
 		notes: (b) => ok(notesAnswer(f.notes, b as { sort: string; orphaned?: boolean; group?: string; offset?: number })),
 		'web-list': (b) => ok(webList(REF, b as { scope: WebScope; doc?: string; sort: string; open?: string[]; offset?: number })),
 		'web-group': (b) => ok({ rows: webGroup(REF, b as { scope: WebScope; doc?: string; group: string }) }),
@@ -155,6 +157,14 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			f.gen++;
 			changed();
 			return ok({});
+		},
+		'formal-ask': (b) => {
+			const plan = formalPlan(REF, b.targets as string[], (b.assume as string[]) ?? []);
+			if (plan.stops.length) return no('needs-label', `${plan.stops.map((r) => r.name).join(', ')} needs a label`);
+			const tasks = plan.targets.map((t) => ask(f.review, 'formalize', { name: t.name, doc: t.doc }, [t.doc]));
+			f.gen++;
+			changed();
+			return ok({ tasks });
 		},
 		'library-mention': (b) => closing((r) => r.kind === 'cited' && r.citation === b.citation),
 		'review-accept': (b) => closing((r) => r.kind === 'accepted-changed' && (b.keys as string[]).includes(r.key)),

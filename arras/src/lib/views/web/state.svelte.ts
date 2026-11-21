@@ -24,6 +24,8 @@ class WebState {
 	/** Whether the focus card's fold of proofs, Lean and record is open. */
 	more = $state(false);
 	served = $state<boolean | null>(null);
+	/** The person's results chosen to formalize. */
+	chosen = new SvelteSet<string>();
 
 	list = new Read<WebList>();
 	focus = new Read<WebFocus>();

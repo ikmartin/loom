@@ -16,6 +16,8 @@ interface N {
 	ex?: string;
 	body?: string;
 	rel?: string[];
+	/** A result of a draft with no label, which a Lean statement could not name. */
+	nolabel?: true;
 }
 
 /** By result: a draft's results by label, the library's by node. */
@@ -28,7 +30,7 @@ const W: Record<string, N> = {
 	'thm:count': { name: 'Theorem 3.4', title: 'Bounded balanced weightings', src: MAIN, st: 'unformal', s: ['def:quiver', 'def:height'], p: ['thm:rank', 'lem:forest', 'lem:interval', 'lem:boxes', 'tq-020E', 'tq-020G', 'tq-02D4', 'tq-04A1', 'tq-05A1'], ex: 'The number of balanced weightings of height at most h is a polynomial in h …', body: 'The number of balanced weightings of \\(Q\\) of height at most \\(h\\) is a polynomial in \\(h\\) of degree \\(|A(Q)| - |V(Q)| + c\\).' },
 	'conv:finite': { name: 'Convention 1.1', src: MAIN, st: 'unformal', ex: 'Every quiver in this paper is finite: both V(Q) and A(Q) are finite sets.' },
 	'def:box': { name: 'Definition 2.4', title: 'Box', src: MAIN, st: 'unformal', s: ['def:quiver'], ex: 'A box is a product of intervals of weightings.' },
-	'def:height': { name: 'Definition 3.2', title: 'Height', src: MAIN, st: 'unformal', ex: 'The height of a weighting w is the largest |w(a)|.' },
+	'def:height': { name: 'Definition 3.2', title: 'Height', src: MAIN, st: 'unformal', ex: 'The height of a weighting w is the largest |w(a)|.', nolabel: true },
 	'lem:interval': { name: 'Lemma 3.10', src: MAIN, st: 'unformal', s: ['def:box'], p: ['def:height'], ex: 'Each interval of balanced weightings is a box.' },
 	'lem:boxes': { name: 'Lemma 3.11', src: MAIN, st: 'unformal', s: ['def:height'], ex: 'The boxes of height at most h number polynomially many in h.' },
 	'def:connected': { name: 'Definition 3.7', title: 'Connected', src: MAIN, st: 'leanq', ex: 'A quiver is connected if its underlying graph is.' },
@@ -70,7 +72,7 @@ function status(n: N): { paper: Paper | null; lean: LeanStatus | null } {
 export function rowOf(id: string, refs: Record<string, string>): Row {
 	const n = W[id];
 	const source = own(id) ? { doc: n.src } : { ref: refs[n.src], short: SHORT[n.src][0] };
-	return { result: id, name: n.name, ...(n.title ? { title: n.title } : {}), taxon: n.name.split(' ')[0].toLowerCase(), source, ...status(n) };
+	return { result: id, name: n.name, ...(n.title ? { title: n.title } : {}), taxon: n.name.split(' ')[0].toLowerCase(), source, ...status(n), ...(own(id) && n.st === 'unformal' ? { choose: true } : {}) };
 }
 
 /** Number order, read naturally: 3.2 before 3.10. */
@@ -199,4 +201,51 @@ export function webGraph(refs: Record<string, string>, a: { scope: WebScope; doc
 	const drawn = new Set([f, ...b, ...u, ...r]);
 	const edges = [...drawn].flatMap((x) => uses(x).filter((y) => drawn.has(y)).map((y) => ({ from: x, to: y, proof: (W[x].p ?? []).includes(y) })));
 	return { focus: rowOf(f, refs), excerpt: W[f].ex ?? '', columns: { back: b.map((k) => rowOf(k, refs)), uses: u.map((k) => rowOf(k, refs)), used_by: r.map((k) => rowOf(k, refs)) }, more: { back: l2.length - b.length, uses: l1.length - u.length, used_by: r1.length - r.length }, edges };
+}
+
+const isDef = (id: string) => /^(Definition|Convention)/.test(W[id].name);
+
+/** `formal-marks`: each result of a draft and its Lean mark. */
+export function formalMarks(doc: string): Record<string, string> {
+	const mark = (n: N) => (n.st === 'formal' ? 'formalized' : n.st === 'leanq' ? 'attest' : 'not');
+	return Object.fromEntries(Object.keys(W).filter((k) => W[k].src === doc).map((k) => [k, mark(W[k])]));
+}
+
+/** `formal-plan`, by round six's rules as ruled: what to state, prove and assume, what is formalized already, what stops the request, and what keeps it from reading formalized. */
+export function formalPlan(refs: Record<string, string>, targets: string[], assume: string[]) {
+	const tag: Record<string, string> = {};
+	for (const t of targets) tag[t] = assume.includes(t) ? 'assume' : 'prove';
+	const q = [...targets];
+	const seen = new Set<string>();
+	while (q.length) {
+		const x = q.shift()!;
+		if (seen.has(x)) continue;
+		seen.add(x);
+		const full = tag[x] === 'prove';
+		for (const u of full ? uses(x) : (W[x].s ?? [])) {
+			if (tag[u]) continue;
+			const n = W[u];
+			const t = n.st === 'formal' ? 'formalized' : own(u) && n.st === 'leanq' ? 'attest' : isDef(u) ? 'state' : own(u) ? (assume.includes(u) ? 'assume' : 'prove') : n.st === 'stub' ? 'not-read' : n.st === 'unchecked' ? 'not-checked' : 'library';
+			tag[u] = t;
+			if (['state', 'prove', 'assume', 'library', 'not-checked'].includes(t)) q.push(u);
+		}
+	}
+	const ids = Object.keys(tag).filter((i) => !targets.includes(i));
+	const row = (k: string) => ({ ...rowOf(k, refs), ...(own(k) ? { fragment: `fixture/web/${k}.html` } : {}) });
+	const mine = (t: string) => ids.filter((i) => own(i) && tag[i] === t);
+	const lib = ids.filter((i) => ['library', 'not-read', 'not-checked'].includes(tag[i]));
+	const state = ids.filter((i) => tag[i] === 'state');
+	const prove = [...(targets.length > 1 ? targets : []), ...mine('prove'), ...mine('assume')];
+	const stops = [...targets, ...state, ...prove].filter((i, k, a) => W[i].nolabel && a.indexOf(i) === k);
+	const group = (why: string, list: string[]) => (list.length ? [{ why, results: list.map(row) }] : []);
+	const attest = ids.filter((i) => tag[i] === 'attest');
+	return {
+		targets: targets.map((t) => ({ key: t, name: W[t].name, ...(W[t].title ? { title: W[t].title } : {}), doc: W[t].src, statement: { fragment: `fixture/web/${t}.html` } })),
+		state: state.map(row),
+		prove: prove.map((k) => ({ ...row(k), assume: tag[k] === 'assume' })),
+		assume: lib.map((k) => ({ ...row(k), why: tag[k] === 'not-read' ? 'not-read' : tag[k] === 'not-checked' ? 'not-checked' : null })),
+		formalized: ids.filter((i) => tag[i] === 'formalized').map(row),
+		stops: stops.map(row),
+		before: [...group('not-read', lib.filter((i) => tag[i] === 'not-read')), ...group('not-checked', lib.filter((i) => tag[i] === 'not-checked')), ...group('attest', attest.filter((i) => !['def:connected', 'cor:cycle'].includes(i))), ...group('attested-changed', attest.filter((i) => ['def:connected', 'cor:cycle'].includes(i)))]
+	};
 }

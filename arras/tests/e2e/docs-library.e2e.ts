@@ -1,6 +1,7 @@
 // What Docs draws of the library on round six's fixture (`?fixture=round6`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 8 to 11): the Library button and its picker, a work beside a draft, a citation's card, the notes tab, the Lean marks in the margin and the formalize panel. Where the library's reads are not served, Docs keeps today's Library shelf, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { viewMenu } from '../workspace';
 
 /** One of the showcase quilt's stored papers, which the fixture serves as every work's PDF. */
 const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
@@ -96,4 +97,74 @@ test('the notes tab lists every note by work, the orphaned first, and by date; a
 	await tab.getByTestId('note').filter({ hasText: 'whose coordinates sum to zero' }).getByRole('button').first().click();
 	await expect(page.getByTestId('reading-item')).toBeVisible();
 	await expect(page).toHaveURL(/\/notes|\/master\//);
+});
+
+test('the formalize panel from the Web: chosen results or the card, what stops the request and what keeps it from reading formalized, prove or assume for now, and the request', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/web?fixture=round6');
+	await expect(page.getByTestId('web-row').first()).toBeVisible();
+	const pick = (name: string) => page.getByTestId('web-list').locator('.wrow').filter({ hasText: name }).first().getByTestId('web-choose');
+	await pick('Lemma 3.10').check();
+	await pick('Lemma 3.11').check();
+	await expect(page.getByTestId('web-chosen')).toContainText('2 chosen');
+	await page.getByTestId('web-chosen').getByRole('button', { name: 'formalize…' }).click();
+	const panel = page.getByTestId('formalize-panel');
+	await expect(panel).toContainText('Formalize these 2 results');
+	await page.keyboard.press('Escape');
+	await expect(panel).toHaveCount(0);
+	await page.getByTestId('web-chosen').getByRole('button', { name: 'clear' }).click();
+	await page.getByTestId('web-list').getByTestId('web-row').filter({ hasText: 'Theorem 3.4' }).first().click();
+	await page.getByTestId('focus-formalize').click();
+	await expect(panel).toContainText('Formalize Theorem 3.4');
+	await expect(page.getByTestId('formalize-lead')).toHaveText('To formalize this, an agent will state 3 definitions in Lean, prove 2 of your lemmas, and assume 4 results from your library.');
+	await expect(panel).toContainText('Stops the request');
+	await expect(panel).toContainText('Definition 3.2 has no label, so a Lean statement could not name it. Add one in main.tex, then ask again.');
+	await expect(panel).toContainText('Before it reads formalized');
+	await expect(panel).toContainText('Theorem 2.3 of Okafor 2022 has not been read.');
+	await expect(panel).toContainText('Lemmas 5.7 and 5.9 of Arden 2024 and Theorem 5.1 of Arden 2025 have not been checked against their papers.');
+	await expect(panel).toContainText('Lemma 3.3 waits for you to attest its Lean statement.');
+	await expect(page.getByTestId('formalize-ask')).toBeDisabled();
+	await expect(page.getByTestId('formalize-ask')).toHaveText('add a label to Definition 3.2 first');
+	const lemma = panel.getByTestId('formalize-item').filter({ hasText: 'Lemma 3.11' });
+	await lemma.getByRole('button', { name: 'assume for now' }).click();
+	await expect(page.getByTestId('formalize-lead')).toHaveText('To formalize this, an agent will state 3 definitions in Lean, prove 1 of your lemmas, assume 1 of your lemmas for now, and assume 4 results from your library.');
+	await panel.getByTestId('formalize-item').filter({ hasText: 'Definition 3.2' }).getByRole('button', { name: 'Definition 3.2' }).click();
+	await expect(panel).toContainText('The height of a weighting w is the largest |w(a)|.');
+	await panel.getByRole('button', { name: 'Close the formalize panel' }).click();
+	// a result whose plan nothing stops is asked for, one task
+	await page.getByTestId('web-scope-all').check();
+	await page.getByTestId('web-group').filter({ hasText: 'bounds.tex' }).click();
+	await page.getByTestId('web-list').getByTestId('web-row').filter({ hasText: 'Theorem 1' }).first().click();
+	await page.getByTestId('focus-formalize').click();
+	await expect(page.getByTestId('formalize-ask')).toHaveText('ask an agent to formalize Theorem 1');
+	await page.getByTestId('formalize-ask').click();
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to formalize Theorem 1. It waits in Review, under Waiting for an agent.');
+	await expect(panel).toHaveCount(0);
+	await expect(page).toHaveURL(/\/web/);
+});
+
+test("Lean marks stand in a draft's margin, a click on one not formalized opens the panel there, and the view menu hides them", async ({ page }) => {
+	await open(page);
+	// the draft's results named by the fixture's keys, as the scan names them in a draft of round six
+	await expect(page.locator('.fragment div.env[data-key]').nth(1)).toBeAttached();
+	await page.evaluate(() => {
+		const envs = document.querySelectorAll<HTMLElement>('.fragment div.env[data-key]');
+		envs[0].dataset.key = 'thm:rank';
+		envs[1].dataset.key = 'thm:count';
+	});
+	await viewMenu(page);
+	await page.getByTestId('toggle-lean-marks').click();
+	await viewMenu(page);
+	await page.getByTestId('toggle-lean-marks').click();
+	await expect(page.getByTestId('lean-mark')).toHaveCount(2);
+	await expect(page.getByTestId('lean-mark').first()).toHaveAttribute('data-mark', 'formalized');
+	const not = page.locator('[data-testid="lean-mark"][data-mark="not"]');
+	await expect(not).toHaveAttribute('title', 'not formalized · formalize…');
+	await not.click();
+	await expect(page.getByTestId('formalize-panel')).toContainText('Formalize Theorem 3.4');
+	await page.keyboard.press('Escape');
+	await viewMenu(page);
+	await page.getByTestId('toggle-lean-marks').click();
+	await expect(page.getByTestId('lean-mark')).toHaveCount(0);
+	await expect(page).toHaveURL(/\/master\//);
 });

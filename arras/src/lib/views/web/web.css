@@ -78,6 +78,50 @@
 	font-size: 11.5px;
 	color: var(--ink-faint);
 }
+.wv .wrow {
+	display: flex;
+	align-items: center;
+}
+.wv .wrow .wl {
+	flex: 1;
+	min-width: 0;
+}
+.wv .wrow.in .wl {
+	padding-left: 52px;
+}
+.wv .pick {
+	flex: none;
+	margin: 0 12px 0 6px;
+}
+.wv .pick:disabled {
+	visibility: hidden;
+}
+.wv .pickbar {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 10px 16px;
+	border-top: 1px solid var(--rule);
+	background: var(--sheet);
+}
+.wv .pickbar .grow {
+	flex: 1;
+}
+.wv .linkish.quiet {
+	color: var(--ink-faint);
+}
+.wv .foldrow {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-top: 12px;
+	border-top: 1px solid var(--rule);
+}
+.wv .foldrow .foldline {
+	flex: 1;
+	margin-top: 0;
+	border-top: 0;
+}
 .wv .wl,
 .wv .wdoc {
 	display: flex;

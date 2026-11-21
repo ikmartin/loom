@@ -7,6 +7,7 @@
 	import { web as words } from '$lib/words/web';
 	import { wb } from './state.svelte';
 	import WebRow from './WebRow.svelte';
+	import { formalize } from '$lib/formalize/state.svelte';
 
 	let found = $state<WebSearch | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -64,7 +65,7 @@
 	<div class="wscroll">
 		{#if found}
 			{#each found.hits as h (h.row.result)}
-				<WebRow row={h.row} />
+				<WebRow row={h.row} choosing />
 				{#if h.snippet}<p class="hit" data-testid="web-hit">{h.snippet.before}<mark>{h.snippet.match}</mark>{h.snippet.after}</p>{/if}
 			{:else}<p class="outscope">{words.list.nothing}</p>{/each}
 		{:else if wb.list.error}
@@ -72,21 +73,29 @@
 		{:else if !list}
 			<p class="outscope">{words.list.loading}</p>
 		{:else if list.rows}
-			{#each list.rows as r (r.result)}<WebRow row={r} />{/each}
+			{#each list.rows as r (r.result)}<WebRow row={r} choosing />{/each}
 			{#if list.more}<button type="button" class="linkish more" onclick={more}>{words.list.more(list.more)}</button>{/if}
 		{:else}
 			{#each list.sections ?? [] as sec, i (i)}
 				<p class="whead">{sec.head === 'draft' ? words.file(sec.doc ?? '') : sec.head === 'uses' ? words.list.uses(sec.doc ?? '') : sec.head === 'drafts' ? words.list.drafts : words.list.library}</p>
-				{#each sec.rows ?? [] as r (r.result)}<WebRow row={r} source={false} />{/each}
+				{#each sec.rows ?? [] as r (r.result)}<WebRow row={r} source={false} choosing />{/each}
 				{#each sec.groups ?? [] as g (g.group)}
 					{@const open = isOpen(sec, g)}
 					<button type="button" class="wdoc" aria-expanded={open} data-testid="web-group" onclick={() => turn(sec, g)}>
 						<Icon name={open ? 'caret' : 'right'} size={15} /><span>{g.doc ? words.file(g.doc) : g.short}</span>{#if g.title}<span class="wt">{g.title}</span>{/if}<span class="n">{g.n}</span>
 					</button>
-					{#if open}{#each rowsOf(g) as r (r.result)}<WebRow row={r} source={false} indent />{/each}{/if}
+					{#if open}{#each rowsOf(g) as r (r.result)}<WebRow row={r} source={false} indent choosing />{/each}{/if}
 				{/each}
 			{/each}
 			{#if list.undigested}<p class="outscope">{words.list.undigested(list.undigested)}</p>{/if}
 		{/if}
 	</div>
+	{#if wb.chosen.size}
+		<div class="pickbar" data-testid="web-chosen">
+			<span>{words.choose.chosen(wb.chosen.size)}</span>
+			<button type="button" class="linkish" onclick={() => formalize.open([...wb.chosen])}>{words.choose.formalize}</button>
+			<span class="grow"></span>
+			<button type="button" class="linkish quiet" onclick={() => wb.chosen.clear()}>{words.choose.clear}</button>
+		</div>
+	{/if}
 </div>

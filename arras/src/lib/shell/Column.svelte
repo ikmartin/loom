@@ -17,6 +17,8 @@
 	import { wb } from '$lib/views/web/state.svelte';
 	import { docsState } from '$lib/views/docs/docs.svelte';
 	import Picker from '$lib/views/docs/Picker.svelte';
+	import FormalizePanel from '$lib/formalize/FormalizePanel.svelte';
+	import { formalize } from '$lib/formalize/state.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
 	import { store } from '$lib/manifest/client.svelte';
@@ -297,6 +299,7 @@
 		{@render children()}</div>
 	{#if rail}<aside class="right rail-scroll">{@render rail()}</aside>{/if}
 	{#if primary === 'docs' && docsState.picker}<Picker doc={currentDoc ?? null} left={panelBox?.getBoundingClientRect().right ?? 0} />{/if}
+	{#if (primary === 'docs' || primary === 'web') && formalize.targets}<FormalizePanel left={panelBox?.getBoundingClientRect().right ?? 0} />{/if}
 </div>
 
 <HoverCard />

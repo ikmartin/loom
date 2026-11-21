@@ -44,6 +44,14 @@ export const web = {
 		/** Where the Web's reads failed, with the publisher's reason. */
 		failed: (why: string) => `The web could not be read: ${why}`
 	},
+	choose: {
+		/** The box on a result of the person's not formalized, its accessible name. */
+		box: 'choose to formalize',
+		/** The bar at the list's foot while results are chosen. */
+		chosen: (n: number) => `${n} chosen`,
+		formalize: 'formalize…',
+		clear: 'clear'
+	},
 	focus: {
 		/** The trail of results followed, its accessible name. */
 		trail: 'Results followed',

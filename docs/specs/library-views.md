@@ -424,7 +424,7 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
             {"why": "attest", "results": [ROW]}, {"why": "attested-changed", "results": [ROW]}]}
 ```
 
-A `ROW` in `assume` gains `"why": "not-read"|"not-checked"|null`, and one in `prove` `"assume": true|false`. `stops` is `Stops the request`, and `before` is `Before it reads formalized`, each group named by why it is there; an empty one is not drawn. The plan, by the rules round six draws, as ruled:
+A `ROW` in `assume` gains `"why": "not-read"|"not-checked"|null`, and one in `prove` `"assume": true|false`; a row of the person's gains `"fragment"`, its statement's, which the panel shows a click away. `stops` is `Stops the request`, and `before` is `Before it reads formalized`, each group named by why it is there; an empty one is not drawn. The plan, by the rules round six draws, as ruled:
 
 1. Each target is to be proved, unless the person chose to assume it for now.
 2. From a result to be proved, every result it uses is reached, by its statement and by its proof; from one assumed or a definition to be stated, only what its statement uses.

@@ -76,6 +76,67 @@ export const docs = {
 		/** The column's message after deleting. */
 		deleted: 'Note deleted.'
 	},
+	formalize: {
+		/** The panel's head. */
+		title: (name: string) => `Formalize ${name}`,
+		/** What the head names when several results are asked for at once. */
+		these: (n: number) => `these ${n} results`,
+		/** The panel's close button. */
+		close: 'Close the formalize panel',
+		/** The sentence under the statements, from what the plan holds. */
+		lead: (one: boolean, parts: string[]) => `To formalize ${one ? 'this' : 'them'}, an agent will ${parts.length < 2 ? (parts[0] ?? '') : `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`}.`,
+		state: (n: number) => `state ${n} ${n === 1 ? 'definition' : 'definitions'} in Lean`,
+		prove: (n: number, one: boolean) => `prove ${n} ${one ? 'of your lemmas' : 'of your results'}`,
+		assumeOwn: (n: number, one: boolean) => `assume ${n} ${one ? 'of your lemmas' : 'of your results'} for now`,
+		assumeLibrary: (n: number) => `assume ${n} ${n === 1 ? 'result' : 'results'} from your library`,
+		/** The two parts over what the plan cannot do yet. */
+		stops: 'Stops the request',
+		before: 'Before it reads formalized',
+		/** A result with no label, and that it stops the request. */
+		noLabel: (name: string, doc: string) => `${name} has no label, so a Lean statement could not name it. Add one in ${doc.split('/').pop() ?? doc}, then ask again.`,
+		stopsLine: 'This stops the request.',
+		/** What keeps the result from reading formalized, and where each waits. */
+		notRead: (what: string, many: boolean) => `${what} ${many ? 'have' : 'has'} not been read.`,
+		notReadWhere: (many: boolean) => (many ? 'Wait in Review, under Cited results to digest.' : 'Waits in Review, under Cited results to digest.'),
+		notChecked: (what: string, many: boolean) => `${what} ${many ? 'have' : 'has'} not been checked against ${many ? 'their papers' : 'its paper'}.`,
+		notCheckedWhere: (many: boolean) => (many ? 'Wait in Review, under Digested results to check.' : 'Waits in Review, under Digested results to check.'),
+		attest: (names: string, many: boolean) => `${names} ${many ? 'wait' : 'waits'} for you to attest ${many ? 'their' : 'its'} Lean statement.`,
+		attestWhere: 'In Review, under Lean statements to attest.',
+		attestedChanged: (names: string, many: boolean) => `${names} changed after you attested ${many ? 'their' : 'its'} Lean statement.`,
+		attestedChangedWhere: 'In Review, under Attested results that changed.',
+		/** Under the part before it reads formalized. */
+		beforeNote: (name: string | null) => (name ? `None of these stops the request; ${name} reads formalized only once all of them are done.` : 'None of these stops the request; they read formalized only once all of them are done.'),
+		/** A library result of another work, after its name. */
+		of: (what: string, short: string) => `${what} of ${short}`,
+		/** The lists' heads. */
+		toState: 'To state',
+		toProve: 'To prove',
+		toAssume: 'To assume',
+		formalized: 'Already formalized',
+		/** The choice on a result of the person's to prove. */
+		proveIt: 'prove',
+		assumeForNow: 'assume for now',
+		/** Beside a library result to assume. */
+		notReadYet: 'not read yet',
+		notCheckedYet: 'not checked yet',
+		/** In place of a statement loom knows only by its number. */
+		numberOnly: 'Loom knows it only by its number.',
+		/** The panel's button. */
+		ask: (name: string) => `ask an agent to formalize ${name}`,
+		needsLabel: (name: string) => `add a label to ${name} first`,
+		/** Beside the button. */
+		task: (one: boolean) => (one ? 'It becomes one task in Review, under Waiting for an agent.' : 'One task a result in Review, under Waiting for an agent.'),
+		/** The column's message after asking. */
+		asked: (name: string, one: boolean) => `Asked an agent to formalize ${name}. ${one ? 'It waits' : 'They wait'} in Review, under Waiting for an agent.`
+	},
+	leanMarks: {
+		/** The item in a draft's view menu that shows or hides the Lean marks. */
+		toggle: 'Lean marks',
+		/** Hover text on a mark of a result not formalized, which a click opens the formalize panel from. */
+		not: 'not formalized · formalize…',
+		/** The column's message on a click on a mark of a result Lean accepted that waits for the person. */
+		waits: (name: string) => `${name}: Lean accepted, not attested. It waits for you in Review.`
+	},
 	column: {
 		/** The label over the focused document's sections, low in Docs' column. */
 		outline: 'Outline',

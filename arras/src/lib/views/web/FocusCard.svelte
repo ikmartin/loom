@@ -13,6 +13,7 @@
 	import { web as words } from '$lib/words/web';
 	import Statement from '$lib/views/Statement.svelte';
 	import { wb } from './state.svelte';
+	import { formalize } from '$lib/formalize/state.svelte';
 
 	let { focus }: { focus: WebFocus } = $props();
 	const more = new Read<WebFocus>();
@@ -57,7 +58,10 @@
 			{#each focus.rests_on as r, i (r.result)}{i ? ', ' : ' '}{@render marked(r)} <button type="button" class="linkish" onclick={() => wb.follow(r)}>{r.name}</button> <span class="quiet">{r.source && 'short' in r.source ? r.source.short : ''}</span>{/each}.
 		</p>
 	{/if}
-	<button type="button" class="foldline" aria-expanded={wb.more} onclick={() => (wb.more = !wb.more)}><Icon name={wb.more ? 'caret' : 'right'} size={14} />{words.focus.more}</button>
+	<div class="foldrow">
+		<button type="button" class="foldline" aria-expanded={wb.more} onclick={() => (wb.more = !wb.more)}><Icon name={wb.more ? 'caret' : 'right'} size={14} />{words.focus.more}</button>
+		{#if row.choose}<button type="button" class="linkish" onclick={() => formalize.open([row.result])} data-testid="focus-formalize">{words.choose.formalize}</button>{/if}
+	</div>
 	{#if wb.more && m}
 		<dl class="moreb">
 			{#each m.proofs as p, i (i)}

@@ -451,3 +451,25 @@ export interface NotesAnswer extends Gen {
 	notes?: Note[];
 	more?: number;
 }
+
+// ---- formalization (`docs/specs/library-views.md` §6.4, §6.6) ----
+
+/** `formal-marks`: whether formalization is on for the quilt, and each result of the draft's Lean mark. */
+export interface FormalMarks extends Gen {
+	on: boolean;
+	marks: Record<string, 'formalized' | 'not' | 'attest' | 'assumed'>;
+}
+
+/** A result in the formalize panel: a draft's carries its fragment, its statement one click away. */
+export type PlanRow = Row & { fragment?: string };
+
+/** `formal-plan`: what an agent would state, prove and assume, what stops the request and what keeps it from reading formalized. */
+export interface FormalPlan extends Gen {
+	targets: { key: string; name: string; title?: string; doc: string; statement: Statement }[];
+	state: PlanRow[];
+	prove: (PlanRow & { assume: boolean })[];
+	assume: (PlanRow & { why: 'not-read' | 'not-checked' | null })[];
+	formalized: PlanRow[];
+	stops: PlanRow[];
+	before: { why: 'not-read' | 'not-checked' | 'attest' | 'attested-changed'; results: PlanRow[] }[];
+}
