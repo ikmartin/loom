@@ -138,14 +138,15 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
             p = root / rel
             if not _plain(root, rel) or not p.is_file():
                 continue
-            if recorded[rel] != sha(p.read_text(encoding="utf-8", errors="replace")):
+            held = p.read_bytes()
+            if recorded[rel] != sha(held.decode("utf-8", errors="replace")):
                 rep.theirs.append(rel)
                 continue
             rep.removed.append(rel)
             if write:
                 from loom.writes import put
 
-                put(root, None, rel, None, kind="agents")
+                put(root, None, rel, None, kind="agents", expect=held)
                 try:
                     p.parent.rmdir()
                 except OSError:
