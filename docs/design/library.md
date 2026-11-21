@@ -11,7 +11,7 @@ There are two ways of looking at one body of nodes. **By work**: the papers and 
 Two uses decide the design.
 
 - **First, and built for the pilot: an author formalizes a draft.** The author gives loom a draft. Loom digests the results of other works that the draft depends on, and nothing more. The author's agent then formalizes the draft in Lean with those outside results assumed, so that no effort goes into proving mathematics that is already published.
-- **Later: a publisher keeps a web of what it holds.** An open publisher digests each paper it receives into one growing web, of the size of the Stacks project. A submitter who used loom hands over their digests, so the publisher need only run the Lean again. Nothing is built for this now, and nothing here should have to be redesigned for it.
+- **Later: a publisher keeps a web of what it holds.** An open publisher digests each paper it receives into one growing web, of the size of the Stacks project. A submitter who used loom hands over their digests, so the publisher need only run the Lean again. Nothing is built for this now. What it needs later should be additions, almost without exception: the core of the library, which is the node, its edges and its evidence, should not have to change for it.
 
 Two words are kept apart throughout. **To digest** is to make a node from mathematics in paper form, a TeX source or a PDF. It is not to formalize: a digested node says nothing in Lean. **To formalize** is to state a node in Lean and, for the author's own results, to prove it. Works in the library are digested, and almost never proved.
 
