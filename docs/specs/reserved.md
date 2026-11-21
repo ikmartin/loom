@@ -31,7 +31,7 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | `sync-fetch` | fetches what changed there | Overleaf |
 | `changed-seen` | marks what changed as seen, one row or all | Review |
 
-Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `sync-` to Overleaf; `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch.
+Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `sync-` to Overleaf; `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch; `web-` to the Web, whose reads are built (`write-api.md`).
 
 ## Refusals, and what a write answers
 

@@ -2,7 +2,7 @@
 
 This page specifies two logs loom keeps under `.loom/records/`: the **evidence log**, what someone did to a text (digested it, compared it with its paper, ran Lean on it, attested it), and the **asks log**, what a person asked of an agent and an agent of a person. It wins over `docs/design/library.md` about a shape, as that wins about what a record means. The node files these records speak of are `nodes.md`'s.
 
-What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). Review's lists and their reads and writes (§6, §7, `review.py`) are built for all that needs no node: questions, papers to fetch, Lean statements to attest, accepted and attested results that changed, proposed edits, and what waits for an agent. A library node's status, and the lists `cited` and `check`, wait for the node store; nothing writes a record of evidence yet but the tests.
+What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). Review's lists and their reads and writes (§6, §7, `review.py`) are built for all that needs no node: questions, papers to fetch, Lean statements to attest, accepted and attested results that changed, proposed edits, and what waits for an agent. The Web's reads over the drafts are built (§8, `webview.py`). A library node's status, the lists `cited` and `check`, and the library's results in the Web wait for the node store; nothing writes a record of evidence yet but the tests.
 
 ## 1. Files
 
@@ -293,3 +293,23 @@ Endpoints of the write API, in Review's family (`render/endpoints/review.py`; ro
 | `review-task-delete` | `{task}` | records `withdrawn`; `closed` (409) when withdrawn already, `no-such-task` (404) |
 
 `review-accept` and the proposed edits' endpoints stay as they are. The views spec's `gen`, the library's generation, is the publisher's to keep and is not in these answers yet.
+
+## 8. The Web's reads
+
+The Web is where results are followed, what rests on what, a draft's and the library's alike (`docs/design/library.md`, "The views"). These reads answer it over the drafts' results now (`loom/src/loom/evidence/webview.py`, endpoints in `render/endpoints/web.py`, rows in `write-api.md`); the library's nodes join them with the node store, and until then a scope that asks for them finds none. Each reads the scan, the published manifest and the evidence, and changes nothing.
+
+**A result** of the drafts is a theorem-like block of a document of the person's, named by its key as the manifest names it, and sent as the views spec's `ROW`: `{result, name, title, taxon, source: {doc}, paper, lean}`. `name` is its taxon's word and the number the build published for the document (the word alone where it published none), `taxon` that word in lower case, `paper` null for a draft's result, and `lean` its status's (§5.2), computed only where a record names its label, `none` elsewhere.
+
+**Scopes.** `library` (none yet), `draft` (one draft's results, in `doc`), `deps` (those and every result they use, by statement or by proof, transitively), `all` (every draft's). A scope it does not know, or `draft` and `deps` with no `doc`, is `bad-field`.
+
+**What a result uses** is kept in two: what its statement's references reach, through displays (`Dependencies.review_targets`), and what each of its proofs' reach, a proof's own statement left out since that is what it proves. With two proofs or more, each row of what the proofs use says which (`proof`, from 1), the views spec's Open 27. **What uses it** is the reverse of both.
+
+| read | sends | answers |
+| --- | --- | --- |
+| `web-list` | `{scope, doc?, sort?, open?, offset?}` | by `document`: `{count, sections, undigested}`; under `draft`, one section `draft` with its rows; under `deps`, that and `uses`, the other results by document, open; under `all`, `drafts`, a group a document, folded unless named in `open`, and `library`, empty. By `status`: `{count, rows, more}`, what waits on the person first (`unattested`, `changed`, `waiting`), then not formalized, then formalized, each in document order, two hundred from `offset` |
+| `web-group` | `{scope, doc?, group}` | `{group, n, rows}`: one document's results in the scope |
+| `web-search` | `{scope, doc?, q, limit?}` | `{count, hits: [{row, snippet}]}`: results whose name or title holds `q`, first, with `snippet` null, then those whose statement holds it, with `snippet` `{before, match, after}`, about sixty characters of the statement's LaTeX either side, cut at spaces. Words are compared without regard to case, in order, any space between them. At most `limit`, 1 to 200, 50 by default |
+| `web-focus` | `{scope, doc?, result, more?}` | `{row, statement: {fragment}, relative_to, rests_on, more, uses: {statement, proof, outside: {statement, proof}}, used_by: {rows, outside, more}}`. `relative_to` is `[]` for a formalized result (no library node can be assumed before the node store) and null otherwise; `rests_on` is `[]` until library nodes can be unread or uncompared. Only what is in the scope is sent, what lies outside counted; `used_by` sends at most fifty. With `more`, `{proofs: [{where, uses}], lean: [declarations], record: [{act, by, at}]}`. `no-such-result` (404) |
+| `web-graph` | `{scope, doc?, result}` | `{focus, excerpt, columns: {back, uses, used_by}, more, edges}`: two steps back, what it uses, what uses it, each column of more than six drawing five and counting the rest in `more`; `edges` `{from, to, proof}` only among what is drawn, `proof` true for a use by a proof alone; `excerpt` the statement in plain words, its environment, labels, references and commands left out, at most 200 characters. `no-such-result` (404) |
+
+The views spec's `gen` is the publisher's and is not in these answers yet.
