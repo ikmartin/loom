@@ -24,7 +24,7 @@ Everything in the library is a **node**: one file, named by its id, with a small
 - **A statement**: a theorem, a lemma, a definition, an example, a convention. Its taxon says which, and the set of taxa is open. Its body is the statement.
 - **A proof**: a node of its own, a child of the statement it proves. A statement may have several, since two papers prove one lemma differently and an author may add an argument of their own. Read from a TeX source its body is the proof as written; read from a PDF it may be a pointer, the pages and no text, until someone asks for it to be transcribed.
 - **A reference**: a work. Its body is the work's BibTeX entry as the author's bibliography has it. Each version of a paper, the preprint and the journal's, is a reference of its own, as a bibliography already treats them; that two references are one paper is a relation recorded later, like any other.
-- **A macros node**: the definitions a work's results are typeset with, one for each work that needs one. They are kept apart from every other work's because two papers define the same command differently, and a web of many papers cannot share one preamble. Forester does the same: a tree of definitions that other trees import.
+- **A macros node**: the definitions a work's results are typeset with, one for each work that needs one, taken whole from the work's source the first time it is digested; a definition nothing uses costs nothing, and nobody has to ask later whether one is already there. They are kept apart from every other work's because two papers define the same command differently, and a web of many papers cannot share one preamble. Forester does the same: a tree of definitions that other trees import.
 - **A stub**: a statement known to exist at a place in a work whose text has not been read. A draft that cites Lemma 2.1 of a paper nobody has digested still depends on a node, and the web shows it as known and not yet read.
 
 **The id** is opaque and permanent. It is minted once, it is not reused, and it is not made from a citekey, a printed number or a position, each of which changes. A suffix says what a node is when it is not a statement: `tq-00A1-ref` is a work, `tq-00A1-macros` its macros, `tq-00K3-proof00` a proof of `tq-00K3`. A proof's number is given once and not renumbered, so removing the first proof does not rename the second, and a proof does not move to another statement. Parts of a node, the (i) and (ii) of a lemma, have no ids.
@@ -41,7 +41,7 @@ Everything in the library is a **node**: one file, named by its id, with a small
 
 ## A draft is not in the library
 
-A draft changes daily, and the library is for what is stable. So a draft's results are read live from the draft, as loom reads them today, and are not copied into node files. They are not shown in the Library. Where a draft's results and the library's are seen together is the Web ([below](#the-library-view)), in which a draft's result has the shape of a node, the draft as its source, and no file. When a paper is finished and the author gives its source to the library on purpose, it is digested like any other work.
+A draft changes daily, and the library is for what is stable. So a draft's results are read live from the draft, as loom reads them today, and are not copied into node files. They are not shown in the Library. Where a draft's results and the library's are seen together is the Web ([below](#the-views)), in which a draft's result has the shape of a node, the draft as its source, and no file. When a paper is finished and the author gives its source to the library on purpose, it is digested like any other work.
 
 A draft's result still needs a name that lasts, because a Lean declaration and the author's attestation point at it. That name is its label in the source. This is the question anchoring calls label keys, and the answer here is yes.
 
@@ -53,7 +53,7 @@ A draft's edges into the library come from what it cites. `\cite[Lemma 2.1]{Jon1
 
 Loom calls no model (P9), so three hands digest, and each can do different things.
 
-- **Loom alone** does what is certain: a reference for each entry of a bibliography, a stub for each cited result, and the statements of a work whose TeX source it holds, extracted exactly. By its own hand it digests only what a draft depends on.
+- **Loom alone** does what is certain: a reference for each entry of a bibliography, a stub for each cited result, and the statements of a work whose TeX source it holds, extracted exactly. By its own hand it digests only what a draft depends on. It fetches a paper's TeX source itself where the entry names an arXiv number, and the network is allowed unless the person turns it off (the author, 2026-11-20), since exact extraction is the fast and trustworthy way and how often it is open decides how much is left to agents.
 - **An agent**, asked, does what needs reading: transcribing a statement from the pages of a PDF, which loom checks is on the page it names, and working out which result a citation with no number relies on. An agent can also find a fault in a digest loom made, and propose a node or a correction from a work's source.
 - **The person** chooses what is digested beyond the least, checks a node against its paper, and attests.
 
@@ -104,7 +104,7 @@ Nothing about a node's standing is stored as a verdict. It is computed from reco
 
 So a node is known in three ways that are not confused with one another: by the literature, where it is published; by the person, who has read it, accepted it, or attested to it; and by the machine.
 
-**An attestation holds for a statement together with everything it uses.** Take a definition, "a widget is a compact set with property P", and a proposition that uses it, "every widget is bounded". The author attests that a Lean theorem says what the proposition says. If the definition is later corrected to "a closed set with property P", the proposition's own words have not changed and it now claims something else. So an attestation names the statement and every node its statement uses, and what those use in turn, and goes stale when any of them changes.
+**An attestation holds for a statement together with everything it uses.** Take a definition, "a widget is a compact set with property P", and a proposition that uses it, "every widget is bounded". The author attests that a Lean theorem says what the proposition says. If the definition is later corrected to "a closed set with property P", the proposition's own words have not changed and it now claims something else. So an attestation names the statement and every node its statement uses, and what those use in turn, and goes stale when any of them changes. Notation that a work's macros typeset and no node defines has a row of its own in what is attested, and attesting does not wait for it to be digested.
 
 ## Formalization
 
@@ -120,21 +120,24 @@ Loom runs the check itself, fenced, so that "Lean accepted this" is something lo
 
 **Open.** What a person is shown between "an agent proposes this formalization" and "formalized": whether a node reads "Lean accepted, not attested", and what a result reads when its proof rests on one not yet proved.
 
-## The Library view
+## The views
 
-The Library is a view of its own, beside Docs and Review. It lists works as a reference manager does. It shows a result on a page of its own: the statement, where it is from, what it uses and what uses it, and its evidence, each a link to follow (V5). And reading a work there opens its PDF at the place, with the work's results to move between, in the manner of the Stacks project's pages. From this view the author digests and verifies what they choose.
+Four views, each for one kind of work, as the author set them on 2026-11-20 after the first mock-up.
 
-A work also still opens beside a document in Docs, from a library control in the column, since a result is mostly wanted in the paper it lives in, next to what is being written.
+- **Docs** is for drafting and editing. A work still opens beside a document there: the library is a control that opens a compact picker over the view, a list or thumbnails sorted by author or by title, and all notes is a control that opens their page as a tab.
+- **The Library** is for works: the list of them, as a reference manager has it, the digestion of each managed work by work, and reading. It has its own tabs, the list of works the leftmost, and a work opens in a tab there. It repeats some of Docs on purpose: Docs is made for writing and the Library for reading. The reader of a PDF is the same in both, with the same notes and marks.
+- **The Web** is the one place where nodes are navigated, what rests on what, across the whole quilt, a draft's results and the library's alike, by a scope the person chooses: the library alone, a draft alone, a draft with what it depends on, or everything. It has a form in lists and a drawn form of a neighbourhood. A drawing of the whole web is wanted later.
+- **Review** is everything waiting for the person's decision, in one list: edits an agent proposes to their text, what changed in their own text, nodes to check and corrections to nodes, formalizations to attest, questions an agent asks, and problems in their own text. It is needed because nothing unchecked may look checked (P15), so one place must list what is unchecked. Agent tasks, everything waiting for an agent, is a part of it and does not stand beside it.
 
-**The Web** is where dependency is followed across everything in the quilt, a draft's results and the library's alike, by a scope the person chooses: the library alone, a draft alone, a draft with what it depends on, or everything (the author, 2026-11-20). A draft with what it depends on is the scope a person formalizing a paper works in.
+**A control in one view does not send the person to another** (the author, 2026-11-20: it "makes it unclear where you've ended up and makes the state of loom seem chaotic and unpredictable"). Whatever is started in a view opens and completes there, in place, in a panel or in a tab of that view; only the views' own names change view. So a result is checked where it is being read, the node beside its place on the page, and in Review a row to check opens in place and shows the same. Inside the Library a result that points into another work opens that work at its place, in a Library tab; following dependency from node to node is the Web's.
 
-The Library has both of its representations: by work, and by dependency among the stable things it holds (the author, 2026-11-20). The Web is the same following of dependency with a draft's results let in.
+**Less is shown by default.** The first mock-up was noisy, and it is not to feel like a trading terminal (V6).
 
-**Open.** Whether the Web is a view of its own beside the Library, or one view of dependency reached from the Library with the library's scope and from a draft with the draft's. The author's intuition is the first: the Web is a thing of the whole quilt, distinct from Docs and from the Library, which can also show the library's web alone. It is left to the mock-ups.
+**One vocabulary says how a thing stands**, on every surface: one shape for the reading of the paper and another for Lean, filled for a person's yes, a colour for what waits on a person, an outline for nothing yet.
 
-**Review** becomes one thing once the Library manages works: everything waiting for the person's decision. Edits an agent proposes to their text, what changed in their own text, nodes to check and corrections to nodes, formalizations to attest, questions an agent asks, and problems in their own text. It is needed because nothing unchecked may look checked (P15), so one place must list what is unchecked. Agent tasks is its mirror, everything waiting for an agent, and the two stand together. Each decision can also be made where its thing lives (V7); Review is the list across the quilt.
+**Open.** The word for a node a person has compared with its paper. "Checked" was read as possibly meaning the mathematics, or Lean.
 
-Drawing the web waits for a second pass. At the size of the author's own quilt the whole graph was unreadable, so these views answer questions, and draw at most a neighbourhood.
+**Open.** What the control for orphaned things in Docs holds: notes whose document is gone, files no document reads, or both.
 
 ## Scale, and moving between quilts
 
