@@ -209,6 +209,8 @@ def phase(name: str, root: Path, repeat: int) -> dict[str, Any]:
                 "search one word": lambda: index.search("compact"),
                 "search three words": lambda: index.search("compact bounded sequence"),
                 "search a prefix": lambda: index.search("homo"),
+                "search a word most names hold": lambda: index.search("lemma"),
+                "search one letter": lambda: index.search("c"),
                 "search a number": lambda: index.search("2.3"),
                 "search words in one work": lambda: index.search("compact", work=ref),
                 "search words and proofs": lambda: index.search("compact bounded", proofs=True),
