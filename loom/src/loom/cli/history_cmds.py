@@ -662,11 +662,15 @@ def mv(old: str, new: str, dry_run: bool, as_json: bool, quilt_path: str | None)
         main_moved = follows and main != new_rel
         data: dict[str, Any] = {"action": "move", **record}
     else:
-        if moved:
-            (root / new_rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(root / old_rel), str(root / new_rel))
-        entry = append_entry(result.quilt.history_dir, "move", record, actor_for(root))
-        main_moved = follows and set_main_forced(result.quilt, new_rel)
+        from loom import writes
+
+        # one act through the door: the document moved, the history's line of it and the config's main, together
+        with writes.act(root, result.quilt.history_dir, "mv", actor_for(root)) as w, writes.staging(w):
+            if moved:
+                w.replace(new_rel, w.read(old_rel))
+                w.replace(old_rel, None)
+            entry = append_entry(result.quilt.history_dir, "move", record, actor_for(root))
+            main_moved = follows and set_main_forced(result.quilt, new_rel)
         data = {**entry.to_dict(), "line": entry.line}
     if dry_run:
         said = (

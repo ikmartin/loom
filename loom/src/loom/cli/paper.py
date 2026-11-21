@@ -638,17 +638,27 @@ def _atomize(
     }
     moved = sum(len(pl.moves) for pl in plans)
     ident: IdentityResult | None = None
+    main_moved: dict[str, bool] = {}
     if not dry_run:
+        from loom import writes
+
         progress.next_stage(f"identity test: compiling {plan.src} and {plan.dest}")
         ident = _identity_for(result, root, plan.src, plan.dest)
-        for pl in plans if retire else []:
-            target_path = root / RETIRED / pl.src
-            target_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(root / pl.src), str(target_path))
-        append_entry(result.quilt.history_dir, "atomize", record, actor_for(root))
+        # one act through the door: each source retired into loom's records, the history's line and the config's main
+        with writes.act(root, result.quilt.history_dir, "atomize", actor_for(root)) as w, writes.staging(w):
+            for pl in plans if retire else []:
+                w.replace(f"{RETIRED}/{pl.src}", w.read(pl.src))
+                w.replace(pl.src, None)
+            append_entry(result.quilt.history_dir, "atomize", record, actor_for(root))
+            for pl in plans:
+                main_moved[pl.dest] = result.quilt.config.main in (pl.src, f"{RETIRED}/{pl.src}") and set_main_forced(
+                    result.quilt, pl.dest
+                )
     for pl in plans:
-        if result.quilt.config.main in (pl.src, f"{RETIRED}/{pl.src}") and (
-            result.quilt.config.main != pl.dest if dry_run else set_main_forced(result.quilt, pl.dest)
+        if (
+            result.quilt.config.main in (pl.src, f"{RETIRED}/{pl.src}") and result.quilt.config.main != pl.dest
+            if dry_run
+            else main_moved[pl.dest]
         ):
             wrote.append(Item(f"config.toml: main = {pl.dest}"))
     would = "would be " if dry_run else ""
