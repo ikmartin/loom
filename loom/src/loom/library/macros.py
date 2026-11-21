@@ -43,9 +43,20 @@ def preamble_items(source: Path) -> list[str]:
 def _items(text: str, source: Path, here: Path, seen: set[Path], depth: int) -> list[str]:
     out: list[str] = []
     clean = blank_comments(text)
+    # a conditional `\\newif\\ifdraft` defines `\\drafttrue` and `\\draftfalse`, which a preamble sets
+    flags = {f"{n}{v}" for n in re.findall(r"\\newif\s*\\if([A-Za-z@]+)", clean) for v in ("true", "false")}
     for item in macros_items(text):
+        if item.command == "AtBeginDocument":
+            # what it holds is taken as the preamble's own items are, and the rest left out
+            group = text[item.start : item.end]
+            inner = (
+                _items(group[group.find("{") + 1 : group.rfind("}")], source, here, seen, depth) if "{" in group else []
+            )
+            if inner:
+                out.append("\\AtBeginDocument{" + "\n".join(inner) + "}")
+            continue
         if item.command not in _LOADERS:
-            if item.command in ARGUMENTS:
+            if item.command in ARGUMENTS or item.command in flags:
                 out.append(text[item.start : item.end].strip())
             continue
         names, options = _loaded(clean, item.start, item.end)

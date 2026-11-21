@@ -123,3 +123,21 @@ def test_a_document_the_store_does_not_hold_is_refused(tmp_path: Path) -> None:
 def test_stems_are_drawn_past_everything_seen_and_never_twice() -> None:
     minter = Minter("tq", ["tq-00K3", "x tq-0100-proof00 y", "q-0ZZZ"])
     assert [minter.stem() for _ in range(3)] == ["tq-0101", "tq-0102", "tq-0103"]
+
+
+def test_a_preamble_s_at_begin_document_and_conditionals_are_taken_as_check_10_reads_them(tmp_path: Path) -> None:
+    from loom.library.checks import check_file
+    from loom.library.node import node_bytes
+
+    folder = tmp_path / "s"
+    folder.mkdir()
+    (folder / "main.tex").write_text(
+        "\\documentclass{article}\n\\newif\\ifdraft\n\\drafttrue\n"
+        "\\AtBeginDocument{\\renewcommand{\\phi}{\\varphi}\\maketitle}\n\\AtBeginDocument{\\maketitle}\n"
+        "\\begin{document}\\end{document}\n"
+    )
+    items = preamble_items(folder)
+    assert items == ["\\newif\\ifdraft", "\\drafttrue", "\\AtBeginDocument{\\renewcommand{\\phi}{\\varphi}}"]
+    node = macros_node("tq-00A1-ref", items)
+    assert node is not None
+    assert check_file(node.file_name, node_bytes(node))[1] == []
