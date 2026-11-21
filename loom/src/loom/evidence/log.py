@@ -443,12 +443,14 @@ def write(root: Path, kind: str, by: Who, *, on: Subject | None = None, **fields
     if on is not None:
         line["on"] = on.to_dict()
     path = log_path(root)
+    # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
+    try:
+        parse({**line, "id": f"ev-{at[:10]}-0"})
+    except ValueError as exc:
+        raise EvidenceRefused(str(exc)) from None
     with locked(path):
         line["id"] = draw(f"ev-{at[:10]}-", {r.id for r in replay(root).records})
-        try:
-            record = parse(line)
-        except ValueError as exc:
-            raise EvidenceRefused(str(exc)) from None
+        record = parse(line)
         text = json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
         with path.open("a", encoding="utf-8") as fh:
             fh.write(text)

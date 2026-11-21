@@ -221,7 +221,9 @@ def replay(root: Path) -> tuple[list[Record], list[str]]:
                 problems.append(f"{LOG}:{n}: its type is not a type's id")
             # a purpose this loom does not know reads as a note, and is said, so nothing waits on it unseen
             if event.get("purpose") is not None and event.get("purpose") not in PURPOSES:
-                problems.append(f"{LOG}:{n}: {event.get('purpose')!r} is not a purpose loom knows, so it reads as a note")
+                problems.append(
+                    f"{LOG}:{n}: {event.get('purpose')!r} is not a purpose loom knows, so it reads as a note"
+                )
             if not ID.match(ann.id):
                 problems.append(f"{LOG}:{n}: {ann.id!r} is not an annotation id")
             if kind == "replied" and str(event.get("reply_to") or "") not in index:

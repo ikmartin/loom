@@ -231,7 +231,9 @@ def live_text(result: ScanResult, records: Records, run: Path | None, session_id
     asked = sum(1 for s in waiting if s.ask.to == "person")
     if tasks or asked:
         # an agent that attaches is told what is open, and takes from it only if it was launched for that or offers to
-        lines.append(f"- asks: {tasks} open for an agent, {asked} of yours waiting for the person; `loom tasks` lists them")
+        lines.append(
+            f"- asks: {tasks} open for an agent, {asked} of yours waiting for the person; `loom tasks` lists them"
+        )
     from loom.sessions import active
 
     here = active(root)

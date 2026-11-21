@@ -438,12 +438,14 @@ def ask(root: Path, by: Who, what: str, to: str, on: Mapping[str, Any], **fields
         "words": fields.pop("words", ""),
         **fields,
     }
+    # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
+    try:
+        parse_ask({**line, "id": f"t-{at[:10]}-0"})
+    except ValueError as exc:
+        raise AskRefused(str(exc)) from None
     with locked(log_path(root)):
         line["id"] = draw(f"t-{at[:10]}-", set(replay(root).asks))
-        try:
-            made = parse_ask(line)
-        except ValueError as exc:
-            raise AskRefused(str(exc)) from None
+        made = parse_ask(line)
         _append(root, line)
     return made
 
@@ -475,6 +477,9 @@ def say(root: Path, by: Who, event: str, task: str, **fields: Any) -> Ask:
         `no-such-ask`, or the event is not of its shape or not its hand's to say; nothing was written.
     """
     line: dict[str, Any] = {"event": event, "at": stamp(), "by": by.to_dict(), "task": task, **fields}
+    if task not in replay(root).asks:
+        # before the lock, which would make the log's file: a refusal writes nothing at all
+        raise AskRefused(f"{task} is no ask in this quilt")
     with locked(log_path(root)):
         found = replay(root).asks.get(task)
         if found is None:

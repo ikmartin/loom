@@ -5,13 +5,14 @@ One module per group of commands, merged here. `KIND` says how a command prints:
 
 from __future__ import annotations
 
-from tests.output_cases import agents, core, history, library_decide, library_read, library_store
+from tests.output_cases import agents, asks, core, history, library_decide, library_read, library_store
 from tests.output_cases.base import Case, Setup
 
 KIND: dict[str, str] = {
     **core.KIND,
     **history.KIND,
     **agents.KIND,
+    **asks.KIND,
     **library_store.KIND,
     **library_decide.KIND,
     **library_read.KIND,
@@ -20,6 +21,7 @@ CASES: dict[str, list[Case]] = {
     **core.CASES,
     **history.CASES,
     **agents.CASES,
+    **asks.CASES,
     **library_store.CASES,
     **library_decide.CASES,
     **library_read.CASES,
