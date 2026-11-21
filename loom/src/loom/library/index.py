@@ -820,6 +820,8 @@ def _searchable(text: str) -> str:
 
 def _folded(text: str) -> tuple[str, list[int]]:
     """`text` without case or accents, as the index's tokenizer reads it, and for each of its characters the place in `text` it came from."""
+    if text.isascii():
+        return text.lower(), list(range(len(text)))
     out: list[str] = []
     owner: list[int] = []
     for i, ch in enumerate(text):
