@@ -729,8 +729,12 @@ def test_under_a_fixed_clock_two_runs_answer_alike(tmp_path: Path, monkeypatch: 
 def test_the_drops_that_wait_are_listed_oldest_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """`arriving` lists the drops in the order they came, as the manifest says, not by their bytes' hash."""
     root = quilt(tmp_path)
-    for day, name in (("03", "third.pdf"), ("01", "first.pdf"), ("02", "second.pdf")):
-        monkeypatch.setenv("LOOM_FIXED_TIME", f"2026-01-{day}T09:00:00Z")
+    for when, name in (
+        ("2026-01-03T09:00:00Z", "third.pdf"),
+        ("2026-01-01T09:00:00Z", "first.pdf"),
+        ("2026-01-02T09:00:00Z", "second.pdf"),
+    ):
+        monkeypatch.setenv("LOOM_FIXED_TIME", when)
         dropped(root, name, a_pdf(tmp_path, [name], name))
     assert [row["name"] for row in waiting(root)] == ["first.pdf", "second.pdf", "third.pdf"]
 
