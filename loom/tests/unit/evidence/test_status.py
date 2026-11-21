@@ -11,7 +11,7 @@ from loom.evidence import log
 from loom.evidence.log import replay, write
 from loom.evidence.status import files_unchanged, status
 from loom.evidence.subjects import Subject, Who
-from loom.evidence.web import DraftWeb, Here
+from loom.evidence.web import Blank, DraftWeb, Here, Joined
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
@@ -75,7 +75,9 @@ def _file_hash(root: Path, rel: str) -> str:
     return "sha256:" + hashlib.sha256((root / rel).read_bytes()).hexdigest()
 
 
-def _lean(root: Path, web: DraftWeb, *, statement: str = "sha256:" + "1" * 64, ok_: bool = True) -> log.Record:
+def _lean(
+    root: Path, web: DraftWeb, *, statement: str = "sha256:" + "1" * 64, ok_: bool = True, assumed: list | None = None
+) -> log.Record:
     subject = web.subject(Here("block", _key(web)))
     assert subject is not None
     return write(
@@ -101,7 +103,7 @@ def _lean(root: Path, web: DraftWeb, *, statement: str = "sha256:" + "1" * 64, o
                 "sorry": False,
             }
         ],
-        assumed=[],
+        assumed=assumed or [],
         uses=[],
         replay={"tool": "leanchecker", "exit": 0, "output": ""},
         ok=ok_,
@@ -351,3 +353,121 @@ def test_an_open_correction_is_on_the_text_it_corrects_until_declined(tmp_path: 
     assert _node_status(tmp_path, H2).proposal is None
     write(tmp_path, "declined", PERSON, proposal=made.id, why="")
     assert _node_status(tmp_path, H1).proposal is None
+
+
+# ---- the gate: nothing reads formalized while a library result under it is unread, unchecked or, assumed, unattested
+
+
+class _Nodes(Blank):
+    """A library of a few nodes, each with its text's hash and whether its body is empty, as the node store will answer."""
+
+    def __init__(self, nodes: dict[str, tuple[str, bool]]) -> None:
+        self.nodes = nodes
+
+    def subject(self, here: Here) -> Subject | None:
+        held = self.nodes.get(here.name) if here.kind == "node" else None
+        return Subject("node", here.name, held[0]) if held else None
+
+    def resolve(self, key: tuple[str, str], near: Here) -> str | None:
+        held = self.nodes.get(key[1]) if key[0] == "node" else None
+        return held[0] if held else None
+
+    def stub(self, here: Here) -> bool | None:
+        held = self.nodes.get(here.name) if here.kind == "node" else None
+        return held[1] if held else None
+
+
+def _attest_over(root: Path, draft: DraftWeb, lean: log.Record, nodes: list[str]) -> None:
+    """An attestation whatever wrote it, its closure the lemma's and these library nodes at the hashes the library gives now: the gate must hold against any record."""
+    at = Here("block", _key(draft))
+    subject = draft.subject(at)
+    assert subject is not None
+    closure = [{k[0]: k[1], "hash": h} for k, h in sorted(draft.closure(at).items())]
+    closure += [{"node": n, "hash": H1} for n in nodes]
+    write(
+        root,
+        "attested",
+        PERSON,
+        on=subject,
+        lean=lean.id,
+        statements={"balanced": lean.get("declarations")[0]["statement"]},
+        closure=closure,
+        rulings=[],
+    )
+    for name, digest in draft.notation(at).items():
+        write(root, "attested", PERSON, on=Subject("macro", name, digest))
+
+
+def _gated(root: Path, library: Blank):  # type: ignore[no-untyped-def]
+    draft = _web(root)
+    return status(replay(root), Joined(draft, library), Here("block", _key(draft)), lean_now=files_unchanged(root))
+
+
+@pytest.mark.parametrize(("stub", "why"), [(True, "stub"), (False, "unchecked")])
+def test_a_library_result_it_uses_unread_or_unchecked_keeps_it_from_reading_formalized(
+    root: Path, stub: bool, why: str
+) -> None:
+    draft = _web(root)
+    _attest_over(root, draft, _lean(root, draft), ["tq-00B7"])
+    found = _gated(root, _Nodes({"tq-00B7": (H1, stub)}))
+    assert found.lean == "waiting" and [(w.key, w.why) for w in found.waiting_on] == [(("node", "tq-00B7"), why)]
+    if not stub:
+        write(root, "compared", PERSON, on=Subject("node", "tq-00B7", H1), **{"with": PAPER})
+        assert _gated(root, _Nodes({"tq-00B7": (H1, False)})).lean == "formalized"
+
+
+def test_a_library_result_nothing_can_say_of_keeps_it_from_reading_formalized(root: Path) -> None:
+    """Before the node store, no web answers for a node: one under an attestation is a cause with nothing now, and one assumed in Lean waits."""
+    draft = _web(root)
+    _attest_over(root, draft, _lean(root, draft), ["tq-00B7"])
+    for web in (Joined(draft, Blank()), draft):
+        found = status(replay(root), web, Here("block", _key(draft)), lean_now=files_unchanged(root))
+        assert found.lean == "changed" and [(c.key, c.now) for c in found.causes] == [(("node", "tq-00B7"), None)]
+    assumed = Subject("node", "tq-00B8", H1)
+    _attest_over(root, draft, _lean(root, draft, assumed=[assumed.to_dict()]), [])
+    found = _gated(root, Blank())
+    assert found.lean == "waiting" and [(w.key, w.why) for w in found.waiting_on] == [(("node", "tq-00B8"), "unknown")]
+
+
+def test_a_result_assumed_in_lean_must_be_compared_and_its_own_lean_attested(root: Path) -> None:
+    draft = _web(root)
+    library = _Nodes({"tq-00B8": (H1, False)})
+    node = Subject("node", "tq-00B8", H1)
+    _attest_over(root, draft, _lean(root, draft, assumed=[node.to_dict()]), [])
+    assert [(w.why) for w in _gated(root, library).waiting_on] == ["unchecked"]
+    write(root, "compared", PERSON, on=node, **{"with": PAPER})
+    found = _gated(root, library)
+    assert found.lean == "waiting" and [w.why for w in found.waiting_on] == ["unattested"]
+    axiom = write(
+        root,
+        "lean",
+        LOOM,
+        on=node,
+        project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64},
+        files={"lean/Balanced.lean": _file_hash(root, "lean/Balanced.lean")},
+        declarations=[
+            {
+                "name": "B8",
+                "kind": "axiom",
+                "role": "states",
+                "names": {"node": "tq-00B8"},
+                "statement": H2,
+                "axioms": [],
+                "sorry": False,
+            }
+        ],
+        assumed=[],
+        uses=[],
+        replay={"tool": "leanchecker", "exit": 0, "output": ""},
+        ok=True,
+    )
+    write(root, "attested", PERSON, on=node, lean=axiom.id, statements={"B8": H2}, closure=[], rulings=[])
+    found = _gated(root, library)
+    assert found.lean == "formalized" and found.relative_to == (node,)
+
+
+def test_before_attesting_what_waits_is_said_beside_unattested(root: Path) -> None:
+    draft = _web(root)
+    _lean(root, draft, assumed=[{"node": "tq-00B8", "hash": H1}])
+    found = _gated(root, _Nodes({"tq-00B8": (H1, True)}))
+    assert found.lean == "unattested" and [w.why for w in found.waiting_on] == ["stub"]

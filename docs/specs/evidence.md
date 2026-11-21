@@ -226,12 +226,13 @@ The function is built and answers for a draft's results now; it answers for a no
 | --- | --- | --- |
 | `reading` | `stub`, `unchecked`, `matches`; none for a draft's result | a node: `stub` with an empty body; `matches` when a person's `compared` names its hash now; else `unchecked`, with `compared_before` when one named an earlier text |
 | `how`, `sought`, `proposal` | | the latest `digested` on this very text; a `sought` on it; an open `proposed` on it |
-| `lean` | `none`, `rerun`, `failed`, `unattested`, `changed`, `formalized` | below |
+| `lean` | `none`, `rerun`, `failed`, `unattested`, `changed`, `waiting`, `formalized` | below |
 | `role` | `proved`, `unproved`, `assumed`, `defined` | from the Lean record on the text now: the stating declaration is a theorem with no `sorry`, one with a `sorry`, an axiom, or a definition |
 | `relative_to` | subjects | the record's `assumed`: what its proof is verified relative to |
 | `causes` | `{changed, then, now}` | for `changed`: each subject whose hash is no longer the one attested, `now` null where it no longer resolves |
 | `unattested_notation` | command names | rows of its notation no person has attested in their definition now |
 | `accepted` | `fresh`, `changed`, none | a draft's result the reviewer accepted, from the ledger |
+| `waiting_on` | `{node, why}` | with a current Lean record: each library result that keeps it from reading formalized, `why` being `stub` (not read), `unchecked` (not compared with its paper on its text now), `unattested` (assumed in Lean, and its own Lean statement not attested) or `unknown` (nothing can say of it yet) |
 
 `lean`, where the **standing** records are the `lean` records on this result whose Lean is unchanged, the **latest** is the last of them, and the **current** is the latest when it is on the text now:
 
@@ -242,7 +243,10 @@ The function is built and answers for a draft's results now; it answers for a no
    - else `rerun` when there is no current record (the text changed and the person said the Lean still states it, so loom runs it on the text now);
    - else `failed` when the current record's `ok` is false;
    - else `unattested` while a row of its notation was never attested;
+   - else `waiting` while `waiting_on` names anything (below);
    - else `formalized`.
-4. Otherwise (never attested, or attested of a statement the Lean no longer has): `rerun` with no current record, `failed` when its `ok` is false, else `unattested`.
+4. Otherwise (never attested, or attested of a statement the Lean no longer has): `rerun` with no current record, `failed` when its `ok` is false, else `unattested`, with `waiting_on` said beside it.
+
+**The gate.** A result reads `formalized` only when Lean accepted it on its text now, the person's attestation holds, and every library result under it is settled: each node its attested closure holds is read (not a stub) and compared with its paper on its text now, and each node its Lean assumes (`relative_to`) is that too and its own Lean statement attested, its own status `formalized`. Status computes this itself, from whatever records exist, and does not trust it to the act that wrote them, so an attestation written by hand over an unread or unchecked result still leaves it short of `formalized`. Between the two, Lean accepted and the attestation holding but a library result under it not yet settled, the result reads `waiting`, and `waiting_on` names each such result and why. Attesting itself waits for the closure's nodes to be read and compared (`formal-attest`, not built yet, refuses them as `unchecked`), so before an attestation `waiting_on` is said beside `unattested` for the request to name what will keep the result from reading formalized. A node no web can say anything of (before the node store, every node) settles nothing: under an attestation it is a cause with `now` null, and assumed it waits as `unknown`.
 
 A row of notation is attested once, in its definition, and holds wherever that definition is used: a changed definition is looked at once, and every result using it holds again once it is. A changed definition of a result's closure is not: each result resting on it is attested again, one by one.

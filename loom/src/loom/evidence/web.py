@@ -83,6 +83,40 @@ class Blank:
         return None
 
 
+class Joined:
+    """The drafts' web and the library's as one: a block is the drafts', a node the library's.
+
+    What a draft's citation of a library result reaches is the drafts' web's to say once citations resolve to nodes; until then a draft's closure holds labels alone.
+    """
+
+    def __init__(self, draft: Web, library: Web) -> None:
+        self.draft, self.library = draft, library
+
+    def _for(self, here: Here) -> Web:
+        return self.library if here.kind == "node" else self.draft
+
+    def subject(self, here: Here) -> Subject | None:
+        return self._for(here).subject(here)
+
+    def resolve(self, key: tuple[str, str], near: Here) -> str | None:
+        return (self.library if key[0] == "node" else self.draft).resolve(key, near)
+
+    def closure(self, here: Here) -> dict[tuple[str, str], str]:
+        return self._for(here).closure(here)
+
+    def notation(self, here: Here) -> dict[str, str]:
+        return self._for(here).notation(here)
+
+    def acceptance(self, here: Here) -> str | None:
+        return self._for(here).acceptance(here)
+
+    def stub(self, here: Here) -> bool | None:
+        return self._for(here).stub(here)
+
+    def holds(self, ref: str, want: str) -> bool | None:
+        return self.library.holds(ref, want)
+
+
 def macro_hash(macro: Macro) -> str:
     """The hash a record names a macro's definition by (`docs/specs/evidence.md` §5.1).
 

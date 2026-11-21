@@ -1,13 +1,13 @@
 """A result's status, computed from the evidence and the texts now, and never stored (`docs/specs/evidence.md` §5).
 
-Nothing reads `formalized` without a person's attestation that still holds, nothing reads `matches` without a person's comparison of this very text, and a Lean record is believed only while every Lean file it read is unchanged.
+Nothing reads `formalized` without a person's attestation that still holds and every library result under it read and compared with its paper, nothing reads `matches` without a person's comparison of this very text, and a Lean record is believed only while every Lean file it read is unchanged. The gate is computed here from whatever records exist, not trusted to the act that wrote them.
 """
 
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from loom.evidence.log import Evidence, Record
@@ -15,7 +15,7 @@ from loom.evidence.subjects import Subject
 from loom.evidence.web import Here, Web
 
 #: What `lean` can be, from nothing done to formalized.
-LEAN = ("none", "rerun", "failed", "unattested", "changed", "formalized")
+LEAN = ("none", "rerun", "failed", "unattested", "changed", "waiting", "formalized")
 #: Declaration kinds that define rather than state a claim.
 _DEFINES = frozenset({"def", "structure", "inductive", "abbrev", "instance", "opaque"})
 
@@ -27,6 +27,14 @@ class Cause:
     key: tuple[str, str]
     then: str | None
     now: str | None
+
+
+@dataclass(frozen=True)
+class Waiting:
+    """A library result a result rests on that keeps it from reading formalized, and why: `stub` (not read), `unchecked` (not compared with its paper on its text now), `unattested` (assumed in Lean, its own Lean statement not attested), or `unknown` (nothing can say of it, as before the node store)."""
+
+    key: tuple[str, str]
+    why: str
 
 
 @dataclass(frozen=True)
@@ -59,6 +67,8 @@ class Status:
         Commands it is typeset with that no person has attested in this definition.
     accepted : str or None
         A draft's result the person accepted: `fresh` or `changed`; None where they never did.
+    waiting_on : tuple of Waiting
+        With a current Lean record: each library result its statement uses or its Lean assumes that is not yet read, compared, or (assumed) attested; `formalized` only when there is none.
     """
 
     subject: Subject | None
@@ -73,6 +83,7 @@ class Status:
     causes: tuple[Cause, ...] = ()
     unattested_notation: tuple[str, ...] = ()
     accepted: str | None = None
+    waiting_on: tuple[Waiting, ...] = ()
     lean_record: str | None = field(default=None, compare=False)
     attestation: str | None = field(default=None, compare=False)
 
@@ -143,7 +154,41 @@ def _role(record: Record, subject: Subject) -> str | None:
     return None
 
 
-def status(evidence: Evidence, web: Web, here: Here, *, lean_now: Callable[[Record], bool]) -> Status:
+def gate(
+    evidence: Evidence,
+    web: Web,
+    uses: Iterable[str],
+    assumed: Iterable[str],
+    lean_now: Callable[[Record], bool],
+    seen: frozenset[str] = frozenset(),
+) -> tuple[Waiting, ...]:
+    """The library results that keep a result from reading formalized (`docs/specs/evidence.md` §5.2).
+
+    `uses` are the nodes its statement's closure holds: each must be read and compared with its paper on its text now. `assumed` are the nodes its Lean states as axioms: each must be that, and its own Lean statement attested (its status `formalized`). A node nothing can say of waits, so a result resting on the library never reads formalized before the library can answer for it.
+    """
+    out: list[Waiting] = []
+    for node, must_attest in [(n, False) for n in uses] + [(n, True) for n in assumed]:
+        if any(w.key == ("node", node) for w in out):
+            continue
+        here = Here("node", node)
+        subject, stub = web.subject(here), web.stub(here)
+        if subject is None or stub is None:
+            out.append(Waiting(("node", node), "unknown"))
+        elif stub:
+            out.append(Waiting(("node", node), "stub"))
+        elif not any(
+            r.on is not None and r.on.hash == subject.hash for r in evidence.about("node", node, of="compared")
+        ):
+            out.append(Waiting(("node", node), "unchecked"))
+        elif must_attest and node not in seen:
+            if status(evidence, web, here, lean_now=lean_now, _seen=seen | {node}).lean != "formalized":
+                out.append(Waiting(("node", node), "unattested"))
+    return tuple(out)
+
+
+def status(
+    evidence: Evidence, web: Web, here: Here, *, lean_now: Callable[[Record], bool], _seen: frozenset[str] = frozenset()
+) -> Status:
     """How the result at `here` stands now.
 
     Parameters
@@ -197,56 +242,35 @@ def status(evidence: Evidence, web: Web, here: Here, *, lean_now: Callable[[Reco
         return base
     standing = [r for r in leans if lean_now(r)]
     if not standing:
-        return _with(base, "rerun")
+        return replace(base, lean="rerun")
     latest = standing[-1]
     current = latest if latest.on is not None and latest.on.hash == subject.hash else None
-    role = _role(current, subject) if current else None
-    relative = tuple(Subject.from_dict(a, ("node",)) for a in current.get("assumed", [])) if current else ()
+    if current is None:
+        found = replace(base, lean="rerun", lean_record=latest.id)
+    else:
+        assumed = tuple(Subject.from_dict(a, ("node",)) for a in current.get("assumed", []))
+        found = replace(base, role=_role(current, subject), relative_to=assumed, lean_record=current.id)
     said = [r for r in evidence.about(kind, name, of="attested") if r.by.kind == "person"]
     attestation = said[-1] if said else None
     if attestation is not None and dict(attestation.get("statements", {})) == statements_of(latest):
+        found = replace(found, attestation=attestation.id)
         changed, never = notation_of(evidence, web, here)
         causes = causes_of(attestation, web, here) + changed
         if causes:
-            return _with(base, "changed", role, relative, causes, never, latest, attestation)
+            return replace(found, lean="changed", causes=tuple(causes), unattested_notation=tuple(never))
         if current is None:
-            return _with(base, "rerun", None, (), (), never, latest, attestation)
-        if not current.get("ok"):
-            return _with(base, "failed", role, relative, (), never, current, attestation)
-        if never:
-            return _with(base, "unattested", role, relative, (), never, current, attestation)
-        return _with(base, "formalized", role, relative, (), (), current, attestation)
-    if current is None:
-        return _with(base, "rerun", lean_record=latest)
+            return replace(found, unattested_notation=tuple(never))
+        uses = [m["node"] for m in attestation.get("closure", []) if "node" in m]
+    else:
+        if current is None:
+            return found
+        never = notation_of(evidence, web, here)[1]
+        uses = [k[1] for k in web.closure(here) if k[0] == "node"]
+        attestation = None
+    waiting = gate(evidence, web, uses, [a.name for a in found.relative_to], lean_now, _seen | {name})
+    found = replace(found, unattested_notation=tuple(never), waiting_on=waiting)
     if not current.get("ok"):
-        return _with(base, "failed", role, relative, lean_record=current)
-    _changed, never = notation_of(evidence, web, here)
-    return _with(base, "unattested", role, relative, (), never, current)
-
-
-def _with(
-    base: Status,
-    lean: str,
-    role: str | None = None,
-    relative: tuple[Subject, ...] = (),
-    causes: list[Cause] | tuple[Cause, ...] = (),
-    never: list[str] | tuple[str, ...] = (),
-    lean_record: Record | None = None,
-    attestation: Record | None = None,
-) -> Status:
-    return Status(
-        base.subject,
-        base.reading,
-        base.compared_before,
-        base.how,
-        base.sought,
-        base.proposal,
-        lean,
-        role,
-        relative,
-        tuple(causes),
-        tuple(never),
-        base.accepted,
-        lean_record.id if lean_record else None,
-        attestation.id if attestation else None,
-    )
+        return replace(found, lean="failed")
+    if attestation is None or never:
+        return replace(found, lean="unattested")
+    return replace(found, lean="waiting" if waiting else "formalized")

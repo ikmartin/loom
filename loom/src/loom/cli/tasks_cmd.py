@@ -352,6 +352,7 @@ def _status_row(here: Any, s: Any) -> dict[str, Any]:
         "unattested_notation": list(s.unattested_notation),
         "accepted": s.accepted,
         "proposal": s.proposal,
+        "waiting_on": [{"node": w.key[1], "why": w.why} for w in s.waiting_on],
     }
 
 
@@ -364,6 +365,7 @@ def _says(row: dict[str, Any]) -> str:
         "failed": "Lean did not accept it",
         "unattested": "Lean accepted it; the person has not attested it",
         "changed": "attested, and changed since",
+        "waiting": "attested and accepted by Lean; a library result under it is not yet read, compared or attested",
         "formalized": "formalized",
     }[row["lean"]]
     accepted = {"fresh": "; accepted", "changed": "; accepted, and changed since"}.get(row["accepted"] or "", "")
