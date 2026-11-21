@@ -112,6 +112,20 @@ LOOM: dict[str, Code] = {
     "loom:write-left": Code("warning", LATEX),
     # a warning and never an error, because loom cannot fetch without consent
     "loom:no-readable-copy": Code("warning", INTERNAL),
+    # the library's nodes (docs/specs/nodes.md §11): a file of loom's records failing one of the eleven checks, a code each
+    "loom:node-unreadable": Code("error", INTERNAL),
+    "loom:node-schema": Code("error", INTERNAL),
+    "loom:node-id": Code("error", INTERNAL),
+    "loom:node-taxon": Code("error", INTERNAL),
+    "loom:node-key": Code("error", INTERNAL),
+    "loom:node-parent": Code("error", INTERNAL),
+    "loom:node-edge": Code("error", INTERNAL),
+    "loom:node-body-ref": Code("error", INTERNAL),
+    "loom:node-bibtex": Code("error", INTERNAL),
+    "loom:node-macros": Code("error", INTERNAL),
+    "loom:node-incomplete": Code("error", INTERNAL),
+    # a line of the tag log that is neither a tag nor an untag, skipped as `loom:foreign-annotations` skips one of the annotation log
+    "loom:foreign-tags": Code("warning", INTERNAL),
 }
 
 #: The codes whose severity differs by instance, each set by its emitter: the first four an error of class `LATEX` where a document's compile reads the instance, and `loom:environment-spans-files` where a document is never closed, else a warning of class `MODEL` (an info for a reference between two files no document reads); the compile codes a warning when a file the document reads changed after its log; `loom:no-readable-copy` and `loom:annotation-types` an info in their milder case; `loom:document-gone` of class `LATEX` where annotations are on the document, which the person is shown nowhere else.
