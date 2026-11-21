@@ -32,6 +32,20 @@ export const docs = {
 		/** The picker's close button. */
 		close: 'Close the library'
 	},
+	card: {
+		/** Under a cited result's name on its card: its work, and the page it stands on where known. */
+		at: (short: string, page: string) => (page ? `${short} · page ${page}` : short),
+		/** On a cited stub's card. */
+		stub: 'Loom knows this result only by its number. Nobody has read it.',
+		/** Opens the work beside the draft at the result's place. */
+		open: 'open at its place',
+		/** Opens a stub's work beside the draft where loom finds its name. */
+		locate: 'locate in PDF',
+		/** Asks an agent to read a stub. */
+		read: 'ask an agent to read it',
+		/** The column's message after asking. */
+		asked: 'Asked an agent to read it. It comes back in Review, under Digested results to check.'
+	},
 	notes: {
 		/** The button in Docs' column that opens the notes tab. */
 		open: 'Notes'

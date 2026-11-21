@@ -1,6 +1,7 @@
 <script lang="ts">
 	// A work of the library beside a draft (8): its stored PDF in the one reader, without the digest marks, at the page it was opened at. Its tab is the work's short name, learnt here from its read.
 	import '$lib/views/library/library.css';
+	import { untrack } from 'svelte';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
@@ -25,7 +26,7 @@
 	$effect(() => {
 		const page = Number(/^page=(\d+)$/.exec(item.anchor ?? '')?.[1] ?? 0);
 		const seq = item.seq ?? 0;
-		if (page) lib.goto = { ...lib.goto, [item.id]: { page, seq } };
+		if (page) lib.goto = { ...untrack(() => lib.goto), [item.id]: { page, seq } };
 	});
 </script>
 

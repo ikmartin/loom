@@ -9,6 +9,8 @@
 	import { itemFromPath, itemKey, regionAt, type Item } from '$lib/workspace/item';
 	import { kinds } from '$lib/workspace/registry';
 	import { workspace } from '$lib/workspace/store.svelte';
+	import CiteCard from '$lib/views/docs/CiteCard.svelte';
+	import { docsState } from '$lib/views/docs/docs.svelte';
 
 	const SHOW_MS = 300;
 	const HIDE_MS = 200;
@@ -21,6 +23,8 @@
 	let anchor: Element | null = null;
 	/** What the hovered link names and the pane it stands in, for the card's one action: opening it in that pane, the destination a click does not give (H6). */
 	let opens = $state.raw<{ item: Item; pane: number } | null>(null);
+	/** A citation of a library node (8c), which the library's card shows in place of an item's. */
+	let cited = $state.raw<{ node: string; pane: number } | null>(null);
 	let showTimer: ReturnType<typeof setTimeout> | undefined;
 	let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -56,6 +60,14 @@
 		target = null;
 		anchor = null;
 		opens = null;
+		cited = null;
+	}
+
+	/** The library node a hovered citation names, where the library's reads are served and the manifest has no item by that name. */
+	function libraryCite(a: Element): string | null {
+		const named = a.closest<HTMLElement>('span.cite[data-target]')?.dataset.target;
+		if (!named || !m || !docsState.served || a.closest('.link-preview, [data-no-preview]')) return null;
+		return previewOfKey(m, named) ? null : named;
 	}
 
 	function hideSoon() {
@@ -90,10 +102,16 @@
 		top = y;
 	}
 
-	function show(a: Element, t: Item) {
+	function show(a: Element, t: Item | null, c: string | null = null) {
 		if (!m) return;
 		anchor = a;
 		target = t;
+		cited = c ? { node: c, pane: paneOfElement(a) } : null;
+		if (!t) {
+			opens = null;
+			void place();
+			return;
+		}
 		const pane = paneOfElement(a);
 		// `open here` opens what a click would, at the same place: the link's own item where it has an href, else the one the card shows
 		const href = a.getAttribute('href');
@@ -119,14 +137,15 @@
 				clearTimeout(hideTimer);
 				return;
 			}
-			const t = hoverItem(a);
-			if (!t) return;
+			const c = libraryCite(a);
+			const t = c ? null : hoverItem(a);
+			if (!t && !c) return;
 			pending = a;
-			if (m) kinds[t.kind].prefetch?.(t, m);
+			if (m && t) kinds[t.kind].prefetch?.(t, m);
 			clearTimeout(showTimer);
 			showTimer = setTimeout(() => {
 				pending = null;
-				show(a, t);
+				show(a, t, c);
 			}, SHOW_MS);
 		};
 		const out = (e: MouseEvent) => {
@@ -176,10 +195,13 @@
 	});
 </script>
 
-{#if m && target && kind?.preview}
-	{@const Preview = kind.preview}
+{#if m && (cited || (target && kind?.preview))}
 	<div class="link-preview" role="tooltip" bind:this={card} style="left: {left}px; top: {top}px" data-testid="link-preview">
-		{#key itemKey(target) + (target.place?.page ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
+		{#if cited}<CiteCard node={cited.node} pane={cited.pane} doc={workspace.current?.kind === 'document' ? workspace.current.id : null} onsized={() => void place()} ondone={hide} />{/if}
+		{#if target && kind?.preview}
+			{@const Preview = kind.preview}
+			{#key itemKey(target) + (target.place?.page ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
+		{/if}
 		{#if opens}
 			<!-- Drawn always, not revealed once the pointer is inside: a remedy most readers never find is no remedy (H6). A click opens the target in the other pane; this opens it in the link's own, or reveals it where it is already open. -->
 			<p class="opens">

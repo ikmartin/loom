@@ -40,3 +40,32 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 	await expect(page.getByTestId('reading-item').getByTestId('reader-view')).toHaveCount(0);
 	await expect(page).toHaveURL(/\/master\//);
 });
+
+/** Has the draft's `nth` citation name `node`, as its fragment will once citations resolve to the library's nodes (`dialect.md` §2.8 changing with the digest). */
+async function citing(page: Page, nth: number, node: string): Promise<void> {
+	await expect(page.locator('.fragment span.cite').nth(nth)).toBeAttached();
+	await page.evaluate(([i, n]) => (document.querySelectorAll<HTMLElement>('.fragment span.cite')[Number(i)].dataset.target = String(n)), [nth, node]);
+}
+
+test("a citation's card shows the cited result and opens its work beside the draft at its place; a stub's offers to locate it or have it read", async ({ page }) => {
+	await open(page);
+	const card = page.getByTestId('cite-card');
+	await citing(page, 0, 'tq-0203');
+	await page.locator('.fragment span.cite').nth(0).locator('a').first().hover();
+	await expect(card).toContainText('Proposition 2.1');
+	await expect(card).toContainText('Arden 2024 · page 7');
+	await expect(card).toContainText('matches the paper');
+	await card.getByRole('button', { name: 'open at its place' }).click();
+	await expect(page.getByTestId('reading-item')).toBeVisible();
+	await expect(page.getByRole('tab', { name: /Arden 2024/ })).toBeVisible();
+	await expect(card).toHaveCount(0);
+	await citing(page, 1, 'tq-04A1');
+	await page.locator('.fragment span.cite').nth(1).locator('a').first().hover();
+	await expect(card).toContainText('Theorem 2.3');
+	await expect(card).toContainText('Okafor 2022');
+	await expect(card).toContainText('Loom knows this result only by its number. Nobody has read it.');
+	await expect(card.getByRole('button', { name: 'locate in PDF' })).toBeVisible();
+	await card.getByRole('button', { name: 'ask an agent to read it' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read it.');
+	await expect(page).toHaveURL(/\/master\//);
+});
