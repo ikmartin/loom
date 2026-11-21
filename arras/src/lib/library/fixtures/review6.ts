@@ -75,6 +75,17 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 			['=', '.']
 		]
 	};
+	// what `locate…` opens on each cited result: the draft's sentence citing it, and what loom found of its name in the paper
+	const cite = (key: string, html: string) => {
+		fragments[`fixture/cites/${key}.html`] = html;
+		return `fixture/cites/${key}.html`;
+	};
+	const c = (n: string, label: string) => `<span class="cite"><a>[${n}, ${label}]</a></span>`;
+	bodies[`cited:${refs.okafor}#tq-04A1`] = { cite: { doc: MAIN, key: 'sec:intro', where: 'main.tex, Section 1', fragment: cite('t23', p(`…the counting argument of Section 3 is an adaptation of the median-order technique of ${c('2', 'Theorem 2.3')}.`)), nth: 0 }, find: { query: 'Theorem 2.3', hits: [{ page: 1, rects: [[72, 236, 180, 250]] }, { page: 2, rects: [[72, 410, 180, 424]] }], pages: 24 } };
+	bodies[`cited:${refs.okafor}#tq-04A2`] = { cite: { doc: MAIN, key: 'thm:count/proof', where: 'main.tex, proof of Theorem 3.4', fragment: cite('c42', p(`…and the count is a polynomial, as in ${c('2', 'Corollary 4.2')}.`)), nth: 0 }, find: { query: 'Corollary 4.2', hits: [{ page: 1, rects: [[72, 520, 190, 534]] }], pages: 24 } };
+	bodies[`cited:${refs.arden25}#tq-04B1`] = { cite: { doc: MAIN, key: 'sec:intro', where: 'main.tex, Section 1', fragment: cite('t62', p(`The extension criterion ${c('3', 'Theorem 6.2')} appears only in the second arXiv version of that paper.`)), nth: 0 }, find: { query: 'Theorem 6.2', hits: [], pages: 31 } };
+	bodies[`cited:${refs.smith}#tq-04C1`] = { cite: { doc: BOUNDS, key: 'thm:radius/proof', where: 'bounds.tex, proof of Theorem 1', fragment: cite('l82', p(`…by the thinness bound ${c('Smi24', 'Lemma 8.2')}, applied to each widget.`)), nth: 0 }, find: { query: 'Lemma 8.2', hits: [{ page: 2, rects: [[72, 610, 160, 624]] }], pages: 31 } };
+	bodies['cited:m-2026-11-21-oka22'] = { cite: { doc: MAIN, key: 'thm:count/proof', where: 'main.tex, proof of Theorem 3.4', fragment: cite('bare', p(`Each interval ${m('[u, v]')} is a box <span class="cite"><a>[2]</a></span>, so the count over intervals is a sum of products.`)), nth: 0 } };
 	const attest: AttestRow[] = [
 		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null },
 		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches' }
@@ -132,9 +143,9 @@ export function list(r: ReviewFixture, extra: ReviewRow[], kind: ReviewKind | 'a
 	return { groups: [group(kind)] };
 }
 
-/** `review-row`: a row's body, by the row's id. */
-export function body(r: ReviewFixture, row: string): Omit<ReviewBody, 'gen'> | null {
-	const b = r.bodies[row];
+/** `review-row`: a row's body, by the row's id; for a cited result's `locate…`, by its row and its node. */
+export function body(r: ReviewFixture, row: string, node?: string): Omit<ReviewBody, 'gen'> | null {
+	const b = r.bodies[node ? `${row}#${node}` : row];
 	return b ? { row, ...b } : null;
 }
 
@@ -162,3 +173,8 @@ export function ask(r: ReviewFixture, what: string, on: TaskRow['on'], docs: str
 
 /** The fixture's fragment for a path, for its source's `fragment`. */
 export const fragmentOf = (r: ReviewFixture, path: string): string | null => r.fragments[path] ?? null;
+
+/** Marks the cited result `node` as placed by the person, as a mark to digest naming it does. */
+export function markStub(r: ReviewFixture, node: string): void {
+	for (const row of r.rows) if (row.kind === 'cited' && row.citation === undefined) for (const s of row.stubs) if (s.node === node) s.marked = true;
+}

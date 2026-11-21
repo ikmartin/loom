@@ -77,7 +77,7 @@ export function marks(r: ReviewRow): [MarkKind | null, MarkKind | null] {
 }
 
 /** The kinds whose rows open in this build; a papers-to-fetch row never does. */
-const OPENS = new Set<ReviewRow['kind']>(['questions', 'accepted-changed', 'edits', 'check']);
+const OPENS = new Set<ReviewRow['kind']>(['questions', 'accepted-changed', 'edits', 'check', 'cited']);
 export const opens = (r: ReviewRow): boolean => OPENS.has(r.kind);
 
 /** A task's sentence, from what was asked and of what; an ask of a kind loom does not make here is drawn with the words it carries. */
@@ -103,3 +103,6 @@ export function task(t: TaskRow): string {
 			return t.text ?? '';
 	}
 }
+
+/** The cited results the rows hold, which `ask an agent to read all` asks for. */
+export const stubsOf = (rows: (ReviewRow | TaskRow)[]) => rows.flatMap((r) => (r.kind === 'cited' && r.citation === undefined ? r.stubs.map((s) => ({ node: s.node, docs: s.rests.docs })) : []));

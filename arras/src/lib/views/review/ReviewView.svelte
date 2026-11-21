@@ -8,6 +8,8 @@
 	import Group from './Group.svelte';
 	import Row from './Row.svelte';
 	import Task from './Task.svelte';
+	import ReadAll from './ReadAll.svelte';
+	import { stubsOf } from './rows';
 
 	$effect(() => {
 		const kind = rv.kind;
@@ -33,6 +35,9 @@
 				<Group group={g} />
 			{/each}
 		{:else}
+			{#if rv.kind === 'cited' && stubsOf(groups[0].rows).length}
+				<div class="rg head">{words.cited.head(stubsOf(groups[0].rows).length)}<ReadAll rows={groups[0].rows} /></div>
+			{/if}
 			{#each groups[0].rows as r (r.row)}
 				{#if r.kind === 'agents'}<Task row={r} />{:else}<Row row={r} />{/if}
 			{/each}

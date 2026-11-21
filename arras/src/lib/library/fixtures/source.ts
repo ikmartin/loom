@@ -3,7 +3,7 @@
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, nodeAnswer, placesOf, round6, scopesOf, workAnswer, type Fixture } from './round6';
-import { ask, body, close, counts, fragmentOf, list } from './review6';
+import { ask, body, close, counts, fragmentOf, list, markStub } from './review6';
 import type { ReviewKind, TaskRow } from '../types';
 
 type Body = Record<string, unknown>;
@@ -38,8 +38,12 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'review-counts': (b) => ok(counts(f.review, checkRows(f), b.doc as string | undefined)),
 		'review-list': (b) => ok(list(f.review, checkRows(f), b.kind as ReviewKind | 'all' | 'agents', b.doc as string | undefined)),
 		'review-row': (b) => {
-			const a = body(f.review, b.row as string);
-			return a ? ok(a) : no('no-such-row');
+			const a = body(f.review, b.row as string, b.node as string | undefined);
+			if (!a) return no('no-such-row');
+			// a cited result's locate… draws the work's PDF, by its hash
+			const cited = b.node ? f.review.rows.find((r) => r.row === b.row && r.kind === 'cited') : undefined;
+			const pdf = cited && 'ref' in cited ? (f.works.find((w) => w.ref === cited.ref)?.holds.pdf ?? null) : undefined;
+			return ok(pdf === undefined ? a : { ...a, pdf });
 		}
 	};
 
@@ -83,6 +87,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		},
 		annotate: (b) => {
 			if (b.purpose !== 'to-digest') return ok({});
+			if (b.node) markStub(f.review, b.node as string);
 			const mark = `a-${f.gen}-mark`;
 			(f.marks[b.target as string] ??= []).push({ mark, page: b.page as number, words: String(b.quote ?? '').slice(0, 40) + '…' });
 			f.gen++;
@@ -103,6 +108,20 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 			const on = { ...(b.on as TaskRow['on']) };
 			const w = f.works.find((x) => x.ref === on.ref);
 			if (w) on.short = w.short;
+			// a stub asked for leaves the cited results; its row goes with its last
+			if (b.what === 'read') {
+				const nodes = (b.nodes as string[]) ?? [];
+				for (const r of f.review.rows) if (r.kind === 'cited' && r.citation === undefined) {
+					const named = r.stubs.filter((s) => nodes.includes(s.node));
+					if (named.length) {
+						on.short = r.short;
+						on.names = named.map((s) => s.name);
+					}
+					r.stubs = r.stubs.filter((s) => !nodes.includes(s.node));
+				}
+				f.review.rows = f.review.rows.filter((r) => !(r.kind === 'cited' && r.citation === undefined && !r.stubs.length));
+			}
+			if (b.what === 'which-result') close(f.review, (r) => r.kind === 'cited' && r.citation === (b.on as { citation?: string }).citation);
 			const task = ask(f.review, b.what as string, on, (b.from as string[]) ?? [], (b.text as string) || (b.words as string) || undefined);
 			f.gen++;
 			changed();
@@ -112,6 +131,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 		'review-task-delete': (b) => closing((r) => r.kind === 'agents' && r.task === b.task),
 		'change-keep': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
 		'change-discard': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
+		'library-mention': (b) => closing((r) => r.kind === 'cited' && r.citation === b.citation),
 		'review-accept': (b) => closing((r) => r.kind === 'accepted-changed' && (b.keys as string[]).includes(r.key)),
 		'library-correction-take': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),
 		'library-correction-decline': (b) => closing((r) => r.kind === 'check' && r.correction === b.correction),

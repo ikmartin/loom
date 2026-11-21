@@ -6,7 +6,7 @@
 	import { typeset } from '$lib/math/mathjax';
 	import { review as words } from '$lib/words/review';
 
-	let { fragment }: { fragment: string } = $props();
+	let { fragment, hot = null }: { fragment: string; /** Which of its citations (`span.cite`) to mark, counted from 0. */ hot?: number | null } = $props();
 	let html = $state<string | null | undefined>(undefined);
 	let box = $state<HTMLElement | null>(null);
 
@@ -16,7 +16,9 @@
 			if (path !== fragment) return;
 			html = h;
 			await tick();
-			if (box) void typeset(box, store.manifest?.macros?.default ?? []);
+			if (!box) return;
+			if (hot !== null) box.querySelectorAll('span.cite')[hot]?.classList.add('hot');
+			void typeset(box, store.manifest?.macros?.default ?? []);
 		});
 	});
 </script>
@@ -36,5 +38,9 @@
 	}
 	.statement :global(p) {
 		margin: 0;
+	}
+	.statement :global(span.cite.hot) {
+		background: var(--link-wash);
+		border-radius: 3px;
 	}
 </style>

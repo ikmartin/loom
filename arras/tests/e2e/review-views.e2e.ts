@@ -114,6 +114,63 @@ test("an agent's correction to a compared result shows what it changes, and is t
 	await expect(row).toHaveCount(0);
 });
 
+test("a cited result is located in its paper, its passage marked to digest, and asked for; or asked for at once, alone or all together", async ({ page }) => {
+	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
+	await open(page);
+	await page.getByTestId('review-kind-cited').click();
+	await expect(page.getByText('4 results your drafts cite that loom could not digest by itself')).toBeVisible();
+	const okafor = page.getByTestId('review-row').filter({ hasText: 'Okafor 2022 · ' });
+	await expect(okafor).toContainText('Okafor 2022 · Theorem 2.3 and Corollary 4.2');
+	await expect(okafor).toContainText('PDF only · main.tex rests on both');
+	await okafor.getByRole('button', { expanded: false }).first().click();
+	const thm = okafor.getByTestId('review-sub').filter({ hasText: 'Theorem 2.3' });
+	await thm.getByRole('button', { name: 'locate…' }).click();
+	await expect(thm).toContainText('main.tex, Section 1 cites it here');
+	await expect(thm.locator('span.cite.hot')).toHaveText('[2, Theorem 2.3]');
+	await expect(thm).toContainText('these words are on page 1 · 1 of 2');
+	await thm.getByRole('button', { name: 'next ›' }).click();
+	await expect(thm).toContainText('these words are on page 2 · 2 of 2');
+	await expect(thm).toContainText('Nothing is marked. Select the passage, then mark to digest.');
+	// select the words of a line the crop shows, as a reader's drag would, and let go
+	const crop = thm.getByTestId('review-crop');
+	await expect(crop.locator('.text span').first()).toBeAttached();
+	await crop.evaluate((box) => {
+		const at = box.getBoundingClientRect();
+		const span = [...box.querySelectorAll('.text span')].find((s) => {
+			const r = s.getBoundingClientRect();
+			return (s.textContent ?? '').trim().length > 8 && r.top > at.top && r.bottom < at.bottom;
+		})!;
+		const range = document.createRange();
+		range.selectNodeContents(span);
+		getSelection()!.removeAllRanges();
+		getSelection()!.addRange(range);
+		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+	await thm.getByRole('button', { name: 'mark to digest' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Marked on page 2. An agent reads it from there.');
+	// the row stays open, its other result under it
+	await expect(okafor).toContainText('Okafor 2022 · Corollary 4.2');
+	await okafor.getByRole('button', { name: 'ask an agent to read it' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read it. It comes back under Digested results to check.');
+	await expect(okafor).toHaveCount(0);
+	await page.getByTestId('read-all').click();
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read them.');
+	await expect(page.getByTestId('review-row')).toHaveCount(1);
+	await expect(count(page, 'review-kind-agents')).toHaveText('10');
+});
+
+test('a citation that names no result says what to add, and is asked about or remembered as a mention', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-cited').click();
+	const bare = page.getByTestId('review-row').filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result' });
+	await bare.getByRole('button', { expanded: false }).click();
+	await expect(bare.locator('span.cite.hot')).toHaveText('[2]');
+	await expect(bare).toContainText('Add the result to this citation in main.tex, for example \\cite[Lemma 2.4]{Oka22}.');
+	await bare.getByRole('button', { name: 'only a mention' }).click();
+	await expect(page.getByTestId('column-message')).toContainText('Remembered as a mention. It is not asked about again.');
+	await expect(bare).toHaveCount(0);
+});
+
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-agents').click();

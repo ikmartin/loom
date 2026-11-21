@@ -72,6 +72,40 @@ export const review = {
 	/** Pieces of a row's quiet line, joined by a middle dot. */
 	quiet: (parts: string[]) => parts.filter(Boolean).join(' · '),
 	cited: {
+		/** Over the cited results, where the kind is shown alone. */
+		head: (n: number) => `${n} results your drafts cite that loom could not digest by itself`,
+		/** The button over the cited results that asks an agent to read every one. */
+		readAll: (n: number) => `ask an agent to read all ${n}`,
+		/** On a cited result's row: asks an agent to read it. */
+		read: 'ask an agent to read it',
+		/** On a cited result's row: opens the paper at what loom found of it, to mark its place. */
+		locate: 'locate…',
+		/** A cited result's quiet line once the person marked its place. */
+		marked: 'marked by you',
+		/** The column's message after asking for one. */
+		asked: 'Asked an agent to read it. It comes back under Digested results to check.',
+		/** The column's message after asking for all. */
+		askedAll: 'Asked an agent to read them. They wait under Waiting for an agent, and come back under Digested results to check.',
+		/** Over the sentence of a draft that cites the result. */
+		citesHere: (where: string) => `${where} cites it here`,
+		/** The find bar's field, its accessible name. */
+		find: 'Find in the paper',
+		/** The find bar, where loom found the result's name. */
+		hit: (page: number, i: number, n: number) => `these words are on page ${page} · ${i} of ${n}`,
+		/** Goes to the next place the words are. */
+		next: 'next ›',
+		/** The find bar, where loom found nothing. */
+		noHit: (page: number, pages: number) => `not in the PDF's text · page ${page} of ${pages}`,
+		/** Turns to the next page, where loom found nothing. */
+		nextPage: 'next page ›',
+		/** Under the page while nothing is marked, where loom found the words. */
+		unmarked: 'Nothing is marked. Select the passage, then mark to digest.',
+		/** Under the page while nothing is marked, where loom found nothing. */
+		unfound: 'Loom found nothing to go to. Page through, then select the passage.',
+		/** The button over words selected on the page. */
+		mark: 'mark to digest',
+		/** The column's message once the person marked the passage and an agent was asked to read it. */
+		markedOn: (page: number) => `Marked on page ${page}. An agent reads it from there.`,
 		/** A cited row's quiet line, for a work loom holds only as a PDF. */
 		pdfOnly: 'PDF only',
 		/** A cited row's quiet line, for a result loom looked for in the work's TeX source and did not find. */
@@ -79,6 +113,23 @@ export const review = {
 		/** The row of a citation that names no result. */
 		namesNone: (doc: string, where: string, short: string) => `${file(doc)} · ${where} cites ${short} without naming a result`
 	},
+	citation: {
+		/** Under a citation that names no result: what is wrong, and what to add. */
+		explain: (short: string, doc: string) => `This cites ${short} without naming a result, so loom cannot tell what the proof rests on. Add the result to this citation in ${file(doc)}, for example`,
+		/** The example of what to add, in the person's own key. */
+		example: (citekey: string) => `\\cite[Lemma 2.4]{${citekey}}`,
+		/** Asks an agent which result it is. */
+		which: 'ask an agent which result',
+		/** Says it names no result on purpose. */
+		mention: 'only a mention',
+		/** Under the buttons. */
+		comesBack: (doc: string) => `An agent's answer comes back as a proposed edit to ${file(doc)}, which you keep or undo.`,
+		/** The column's message after asking which. */
+		askedWhich: 'Asked an agent which result it is.',
+		/** The column's message after only a mention. */
+		mentioned: 'Remembered as a mention. It is not asked about again.'
+	},
+
 	check: {
 		/** A check row's quiet line, where an agent transcribed its results from the pages of a PDF. */
 		transcribed: 'transcribed by an agent',

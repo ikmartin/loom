@@ -130,7 +130,7 @@ export const node = (target: { node: string; brief?: boolean } | { ref: string; 
 export const find = (ref: string, q: string) => call<FindAnswer>('library-find', { ref, q });
 export const reviewCounts = (doc?: string, s?: number) => call<ReviewCounts>('review-counts', { ...(doc ? { doc } : {}), ...since(s) });
 export const reviewList = (kind: ReviewKind | 'all' | 'agents', doc?: string, s?: number) => call<ReviewList>('review-list', { kind, ...(doc ? { doc } : {}), ...since(s) });
-export const reviewRow = (row: string, s?: number) => call<ReviewBody>('review-row', { row, ...since(s) });
+export const reviewRow = (row: string, s?: number, node?: string) => call<ReviewBody>('review-row', { row, ...(node ? { node } : {}), ...since(s) });
 
 // ---- the writes ----
 
@@ -144,6 +144,7 @@ export const undoTake = (id: string, act?: string) => call<WriteDone>('library-u
 export const answer = (task: string, choice: number | null, words: string) => call<WriteDone>('review-answer', { task, ...(choice === null ? {} : { choice }), words });
 export const takeCorrection = (correction: string) => call<WriteDone>('library-correction-take', { correction });
 export const declineCorrection = (correction: string) => call<WriteDone>('library-correction-decline', { correction });
+export const mention = (citation: string) => call<WriteDone>('library-mention', { citation });
 export const withdraw = (task: string) => call<WriteDone>('review-task-delete', { task });
 /** Asks an agent (`review-task`): an `asked` line of the asks log (`evidence.md` §4.1), `fields` those of its `what`, `from` the drafts it is asked for. */
 export const ask = (what: string, on: Record<string, unknown>, fields: Record<string, unknown>, from: string[], words = '') => call<WriteDone & { task: string }>('review-task', { what, on, ...fields, from, words });
