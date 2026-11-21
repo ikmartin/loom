@@ -179,7 +179,16 @@ def _annotation(event: dict[str, Any]) -> Annotation:
         gap=_gap(event.get("gap")),
         context=dict(event["context"]) if isinstance(event.get("context"), dict) else None,
         purpose=str(event["purpose"]) if event.get("purpose") in PURPOSES else None,
+        node=str(event["node"]) if _names_a_node(event) else None,
     )
+
+
+def _names_a_node(event: dict[str, Any]) -> bool:
+    """Whether a created event is a mark to digest naming the stub it locates by a node's id."""
+    from loom.evidence.subjects import NODE
+
+    node = event.get("node")
+    return event.get("purpose") in PURPOSES and isinstance(node, str) and NODE.fullmatch(node) is not None
 
 
 def _gap(given: Any) -> list[float] | None:
@@ -224,6 +233,8 @@ def replay(root: Path) -> tuple[list[Record], list[str]]:
                 problems.append(
                     f"{LOG}:{n}: {event.get('purpose')!r} is not a purpose loom knows, so it reads as a note"
                 )
+            if event.get("node") is not None and not _names_a_node(event):
+                problems.append(f"{LOG}:{n}: only a mark to digest names a node, by its id, so it names none")
             if not ID.match(ann.id):
                 problems.append(f"{LOG}:{n}: {ann.id!r} is not an annotation id")
             if kind == "replied" and str(event.get("reply_to") or "") not in index:

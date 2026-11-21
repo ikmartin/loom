@@ -133,7 +133,7 @@ Every `asked` line has `event` (`asked`), `id`, `at`, `by`, `what`, `to` (`agent
 
 | `what` | to | asked by | its fields |
 | --- | --- | --- | --- |
-| `read` | agent | person | `nodes`: the stubs to read; `marks`, the person's marks to digest that show where (`manifest.md`, annotations' `purpose`) |
+| `read` | agent | person | `nodes`: the stubs to read; `marks`, the person's marks to digest that show where (`manifest.md`, annotations' `purpose`), each of which may name the stub it locates (`node`) |
 | `digest` | agent | person | `ref`; `scope`: `uses`, `marked`, `chosen` or `all`; `nodes` where the scope names results, `marks` (the ids of the person's marks to digest on the work's pages, annotations whose `purpose` is `to-digest`, `manifest.md`) where it names marks: `marked` needs `marks`, `chosen` needs `nodes` |
 | `ask` | agent | person | `text`, the person's question; `quote`, the words it is on, where they selected some |
 | `correct` | agent | person | `text`, what the person says differs; `on` is the node |

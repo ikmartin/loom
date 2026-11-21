@@ -81,9 +81,10 @@ def _row(found: Any, standing: Any, marks: dict[str, Any] | None = None) -> dict
 
 
 def _mark_place(mark: Any) -> dict[str, Any]:
-    """Where a mark to digest stands, as its annotation records it: the work, the page, the words and the rectangles."""
+    """Where a mark to digest stands, as its annotation records it: the work, the page, the words and the rectangles, and the stub it locates where it names one."""
     return {
         "mark": mark.id,
+        "node": mark.node,
         "work": mark.target_key,
         "page": mark.anchor.page if mark.anchor else mark.page,
         "quote": mark.selector.exact if mark.selector else None,

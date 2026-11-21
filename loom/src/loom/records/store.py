@@ -1131,6 +1131,8 @@ class Records:
                 "mark": a.mark,
                 # what it is for: `to-digest` on a mark asking for a result to be read, which no list of notes holds; null on a note
                 "purpose": a.purpose,
+                # on a mark to digest, the stub it locates, by its node's id; null where it names none
+                "node": a.node,
                 "origin": a.origin,
                 "hides": res.hides,
                 "resolved_why": a.resolved_why,

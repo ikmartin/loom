@@ -97,3 +97,36 @@ def test_a_purpose_loom_does_not_know_reads_as_a_note_and_is_said(tmp_path: Path
     records, problems = load_records(q)
     assert _annotations(q)[mark].purpose is None  # type: ignore[attr-defined]
     assert any("'to-weigh' is not a purpose" in p for p in problems)
+
+
+def test_a_mark_names_the_stub_it_locates_and_a_task_to_read_it_shows_both(tmp_path: Path) -> None:
+    q, ck = mapped(tmp_path)
+    mark = _mark(q, ck, node="sh-00B7")
+    found = _annotations(q)[mark]
+    assert found.node == "sh-00B7" and found.to_dict()["node"] == "sh-00B7"  # type: ignore[attr-defined]
+    task = asks.ask(q, Who("person", PERSON), "read", "agent", {"node": "sh-00B7"}, nodes=["sh-00B7"], marks=[mark])
+    [row] = [r for r in json_of("tasks", "--json", cwd=q)["tasks"] if r["id"] == task.id]
+    assert row["mark_places"][0]["node"] == "sh-00B7" and row["nodes"] == ["sh-00B7"]
+
+
+@pytest.mark.parametrize(
+    ("extra", "why"),
+    [({"purpose": None, "message": "a note"}, "only a mark to digest"), ({"node": "not a node"}, "not a node's id")],
+)
+def test_only_a_mark_to_digest_names_a_node_and_by_a_nodes_id(tmp_path: Path, extra: dict, why: str) -> None:
+    q, ck = mapped(tmp_path)
+    with pytest.raises(ApiError, match=why):
+        _mark(q, ck, **{"node": "sh-00B7", **extra})
+
+
+def test_a_node_on_a_note_in_the_log_is_dropped_and_said(tmp_path: Path) -> None:
+    q, ck = mapped(tmp_path)
+    said = handle(q, "annotate", {"target": ck, "page": PAGE, "quote": WORDS, "message": "a note", "author": PERSON})
+    note = str(said["result"]).split()[0]
+    log = q / ".loom/records/annotations/log.jsonl"
+    lines = log.read_text(encoding="utf-8").splitlines()
+    log.write_text(
+        "\n".join(json.dumps({**json.loads(x), "node": "sh-00B7"}) if note in x else x for x in lines) + "\n"
+    )
+    assert _annotations(q)[note].node is None  # type: ignore[attr-defined]
+    assert any("only a mark to digest names a node" in p for p in load_records(q)[1])

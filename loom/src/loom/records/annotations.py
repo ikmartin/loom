@@ -54,6 +54,8 @@ class Annotation:
     earlier: dict[str, Any] | None = None
     #: What it is for, from `PURPOSES`; None for a note.
     purpose: str | None = None
+    #: On a mark to digest, the stub it locates, by its node's id; None on any other annotation and on a mark that names none.
+    node: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -73,7 +75,7 @@ class Annotation:
             "resolved_why": self.resolved_why,
             **{
                 k: getattr(self, k)
-                for k in ("page", "rects", "strokes", "mark", "artifact", "origin", "gap", "earlier", "purpose")
+                for k in ("page", "rects", "strokes", "mark", "artifact", "origin", "gap", "earlier", "purpose", "node")
                 if getattr(self, k) is not None
             },
         }
@@ -108,6 +110,7 @@ class Annotation:
             gap=d.get("gap") if isinstance(d.get("gap"), list) else None,
             earlier=d.get("earlier") if isinstance(d.get("earlier"), dict) else None,
             purpose=d.get("purpose") if d.get("purpose") in PURPOSES else None,
+            node=d.get("node") if d.get("purpose") in PURPOSES and isinstance(d.get("node"), str) else None,
         )
 
 

@@ -447,6 +447,7 @@ def _one_comment(
     strokes: list[list[float]] | None = None,
     mark: str | None = None,
     purpose: str | None = None,
+    node: str | None = None,
     dry_run: bool = False,
 ) -> str:
     """Append one review event to the log and describe it; the only writer of review records.
@@ -464,7 +465,7 @@ def _one_comment(
 
         refuse_bad_links(result, root, message)
 
-    if purpose is not None and (reply or resolve):
+    if (purpose is not None or node is not None) and (reply or resolve):
         raise EnvError("a purpose is given a new annotation, not a reply or a resolution")
     if reply or resolve:
         refuse_lost(
@@ -535,6 +536,8 @@ def _one_comment(
     work = None if pdf_path else _work_target(result, target)
     if purpose is not None:
         styled["purpose"] = _purpose(purpose, akind, work is not None and page is not None)
+    if node is not None:
+        styled["node"] = _located(node, purpose)
     if pdf_path is not None or (work is not None and (mark or strokes)):
         return _on_pdf_page(
             result, base, records, date, target, message, quote, styled, page, rects, strokes, mark, dry_run=dry_run
@@ -582,6 +585,17 @@ def _one_comment(
         dry_run,
     )
     return f"{ann_id}  {key}  {type_id or 'untyped'}  ({aid})"
+
+
+def _located(node: str, purpose: str | None) -> str:
+    """The stub a mark to digest locates, by its node's id: given only with the purpose `to-digest`, where the person who found the result on the page says which it is."""
+    from loom.evidence.subjects import NODE
+
+    if purpose != "to-digest":
+        raise EnvError("only a mark to digest names the stub it locates; give the purpose to-digest")
+    if not NODE.fullmatch(node):
+        raise EnvError(f"{node!r} is not a node's id")
+    return node
 
 
 def _purpose(purpose: str, akind: str, on_a_works_page: bool) -> str:

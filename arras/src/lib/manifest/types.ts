@@ -430,6 +430,8 @@ export interface Annotation {
   mark?: string | null;
   /** What it is for beside a note: `to-digest`, the person's mark asking that a result on a work's page be read, which no list of notes holds; null on a note. */
   purpose?: 'to-digest' | null;
+  /** On a mark to digest, the stub it locates, by its node's id; null where it names none. */
+  node?: string | null;
   /** Where one taken in from a PDF's own annotations came from. */
   origin?: { by?: string; subtype?: string; color?: number[]; ref?: string; sha?: string } | null;
   /** The reference of the PDF's own annotation it stands for, while the file is the one it was taken from: the viewer leaves that one undrawn. */

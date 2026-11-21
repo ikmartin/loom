@@ -97,6 +97,7 @@ def _review(root: Path, endpoint: str, body: dict[str, Any]) -> str:
                 strokes=_geometry(body, "strokes"),
                 mark=_str(body, "mark"),
                 purpose=_str(body, "purpose"),
+                node=_str(body, "node"),
             )
         annotation = _str(body, "annotation", required=True)
         if endpoint == "reply":
