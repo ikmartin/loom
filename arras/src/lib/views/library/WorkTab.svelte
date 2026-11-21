@@ -1,12 +1,12 @@
 <script lang="ts">
-	// A work's tab (2, 3): the work's paper in the one reader (`pdf/Reading`), the very reader a pane of Docs draws for the work, with the same annotations and place, and the Library's layers over it, each where the source serves its read: the `view` menu's digest marks, which draw beside each node on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page); on words selected, `mark to digest` and `ask an agent…` beside Quote; the result chosen beside the page; and the outline's jumps (`lib.go`). A work loom holds no document of says so, with its own page to open.
+	// A work's tab (2, 3): the work's paper in the one reader (`pdf/Reading`), the very reader a pane of Docs draws for the work, with the same annotations and place, and the Library's layers over it, each where the source serves its read: the `view` menu's digest marks, which draw beside each node on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), offered where places and digesting are both served, since a node's place comes with the digest; every annotation, a mark to digest among them, is the reader's own to draw; on words selected, `mark to digest` and `ask an agent…` beside Quote; the result chosen beside the page; and the outline's jumps (`lib.go`). A work loom holds no document of says so, with its own page to open.
 	import { untrack } from 'svelte';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
 	import { said } from '$lib/library/said';
 	import { served } from '$lib/library/served.svelte';
-	import type { Place, PlacesAnswer, Rect } from '$lib/library/types';
+	import type { NodePlace, PlacesAnswer, Rect } from '$lib/library/types';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { paperMark } from '$lib/marks/marks';
 	import PdfBar from '$lib/pdf/PdfBar.svelte';
@@ -34,8 +34,9 @@
 		void can('annotate').then((ok) => (writes = ok));
 	});
 
-	// the digest marks: the places of the work's nodes and marks on the page in view and its neighbours, asked for only while they are on
-	const marks = $derived(lib.overlay && served.has('library-places'));
+	// the digest marks: the places of the work's nodes on the page in view and its neighbours, asked for only while they are on
+	const digests = $derived(served.has('library-places') && served.has('library-digest'));
+	const marks = $derived(lib.overlay && digests);
 	let page = $state(1);
 	const places = new Read<PlacesAnswer>();
 	$effect(() => {
@@ -46,8 +47,8 @@
 		void places.load(`${ref}:${near.join(',')}`, (s) => api.places({ ref, pages: near }, s));
 	});
 	const byPage = $derived.by(() => {
-		const out: Record<number, Place[]> = {};
-		for (const p of places.value?.places ?? []) (out[p.page] ??= []).push(p);
+		const out: Record<number, NodePlace[]> = {};
+		for (const p of places.value?.places ?? []) if ('node' in p) (out[p.page] ??= []).push(p);
 		return out;
 	});
 	const chosen = $derived(lib.beside[ref]);
@@ -102,7 +103,7 @@
 				<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={w.short} part="read" {writes} disabled={!held.desk} />
 				<span class="grow"></span>
 				<!-- the digest marks where the source serves their places -->
-				{#if served.has('library-places')}<span class="menuwrap">
+				{#if digests}<span class="menuwrap">
 					<button type="button" class="btn quiet" aria-expanded={menus.open === `view:${ref}`} onclick={() => menus.toggle(`view:${ref}`)} data-testid="reader-view">{words.reader.view}</button>
 					{#if menus.open === `view:${ref}`}
 						<div class="menu viewmenu">
@@ -133,15 +134,11 @@
 {/snippet}
 
 {#snippet overlay({ page: n, at }: { page: number; at: (r: Rect) => { left: string; top: string; width: string; height: string } })}
-	{#each byPage[n] ?? [] as p (p.node ?? p.mark)}
+	{#each byPage[n] ?? [] as p (p.node)}
 		{@const b = at(bar(p.rects))}
 		{@const first = at(p.rects[0])}
 		<span class="dbr {p.paper}" style:left={b.left} style:top={b.top} style:height={b.height}></span>
-		{#if p.node}
-			<button type="button" class="dchip" class:on={chosen && 'node' in chosen && chosen.node === p.node} style:top={first.top} aria-label={words.reader.chip(p.name ?? '')} data-testid="digest-chip" data-node={p.node} onclick={() => (lib.beside = { ...lib.beside, [ref]: { node: p.node! } })}><Mark kind={paperMark(p.paper)} size={11} />{#if p.number}<span>{p.number}</span>{/if}</button>
-		{:else}
-			<span class="dchip mark" style:top={first.top}><Mark kind="marked" size={11} /></span>
-		{/if}
+		<button type="button" class="dchip" class:on={chosen && 'node' in chosen && chosen.node === p.node} style:top={first.top} aria-label={words.reader.chip(p.name ?? '')} data-testid="digest-chip" data-node={p.node} onclick={() => (lib.beside = { ...lib.beside, [ref]: { node: p.node } })}><Mark kind={paperMark(p.paper)} size={11} />{#if p.number}<span>{p.number}</span>{/if}</button>
 	{/each}
 {/snippet}
 
@@ -234,10 +231,6 @@
 	.dchip.on {
 		border-color: var(--link);
 		box-shadow: 0 0 0 2px var(--link-wash);
-	}
-	.dchip.mark {
-		left: -34px;
-		cursor: default;
 	}
 	.askrow {
 		display: flex;

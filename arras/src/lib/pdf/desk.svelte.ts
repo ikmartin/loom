@@ -31,6 +31,8 @@ export interface Surface {
 	notes?: Annotating;
 	/** Whether the pane hides every annotation. */
 	hidden?: boolean;
+	/** Where the publisher found an annotation the record holds no place for, by id (`library-places`): null where it stands nowhere, undefined while not yet known. Absent where nothing finds places. */
+	stands?: (id: string) => { page: number; rects: number[][] } | null | undefined;
 }
 
 const INK_PAUSE = 900;
@@ -67,7 +69,13 @@ export class MarkDesk {
 	/** The top-level annotations on this PDF's pages, as published. */
 	rows = $derived<Annotation[]>(Object.values(store.manifest?.annotations ?? {}).filter((a) => !a.in_reply_to && (a.target.page ?? 0) > 0 && this.#surface().owns(a)));
 	/** Each annotation on the pages with where it is drawn, or null for one with no place on a page now. */
-	placed = $derived<{ a: Annotation; m: PageMark | null }[]>(this.rows.map((a) => ({ a, m: markOf(a) })));
+	placed = $derived<{ a: Annotation; m: PageMark | null }[]>(this.rows.map((a) => ({ a, m: markOf(a, this.#surface().stands?.(a.id)) })));
+
+	/** Whether where `a` stands is known: drawn, detached, or answered for by the places asked since the manifest changed. One not yet known is neither drawn nor listed, and what is on its way to it stays drawn. */
+	#known(a: Annotation): boolean {
+		const s = this.#surface();
+		return !s.stands || a.detached || !!markOf(a, s.stands(a.id)) || s.stands(a.id) !== undefined;
+	}
 
 	/** What is drawn: every annotation with a place, under the item's filter and the pane's hiding, with what is on its way laid over them. A resolved one is drawn while settled annotations are shown. */
 	marks = $derived.by<PageMark[]>(() => {
@@ -84,19 +92,21 @@ export class MarkDesk {
 	});
 
 	/** The annotations on the pages with no place on one now: detached on a changed file, or one whose record says no place. Listed, never drawn. */
-	detached = $derived<Annotation[]>(this.placed.filter((p) => !p.m).map((p) => p.a));
+	detached = $derived<Annotation[]>(this.placed.filter((p) => !p.m && this.#known(p.a)).map((p) => p.a));
 
 	/** The annotations in the file that one of loom's stands for, by reference; the pages leave them undrawn. */
 	hides = $derived<string[]>(this.rows.flatMap((a) => (a.hides ? [a.hides] : [])));
 
-	/** Let go of what the manifest now says; called whenever it changes. */
+	/** Let go of what the manifest and the places now say; called whenever either changes. */
 	settle(): void {
 		const live = new Map(this.rows.map((a) => [a.id, a]));
-		if (this.#pending.some((m) => live.has(m.id))) this.#pending = this.#pending.filter((m) => !live.has(m.id));
+		// one on words is let go only once where it stands is known, so it is not undrawn between the manifest and the places
+		const arrived = (m: PageMark) => live.has(m.id) && this.#known(live.get(m.id)!);
+		if (this.#pending.some(arrived)) this.#pending = this.#pending.filter((m) => !arrived(m));
 		const changed: Record<string, Partial<PageMark>> = {};
 		for (const [id, over] of Object.entries(this.#changed)) {
 			const row = live.get(id);
-			const now = row ? markOf(row) : null;
+			const now = row ? markOf(row, this.#surface().stands?.(id)) : null;
 			const same = now && (over.rects === undefined || JSON.stringify(now.rects) === JSON.stringify(over.rects)) && (over.strokes === undefined || JSON.stringify(now.strokes) === JSON.stringify(over.strokes));
 			if (row && !same) changed[id] = over;
 		}

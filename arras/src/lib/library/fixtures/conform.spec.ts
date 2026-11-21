@@ -48,8 +48,8 @@ function differences(got: unknown, want: unknown, at = ''): string[] {
 		const items = want as unknown[];
 		if (!items.length) return [];
 		return got.flatMap((g, i) => {
-			// an item tagged by its kind, a section by its head or an intake's row by its state, against the sample's item of the same; an untagged one against the sample's item with the same fields where there is one (a folded group sends no rows), else its first
-			const tag = (x: unknown) => (x as { kind?: string })?.kind ?? (x as { head?: string })?.head ?? (x as { state?: string })?.state;
+			// an item tagged by its kind, a section by its head or an intake's row by its state, against the sample's item of the same; an untagged one against the sample's item with the same fields where there is one (a folded group sends no rows), else its first; a node's place, which the digest adds to the places, is tagged apart and so meets none of loom's yet
+			const tag = (x: unknown) => (x as { kind?: string })?.kind ?? (x as { head?: string })?.head ?? (x as { state?: string })?.state ?? (x && typeof x === 'object' && 'node' in x && 'rects' in x ? "a node's place" : undefined);
 			const keys = (x: unknown) => (x && typeof x === 'object' ? Object.keys(x).sort().join() : '');
 			const match = tag(g) === undefined ? (items.find((w) => keys(w) === keys(g)) ?? items[0]) : items.find((w) => tag(w) === tag(g));
 			return match === undefined ? [] : differences(g, match, `${at}[${i}]`);
@@ -109,6 +109,7 @@ const CALLS: Record<string, (r: Record<string, unknown>) => Promise<api.Answer<u
 	'web-focus': (r) => api.webFocus({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string, r.more === true),
 	'web-graph': (r) => api.webGraph({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string),
 	'library-works': (r) => api.works(r.doc as string | undefined, r.since as number | undefined),
+	'library-places': (r) => api.places({ ref: r.ref as string, ...(r.pages ? { pages: r.pages as number[] } : {}) }, r.since as number | undefined),
 	'library-receive': (r) => api.receive(new File([new Uint8Array(r.size as number)], r.name as string)),
 	'library-take': (r) => api.take(r.items as never, r.online as false | undefined),
 	'library-answer': (r) => api.answerDrop(r.question as string, r.same as string | null, r.online as boolean | undefined),
@@ -202,6 +203,12 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 			return { ...r, ref: held };
 		case 'library-look-up':
 			return { ...r, ref: unlooked };
+		case 'library-places': {
+			// a work with a mark to digest on its pages, which is an annotation placed; one holding no PDF for the refusal
+			if (s.answer.status) return { ref: f.data.works.find((w) => !w.holds.pdf)!.ref };
+			const [ref, marks] = Object.entries(f.data.marks).find(([, ms]) => ms.length)!;
+			return { ref, ...(r.pages ? { pages: [marks[0].page] } : {}), ...(r.since !== undefined ? { since: f.data.gen } : {}) };
+		}
 		case 'library-restore': {
 			const del = await f.call<{ gen: number; undo: string }>('library-delete', { ref: held });
 			return { undo: del.ok ? del.value.undo : '' };

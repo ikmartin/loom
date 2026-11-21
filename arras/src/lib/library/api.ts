@@ -139,7 +139,7 @@ export const work = async (ref: string, s?: number): Promise<Answer<WorkAnswer>>
 	return { ok: true, value: { gen: all.value.gen, ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, holds: { pdf: w.holds.pdf, pages: null, tex: w.holds.tex }, entry: '', link: w.link, outline: null, marks: [], unplaced: [] } };
 };
 export const digestScopes = (target: { ref: string } | { all: true }, s?: number) => call<DigestScopes>('library-digest-scopes', { ...target, ...since(s) });
-export const places = (target: { ref: string; pages: number[] } | { node: string }, s?: number) => call<PlacesAnswer>('library-places', { ...target, ...since(s) });
+export const places = (target: { ref: string; pages?: number[] } | { node: string }, s?: number) => call<PlacesAnswer>('library-places', { ...target, ...since(s) });
 export const node = (target: { node: string; brief?: boolean } | { ref: string; item: string }, s?: number) => call<NodeAnswer>('library-node', { ...target, ...since(s) });
 export const find = (ref: string, q: string) => call<FindAnswer>('library-find', { ref, q });
 /** Where a Web read looks: its scope, and the draft where the scope names one. */

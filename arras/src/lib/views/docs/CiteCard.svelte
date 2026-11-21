@@ -35,7 +35,7 @@
 	}
 	async function atPlace(): Promise<void> {
 		const at = await api.places({ node });
-		beside(at.ok ? (at.value.places.find((p) => p.node === node)?.page ?? Number(n?.pages) ?? 0) : Number(n?.pages) || 0);
+		beside(at.ok ? (at.value.places.find((p) => 'node' in p && p.node === node)?.page ?? Number(n?.pages) ?? 0) : Number(n?.pages) || 0);
 	}
 	async function locate(): Promise<void> {
 		if (!n) return;

@@ -34,8 +34,11 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 		'library-digest-scopes': (b) => (b.all ? ok({ used: 14 }) : ok(scopesOf(f, b.ref as string))),
 		'library-places': (b) => {
 			const ref = (b.ref as string) ?? Object.keys(f.results).find((r) => f.results[r].some((x) => x.node === b.node)) ?? '';
-			const pdf = f.works.find((w) => w.ref === ref)?.holds.pdf ?? '';
-			return ok({ pdf, places: placesOf(f, b as { ref?: string; node?: string; pages?: number[] }) });
+			const work = f.works.find((w) => w.ref === ref);
+			if (!work) return no('no-such-ref');
+			if (!work.holds.pdf) return no('no-document');
+			const places = placesOf(f, b as { ref?: string; node?: string; pages?: number[] });
+			return ok({ result: `${places.length} placed`, pdf: work.holds.pdf, places });
 		},
 		'library-node': (b) => {
 			const a = nodeAnswer(f, b as { node?: string; ref?: string; item?: string; brief?: boolean });

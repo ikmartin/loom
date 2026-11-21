@@ -1,14 +1,18 @@
 <script lang="ts">
 	// Reading one work: its stored PDF, by its hash, at `GET /_api/library/pdf/<hex>`, and its annotations, annotated and read as a document's are (`MarkedDoc`). Content only, so there is one frame and not one inside another; what opens a work gives it the PDF's hash, which the library knows and the manifest does not.
 	//
-	// **Every annotation on the page is drawn** by the desk (`desk.svelte.ts`) in its look, unless the pane hides them all; a settled one only while the settled control is on. One that records where it stands (`rects`, `strokes`) is drawn there; one anchored by its words alone has no place until the publisher says where it stands.
+	// **Every annotation on the page is drawn** by the desk (`desk.svelte.ts`) in its look, unless the pane hides them all; a settled one only while the settled control is on. One that records where it stands (`rects`, `strokes`) is drawn there; one anchored by its words alone is drawn where the publisher finds them (`library-places`), asked for the whole work as the reader opens and again, with the generation held, whenever the annotations change. Where no publisher finds places, such a note is listed and drawn nowhere.
 	//
 	// **A locator in the URL is drawn transiently** (§3, §6): `span=`, `box=` or `quote=` name a place a message or a link pointed at, lit while the URL carries it and not recorded; `annot=` names an annotation by id and focuses its mark.
 	//
 	// **The one reader**, in a pane of Docs' workspace (`WorkItem`) and in the Library's tab for a work alike, with the same annotations: a view adds its own layers over it, never a second reader (`overlay` on the pages, `more` beside Quote on a selection, `onpage` to follow the page in view).
 	//
 	// **It opens where the reader last was, unless a link sends it elsewhere.** A link's place wins for as long as it is in force, and where it lands is then where the reader is. Once they move by their own hand nothing sends them back to it, and once its page has left the view the link is done with: its place comes off the item and so off the URL, so a reload returns to where they went.
-	import { pdfUrl } from '$lib/library/api';
+	import { pdfUrl, places } from '$lib/library/api';
+	import { Read } from '$lib/library/read.svelte';
+	import { served } from '$lib/library/served.svelte';
+	import { store } from '$lib/manifest/client.svelte';
+	import { untrack } from 'svelte';
 	import { paperPlace } from './place.svelte';
 	import { paneOf } from '$lib/workspace/state.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
@@ -23,7 +27,7 @@
 	import { here } from '$lib/here.svelte';
 	import { library } from '$lib/words/library';
 	import type { Snippet } from 'svelte';
-	import type { Rect } from '$lib/library/types';
+	import type { AnnotationPlace, PlacesAnswer, Rect } from '$lib/library/types';
 
 	let {
 		ref,
@@ -71,7 +75,23 @@
 	// a work's pages in a pane hide every annotation while the pane does
 	const holder = paneOf();
 	const hide = $derived(holder ? workspace.hidesNotes(holder.index) : false);
-	const desk = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url, name: `${ref}.pdf`, notes: held.notes, hidden: hide }));
+	// where each annotation on the paper stands, asked for whole and again whenever the annotations change; known for the annotations it was last answered for
+	const finds = $derived(!!pdf && served.has('library-places'));
+	const stood = new Read<PlacesAnswer>();
+	let stoodFor = $state.raw<unknown>(undefined);
+	let asking = 0;
+	$effect(() => {
+		const anns = store.manifest?.annotations;
+		if (!finds) return;
+		const work = ref;
+		const n = ++asking;
+		void untrack(() => stood.load(work, (s) => places({ ref: work }, s))).then(() => {
+			if (n === asking) stoodFor = anns;
+		});
+	});
+	const stands = $derived(new Map((stood.value?.places ?? []).filter((p): p is AnnotationPlace => 'annotation' in p).map((p) => [p.annotation, p])));
+	const standsOf = (id: string) => stands.get(id) ?? (stoodFor === store.manifest?.annotations ? null : undefined);
+	const desk = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url, name: `${ref}.pdf`, notes: held.notes, hidden: hide, stands: finds ? standsOf : undefined }));
 	// the toolbar's PDF menu acts through it
 	$effect(() => {
 		const state = held;

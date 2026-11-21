@@ -25,7 +25,7 @@
 	});
 
 	const n = $derived(read.value);
-	const place = $derived(at.value?.places.find((p) => p.node === node) ?? null);
+	const place = $derived(at.value?.places.find((p) => 'node' in p && p.node === node) ?? null);
 	const how = $derived.by(() => {
 		const d = n?.digested;
 		if (!d) return '';

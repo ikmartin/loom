@@ -353,7 +353,7 @@ function transcribedAnswer(f: Fixture, node: string): NodeAnswer | null {
 	};
 }
 
-/** Where each node of a work stands on the pages asked for: placed down the fixture PDF's pages, a band each. */
+/** Where each node of a work stands on the pages asked for, placed down the fixture PDF's pages a band each, and each mark to digest as the annotation it is (`library-places`, §3.3): a node's entry is what the digest will add. */
 export function placesOf(f: Fixture, args: { ref?: string; node?: string; pages?: number[] }): Place[] {
 	const out: Place[] = [];
 	for (const [ref, list] of Object.entries(f.results)) {
@@ -372,7 +372,7 @@ export function placesOf(f: Fixture, args: { ref?: string; node?: string; pages?
 	if (t && !t.stub) out.push({ node: args.node!, name: `${t.tax} ${t.num}`, number: t.num, page: t.page, rects: [[72, 300, 540, 372]], paper: f.checked.includes(args.node!) ? 'matches' : 'unchecked', lean: null });
 	for (const [ref, ms] of Object.entries(f.marks)) {
 		if (args.ref && ref !== args.ref) continue;
-		for (const m of ms) if (!args.pages || args.pages.includes(m.page)) out.push({ mark: m.mark, page: m.page, rects: [[70, 352, 541, 402]], paper: 'marked' });
+		for (const m of ms) if (!args.pages || args.pages.includes(m.page)) out.push({ annotation: m.mark, page: m.page, rects: [[70, 352, 541, 402]] });
 	}
 	return out;
 }

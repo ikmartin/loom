@@ -122,10 +122,16 @@ export interface DigestDone extends Gen {
 /** A rectangle on a PDF page, in points from its top left: x0, y0, x1, y1. */
 export type Rect = [number, number, number, number];
 
-/** A node's place on its page, or a mark's (`library-places`, §3.3). */
-export interface Place {
-	node?: string;
-	mark?: string;
+/** Where an annotation on a work's PDF stands (`library-places`, §3.3): its page and a rectangle a line. */
+export interface AnnotationPlace {
+	annotation: string;
+	page: number;
+	rects: Rect[];
+}
+
+/** A node's place on its page, which joins `library-places` with the digest; round six's fixture answers it. */
+export interface NodePlace {
+	node: string;
 	name?: string;
 	number?: string;
 	page: number;
@@ -133,6 +139,8 @@ export interface Place {
 	paper: Paper;
 	lean?: LeanStatus | null;
 }
+
+export type Place = AnnotationPlace | NodePlace;
 
 export interface PlacesAnswer extends Gen {
 	pdf: Hash;

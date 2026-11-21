@@ -71,9 +71,10 @@
 	/** The pin is Comment's, which takes the pointer from the page as a drawing tool does. */
 	const tool = $derived(notes.tool === 'comment' && desk.writes ? 'pin' : view.tool);
 
-	// what the manifest now says lets go of what was on its way
+	// what the manifest and the places now say lets go of what was on its way
 	$effect(() => {
 		void store.manifest;
+		void desk.placed;
 		untrack(() => desk.settle());
 	});
 
