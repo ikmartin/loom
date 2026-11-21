@@ -15,7 +15,8 @@ import re
 import shutil
 import sys
 import tempfile
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -92,12 +93,9 @@ class Gen:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text, encoding="utf-8")
 
-    def take_in(self, target: str, items: list[dict[str, object]]) -> dict[str, int]:
-        """Take a PDF's own annotations in as the author, as the viewer's Take in does (`records.marks.take_in`), under this generator's clock and config."""
-        from loom.records.marks import take_in
-        from loom.scan.quilt import load_quilt
-        from loom.scan.scan import scan
-
+    @contextmanager
+    def _as_author(self) -> Iterator[None]:
+        """This generator's clock and config, and the quilt as the working directory, for a call made into loom directly rather than through the command line."""
         saved = {k: os.environ.get(k) for k in self.env()}
         old = os.getcwd()
         try:
@@ -107,7 +105,7 @@ class Gen:
                 else:
                     os.environ[k] = v
             os.chdir(self.root)
-            return take_in(scan(load_quilt(self.root)), target, items, ("person", self.author))
+            yield
         finally:
             os.chdir(old)
             for k, v in saved.items():
@@ -115,6 +113,23 @@ class Gen:
                     os.environ.pop(k, None)
                 else:
                     os.environ[k] = v
+
+    def take_in(self, target: str, items: list[dict[str, object]]) -> dict[str, int]:
+        """Take a PDF's own annotations in as the author, as the viewer's Take in does (`records.marks.take_in`), under this generator's clock and config."""
+        from loom.records.marks import take_in
+        from loom.scan.quilt import load_quilt
+        from loom.scan.scan import scan
+
+        with self._as_author():
+            return take_in(scan(load_quilt(self.root)), target, items, ("person", self.author))
+
+    def look(self) -> None:
+        """Take the author's look at every open file, as `loom serve` takes a first one (`looks.take`): unlike Keep all, it keeps no suggested edit, so those the story files stay waiting."""
+        from loom.looks import take
+        from loom.scan.quilt import load_quilt
+
+        with self._as_author():
+            take(load_quilt(self.root), self.author)
 
     def apply_patch(self, diff: str) -> None:
         """Apply a unified diff loom printed, as the author's editor would."""
@@ -492,7 +507,7 @@ def build_synthetic(dest: Path) -> None:
 
     _write_expected_lint(g)
     # the look last, after every file the story writes, so the one change it shows is the edit after it
-    g.run("changes", "--keep-all")
+    g.look()
     g.at("2026-09-16T11:45:00Z")
     g.edit("notes/intro.md", "A widget is fixed by its locus.", "A widget is fixed by its locus, and by nothing else.")
     # an in-place edit to the paper itself, which waits for the author beside the suggested edit, drawn in its block
