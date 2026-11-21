@@ -62,7 +62,7 @@ def test_a_work_made_from_an_identifier_alone_reads_unconfirmed(tmp_path: Path) 
     take(root, [Item(text="arXiv:2209.01234v2")], by="Isaac")
     rows = {r["short"]: r for r in works(scan(load_quilt(root)))}
     [unconfirmed] = [r for r in rows.values() if r["lookup"]]
-    assert unconfirmed["lookup"] == {"state": "unconfirmed", "identifier": "arXiv 2209.01234v2"}
+    assert unconfirmed["lookup"] == {"state": "unconfirmed", "identifier": "arxiv:2209.01234v2"}
 
 
 def test_an_edited_entry_is_written_and_recorded_and_refused_when_bad(tmp_path: Path) -> None:

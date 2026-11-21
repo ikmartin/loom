@@ -87,16 +87,11 @@ def works(result: ScanResult, *, doc: str | None = None, write: bool = True) -> 
                     "used_in": citing.get(entry.key.lower(), []),
                     "link": link(fields),
                     "version": fields.get("version") or None,
-                    "lookup": {"state": "unconfirmed", "identifier": _said(stated[0])}
+                    # `scheme:value`, as the intake's rows give it; the viewer says it as a person reads it
+                    "lookup": {"state": "unconfirmed", "identifier": stated[0]}
                     if stated and acts.unconfirmed(ref)
                     else None,
                     "cited_as": labels.get(entry.key.lower()),
                 }
             )
     return sorted(rows, key=lambda r: (r["short"].lower(), r["ref"]))
-
-
-def _said(identifier: str) -> str:
-    """An identifier as a person reads it: `arXiv 2209.01234v2`, `DOI 10.1000/x`."""
-    scheme, _, value = identifier.partition(":")
-    return f"{ {'arxiv': 'arXiv', 'doi': 'DOI', 'mr': 'MR', 'zbl': 'Zbl'}.get(scheme, scheme) } {value}"
