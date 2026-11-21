@@ -667,6 +667,16 @@ class NodeIndex:
         rows = self.db.execute("SELECT id FROM nodes WHERE citekey = ? AND kind = 'reference'", (key.casefold(),))
         return frozenset(r[0] for r in rows)
 
+    def source(self, node_id: str) -> str | None:
+        row = self.db.execute("SELECT source FROM nodes WHERE id = ?", (node_id,)).fetchone()
+        return row[0] if row else None
+
+    def macros(self, ref: str) -> str:
+        row = self.db.execute(
+            "SELECT body FROM nodes WHERE id = ? AND kind = 'macros'", (ids.macros_of(ref),)
+        ).fetchone()
+        return row[0] if row else ""
+
     def same_but_case(self, node_id: str) -> list[str]:
         """The nodes whose ids equal `node_id` ignoring case and are not it, which a case-blind file system would write over."""
         rows = self.db.execute("SELECT id FROM nodes WHERE id = ? COLLATE NOCASE AND id != ?", (node_id, node_id))

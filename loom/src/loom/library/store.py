@@ -120,6 +120,13 @@ class _Batch:
         }
         return frozenset(here | (self.index.keyed(key) - set(self.nodes)))
 
+    def source(self, node_id: str) -> str | None:
+        return self.nodes[node_id].source if node_id in self.nodes else self.index.source(node_id)
+
+    def macros(self, ref: str) -> str:
+        mid = ids.macros_of(ref)
+        return self.nodes[mid].body if mid in self.nodes else self.index.macros(ref)
+
 
 def next_stem(result: ScanResult) -> str:
     """A new stem for a library node: one past the largest local part anything in the quilt names under its prefix, the author's sources, records, the library and git history among them, as `loom id --next` draws.

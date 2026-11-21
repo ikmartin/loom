@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 
 from loom.scan.edges import CITE_CMDS
 from loom.scan.tokenize import match_group, read_mandatory, read_optional, skip_space
@@ -79,11 +80,12 @@ _VERBATIM = re.compile(
 
 @dataclass(frozen=True)
 class Pointer:
-    """One id or anchor a body names: the command (`ref`, `cite`, `label`, …), the argument exactly, and the 1-based line it is on."""
+    """One id or anchor a body names: the command (`ref`, `cite`, `label`, …), the argument exactly, and the 1-based line it is on; `via` the work's own command it was written through (`Wrapper`), if any."""
 
     command: str
     target: str
     line: int
+    via: str = ""
 
     @property
     def cites(self) -> bool:
@@ -174,6 +176,108 @@ def _cited(text: str, pos: int, multi: bool) -> list[str]:
         pos = end
         if not multi:
             return groups
+
+
+@dataclass(frozen=True)
+class Wrapper:
+    """A work's own command whose definition holds a referencing command, a citation or `\\label`: each such use in it (`command`, its argument with `#1`… where the wrapper's arguments go), the number of its arguments, and the default of the first when it is optional."""
+
+    uses: tuple[tuple[str, str], ...]
+    count: int
+    default: str | None = None
+
+
+_DEFINITION = re.compile(r"\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?(?![A-Za-z@])")
+_DEF = re.compile(r"\\[gex]?def\s*(\\[A-Za-z@]+)((?:#[1-9])*)\s*(?=\{)")
+
+
+@lru_cache(maxsize=64)
+def wrappers(macros: str) -> dict[str, Wrapper]:
+    """The commands a macros node's body defines whose definitions hold a referencing command, a citation or `\\label`, by name without the backslash: `\\newcommand{\\eq}[1]{(\\ref{#1})}` makes `\\eq{eq:bound}` point at `eq:bound`.
+
+    Parameters
+    ----------
+    macros : str
+        A macros node's body; '' for a work with none.
+
+    Returns
+    -------
+    dict of str to Wrapper
+        Read from `\\newcommand`, `\\renewcommand`, `\\providecommand`, `\\DeclareRobustCommand` and `\\def` and its kin; a definition of a name `pointers` reads already is left out. Shared between calls: do not change it.
+    """
+    text = unread(macros)
+    out: dict[str, Wrapper] = {}
+    for m in _DEFINITION.finditer(text):
+        p = skip_space(text, m.end())
+        if p < len(text) and text[p] == "{":
+            end = match_group(text, p)
+            name, pos = (text[p + 1 : end - 1].strip(), end) if end > 0 else ("", p)
+        else:
+            cs = _CS.match(text, p)
+            name, pos = (cs.group(0), cs.end()) if cs else ("", p)
+        count, _s, _e, pos = read_optional(text, pos)
+        default, _s, _e, pos = read_optional(text, pos)
+        body, _s, _e, _n = read_mandatory(text, pos)
+        n = int(count) if count is not None and count.strip().isdigit() else 0
+        _wrapper(out, name, body, n, default if n else None)
+    for m in _DEF.finditer(text):
+        end = match_group(text, m.end())
+        if end > 0:
+            _wrapper(out, m.group(1), text[m.end() + 1 : end - 1], len(m.group(2)) // 2, None)
+    return out
+
+
+def _wrapper(out: dict[str, Wrapper], name: str, body: str | None, count: int, default: str | None) -> None:
+    """Add `name` to `out` when `body` points or labels; a name loom reads already, or none, is left out."""
+    if body is None or not re.fullmatch(r"\\[A-Za-z@]+", name) or name[1:] in REFS | CITES | {HYPERREF, "label"}:
+        return
+    uses = tuple((p.command, p.target) for p in [*pointers(body), *labels(body)])
+    if uses:
+        out[name[1:]] = Wrapper(uses, count, default)
+
+
+def wrapped(body: str, given: dict[str, Wrapper]) -> list[Pointer]:
+    """What a body points at, or labels, through its work's own commands (`wrappers`): each use in a wrapper's definition with the arguments the body gives in place of `#1`…, a list split at its commas as `pointers` splits one.
+
+    Parameters
+    ----------
+    body : str
+        A statement's or a proof's body.
+    given : dict of str to Wrapper
+        Its work's wrappers.
+
+    Returns
+    -------
+    list of Pointer
+        Each with `via` the wrapper's name; a `label` among them is a label the body defines through it.
+    """
+    if not given:
+        return []
+    text = unread(body)
+    out: list[Pointer] = []
+    names = "|".join(sorted((re.escape(n) for n in given), key=len, reverse=True))
+    for m in re.finditer(r"\\(" + names + r")(?![A-Za-z@])", text):
+        w = given[m.group(1)]
+        args: list[str] = []
+        pos = m.end()
+        for k in range(w.count):
+            if k == 0 and w.default is not None:
+                arg, _s, _e, pos = read_optional(text, pos)
+                args.append(w.default if arg is None else arg)
+            else:
+                arg, _s, _e, pos = read_mandatory(text, pos)
+                args.append(arg or "")
+        line = text.count("\n", 0, m.start()) + 1
+        for command, template in w.uses:
+            target = _fill(template, args)
+            names_ = target.split(",") if command in LISTS or command in CITES else [target]
+            out.extend(Pointer(command, t.strip(), line, m.group(1)) for t in names_ if t.strip())
+    return out
+
+
+def _fill(template: str, args: list[str]) -> str:
+    """A use's argument with the wrapper's arguments in place of `#1`…; one not given is empty."""
+    return re.sub(r"#([1-9])", lambda g: args[int(g.group(1)) - 1] if int(g.group(1)) <= len(args) else "", template)
 
 
 def unknown(body: str) -> list[Pointer]:
@@ -293,7 +397,7 @@ class Item:
     end: int = 0
 
 
-#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`. A starred form is its command's. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets, and no setting of the page's layout (`\setlength`, `\setcounter`), which is the document's, not the work's.
+#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`, `c` a `\chardef`'s number after an optional `=`. A starred form is its command's; what `\AtBeginDocument` holds is checked item by item as the body is. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets, and no setting of the page's layout (`\setlength`, `\setcounter`), which is the document's, not the work's.
 ARGUMENTS = {
     "usepackage": "oom",
     "RequirePackage": "oom",
@@ -333,6 +437,25 @@ ARGUMENTS = {
     "DeclareMathAlphabet": "nmmmm",
     "DeclareSymbolFont": "mmmmm",
     "DeclareMathSymbol": "nmmm",
+    "DeclareMathAccent": "nmmm",
+    "SetMathAlphabet": "nmmmmm",
+    "DeclareFontFamily": "mmm",
+    "DeclareFontShape": "mmmmmm",
+    "DeclareUnicodeCharacter": "mm",
+    "mathchardef": "nc",
+    "chardef": "nc",
+    "newtoks": "n",
+    "newdimen": "n",
+    "newskip": "n",
+    "newcount": "n",
+    "newcolumntype": "mom",
+    "newtheoremstyle": "mmmmmmmmm",
+    "allowdisplaybreaks": "o",
+    "tikzcdset": "m",
+    "SelectTips": "mm",
+    "xymatrixcolsep": "m",
+    "xymatrixrowsep": "m",
+    "AtBeginDocument": "m",
 }
 _CS = re.compile(r"\\(?:[A-Za-z@]+|.)")
 #: The arguments read after a command `ARGUMENTS` does not know: its star, then every bracket and brace group that follows.
@@ -409,4 +532,10 @@ def _arguments(text: str, pos: int, shape: str) -> int:
                 p = skip_space(text, p + 1)
             cs = _CS.match(text, p)
             pos = cs.end() if cs else min(p + 1, len(text))
+        elif arg == "c":
+            p = skip_space(text, pos)
+            if p < len(text) and text[p] == "=":
+                p = skip_space(text, p + 1)
+            number = re.match(r"[\"'`]?[0-9A-Fa-f]+|\\[A-Za-z@]+|`\\?.", text[p:])
+            pos = p + number.end() if number else p
     return pos
