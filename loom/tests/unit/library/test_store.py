@@ -125,7 +125,7 @@ def test_a_proof_s_number_is_one_past_the_largest_seen(tmp_path: Path) -> None:
     root = quilt(tmp_path)
     assert next_proof(root, "tq-00K3") == "tq-00K3-proof01"
     assert next_proof(root, "tq-00A4") == "tq-00A4-proof00"
-    tag(root, "tq-00K3-proof00", "short", by="Isaac", kind="person")
+    tag(root, "tq-00K3-proof00", "short", by="A. Author", kind="person")
     remove_node(root, "tq-00K3-proof00")
     assert next_proof(root, "tq-00K3") == "tq-00K3-proof01", "the tag log still names proof00"
 

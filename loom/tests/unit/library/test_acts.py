@@ -18,7 +18,7 @@ from loom.paths import LIBRARY_UNDO
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 
-ME = {"by": "Isaac", "kind": "person"}
+ME = {"by": "A. Author", "kind": "person"}
 
 
 def quilt(tmp_path: Path) -> Path:
@@ -61,7 +61,7 @@ def test_the_works_list_draws_each_work_in_words(tmp_path: Path) -> None:
 
 def test_a_work_made_from_an_identifier_alone_reads_unconfirmed(tmp_path: Path) -> None:
     root = quilt(tmp_path)
-    take(root, [Item(text="arXiv:2209.01234v2")], by="Isaac")
+    take(root, [Item(text="arXiv:2209.01234v2")], by="A. Author")
     rows = {r["short"]: r for r in works(scan(load_quilt(root)))}
     [unconfirmed] = [r for r in rows.values() if r["lookup"]]
     assert unconfirmed["lookup"] == {"state": "unconfirmed", "identifier": "arxiv:2209.01234v2"}
@@ -75,7 +75,7 @@ def test_an_edited_entry_is_written_and_recorded_and_refused_when_bad(tmp_path: 
     with pytest.raises(ActRefused) as bad:
         edit_entry(root, ref, "not bibtex", **ME)
     assert (bad.value.code, bad.value.status) == ("bad-entry", 400)
-    take(root, [Item(text="@book{Other, title = {x}}\n")], by="Isaac")
+    take(root, [Item(text="@book{Other, title = {x}}\n")], by="A. Author")
     with pytest.raises(ActRefused) as taken:
         edit_entry(root, ref, "@article{other, title = {x}}", **ME)
     assert taken.value.code == "key-taken"
@@ -103,7 +103,7 @@ def test_an_edited_entry_is_refused_in_words_about_the_entry_never_loom_s_files(
     """M-8 for the work's tab: the key held in another case, as check 9 folds it, is the other work's, named by its short name."""
     root = quilt(tmp_path)
     ref = the_ref(root)
-    take(root, [Item(text="@book{Straße1, author = {Weg, Anna}, title = {Streets}, year = {2020}}\n")], by="Isaac")
+    take(root, [Item(text="@book{Straße1, author = {Weg, Anna}, title = {Streets}, year = {2020}}\n")], by="A. Author")
     with pytest.raises(ActRefused) as refused:
         edit_entry(root, ref, bibtex, **ME)
     assert refused.value.code == code and said in refused.value.message, refused.value.message
@@ -175,7 +175,7 @@ def held(tmp_path: Path) -> tuple[Path, str]:
     write_node(root, Node(id=f"{stem}-macros", taxon="macros", body="\\newcommand{\\x}{y}\n"))
     write_node(root, Node(id="tq-0009", taxon="lemma", source=ref, body="A lemma.\n"))
     write_node(root, Node(id="tq-0009-proof00", taxon="proof", body="By hand.\n"))
-    who = {"when": "2026-11-20T00:00:00Z", "author": "Isaac", "kind": "human", "type": "question"}
+    who = {"when": "2026-11-20T00:00:00Z", "author": "A. Author", "kind": "human", "type": "question"}
     events = [
         {"event": "created", "id": "a-2026-11-20-aaaaaa", "target": "tq-0001", "body": "Elsewhere.", **who},
         {"event": "created", "id": "a-2026-11-20-bbbbbb", "target": ref, "body": "On the work.", **who},

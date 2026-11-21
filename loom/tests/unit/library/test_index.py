@@ -125,7 +125,7 @@ def test_search_by_number_matches_it_exactly(root: Path) -> None:
 
 
 def test_search_by_taxon_and_tag(root: Path) -> None:
-    tag(root, "tq-00K5", "Bounds", by="Isaac", kind="person")
+    tag(root, "tq-00K5", "Bounds", by="A. Author", kind="person")
     with NodeIndex.open(root) as index:
         assert found(index, taxon="lemma") == ["tq-00K3", "tq-00B7"]
         assert found(index, tag="bounds") == ["tq-00K5"]
@@ -142,7 +142,7 @@ def test_search_looks_in_proofs_when_asked_and_marks_the_statement(root: Path) -
 
 
 def test_tags_in_the_index_come_from_the_log(root: Path) -> None:
-    tag(root, "tq-00K3", "14A20", by="Isaac", kind="person")
+    tag(root, "tq-00K3", "14A20", by="A. Author", kind="person")
     tag(root, "tq-00K5", "14a20", by="Claude agent", kind="agent")
     tag(root, "tq-00K5", "compact", by="Claude agent", kind="agent")
     with NodeIndex.open(root) as index:
@@ -325,9 +325,9 @@ def test_the_generation_moves_when_a_node_or_a_tag_changes_and_not_otherwise(tmp
         assert index.refresh().generation == first + 1
         (root / LIBRARY_NODES / "tq-00K3.node").touch()
         assert index.refresh().generation == first + 1, "a file touched and not changed is no change"
-        tag(root, "tq-00K5", "bounds", by="Isaac", kind="person")
+        tag(root, "tq-00K5", "bounds", by="A. Author", kind="person")
         assert index.refresh().generation == first + 2
-        tag(root, "tq-00K5", "Bounds", by="Isaac", kind="person")
+        tag(root, "tq-00K5", "Bounds", by="A. Author", kind="person")
         assert index.refresh().generation == first + 2, "a tag written again changes nothing"
         (root / LIBRARY_NODES / "tq-00K6.node").write_bytes(b"not a node\n")
         assert index.refresh().generation == first + 2, "a file that does not read changes no node"

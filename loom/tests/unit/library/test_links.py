@@ -19,7 +19,7 @@ def quilt(tmp_path: Path) -> tuple[Path, str]:
     root.mkdir()
     (root / "config.toml").write_text('[quilt]\nprefix = "tq"\n')
     load_quilt(root)
-    [row] = take(root, [Item(text="@article{Smi24, title = {Widgets}, eprint = {2401.01234v2}}\n")], by="Isaac")
+    [row] = take(root, [Item(text="@article{Smi24, title = {Widgets}, eprint = {2401.01234v2}}\n")], by="A. Author")
     write_node(
         root,
         Node(

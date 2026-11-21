@@ -13,7 +13,7 @@ from loom.library.macros import macros_node, preamble_items
 from loom.library.references import Minter, attach, make, remake_macros
 from loom.library.store import NodeRefused, read
 
-ME = {"by": "Isaac", "kind": "person"}
+ME = {"by": "A. Author", "kind": "person"}
 ENTRY = "@article{Smi24,\n  author = {Smith, Jane},\n  title  = {Widgets},\n  year   = {2024},\n}\n"
 
 MAIN = r"""\documentclass{amsart}
@@ -79,7 +79,7 @@ def test_a_reference_is_written_and_its_making_recorded(tmp_path: Path) -> None:
     assert node.id == "tq-000A-ref"
     assert read(tmp_path, "tq-000A-ref") == node and node.body == ENTRY
     made = log.replay(tmp_path).made(node.id)
-    assert made is not None and (made["how"], made["key"], made["by"]) == ("paste", "Smi24", "Isaac")
+    assert made is not None and (made["how"], made["key"], made["by"]) == ("paste", "Smi24", "A. Author")
     assert check(tmp_path) == []
 
 

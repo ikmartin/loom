@@ -67,10 +67,10 @@ def test_a_deleted_key_is_left_alone_until_the_work_is_added_again(tmp_path: Pat
     done = gather(scan(load_quilt(root)))
     smith = next(r for r in done.made if "Smi24" in (read(root, r).body if read(root, r) else ""))  # type: ignore[union-attr]
     (root / ".loom/library/nodes" / f"{smith}.node").unlink()
-    log.record(root, "deleted", smith, key="Smi24", undo="u-1", by="Isaac", kind="person")
+    log.record(root, "deleted", smith, key="Smi24", undo="u-1", by="A. Author", kind="person")
     again = gather(scan(load_quilt(root)))
     assert again.made == [] and again.deleted == ["Smi24"]
-    log.record(root, "restored", smith, undo="u-1", by="Isaac", kind="person")
+    log.record(root, "restored", smith, undo="u-1", by="A. Author", kind="person")
     assert len(gather(scan(load_quilt(root))).made) == 1
 
 
@@ -84,7 +84,7 @@ def test_a_gathered_reference_follows_its_bib_until_edited_in_loom(tmp_path: Pat
     node = read(root, ref)
     assert node is not None
     write_node(root, replace(node, body=node.body.replace("Widgets and bounds", "Widgets, corrected")))
-    log.record(root, "edited", ref, by="Isaac", kind="person")
+    log.record(root, "edited", ref, by="A. Author", kind="person")
     (root / "refs.bib").write_text(BIB.replace("{Widgets}", "{Widgets again}"))
     assert gather(scan(load_quilt(root))).followed == []
     assert "Widgets, corrected" in refs(root)["Smi24"]

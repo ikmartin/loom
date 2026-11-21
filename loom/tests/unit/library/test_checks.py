@@ -73,7 +73,9 @@ def test_each_failure_is_an_error_of_loom_s_records_under_its_check_s_code() -> 
 
 
 def test_a_node_stated_in_the_quilt_is_the_person_s_to_put_right() -> None:
-    mine = Node(id="tq-00Q1", taxon="conjecture", authors=("Martin",), body="Every widget is round \\ref{tq-00Q2}.\n")
+    mine = Node(
+        id="tq-00Q1", taxon="conjecture", authors=("A. Author",), body="Every widget is round \\ref{tq-00Q2}.\n"
+    )
     [d] = check_store(with_(mine))
     assert (d.code, d.owner) == ("loom:node-body-ref", None)
 

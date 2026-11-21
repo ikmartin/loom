@@ -81,13 +81,13 @@ def test_the_generation_stands_until_anything_a_row_reads_changes(tmp_path: Path
     first = generation(result)
     assert generation(result) == first, "nothing changed, so `since` answers unchanged"
     # a node: a work pasted
-    take(root, [Item(text="@article{New1, title = {New}}\n")], by="Isaac")
+    take(root, [Item(text="@article{New1, title = {New}}\n")], by="A. Author")
     after_node = generation(result)
     assert after_node > first
     assert generation(result) == after_node
     # the log alone: a look-up recorded and nothing else
     [ref] = [r["ref"] for r in works(result) if r["short"] == "New"]
-    log.record(root, "looked-up", ref, by="Isaac", kind="person", found=False)
+    log.record(root, "looked-up", ref, by="A. Author", kind="person", found=False)
     after_log = generation(result)
     assert after_log > after_node
     # the scan alone: a document cites another work, so `used_in` changes

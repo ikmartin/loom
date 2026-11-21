@@ -12,7 +12,7 @@ from loom.library.tags import TagRefused, normalise, problems, replay, tag, unta
 from loom.paths import LIBRARY_NODES, TAG_LOG
 from tests.unit.library._store import quilt
 
-ME = {"by": "Isaac Martin", "kind": "person"}
+ME = {"by": "A. Author", "kind": "person"}
 AGENT = {"by": "Claude agent", "kind": "agent"}
 OTHER_AGENT = {"by": "Codex agent", "kind": "agent"}
 
@@ -47,7 +47,7 @@ def test_a_tag_is_one_line_saying_who_and_when(tmp_path: Path, monkeypatch: pyte
             "event": "tag",
             "node": "tq-00K3",
             "tag": "compactness",
-            "by": "Isaac Martin",
+            "by": "A. Author",
             "kind": "person",
             "at": "2026-11-21T09:00:00Z",
         }
@@ -97,11 +97,9 @@ def test_an_agent_takes_off_only_its_own(tmp_path: Path) -> None:
     tag(root, "tq-00K3", "bounded", **AGENT)
     assert untag(root, "tq-00K3", "bounded", **AGENT) is True
     assert replay(root).of("tq-00K3") == ["bounded"], "the person's tag still stands"
-    with pytest.raises(
-        TagRefused, match="an agent takes off only its own tags, and Isaac Martin put bounded on tq-00K3"
-    ):
+    with pytest.raises(TagRefused, match="an agent takes off only its own tags, and A. Author put bounded on tq-00K3"):
         untag(root, "tq-00K3", "bounded", **OTHER_AGENT)
-    assert replay(root).held("tq-00K3", "bounded") == {"Isaac Martin"}
+    assert replay(root).held("tq-00K3", "bounded") == {"A. Author"}
 
 
 def test_the_log_is_only_appended_to(tmp_path: Path) -> None:
@@ -147,7 +145,7 @@ def test_a_tag_composed_or_decomposed_is_one_tag(tmp_path: Path) -> None:
     root = quilt(tmp_path)
     assert tag(root, "tq-00K3", "café", **ME)
     assert tag(root, "tq-00K3", "café", **AGENT) is not False or replay(root).held("tq-00K3", "café") == {
-        "Isaac Martin",
+        "A. Author",
         "Claude agent",
     }
     assert replay(root).of("tq-00K3") == ["café"]

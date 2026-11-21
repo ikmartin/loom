@@ -47,11 +47,11 @@ def event(**fields: object) -> str:
 
 
 NOTES = [
-    event(event="created", id="a-2026-09-16-aaaaaa", author="Isaac", kind="person", when="2026-09-16T10:00:00Z", target="arXiv:2401.01234v1", anchor=None, type="note", body="Read §2 first."),
-    event(event="created", id="a-2026-09-16-bbbbbb", author="Isaac", kind="person", when="2026-09-16T10:01:00Z", target=f"work:{HAR77_WORK}", anchor=None, type="question", body="Which edition — the 1977 one?"),
-    event(event="created", id="a-2026-09-16-cccccc", author="Isaac", kind="person", when="2026-09-16T10:02:00Z", target="arXiv:2401.01234v1", anchor={"exact": "Widgets.", "prefix": "", "suffix": ""}, artifact=hashlib.sha256(PDF_V).hexdigest(), mark="box", page=1, rects=[[1.0, 2.0, 3.0, 4.0]], type=None, body=""),
-    event(event="created", id="a-2026-09-16-dddddd", author="Isaac", kind="person", when="2026-09-16T10:03:00Z", target="tq-0001", anchor=None, type="note", body="On my own lemma."),
-    event(event="created", id="a-2026-09-16-eeeeee", author="Isaac", kind="person", when="2026-09-16T10:04:00Z", target="Smi24-thm-4.1", anchor=None, type="note", body="On the digest's theorem."),
+    event(event="created", id="a-2026-09-16-aaaaaa", author="A. Author", kind="person", when="2026-09-16T10:00:00Z", target="arXiv:2401.01234v1", anchor=None, type="note", body="Read §2 first."),
+    event(event="created", id="a-2026-09-16-bbbbbb", author="A. Author", kind="person", when="2026-09-16T10:01:00Z", target=f"work:{HAR77_WORK}", anchor=None, type="question", body="Which edition — the 1977 one?"),
+    event(event="created", id="a-2026-09-16-cccccc", author="A. Author", kind="person", when="2026-09-16T10:02:00Z", target="arXiv:2401.01234v1", anchor={"exact": "Widgets.", "prefix": "", "suffix": ""}, artifact=hashlib.sha256(PDF_V).hexdigest(), mark="box", page=1, rects=[[1.0, 2.0, 3.0, 4.0]], type=None, body=""),
+    event(event="created", id="a-2026-09-16-dddddd", author="A. Author", kind="person", when="2026-09-16T10:03:00Z", target="tq-0001", anchor=None, type="note", body="On my own lemma."),
+    event(event="created", id="a-2026-09-16-eeeeee", author="A. Author", kind="person", when="2026-09-16T10:04:00Z", target="Smi24-thm-4.1", anchor=None, type="note", body="On the digest's theorem."),
 ]  # fmt: skip
 
 

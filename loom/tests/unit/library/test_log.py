@@ -11,7 +11,7 @@ from loom.library.log import problems, record, replay
 from loom.paths import LIBRARY_LOG
 
 LOOM = {"by": "loom", "kind": "loom"}
-ME = {"by": "Isaac", "kind": "person"}
+ME = {"by": "A. Author", "kind": "person"}
 
 
 def test_an_act_is_one_line_with_who_and_when(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -29,7 +29,7 @@ def test_an_act_is_one_line_with_who_and_when(tmp_path: Path, monkeypatch: pytes
     )
     [line] = (tmp_path / LIBRARY_LOG).read_text(encoding="utf-8").splitlines()
     assert json.loads(line) == {
-        "event": "made", "ref": "tq-00A1-ref", "by": "Isaac", "kind": "person", "at": "2026-11-21T09:00:00Z",
+        "event": "made", "ref": "tq-00A1-ref", "by": "A. Author", "kind": "person", "at": "2026-11-21T09:00:00Z",
         "how": "drop", "found_by": "arxiv", "looked_up": False, "source": "2401.01234v2.pdf", "key": "Smi24",
     }  # fmt: skip
 

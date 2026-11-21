@@ -21,7 +21,7 @@ from loom.paths import INCOMING, LIBRARY_DOCUMENTS
 from loom.scan.quilt import load_quilt
 from tests.unit._pdfs import lines_pdf
 
-ME = {"by": "Isaac"}
+ME = {"by": "A. Author"}
 
 
 def quilt(tmp_path: Path) -> Path:
