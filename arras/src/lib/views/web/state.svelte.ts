@@ -72,4 +72,4 @@ class WebState {
 export const wb = new WebState();
 
 /** Whether a result may be chosen to formalize: one of the person's results that no Lean states yet. */
-export const choosable = (r: Row): boolean => !!r.source && 'doc' in r.source && r.lean === 'none';
+export const choosable = (r: Row): boolean => !!r.source && 'doc' in r.source && (r.lean?.lean ?? 'none') === 'none';

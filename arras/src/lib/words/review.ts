@@ -242,8 +242,6 @@ export const review = {
 	attested: {
 		/** The first step's head. */
 		then: (date: string) => `What you attested, on ${date}`,
-		/** The same, where the attestation's date is not sent. */
-		thenUndated: 'What you attested',
 		/** Over the Lean the person attested. */
 		leanThen: 'the Lean you attested, as Lean prints it',
 		/** The second step's head. */
@@ -267,7 +265,7 @@ export const review = {
 		/** The column's message after "still states it". */
 		attestedAgain: 'Attested again.',
 		/** An attested-changed row's quiet line, where the result's own statement changed. */
-		statement: 'its statement changed since you attested it',
+		statement: (date: string) => `its statement changed since you attested it, ${date}`,
 		/** An attested-changed row's quiet line, where what its statement uses changed and nothing rests on it. */
 		uses: 'what it uses changed since you attested it',
 		/** An attested-changed row's quiet line, where a definition changed that results rest on. */
@@ -278,6 +276,8 @@ export const review = {
 	questions: {
 		/** An agent's question, after the agent's name: where it was asked. */
 		asks: (where: string) => ` asks, ${where}: `,
+		/** Where a question was asked, while the agent's session was digesting a work. */
+		digesting: (short: string) => `digesting ${short}`,
 		/** Where a question was asked, on a draft's result. */
 		onResult: (doc: string, name: string) => `on ${file(doc)}, ${name}`,
 		/** Where a question was asked, on a page of a work. */

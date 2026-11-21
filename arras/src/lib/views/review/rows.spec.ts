@@ -44,7 +44,7 @@ describe("round six's rows", () => {
 		expect(line(byRow('check:ev-'), n)).toBe('Arden 2024 · a correction to Definition 1.2');
 		expect(line(byRow('attested-changed:def'), n)).toBe('main.tex · Definition 3.7');
 		expect(quiet(byRow('attested-changed:def'))).toBe('changed since you attested it · 2 results rest on it');
-		expect(quiet(byRow('attested-changed:cor'))).toBe('its statement changed since you attested it');
+		expect(quiet(byRow('attested-changed:cor'))).toBe('its statement changed since you attested it, 20 Nov');
 		expect(line(byRow('fetch:t-2026-11-21-pq0d4n'), n)).toBe('Jones 2019 · Covering estimates');
 		expect(line(byRow('fetch:t-2026-11-21-pq0d4n'), none)).toBe('a paper');
 		expect(quiet(byRow('edits:c-4d'))).toBe('bounds.tex has not compiled since this edit (line 14)');
@@ -53,7 +53,9 @@ describe("round six's rows", () => {
 
 	it("say an agent's question with where it was asked", () => {
 		const [a, b] = r.rows.filter((x) => x.kind === 'questions') as Extract<ReviewRow, { kind: 'questions' }>[];
-		expect(question(a, n).by + question(a, n).rest).toBe('Claude Code asks, on Okafor 2022, page 7: your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?');
+		// where the agent's session was digesting a work when it asked, the row says so
+		expect(question(a, n).by + question(a, n).rest).toBe('Claude Code asks, digesting Okafor 2022: your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?');
+		expect(question({ ...a, under: null }, n).rest).toBe(' asks, on Okafor 2022, page 7: your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?');
 		expect(question(b, n).rest).toBe(' asks, on main.tex, Theorem 2.1: should the count include the zero weighting?');
 		// while the names are read, or where nothing names them, a row says what it is without an id
 		expect(question(b, none).rest).toBe(' asks, on main.tex, a result: should the count include the zero weighting?');

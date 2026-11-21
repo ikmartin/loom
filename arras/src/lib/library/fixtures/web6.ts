@@ -1,6 +1,6 @@
 // The Web's part of round six's fixture: the prototype's web of results, main.tex's and bounds.tex's with the library's they rest on, answered as `web-list`, `web-group`, `web-search`, `web-focus` and `web-graph` will answer them. Status is given as the evidence lane's fields, which the viewer only draws. Written from the spec (`docs/specs/library-views.md` §5) until those reads are served.
 
-import type { Lean, Paper, Row, WebFocus, WebGraph, WebList, WebScope, WebSearch, WebSection } from '../types';
+import type { Lean, LeanStatus, Paper, Reading, Row, WebFocus, WebGraph, WebList, WebScope, WebSearch, WebSection } from '../types';
 
 const MAIN = 'drafting/main.tex';
 const BOUNDS = 'drafting/bounds.tex';
@@ -77,12 +77,14 @@ export function growWeb(): void {
 const uses = (id: string) => [...(W[id].s ?? []), ...(W[id].p ?? [])];
 const usedBy = (id: string) => Object.keys(W).filter((k) => uses(k).includes(id));
 
-/** A result's two statuses, as the evidence lane's status gives them: `lean` its status's word (`evidence.md` §8). */
-function status(n: N): { paper: Paper | null; lean: Lean } {
-	if (n.src.endsWith('.tex')) return { paper: null, lean: n.st === 'formal' ? 'formalized' : n.st === 'leanq' ? 'unattested' : 'none' };
-	if (n.st === 'assumed') return { paper: 'matches', lean: 'formalized' };
-	if (n.st === 'leanq') return { paper: 'matches', lean: 'unattested' };
-	return { paper: n.st === 'checked' ? 'matches' : (n.st as Paper), lean: 'none' };
+/** How a result stands, as the evidence lane's status gives it (`evidence.md` §6, §8): its paper and the reading of it, null for a draft's, and its Lean with the role and what it waits on. */
+function status(n: N): { paper: Paper | null; reading: Reading; lean: LeanStatus } {
+	const lean = (l: Lean, role: LeanStatus['role'] = 'proved'): LeanStatus => ({ lean: l, role: l === 'none' ? null : role, waiting_on: [] });
+	if (n.src.endsWith('.tex')) return { paper: null, reading: null, lean: n.st === 'formal' ? lean('formalized', n.name.startsWith('Definition') ? 'defined' : 'proved') : n.st === 'leanq' ? lean('unattested') : lean('none') };
+	if (n.st === 'assumed') return { paper: 'matches', reading: 'matches', lean: lean('formalized', 'assumed') };
+	if (n.st === 'leanq') return { paper: 'matches', reading: 'matches', lean: lean('unattested') };
+	const paper = n.st === 'checked' ? 'matches' : (n.st as Paper);
+	return { paper, reading: paper === 'marked' ? 'stub' : paper, lean: lean('none') };
 }
 
 /** A result as a list sends it (`ROW`): its title null where it has none. */

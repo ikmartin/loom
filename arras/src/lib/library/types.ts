@@ -9,12 +9,15 @@ export type Lean = 'none' | 'rerun' | 'failed' | 'unattested' | 'changed' | 'wai
 /** What keeps a result from reading formalized (`evidence.md` §5.2): a node, one of the person's results its Lean assumes, or a citation's key with its locator where it has one; and why. */
 export type WaitingOn = ({ node: string } | { label: string } | { cite: string }) & { why: 'stub' | 'unchecked' | 'unattested' | 'unknown' };
 
-/** How a result's Lean stands, as `evidence.md` §5.2 computes it, with its role and what it waits on. */
+/** How a result's Lean stands, as `evidence.md` §5.2 computes it, with its role and what it waits on: `{lean: "none", role: null, waiting_on: []}` where no record names it. */
 export interface LeanStatus {
 	lean: Lean;
-	role?: 'proved' | 'unproved' | 'assumed' | 'defined';
+	role?: 'proved' | 'unproved' | 'assumed' | 'defined' | null;
 	waiting_on?: WaitingOn[];
 }
+
+/** The reading of a library result's paper (`evidence.md` §5.2), null for a draft's result. */
+export type Reading = 'stub' | 'unchecked' | 'matches' | null;
 
 /** How a node's text was made (`evidence.md` §3.1). */
 export type How = 'extracted' | 'transcribed' | 'read' | 'corrected' | 'written';
@@ -136,7 +139,7 @@ export interface PlacesAnswer extends Gen {
 	places: Place[];
 }
 
-/** A result wherever results are listed (§2, "A result in a list"; `evidence.md` §8): `title` null where it has none, `paper` null for a draft's result, `lean` its status's. */
+/** A result wherever results are listed (§2, "A result in a list"; `evidence.md` §8): `title` null where it has none, `paper` and `reading` null for a draft's result, `lean` how it stands in Lean. */
 export interface Row {
 	result: string;
 	name: string;
@@ -144,7 +147,8 @@ export interface Row {
 	taxon: string;
 	source: { ref: string; short: string } | { doc: string } | null;
 	paper: Paper | null;
-	lean: Lean | null;
+	reading: Reading;
+	lean: LeanStatus | null;
 }
 
 /** What a body points at, drawn in the pointer's place: a result's name and number and its mark, or an anchor's number; `work` marks a result of another work, drawn as a citation with the result as its locator. */
@@ -219,6 +223,8 @@ export interface AcceptedChangedRow extends RowBase {
 	key: string;
 	name: string;
 	doc: string;
+	reading: Reading;
+	lean: LeanStatus;
 }
 
 /** The place an ask is tied to (`evidence.md` §4.1), by ids: a node, a draft's label, a block of a document, a work or one of its pages, or a document. The viewer looks each up to name it. */
@@ -240,6 +246,8 @@ export interface QuestionRow extends RowBase {
 	text: string;
 	choices: string[];
 	quote: string | null;
+	/** The task the asking agent's session was working on when it asked, its work where it names one; null where none. */
+	under: { task: string; what: string; on: AskedOn; ref: string | null } | null;
 }
 
 /** A cause of an attestation's going stale (`evidence.md` §5.2): what changed, by its label or node, and its hash then and now, either null. */
@@ -256,8 +264,11 @@ export interface AttestedChangedRow extends RowBase {
 	doc: string;
 	changed: 'statement' | 'used';
 	causes: Cause[];
-	/** The attestation's record. */
+	/** The attestation's record, and when it was made. */
 	attestation: string;
+	attested_at: string;
+	reading: Reading;
+	lean: LeanStatus;
 	/** The results that rest under this one, each attested again one by one. */
 	resting: { result: string; name: string }[];
 }
@@ -300,8 +311,9 @@ export interface AttestRow extends RowBase {
 	what: 'statement and proof' | 'statement only';
 	paper: Paper | null;
 	/** The Lean record to attest. */
-	lean: string;
-	waiting_on: WaitingOn[];
+	record: string;
+	reading: Reading;
+	lean: LeanStatus;
 }
 
 export interface FetchRow extends RowBase {

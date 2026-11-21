@@ -302,7 +302,7 @@ export function nodeAnswer(f: Fixture, args: { node?: string; ref?: string; item
 		const base = { gen: f.gen, name: `${r.tax} ${r.num}`, ...(r.title ? { title: r.title } : {}), taxon: r.tax.toLowerCase(), work, pages: String(r.page ?? '') };
 		if (!r.p || (!args.node && !r.p)) return { ...base, digested: null, paper: null };
 		const b = r.node ? BODY[r.node] : undefined;
-		const uses = (b?.uses ?? []).map((u) => (u === 'tq-00B7' ? { result: u, name: 'Lemma 2.1', title: null, taxon: 'lemma', source: { ref: REF.jones, short: 'Jones 2019' }, paper: 'stub' as const, lean: null } : { result: u, name: 'Definition 2.1', title: 'Widget', taxon: 'definition', source: null, paper: 'matches' as const, lean: null }));
+		const uses = (b?.uses ?? []).map((u) => (u === 'tq-00B7' ? { result: u, name: 'Lemma 2.1', title: null, taxon: 'lemma', source: { ref: REF.jones, short: 'Jones 2019' }, paper: 'stub' as const, reading: 'stub' as const, lean: null } : { result: u, name: 'Definition 2.1', title: 'Widget', taxon: 'definition', source: null, paper: 'matches' as const, reading: 'matches' as const, lean: null }));
 		return {
 			...base,
 			node: r.node,

@@ -46,7 +46,7 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await open(page);
 	await page.getByTestId('review-kind-questions').click();
 	const first = page.getByTestId('review-row').first();
-	await expect(first).toContainText('Claude Code asks, on Okafor 2022, page 7: your mark on page 7');
+	await expect(first).toContainText('Claude Code asks, digesting Okafor 2022: your mark on page 7');
 	await first.getByRole('button', { expanded: false }).click();
 	await first.getByRole('button', { name: 'only the proposition', exact: true }).click();
 	await expect(page.getByTestId('column-message')).toContainText('Answered. Claude Code is told.');
@@ -212,7 +212,7 @@ test('an attested definition that changed is asked about in three steps, and eac
 	await def.getByRole('button', { name: 'still states it' }).first().click();
 	await expect(def).toHaveCount(0);
 	const cor = page.getByTestId('review-row').filter({ hasText: 'main.tex · Corollary 3.5' });
-	await expect(cor).toContainText('its statement changed since you attested it');
+	await expect(cor).toContainText('its statement changed since you attested it, 20 Nov');
 	await cor.getByRole('button', { expanded: false }).first().click();
 	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
 });

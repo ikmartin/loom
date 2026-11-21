@@ -43,7 +43,7 @@
 	<div class="step">
 		<div class="stepn">1</div>
 		<div class="stepb">
-			<div class="steph">{b.at ? words.attested.then(words.day(b.at)) : words.attested.thenUndated}</div>
+			<div class="steph">{words.attested.then(words.day(b.at ?? row.attested_at))}</div>
 			<div class="cmp">
 				<div class="citebox"><Statement fragment={b.then.fragment} /></div>
 				<div><div class="crop-cap">{words.attested.leanThen}</div>{#if b.lean}<Lean code={b.lean} />{/if}</div>

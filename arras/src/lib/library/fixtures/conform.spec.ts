@@ -5,6 +5,7 @@ import { forgetCapabilities } from '$lib/write';
 import * as api from '../api';
 import { fixtureSource } from './source';
 
+// the samples are generated (`scripts/regen views`) and committed on library-web; on a branch that has not taken them yet, this check needs them copied in
 const DIR = new URL('../../../../../docs/specs/fixture/views/', import.meta.url);
 
 interface Sample {
@@ -124,8 +125,8 @@ describe('every generated sample passes through the client as a served answer wo
 	});
 	afterEach(() => vi.unstubAllGlobals());
 
-	it('finds the fifteen samples', () => {
-		expect(samples.length).toBe(15);
+	it('finds the sixteen samples', () => {
+		expect(samples.length).toBe(16);
 		for (const s of samples) expect(CALLS, s.endpoint).toHaveProperty([s.endpoint]);
 	});
 
@@ -152,7 +153,8 @@ function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Record<string,
 	const task = review.tasks[0];
 	switch (s.endpoint) {
 		case 'review-row':
-			return { row: question?.row };
+			// the sample names its row's kind after the read's name, where it is not a question's
+			return { row: (s.name.includes('.') ? review.rows.find((x) => x.kind === s.name.split('.')[1]) : question)?.row };
 		case 'review-answer':
 			return { ...r, question: question && 'question' in question ? question.question : '' };
 		case 'review-task-delete':

@@ -55,7 +55,8 @@ export function line(r: ReviewRow, n: Names): string {
 export function question(r: Extract<ReviewRow, { kind: 'questions' }>, n: Names): { by: string; rest: string } {
 	const o = r.on;
 	const node = o.node ? n.node(o.node) : undefined;
-	const where = o.ref ? (o.page ? words.questions.onPage(short(n, o.ref), o.page) : words.questions.on(short(n, o.ref))) : o.label || o.block ? words.questions.onResult(r.docs[0] ?? '', placed(n, o)) : o.node ? words.questions.on(node ? words.of(node.name, node.short) : words.someResult) : words.questions.on(o.document ? words.file(o.document) : '');
+	// where the agent was when it asked: the work it was digesting, where its session was digesting one; else the question's own place
+	const where = r.under?.what === 'digest' && r.under.ref ? words.questions.digesting(short(n, r.under.ref)) : o.ref ? (o.page ? words.questions.onPage(short(n, o.ref), o.page) : words.questions.on(short(n, o.ref))) : o.label || o.block ? words.questions.onResult(r.docs[0] ?? '', placed(n, o)) : o.node ? words.questions.on(node ? words.of(node.name, node.short) : words.someResult) : words.questions.on(o.document ? words.file(o.document) : '');
 	return { by: r.by, rest: words.questions.asks(where) + r.text };
 }
 
@@ -78,7 +79,7 @@ export function quiet(r: ReviewRow): string {
 			return words.attest.what[r.what];
 		case 'attested-changed':
 			// results resting under it are counted; else what changed, its own text or what it uses
-			return r.resting.length ? words.attested.used(r.resting.length) : r.changed === 'statement' ? words.attested.statement : words.attested.uses;
+			return r.resting.length ? words.attested.used(r.resting.length) : r.changed === 'statement' ? words.attested.statement(words.day(r.attested_at)) : words.attested.uses;
 		case 'edits':
 			return r.broke ? words.edits.broke(r.doc, r.broke.line) : r.by ? words.edits.by(r.by) : '';
 		default:

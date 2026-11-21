@@ -52,9 +52,9 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	const rows: ReviewRow[] = [];
 
 	const questions: QuestionRow[] = [
-		{ row: 'questions:t-2026-11-21-w2c6ga', kind: 'questions', docs: [MAIN], question: 't-2026-11-21-w2c6ga', by: 'Claude Code', on: { ref: refs.okafor, page: 7 }, text: 'your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?', choices: ['both', 'only the proposition'], quote: null },
+		{ row: 'questions:t-2026-11-21-w2c6ga', kind: 'questions', docs: [MAIN], question: 't-2026-11-21-w2c6ga', by: 'Claude Code', on: { ref: refs.okafor, page: 7 }, text: 'your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?', choices: ['both', 'only the proposition'], quote: null, under: { task: 't-2026-11-21-dg01', what: 'digest', on: { ref: refs.okafor }, ref: refs.okafor } },
 		// on a draft's result by its label, which the served manifest names (the static suite's main.tex's Theorem 2.1)
-		{ row: 'questions:t-2026-11-21-k4dq2m', kind: 'questions', docs: [MAIN], question: 't-2026-11-21-k4dq2m', by: 'Claude Code', on: { label: 'sy-0003' }, text: 'should the count include the zero weighting?', choices: ['yes', 'no'], quote: null }
+		{ row: 'questions:t-2026-11-21-k4dq2m', kind: 'questions', docs: [MAIN], question: 't-2026-11-21-k4dq2m', by: 'Claude Code', on: { label: 'sy-0003' }, text: 'should the count include the zero weighting?', choices: ['yes', 'no'], quote: null, under: null }
 	];
 	const fetch: FetchRow[] = [
 		{ row: 'fetch:t-2026-11-21-pq0d4n', kind: 'fetch', docs: [BOUNDS], task: 't-2026-11-21-pq0d4n', ref: refs.jones, link: 'https://doi.org/10.1000/example.2019.17', want: 'pdf', by: 'Claude Code', words: "The publisher's page asks for a login." },
@@ -140,19 +140,19 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 		]
 	};
 	const attest: AttestRow[] = [
-		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null, lean: 'ev-2026-11-21-l3an9e', waiting_on: [] },
-		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches', lean: 'ev-2026-11-21-k5ob2q', waiting_on: [] }
+		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null, record: 'ev-2026-11-21-l3an9e', reading: null, lean: { lean: 'unattested', role: 'proved', waiting_on: [] } },
+		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches', record: 'ev-2026-11-21-k5ob2q', reading: 'matches', lean: { lean: 'unattested', role: 'proved', waiting_on: [] } }
 	];
 	const accepted: AcceptedChangedRow[] = ACCEPTED.map(([doc, key, name, html]) => {
 		const row = `accepted-changed:${key}`;
 		fragments[`fixture/accepted/${key}.html`] = html;
 		bodies[row] = { statement: { fragment: `fixture/accepted/${key}.html` } };
-		return { row, kind: 'accepted-changed', docs: [doc], key, name, doc };
+		return { row, kind: 'accepted-changed', docs: [doc], key, name, doc, reading: null, lean: { lean: 'none', role: null, waiting_on: [] } };
 	});
 	const attested: AttestedChangedRow[] = [
-		{ row: 'attested-changed:cor:cycle', kind: 'attested-changed', docs: [MAIN], result: 'cor:cycle', name: 'Corollary 3.5', doc: MAIN, changed: 'statement', causes: [{ changed: { label: 'cor:cycle' }, then: sha('cor:cycle then'), now: sha('cor:cycle now') }], attestation: 'ev-2026-11-20-c35att', resting: [] },
+		{ row: 'attested-changed:cor:cycle', kind: 'attested-changed', docs: [MAIN], result: 'cor:cycle', name: 'Corollary 3.5', doc: MAIN, changed: 'statement', causes: [{ changed: { label: 'cor:cycle' }, then: sha('cor:cycle then'), now: sha('cor:cycle now') }], attestation: 'ev-2026-11-20-c35att', attested_at: '2026-11-20T16:02:00Z', reading: null, lean: { lean: 'changed', role: 'proved', waiting_on: [] }, resting: [] },
 		// a changed definition: its own text changed, and the results resting on it come under it, each to be attested again
-		{ row: 'attested-changed:def:connected', kind: 'attested-changed', docs: [MAIN], result: 'def:connected', name: 'Definition 3.7', doc: MAIN, changed: 'statement', causes: [{ changed: { label: 'def:connected' }, then: sha('def:connected then'), now: sha('def:connected now') }], attestation: 'ev-2026-11-12-d37att', resting: [{ result: 'prop:tree', name: 'Proposition 3.8' }, { result: 'lem:bridge', name: 'Lemma 3.9' }] }
+		{ row: 'attested-changed:def:connected', kind: 'attested-changed', docs: [MAIN], result: 'def:connected', name: 'Definition 3.7', doc: MAIN, changed: 'statement', causes: [{ changed: { label: 'def:connected' }, then: sha('def:connected then'), now: sha('def:connected now') }], attestation: 'ev-2026-11-12-d37att', attested_at: '2026-11-12T10:40:00Z', reading: null, lean: { lean: 'changed', role: 'defined', waiting_on: [] }, resting: [{ result: 'prop:tree', name: 'Proposition 3.8' }, { result: 'lem:bridge', name: 'Lemma 3.9' }] }
 	];
 	const edits: EditRow[] = EDITS.map((e) => {
 		const row = `edits:${e.change}`;
