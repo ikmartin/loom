@@ -36,6 +36,7 @@ The keys, in the order loom writes them. A key this table does not name is refus
 | `source` | string | statements, proofs | The id of the reference (§7) this node's text was read from. Absent for a node stated in the quilt and read from no work. |
 | `label` | string | statements with a `source` | The source's own label for the statement, when the source is LaTeX and labels it. |
 | `pages` | string | statements and proofs with a `source` | The page, or the first and last page joined by a hyphen, as the source numbers its pages: `"13"`, `"12-13"`. |
+| `anchors` | table of strings | statements, proofs | For each anchor the body defines (§3) whose source prints a number, that number as `\ref` prints it: `{tq-00K3-eq00 = "3.3"}`, which `\eqref` draws "(3.3)". An anchor the source prints no number for is left out. Absent when there are none. |
 | `uses` | array of strings | statements, proofs | Ids of the nodes this node's text uses (§9), sorted. Absent when there are none. |
 | `mentions` | array of strings | statements, proofs | Ids of the nodes this node's text mentions (§9), sorted. Absent when there are none. |
 | `authors` | array of strings | statements and proofs with no `source` | Who states it. |
@@ -43,7 +44,7 @@ The keys, in the order loom writes them. A key this table does not name is refus
 
 A macros node (§8) has `schema`, `id` and `taxon` only.
 
-**Loom's form.** Loom writes a header one way: the keys in the table's order, one `key = value` a line, a list on one line (`uses = ["tq-00B7", "tq-00K3"]`), and each string a basic string (`"…"`), except a string with a backslash and no `'` or control character, which is a literal string (`'The \emph{widget} bound'`) so that LaTeX reads as LaTeX. A file in this form reads and writes back byte for byte. A header in any other valid TOML form is read and never refused, and is written in loom's form the next time loom writes the node, which changes its hash as any edit does.
+**Loom's form.** Loom writes a header one way: the keys in the table's order, one `key = value` a line, a list on one line (`uses = ["tq-00B7", "tq-00K3"]`), a table on one line with its keys in order (`anchors = {tq-00K3-eq00 = "3.3"}`), and each string a basic string (`"…"`), except a string with a backslash and no `'` or control character, which is a literal string (`'The \emph{widget} bound'`) so that LaTeX reads as LaTeX. A file in this form reads and writes back byte for byte. A header in any other valid TOML form is read and never refused, and is written in loom's form the next time loom writes the node, which changes its hash as any edit does.
 
 ## 3. Ids
 
@@ -173,10 +174,10 @@ A file that fails any of these is refused when it is written and reported when i
 2. `schema` is a number this loom reads. [`loom:node-schema`]
 3. `id` is the file's name without `.node` and matches §3; and, when loom writes it, no other node's id equals it ignoring case, since a file system blind to case holds one file for both. [`loom:node-id`]
 4. `taxon` agrees with the id (§5). [`loom:node-taxon`]
-5. Every key is one §2 names and allows on this kind of node, with the type §2 gives, and no string or list is empty. [`loom:node-key`]
+5. Every key is one §2 names and allows on this kind of node, with the type §2 gives, and no string, list or table is empty; every key of `anchors` is one of the node's own anchors. [`loom:node-key`]
 6. A proof's statement exists; a macros node's reference exists; a `source` is the id of a reference that exists; and a stem is not both a statement's and a work's (§3). [`loom:node-parent`]
 7. Every id in `uses` and in `mentions` is a node that exists and is not a macros node; none is in both; both are sorted, in code-point order, with no id twice and not the node itself. [`loom:node-edge`]
-8. Every id the body points at is in `uses` or `mentions`, with the exemptions of §4; every argument of a referencing command is an id or an anchor, and every citation's key a reference's id; every anchor the body defines is the node's own, and none is defined twice; and every anchor the body points at is defined by its owner, where the owner has text. Nothing in a comment is read. [`loom:node-body-ref`]
+8. Every id the body points at is in `uses` or `mentions`, with the exemptions of §4; every argument of a referencing command is an id or an anchor, and every citation's key a reference's id; every anchor the body defines is the node's own, and none is defined twice; every anchor the body points at is defined by its owner, where the owner has text; and every anchor `anchors` numbers is defined by the body. Nothing in a comment is read. [`loom:node-body-ref`]
 9. A reference's body is one BibTeX entry standing alone, with a key, and no other reference has its key, ignoring case. [`loom:node-bibtex`]
 10. A macros node's body holds only what §8 allows; a failure names the command. [`loom:node-macros`]
 11. A pointer has `source` and `pages`; a stub has `source`. [`loom:node-incomplete`]
@@ -233,7 +234,7 @@ pages = "4"
 A \emph{widget} is a compact set $W \subset \mathbb{R}^n$ whose boundary lies in $\Wid$.
 ```
 
-A lemma that uses it and holds an anchor, `tq-00K3.node`:
+A lemma that uses it and holds an anchor, which the paper prints as (3.3), `tq-00K3.node`:
 
 ```
 +++
@@ -245,6 +246,7 @@ title = "Test lemma"
 source = "tq-00A1-ref"
 label = "lem:test"
 pages = "12"
+anchors = {tq-00K3-eq00 = "3.3"}
 uses = ["tq-00A4"]
 +++
 Let $W$ be a widget (Definition~\ref{tq-00A4}). Then
@@ -335,9 +337,11 @@ source = "tq-00B1-ref"
 
 Loom answers questions of the library from an index it derives, `.loom/cache/library/nodes.sqlite3` (SQLite, with FTS5 for words), and not by reading every file. Nothing makes it before it is asked for. Each time it is opened it is brought up to date: a file whose size and modification time are as they were is not read again, unless it was written within two seconds of the last update, since a change in the same tick leaves both as they were; the tag log is replayed when it changed. It holds the readable nodes only; a file that fails a check reading it takes (1 to 5) is left out, and the checks report it. An index of another version, or one SQLite cannot read, is made again, and it can be made again at will.
 
-It answers: a node by its id, and a reference by its entry's key; a work's nodes in the paper's order, each statement followed by its proofs; what a node uses and mentions, and what uses and mentions it; a statement's proofs; the stubs, of one work or all; and a search. A work's order is the place loom records for each node (§9), and until that is built its statements' numbers read naturally (3.2, 3.10, A.1), then the first page.
+It answers: a node by its id, and a reference by its entry's key; the number the source prints for an anchor; a work's nodes in the paper's order, each statement followed by its proofs; what a node uses and mentions, and what uses and mentions it; a statement's proofs; the stubs, of one work or all; and a search. A work's order is the place loom records for each node (§9), and until that is built its statements' numbers read naturally (3.2, 3.10, A.1), then the first page.
 
-A search returns statements, stubs among them. Every word must match among a statement's number, title, work and text, and the last word may be the start of a longer one; a word shaped like a printed number with a dot (`3.4`, `A.2`) matches a number exactly. A statement's work is its reference's key, authors, title and year. Its text is its body with comments, the arguments of `\ref`, `\cite` and `\label`, environments' names and a short list of commands that carry no meaning (`emph`, `mathbb`, `left` and their like) left out; any other command's name is a word, so `Hom`, `alpha` and `otimes` find the statements that use them. A search may be limited to a work, a taxon or a tag, and may look in proofs as well, where a statement found by a proof's words alone is marked with that proof.
+A search returns statements, stubs among them. Every word must match among a statement's name (its taxon and number, "lemma 3.2"), title, work and text, and the last word may be the start of a longer one; a word shaped like a printed number with a dot (`3.4`, `A.2`) matches a number exactly. Each hit says where it matched, `name` (its name or title), `text`, `proof` or `work`, and a hit in the text or a proof carries the words around the match from that LaTeX, cut at spaces outside mathematics, the match being the whole word it starts, and inside a formula the whole formula. Hits on the name come first, then the rest by how well they match. A statement's work is its reference's key, authors, title and year. Its text is its body with comments, the arguments of `\ref`, `\cite` and `\label`, environments' names and a short list of commands that carry no meaning (`emph`, `mathbb`, `left` and their like) left out; any other command's name is a word, so `Hom`, `alpha` and `otimes` find the statements that use them. A search may be limited to a work, a taxon or a tag, and may look in proofs as well, where a statement found by a proof's words alone is marked with that proof.
+
+The index keeps a **generation**, a number raised by every update that puts a node in, takes one out or changes one, or changes the tags on one, and by nothing else: not a file touched and unchanged, not a file that does not read, not a tag written again. A publisher that keeps a generation of its own for the views (`library-views.md` §2, "Freshness") raises it whenever this one moves.
 
 ## 14. Tags
 

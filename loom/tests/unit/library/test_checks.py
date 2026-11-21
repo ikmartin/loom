@@ -249,6 +249,16 @@ def test_check_8_a_proof_points_at_itself_its_statement_and_their_anchors_freely
     assert check_store(with_(proof)) == []
 
 
+def test_check_8_an_anchor_given_a_number_is_defined_by_the_body() -> None:
+    files = body("x\n", anchors=(("tq-00K3-eq00", "3.3"), ("tq-00K3-eq01", "3.4")))
+    assert says(
+        files,
+        "loom:node-body-ref",
+        "tq-00K3.node's `anchors` gives a number to tq-00K3-eq01, which its body does not define.",
+    )
+    assert check_store(body("x\n", anchors=(("tq-00K3-eq00", "3.3"),))) == []
+
+
 def test_check_8_a_commented_reference_is_not_read() -> None:
     assert check_store(body("By \\ref{tq-00A4}. % and \\ref{tq-00K5}\n")) == []
 

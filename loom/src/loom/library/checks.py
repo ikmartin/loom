@@ -196,6 +196,9 @@ def _body_refs(node: Node, name: str) -> list[Problem]:
         elif p.target in seen:
             out.append(Problem(8, f"{name} defines the anchor {p.target} twice.", line, True))
         seen.add(p.target)
+    for anchor, _number in node.anchors:
+        if anchor not in seen:
+            out.append(Problem(8, f"{name}'s `anchors` gives a number to {anchor}, which its body does not define."))
     return out
 
 

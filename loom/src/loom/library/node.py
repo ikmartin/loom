@@ -20,7 +20,7 @@ READABLE = frozenset({SCHEMA})
 SUFFIX = ".node"
 FENCE = "+++"
 
-_STR, _IDS, _STRS, _HASH = "a string", "a list of ids", "a list of names", "a hash"
+_STR, _IDS, _STRS, _HASH, _TABLE = "a string", "a list of ids", "a list of names", "a hash", "a table of anchors"
 #: The header's keys in the order loom writes them, each with its type, the kinds it is allowed on, and whether it needs a `source` (True), forbids one (False) or neither (None).
 KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "number": (_STR, frozenset({ids.STATEMENT}), None),
@@ -28,6 +28,7 @@ KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "source": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "label": (_STR, frozenset({ids.STATEMENT}), True),
     "pages": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), True),
+    "anchors": (_TABLE, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "uses": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "mentions": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "authors": (_STRS, frozenset({ids.STATEMENT, ids.PROOF}), False),
@@ -80,6 +81,7 @@ class Node:
     source: str | None = None
     label: str | None = None
     pages: str | None = None
+    anchors: tuple[tuple[str, str], ...] = ()
     uses: tuple[str, ...] = ()
     mentions: tuple[str, ...] = ()
     authors: tuple[str, ...] = ()
@@ -112,8 +114,25 @@ class Node:
         for key in KEYS:
             value = getattr(self, key)
             if value:
-                out[key] = list(value) if isinstance(value, tuple) else value
+                out[key] = (
+                    dict(sorted(value)) if key == "anchors" else list(value) if isinstance(value, tuple) else value
+                )
         return out
+
+    @classmethod
+    def from_header(cls, header: dict[str, Any], body: str) -> Node:
+        """The node a header that passes checks 1 to 5 states, and `body`; lists become tuples and `anchors` pairs in order."""
+        keys: dict[str, Any] = {}
+        for key, value in header.items():
+            if key in KEYS:
+                keys[key] = (
+                    tuple(sorted(value.items()))
+                    if isinstance(value, dict)
+                    else tuple(value)
+                    if isinstance(value, list)
+                    else value
+                )
+        return cls(id=header["id"], taxon=header["taxon"], body=body, schema=header["schema"], **keys)
 
 
 def file_name(node_id: str) -> str:
@@ -199,8 +218,7 @@ def read_node(data: bytes, name: str) -> Node:
     problems = header_problems(header, name, header_text)
     if problems:
         raise NodeUnreadable(problems)
-    keys: dict[str, Any] = {key: tuple(v) if isinstance(v, list) else v for key, v in header.items() if key in KEYS}
-    return Node(id=header["id"], taxon=header["taxon"], body=body, schema=header["schema"], **keys)
+    return Node.from_header(header, body)
 
 
 def header_problems(header: dict[str, Any], name: str, header_text: str = "") -> list[Problem]:
@@ -282,11 +300,26 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
         said = _type_problem(typ, value)
         if said:
             out.append(Problem(5, f"{name}'s `{key}` {said}.", line(key)))
+        elif typ == _TABLE and isinstance(node_id, str):
+            for anchor in sorted(a for a in value if ids.anchor_owner(a) != node_id):
+                out.append(
+                    Problem(
+                        5, f"{name}'s `anchors` names {anchor}, which is not one of {node_id}'s anchors.", line(key)
+                    )
+                )
     return out
 
 
 def _type_problem(typ: str, value: Any) -> str | None:
     """What is wrong with `value` as a value of type `typ`, as the rest of a sentence; None when nothing is."""
+    if typ == _TABLE:
+        if not isinstance(value, dict) or not all(isinstance(v, str) for v in value.values()):
+            return "is not a table from anchors to the numbers their source prints"
+        if not value:
+            return "is an empty table, where a key with nothing to say is left out"
+        if not all(value.values()):
+            return "gives an anchor an empty number"
+        return None
     if typ in (_STR, _HASH):
         if not isinstance(value, str):
             return f"is not {typ}"
@@ -327,11 +360,18 @@ def node_bytes(node: Node) -> bytes:
 
 
 def _toml(value: Any) -> str:
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{_key(k)} = {_string(v)}" for k, v in value.items()) + "}"
     if isinstance(value, int):
         return str(value)
     if isinstance(value, list):
         return "[" + ", ".join(_string(v) for v in value) + "]"
     return _string(value)
+
+
+def _key(k: str) -> str:
+    """A key as an inline table writes it: bare where TOML allows, as an anchor's id always is."""
+    return k if re.fullmatch(r"[A-Za-z0-9_-]+", k) else _string(k)
 
 
 def _string(s: str) -> str:

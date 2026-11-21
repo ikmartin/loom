@@ -241,3 +241,48 @@ def test_a_problem_names_its_key_s_line() -> None:
 def test_every_problem_of_a_file_is_said_at_once() -> None:
     found = problems(file('schema = 7\nid = "tq-00K4"\ntaxon = "Lemma"\nstatus = "ok"\n'))
     assert sorted(c for c, _ in found) == [2, 3, 4, 5]
+
+
+# ---- anchors: the numbers a source prints for its anchors ---------------------------------------------------------------
+
+
+def test_anchors_are_a_table_on_one_line_in_order() -> None:
+    node = Node(
+        id="tq-00K3",
+        taxon="lemma",
+        source="tq-00A1-ref",
+        anchors=(("tq-00K3-eq00", "3.3"), ("tq-00K3-it01", "ii")),
+        body="x\n",
+    )
+    data = node_bytes(node)
+    assert b'anchors = {tq-00K3-eq00 = "3.3", tq-00K3-it01 = "ii"}\n' in data
+    assert read_node(data, "tq-00K3.node") == node
+
+
+def test_anchors_written_as_a_section_are_read() -> None:
+    data = file('schema = 1\nid = "tq-00K3"\ntaxon = "lemma"\n[anchors]\ntq-00K3-eq00 = "3.3"\n', "x\n")
+    assert read_node(data, "tq-00K3.node").anchors == (("tq-00K3-eq00", "3.3"),)
+
+
+@pytest.mark.parametrize(
+    ("value", "said"),
+    [
+        ('["tq-00K3-eq00"]', "is not a table from anchors to the numbers their source prints"),
+        ("{tq-00K3-eq00 = 3}", "is not a table from anchors"),
+        ("{}", "is an empty table"),
+        ('{tq-00K3-eq00 = ""}', "gives an anchor an empty number"),
+        ('{tq-00K5-eq00 = "3.3"}', "`anchors` names tq-00K5-eq00, which is not one of tq-00K3's anchors."),
+        ('{tq-00K3 = "3.3"}', "`anchors` names tq-00K3, which is not one of tq-00K3's anchors."),
+    ],
+)
+def test_check_5_anchors_number_the_node_s_own_anchors(value: str, said: str) -> None:
+    found = problems(file(f'schema = 1\nid = "tq-00K3"\ntaxon = "lemma"\nanchors = {value}\n', "x\n"))
+    assert any(c == 5 and said in m for c, m in found), found
+
+
+def test_anchors_are_not_a_reference_s() -> None:
+    found = problems(
+        file('schema = 1\nid = "tq-00A1-ref"\ntaxon = "reference"\nanchors = {tq-00A1-eq00 = "1"}\n'),
+        "tq-00A1-ref.node",
+    )
+    assert any(c == 5 and "`anchors` is not a key of a reference" in m for c, m in found), found

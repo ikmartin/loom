@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from loom.library.checks import check
-from loom.library.index import NodeIndex, words
+from loom.library.index import NodeIndex, Snippet, snippet, words
 from loom.library.node import Node, node_bytes, node_hash
 from loom.library.store import read
 from loom.library.tags import tag
@@ -251,3 +251,84 @@ def test_a_quilt_with_no_library_has_an_empty_index(tmp_path: Path) -> None:
     with NodeIndex.open(tmp_path) as index:
         assert index.count() == 0
         assert index.search("widget") == []
+
+
+# ---- what the views ask beyond the questions ---------------------------------------------------------------------------
+
+
+def test_an_anchor_s_printed_number(root: Path) -> None:
+    with NodeIndex.open(root) as index:
+        assert index.anchor_number("tq-00K3-eq00") == "3.3"
+        assert index.anchor_number("tq-00K3-eq01") is None
+
+
+def test_a_hit_says_where_it_matched(root: Path) -> None:
+    with NodeIndex.open(root) as index:
+        hits = {h.row.id: h for h in index.search("widget")}
+        assert hits["tq-00A4"].where == "name" and hits["tq-00A4"].snippet is None, "its title is Widget"
+        assert hits["tq-00K3"].where == "text"
+        assert {h.where for h in index.search("Jones")} == {"work"}
+        assert [h.where for h in index.search("3.4")] == ["name"]
+        assert [h.where for h in index.search("lemma 3.2")] == ["name"], "a result's name is its taxon and number"
+        [proof] = index.search("triangle", proofs=True)
+        assert (proof.where, proof.in_proof) == ("proof", "tq-00K3-proof00")
+        assert proof.snippet is not None and proof.snippet.match == "triangle"
+
+
+def test_a_match_on_the_name_comes_before_one_in_the_text(root: Path) -> None:
+    put(root, Node(id="tq-00K6", taxon="remark", number="3.5", source="tq-00A1-ref", body=("A widget, " * 30) + "\n"))
+    with NodeIndex.open(root) as index:
+        order = [h.row.id for h in index.search("widget")]
+        assert order[0] == "tq-00A4" and order.index("tq-00A4") < order.index("tq-00K6")
+
+
+def test_a_hit_in_the_text_carries_the_words_around_it(root: Path) -> None:
+    with NodeIndex.open(root) as index:
+        [hit] = [h for h in index.search("origin") if h.row.id == "tq-00K5"]
+        assert hit.snippet is not None
+        assert (hit.snippet.match, hit.snippet.after) == ("origin", ".")
+        assert hit.snippet.before.endswith("lies in a ball about the ")
+
+
+def test_a_snippet_is_cut_at_spaces_outside_mathematics() -> None:
+    body = (
+        "Let $W$ be a widget (Definition~\\ref{tq-00A4}). Then the number of weightings of $Q$ of height at most $h$ "
+        "is a polynomial in $h$ of degree at most $n$, and $\\Hom(A, B) \\otimes C$ is flat. % a polynomial in a comment\n"
+        "\\begin{equation}\\label{tq-00K3-eq00} |x| \\le \\diam W \\end{equation} Über alles.\n"
+    )
+    poly = snippet(body, ["polynomial"])
+    assert poly == Snippet(
+        "…the number of weightings of $Q$ of height at most $h$ is a ",
+        "polynomial",
+        " in $h$ of degree at most $n$, and $\\Hom(A, B) \\otimes C$…",
+    )
+    hom = snippet(body, ["Hom"])
+    assert hom is not None and hom.match == "$\\Hom(A, B) \\otimes C$", "a match inside a formula is the formula"
+    diam = snippet(body, ["diam"])
+    assert diam is not None and diam.match.startswith("\\begin{equation}") and diam.match.endswith("\\end{equation}")
+    weigh = snippet(body, ["weigh"])
+    assert weigh is not None and weigh.match == "weightings", "a prefix's match is the whole word"
+    uber = snippet(body, ["uber"])
+    assert uber is not None and (uber.match, uber.after) == ("Über", " alles."), "accents and case are ignored"
+    for unread in (["eq00"], ["emph"], ["equation"], ["comment"], ["nothing"]):
+        assert snippet(body, unread) is None, unread
+
+
+def test_the_generation_moves_when_a_node_or_a_tag_changes_and_not_otherwise(tmp_path: Path) -> None:
+    root = quilt(tmp_path, aged=True)
+    with NodeIndex.open(root) as index:
+        first = index.generation()
+        assert first == 1
+        assert index.refresh().generation == first, "nothing changed"
+        lemma = index.node("tq-00K3")
+        assert lemma is not None
+        put(root, Node(**{**lemma.__dict__, "body": lemma.body + "More.\n"}))
+        assert index.refresh().generation == first + 1
+        (root / LIBRARY_NODES / "tq-00K3.node").touch()
+        assert index.refresh().generation == first + 1, "a file touched and not changed is no change"
+        tag(root, "tq-00K5", "bounds", by="Isaac", kind="person")
+        assert index.refresh().generation == first + 2
+        tag(root, "tq-00K5", "Bounds", by="Isaac", kind="person")
+        assert index.refresh().generation == first + 2, "a tag written again changes nothing"
+        (root / LIBRARY_NODES / "tq-00K6.node").write_bytes(b"not a node\n")
+        assert index.refresh().generation == first + 2, "a file that does not read changes no node"

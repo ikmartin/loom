@@ -88,7 +88,9 @@ def test_a_write_refused_for_what_it_breaks_elsewhere_is_not_refused(tmp_path: P
     root = quilt(tmp_path)
     lemma = read(root, "tq-00K3")
     assert lemma is not None
-    write_node(root, Node(**{**lemma.__dict__, "body": "Let $W$ be a widget (Definition~\\ref{tq-00A4}).\n"}))
+    write_node(
+        root, Node(**{**lemma.__dict__, "body": "Let $W$ be a widget (Definition~\\ref{tq-00A4}).\n", "anchors": ()})
+    )
     assert [(d.keys[0], d.code) for d in check(root)] == [("tq-00K5-proof00", "loom:node-body-ref")]
 
 
