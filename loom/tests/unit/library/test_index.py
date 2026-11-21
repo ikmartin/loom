@@ -112,7 +112,7 @@ def test_search_reads_mathematics_but_not_markup_or_ids(root: Path) -> None:
         assert found(index, "mathbb") == [] and found(index, "emph") == [], "markup is not"
         assert found(index, "equation") == [] and found(index, "enumerate") == []
         assert found(index, "eq00") == [] and found(index, "00A4") == [], "ids are not words"
-    assert "Hom" in words("$\\Hom(A, B) \\otimes \\alpha$").split()
+    assert "hom" in words("$\\Hom(A, B) \\otimes \\alpha$").split(), "folded as the index folds"
 
 
 def test_search_by_number_matches_it_exactly(root: Path) -> None:
@@ -499,3 +499,15 @@ def test_a_snippet_in_a_long_display_is_the_line_that_holds_the_word() -> None:
     assert long is not None and "\\zeta" in long.match and len(long.match) <= 160
     short = snippet("Then $a + \\zeta$ holds.\n", ["zeta"])
     assert short is not None and short.match == "$a + \\zeta$"
+
+
+@pytest.mark.parametrize(
+    ("written", "typed"), [("Straße", "strasse"), ("strasse", "Straße"), ("ﬁnite", "finite"), ("finite", "ﬁnite")]
+)
+def test_a_word_is_found_as_its_letters_are_folded_in_full(root: Path, written: str, typed: str) -> None:
+    """N-22: ß folds to ss and a ligature is its letters, in the index and in what is typed alike."""
+    put(root, Node(id="tq-0P01", taxon="lemma", number="7.1", source="tq-00A1-ref", body=f"A {written} sequence.\n"))
+    with NodeIndex.open(root) as index:
+        hits = index.search(typed)
+        assert [h.row.id for h in hits] == ["tq-0P01"]
+        assert hits[0].snippet is not None and hits[0].snippet.match == written

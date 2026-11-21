@@ -28,7 +28,7 @@ from loom.paths import LIBRARY_NODES, NODE_INDEX, TAG_LOG
 from loom.scan.bib import parse_bib
 
 #: The index's own number: an index of another is made again. Raised whenever what the index holds or how it is read changes.
-VERSION = 2
+VERSION = 3
 #: The longest formula a snippet's match is whole; inside a longer one the match is the line of it that holds the word, and inside a longer line, as much of the line around the word as fits.
 LONG = 160
 #: Nanoseconds before the last update within which a file is read again though its size and time agree, since a change in the same tick leaves them as they were.
@@ -136,10 +136,15 @@ class Refreshed:
 
 
 def words(body: str) -> str:
-    """The words of a body as the index holds them: comments, the arguments of `\\ref`, `\\cite` and `\\label`, environments' names and `QUIET`'s commands left out, every other command's name a word."""
+    """The words of a body as the index holds them, made plain (`plain`): comments, the arguments of `\\ref`, `\\cite` and `\\label`, environments' names and `QUIET`'s commands left out, every other command's name a word."""
     text = _POINTED.sub(" ", blank_comments(body))
     text = _ENVIRONMENT.sub(" ", text)
-    return _COMMAND.sub(lambda m: " " if m.group(1) in QUIET else f" {m.group(1)} ", text)
+    return plain(_COMMAND.sub(lambda m: " " if m.group(1) in QUIET else f" {m.group(1)} ", text))
+
+
+def plain(text: str) -> str:
+    """`text` as the index and a search compare it, past what SQLite's tokenizer folds (case and accents): compatibility forms made plain (NFKC, so ﬁ is fi and ℝ is R) and case folded in full (ß is ss)."""
+    return unicodedata.normalize("NFKC", text).casefold()
 
 
 def natural(value: str | None) -> str | None:
@@ -156,7 +161,7 @@ def _work(entry_text: str) -> tuple[str | None, str]:
         return None, ""
     fields = next(iter(parse_bib(entry_text).values()), None)
     got = fields.fields if fields else {}
-    return entry.key, " ".join([entry.key, *(words(_accents(got.get(k, ""))) for k in ("author", "title", "year"))])
+    return entry.key, " ".join([plain(entry.key), *(words(_accents(got.get(k, ""))) for k in ("author", "title", "year"))])
 
 
 #: TeX's accent commands, each with the combining character it puts on its letter, so `M\"uller` is indexed as "Müller", which "Muller" finds too.
@@ -732,7 +737,7 @@ class NodeIndex:
             Each with where it matched and, for a match in a statement's or a proof's text, the words around it (`snippet`); matches on the name first, then the best; with no text, in their works' order.
         """
         numbers = [w for w in text.split() if _NUMBER.fullmatch(w)]
-        terms = _TOKEN.findall(" ".join(w for w in text.split() if w not in numbers))
+        terms = _TOKEN.findall(plain(" ".join(w for w in text.split() if w not in numbers)))
         where: list[str] = ["n.kind IN ('statement', 'proof')" if proofs else "n.kind = 'statement'"]
         args: list[Any] = []
         if work:
