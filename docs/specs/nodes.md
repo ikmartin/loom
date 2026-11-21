@@ -25,7 +25,7 @@ The body is every byte after the line feed that ends the second `+++` line. Noth
 The keys, in the order loom writes them. A key this table does not name is refused, and so is a key on a kind of node the table does not allow it on.
 
 | key | type | allowed on | meaning |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `schema` | integer | every node, required | The number of this format. It is `1`. It is raised only when the format changes so that a loom that knows the old number cannot read the file, and is never loom's version. |
 | `id` | string | every node, required | The node's id (§3), the same as the file's name without `.node`. |
 | `taxon` | string | every node, required | What the node is (§5). |
@@ -89,7 +89,7 @@ A body does not define commands, load packages or input files. Definitions belon
 A node's taxon and its id agree:
 
 | id ends | `taxon` | the node is |
-|---|---|---|
+| --- | --- | --- |
 | `-ref` | `reference` | a work (§7) |
 | `-macros` | `macros` | a work's macros (§8) |
 | `-proof` and two digits | `proof` | a proof (§6) |
@@ -136,7 +136,7 @@ An edge runs from one node to another and has a kind. This is the whole vocabula
 **Stated in a node's file.**
 
 | kind | written as | means |
-|---|---|---|
+| --- | --- | --- |
 | source | the `source` key | This node's text was read from that reference. |
 | uses | an id in `uses` | **[decided]** This node's text invokes that node. On a statement: the other node is needed to say what the statement means. On a proof: the argument rests on it. |
 | mentions | an id in `mentions` | **[decided]** This node's text points at that node without resting on it. |

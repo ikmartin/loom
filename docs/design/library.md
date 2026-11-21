@@ -106,7 +106,9 @@ A work also still opens beside a document in Docs, from a library control in the
 
 **The Web** is where dependency is followed across everything in the quilt, a draft's results and the library's alike, by a scope the person chooses: the library alone, a draft alone, a draft with what it depends on, or everything (the author, 2026-11-20). A draft with what it depends on is the scope a person formalizing a paper works in.
 
-**Open.** Whether the Library keeps a view by dependency of its own, or the Web is the one place dependency is followed and the Library is the works and their results.
+The Library has both of its representations: by work, and by dependency among the stable things it holds (the author, 2026-11-20). The Web is the same following of dependency with a draft's results let in.
+
+**Open.** Whether the Web is a view of its own beside the Library, or one view of dependency reached from the Library with the library's scope and from a draft with the draft's.
 
 Drawing the web waits for a second pass. At the size of the author's own quilt the whole graph was unreadable, so these views answer questions, and draw at most a neighbourhood.
 
