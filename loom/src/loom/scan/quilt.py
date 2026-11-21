@@ -88,6 +88,11 @@ class QuiltConfig:
                 cfg.warnings.append(f"config.toml: [{table_name}] is not a table; ignored")
                 continue
             known = CONFIG_KEYS.get(table_name)
+            if table_name == "review" and "track_edits" in keys:
+                cfg.warnings.append(
+                    "config.toml: [review] track_edits is gone: every quilt keeps your look now, so your own edits in an editor wait in Your Changes too; delete the [review] table"
+                )
+                continue
             if known is None:
                 cfg.warnings.append(f"config.toml: unknown table [{table_name}]; ignored")
                 continue

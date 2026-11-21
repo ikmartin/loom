@@ -218,11 +218,15 @@ def test_a_new_quilt_keeps_the_look_with_no_setting(tmp_path: Path) -> None:
     assert listed["look"] is not None and [c["path"] for c in listed["changes"]] == ["README.md"]
 
 
-def test_a_review_table_left_in_a_config_is_unknown_and_warned_of() -> None:
-    from loom.scan.quilt import QuiltConfig
-
-    cfg = QuiltConfig.from_dict({"quilt": {"name": "x"}, "review": {"track_edits": True}})
-    assert "config.toml: unknown table [review]; ignored" in cfg.warnings
+def test_a_track_edits_left_in_a_config_says_the_look_is_kept_now_at_its_line(q: Path) -> None:
+    """A quilt that had turned tracking off is told its own edits will be listed, at the table's line (P-8)."""
+    cfg = q / "config.toml"
+    cfg.write_text(cfg.read_text().rstrip("\n") + "\n\n[review]\ntrack_edits = false\n")
+    line = cfg.read_text().splitlines().index("[review]") + 1
+    said = json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"]
+    (d,) = [x for x in said if "track_edits" in x["message"]]
+    assert "your own edits in an editor wait in Your Changes" in d["message"]
+    assert d["locations"][0]["line"] == line
 
 
 # ---- the person's own acts go into their look (P-1) --------------------------------------------------------------
@@ -305,3 +309,16 @@ def test_an_agent_s_edit_before_the_first_serve_is_listed(tmp_path: Path, monkey
     (q / "README.md").write_text("an agent's edit before any serve\n", encoding="utf-8")
     ServeSession(load_quilt(q), q, port=0, compile_masters=False).first_look()
     assert edits(q) == ["README.md"]
+
+
+def test_a_copied_quilt_s_server_file_does_not_start_loom_on_the_original(tmp_path: Path) -> None:
+    """A client's server file names its quilt's path; started in a copy it would drive the original, so it is refused (P-7)."""
+    import shutil
+
+    from tests.helpers import refused
+
+    original = demo(tmp_path)
+    copy = tmp_path / "copy"
+    shutil.copytree(original, copy)
+    r = refused("mcp", "--as", "Codex Agent", "--quilt", str(original), cwd=copy, code=2, match="copied quilt")
+    assert "loom ai init" in r.output

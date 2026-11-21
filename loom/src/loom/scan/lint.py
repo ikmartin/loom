@@ -235,8 +235,24 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
     asm = result.assembly
     files = result.files
     diags: list[Diagnostic] = list(result.diagnostics) + list(edges.diagnostics)
+    config_lines = (
+        (result.quilt.root / "config.toml").read_text(encoding="utf-8", errors="replace").splitlines()
+        if (result.quilt.root / "config.toml").is_file()
+        else []
+    )
     for w in result.quilt.config.warnings:
-        diags.append(Diagnostic("warning", "loom:unknown-config-key", w, [Location("config.toml", 1)]))
+        # at the line of the table the warning names, where there is one
+        named = re.search(r"\[([A-Za-z0-9_-]+)\]|key ([A-Za-z0-9_-]+)\.|: ([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+ ", w)
+        table = next((g for g in named.groups() if g), None) if named else None
+        line = next(
+            (
+                i
+                for i, text in enumerate(config_lines, 1)
+                if table and re.match(rf"\s*\[\s*{re.escape(table)}\s*\]", text)
+            ),
+            1,
+        )
+        diags.append(Diagnostic("warning", "loom:unknown-config-key", w, [Location("config.toml", line)]))
     from loom.history.checks import quick_checks
     from loom.history.ledger import load_history
 
