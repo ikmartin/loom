@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 from click.testing import Result
 
 from loom.history.steps import text_hash
@@ -203,7 +204,7 @@ def test_a_quilt_made_from_a_paper_denies_agents_its_directory_in_the_act_that_s
 
     q = imported(tmp_path)
     cfg = load_quilt(q).config
-    assert cfg.agents_deny == ["main/"] and cfg.main == "main/main.tex"
+    assert cfg.agents_deny == ["/main/"] and cfg.main == "main/main.tex"
     journal = [json.loads(x) for x in (q / ".loom/local/writes.jsonl").read_text().splitlines()]
     acts = {e["act"] for e in journal if e["event"] == "begin" and "config.toml" in e.get("files", {})}
     assert len(acts) == 1  # the config's main and its deny, one act with the import's step
@@ -217,15 +218,15 @@ def test_import_adds_only_a_place_no_entry_covers_and_keeps_the_person_s_entries
     cfg = q / "config.toml"
     cfg.write_text(cfg.read_text().replace("deny = []", 'deny = ["!negated", "notes/"]'))
     dry = ok("import", str(p / "main.tex"), "--dry-run", "--json", cwd=q)
-    assert json.loads(dry.stdout)["denied"] == ["main/"]
+    assert json.loads(dry.stdout)["denied"] == ["/main/"]
     assert 'deny = ["!negated", "notes/"]' in cfg.read_text()  # a dry run writes nothing
     r = ok("import", str(p / "main.tex"), "--yes", cwd=q)
-    assert "config.toml: agents may not write main/, so they propose changes there" in said(r)
-    assert 'deny = ["!negated", "notes/", "main/"]' in cfg.read_text()
+    assert "config.toml: agents may not write /main/, so they propose changes there" in said(r)
+    assert 'deny = ["!negated", "notes/", "/main/"]' in cfg.read_text()
     again = ok("import", str(p / "main.tex"), "--to", "main/main-2.tex", "--yes", cwd=q)
-    assert "agents may not write" not in said(again) and load_quilt(q).config.agents_deny == ["notes/", "main/"]
+    assert "agents may not write" not in said(again) and load_quilt(q).config.agents_deny == ["notes/", "/main/"]
     ok("import", str(p / "main.tex"), "--to", "other/paper.tex", "--yes", cwd=q)
-    assert load_quilt(q).config.agents_deny == ["notes/", "main/", "other/"]
+    assert load_quilt(q).config.agents_deny == ["notes/", "/main/", "/other/"]
 
 
 def test_a_paper_directory_made_a_quilt_denies_its_original_s_places_too(tmp_path: Path) -> None:
@@ -235,7 +236,7 @@ def test_a_paper_directory_made_a_quilt_denies_its_original_s_places_too(tmp_pat
     p = paper_dir(tmp_path)
     ok("init", str(p), "--from", str(p / "main.tex"), "--prefix", "pp", "--yes", cwd=tmp_path)
     deny = load_quilt(p).config.agents_deny
-    assert set(deny) == {"main/", "/main.tex", "/preamble.tex", "sections/", "figures/", "/refs.bib"}
+    assert set(deny) == {"/main/", "/main.tex", "/preamble.tex", "/sections/", "/figures/", "/refs.bib"}
 
 
 def test_import_refuses_line_anchoring_with_the_paper_s_lines_and_fix_anchoring(tmp_path: Path) -> None:
@@ -330,6 +331,54 @@ def test_init_refuses_a_config_that_is_not_a_quilt_s_and_writes_nothing(tmp_path
     )
     assert (p / "config.toml").read_text() == "[tool]\nname = 'theirs'\n"
     assert sorted(x.relative_to(p).as_posix() for x in p.rglob("*")) == before
+
+
+@pytest.mark.parametrize("folder", ["my paper [v2]", "!draft", "drafts*"])
+def test_a_paper_in_a_folder_with_glob_characters_is_denied_that_folder_and_no_other(
+    tmp_path: Path, folder: str
+) -> None:
+    """Deny entries are escaped and anchored at the quilt's top: the folder is protected, a like-named one elsewhere is not (P-5)."""
+    from loom.agents import denied_by
+    from loom.scan.quilt import load_quilt
+
+    p = paper_dir(tmp_path)
+    q = bare_quilt(tmp_path)
+    ok("import", str(p / "main.tex"), "--to", f"{folder}/main.tex", "--yes", "--no-check", cwd=q)
+    cfg = load_quilt(q).config
+    assert denied_by(cfg, f"{folder}/main.tex") is not None
+    assert denied_by(cfg, f"{folder}2/main.tex") is None and denied_by(cfg, f"elsewhere/{folder}/x.tex") is None
+    assert denied_by(cfg, "draftsX/y.tex") is None
+
+
+def test_an_agent_s_new_result_beside_a_denied_paper_is_refused_with_where_it_goes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The denial stands; the refusal says where an agent's new result goes, and `--to` a file it may write works (P-4)."""
+    q = imported(tmp_path)
+    monkeypatch.setenv("AI_AGENT", "1")
+    r = refused(
+        "new", "lemma", "An agent's lemma", "--as", "Referee Agent", cwd=q, code=2, match="protects it from agents"
+    )
+    assert "--to FILE" in said(r) and "loom draft DOC --ai NAME" in said(r)
+    ok("new", "lemma", "An agent's lemma", "--to", "notes/agent-lemma.tex", "--as", "Referee Agent", cwd=q)
+    assert (q / "notes/agent-lemma.tex").is_file()
+
+
+def test_an_import_writes_claude_code_s_permission_file_with_its_entries_in_the_same_act(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What the import says is protected is protected for Claude Code at once, not after the next upgrade (P-6)."""
+    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
+        monkeypatch.delenv(marker, raising=False)
+    p = paper_dir(tmp_path)
+    ok("init", str(tmp_path / "q"), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    q = tmp_path / "q"
+    ok("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+    deny = json.loads((q / ".claude/settings.json").read_text())["permissions"]["deny"]
+    assert any(r.startswith("Edit(/main/") for r in deny), deny
+    journal = [json.loads(x) for x in (q / ".loom/local/writes.jsonl").read_text().splitlines()]
+    (act,) = [e for e in journal if e["event"] == "begin" and e["kind"] == "import"]
+    assert ".claude/settings.json" in act["files"] and "config.toml" in act["files"]
 
 
 def test_id_prints_patch_and_to_writes_copy(tmp_path: Path) -> None:

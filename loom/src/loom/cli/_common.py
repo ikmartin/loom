@@ -136,8 +136,8 @@ def destination(
     return target
 
 
-def refuse_protected(quilt: Any, target: Path) -> None:
-    """Refuse an agent a file the quilt protects from agents, whichever command writes it and whatever client runs the agent (K5).
+def refuse_protected(quilt: Any, target: Path, advice: str = "write it elsewhere, or leave it to the author") -> None:
+    """Refuse an agent a file the quilt protects from agents, whichever command writes it and whatever client runs the agent (K5); `advice` says where it may write instead.
 
     Claude Code's permission file refuses the agent's own edits; this refuses the same paths when a loom command is the writer, which is the only refusal an agent in any other client meets. A person is never refused here.
     """
@@ -151,4 +151,4 @@ def refuse_protected(quilt: Any, target: Path) -> None:
 
     why = refusal(quilt.config, resolved.relative_to(root).as_posix())
     if why is not None:
-        raise EnvError(f"{resolved.relative_to(root).as_posix()}: {why}; write it elsewhere, or leave it to the author")
+        raise EnvError(f"{resolved.relative_to(root).as_posix()}: {why}; {advice}")

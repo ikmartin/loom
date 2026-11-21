@@ -77,11 +77,14 @@ class Pattern:
 
 
 def _glob(body: str) -> str:
-    """A gitignore glob as a regex: `*` and `?` stop at `/`, `**` crosses directories, `[...]` is a class."""
+    """A gitignore glob as a regex: `*` and `?` stop at `/`, `**` crosses directories, `[...]` is a class, and a backslash takes the character after it as itself."""
     out, i = [], 0
     while i < len(body):
         c = body[i]
-        if body.startswith("**/", i):
+        if c == "\\" and i + 1 < len(body):
+            out.append(re.escape(body[i + 1]))
+            i += 2
+        elif body.startswith("**/", i):
             out.append("(?:.*/)?")
             i += 3
         elif body.startswith("**", i):
@@ -164,7 +167,7 @@ def denied_by(config: QuiltConfig, rel: str) -> str | None:
 
 
 def places_to_deny(config: QuiltConfig, paths: Iterable[str]) -> list[str]:
-    """The `[agents] deny` entries that would protect each of the person's files `paths` (quilt-relative) nothing protects yet: a file's directory, or the file itself at the quilt's top, shallowest first, so one entry covering another's files leaves the second out."""
+    """The `[agents] deny` entries that would protect each of the person's files `paths` (quilt-relative) nothing protects yet: a file's directory, or the file itself at the quilt's top, shallowest first, so one entry covering another's files leaves the second out; each anchored at the quilt's top (`/main/`) and escaped (`_literal`)."""
     import dataclasses
 
     added: list[str] = []
@@ -172,14 +175,20 @@ def places_to_deny(config: QuiltConfig, paths: Iterable[str]) -> list[str]:
         if denied_by(dataclasses.replace(config, agents_deny=[*config.agents_deny, *added]), rel) is not None:
             continue
         parent = PurePosixPath(rel).parent.as_posix()
-        added.append(f"/{rel}" if parent == "." else f"{parent}/")
+        # anchored at the quilt's top and every glob character escaped, so the entry names that place and no other
+        added.append(f"/{_literal(rel)}" if parent == "." else f"/{_literal(parent)}/")
     return added
+
+
+def _literal(path: str) -> str:
+    """`path` as a deny pattern that matches it alone: each character a glob reads (`*`, `?`, `[`, `]`, a backslash) escaped."""
+    return re.sub(r"([*?\[\]\\])", r"\\\1", path)
 
 
 def deny_documents(quilt: Quilt, paths: Iterable[str]) -> list[str]:
     """Add to `[agents] deny` what `places_to_deny` gives for the person's files `paths`, as `loom import` and `loom init --from` do for the paper they bring in.
 
-    The config is read as the act staging on this thread holds it, if one does, so a `main` set in the same act stands; the person's entries are kept as written, a refused one among them. Returns the entries added: none when everything is covered, or when the config is laid out in a way loom cannot edit (`ConfigRefused`).
+    The config is read as the act staging on this thread holds it, if one does, so a `main` set in the same act stands; the person's entries are kept as written, a refused one among them. Where the quilt has an agent layer, its permission files are written with the entries in the same act (`write_permissions`), so Claude Code refuses an agent's own edit there from the start; one loom cannot write is left, and `loom lint` says it lags. Returns the entries added: none when everything is covered, or when the config is laid out in a way loom cannot edit (`ConfigRefused`).
     """
     import tomllib
 
@@ -196,9 +205,17 @@ def deny_documents(quilt: Quilt, paths: Iterable[str]) -> list[str]:
     if not added or not isinstance(written, list):
         return []
     try:
-        set_values(quilt, {"agents.deny": [*written, *added]})
+        config = set_values(quilt, {"agents.deny": [*written, *added]})
     except ConfigRefused:
         return []
+    if (quilt.root / AI).is_dir():
+        from loom.ai.layout import SHELL, variant, write_permissions
+        from loom.writes import WriteRefused
+
+        try:
+            write_permissions(quilt.root, config, shell=variant(quilt.root) == SHELL)
+        except WriteRefused:
+            pass  # a permission file loom cannot write stays as it was, and lint says it lags
     return added
 
 
