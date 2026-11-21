@@ -162,7 +162,7 @@ def body_start(data: bytes, body: str) -> int:
 
 
 def split(data: bytes, name: str) -> tuple[str, str]:
-    """The header's text and the body of the file `name`, or `NodeUnreadable` (check 1) when its fences are not where §1 puts them or it is not UTF-8.
+    """The header's text and the body of the file `name`, or `NodeUnreadable` (check 1) when its fences are not where §1 puts them, it is not UTF-8, or it holds a carriage return or a NUL.
 
     The body is every byte after the line feed that ends the second line `+++`.
     """
@@ -179,6 +179,10 @@ def split(data: bytes, name: str) -> tuple[str, str]:
             else f"{name} does not begin with a line `+++`."
         )
         raise NodeUnreadable([Problem(1, said, 1)])
+    for bad, what in (("\r", "a carriage return, where a node file ends its lines with a line feed alone"), ("\x00", "a NUL character")):
+        if bad in text:
+            line = text.count("\n", 0, text.index(bad)) + 1
+            raise NodeUnreadable([Problem(1, f"{name} holds {what}, on line {line}.", line)])
     m = re.search(r"^\+\+\+\n", rest, re.M)
     if m is None:
         said = (

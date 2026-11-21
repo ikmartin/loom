@@ -373,3 +373,73 @@ def test_a_quilt_s_store_is_its_node_files_and_nothing_else(tmp_path: Path) -> N
     assert check(tmp_path) == []
     (folder / "tq-00K3.node").write_bytes(b"broken")
     assert ("tq-00K3", "loom:node-unreadable") in [(d.keys[0], d.code) for d in check(tmp_path)]
+
+
+# ---- the review's findings ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("command", ["\\thmref{def:a}", "\\Citeyear{Jon19}", "\\secrefs{x}"])
+def test_check_8_a_command_named_as_a_pointer_and_not_read_is_refused(command: str) -> None:
+    """N-7."""
+    assert says(
+        body(f"By {command}.\n", uses=()), "loom:node-body-ref", "which loom does not read as pointing at anything"
+    )
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "\\crefrange{tq-00A4}{def:b}",
+        "\\hyperref[def:a]{text}",
+        "\\citeyearpar{Jon19}",
+        "\\cites(pre)(post){Jon19}",
+        "\\nocite{Jon19}",
+    ],
+)
+def test_check_8_a_source_s_label_in_a_command_off_the_old_lists_is_refused(command: str) -> None:
+    """N-7: each of these let a source's label or key through."""
+    found = check_store(body(f"See {command}.\n", uses=("tq-00A4",)))
+    assert any(d.code == "loom:node-body-ref" and ("def:" in d.message or "Jon19" in d.message) for d in found), found
+
+
+def test_check_8_a_reference_to_a_command_is_refused() -> None:
+    """N-17."""
+    assert says(body("By \\ref\\lbl.\n", uses=()), "loom:node-body-ref", "points at \\lbl with \\ref")
+
+
+def test_check_8_a_label_with_cleveref_s_type_and_a_pointer_in_verbatim_pass() -> None:
+    """N-17."""
+    files = with_(
+        lemma(body="See \\verb|\\ref{def:a}|.\n\\begin{equation}\\label[equation]{tq-00K3-eq00} x \\end{equation}\n")
+    )
+    assert check_store(files) == []
+
+
+@pytest.mark.parametrize(
+    ("data", "words"),
+    [
+        (
+            b'+++\nschema = 1\nid = "tq-00K6"\ntaxon = "remark"\n+++\nA line.\r\nAnother.\n',
+            "carriage return, where a node file ends its lines with a line feed alone, on line 6",
+        ),
+        (b'+++\nschema = 1\r\nid = "tq-00K6"\ntaxon = "remark"\n+++\nA line.\n', "carriage return"),
+        (b'+++\nschema = 1\nid = "tq-00K6"\ntaxon = "remark"\n+++\nA \x00 line.\n', "NUL"),
+    ],
+)
+def test_check_1_a_carriage_return_or_a_nul_anywhere_is_refused(data: bytes, words: str) -> None:
+    """N-10: the same text with other line endings hashes otherwise, so a checkout through `core.autocrlf` would stale every record."""
+    found = check_store(with_(raw={"tq-00K6.node": data}))
+    assert [(d.code, words in d.message) for d in found] == [("loom:node-unreadable", True)], found
+
+
+def test_check_9_an_entry_with_a_key_and_no_fields_has_a_key() -> None:
+    """N-18."""
+    assert check_store(reference("@misc{K1}\n")) == []
+
+
+def test_check_9_an_abbreviation_left_unexpanded_is_refused_a_month_apart() -> None:
+    """N-18."""
+    assert says(
+        reference("@article{K1,\n  journal = jex # { Letters},\n}\n"), "loom:node-bibtex", "uses jex unexpanded"
+    )
+    assert check_store(reference("@article{K1,\n  month = jan,\n  year = 2019,\n}\n")) == []

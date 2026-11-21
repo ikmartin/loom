@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from loom.library import ids
-from loom.library.body import CITES, REFS, blank_comments, entry_of, labels
+from loom.library.body import CITES, MULTICITES, RANGES, REFS, blank_comments, entry_of, labels
 from loom.library.node import SUFFIX, Node, NodeUnreadable, node_hash, read_node
 from loom.library.tags import fold, replay
 from loom.paths import LIBRARY_NODES, NODE_INDEX, TAG_LOG
@@ -45,7 +45,13 @@ QUIET = frozenset(
     }
 )  # fmt: skip
 _POINTED = re.compile(
-    r"\\(?:" + "|".join(sorted(REFS | CITES | {"label"}, key=len, reverse=True)) + r")\*?\s*(?:\[[^\]]*\]\s*)*\{[^}]*\}"
+    r"\\(?:"
+    + "|".join(sorted(RANGES | MULTICITES, key=len, reverse=True))
+    + r")\*?(?:\s*\([^)]*\))*(?:\s*(?:\[[^\]]*\]\s*)*\{[^}]*\})+"
+    r"|\\hyperref\s*\[[^\]]*\]"
+    r"|\\(?:"
+    + "|".join(sorted(REFS | CITES | {"label"}, key=len, reverse=True))
+    + r")\*?\s*(?:\[[^\]]*\]\s*)*\{[^}]*\}"
 )
 _ENVIRONMENT = re.compile(r"\\(?:begin|end)\s*\{[^}]*\}")
 _COMMAND = re.compile(r"\\([A-Za-z@]+)")

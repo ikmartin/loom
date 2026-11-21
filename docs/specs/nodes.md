@@ -10,7 +10,7 @@ A rule marked **[decided]** was settled by the author on 2026-11-20. The others 
 
 **[decided]** A node is one file, `.loom/library/nodes/<id>.node`, where `<id>` is the node's id (§3). One node, one file; one file, one node. Only the files named `*.node` directly in that folder are nodes; anything else there is not read.
 
-A file is UTF-8 with line feeds and has three parts in this order:
+A file is UTF-8 with line feeds, holding no carriage return and no NUL, and has three parts in this order:
 
 1. a line that is exactly `+++`;
 2. the **header**, a TOML document (§2);
@@ -80,12 +80,13 @@ An **anchor** is not a node and has no file. It is a place inside a node's body 
 
 **[decided]** A body points at other nodes by their ids.
 
-1. The argument of `\ref`, `\eqref`, `\autoref`, `\pageref`, `\vref`, `\Vref`, `\cref` and `\Cref`, starred or not, is an id or an anchor, or for the last two a list of them. The source's `\ref{def:widget}` is written `\ref{tq-00A4}`.
-2. The key of a citation command is the id of a reference. The source's `\cite{Jon19}` is written `\cite{tq-00B1-ref}`. The citation commands are `\cite`, `\Cite`, `\citep`, `\Citep`, `\citet`, `\Citet`, `\citealp`, `\citealt`, `\citeauthor`, `\citeyear`, `\parencite`, `\Parencite`, `\textcite`, `\Textcite`, `\autocite`, `\footcite` and `\cites`, starred or not (`CITES` in `loom/src/loom/library/body.py`).
+1. The argument of a referencing command, starred or not, is an id or an anchor: of `\ref`, `\eqref`, `\autoref`, `\pageref`, `\vref`, `\Vref`, `\vpageref`, `\fullref`, `\nameref`, `\Nameref` and `\autopageref` one; of cleveref's `\cref`, `\Cref`, `\cpageref`, `\Cpageref`, `\labelcref`, `\labelcpageref`, `\namecref`, `\nameCref`, `\lcnamecref` and their plurals a list; of `\crefrange`, `\Crefrange`, `\cpagerefrange`, `\Cpagerefrange`, `\vrefrange` and `\vpagerefrange` each of the two; and of `\hyperref[…]{…}` the one in brackets (`SINGLE`, `LISTS` and `RANGES` in `loom/src/loom/library/body.py`). The source's `\ref{def:widget}` is written `\ref{tq-00A4}`.
+2. The key of a citation command is the id of a reference. The source's `\cite{Jon19}` is written `\cite{tq-00B1-ref}`. The citation commands are LaTeX's, natbib's and biblatex's, starred or not, `\cite`, `\citep`, `\citet`, `\citealp`, `\citeauthor`, `\citeyearpar`, `\nocite`, `\parencite`, `\textcite`, `\autocite`, `\footcite`, `\fullcite`, `\citetitle` and their like; biblatex's multicites (`\cites`, `\parencites`, …) read every group of keys, after up to two notes in parentheses (`CITES` and `MULTICITES` in `loom/src/loom/library/body.py`).
 3. A citation that names one result of another work is written as a reference to that result's node, which is a stub (§6) if the result has not been read. The source's `\cite[Lemma 2.1]{Jon19}` is written `\ref{tq-00B7}`. Loom prints it as a citation with its locator, since the node it points at belongs to another work.
 4. A `\label` inside a body is an anchor of that node, and nothing else: the source's `\label{eq:bound}` on a display in the statement `tq-00K3` is written `\label{tq-00K3-eq00}`. The statement's own label is not in the body; it is the header's `label`.
+5. A command named as these are, ending in `ref`, `refs` or `refrange` (or `Ref`, …) or holding `cite` (or `Cite`), that is on none of the lists (`\href` apart) is refused, and so is a referencing command whose argument is a command (`\ref\x`): loom cannot read what they point at, and a pointer it cannot read is a pointer it cannot check.
 
-Nothing else in the text is changed by digest: the words, the mathematics, and which referencing command the source used are as the source has them. A comment is part of the text and is kept, but nothing in it is read as pointing at anything.
+Nothing else in the text is changed by digest: the words, the mathematics, and which referencing command the source used are as the source has them. A comment is part of the text and is kept, but nothing in it is read as pointing at anything; nor is anything in verbatim text (`\verb`, and the `verbatim`, `Verbatim`, `lstlisting`, `minted` and `comment` environments). A `\label` may carry cleveref's optional `[type]` before its anchor.
 
 A body does not define commands, load packages or input files. Definitions belong to the macros node.
 
@@ -177,8 +178,8 @@ A file that fails any of these is refused when it is written and reported when i
 5. Every key is one §2 names and allows on this kind of node, with the type §2 gives, and no string, list or table is empty; every key of `anchors` is one of the node's own anchors. [`loom:node-key`]
 6. A proof's statement exists; a macros node's reference exists; a `source` is the id of a reference that exists; and a stem is not both a statement's and a work's (§3). [`loom:node-parent`]
 7. Every id in `uses` and in `mentions` is a node that exists and is not a macros node; none is in both; both are sorted, in code-point order, with no id twice and not the node itself. [`loom:node-edge`]
-8. Every id the body points at is in `uses` or `mentions`, with the exemptions of §4; every argument of a referencing command is an id or an anchor, and every citation's key a reference's id; every anchor the body defines is the node's own, and none is defined twice; every anchor the body points at is defined by its owner, where the owner has text; and every anchor `anchors` numbers is defined by the body. Nothing in a comment is read. [`loom:node-body-ref`]
-9. A reference's body is one BibTeX entry standing alone, with a key, and no other reference has its key, ignoring case. [`loom:node-bibtex`]
+8. Every id the body points at is in `uses` or `mentions`, with the exemptions of §4; every argument of a referencing command is an id or an anchor, and every citation's key a reference's id; no command is named as a pointer that loom does not read (§4, rule 5); every anchor the body defines is the node's own, and none is defined twice; every anchor the body points at is defined by its owner, where the owner has text; and every anchor `anchors` numbers is defined by the body. Nothing in a comment or verbatim text is read. [`loom:node-body-ref`]
+9. A reference's body is one BibTeX entry standing alone, with a key and no abbreviation unexpanded but a month's (`jan` to `dec`, which BibTeX's styles define), and no other reference has its key, ignoring case. [`loom:node-bibtex`]
 10. A macros node's body holds only what §8 allows; a failure names the command. [`loom:node-macros`]
 11. A pointer has `source` and `pages`; a stub has `source`. [`loom:node-incomplete`]
 

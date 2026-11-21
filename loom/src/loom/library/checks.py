@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 from loom.library import ids
-from loom.library.body import ARGUMENTS, entry_of, labels, macros_items, pointers
+from loom.library.body import ARGUMENTS, entry_of, labels, macros_items, pointers, unknown
 from loom.library.node import SUFFIX, Node, NodeUnreadable, Problem, body_start, read_node
 from loom.paths import LIBRARY_NODES
 from loom.scan.model import Diagnostic, Location
@@ -181,6 +181,15 @@ def _body_refs(node: Node, name: str) -> list[Problem]:
             out.append(
                 Problem(8, f"{name} points at {owner} and lists it in neither `uses` nor `mentions`.", line, True)
             )
+    for p in unknown(node.body):
+        out.append(
+            Problem(
+                8,
+                f"{name} uses \\{p.command}, which loom does not read as pointing at anything; write what it points at with \\ref, \\cref, \\hyperref[...] or a citation loom reads (§4), so it is checked.",
+                p.line,
+                True,
+            )
+        )
     seen: set[str] = set()
     for p in labels(node.body):
         line = p.line
@@ -213,6 +222,13 @@ def _entry(node: Node, name: str) -> list[Problem]:
         out.append(Problem(9, f"{name}'s entry has no key, which documents cite the work by."))
     if entry.outside:
         out.append(Problem(9, f"{name}'s body holds more than its one entry: {entry.outside[:40]!r} follows it."))
+    if entry.bare:
+        out.append(
+            Problem(
+                9,
+                f"{name}'s entry uses {', '.join(entry.bare)} unexpanded, where a reference's entry stands alone with no `@string` to expand it.",
+            )
+        )
     return out
 
 

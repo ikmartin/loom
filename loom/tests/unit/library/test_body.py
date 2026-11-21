@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from loom.library.body import blank_comments, entry_of, labels, macros_items, pointers
+from loom.library.body import blank_comments, entry_of, labels, macros_items, pointers, unknown
 
 
 def said(body: str) -> list[tuple[str, str, int]]:
@@ -49,7 +49,8 @@ def test_a_commented_reference_is_not_read() -> None:
 
 def test_a_longer_command_is_not_a_reference() -> None:
     assert said("\\refstepcounter{x} \\citeauthor{tq-00B1-ref} \\nameref{tq-0001} \\cited{x}") == [
-        ("citeauthor", "tq-00B1-ref", 1)
+        ("citeauthor", "tq-00B1-ref", 1),
+        ("nameref", "tq-0001", 1),
     ]
 
 
@@ -115,3 +116,74 @@ def test_what_a_macros_body_should_not_hold_is_an_item_of_its_own() -> None:
     assert commands == [("documentclass", 1), ("newtheorem", 2), ("input", 4)]
     assert any(i.command == "text" and "Some words." == i.text and i.line == 3 for i in items)
     assert len(items) == 4
+
+
+# ---- the review's findings ---------------------------------------------------------------------------------------------
+
+
+def test_cleveref_s_varioref_s_and_hyperref_s_commands_are_read() -> None:
+    """N-7: every command of the lists, each argument as its shape says."""
+    body = (
+        "\\crefrange{tq-0001}{tq-0002} \\Crefrange*{tq-0003}{tq-0004} \\cpageref{tq-0005,tq-0006} \\Cpageref{tq-0007}\n"
+        "\\labelcref{tq-0008} \\nameref{tq-0009} \\Nameref{tq-000A} \\autopageref{tq-000B} \\vrefrange{tq-000C}{tq-000D}\n"
+        "\\hyperref[tq-000E]{the lemma} \\namecref{tq-000F} \\vpageref{tq-000G}\n"
+    )
+    assert [(c, t) for c, t, _ in said(body)] == [
+        ("crefrange", "tq-0001"), ("crefrange", "tq-0002"), ("Crefrange", "tq-0003"), ("Crefrange", "tq-0004"),
+        ("cpageref", "tq-0005"), ("cpageref", "tq-0006"), ("Cpageref", "tq-0007"), ("labelcref", "tq-0008"),
+        ("nameref", "tq-0009"), ("Nameref", "tq-000A"), ("autopageref", "tq-000B"), ("vrefrange", "tq-000C"),
+        ("vrefrange", "tq-000D"), ("hyperref", "tq-000E"), ("namecref", "tq-000F"), ("vpageref", "tq-000G"),
+    ]  # fmt: skip
+    assert unknown(body) == []
+
+
+def test_every_citation_command_is_read_biblatex_s_notes_in_parentheses_passed_over() -> None:
+    """N-7."""
+    body = (
+        "\\citeyearpar{tq-0001-ref} \\Citeauthor{tq-0002-ref} \\nocite{tq-0003-ref} \\fullcite{tq-0004-ref}\n"
+        "\\citenum{tq-0005-ref} \\parencites(see)(and)[3]{tq-0006-ref}[4]{tq-0007-ref} \\textcites{tq-0008-ref}{tq-0009-ref}\n"
+    )
+    assert [(c, t) for c, t, _ in said(body)] == [
+        ("citeyearpar", "tq-0001-ref"), ("Citeauthor", "tq-0002-ref"), ("nocite", "tq-0003-ref"), ("fullcite", "tq-0004-ref"),
+        ("citenum", "tq-0005-ref"), ("parencites", "tq-0006-ref"), ("parencites", "tq-0007-ref"), ("textcites", "tq-0008-ref"),
+        ("textcites", "tq-0009-ref"),
+    ]  # fmt: skip
+
+
+def test_a_command_named_as_a_pointer_and_not_read_is_found() -> None:
+    """N-7: a new command is a refusal to widen the lists, never a pointer that passes unread."""
+    body = "\\thmref{def:a} \\Citeyear{Jon19} \\mycites{x}\n\\href{https://x}{y} \\refstepcounter{x} % \\secref{x}\n"
+    assert [(p.command, p.line) for p in unknown(body)] == [("thmref", 1), ("Citeyear", 1), ("mycites", 1)]
+
+
+def test_a_reference_to_a_command_is_kept_for_the_checks() -> None:
+    """N-17: `\\ref\\lbl` is passed on as it is, not passed over."""
+    assert said("\\ref\\lbl") == [("ref", "\\lbl", 1)]
+
+
+def test_verbatim_text_is_not_read() -> None:
+    """N-17."""
+    body = "Write \\verb|\\ref{def:a}| or \\verb*+\\cite{Jon19}+.\n\\begin{verbatim}\n\\ref{def:b} \\thmref{x}\n\\end{verbatim}\n\\ref{tq-0001}\n"
+    assert said(body) == [("ref", "tq-0001", 5)]
+    assert unknown(body) == []
+
+
+def test_a_label_s_optional_type_is_passed_over() -> None:
+    """N-17: cleveref's `\\label[type]{…}`."""
+    assert [p.target for p in labels("\\label[equation]{tq-00K3-eq00}")] == ["tq-00K3-eq00"]
+
+
+def test_an_entry_with_a_key_and_no_fields_has_its_key() -> None:
+    """N-18."""
+    found = entry_of("@misc{K1}\n")
+    assert found is not None and found.key == "K1"
+
+
+def test_an_entry_s_abbreviations_are_found_months_apart() -> None:
+    """N-18."""
+    found = entry_of(
+        '@article{K1,\n  journal = jex # { Letters},\n  month = jan,\n  year = 2019,\n  note = "a {"} b" # x,\n}\n'
+    )
+    assert found is not None and found.bare == ("jex", "x")
+    clean = entry_of("@article{K1, title = {A = B, # C}, year = {2019}}\n")
+    assert clean is not None and clean.bare == ()
