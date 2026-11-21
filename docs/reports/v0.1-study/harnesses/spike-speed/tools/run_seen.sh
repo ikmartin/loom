@@ -1,7 +1,7 @@
 #!/bin/bash
 # Start serveprobe on the scratch relloc with the scratch clone, run seen.cjs (5 edits to a word in a proof), stop the server.
 # Usage: run_seen.sh LABEL PORT [extra serveprobe flags, e.g. --cache-git]
-SP=/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/spike-speed
+SP=${SCRATCH:?}/study/spike-speed
 LABEL=$1; PORT=$2; shift 2
 export XDG_CONFIG_HOME=$SP/xdg
 PY=$SP/${CODE:-repo}/loom/.venv/bin/python

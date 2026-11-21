@@ -278,7 +278,7 @@ python 3.13.13
   git        git version 2.50.1 (Apple Git-155)       /usr/bin/git
 
 author: ikmartin  (from git config user.name)
-arras bundle: /Users/isaac/dev/loom-arras/loom/src/loom/assets/arras  (vendored, arras 43cb4b6 interface 1 vendored 2026-09-23T23:24:53Z)
+arras bundle: ~/dev/loom-arras/loom/src/loom/assets/arras  (vendored, arras 43cb4b6 interface 1 vendored 2026-09-23T23:24:53Z)
 
 ok
 ```

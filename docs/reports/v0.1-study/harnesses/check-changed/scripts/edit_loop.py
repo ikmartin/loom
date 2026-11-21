@@ -11,7 +11,7 @@ import time
 import urllib.request
 
 quilt, port, rel, n = sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4])
-LOOM = "/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom"
+LOOM = os.path.expanduser("~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom")
 man = os.path.join(quilt, ".loom/build/manifest.json")
 start_m = os.stat(man).st_mtime_ns if os.path.exists(man) else 0
 proc = subprocess.Popen([LOOM, "serve", "--no-compile", "--port", str(port)], cwd=quilt, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

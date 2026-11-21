@@ -1,6 +1,6 @@
 # Assistant log: the quilt session
 
-Every shell command below was run with the prefix given in the task, `cd /private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/haiku/project && export PATH=/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin:$PATH XDG_CONFIG_HOME=/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/haiku/xdg && `. Below, PREFIX stands for that string, and each command is shown after it.
+Every shell command below was run with the prefix given in the task, `cd <scratch>/study/haiku/project && export PATH=~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin:$PATH XDG_CONFIG_HOME=<scratch>/study/haiku/xdg && `. Below, PREFIX stands for that string, and each command is shown after it.
 
 ## How much of the orientation I read
 
@@ -178,7 +178,7 @@ The write-up is in the session `s-2026-11-13-4sz2c4` ("Review of the Rank theore
 
 Reply to the mathematician:
 
-> The write-up is in the session "Review of the Rank theorem", s-2026-11-13-4sz2c4, in the transcript, in order: the orientation, the Rank review, the cited lemma, the request to accept, the Introduction edit, and the request to add the paper. It lists what is still open: your decisions on my suggestions, the Referee's open revisions on sh-0009, and the Lemma 5.9 sentence. A fuller log of the commands I ran is at /private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/haiku/assistant-log.md.
+> The write-up is in the session "Review of the Rank theorem", s-2026-11-13-4sz2c4, in the transcript, in order: the orientation, the Rank review, the cited lemma, the request to accept, the Introduction edit, and the request to add the paper. It lists what is still open: your decisions on my suggestions, the Referee's open revisions on sh-0009, and the Lemma 5.9 sentence. A fuller log of the commands I ran is at <scratch>/study/haiku/assistant-log.md.
 
 Frank notes:
 

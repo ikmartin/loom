@@ -1,6 +1,6 @@
 # v0.1 study: a private TinyTeX, installed and run
 
-Done 2026-11-13 on an Apple M2 (arm64), macOS Darwin 25.5.0, with other agents sharing the machine (`vm.loadavg` 2.2 to 23 during the work; the value beside each timing is the one-minute load). Everything lives under the scratch directory `S=/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/tinytex`: the installation in `$S/tt/TinyTeX`, quilt copies in `$S/q`, every tool log and JSON report in `$S/logs`, scripts in `$S/scripts`, screenshots in `$S/shots`. loom ran as `/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom` with `XDG_CONFIG_HOME` in scratch.
+Done 2026-11-13 on an Apple M2 (arm64), macOS Darwin 25.5.0, with other agents sharing the machine (`vm.loadavg` 2.2 to 23 during the work; the value beside each timing is the one-minute load). Everything lives under the scratch directory `S=<scratch>/study/tinytex`: the installation in `$S/tt/TinyTeX`, quilt copies in `$S/q`, every tool log and JSON report in `$S/logs`, scripts in `$S/scripts`, screenshots in `$S/shots`. loom ran as `~/dev/loom-arras/.claude/worktrees/v01-study/loom/.venv/bin/loom` with `XDG_CONFIG_HOME` in scratch.
 
 Three PATHs were used (`$S/scripts/env-*.sh`):
 
@@ -189,13 +189,13 @@ Use loom's own, always, with the person's own TeX behind a setting. For: one TeX
 - `$S/tt/TinyTeX`: TinyTeX-0 v2026.11 plus 135 packages by tlmgr (list in `$S/logs/installed-final.txt`), 407M.
 - `$S/tt2/TinyTeX`: a second TinyTeX-0 v2026.11 with TinyTeX-1's list and `make4ht tex4ht luaxml dvisvgm tikz-cd pgf xypic`, 328M.
 - `$S/reloc/TinyTeX`: the archive of the first, extracted to test relocation, 405M; `$S/archive/*.tar.xz`, 237M.
-- Side effect outside scratch: biber's unpack cache `/var/folders/xh/br51g1_j71sdmy2fqdss_blh0000gn/T/par-6973616163/cache-bcf1e1e0a2c546e2ccb004c42af5f8631c12c6fd` (218M, created 14:51 by TinyTeX's biber 2.22; the sibling `cache-4cd328e4…` predates this work and is not mine).
+- Side effect outside scratch: biber's unpack cache `$TMPDIR/par-…/cache-bcf1e1e0a2c546e2ccb004c42af5f8631c12c6fd` (218M, created 14:51 by TinyTeX's biber 2.22; the sibling `cache-4cd328e4…` predates this work and is not mine).
 - Nothing in `~/Library/TinyTeX`, the shell profile, `/usr/local/bin`, `/etc/paths.d` or any PATH outside my commands; no sudo. Quilt copies, logs, scripts and screenshots are also under `$S` (1.5G in all).
 
 One command removes all of it:
 
 ```
-rm -rf /private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/tinytex /var/folders/xh/br51g1_j71sdmy2fqdss_blh0000gn/T/par-6973616163/cache-bcf1e1e0a2c546e2ccb004c42af5f8631c12c6fd
+rm -rf <scratch>/study/tinytex $TMPDIR/par-…/cache-bcf1e1e0a2c546e2ccb004c42af5f8631c12c6fd
 ```
 
 I did not run it.

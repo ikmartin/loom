@@ -1,6 +1,6 @@
 # Process and documents audit (area: PROC)
 
-Checkout: branch v0.1-study at `/Users/isaac/dev/loom-arras/.claude/worktrees/v01-study`. Word counts are `wc -w` over the Markdown files. Nothing was installed or run except the read-only checkers `docs/work-queue/check.py`, `scripts/checks/principles.py` and `scripts/checks/hardwrap.py --all`, which report: queue ok with 25 active of 45, principles ok (6 sets, 48 principles), 144 hard-wrapped pairs remain in the repository (the check judges only added lines).
+Checkout: branch v0.1-study at `~/dev/loom-arras/.claude/worktrees/v01-study`. Word counts are `wc -w` over the Markdown files. Nothing was installed or run except the read-only checkers `docs/work-queue/check.py`, `scripts/checks/principles.py` and `scripts/checks/hardwrap.py --all`, which report: queue ok with 25 active of 45, principles ok (6 sets, 48 principles), 144 hard-wrapped pairs remain in the repository (the check judges only added lines).
 
 ## 1. Census
 

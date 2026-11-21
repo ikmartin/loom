@@ -8,7 +8,7 @@ nohup node driver.mjs 48199 ./shots > driver.out 2>&1 &     # port, screenshot f
 W=1100 H=800 node driver.mjs ...                            # optional starting viewport (default 1440x900)
 ```
 
-It loads Playwright from `/Users/isaac/dev/loom-arras/arras/node_modules` (read-only). Browser events (console errors, page errors, failed requests, HTTP >= 400, dialogs, downloads, new tabs) are appended to `driver-events.log` next to the script, one line per event, together with every command received.
+It loads Playwright from `~/dev/loom-arras/arras/node_modules` (read-only). Browser events (console errors, page errors, failed requests, HTTP >= 400, dialogs, downloads, new tabs) are appended to `driver-events.log` next to the script, one line per event, together with every command received.
 
 ## Send commands
 

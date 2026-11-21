@@ -1,6 +1,6 @@
 #!/bin/bash
 # Each change's save-build on relloc-b, in process, one code tree after another; two rounds, the second in reverse order.
-SP=/private/tmp/claude-501/-Users-isaac-dev-loom-arras/f0ec29b5-fd45-4e3f-ae50-d9f9d632cd2f/scratchpad/study/spike-speed
+SP=${SCRATCH:?}/study/spike-speed
 export XDG_CONFIG_HOME=$SP/xdg
 Q=$SP/relloc-b
 OUT=$SP/logs/builds.jsonl
