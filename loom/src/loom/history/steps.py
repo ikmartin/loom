@@ -41,8 +41,8 @@ class FreezePlan:
 
 
 def versionable(n: NodeRec) -> bool:
-    """A statement or proof key with an identity: `rl-0001`, `rl-0001/proof`, `rl-0001/proof/2`, a labelled proof's own id; never a qualified key, a section, or a conflicted placeholder."""
-    if n.kind not in ("environment", "proof") or "#" in n.key or n.derived_of:
+    """A statement or proof key with an identity: `rl-0001`, `rl-0001/proof`, `rl-0001/proof/2`, a labelled proof's own id; never a qualified key, a key a label gives a statement or its proofs, a section, or a conflicted placeholder."""
+    if n.kind not in ("environment", "proof") or "#" in n.key or n.derived_of or n.marker:
         return False  # an agent document's node has no history of its own: its base is its counterpart's version
     if n.kind == "environment":
         return bool(n.id)

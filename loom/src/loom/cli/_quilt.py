@@ -104,12 +104,15 @@ def open_bib(quilt_path: str | None) -> tuple[Quilt, dict[str, BibEntry]]:
 
 
 def resolve_key(result: ScanResult, key: str) -> str:
-    """Accept an id, an alias, a proof key, a qualified key, or a master path; return the canonical key or raise."""
+    """Accept an id, an alias, a proof key, a qualified key, a statement's place key once a label or an id keys it, or a master path; return the canonical key or raise."""
     nodes = result.assembly.nodes
     if key in nodes:
         return key
     if key in result.assembly.regions:
         return key
+    named = result.named(key)
+    if named is not None:
+        return named
     target = result.assembly.labels.get(key)
     if target is not None:
         return target
