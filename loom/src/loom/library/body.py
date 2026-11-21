@@ -291,7 +291,7 @@ class Item:
     text: str = ""
 
 
-#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`. A starred form is its command's. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets.
+#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`. A starred form is its command's. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets, and no setting of the page's layout (`\setlength`, `\setcounter`), which is the document's, not the work's.
 ARGUMENTS = {
     "usepackage": "oom",
     "RequirePackage": "oom",
@@ -324,9 +324,7 @@ ARGUMENTS = {
     "colorlet": "omm",
     "numberwithin": "omm",
     "newcounter": "mo",
-    "setcounter": "mm",
     "newlength": "n",
-    "setlength": "nm",
     "newif": "n",
     "crefname": "mmm",
     "Crefname": "mmm",

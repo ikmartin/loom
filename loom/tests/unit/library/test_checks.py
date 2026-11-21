@@ -449,8 +449,14 @@ def test_check_10_the_definitions_real_preambles_hold_pass() -> None:
     """N-16: the definitions a body can need that 162 of 178 of TeX Live's theorem-declaring documents were refused for."""
     text = (
         "\\PassOptionsToPackage{hyphens}{url}\n\\definecolor{dark}{rgb}{0,0,0.5}\\definecolor[named]{x}{gray}{0.5}\\colorlet{light}{dark!20}\n"
-        "\\numberwithin{equation}{section}\n\\newcounter{claim}[section]\\setcounter{claim}{0}\n\\newlength{\\gap}\\setlength{\\gap}{2pt}\n"
+        "\\numberwithin{equation}{section}\n\\newcounter{claim}[section]\n\\newlength{\\gap}\n"
         "\\newif\\ifdraft\n\\crefname{lemma}{lemma}{lemmas}\\Crefname{lemma}{Lemma}{Lemmas}\n"
         '\\DeclareMathAlphabet{\\mathpzc}{OT1}{pzc}{m}{it}\n\\DeclareSymbolFont{AMSb}{U}{msb}{m}{n}\n\\DeclareMathSymbol{\\Bbbk}{\\mathord}{AMSb}{"7C}\n'
     )
     assert check_store(macros(text)) == []
+
+
+@pytest.mark.parametrize("setting", ["\\setlength{\\parindent}{0pt}", "\\setcounter{tocdepth}{2}"])
+def test_check_10_a_setting_of_the_page_s_layout_is_refused(setting: str) -> None:
+    """A work's macros are what its bodies need to read, not how its paper was laid out."""
+    assert says(macros(setting + "\n"), "loom:node-macros", setting.split("{")[0])
