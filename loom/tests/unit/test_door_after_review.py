@@ -381,6 +381,52 @@ def writes_lines(root: Path) -> list[dict]:
     return [json.loads(x) for x in p.read_text().splitlines()] if p.is_file() else []
 
 
+# ---- a file only this machine reads ------------------------------------------------------------------------------
+
+
+def test_an_agent_app_s_mcp_file_keeps_its_texts_on_this_machine_and_none_in_the_history(tmp_path: Path) -> None:
+    """An MCP file names this machine's loom and the quilt's absolute path: its texts stay beside the journal, so the committed history carries no machine's paths, and a quilt made twice, as the generated quilts are, is the same."""
+    from loom import writes
+    from loom.ai.clients import PROJECT_FILES
+
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "none", "--yes", cwd=tmp_path)
+    ok("ai", "init", cwd=root)  # through the door, as the generator writes them
+    written = [rel for rel in PROJECT_FILES if (root / rel).is_file()]
+    assert len(written) == len(PROJECT_FILES), written
+    hist, here = root / ".loom/records/history", root / ".loom/local"
+    for rel in written:
+        d = writes.digest((root / rel).read_bytes())
+        assert d is not None and writes.fetch(hist, d) is None and writes.fetch(here, d) is not None, rel
+    places = {str(root), os.path.realpath(root)}
+    named = [p.name for p in (hist / "texts").iterdir() if any(x in p.read_text(errors="replace") for x in places)]
+    assert named == []
+
+
+def test_an_act_cut_short_on_an_mcp_file_is_put_back_from_this_machine_s_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Recovery reads the texts kept beside the journal as it reads the history's, so an MCP file an act replaced comes back whole."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    before = (root / ".mcp.json").read_bytes()
+    hist = load_quilt(root).history_dir
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(root, hist, "agents") as w:
+            w.replace(".mcp.json", before.replace(b"loom", b"loom-elsewhere", 1))
+            w.replace("notes.md", b"# Notes\n")
+    restore()
+    assert (root / ".mcp.json").read_bytes() != before
+    said = writes.recover(root, hist)
+    assert said and said[0].startswith("undid agents:"), said
+    assert (root / ".mcp.json").read_bytes() == before
+
+
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
 
 

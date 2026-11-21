@@ -23,7 +23,7 @@ from typing import Any
 
 from loom.errors import ContentError
 from loom.locks import flush, locked
-from loom.paths import JOURNAL, JOURNAL_INDEX, WRITES_LOCK
+from loom.paths import JOURNAL, JOURNAL_INDEX, LOCAL, WRITES_LOCK
 
 #: The suffix of the temporary file an act writes beside the file it replaces.
 TEMP = ".loom-tmp"
@@ -91,6 +91,21 @@ def _unkept(data: bytes) -> bool:
     except UnicodeDecodeError:
         return True
     return False
+
+
+def this_machine(rel: str) -> bool:
+    """Whether `rel` is a file only this machine reads, whose texts an act keeps beside the journal (`.loom/local/texts/`) rather than in the history's store, which is committed.
+
+    An agent app's MCP file (`ai.clients.PROJECT_FILES`) names this machine's loom and the quilt's absolute path: in the history it would carry one machine's paths to every co-author, and a quilt made twice would differ with where it was made.
+    """
+    from loom.ai.clients import PROJECT_FILES
+
+    return rel in PROJECT_FILES
+
+
+def _fetch(root: Path, history: Path, d: str) -> bytes | None:
+    """The bytes an act stored as `d`, from the history's store or, for a file only this machine reads (`this_machine`), from the one beside the journal."""
+    return fetch(history, d) or fetch(root / LOCAL, d)
 
 
 def fetch(history: Path, d: str) -> bytes | None:
@@ -592,8 +607,8 @@ def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None, mod
 def _undo_file(root: Path, history: Path, rel: str, ab: list[str | None]) -> bool:
     """Put back the before bytes of a journalled act's file `rel` (`ab` its before and after digests) while it holds the after (`_put_back`); False, with nothing written, when the store lacks either text, so nothing is put back blind."""
     b, a = ab
-    before = fetch(history, b) if b else None
-    after = fetch(history, a) if a else None
+    before = _fetch(root, history, b) if b else None
+    after = _fetch(root, history, a) if a else None
     if (b and before is None) or (a and after is None):
         return False
     return _put_back(root, rel, before, after)
@@ -1043,7 +1058,7 @@ def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] 
             holds,
             settles=f"Loom will not put it back over that act, so {BY_HAND}.",
         )
-    texts = {rel: [fetch(history, d) if d else None for d in ab] for rel, ab in files.items()}
+    texts = {rel: [_fetch(root, history, d) if d else None for d in ab] for rel, ab in files.items()}
     # a file the act made is undone by its digest alone (`_unkept`): only a file it replaced or removed needs its texts
     lacking = [
         rel
@@ -1409,13 +1424,14 @@ class Act:
             _append_records(self.root, self.records)
             self._follow()
             return
-        files = {
-            rel: [
-                store(self.history, b) if (b := self.before.get(rel)) is not None else None,
-                None if data is None else digest(data) if b is None and _unkept(data) else store(self.history, data),
+        files: dict[str, list[str | None]] = {}
+        for rel, data in changed.items():
+            keep = self.root / LOCAL if this_machine(rel) else self.history
+            b = self.before.get(rel)
+            files[rel] = [
+                store(keep, b) if b is not None else None,
+                None if data is None else digest(data) if b is None and _unkept(data) else store(keep, data),
             ]
-            for rel, data in changed.items()
-        }
         begin = {
             "event": "begin",
             "act": self.id,
