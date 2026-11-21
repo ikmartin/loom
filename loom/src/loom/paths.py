@@ -160,6 +160,10 @@ RESOLVED = f"{LIBRARY_CACHE}/resolve"
 NODE_INDEX = f"{LIBRARY_CACHE}/nodes.sqlite3"
 #: A stored source unpacked, `<hex>/`, made when something reads it.
 LIBRARY_SOURCES = f"{LIBRARY_CACHE}/sources"
+#: A stored PDF's first page, `<hex>.png`, made when first asked for (`library.thumbs`).
+LIBRARY_THUMBS = f"{LIBRARY_CACHE}/thumbs"
+#: What a delete took, kept on this machine for its one undo (`library.delete`).
+LIBRARY_UNDO = f"{LOCAL}/library-undo"
 #: What marks on a PDF are found by: word boxes of a PDF outside the store, by its hash, and where each mark was found again.
 MARKS = f"{CACHE}/marks"
 MARK_BOXES = f"{MARKS}/boxes"
