@@ -36,7 +36,7 @@ MAX_IMAGES = 8
 #: What a command does that makes the server bind its conversation's session first: its first look (`since`, a `write`) or any other write.
 BINDS = frozenset({"write", "replace"})
 #: The commands that write into a session, or look as one, and are given the bound session where a call names none.
-INTO = frozenset({"session say", "library propose", "since"})
+INTO = frozenset({"session say", "library propose", "since", "ask", "tasks take", "tasks withdraw"})
 #: The requests that are an agent's use of loom, and what the record's `last` calls each.
 CALLS = {"tools/call": "tool", "prompts/get": "prompt", "resources/read": "resource"}
 #: Where a client that sends no `initialize` puts who it is and the protocol it speaks: every request's `_meta`.

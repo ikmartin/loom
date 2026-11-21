@@ -224,15 +224,16 @@ def live_text(result: ScanResult, records: Records, run: Path | None, session_id
     lines.append(f"- lint: {tally(found, result)}; run `loom lint` for the list")
     und = payload["undigested"]
     lines.append("- undigested citekeys: " + (", ".join(und) if und else "none"))
-    from loom.evidence.asks import open_asks
+    from loom.evidence.asks import answered_unseen, open_asks
 
-    waiting = open_asks(root)
-    tasks = sum(1 for s in waiting if s.ask.to == "agent")
-    asked = sum(1 for s in waiting if s.ask.to == "person")
-    if tasks or asked:
+    waiting = open_asks(root, closed=True)
+    tasks = sum(1 for s in waiting if s.ask.to == "agent" and s.open)
+    asked = sum(1 for s in waiting if s.ask.to == "person" and s.open)
+    answered = sum(1 for s in waiting if answered_unseen(root, s.ask))
+    if tasks or asked or answered:
         # an agent that attaches is told what is open, and takes from it only if it was launched for that or offers to
         lines.append(
-            f"- asks: {tasks} open for an agent, {asked} of yours waiting for the person; `loom tasks` lists them"
+            f"- asks: {tasks} open for an agent, {asked} asked of the person by agents and waiting, {answered} answered and not yet seen by the agent that asked; `loom tasks` lists them"
         )
     from loom.sessions import active
 

@@ -58,6 +58,8 @@ class Since:
     stale: list[dict[str, Any]] = field(default_factory=list)
     state: list[dict[str, Any]] = field(default_factory=list)
     said: list[dict[str, Any]] = field(default_factory=list)
+    #: The person's answers to questions this agent asked (`loom ask`), each once.
+    answers: list[dict[str, Any]] = field(default_factory=list)
     ticks: list[dict[str, Any]] = field(default_factory=list)
     #: Each file the viewer shows that was added, changed or removed in the window, by path.
     files: list[dict[str, Any]] = field(default_factory=list)
@@ -75,6 +77,7 @@ class Since:
             or self.stale
             or self.state
             or self.said
+            or self.answers
             or self.ticks
             or self.files
         )
@@ -93,6 +96,7 @@ class Since:
             "stale": self.stale,
             "state": self.state,
             "said": self.said,
+            "answers": self.answers,
             "ticks": self.ticks,
             "files": self.files,
         }
@@ -273,10 +277,36 @@ def since(result: ScanResult, name: str, session: Session | None = None) -> Sinc
     _acceptances(result, window, new, out, states, stale)
     current = _state(result, window, new, out)
     _said(root, new, out)
+    _answers(root, name, new, out)
     _ticks(result, new, out)
     _files(result, new, now, out, kept is not None or opened == "name")
     out.marker = Marker(when=now, seen=marks, stale=stale, state=current)
     return out
+
+
+def _answers(root: Path, name: str, new: Any, out: Since) -> None:
+    """The person's answers to the questions `name` asked, since it last looked: the choice by its words and the person's own."""
+    from loom.evidence.asks import replay
+
+    for found in replay(root).asks.values():
+        if found.to != "person" or found.what != "question" or found.by.kind != "agent" or found.by.name != name:
+            continue
+        choices = list(found.get("choices", []))
+        for answer in found.answers:
+            when = str(answer.get("at", ""))
+            if not new(when, f"answered:{found.id}:{when}"):
+                continue
+            choice = answer.get("choice")
+            out.answers.append(
+                {
+                    "task": found.id,
+                    "question": found.get("text"),
+                    "choice": choices[choice] if isinstance(choice, int) and 0 <= choice < len(choices) else None,
+                    "words": answer.get("words") or "",
+                    "by": (answer.get("by") or {}).get("name"),
+                    "when": when,
+                }
+            )
 
 
 def _edits(root: Path, name: str, new: Any, out: Since) -> None:

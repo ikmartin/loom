@@ -128,19 +128,20 @@ Every `asked` line has `event` (`asked`), `id`, `at`, `by`, `what`, `to` (`agent
 
 - `on` is the place it is tied to, one of: `{"node": …}`; `{"label": …}`; `{"block": {key, hash, context}}`, a block of a person's document as a note names one (§3.7); `{"ref": …}` or `{"ref": …, "page": n}`, a work or one of its pages; `{"document": path}`.
 - `from` lists the drafts it was asked for, so that Review can show only what concerns one draft.
-- `words` are the person's or the agent's own, often empty.
+- `words` are the person's or the agent's own, often empty. Words, a question's text and its choices hold no control character but a line feed or a tab.
+- An agent's ask may carry `session`, the loom session it was asked in, by which loom tells one conversation's asks from another's under the one name an app declares.
 
 | `what` | to | asked by | its fields |
 | --- | --- | --- | --- |
 | `read` | agent | person | `nodes`: the stubs to read; `marks`, the person's marks to digest that show where (`manifest.md`, annotations' `purpose`) |
-| `digest` | agent | person | `ref`; `scope`: `uses`, `marked`, `chosen` or `all`; `nodes` where the scope names results, `marks` (the ids of the person's marks to digest on the work's pages, annotations whose `purpose` is `to-digest`, `manifest.md`) where it names marks |
+| `digest` | agent | person | `ref`; `scope`: `uses`, `marked`, `chosen` or `all`; `nodes` where the scope names results, `marks` (the ids of the person's marks to digest on the work's pages, annotations whose `purpose` is `to-digest`, `manifest.md`) where it names marks: `marked` needs `marks`, `chosen` needs `nodes` |
 | `ask` | agent | person | `text`, the person's question; `quote`, the words it is on, where they selected some |
 | `correct` | agent | person | `text`, what the person says differs; `on` is the node |
 | `restate` | agent | person | `target`, a node or label subject; `differs`, what the person says the Lean gets wrong |
 | `which-result` | agent | person | `cites`: the work a citing block cites with no result named; `on` is that block |
 | `formalize` | agent | person | `target`; `state`, `prove`, `assume`: the subjects of each part of the boundary |
 | `question` | person | agent | `text`; `choices`, up to 6 distinct strings of at most 200 characters; `quote`, the words it is on |
-| `paper` | person | agent | `ref`; `link`, the http or https address it could not fetch from; `want`, `pdf` or `tex` |
+| `paper` | person | agent | `ref`; `link`, the http or https address it could not fetch from, with no name or password in it; `want`, `pdf` or `tex` |
 
 The names are those of `library-views.md` §4.3, so the viewer draws an ask by its `what`.
 
@@ -157,11 +158,13 @@ Each names its ask by `task`.
 | `event` | by | its fields | means |
 | --- | --- | --- | --- |
 | `took` | an agent, on an ask to an agent | `session`, its loom session | it is working on it |
-| `done` | an agent, on an ask to an agent | `made`, the ids of what it produced | what it produced, which loom checks |
+| `done` | an agent, on an ask to an agent | `made`, the ids of what it produced: nodes or suggested edits | what it produced |
 | `answered` | the one an `ask` or a `question` was asked of | `words`, and for a `question`, `choice`, the number of one of its choices | the answer: a choice, words, or both |
-| `withdrawn` | a person, or the agent that asked | | the ask is withdrawn; this is deleting it |
+| `withdrawn` | a person, or the agent that asked | an agent's may carry `session` | the ask is withdrawn; this is deleting it |
 
-A person withdraws any ask and an agent only its own; an agent's withdrawal of another's is skipped and reported. An event may stand above its ask in the file, as a merge can leave it.
+A person withdraws any ask and an agent only its own: one asked under its name, and where the ask names a session, in that session. Both, since neither alone tells one conversation: every conversation of one app declares one name, and every agent in a shell shares the quilt's active session. An agent's withdrawal of another's is skipped and reported. An event may stand above its ask in the file, as a merge can leave it.
+
+Loom's commands refuse to say what an ask as it stands cannot take (`asks.closed_for`): nothing of a withdrawn ask, no second answer, a `done` that names nothing made, and a `took` of a task another session that is live now has taken.
 
 ```json
 {"at":"2026-11-21T09:04:31Z","by":{"kind":"agent","name":"Claude Code"},"event":"took","session":"s-2026-11-21-a8k2rx","task":"t-2026-11-21-7h3qfw"}
@@ -196,16 +199,16 @@ Each is also its MCP tool, as every agent command is. An agent names itself with
 
 | command | does |
 | --- | --- |
-| `loom tasks [--all]` | what is open for agents, each with its place and whether a session is on it, and what agents asked of the person that waits, with its answers; `--all` adds what is closed |
-| `loom tasks take TASK` | says the active session is working on it |
+| `loom tasks [--all]` | what is open for agents, each with its place and whether a session is on it; what agents asked of the person that waits, each naming the agent that asked; and each question the person answered that the agent that asked has not seen since its last `loom since`, with the choice and the words; `--all` adds what is closed |
+| `loom tasks take TASK` | says the session is working on it: `--session`, else the active one |
 | `loom tasks done TASK --made ID…` | says what the agent made |
 | `loom tasks answer TASK TEXT` | answers a person's `ask` |
-| `loom tasks withdraw TASK` | withdraws one of its own asks |
+| `loom tasks withdraw TASK` | withdraws one of its own asks, in its session (`--session`, else the active one) |
 | `loom ask TEXT --on PLACE [--choice C]…` | asks the person a `question`; PLACE is a draft's label or a block's key, a node's id, a work's id with `:PAGE`, or a document's path, a draft's label first since a draft's id has a node's shape |
 | `loom ask --paper REF --link URL [--want pdf\|tex] [TEXT]` | asks the person for a paper it could not fetch |
 | `loom evidence NAME` | a result's status and every record and ask about it; NAME is a draft's label or a node's id |
 
-`loom ai orient` says how many asks are open when any are.
+`loom ai orient` says how many asks are open for an agent, how many agents asked of the person and wait, and how many questions are answered and not yet seen by the agent that asked, when any are. `loom since` reports the person's answers to the questions the agent looking asked, each once. Over MCP, `ask`, `tasks take` and `tasks withdraw` are given the conversation's bound session where a call names none.
 
 ## 5. Status
 

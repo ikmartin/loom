@@ -495,6 +495,8 @@ def _one_comment(
         if found is None:
             raise NotFoundError("annotation", f"no annotation {reply}")
         _, parent = found
+        if parent.purpose is not None:
+            raise EnvError(f"{reply} is a mark to digest, a request rather than a note, and takes no reply")
         # on the block the note it answers is on now, which its key may no longer name; on none, as the note is
         placed = _placed(result, parent)
         ann_id = _append_new(

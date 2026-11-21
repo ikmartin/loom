@@ -14,13 +14,13 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from loom.clock import stamp
-from loom.evidence.log import AT, Evidence, Record
+from loom.evidence.log import AT, Evidence, Read, Record, append_line, grown, stopped
 from loom.evidence.status import statements_of
 from loom.evidence.subjects import HASH, NODE, REFERENCE, Subject, Who, label_problem
 from loom.evidence.web import Here, Web
 from loom.locks import locked
 from loom.paths import ASK_LOG
-from loom.records.ids import ASK, SESSION, draw
+from loom.records.ids import ASK, EDIT, SESSION, draw
 
 #: An ask's id: `t-`, the day it was asked, and a random token.
 ID = re.compile(ASK)
@@ -77,10 +77,28 @@ class Ask:
 
 @dataclass
 class Asks:
-    """Every ask in the order asked, and the problems of the lines skipped."""
+    """Every ask in the order asked, and the problems of the lines skipped.
+
+    `pending` holds an event read before the ask it names, as a merge can order them, until that ask is read; one never found is a problem.
+    """
 
     asks: dict[str, Ask] = field(default_factory=dict)
     problems: list[str] = field(default_factory=list)
+    _bad: list[tuple[int, str]] = field(default_factory=list, repr=False)
+    _pending: list[tuple[int, dict[str, Any]]] = field(default_factory=list, repr=False)
+
+    def copy(self) -> Asks:
+        """A copy a replay extends while a reader holds the first; an ask an event changes is copied before it changes."""
+        return Asks(dict(self.asks), list(self.problems), list(self._bad), list(self._pending))
+
+    def _own(self, ask_id: str) -> Ask:
+        """The ask to change, copied so a reader of an earlier replay keeps what it read."""
+        found = self.asks[ask_id]
+        mine = Ask(
+            **{**found.__dict__, "took": list(found.took), "done": list(found.done), "answers": list(found.answers)}
+        )
+        self.asks[ask_id] = mine
+        return mine
 
 
 def log_path(root: Path) -> Path:
@@ -88,7 +106,7 @@ def log_path(root: Path) -> Path:
     return root / ASK_LOG
 
 
-_MEMO: dict[str, tuple[tuple[int, int, int], Asks]] = {}
+_MEMO: dict[str, tuple[Read, Asks]] = {}
 
 
 def replay(root: Path) -> Asks:
@@ -102,55 +120,72 @@ def replay(root: Path) -> Asks:
     Returns
     -------
     Asks
-        In the order asked; read again only when the file's size, time or inode moved since the last replay. A caller must not change what it is given.
+        In the order asked. A replay reads on from where the last one stopped while the file is that one grown, and reads it whole otherwise (`log.grown`); what it returns is a copy a later replay does not change, and a caller must not change it either.
     """
     path = log_path(root)
-    try:
-        st = path.stat()
-    except FileNotFoundError:
+    if not path.is_file():
         return Asks()
-    key = (st.st_size, st.st_mtime_ns, st.st_ino)
     held = _MEMO.get(str(path))
-    if held is not None and held[0] == key:
-        return held[1]
-    found = _read(path.read_text(encoding="utf-8"))
-    _MEMO[str(path)] = (key, found)
-    return found
+    found = grown(path, held[0] if held else None)
+    if found is None or held is None:
+        with path.open("rb") as fh:
+            data = fh.read()
+        end = data.rfind(b"\n") + 1
+        chunk, start, rest, value, lines = data[:end], 0, data[end:], Asks(), 0
+    else:
+        chunk, start, rest = found
+        if not chunk and not rest.strip():
+            return held[1]
+        value, lines = held[1].copy(), held[0].lines
+    _read(chunk.decode("utf-8"), value, lines)
+    read = stopped(path, start, chunk, lines)
+    _MEMO[str(path)] = (read, value)
+    if rest.strip():
+        # a last line with no line feed: read when it is a whole line of JSON, as a hand-written one is, and read again once ended
+        try:
+            text = rest.decode("utf-8")
+            json.loads(text)
+        except (ValueError, UnicodeDecodeError):
+            return value
+        value = _read(text, value.copy(), read.lines)
+    return value
 
 
-def _read(text: str) -> Asks:
-    """Two passes: every `asked` first, then the events, so a line a merge put above its ask still finds it; problems in the order of their lines."""
-    out = Asks()
-    later: list[tuple[int, dict[str, Any]]] = []
-    for n, line in enumerate(text.splitlines(), 1):
+def _read(text: str, out: Asks | None = None, before: int = 0) -> Asks:
+    """Read lines of the log into `out`, numbering them from `before`: each `asked` as it comes, each event onto its ask, or held until its ask is read; problems in the order of their lines."""
+    out = out if out is not None else Asks()
+    for n, line in enumerate(text.splitlines(), before + 1):
         if not line.strip():
             continue
         try:
             raw = json.loads(line)
         except json.JSONDecodeError as exc:
-            out.problems.append(f"{ASK_LOG}:{n}: not JSON ({exc.msg})")
+            out._bad.append((n, f"not JSON ({exc.msg})"))
             continue
         if not isinstance(raw, dict) or raw.get("event") not in EVENTS:
-            out.problems.append(f"{ASK_LOG}:{n}: not an ask's event")
+            out._bad.append((n, "not an ask's event"))
             continue
         if raw["event"] != "asked":
-            later.append((n, raw))
+            out._pending.append((n, raw))
             continue
         try:
             made = parse_ask(raw)
         except ValueError as exc:
-            out.problems.append(f"{ASK_LOG}:{n}: {exc}")
+            out._bad.append((n, str(exc)))
             continue
         out.asks.setdefault(made.id, made)
-    for n, raw in later:
-        found = out.asks.get(str(raw.get("task")))
+    waiting = []
+    for n, raw in out._pending:
+        if str(raw.get("task")) not in out.asks:
+            waiting.append((n, raw))
+            continue
         try:
-            if found is None:
-                raise ValueError(f"{raw['event']} names {raw.get('task')!r}, which is no ask in the log")
-            apply(found, raw)
+            apply(out._own(str(raw.get("task"))), raw)
         except ValueError as exc:
-            out.problems.append(f"{ASK_LOG}:{n}: {exc}")
-    out.problems.sort(key=lambda p: int(p.split(":", 2)[1]))
+            out._bad.append((n, str(exc)))
+    out._pending = waiting
+    unfound = [(n, f"{raw['event']} names {raw.get('task')!r}, which is no ask in the log") for n, raw in waiting]
+    out.problems = [f"{ASK_LOG}:{n}: {said}" for n, said in sorted(out._bad + unfound)]
     return out
 
 
@@ -163,9 +198,15 @@ def _keys(raw: dict[str, Any], required: set[str], optional: frozenset[str] = fr
         raise ValueError(f"has {', '.join(sorted(extra))}, which this {raw.get('what') or raw.get('event')} does not")
 
 
+#: A character a person is shown that is not text: a control character other than a tab or a line break, which could rewrite what a terminal shows.
+_CONTROL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
 def _words(value: Any, what: str, *, empty: bool = True, most: int = WORDS) -> str:
     if not isinstance(value, str) or (not empty and not value.strip()) or len(value) > most:
         raise ValueError(f"{what} is {'a' if empty else 'a non-empty'} string of at most {most} characters")
+    if _CONTROL.search(value):
+        raise ValueError(f"{what} holds a control character")
     return value
 
 
@@ -200,7 +241,11 @@ def place_problem(on: Any) -> str | None:
         if not isinstance(on["ref"], str) or not REFERENCE.fullmatch(on["ref"]):
             return "on's ref is not a reference's id"
         page = on.get("page", 1)
-        return None if isinstance(page, int) and not isinstance(page, bool) and page >= 1 else "on's page is a number"
+        return (
+            None
+            if isinstance(page, int) and not isinstance(page, bool) and page >= 1
+            else "on's page is a number from 1"
+        )
     if set(on) == {"document"}:
         return None if isinstance(on["document"], str) and on["document"] else "on's document is a path"
     return "on names a node, a label, a block, a work or a document"
@@ -225,6 +270,8 @@ def _link(value: Any) -> None:
     parts = urlsplit(value)
     if parts.scheme not in ("http", "https") or not parts.netloc:
         raise ValueError("link is one http or https address")
+    if parts.username is not None or parts.password is not None:
+        raise ValueError("link holds a name or a password; give the page's address alone")
 
 
 def _what_fields(raw: dict[str, Any]) -> None:
@@ -250,6 +297,10 @@ def _what_fields(raw: dict[str, Any]) -> None:
             not isinstance(raw["marks"], list) or not all(isinstance(m, str) and m for m in raw["marks"])
         ):
             raise ValueError("marks is a list of the marks' ids")
+        if raw["scope"] == "marked" and not raw.get("marks"):
+            raise ValueError("a digest of what was marked names the marks")
+        if raw["scope"] == "chosen" and not raw.get("nodes"):
+            raise ValueError("a digest of chosen results names them in nodes")
     elif what == "formalize":
         _keys(raw, base | {"target", "state", "prove", "assume"})
         Subject.from_dict(raw["target"], ("node", "label"))
@@ -332,7 +383,11 @@ def parse_ask(raw: dict[str, Any]) -> Ask:
         if not isinstance(origin, list) or not all(isinstance(d, str) and d for d in origin):
             raise ValueError("from is a list of the drafts it was asked for")
         _words(raw.get("words"), "words")
-        _what_fields(raw)
+        if "session" in raw:
+            # the loom session an agent asked in, by which its own ask is told from another conversation's
+            if by.kind != "agent" or not isinstance(raw["session"], str) or not re.fullmatch(SESSION, raw["session"]):
+                raise ValueError("session is the asking agent's loom session")
+        _what_fields({k: v for k, v in raw.items() if k != "session"})
     except ValueError as exc:
         raise ValueError(f"{aid}: {exc}") from None
     return Ask(aid, str(what), str(to), by, at, raw["on"], tuple(origin), raw["words"], raw)
@@ -361,6 +416,9 @@ def apply(ask: Ask, raw: dict[str, Any]) -> None:
                 _keys(raw, {"task", "made"})
                 if not isinstance(raw["made"], list) or not all(isinstance(m, str) and m for m in raw["made"]):
                     raise ValueError("made is a list of what it produced")
+                for m in raw["made"]:
+                    if not (NODE.fullmatch(m) or re.fullmatch(EDIT, m)):
+                        raise ValueError(f"{m!r} is neither a node's id nor a suggested edit's")
         elif event == "answered":
             _keys(raw, {"task", "words"}, frozenset({"choice"}))
             if by.kind != ask.to:
@@ -377,8 +435,12 @@ def apply(ask: Ask, raw: dict[str, Any]) -> None:
             if choice is None and not raw["words"].strip():
                 raise ValueError("an answer is a choice, words, or both")
         else:  # withdrawn
-            _keys(raw, {"task"})
-            if not may_withdraw(ask, by):
+            _keys(raw, {"task"}, frozenset({"session"}))
+            if not may_withdraw(ask, by, raw.get("session")):
+                if ask.by == by:
+                    raise ValueError(
+                        f"{by.name} may not withdraw it here: it was asked in the session {ask.get('session')}"
+                    )
                 raise ValueError(f"{by.name or by.kind} may not withdraw an ask another agent made")
     except ValueError as exc:
         raise ValueError(f"{ask.id}: {exc}") from None
@@ -392,14 +454,19 @@ def apply(ask: Ask, raw: dict[str, Any]) -> None:
         ask.withdrawn = raw
 
 
-def may_withdraw(ask: Ask, by: Who) -> bool:
-    """A person withdraws any ask; an agent only one it made."""
-    return by.kind == "person" or (by.kind == "agent" and ask.by == by)
+def may_withdraw(ask: Ask, by: Who, session: str | None = None) -> bool:
+    """A person withdraws any ask; an agent only one it made: under the name it asked as, and in the loom session it asked in where the ask names one.
+
+    Both, since neither tells one conversation alone: every conversation of one app declares one name, and every agent in a shell shares the quilt's active session.
+    """
+    if by.kind == "person":
+        return True
+    asked_in = ask.get("session")
+    return by.kind == "agent" and ask.by == by and (not asked_in or session == asked_in)
 
 
 def _append(root: Path, line: dict[str, Any]) -> None:
-    with log_path(root).open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n")
+    append_line(log_path(root), json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
 
 
 def ask(root: Path, by: Who, what: str, to: str, on: Mapping[str, Any], **fields: Any) -> Ask:
@@ -443,10 +510,11 @@ def ask(root: Path, by: Who, what: str, to: str, on: Mapping[str, Any], **fields
         **fields,
     }
     # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
+    trial = f"t-{at[:10]}-0"
     try:
-        parse_ask({**line, "id": f"t-{at[:10]}-0"})
+        parse_ask({**line, "id": trial})
     except ValueError as exc:
-        raise AskRefused(str(exc)) from None
+        raise AskRefused(str(exc).removeprefix(f"{trial}: ")) from None
     with locked(log_path(root)):
         line["id"] = draw(f"t-{at[:10]}-", set(replay(root).asks))
         made = parse_ask(line)
@@ -488,12 +556,31 @@ def say(root: Path, by: Who, event: str, task: str, **fields: Any) -> Ask:
         found = replay(root).asks.get(task)
         if found is None:
             raise AskRefused(f"{task} is no ask in this quilt")
+        closed = closed_for(found, event, by, fields, root)
+        if closed:
+            raise AskRefused(closed)
         try:
             apply(_copy(found), line)
         except ValueError as exc:
             raise AskRefused(str(exc)) from None
         _append(root, line)
         return replay(root).asks[task]
+
+
+def closed_for(found: Ask, event: str, by: Who, fields: Mapping[str, Any], root: Path) -> str:
+    """Why an event may not be said of an ask as it stands, '' when it may: nothing is said of a withdrawn ask, an answered one is not answered again, `done` names what it made, and a task a live session of another works on is not taken."""
+    if found.withdrawn is not None:
+        return f"{found.id} is withdrawn"
+    if event == "answered" and found.answers:
+        return f"{found.id} is answered already"
+    if event == "done" and not fields.get("made"):
+        return "say what you made with --made"
+    if event == "took":
+        live = live_sessions(root)
+        holders = {str(t.get("session")) for t in found.took} & live
+        if holders - {str(fields.get("session"))}:
+            return f"{found.id} is being worked on by a live session, {sorted(holders)[0]}"
+    return ""
 
 
 def _copy(found: Ask) -> Ask:
@@ -685,3 +772,14 @@ def place_of(quilt: Any, text: str) -> tuple[dict[str, Any], list[str]]:
     raise ContentError(
         f"nothing of this quilt is named {name}: give a result's label or key, a node's id, a work's id, or a document's path"
     )
+
+
+def answered_unseen(root: Path, found: Ask) -> bool:
+    """Whether an agent's question has an answer the agent that asked has not seen since: given after its last look (`loom since`'s marker for its name), or with no look yet."""
+    from loom.since import read_marker
+
+    if found.to != "person" or found.what != "question" or not found.answers or found.by.kind != "agent":
+        return False
+    marker = read_marker(root, found.by.name)
+    when = str(found.answers[-1].get("at", ""))
+    return marker is None or marker.new(when, f"answered:{found.id}:{when}")

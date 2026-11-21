@@ -15,6 +15,13 @@ from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Report, counted
 from loom.errors import ContentError, EnvError
 
+SESSION_OPTION = click.option(
+    "--session",
+    "session",
+    default=None,
+    metavar="ID",
+    help="The loom session you work in, by which loom tells your asks from another conversation's; default the active one.",
+)
 AS_OPTION = click.option(
     "--as", "declared", default=None, metavar="NAME", help="Who acts; an agent names itself, including Agent or AI."
 )
@@ -32,6 +39,14 @@ def _agent(root: Path, declared: str | None) -> Any:
             f"{name or 'nobody'} is not an agent's name; a person acts in the viewer. Name yourself with --as, including Agent or AI."
         )
     return Who("agent", name)
+
+
+def _session(root: Path, given: str | None) -> str | None:
+    """The session an agent's command acts in: the one it names, else the quilt's active one, else none."""
+    from loom.cli._common import find_session
+    from loom.sessions import active
+
+    return str(find_session(root, given).id) if given else active(root)
 
 
 def _refused(exc: Exception) -> ContentError:
@@ -78,6 +93,11 @@ def _mark_place(mark: Any) -> dict[str, Any]:
 
 def _line(found: Any, standing: Any) -> str:
     a = found
+    if a.to == "person":
+        # another agent's words, named and quoted, never read as part of the list
+        asker = f" by {a.by.name}:"
+    else:
+        asker = ""
     if a.what in ("question", "ask", "correct"):
         said = f'"{a.get("text")}"'
     elif a.what == "paper":
@@ -91,7 +111,13 @@ def _line(found: Any, standing: Any) -> str:
         said = f"which result of {a.get('cites')} {a.on['block']['key']} rests on"
     state = "working" if standing.working else ("open" if standing.open else str(standing.why))
     words = f" ({a.words})" if a.words else ""
-    return f"{a.id}  {a.what} {said}{words}  [{state}]"
+    line = f"{a.id}  {a.what}{asker} {said}{words}  [{state}]"
+    for answer in a.answers:
+        choice = answer.get("choice")
+        picked = f'"{a.get("choices", [])[choice]}"' if isinstance(choice, int) else ""
+        own = f'"{answer.get("words")}"' if answer.get("words") else ""
+        line += "\n  answered: " + " and ".join(x for x in (picked, own) if x)
+    return line
 
 
 @click.group(name="tasks", cls=CommandGroup, invoke_without_command=True)
@@ -100,17 +126,17 @@ def _line(found: Any, standing: Any) -> str:
 @quilt_option
 @click.pass_context
 def tasks(ctx: click.Context, show_all: bool, as_json: bool, quilt_path: str | None) -> None:
-    """List what waits for an agent: what a person asked of agents, and the questions and papers agents asked of the person, with the person's answers.
+    """List what waits for an agent: what a person asked of agents, the questions and papers agents asked of the person, and each answer the person gave that the agent that asked has not seen since its last `loom since`.
 
     Nothing is assigned or ranked: take what you can do (`loom tasks take ID`), and say what you produced (`loom tasks done ID --made ID`). An ask closes by what it produces, a stub read or Lean run on its result, whoever produced it.
     """
     if ctx.invoked_subcommand is not None:
         return
-    from loom.evidence.asks import open_asks
+    from loom.evidence.asks import answered_unseen, open_asks
     from loom.records.annotations import load_records
 
     root = open_quilt(quilt_path).root
-    every = open_asks(root, closed=show_all)
+    every = [s for s in open_asks(root, closed=True) if show_all or s.open or answered_unseen(root, s.ask)]
     marks = {a.id: a for rec in load_records(root)[0] for a in rec.annotations if a.purpose == "to-digest"}
     for_agents = [s for s in every if s.ask.to == "agent"]
     of_person = [s for s in every if s.ask.to == "person"]
@@ -120,7 +146,12 @@ def tasks(ctx: click.Context, show_all: bool, as_json: bool, quilt_path: str | N
     ]
     waiting = sum(1 for s in for_agents if s.open)
     Report(
-        f"{counted(waiting, 'task waits', 'tasks wait')} for an agent; {counted(sum(1 for s in of_person if s.open), 'ask waits', 'asks wait')} for the person",
+        f"{counted(waiting, 'task waits', 'tasks wait')} for an agent; {counted(sum(1 for s in of_person if s.open), 'ask waits', 'asks wait')} for the person"
+        + (
+            f"; {counted(answered, 'answer')} not yet seen"
+            if (answered := sum(1 for s in of_person if answered_unseen(root, s.ask)))
+            else ""
+        ),
         groups=[g for g in groups if g.items],
         data={"tasks": [_row(s.ask, s, marks) for s in for_agents], "asked": [_row(s.ask, s) for s in of_person]},
     ).emit(as_json)
@@ -142,15 +173,14 @@ def _say(
 
 @tasks.command(name="take")
 @click.argument("task")
+@SESSION_OPTION
 @AS_OPTION
 @JSON_OPTION
 @quilt_option
-def take_command(task: str, declared: str | None, as_json: bool, quilt_path: str | None) -> None:
-    """Say that this session is working on TASK, so the person sees it taken."""
-    from loom.sessions import active
-
+def take_command(task: str, session: str | None, declared: str | None, as_json: bool, quilt_path: str | None) -> None:
+    """Say that your session is working on TASK, so the person sees it taken; refused while a live session of another works on it."""
     root = open_quilt(quilt_path).root
-    session = active(root)
+    session = _session(root, session)
     if not session:
         raise EnvError("no session is active; open one with `loom session new` and take the task again")
     _say("took", task, declared, as_json, quilt_path, "{id}: taken by this session", session=session)
@@ -186,12 +216,18 @@ def answer_command(task: str, text: str, declared: str | None, as_json: bool, qu
 
 @tasks.command(name="withdraw")
 @click.argument("task")
+@SESSION_OPTION
 @AS_OPTION
 @JSON_OPTION
 @quilt_option
-def withdraw_command(task: str, declared: str | None, as_json: bool, quilt_path: str | None) -> None:
-    """Withdraw TASK, a question or a paper you asked of the person and no longer need. Only your own."""
-    _say("withdrawn", task, declared, as_json, quilt_path, "{id}: withdrawn")
+def withdraw_command(
+    task: str, session: str | None, declared: str | None, as_json: bool, quilt_path: str | None
+) -> None:
+    """Withdraw TASK, a question or a paper you asked of the person and no longer need: one you asked, under your name, and in your session where it was asked in one."""
+    session = _session(open_quilt(quilt_path).root, session)
+    _say(
+        "withdrawn", task, declared, as_json, quilt_path, "{id}: withdrawn", **({"session": session} if session else {})
+    )
 
 
 @click.command(name="ask")
@@ -237,6 +273,7 @@ def withdraw_command(task: str, declared: str | None, as_json: bool, quilt_path:
     metavar="DOC",
     help="A draft it is asked for, so the person can see it with that draft's; default the documents that read the place.",
 )
+@SESSION_OPTION
 @AS_OPTION
 @JSON_OPTION
 @quilt_option
@@ -248,19 +285,26 @@ def ask_command(
     link: str | None,
     want: str,
     drafts: tuple[str, ...],
+    session: str | None,
     declared: str | None,
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
     """Ask the person a question in TEXT, or with --paper for a paper you could not fetch.
 
-    A question waits in Review with its choices and a field for the person's own words; their answer comes back in `loom tasks`. A paper waits with its link: the person opens it, downloads the paper and drops the file into loom, which attaches it to the work that waits.
+    A question waits in Review with its choices and a field for the person's own words; once they answer, `loom tasks` shows the answer until your next `loom since`, which reports it. A paper waits in Review with its link, for the person to fetch and add; the request closes once the work holds the document.
     """
     from loom.evidence.asks import AskRefused, ask, place_of
+    from loom.scan.scan import scan
 
     quilt = open_quilt(quilt_path)
     root = quilt.root
     who = _agent(root, declared)
+    session = _session(root, session)
+    stray = [d for d in drafts if d not in scan(quilt).masters] if drafts else []
+    if stray:
+        raise ContentError(f"{stray[0]} is not a document of this quilt; --for names a draft by its path")
+    mine = {"session": session} if session else {}
     try:
         if ref is not None:
             if not link:
@@ -278,6 +322,7 @@ def ask_command(
                 ref=ref,
                 link=link,
                 want=want,
+                **mine,
             )
             verdict = f"{made.id}: asked the person for the {want} of {ref}"
         else:
@@ -289,7 +334,7 @@ def ask_command(
             fields: dict[str, Any] = {"text": text}
             if choices:
                 fields["choices"] = list(choices)
-            made = ask(root, who, "question", "person", on, origin=list(drafts) or readers, **fields)
+            made = ask(root, who, "question", "person", on, origin=list(drafts) or readers, **fields, **mine)
             verdict = f"{made.id}: asked the person"
     except AskRefused as exc:
         raise _refused(exc) from None
@@ -343,6 +388,7 @@ def evidence_command(name: str, as_json: bool, quilt_path: str | None) -> None:
 def _status_row(here: Any, s: Any) -> dict[str, Any]:
     return {
         "at": here.name,
+        "kind": here.kind,
         "subject": s.subject.to_dict() if s.subject else None,
         "reading": s.reading,
         "lean": s.lean,
@@ -352,13 +398,13 @@ def _status_row(here: Any, s: Any) -> dict[str, Any]:
         "unattested_notation": list(s.unattested_notation),
         "accepted": s.accepted,
         "proposal": s.proposal,
-        "waiting_on": [{"node": w.key[1], "why": w.why} for w in s.waiting_on],
+        "waiting_on": [{w.key[0]: w.key[1], "why": w.why} for w in s.waiting_on],
     }
 
 
 def _says(row: dict[str, Any]) -> str:
     if row["subject"] is None:
-        return "no lasting name: it has no label"
+        return "not in the library" if row["kind"] == "node" else "no lasting name: it has no label"
     lean = {
         "none": "not formalized",
         "rerun": "Lean changed or the text did since loom ran it; loom runs it again",
