@@ -7,6 +7,7 @@
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
 	import Statement from '../Statement.svelte';
+	import SeeItLink from '../SeeItLink.svelte';
 
 	let { row }: { row: EditRow | AcceptedChangedRow } = $props();
 	const body = new Read<ReviewBody>();
@@ -38,3 +39,4 @@
 		<button type="button" class="btn" disabled={busy} onclick={() => act(() => api.accept(row.key), words.accepted.accepted)}>{words.accepted.accept}</button>
 	{/if}
 </div>
+<SeeItLink doc={row.doc} key={row.key} name={row.kind === 'edits' ? row.where : row.name} />

@@ -30,7 +30,7 @@
 	{#if meta}<span class="meta" class:problem={row.kind === 'edits' && row.broke}>{meta}</span>{/if}
 {/snippet}
 
-<div class="rr" class:open data-testid="review-row" data-kind={row.kind}>
+<div class="rr" class:open data-testid="review-row" data-kind={row.kind} data-ref={row.kind === 'fetch' ? row.ref : undefined}>
 	{#if openable}
 		<button type="button" class="rr-h" aria-expanded={open} onclick={() => rv.toggle(row.row)}>
 			{@render head()}<span class="chev"><Icon name={open ? 'caret' : 'right'} size={16} /></span>

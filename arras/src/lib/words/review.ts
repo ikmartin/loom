@@ -305,6 +305,16 @@ export const review = {
 		/** In place of a statement whose rendering could not be read. */
 		missing: 'This text could not be read.'
 	},
+	seeIt: {
+		/** Under a row's text: lays its document over Review, at the result. */
+		link: (doc: string) => `see it in ${file(doc)}`,
+		/** In the document's head over Review: where it was opened. */
+		at: (name: string) => `at ${name}`,
+		/** In the document's head: that it cannot be edited here. */
+		readOnly: 'read only here; edit it in Docs',
+		/** The document's close button. */
+		close: 'Close the document'
+	},
 	agents: {
 		/** A task an agent has taken, after the agent's name. */
 		working: 'is working on it',

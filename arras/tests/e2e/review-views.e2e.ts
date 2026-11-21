@@ -1,6 +1,7 @@
 // Review on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/review6.ts`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 4 to 12): the column's kinds, counts and drafts; the list by who is waiting; answering a question, keeping an edit, withdrawing a task; and the rules that hold everywhere: no control but the four view names changes view, and no id is drawn. Where Review's reads are not served, today's Review stands, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { serve } from '../manifest';
 
 /** One of the showcase quilt's stored papers, which the fixture serves as every work's PDF. */
 const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
@@ -218,6 +219,38 @@ test('an attested definition that changed is asked about in three steps, and eac
 	await expect(cor).toContainText('its statement changed since you attested it, 20 Nov');
 	await cor.getByRole('button', { expanded: false }).first().click();
 	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
+});
+
+test('see it lays the document over Review, read only, at the result, and closes back to the list', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-edits').click();
+	const bounds = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Theorem 1' });
+	await bounds.getByRole('button', { expanded: false }).click();
+	// a draft the quilt does not hold offers nothing to see
+	await expect(bounds.getByTestId('see-it')).toHaveCount(0);
+	const main = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
+	await main.getByRole('button', { expanded: false }).click();
+	await main.getByTestId('see-it').click();
+	const over = page.getByTestId('review-over');
+	await expect(over).toContainText('main.tex');
+	await expect(over).toContainText('at proof of Theorem 3.1 · read only here; edit it in Docs');
+	await expect(over.locator('.fragment').first()).toBeVisible();
+	await expect(page).toHaveURL(/\/review/);
+	await over.getByRole('button', { name: 'Close the document' }).click();
+	await expect(over).toHaveCount(0);
+	await expect(main.getByTestId('see-it')).toBeVisible();
+});
+
+test("a collaborator's pull is chosen under the kinds and drawn as today's review of it", async ({ page }) => {
+	await serve(page, (m) => {
+		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [{ status: 'M', path: 'drafting/main.tex', diff: '-Old prose\n+New prose' }], changes: [{ key: 'prose:setup', name: 'Introduction', category: 'prose', kind: 'edited', local_changed: false, conflict: false, already_local: false, current: 'Old prose', proposed: 'New prose', affected: [] }] };
+	});
+	await open(page);
+	await page.getByTestId('review-kind-incoming').click();
+	await expect(page.getByText('New prose', { exact: true })).toBeVisible();
+	await expect(page.getByTestId('contribution-bar')).toContainText('A pull is taken whole.');
+	await page.getByTestId('review-kind-all').click();
+	await expect(page.getByTestId('review-row')).toHaveCount(29);
 });
 
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {

@@ -7,6 +7,7 @@
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
 	import Statement from '../Statement.svelte';
+	import SeeItLink from '../SeeItLink.svelte';
 
 	let { row }: { row: Extract<CitedRow, { citation: string }> } = $props();
 	const body = new Read<ReviewBody & { cite?: { where: string; fragment: string; nth: number } }>();
@@ -40,5 +41,6 @@
 <div class="answers">
 	<button type="button" class="btn" disabled={busy} onclick={which}>{words.citation.which}</button>
 	<button type="button" class="btn" disabled={busy} onclick={mention}>{words.citation.mention}</button>
+	<SeeItLink doc={row.doc} key={row.key} name={row.where} />
 </div>
 <p class="note after">{words.citation.comesBack(row.doc)}</p>

@@ -9,8 +9,10 @@ import type { ReviewCounts, ReviewKind, ReviewList } from '$lib/library/types';
 export const COLUMN_ORDER: ReviewKind[] = ['accepted-changed', 'questions', 'attested-changed', 'cited', 'check', 'attest', 'fetch', 'edits'];
 
 class ReviewState {
-	/** What the list shows: everything, one kind, or the tasks waiting for an agent. */
-	kind = $state<ReviewKind | 'all' | 'agents'>('all');
+	/** What the list shows: everything, one kind, the tasks waiting for an agent, or a collaborator's pull. */
+	kind = $state<ReviewKind | 'all' | 'agents' | 'incoming'>('all');
+	/** A document laid over the list, read only, at a result; none while the list shows. */
+	over = $state<{ doc: string; key: string; name: string } | null>(null);
 	/** The draft the list is narrowed to, or none. */
 	doc = $state<string | null>(null);
 	/** Kinds folded under Everything; the agents' group starts folded. */
@@ -37,8 +39,9 @@ class ReviewState {
 	}
 
 	/** Shows one kind, or everything; choosing Everything shows every draft again. */
-	choose(kind: ReviewKind | 'all' | 'agents'): void {
+	choose(kind: ReviewKind | 'all' | 'agents' | 'incoming'): void {
 		this.kind = kind;
+		this.over = null;
 		if (kind === 'all') this.doc = null;
 	}
 

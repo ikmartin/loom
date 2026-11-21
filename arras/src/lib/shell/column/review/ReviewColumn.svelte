@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, the tasks waiting for an agent between two rules, the drafts with what concerns each, and at its foot the Record. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, the tasks waiting for an agent between two rules, a collaborator's pull where the quilt has one, the drafts with what concerns each, and at its foot the Record. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -9,6 +9,8 @@
 	import { hovercard } from '$lib/shell/hovercards.svelte';
 	import { COLUMN_ORDER, rv } from '$lib/views/review/state.svelte';
 	import { review as words } from '$lib/words/review';
+	import { store } from '$lib/manifest/client.svelte';
+	import { pullLabel } from '$lib/review/proposed';
 
 	$effect(() => {
 		const doc = rv.doc ?? undefined;
@@ -21,7 +23,7 @@
 	const inList = $derived(page.route.id === '/review');
 
 	/** Shows `kind` in the list, coming back to it from the Record. */
-	function pick(kind: ReviewKind | 'all' | 'agents'): void {
+	function pick(kind: ReviewKind | 'all' | 'agents' | 'incoming'): void {
 		rv.choose(kind);
 		if (!inList) void goto(route('/review'));
 	}
@@ -29,7 +31,8 @@
 		rv.draft(doc);
 		if (!inList) void goto(route('/review'));
 	}
-	const on = (kind: ReviewKind | 'all' | 'agents') => inList && rv.kind === kind;
+	const on = (kind: ReviewKind | 'all' | 'agents' | 'incoming') => inList && rv.kind === kind;
+	const m = $derived(store.manifest);
 </script>
 
 <div class="rv-col rail-scroll" data-testid="review-column">
@@ -48,6 +51,9 @@
 			>{words.kinds.agents.name}<span class="n">{counts?.agents ?? ''}</span></button
 		>
 		<div class="rule"></div>
+		{#if m?.incoming}
+			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" onclick={() => pick('incoming')}>{pullLabel(m)}</button>
+		{/if}
 	</nav>
 	{#if counts?.drafts.length}
 		<p class="rl"><span use:hovercard={{ text: words.column.draftsHover, place: 'beside' }}>{words.column.drafts}</span></p>

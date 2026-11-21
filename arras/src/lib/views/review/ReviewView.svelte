@@ -10,20 +10,25 @@
 	import Task from './Task.svelte';
 	import ReadAll from './ReadAll.svelte';
 	import { stubsOf } from './rows';
+	import SeeIt from './SeeIt.svelte';
+	import Pull from './Pull.svelte';
 
 	$effect(() => {
 		const kind = rv.kind;
 		const doc = rv.doc ?? undefined;
 		void gen.gen;
-		void rv.list.load(`list:${kind}:${doc ?? ''}`, (s) => api.reviewList(kind, doc, s));
+		if (kind !== 'incoming') void rv.list.load(`list:${kind}:${doc ?? ''}`, (s) => api.reviewList(kind, doc, s));
 	});
 
 	const groups = $derived((rv.list.value?.groups ?? []).filter((g) => g.rows.length));
 </script>
 
 <main class="rvw" data-testid="review-view">
+	<div class="scroll">
 	<div class="list">
-		{#if rv.list.error}
+		{#if rv.kind === 'incoming'}
+			<Pull />
+		{:else if rv.list.error}
 			<p class="empty">{words.list.failed(rv.list.error.message)}</p>
 		{:else if !rv.list.value}
 			<p class="empty">{words.list.loading}</p>
@@ -43,4 +48,6 @@
 			{/each}
 		{/if}
 	</div>
+	</div>
+	{#if rv.over}<SeeIt over={rv.over} />{/if}
 </main>

@@ -11,6 +11,7 @@
 	import Lean from '../Lean.svelte';
 	import Statement from '../Statement.svelte';
 	import Restate from './Restate.svelte';
+	import SeeItLink from '../SeeItLink.svelte';
 
 	type Resting = { result: string; name: string; statement: Text; lean: string; attested_again: boolean };
 	type Body = ReviewBody & { observation?: string; at?: string; then?: Text; now?: Text; lean?: string; resting?: Resting[] };
@@ -53,6 +54,7 @@
 		<div class="stepb">
 			<div class="steph">{words.attested.now}</div>
 			<div class="citebox"><Statement fragment={b.now.fragment} /></div>
+			<SeeItLink doc={row.doc} key={row.result} name={row.name} />
 		</div>
 	</div>
 	<div class="step">
