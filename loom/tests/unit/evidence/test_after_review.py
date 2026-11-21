@@ -238,7 +238,7 @@ def test_an_answer_may_hold_a_line_feed_and_a_tab_but_no_other_control_character
     assert say(root, PERSON, "answered", q.id, words="both,\n\tand why").answers
 
 
-@pytest.mark.parametrize("link", ["http://user:pw@doi.org/x", "https://user@doi.org/x"])
+@pytest.mark.parametrize("link", ["http://user:pw@example.org/x", "https://user@example.org/x"])
 def test_a_papers_link_holds_no_name_or_password(root: Path, link: str) -> None:
     with pytest.raises(AskRefused, match="name or a password"):
         ask(root, AGENT, "paper", "person", {"ref": "tq-00B1-ref"}, ref="tq-00B1-ref", link=link, want="pdf")
