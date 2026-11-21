@@ -163,7 +163,8 @@ export const takeCorrection = (correction: string) => call<WriteDone>('library-c
 export const declineCorrection = (correction: string) => call<WriteDone>('library-correction-decline', { correction });
 export const attest = (result: string, observation: string) => call<WriteDone>('formal-attest', { result, observation });
 export const mention = (citation: string) => call<WriteDone>('library-mention', { citation });
-export const withdraw = (task: string) => call<WriteDone>('review-task-delete', { task });
+/** Withdraws a task (`review-task-delete`); `undo`, the column's undo of that, puts the same task back as it stood. */
+export const withdraw = (task: string, undo = false) => call<WriteDone>('review-task-delete', { task, ...(undo ? { undo: true } : {}) });
 /** Asks an agent (`review-task`): an `asked` line of the asks log (`evidence.md` §4.1), `fields` those of its `what`, `from` the drafts it is asked for. */
 export const ask = (what: string, on: Record<string, unknown>, fields: Record<string, unknown>, from: string[], words = '') => call<WriteDone & { task: string }>('review-task', { what, on, ...fields, from, words });
 

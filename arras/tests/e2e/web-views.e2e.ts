@@ -60,6 +60,12 @@ test('by status puts what is not read first, and the search finds words in a sta
 	await expect(page.getByTestId('web-hit').first()).toBeVisible();
 	await expect(page.getByTestId('web-hit').first().locator('mark')).toHaveText('polynomial');
 	await expect(page.getByTestId('web-list')).toContainText('2 results');
+	// a hit is one paragraph: the match an inline mark among its words, the spaces either side kept and no word cut
+	const lemma = page.getByTestId('web-hit').filter({ hasText: 'polynomially' });
+	await expect(lemma).toContainText('number polynomially many in h');
+	for (const hit of await page.getByTestId('web-hit').all()) expect(await hit.evaluate((e) => (e as HTMLElement).innerText.includes('\n'))).toBe(false);
+	const [mark, line] = [await lemma.locator('mark').boundingBox(), await lemma.boundingBox()];
+	expect(Math.abs(mark!.y - line!.y)).toBeLessThan(4);
 	await page.getByTestId('web-search').fill('zzzz');
 	await expect(page.getByTestId('web-list')).toContainText('nothing matches');
 });

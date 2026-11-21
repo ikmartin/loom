@@ -21,6 +21,7 @@
 	import { formalize } from '$lib/formalize/state.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
+	import { lib } from '$lib/views/library/state.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
 	import { documentLabel } from '$lib/workspace/names';
@@ -81,7 +82,8 @@
 	const sections = $derived(store.manifest ? sectionsOf(store.manifest) : []);
 
 	// Each view's name goes to its view: Docs to the reading address, where it was left; Review to its list where its reads are served, else to today's landing; the Library and the Web to their own pages, which keep their place themselves. A corpus that declares no review has no Review; one that says nothing either way keeps it.
-	const hrefOf = (v: Primary): string => (v === 'docs' ? docsHref || route('/') : v === 'review' ? (rv.served ? route('/review') : reviewLanding(sections)) : route(`/${v}`));
+	// Docs and the Library go back to where they were left: Docs' reading address, the Library's tab
+	const hrefOf = (v: Primary): string => (v === 'docs' ? docsHref || route('/') : v === 'library' ? lib.address : v === 'review' ? (rv.served ? route('/review') : reviewLanding(sections)) : route(`/${v}`));
 	const shownViews = $derived(VIEWS.filter((v) => v !== 'review' || store.manifest?.publishes?.review !== false));
 
 	// The line between the documents and the outline: where it stands is a preference, drawn at most once a frame while it is dragged and stored at the drop, as the pane divider is.

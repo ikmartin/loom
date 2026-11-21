@@ -37,6 +37,18 @@ test('thumbnails draw sixty at first, and the choice is remembered', async ({ pa
 	await open(page);
 	await page.getByTestId('works-thumbs').click();
 	await expect(page.getByTestId('work-thumb')).toHaveCount(60);
+	// the pages of a row stand level, whatever the length of each caption
+	const rows = await page.getByTestId('work-thumb').evaluateAll((cards) => {
+		const tops = new Map<number, number[]>();
+		for (const c of cards.slice(0, 24)) {
+			const pg = c.querySelector('.pg')!.getBoundingClientRect();
+			const row = Math.round(pg.top / 100);
+			tops.set(row, [...(tops.get(row) ?? []), pg.top]);
+		}
+		return [...tops.values()].map((t) => Math.max(...t) - Math.min(...t));
+	});
+	expect(rows.length).toBeGreaterThan(1);
+	for (const spread of rows) expect(spread).toBeLessThan(0.5);
 	await page.reload();
 	await expect(page.getByTestId('works-thumbnails')).toBeVisible();
 	await page.getByTestId('works-list').click();
@@ -171,6 +183,27 @@ test("a work's tab has an address: a reload keeps the open works, and Back stays
 	await expect(page.getByTestId('library-tab')).toHaveCount(1);
 });
 
+test("the Library's name goes back to the tab it was left at, after another view and after a reload there", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await page.getByTestId('primary-docs').click();
+	await expect(page).not.toHaveURL(/\/library/);
+	await page.getByTestId('primary-library').click();
+	await expect(page).toHaveURL(/\/library\?work=/);
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await page.getByTestId('primary-docs').click();
+	await page.reload();
+	await page.getByTestId('primary-library').click();
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	// left at the list, it goes back to the list
+	await page.getByTestId('library-tab-works').click();
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('primary-docs').click();
+	await page.getByTestId('primary-library').click();
+	await expect(page.getByTestId('works-table')).toBeVisible();
+});
+
 test("the list works from the keyboard: a row's title opens its work, and its own controls show while it holds the keyboard", async ({ page }) => {
 	await open(page);
 	const smith = row(page, 'Widgets and their bounds');
@@ -206,6 +239,12 @@ test('on a quilt that has not said whether loom may use the network, a work adde
 	await page.getByTestId('paste-identifier').press('Enter');
 	const added = row(page, 'arXiv 2209.01234v2');
 	await expect(added).toContainText('look it up this once?');
+	// not now leaves it unconfirmed; a later look up, refused as the quilt has not answered, asks again
+	await added.getByTestId('look-not').click();
+	await expect(added).toContainText('details unconfirmed');
+	await added.getByRole('button', { name: 'look up' }).click();
+	await expect(added).toContainText('look it up this once?');
+	await expect(page.getByTestId('column-message')).not.toContainText('Loom could not do that.');
 	await added.getByTestId('look-yes').click();
 	await expect(row(page, 'Gadget towers')).toBeVisible();
 	await expect(row(page, 'Gadget towers')).not.toContainText('look it up');

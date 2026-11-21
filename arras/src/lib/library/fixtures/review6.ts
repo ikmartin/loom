@@ -15,6 +15,8 @@ export interface ReviewFixture {
 	bodies: Record<string, Record<string, unknown>>;
 	fragments: Record<string, string>;
 	seq: number;
+	/** Tasks withdrawn, each with where it stood, for an undo to put back. */
+	withdrawn?: Record<string, { row: TaskRow; at: number }>;
 }
 
 /** Inline mathematics, as a fragment holds it. */
@@ -210,6 +212,24 @@ export function close(r: ReviewFixture, test: (row: ReviewRow | TaskRow) => bool
 		return true;
 	}
 	return false;
+}
+
+/** Withdraws a task, keeping it and its place for an undo. */
+export function withdraw(r: ReviewFixture, task: string): boolean {
+	const at = r.tasks.findIndex((t) => t.task === task);
+	if (at < 0) return false;
+	(r.withdrawn ??= {})[task] = { row: r.tasks[at], at };
+	r.tasks.splice(at, 1);
+	return true;
+}
+
+/** Puts a withdrawn task back as it was, in its place. */
+export function unwithdraw(r: ReviewFixture, task: string): boolean {
+	const was = r.withdrawn?.[task];
+	if (!was) return false;
+	r.tasks.splice(Math.min(was.at, r.tasks.length), 0, was.row);
+	delete r.withdrawn![task];
+	return true;
 }
 
 /** A task asked now, as `review-task` and `library-digest` make one. */

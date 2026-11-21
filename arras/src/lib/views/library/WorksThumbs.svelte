@@ -62,6 +62,8 @@
 		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
 		gap: 20px 18px;
 		padding: 16px 0;
+		/* each card as tall as its own caption: a button stretched to its row's tallest would centre a shorter one's page lower */
+		align-items: start;
 	}
 	.th {
 		font: inherit;

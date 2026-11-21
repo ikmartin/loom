@@ -5,7 +5,7 @@ import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, lookUp, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
 import { notesAnswer } from './notes6';
 import { formalMarks, formalPlan, growWeb, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
-import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
+import { ask, attest, body, close, counts, fragmentOf, list, markStub, unwithdraw, withdraw } from './review6';
 import type { ReviewKind, TaskRow, WebScope } from '../types';
 
 type Body = Record<string, unknown>;
@@ -152,7 +152,12 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			return ok({ task });
 		},
 		'review-answer': (b) => closing((r) => r.kind === 'questions' && r.task === b.task),
-		'review-task-delete': (b) => closing((r) => r.kind === 'agents' && r.task === b.task),
+		'review-task-delete': (b) => {
+			if (!(b.undo === true ? unwithdraw(f.review, b.task as string) : withdraw(f.review, b.task as string))) return no('no-such-task');
+			f.gen++;
+			changed();
+			return ok({});
+		},
 		'change-keep': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
 		'change-discard': (b) => closing((r) => r.kind === 'edits' && (b.changes as string[]).includes(r.change)),
 		'formal-attest': (b) => {

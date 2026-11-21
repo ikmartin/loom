@@ -27,6 +27,17 @@ function visited(): string[] {
 		return [];
 	}
 }
+const TAB = 'arras.library.tab';
+
+/** The tab shown when the Library was left, where it is one of the open works. */
+function shown(open: string[]): string {
+	try {
+		const v = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(TAB);
+		return v && open.includes(v) ? v : 'works';
+	} catch {
+		return 'works';
+	}
+}
 const COLS = 'arras.library.columns';
 
 function remembered(key: string): string | null {
@@ -82,9 +93,26 @@ class LibraryState {
 	/** Works selected with ⌘-click, for "everything in the papers I select". */
 	multi = new SvelteSet<string>();
 
-	// the tabs: the works open, kept for the browser tab's visit so a reload keeps them, and the one shown, which the address says (`/library?work=…`)
+	// the tabs: the works open, kept for the browser tab's visit so a reload keeps them, and the one shown, which the address says (`/library?work=…`) and the Library's name goes back to
 	#open = $state<string[]>(visited());
-	tab = $state<string>('works');
+	#tab = $state<string>(shown(this.#open));
+
+	get tab(): string {
+		return this.#tab;
+	}
+	set tab(v: string) {
+		this.#tab = v;
+		try {
+			sessionStorage.setItem(TAB, v);
+		} catch {
+			// a browser that keeps nothing goes back to the list after a reload
+		}
+	}
+
+	/** Where the Library was left: the list, or the work whose tab was shown. */
+	get address(): string {
+		return route('/library') + (this.tab !== 'works' && this.open.includes(this.tab) ? `?work=${encodeURIComponent(this.tab)}` : '');
+	}
 
 	get open(): string[] {
 		return this.#open;
@@ -138,7 +166,7 @@ class LibraryState {
 	/** Shows a tab by going to its address, so Back and Forward move between the Library's tabs and a reload stays on it. */
 	show(tab: string): void {
 		this.tab = tab;
-		void goto(route('/library') + (tab === 'works' ? '' : `?work=${encodeURIComponent(tab)}`), { keepFocus: true, noScroll: true });
+		void goto(this.address, { keepFocus: true, noScroll: true });
 	}
 
 	/** The tab the address names, opened where it is not: what a reload, Back, Forward or a link lands on. */

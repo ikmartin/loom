@@ -305,7 +305,7 @@ Each kind below: what its row draws, the fields it needs, its body, its writes. 
 | `which-result` | `review-task` from a citation | `{citation, doc, where, short}` | "Say which result of Okafor 2022 the proof of Theorem 3.4 cites" |
 | `formalize` | `formal-ask` | `{result, name, doc, assume}` | "Formalize Theorem 3.4 of main.tex" |
 
-Write: `review-task-delete` with `{"task"}`, which withdraws it (`library.md`: a task "is withdrawn by deleting it"). From: the evidence lane's asks, whose record, closing and taking by a session are `evidence.md`'s. Round six also lists tasks no write on this page makes ("Transcribe the second proof of Proposition 3.4 of Smith 2024, from Halberd and Ravel 2021, pages 22–23", "Check the macros of Smith 2024 against its preamble"): an ask whose `what` the viewer does not know is drawn with the `text` it carries.
+Write: `review-task-delete` with `{"task"}`, which withdraws it (`library.md`: a task "is withdrawn by deleting it"); the column's `undo` of that is `review-task-delete` with `{"task", "undo": true}`, which puts the same task back as it stood, in its place in the list and with the agent working on it still working, never a new ask at the end. Built in the viewer and the fixture; the asks log's side, an event after `withdrawn` that opens the ask again as `resolve`'s `undo` reopens an annotation, is the evidence lane's to name (`evidence.md` §4.1), whose wording governs. From: the evidence lane's asks, whose record, closing and taking by a session are `evidence.md`'s. Round six also lists tasks no write on this page makes ("Transcribe the second proof of Proposition 3.4 of Smith 2024, from Halberd and Ravel 2021, pages 22–23", "Check the macros of Smith 2024 against its preamble"): an ask whose `what` the viewer does not know is drawn with the `text` it carries.
 
 ### 4.4 See it in a document (4 see it)
 
@@ -455,7 +455,7 @@ Every write the views make, in one place. "Built" marks one that exists today.
 | `library-mention` | `{citation}` | `{gen}` | remembers a citation as a mention (Open 22) |
 | `review-answer` | `{task, choice?, words}` | `{gen}` | answers an agent's question, `choice` counted from 0; `evidence.md` §4.2's `answered` |
 | `review-task` | `{what, on, from, words, …}` | `{gen, task}` | asks an agent (§4.3, `agents`): `read`, `digest`, `ask`, `correct`, `restate`, `which-result`, each with its own fields; an `asked` line of the evidence lane's log, `evidence.md` §4.1, whose `by`, `id`, `at` and `to` loom writes |
-| `review-task-delete` | `{task}` | `{gen}` | withdraws a task |
+| `review-task-delete` | `{task, undo?}` | `{gen}` | withdraws a task; with `undo`, puts it back as it stood (§4.3) |
 | `formal-ask` | `{targets, assume}` | `{gen, tasks}` | a task for each target; `needs-label` (409) |
 | `formal-attest` | `{result, observation}` | `{gen}` | the person's word that the Lean statement says what the result says, naming the hashes it covers; `unchecked`, `changed` (409) |
 | `place` | `{annotation, target, quote?, page?, rects?}` | `{gen}` | anchors a note again (Open 30) |

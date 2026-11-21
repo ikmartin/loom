@@ -327,14 +327,19 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	await expect(page.getByTestId('review-row').filter({ hasText: 'Arden 2024 · Lemmas' })).toContainText('Arden 2024 · Lemmas 5.7 and 5.9');
 	await page.getByTestId('review-kind-agents').click();
 	const tasks = page.getByTestId('review-task');
-	await tasks.first().hover();
-	const del = tasks.first().getByRole('button', { name: 'delete' });
+	// the undo puts back the same task, in its place and as it stood, not a new ask at the end
+	const before = await tasks.allInnerTexts();
+	const working = before.findIndex((t) => t.includes('working'));
+	expect(working).toBeGreaterThanOrEqual(0);
+	await tasks.nth(working).hover();
+	const del = tasks.nth(working).getByRole('button', { name: 'delete' });
 	const box = (await del.boundingBox())!;
 	expect(box.height).toBeGreaterThanOrEqual(28);
 	await del.click();
 	await expect(tasks).toHaveCount(5);
 	await page.getByTestId('column-message-undo').click();
 	await expect(tasks).toHaveCount(6);
+	expect(await tasks.allInnerTexts()).toEqual(before);
 	await page.getByTestId('review-kind-edits').click();
 	const first = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
 	await first.getByRole('button', { expanded: false }).click();

@@ -9,12 +9,12 @@
 
 	let { row }: { row: TaskRow } = $props();
 
-	/** Withdraws the task; its `undo` asks for the same again. */
+	/** Withdraws the task; its `undo` puts the same task back, in its place. */
 	async function withdraw(): Promise<void> {
-		const done = await api.withdraw(row.task);
+		const task = row.task;
+		const done = await api.withdraw(task);
 		if (!done.ok) return message.post(said(done.error));
-		const again = row;
-		message.post(words.agents.deleted, () => api.ask(again.what, again.on, again.text ? { text: again.text } : {}, again.docs, again.text ?? ''));
+		message.post(words.agents.deleted, () => api.withdraw(task, true));
 	}
 </script>
 

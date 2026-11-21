@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The list of works drawn as a table (1): the columns the person keeps (Title, Authors, Year and Digested by default; Loom has and Used in from the columns menu), any of them sorting, the title breaking ties. A click opens a work in its tab; ⌘-click selects it for "everything in the papers I select". On a row, its own `digest…` and a menu: its source, its entry, delete. A row being looked up, or made while the network was off, says so in its title's place.
+	// The list of works drawn as a table (1): the columns the person keeps (Title, Authors, Year and Digested by default; Loom has and Used in from the columns menu), any of them sorting, the title breaking ties. A click opens a work in its tab; ⌘-click selects it for "everything in the papers I select". On a row, its own `digest…` and a menu: its source, its entry, delete. A row being looked up, or made while the network was off, says so in its title's place; one a quilt that has not said whether loom may use the network refuses to look up asks whether to, this once.
 	import { said } from '$lib/library/said';
 	import Icon from '$lib/components/Icon.svelte';
 	import * as api from '$lib/library/api';
@@ -41,10 +41,13 @@
 		message.post(words.works.deleted(w.short), () => api.restore(done.value.undo));
 	}
 
+	// a quilt that has not said whether loom may use the network refuses a plain look-up; the row then asks again whether to look it up this once
 	async function lookUp(w: Work, once = false): Promise<void> {
 		asking.delete(w.ref);
 		const done = await api.lookUp(w.ref, once);
-		if (!done.ok) message.post(said(done.error));
+		if (done.ok) return;
+		if (done.error.code === 'network-unasked') asking.add(w.ref);
+		else message.post(said(done.error));
 	}
 </script>
 
