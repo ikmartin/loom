@@ -316,14 +316,20 @@ def comparison(result: ScanResult, copy: str) -> dict[str, Any]:
         "merged_document": merged,
         "baseline": baseline,
     }
-    # Pin every scanned source, config and ledger: edits to dependencies or allocation inputs invalidate previews too.
+    # Pin the comparison's own inputs, so a save to an unrelated file keeps a saved choice and the preview: the copy and
+    # its baseline (in `comparison`), the target document's files and preamble, the one config key allocation reads,
+    # the history's entries for this copy, and the context's inputs. Taking it in decides again under the lock, so an
+    # id taken or a dependency changed elsewhere since is still refused there (`_incorporate`).
+    from loom.history.steps import document_files
+
     data["fingerprint"] = _digest(
         {
-            "files": {k: v.text for k, v in result.files.items()},
-            "config": (result.quilt.root / "config.toml").read_text(),
-            "history": [e.to_dict() for e in _history(result).entries],
+            "files": {k: result.files[k].text for k in document_files(result, source) if k in result.files},
+            "copy": (result.quilt.root / copy).read_text(),
+            "prefix": result.quilt.config.prefix,
+            "history": [e.to_dict() for e in _history(result).entries if _about_copy(e.data, copy)],
             "comparison": data,
-            "preambles": {name: closure.raw_text() for name, closure in result.closures.items()},
+            "preamble": result.closures[source].raw_text() if source in result.closures else None,
             "context_inputs": {
                 name: hashlib.sha256((result.quilt.root / name).read_bytes()).hexdigest()
                 if (result.quilt.root / name).is_file()
@@ -1093,6 +1099,11 @@ def decisions(
             if k not in valid
         ],
     }
+
+
+def _about_copy(data: dict[str, Any], copy: str) -> bool:
+    """Whether a history entry's data is about the agent's copy `copy`: the step that made it, one that took it in, or one moved from it."""
+    return any(data.get(k) == copy for k in ("to", "copy", "from"))
 
 
 def choice_signatures(data: dict[str, Any]) -> dict[str, str]:
