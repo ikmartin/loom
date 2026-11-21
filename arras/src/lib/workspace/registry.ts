@@ -19,6 +19,8 @@ import PageItem from './items/PageItem.svelte';
 import FileItem from './items/FileItem.svelte';
 import CompiledItem from './items/CompiledItem.svelte';
 import CompiledControls from './items/CompiledControls.svelte';
+import ReadingItem from './items/ReadingItem.svelte';
+import { shortNames } from '$lib/views/docs/names.svelte';
 import PlainControls from './items/PlainControls.svelte';
 import FileControls from './items/FileControls.svelte';
 import NodePreview from './items/NodePreview.svelte';
@@ -89,7 +91,9 @@ export const kinds: Record<ItemKind, Kind> = {
 	// a file of the project (plan 0.22.7), named by its file name as the tree shows it
 	file: { tab: (item) => item.id.split('/').pop() ?? item.id, renderer: FileItem, controls: FileControls },
 	// a document's compiled PDF (plan 0.29.1), named by its document, since an author's own PDF beside it may have the file name
-	pdf: { tab: (item, m) => pdfName(m.masters, item.id), renderer: CompiledItem, controls: CompiledControls }
+	pdf: { tab: (item, m) => pdfName(m.masters, item.id), renderer: CompiledItem, controls: CompiledControls },
+	// a work of the library beside a draft, named by its short name once its read has said it
+	reading: { tab: (item) => shortNames.get(item.id) ?? '', renderer: ReadingItem, controls: PlainControls }
 };
 
 /** The tab label of an item. */

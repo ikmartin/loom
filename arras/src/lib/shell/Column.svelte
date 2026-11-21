@@ -15,6 +15,8 @@
 	import ReviewColumn from './column/review/ReviewColumn.svelte';
 	import WebColumn from './column/web/WebColumn.svelte';
 	import { wb } from '$lib/views/web/state.svelte';
+	import { docsState } from '$lib/views/docs/docs.svelte';
+	import Picker from '$lib/views/docs/Picker.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
@@ -40,6 +42,7 @@
 		void can('review-accept').then((yes) => readOnly = !yes);
 		rv.ask();
 		wb.ask();
+		docsState.ask();
 	});
 	const reviewPerspective = $derived(store.manifest?.reviewer?.name
 		? frame.column.perspective(store.manifest.reviewer.name)
@@ -224,7 +227,11 @@
 					<div class="part docs-part rail-scroll" data-testid="docs-part" style:flex={outline ? `0 0 ${share * 100}%` : '1 1 auto'}>
 						<FilesShelf {masters} {own} {copiesOf} {section} />
 						<DocumentList {own} {unplaced} {closed} {copiesOf} {section} {filename} {onDocument} {currentDoc} />
-						<!-- the Library's place in Docs' column is built with the Library view, in its own change -->
+						{#if docsState.served}
+							<div class="colbtns">
+								<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>
+							</div>
+						{/if}
 					</div>
 					{#if outline}
 						<!-- A separator that takes focus is a widget in ARIA's own terms, with the arrow keys and aria-valuenow this one has. -->
@@ -287,11 +294,38 @@
 	<div class="content">
 		{@render children()}</div>
 	{#if rail}<aside class="right rail-scroll">{@render rail()}</aside>{/if}
+	{#if primary === 'docs' && docsState.picker}<Picker doc={currentDoc ?? null} left={panelBox?.getBoundingClientRect().right ?? 0} />{/if}
 </div>
 
 <HoverCard />
 
 <style>
+	.colbtns {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 8px 0 var(--gap-tight);
+	}
+	.colbtn {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		min-height: 30px;
+		padding: 4px 12px;
+		font: inherit;
+		font-size: 13px;
+		color: var(--ink);
+		text-align: left;
+		background: var(--ann-neutral-wash);
+		border: 0;
+		border-radius: 7px;
+		cursor: pointer;
+	}
+	.colbtn:hover,
+	.colbtn.on {
+		background: var(--rule);
+	}
 	.review-perspective { margin: 0 0 var(--gap-tight); font-size: 11.5px; color: var(--ink-soft); overflow-wrap: anywhere; }
 	.shell-c {
 		display: grid;

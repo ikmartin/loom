@@ -9,6 +9,9 @@ import type { ReviewKind, TaskRow, WebScope } from '../types';
 
 type Body = Record<string, unknown>;
 
+/** The labels round six's main.tex cites its works by. */
+const CITED: Record<string, string> = { arden24: '[1]', okafor: '[2]', arden25: '[3]', vance: '[4]' };
+
 /** A source over a fresh copy of round six's data; `onChange` hears each write's new generation. */
 export function fixtureSource(onChange: (gen: number) => void = () => {}): Source & { data: Fixture } {
 	const f = round6();
@@ -17,7 +20,8 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}): Sourc
 	const changed = () => onChange(f.gen);
 
 	const reads: Record<string, (b: Body) => Answer<Gen>> = {
-		'library-works': () => ok({ works: f.works }),
+		// asked for a draft, each work says the label that draft cites it by, as round six's main.tex does
+		'library-works': (b) => ok({ works: b.doc ? f.works.map((w) => ({ ...w, cited_as: CITED[Object.keys(REF).find((k) => REF[k] === w.ref) ?? ''] ?? null })) : f.works }),
 		'library-work': (b) => {
 			const a = workAnswer(f, b.ref as string);
 			return a ? ok(a) : no('no-such-ref');

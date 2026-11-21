@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A work's paper in the one reader (`pdf/MarkedDoc`, the same in Docs): today's toolbar and annotation tools, and the Library's own: a `view` menu holding the digest marks, which, while on, draw beside each node of the work on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), and on words selected with no tool in hand, round six's popup: mark to digest, highlight, note, ask an agent. Places are asked for only while the marks are on, for the page in view and its neighbours.
+	// A work's paper in the one reader (`pdf/MarkedDoc`), in a Library tab or beside a draft in Docs, where it draws no digest marks: today's toolbar and annotation tools, and the Library's own: a `view` menu holding the digest marks, which, while on, draw beside each node of the work on the pages in view a chip with its paper mark and number and a bar down its margin (a click puts the node beside the page), and on words selected with no tool in hand, round six's popup: mark to digest, highlight, note, ask an agent. Places are asked for only while the marks are on, for the page in view and its neighbours.
 	import { untrack } from 'svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { paperMark } from '$lib/marks/marks';
@@ -16,7 +16,8 @@
 	import { lib } from './state.svelte';
 	import { menus } from './menus.svelte';
 
-	let { work }: { work: WorkAnswer } = $props();
+	let { work, beside = false }: { work: WorkAnswer; /** Beside a draft in Docs: the reader without the digest marks or their menu. */ beside?: boolean } = $props();
+	const marks = $derived(!beside && lib.overlay);
 
 	const ref = $derived(work.ref);
 	const url = $derived(work.holds.pdf ? api.pdfUrl(work.holds.pdf) : '');
@@ -31,7 +32,7 @@
 	let page = $state(1);
 	const places = new Read<PlacesAnswer>();
 	$effect(() => {
-		const on = lib.overlay;
+		const on = marks;
 		const r = ref;
 		const near = [page - 1, page, page + 1].filter((n) => n > 0);
 		void gen.gen;
@@ -99,14 +100,14 @@
 	<div class="tb">
 		<PdfBar view={reader.view} notes={reader.notes} {desk} of={work.short} part="read" writes={desk.writes} />
 		<span class="grow"></span>
-		<span class="menuwrap">
+		{#if !beside}<span class="menuwrap">
 			<button type="button" class="btn quiet" aria-expanded={menus.open === `view:${ref}`} onclick={() => menus.toggle(`view:${ref}`)} data-testid="reader-view">{words.reader.view}</button>
 			{#if menus.open === `view:${ref}`}
 				<div class="menu viewmenu">
 					<button type="button" class="mi" role="menuitemcheckbox" aria-checked={lib.overlay} onclick={() => (lib.overlay = !lib.overlay)} data-testid="overlay-toggle"><span class="chk">{lib.overlay ? '✓' : ''}</span>{words.reader.overlay}</button>
 				</div>
 			{/if}
-		</span>
+		</span>{/if}
 	</div>
 	<div class="doc">
 		<MarkedDoc
@@ -125,7 +126,7 @@
 				asking = false;
 				offered = { page: e.page, text: e.text, rects: e.rects, at: e.client };
 			}}
-			overlay={lib.overlay ? overlay : undefined}
+			overlay={marks ? overlay : undefined}
 		/>
 		{#if offered}
 			<div class="selpop" style:left="{offered.at.left}px" style:top="{offered.at.top + offered.at.height + 8}px" data-testid="selection-popup">

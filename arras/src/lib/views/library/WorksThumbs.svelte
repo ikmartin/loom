@@ -5,7 +5,7 @@
 	import { library as words } from '$lib/words/library';
 	import { lib } from './state.svelte';
 
-	let { works }: { works: Work[] } = $props();
+	let { works, onopen }: { works: Work[]; /** Where a click goes in place of the Library's tab: the picker opens the work beside a draft. */ onopen?: (w: Work) => void } = $props();
 
 	const STEP = 60;
 	let count = $state(STEP);
@@ -22,12 +22,13 @@
 	const page = $derived(works.slice(0, count));
 
 	function opened(e: MouseEvent, w: Work): void {
-		if (e.metaKey || e.ctrlKey || e.shiftKey) {
+		if (!onopen && (e.metaKey || e.ctrlKey || e.shiftKey)) {
 			if (lib.multi.has(w.ref)) lib.multi.delete(w.ref);
 			else lib.multi.add(w.ref);
 			return;
 		}
-		lib.openWork(w.ref);
+		if (onopen) onopen(w);
+		else lib.openWork(w.ref);
 	}
 </script>
 
