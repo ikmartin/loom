@@ -514,6 +514,38 @@ def test_a_proof_with_no_source_reads_its_statement_s_work_s_commands() -> None:
     assert says(with_(macros_node, proof), "loom:node-body-ref", "points at eq:bound with \\eq")
 
 
+FOLLOWED = (
+    WRAPPERS
+    + "\\newcommand{\\via}[1]{\\thmref{#1}}\n\\let\\also\\via\n\\NewDocumentCommand{\\seeeq}{O{see} m}{#1 \\eq{#2}}\n"
+    + "\\def\\deref{\\mathop{!}}\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("text", "how"),
+    [
+        ("By \\via{lem:x}.\n", "\\via (its work's command for \\ref)"),
+        ("By \\also{lem:x}.\n", "\\also (its work's command for \\ref)"),
+        ("By \\seeeq[cf.]{lem:x}.\n", "\\seeeq (its work's command for \\ref)"),
+    ],
+)
+def test_check_8_follows_a_work_s_commands_through_one_another(text: str, how: str) -> None:
+    """M-14: `\\via` wraps `\\thmref`, which wraps `\\ref`, so `\\via{lem:x}` carries a source label as `\\ref{lem:x}` would."""
+    macros_node = Node(id="tq-00A1-macros", taxon="macros", body=FOLLOWED)
+    files = with_(macros_node, lemma(body=text + "\\begin{equation}\\label{tq-00K3-eq00} x \\end{equation}\n"))
+    assert says(files, "loom:node-body-ref", f"points at lem:x with {how}")
+
+
+def test_check_8_reads_a_command_named_as_a_pointer_as_the_work_defines_it() -> None:
+    """M-14: `\\deref`, which the work defines as `\\mathop{!}`, points at nothing, and is not refused as a pointer loom does not read."""
+    assert says(body("Then $\\deref x$.\n"), "loom:node-body-ref", "\\deref, which loom does not read")
+    macros_node = Node(id="tq-00A1-macros", taxon="macros", body=FOLLOWED)
+    files = with_(
+        macros_node, lemma(body="Then $\\deref x$.\n\\begin{equation}\\label{tq-00K3-eq00} x \\end{equation}\n")
+    )
+    assert check_store(files) == []
+
+
 # ---- 10: the definitions real preambles hold ------------------------------------------------------------------------
 
 
@@ -538,3 +570,45 @@ def test_check_10_reads_inside_at_begin_document() -> None:
 def test_check_10_an_empty_macros_node_is_refused() -> None:
     """N-28: a work whose results need no macros has no macros node."""
     assert says(macros("% nothing\n"), "loom:node-macros", "holds nothing")
+
+
+# ---- 10: a conditional, read whole -------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "\\newif\\ifjournal\n\\journaltrue\n\\ifjournal\n\\newcommand{\\R}{\\mathbb{R}}\n\\else\n\\newcommand{\\R}{\\mathbf{R}}\n\\fi\n",
+        "\\ifdefined\\R\\else\\newcommand{\\R}{\\mathbf{R}}\\fi\n",
+        "\\unless\\ifdefined\\R \\newcommand{\\R}{\\mathbf{R}}\\fi\n",
+        "\\ifx\\R\\undefined \\def\\R{R}\\fi\n",
+        "\\ifcsname R\\endcsname\\else\\def\\R{R}\\fi\n",
+        "\\ifnum\\pdfoutput>0 \\usepackage{graphicx}\\else\\usepackage[dvips]{graphicx}\\fi\n",
+        "\\makeatletter\n\\@ifundefined{R}{\\newcommand{\\R}{\\mathbb{R}}}{}\n\\@ifpackageloaded{amsmath}{}{\\usepackage{amsmath}}\n\\makeatother\n",
+        "\\ifdef{\\R}{}{\\newcommand{\\R}{R}}\n\\ifthenelse{\\boolean{draft}}{\\def\\a{1}}{\\def\\a{2}}\n",
+        "\\newif\\ifdraft\n\\ifdraft\\ifdefined\\R\\else\\def\\R{R}\\fi\\else\\newcommand{\\x}{\\ifmmode a\\else b\\fi}\\fi\n",
+    ],
+)
+def test_check_10_a_conditional_whose_branches_hold_what_a_macros_node_may_passes(text: str) -> None:
+    """M-9: a conditional is one item, allowed when its branches are, so a node made from it keeps one definition of `\\R`."""
+    assert check_store(macros(text)) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "words"),
+    [
+        ("\\newif\\ifdraft\n\\ifdraft\\newtheorem{lemma}{Lemma}\\else\\newcommand{\\x}{y}\\fi\n", "holds \\newtheorem"),
+        ("\\ifdefined\\R\\else\\setlength{\\parindent}{0pt}\\fi\n", "holds \\setlength"),
+        ("\\@ifundefined{R}{\\title{T}}{}\n", "holds \\title"),
+        ("\\ifnum\\value{page}>0 \\def\\x{y}\\fi\n", "holds \\ifnum, a conditional loom does not read whole"),
+        ("\\newif\\ifdraft\n\\ifdraft\\def\\x{y}\n", "holds \\ifdraft, a conditional loom does not read whole"),
+        (
+            "\\ifthenelse{\\equal{\\x}{y}}{\\def\\a{1}}{}\n",
+            "holds \\ifthenelse, a conditional loom does not read whole",
+        ),
+    ],
+)
+def test_check_10_a_conditional_is_refused_for_what_a_branch_holds_or_a_condition_loom_does_not_read(
+    text: str, words: str
+) -> None:
+    assert says(macros(text), "loom:node-macros", words)

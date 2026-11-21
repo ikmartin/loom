@@ -23,8 +23,8 @@ NO_AUTHOR_MESSAGE = (
 CONFIG_KEYS: dict[str, set[str]] = {
     # `history` is the record's directory, documented and never written by init
     "quilt": {"name", "main", "home", "history", "prefix", "engine", "research_state"},
-    # `online`: whether loom may look a work's identifier up; `contact`: the address the lookup services are given
-    "library": {"online", "contact"},
+    # `online`: whether loom may look a work's identifier up
+    "library": {"online"},
     "lint": {"disable"},
     # `deny`: where an agent may not write, gitignore-style, beside what is always protected (`loom.agents`)
     "agents": {"deny"},
@@ -67,7 +67,6 @@ class QuiltConfig:
     engine: str = "pdflatex"
     online: bool = False  # [library] online: whether loom may look identifiers up and fetch documents
     online_asked: bool = False  # `[library] online` is set at all; unset, the viewer asks before the first paper
-    contact: str = ""  # [library] contact: the address the lookup services are given
     author: str = ""  # [author] name: who this quilt's records name
     author_declared: bool = False  # the quilt states an `[author]` table, even with an empty name
     lint_disable: list[str] = field(default_factory=list)
@@ -112,7 +111,6 @@ class QuiltConfig:
         cfg.engine = str(q.get("engine", cfg.engine))
         cfg.online = bool(table("library").get("online", False))
         cfg.online_asked = "online" in table("library")
-        cfg.contact = str(table("library").get("contact", ""))
         cfg.lint_disable = [str(x) for x in table("lint").get("disable", [])]
         cfg.agents_deny = _agents_deny(table("agents").get("deny", []), cfg.warnings)
         track = table("review").get("track_edits", False)

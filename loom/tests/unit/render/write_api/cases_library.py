@@ -214,7 +214,7 @@ def _library_works(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s, q, _ = on_demo(serve, tmp_path)
     builds = s.builds
     said = succeeds(s, "library-works", {})
-    assert said["works"], "gathering makes the demo's cited works"
+    assert said["works"], "the demo's cited works, gathered by its build"
     assert {
         "ref",
         "short",
@@ -230,6 +230,24 @@ def _library_works(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         "cited_as",
     } <= set(said["works"][0])
     assert isinstance(said["gen"], int) and s.builds == builds
+    # `since` while the generation stands: unchanged, and nothing else
+    again = succeeds(s, "library-works", {"since": said["gen"]})
+    assert {k: again[k] for k in ("gen", "unchanged")} == {
+        "gen": said["gen"],
+        "unchanged": True,
+    } and "works" not in again
+    # a work added moves it, and the list comes whole again
+    _pasted(s, ENTRY)
+    moved = succeeds(s, "library-works", {"since": said["gen"]})
+    assert moved["gen"] > said["gen"] and len(moved["works"]) == len(said["works"]) + 1, moved
+    refuses(s, "library-works", {"since": "41"}, 400, "bad-field", "since is the gen")
+    # a build gathers an entry a document's bibliography gains; the list, a read, gathers nothing
+    bib = q / "drafting" / "refs.bib"
+    bib.write_text(
+        bib.read_text(encoding="utf-8") + "\n@article{Gat25, title = {Gathered by a build}}\n", encoding="utf-8"
+    )
+    s.rebuild()
+    assert "Gathered by a build" in {w["title"] for w in succeeds(s, "library-works", {})["works"]}
 
 
 @case("library-look-up")
@@ -254,9 +272,17 @@ def _library_entry(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     man12 = _pasted(s, MAN12)
     succeeds(s, "library-entry", {"ref": man12, "bibtex": MAN12.replace("Virtual pull-backs", "Virtual pullbacks")})
     assert "Virtual pullbacks" in (q / ".loom/library/nodes" / f"{man12}.node").read_text()
-    refuses(s, "library-entry", {"ref": man12, "bibtex": "not bibtex"}, 400, "bad-entry", "not one BibTeX entry")
+    refuses(s, "library-entry", {"ref": man12, "bibtex": "not bibtex"}, 400, "bad-entry", "not a BibTeX entry")
     other = _pasted(s, ENTRY)
-    refuses(s, "library-entry", {"ref": other, "bibtex": "@article{man12, title = {x}}"}, 409, "key-taken", "is also")
+    # said of the work that holds the key, never of loom's files
+    refuses(
+        s,
+        "library-entry",
+        {"ref": other, "bibtex": "@article{man12, title = {x}}"},
+        409,
+        "key-taken",
+        "has the key man12 already",
+    )
 
 
 @case("library-delete")
@@ -290,17 +316,20 @@ def _files(q: Path) -> dict[str, int]:
 
 @case("library-upgrade")
 def _library_upgrade(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A quilt an earlier loom made is served waiting: the viewer's files, `GET /_api` with its format, the stream and `library-upgrade`, and nothing else until the upgrade carries its library, after which the server builds as it starts. The `serve` fixture loads a quilt in this loom's layout only, so this case starts its own server."""
+    """A quilt an earlier loom made is served waiting: the viewer's files, `GET /_api` with its format, the stream and `library-upgrade`, and nothing else until the upgrade carries its library and makes its agents' layer this loom's, as `loom upgrade` does, after which the server builds as it starts. The `serve` fixture loads a quilt in this loom's layout only, so this case starts its own server."""
     import urllib.request
 
     from loom.cli.report import counted
-    from loom.paths import FORMAT, SERVE_JSON
+    from loom.doctor import OK, check_ai_files, check_permissions
+    from loom.paths import AI, FORMAT, SERVE_JSON
     from loom.scan.quilt import load_quilt
     from tests.helpers import PATIENCE
-    from tests.unit.library._old import older_quilt
+    from tests.unit.library._old import OLD_COMMAND, OLD_MODE, OLD_RULE, older_quilt
     from tests.unit.render._serve import fake_bundle
 
-    q = older_quilt(tmp_path)
+    q = older_quilt(tmp_path, agents=True)
+    mode, skill = f"{AI}/modes/{OLD_MODE}.md", f".claude/skills/loom-{OLD_MODE}/SKILL.md"
+    assert check_permissions(q).status != OK  # the earlier loom's rule is stale
     before = _files(q)
     s = ServeSession(
         load_quilt(q, older=True), fake_bundle(tmp_path / "older"), port=0, compile_masters=False, interval=0.2
@@ -340,11 +369,20 @@ def _library_upgrade(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPat
         }, done
         # its works become references, its old library files go
         assert carried["references"] >= 1 and carried["removed"] and carried["problems"] == [], done
-        assert (
-            done["result"]
-            == f"brought the quilt forward to format 2, {counted(carried['references'], 'work')} carried into the library"
+        assert done["result"].startswith(
+            f"brought the quilt forward to format 2, {counted(carried['references'], 'work')} carried into the library; wrote "
         ), done
+        assert done["result"].endswith("; removed 2 files"), done
         assert not (q / ".loom" / "library" / "bibliography.bib").exists()
+        # and its agents are told and allowed what this loom has: the gone mode and its skill removed, the rules and the permissions this loom's
+        agents = done["agents"]
+        assert sorted(agents["removed"]) == sorted([mode, skill]), agents
+        assert f"{AI}/rules.md" in agents["written"] and ".claude/settings.json" in agents["written"], agents
+        assert f".claude/settings.json: allow {OLD_RULE}" in agents["dropped"], agents
+        assert not (q / mode).exists() and not (q / skill).exists()
+        assert OLD_COMMAND not in (q / AI / "rules.md").read_text(encoding="utf-8")
+        assert OLD_RULE not in (q / ".claude" / "settings.json").read_text(encoding="utf-8")
+        assert check_permissions(q).status == OK and check_ai_files(q).status == OK
         # served again as soon as it answers, and built after
         assert succeeds(s, "library-works", {})["works"]
         line = b""
@@ -356,7 +394,8 @@ def _library_upgrade(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPat
         assert said["format"] == {"found": 2, "reads": 2} and "library-take" in said["capabilities"], said
         assert said["frames"], said
         again = succeeds(s, "library-upgrade", {})
-        assert again["result"] == "already current" and again["carried"]["references"] == 0, again
+        assert again["result"].startswith("already current") and again["carried"]["references"] == 0, again
+        assert again["agents"]["written"] == [] and again["agents"]["removed"] == [], again
     finally:
         if stream is not None:
             stream.close()

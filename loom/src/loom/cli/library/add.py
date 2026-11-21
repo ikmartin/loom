@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from pathlib import Path
 from typing import Any
 
@@ -134,22 +133,32 @@ def _work(root: Path, named: str) -> str:
     lib = Library.read(root)
     if named in lib.refs:
         return named
-    if found := lib.by_key.get(named.lower()):
+    if found := lib.by_key.get(named.casefold()):
         return found
     raise EnvError(f"the library has no work {named}: name a reference or the key its entry has")
 
 
 def _received_folder(root: Path, folder: Path) -> tuple[str, bool]:
-    """A folder of a LaTeX source kept as a drop, packed as the store keeps a source; its drop, and whether this made it."""
-    import io
+    """A folder of a LaTeX source kept as a drop, packed as the store keeps a source, a file at a time; its drop, and whether this made it."""
+    import os
+    import secrets
 
-    from loom.library.documents import source_tar
-    from loom.library.intake import incoming, receive
+    from loom.library.documents import NotASource, pack
+    from loom.library.intake import incoming, receive_file
 
-    data = source_tar(folder)
-    drop = hashlib.sha256(data).hexdigest()
-    fresh = not (incoming(root) / drop).is_dir()
-    receive(root, f"{folder.name}.tar", io.BytesIO(data), len(data))
+    base = incoming(root)
+    base.mkdir(parents=True, exist_ok=True)
+    packed = base / f".{folder.name}.{os.getpid()}.{secrets.token_hex(4)}.tar"
+    try:
+        try:
+            with packed.open("wb") as out:
+                drop = pack(folder, out, name=folder.name, work=base).removeprefix("sha256:")
+        except NotASource as exc:
+            raise EnvError(str(exc)) from exc
+        fresh = not (base / drop).is_dir()
+        receive_file(root, packed, name=f"{folder.name}.tar")
+    finally:
+        packed.unlink(missing_ok=True)
     return drop, fresh
 
 

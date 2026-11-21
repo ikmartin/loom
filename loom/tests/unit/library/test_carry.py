@@ -219,3 +219,23 @@ def test_an_entry_the_checks_refuse_is_said_and_the_rest_are_carried(tmp_path: P
     )
     assert (folder / "paper.pdf").is_file() and not (root / STORAGE / "arxiv").exists()
     assert check(root) == []
+
+
+def test_a_key_a_reference_holds_in_another_case_is_held_as_check_9_folds_it(tmp_path: Path) -> None:
+    """`Straße1` and `STRASSE1` are one key to check 9, so the old entry gives the reference holding it what it lacks rather than a second reference the store refuses."""
+    from loom.library.node import Node
+    from loom.library.store import write_node
+
+    root = old_quilt(
+        tmp_path, "@book{Straße1,\n  title = {Streets},\n  year  = {2020},\n  loom-file = {file/0123456789abcdee},\n}"
+    )
+    streets = b"%PDF-1.4\n% Streets\n"
+    folder = root / STORAGE / "file" / "0123456789abcdee"
+    folder.mkdir(parents=True)
+    (folder / "paper.pdf").write_bytes(streets)
+    write_node(root, Node(id="tq-00A1-ref", taxon="reference", body="@book{STRASSE1,\n  title = {Streets},\n}\n"))
+    done = run(root)
+    assert not [p for p in done.problems if "Straße1" in p] and "Straße1" not in done.references
+    held = read(root, "tq-00A1-ref")
+    assert held is not None and held.pdf == "sha256:" + hashlib.sha256(streets).hexdigest()
+    assert [p.name for p in (root / LIBRARY_NODES).glob("*-ref.node")] == ["tq-00A1-ref.node"]

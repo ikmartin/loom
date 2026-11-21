@@ -17,7 +17,9 @@ from loom.library.body import (
     Item,
     Pointer,
     Wrapper,
+    conditional,
     entry_of,
+    is_conditional,
     labels,
     macros_items,
     pointers,
@@ -124,7 +126,7 @@ def node_problems(node: Node, given: dict[str, Wrapper] | None = None) -> list[P
     node : Node
         A node `read_node` made, or one about to be written.
     given : dict of str to Wrapper, optional
-        Its work's own commands that point or label (`body.wrappers` of its macros node, `wrappers_of`), read as check 8 reads `\\ref` and `\\cite`; none by default.
+        Its work's own commands (`body.wrappers` of its macros node, `wrappers_of`): those that point or label read as check 8 reads `\\ref` and `\\cite`, through one another, and none of them refused as a pointer loom does not read; none by default.
 
     Returns
     -------
@@ -182,7 +184,7 @@ def _lists(node: Node, name: str) -> list[Problem]:
 
 
 def wrappers_of(node: Node, view: StoreView) -> dict[str, Wrapper]:
-    """The commands of a statement's or a proof's work that point or label (`body.wrappers`): its source's macros node's, a proof with no source taking its statement's."""
+    """The commands a statement's or a proof's work defines, with what each points at or labels (`body.wrappers`): its source's macros node's, a proof with no source taking its statement's. A command named like a pointer that is among them is read as its definition says, never refused as unread."""
     if node.kind not in (ids.STATEMENT, ids.PROOF):
         return {}
     source = node.source or (view.source(node.parent) if node.kind == ids.PROOF and node.parent else None)
@@ -305,13 +307,28 @@ def _macros(node: Node, name: str) -> list[Problem]:
 
 
 def _items(name: str, body: str, items: list[Item], flags: set[str]) -> list[Problem]:
-    """Check 10 on what a macros body holds at one level; `\\AtBeginDocument`'s group is checked as a body of its own."""
+    """Check 10 on what a macros body holds at one level; `\\AtBeginDocument`'s group, and each branch of a conditional, is checked as a body of its own."""
     out: list[Problem] = []
     for item in items:
         if item.command == "AtBeginDocument":
             group = body[item.start : item.end]
             inner = group[group.find("{") + 1 : group.rfind("}")] if "{" in group else ""
             out += [p._replace(line=item.line) for p in _items(name, inner, macros_items(inner), flags)]
+            continue
+        if is_conditional(item.command):
+            cond = conditional(body, item)
+            if cond is None:
+                out.append(
+                    Problem(
+                        10,
+                        f"{name} holds \\{item.command}, a conditional loom does not read whole: its condition tests what a macros node does not say, or no \\fi ends it.",
+                        item.line,
+                        True,
+                    )
+                )
+                continue
+            for branch in cond.branches:
+                out += [p._replace(line=item.line) for p in _items(name, branch, macros_items(branch), flags)]
             continue
         if item.command in ARGUMENTS or item.command in flags:
             continue

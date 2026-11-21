@@ -180,7 +180,7 @@ def _cited(text: str, pos: int, multi: bool) -> list[str]:
 
 @dataclass(frozen=True)
 class Wrapper:
-    """A work's own command whose definition holds a referencing command, a citation or `\\label`: each such use in it (`command`, its argument with `#1`… where the wrapper's arguments go), the number of its arguments, and the default of the first when it is optional."""
+    """A command a work's macros define: each use of a referencing command, a citation or `\\label` its definition makes, directly or through the work's other commands (`command`, its argument with `#1`… where the wrapper's arguments go), none for a command that points at nothing; the number of its arguments; and the default of the first when it is optional."""
 
     uses: tuple[tuple[str, str], ...]
     count: int
@@ -189,11 +189,19 @@ class Wrapper:
 
 _DEFINITION = re.compile(r"\\(?:newcommand|renewcommand|providecommand|DeclareRobustCommand)\*?(?![A-Za-z@])")
 _DEF = re.compile(r"\\[gex]?def\s*(\\[A-Za-z@]+)((?:#[1-9])*)\s*(?=\{)")
+_DOCUMENT_COMMAND = re.compile(r"\\(?:New|Renew|Provide|Declare)DocumentCommand(?![A-Za-z@])")
+_LET = re.compile(r"\\let\s*(\\[A-Za-z@]+)\s*=?\s*(\\[A-Za-z@]+)")
+#: The other definitions whose first argument is the name they define and whose text points at nothing.
+_NAMES_ONLY = re.compile(
+    r"\\(?:DeclareMathOperator|DeclarePairedDelimiter(?:X|XPP)?|DeclareMathSymbol|DeclareMathAccent|DeclareMathAlphabet|mathchardef|chardef)\*?(?![A-Za-z@])"
+)
+#: How many times a work's commands are followed through each other: enough for any real chain, and an end to one that grows as it is followed.
+_ROUNDS = 8
 
 
 @lru_cache(maxsize=64)
 def wrappers(macros: str) -> dict[str, Wrapper]:
-    """The commands a macros node's body defines whose definitions hold a referencing command, a citation or `\\label`, by name without the backslash: `\\newcommand{\\eq}[1]{(\\ref{#1})}` makes `\\eq{eq:bound}` point at `eq:bound`.
+    """Every command a macros node's body defines, by name without the backslash, with what its definition points at or labels, followed through the work's other commands until nothing more is found: `\\newcommand{\\eq}[1]{(\\ref{#1})}` makes `\\eq{eq:bound}` point at `eq:bound`, and `\\newcommand{\\via}[1]{\\eq{#1}}` makes `\\via` do the same.
 
     Parameters
     ----------
@@ -203,37 +211,75 @@ def wrappers(macros: str) -> dict[str, Wrapper]:
     Returns
     -------
     dict of str to Wrapper
-        Read from `\\newcommand`, `\\renewcommand`, `\\providecommand`, `\\DeclareRobustCommand` and `\\def` and its kin; a definition of a name `pointers` reads already is left out. Shared between calls: do not change it.
+        Read from `\\newcommand`, `\\renewcommand`, `\\providecommand`, `\\DeclareRobustCommand`, xparse's `\\NewDocumentCommand` and kin, `\\def` and its kin, and `\\let`, and named, with no uses, from the definitions that point at nothing (`\\DeclareMathOperator` and the like); a name `pointers` reads already is left out. Shared between calls: do not change it.
     """
     text = unread(macros)
-    out: dict[str, Wrapper] = {}
+    defined: dict[str, tuple[str, int, str | None]] = {}
     for m in _DEFINITION.finditer(text):
-        p = skip_space(text, m.end())
-        if p < len(text) and text[p] == "{":
-            end = match_group(text, p)
-            name, pos = (text[p + 1 : end - 1].strip(), end) if end > 0 else ("", p)
-        else:
-            cs = _CS.match(text, p)
-            name, pos = (cs.group(0), cs.end()) if cs else ("", p)
+        name, pos = _defined_name(text, m.end())
         count, _s, _e, pos = read_optional(text, pos)
         default, _s, _e, pos = read_optional(text, pos)
         body, _s, _e, _n = read_mandatory(text, pos)
         n = int(count) if count is not None and count.strip().isdigit() else 0
-        _wrapper(out, name, body, n, default if n else None)
+        _define(defined, name, body, n, default if n else None)
+    for m in _DOCUMENT_COMMAND.finditer(text):
+        name, pos = _defined_name(text, m.end())
+        spec, _s, _e, pos = read_mandatory(text, pos)
+        body, _s, _e, _n = read_mandatory(text, pos)
+        first = re.match(r"\s*O\{([^{}]*)\}", spec or "")
+        taken = len(re.findall(r"[mo]", spec or "")) + (1 if first else 0)
+        _define(defined, name, body, taken, first.group(1) if first else None)
     for m in _DEF.finditer(text):
         end = match_group(text, m.end())
         if end > 0:
-            _wrapper(out, m.group(1), text[m.end() + 1 : end - 1], len(m.group(2)) // 2, None)
+            _define(defined, m.group(1), text[m.end() + 1 : end - 1], len(m.group(2)) // 2, None)
+    lets: dict[str, str] = {}
+    for m in _LET.finditer(text):
+        # `\\let\\via\\ref` makes `\\via` the very command it names, one loom reads or one of the work's
+        if m.group(2)[1:] in REFS | CITES:
+            _define(defined, m.group(1), f"{m.group(2)}{{#1}}", 1, None)
+        elif re.fullmatch(r"\\[A-Za-z@]+", m.group(1)) and m.group(1)[1:] not in REFS | CITES | {HYPERREF, "label"}:
+            lets[m.group(1)[1:]] = m.group(2)[1:]
+    for m in _NAMES_ONLY.finditer(text):
+        name, _pos = _defined_name(text, m.end())
+        _define(defined, name, "", 0, None)
+
+    def follow(given: dict[str, Wrapper]) -> dict[str, Wrapper]:
+        made = {name: Wrapper(_uses(body, given), count, default) for name, (body, count, default) in defined.items()}
+        return made | {name: given.get(same, Wrapper((), 0)) for name, same in lets.items()}
+
+    out = follow({})
+    for _ in range(_ROUNDS):
+        followed = follow(out)
+        if followed == out:
+            break
+        out = followed
     return out
 
 
-def _wrapper(out: dict[str, Wrapper], name: str, body: str | None, count: int, default: str | None) -> None:
-    """Add `name` to `out` when `body` points or labels; a name loom reads already, or none, is left out."""
+def _defined_name(text: str, pos: int) -> tuple[str, int]:
+    """The name a definition makes, `{\\x}` or `\\x`, from `pos`, and where it ends."""
+    p = skip_space(text, pos)
+    if p < len(text) and text[p] == "{":
+        end = match_group(text, p)
+        return (text[p + 1 : end - 1].strip(), end) if end > 0 else ("", p)
+    cs = _CS.match(text, p)
+    return (cs.group(0), cs.end()) if cs else ("", p)
+
+
+def _define(
+    out: dict[str, tuple[str, int, str | None]], name: str, body: str | None, count: int, default: str | None
+) -> None:
+    """Add `name` to `out` with its definition; a name loom reads already, or none, is left out."""
     if body is None or not re.fullmatch(r"\\[A-Za-z@]+", name) or name[1:] in REFS | CITES | {HYPERREF, "label"}:
         return
-    uses = tuple((p.command, p.target) for p in [*pointers(body), *labels(body)])
-    if uses:
-        out[name[1:]] = Wrapper(uses, count, default)
+    out[name[1:]] = (body, count, default)
+
+
+def _uses(body: str, given: dict[str, Wrapper]) -> tuple[tuple[str, str], ...]:
+    """What a definition's `body` points at or labels, plainly and through `given`, each once, in order."""
+    found = [(p.command, p.target) for p in [*pointers(body), *labels(body), *wrapped(body, given)]]
+    return tuple(dict.fromkeys(found))
 
 
 def wrapped(body: str, given: dict[str, Wrapper]) -> list[Pointer]:
@@ -251,11 +297,12 @@ def wrapped(body: str, given: dict[str, Wrapper]) -> list[Pointer]:
     list of Pointer
         Each with `via` the wrapper's name; a `label` among them is a label the body defines through it.
     """
-    if not given:
+    pointing = [n for n, w in given.items() if w.uses]
+    if not pointing:
         return []
     text = unread(body)
     out: list[Pointer] = []
-    names = "|".join(sorted((re.escape(n) for n in given), key=len, reverse=True))
+    names = "|".join(sorted((re.escape(n) for n in pointing), key=len, reverse=True))
     for m in re.finditer(r"\\(" + names + r")(?![A-Za-z@])", text):
         w = given[m.group(1)]
         args: list[str] = []
@@ -397,7 +444,7 @@ class Item:
     end: int = 0
 
 
-#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`, `c` a `\chardef`'s number after an optional `=`. A starred form is its command's; what `\AtBeginDocument` holds is checked item by item as the body is. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets, and no setting of the page's layout (`\setlength`, `\setcounter`), which is the document's, not the work's.
+#: What a macros node may hold (§8), each command with how its arguments are read after its name: `o` an optional `[...]`, `m` a mandatory group, `n` the name defined (a group or a control sequence), `p` a `\def`'s parameter text up to its body, `t` `\let`'s one token after an optional `=`, `c` a `\chardef`'s number after an optional `=`. A starred form is its command's; what `\AtBeginDocument` holds is checked item by item as the body is, and a conditional (`is_conditional`) is one item, allowed when each of its branches is. Package loads, definitions (of commands, environments, colours, counters, lengths, conditionals, cleveref's names and fonts' symbols), and the settings TikZ and pgfplots take in a preamble; nothing that typesets, and no setting of the page's layout (`\setlength`, `\setcounter`), which is the document's, not the work's.
 ARGUMENTS = {
     "usepackage": "oom",
     "RequirePackage": "oom",
@@ -461,11 +508,230 @@ _CS = re.compile(r"\\(?:[A-Za-z@]+|.)")
 #: The arguments read after a command `ARGUMENTS` does not know: its star, then every bracket and brace group that follows.
 _ANY = "*"
 
+#: TeX's own conditionals, which `\fi` ends, by how their condition is read: '' none, `cs` one control sequence, `two` two tokens, `csname` a name up to `\endcsname`, `number` numbers or dimensions compared, of registers, digits, signs and units. Any other `\if…` followed by no group is read as a flag `\newif` makes, which has none; `\unless` before one reverses it.
+TEX_CONDITIONALS = {
+    "iftrue": "",
+    "iffalse": "",
+    "ifvmode": "",
+    "ifhmode": "",
+    "ifmmode": "",
+    "ifinner": "",
+    "ifdefined": "cs",
+    "ifx": "two",
+    "if": "two",
+    "ifcat": "two",
+    "ifcsname": "csname",
+    "ifnum": "number",
+    "ifdim": "number",
+    "ifodd": "number",
+    "ifcase": "number",
+    "ifvoid": "number",
+    "ifhbox": "number",
+    "ifvbox": "number",
+    "ifeof": "number",
+}
+#: The conditionals that take their branches as groups, each with how its arguments are read after its name: `m` a name holding no command, `n` a control sequence, `x` ifthen's test of booleans, `b` a branch.
+GROUP_CONDITIONALS = {
+    "@ifundefined": "mbb",
+    "@ifdefinable": "nb",
+    "@ifpackageloaded": "mbb",
+    "@ifclassloaded": "mbb",
+    "@ifpackagewith": "mmbb",
+    "IfPackageLoadedTF": "mbb",
+    "IfClassLoadedTF": "mbb",
+    "ifdef": "nbb",
+    "ifundef": "nbb",
+    "ifdefmacro": "nbb",
+    "ifdefempty": "nbb",
+    "ifcsdef": "mbb",
+    "ifcsundef": "mbb",
+    "ifcsmacro": "mbb",
+    "ifbool": "mbb",
+    "iftoggle": "mbb",
+    "ifthenelse": "xbb",
+}
+#: Named like a conditional, and none: the relation.
+_NOT_CONDITIONALS = frozenset({"iff"})
+#: The commands whose next control sequence is a name they define, never a conditional opened.
+_NAMING = frozenset({"newif", "def", "gdef", "edef", "xdef", "let", "global"})
+#: ifthen's tests a macros node's conditional may make: of booleans and of whether a command is defined.
+_IFTHEN = re.compile(
+    r"(?:\s|\\(?:boolean|isundefined)\s*\{\\?[A-Za-z@]+\}|\\(?:not|and|or|NOT|AND|OR)(?![A-Za-z@])|\\[()])*"
+)
+_NUMBER = re.compile(r"(?:\s|[0-9.,<>=+\-*/()\"'`]|[A-Za-z]+|\\[A-Za-z@]+(?![A-Za-z@]))*")
+
+
+def is_conditional(command: str) -> bool:
+    """Whether a macros body's item of `command` is a conditional, read whole (`conditional`): one of `TEX_CONDITIONALS` or `GROUP_CONDITIONALS`, or a flag's `\\if…`."""
+    return (
+        command in TEX_CONDITIONALS
+        or command in GROUP_CONDITIONALS
+        or (command.startswith("if") and command not in _NOT_CONDITIONALS)
+    )
+
+
+@dataclass(frozen=True)
+class Conditional:
+    """A conditional of a macros body read into its parts: `head`, its opener and condition as written; each branch's text; and between them and after the last the words TeX reads there (`\\else`, `\\or`, `\\fi`, or a group's braces)."""
+
+    head: str
+    branches: tuple[str, ...]
+    joints: tuple[str, ...]
+    tail: str
+    #: What goes between the parts when they are put together again: a line break after a control word, nothing between braces.
+    sep: str = ""
+
+    def text(self, branches: tuple[str, ...] | list[str] | None = None) -> str:
+        """The conditional with `branches` in place of its own, which default to them."""
+        parts = [self.head]
+        for i, branch in enumerate(self.branches if branches is None else branches):
+            parts += [branch, self.joints[i] if i < len(self.joints) else self.tail]
+        return self.sep.join(parts)
+
+
+def conditional(body: str, item: Item) -> Conditional | None:
+    """The parts of a conditional item of a macros body (`is_conditional`), or None when loom does not read it whole: a condition other than `TEX_CONDITIONALS` and `GROUP_CONDITIONALS` say, or no `\\fi` ending it.
+
+    Parameters
+    ----------
+    body : str
+        The macros body, or the part of it that holds `item`.
+    item : Item
+        What `macros_items` gave for the conditional.
+
+    Returns
+    -------
+    Conditional or None
+        Its head, branches, joints and tail, each as `body` writes them.
+    """
+    text = blank_comments(body)
+    m = _CS.match(text, item.start)
+    if m is None:
+        return None
+    if item.command in GROUP_CONDITIONALS:
+        return _group_conditional(body, text, m.end(), item, GROUP_CONDITIONALS[item.command])
+    pos = m.end()
+    if m.group(0) == "\\unless":
+        following = _CS.match(text, skip_space(text, pos))
+        if following is None:
+            return None
+        pos = following.end()
+    after = _condition(text, pos, TEX_CONDITIONALS.get(item.command, ""))
+    block = _block(text, after) if after is not None else None
+    if after is None or block is None or block[1] != item.end:
+        return None
+    joints, end = block
+    cuts = [after, *(x for j in joints for x in j), end - len("\\fi")]
+    branches = tuple(body[cuts[i] : cuts[i + 1]].strip() for i in range(0, len(cuts), 2))
+    return Conditional(body[item.start : after].strip(), branches, tuple(body[a:b] for a, b in joints), "\\fi", "\n")
+
+
+def _group_conditional(body: str, text: str, pos: int, item: Item, shape: str) -> Conditional | None:
+    """A conditional taking its branches as groups, read as `shape` says from `pos`, after its name."""
+    head = ""
+    branches: list[str] = []
+    for arg in shape:
+        p = skip_space(text, pos)
+        if arg == "n" and p < len(text) and text[p] != "{":
+            cs = _CS.match(text, p)
+            if cs is None:
+                return None
+            pos = cs.end()
+            continue
+        end = match_group(text, p) if p < len(text) and text[p] == "{" else -1
+        if end < 0:
+            return None
+        inner = text[p + 1 : end - 1]
+        if arg == "b":
+            head = head or body[item.start : p + 1]
+            branches.append(body[p + 1 : end - 1])
+        elif arg == "m" and "\\" in inner:
+            return None
+        elif arg == "n" and not re.fullmatch(r"\s*\\(?:[A-Za-z@]+|.)\s*", inner):
+            return None
+        elif arg == "x" and _IFTHEN.fullmatch(inner) is None:
+            return None
+        pos = end
+    if pos != item.end or not branches:
+        return None
+    return Conditional(head, tuple(branches), ("}{",) * (len(branches) - 1), "}")
+
+
+def _opens(text: str, pos: int, name: str) -> bool:
+    """Whether `\\name`, ending at `pos`, opens a conditional `\\fi` ends: one of TeX's own, or a flag's `\\if…` with no group after it, which a command taking groups would have."""
+    if name in TEX_CONDITIONALS:
+        return True
+    if not name.startswith("if") or name in _NOT_CONDITIONALS or name in GROUP_CONDITIONALS:
+        return False
+    p = skip_space(text, pos)
+    return not (p < len(text) and text[p] == "{")
+
+
+def _block(text: str, pos: int) -> tuple[list[tuple[int, int]], int] | None:
+    """From just after a conditional's opener, where each of its own `\\else` and `\\or` stands, and the offset after the `\\fi` ending it; None when none does. A group is passed over whole, so a conditional inside a definition is the definition's."""
+    joints: list[tuple[int, int]] = []
+    depth = 0
+    i = pos
+    while i < len(text):
+        if text[i] == "{":
+            end = match_group(text, i)
+            if end < 0:
+                return None
+            i = end
+            continue
+        if text[i] != "\\":
+            i += 1
+            continue
+        m = _CS.match(text, i)
+        assert m is not None
+        name = m.group(0)[1:]
+        if name == "fi":
+            if depth == 0:
+                return joints, m.end()
+            depth -= 1
+        elif name in ("else", "or") and depth == 0:
+            joints.append((i, m.end()))
+        elif name in _NAMING and (named := _CS.match(text, skip_space(text, m.end()))):
+            i = named.end()  # `\newif\ifdraft` names a conditional and opens none
+            continue
+        elif _opens(text, m.end(), name):
+            depth += 1
+        i = m.end()
+    return None
+
+
+def _condition(text: str, pos: int, kind: str) -> int | None:
+    """Where a TeX conditional's condition of `kind` (`TEX_CONDITIONALS`) that starts at `pos` ends; None when it is not one loom reads."""
+    if kind == "":
+        return pos
+    if kind in ("cs", "two"):
+        for _ in range(1 if kind == "cs" else 2):
+            p = skip_space(text, pos)
+            token = _CS.match(text, p) if kind == "cs" else re.compile(r"\\(?:[A-Za-z@]+|.)|[^\s{}\\]").match(text, p)
+            if token is None:
+                return None
+            pos = token.end()
+        return pos
+    if kind == "csname":
+        m = re.compile(r"[A-Za-z@0-9 :._\-]*\\endcsname(?![A-Za-z@])").match(text, pos)
+        return m.end() if m else None
+    # numbers compared: registers, digits, signs and units, up to the first definition or the conditional's own words
+    end = pos
+    for m in re.finditer(r"\\[A-Za-z@]+|\S", text[pos:]):
+        read = m.group(0)
+        word = read[1:]
+        if read.startswith("\\") and (word in ARGUMENTS or word in ("else", "or", "fi") or word.startswith("if")):
+            break
+        if read in ("{", "}", "[", "]"):
+            return None
+        end = pos + m.end()
+    return end if _NUMBER.fullmatch(text[pos:end]) and text[pos:end].strip() else None
+
 
 def macros_items(body: str) -> list[Item]:
     """What a macros body holds at its top level, in order: each command with its arguments read as `ARGUMENTS` says, and each run of anything else as `text`.
 
-    A command `ARGUMENTS` does not know takes with it the groups that follow it, so `\\newtheorem{lemma}{Lemma}` is one item.
+    A command `ARGUMENTS` does not know takes with it the groups that follow it, so `\\newtheorem{lemma}{Lemma}` is one item. A conditional `\\fi` ends is one item from its `\\if…` (or `\\unless`) to its `\\fi`, named by its `\\if…`; one taking its branches as groups is read as `GROUP_CONDITIONALS` says.
     """
     text = blank_comments(body)
     out: list[Item] = []
@@ -486,9 +752,17 @@ def macros_items(body: str) -> list[Item]:
         start = pos
         name = m.group(0)[1:]
         pos = m.end()
+        opener, after = name, pos
+        if name == "unless" and (following := _CS.match(text, skip_space(text, pos))):
+            opener, after = following.group(0)[1:], following.end()
+        if _opens(text, after, opener) and (block := _block(text, after)) is not None:
+            # a conditional `\fi` ends is one item, whatever its branches hold
+            out.append(Item(opener, line, "", start, block[1]))
+            pos = block[1]
+            continue
         if pos < n and text[pos] == "*" and name in ARGUMENTS:
             pos += 1
-        pos = _arguments(text, pos, ARGUMENTS.get(name) or _ANY)
+        pos = _arguments(text, pos, ARGUMENTS.get(name) or GROUP_CONDITIONALS.get(name) or _ANY)
         out.append(Item(name, line, "", start, pos))
 
 
@@ -510,7 +784,7 @@ def _arguments(text: str, pos: int, shape: str) -> int:
     for arg in shape:
         if arg == "o":
             _o, _s, _e, pos = read_optional(text, pos)
-        elif arg in "mn":
+        elif arg in "mnbx":
             p = skip_space(text, pos)
             if p < len(text) and text[p] == "{":
                 end = match_group(text, p)

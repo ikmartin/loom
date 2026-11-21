@@ -29,12 +29,12 @@ EVENTS: dict[str, tuple[str, ...]] = {
 }
 #: How a reference was made.
 HOW = ("drop", "paste", "gather", "carry", "source")
-#: What a work was known by when it was made, as the intake's rows say it (`library-views.md` §3.5).
-FOUND_BY = ("arxiv", "doi", "isbn", "entry", "title", "none")
+#: What a work was known by when it was made, as the intake's rows say it (`write-api.md` §6): an identifier it states, its entry (a pasted or gathered one, or the work a document was dropped on), its file's name, or nothing.
+FOUND_BY = ("arxiv", "doi", "zbl", "entry", "title", "none")
 #: Who acts: a person, an agent, or loom of itself (gathering, the carry-over).
 KINDS = ("person", "agent", "loom")
-#: What a reference was known by that a look-up could confirm.
-LOOKABLE = ("arxiv", "doi", "isbn")
+#: What a reference was known by that a look-up could confirm: the identifiers `refs.lookup` asks a service about.
+LOOKABLE = ("arxiv", "doi", "zbl")
 
 
 @dataclass

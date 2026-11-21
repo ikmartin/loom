@@ -103,6 +103,8 @@ LOOM: dict[str, Code] = {
     "loom:link-work-unknown": Code("warning", MODEL),
     # the one door (docs/design/writes.md, "Recovery"): a write to the person's file recovery could neither finish nor undo, which the person has no other place to be told of
     "loom:write-left": Code("warning", LATEX),
+    # gathering: an entry of a bibliography the person's documents read that loom cannot keep as a work, the person's to put right in their own `.bib`, which they are shown nowhere else
+    "loom:bib-entry-refused": Code("warning", LATEX),
     # a warning and never an error, because loom cannot fetch without consent
     # the library's nodes (docs/specs/nodes.md §11): a file of loom's records failing one of the eleven checks, a code each
     "loom:node-unreadable": Code("error", INTERNAL),

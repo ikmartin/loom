@@ -152,8 +152,10 @@ NODE_INDEX = f"{LIBRARY_CACHE}/nodes.sqlite3"
 LIBRARY_SOURCES = f"{LIBRARY_CACHE}/sources"
 #: A stored PDF's first page, `<hex>.png`, made when first asked for (`library.thumbs`).
 LIBRARY_THUMBS = f"{LIBRARY_CACHE}/thumbs"
-#: What a delete took, kept on this machine for its one undo (`library.delete`).
+#: What a delete took, kept on this machine for its one undo (`library.acts.delete`).
 LIBRARY_UNDO = f"{LOCAL}/library-undo"
+#: The undo of a delete under way, named from before anything is removed until its last node is (`library.acts.finish`).
+LIBRARY_DELETING = f"{LIBRARY_UNDO}/deleting"
 #: What marks on a PDF are found by: word boxes of a PDF the library does not store, by its hash, and where each mark was found again.
 MARKS = f"{CACHE}/marks"
 MARK_BOXES = f"{MARKS}/boxes"

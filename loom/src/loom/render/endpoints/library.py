@@ -108,14 +108,18 @@ def _allowance(body: dict[str, Any]) -> bool | None:
 
 
 def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`library-works` (library-views.md §3.1): every work as a row, gathering first; `doc` adds the labels that document's compile cites each work by."""
-    from loom.library.index import NodeIndex
-    from loom.library.works import works
+    """`library-works` (library-views.md §3.1): every work as a row, a read that gathers and writes nothing; `doc` adds the labels that document's compile cites each work by; `since`, the generation last answered, is answered `unchanged` while it stands."""
+    from loom.library.works import generation, works
 
     doc = _str(body, "doc")
-    rows = works(_scan(root), doc=doc)
-    with NodeIndex.open(root) as index:
-        gen = index.generation()
+    since = body.get("since")
+    if since is not None and (not isinstance(since, int) or isinstance(since, bool)):
+        raise ApiError("bad-field", "since is the gen of an earlier answer, a number")
+    result = _scan(root)
+    gen = generation(result, doc=doc)
+    if since == gen:
+        return {"ok": True, "result": "unchanged", "gen": gen, "unchanged": True}
+    rows = works(result, doc=doc)
     return {"ok": True, "result": f"{len(rows)} works", "gen": gen, "works": rows}
 
 
@@ -172,33 +176,28 @@ def receive_stream(root: Path, name: str, stream: Any, length: int) -> dict[str,
 
 
 def _library_upgrade(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`library-upgrade`: bring a quilt an earlier loom made forward, its library carried into the node store and this loom's number stamped, as `loom upgrade` does; the author's.
+    """`library-upgrade`: bring a quilt an earlier loom made forward by the one function `loom upgrade` runs (`loom.upgrade.upgrade`): its library carried into the node store and this loom's number stamped, then the ignore files, the agents' layer and the client files made this loom's; the author's.
 
-    The carry holds the id lock and the library's lock itself, and carries nothing a second time, so a `loom upgrade` beside it does no harm. A quilt already in this loom's layout carries nothing and is answered `already current`; one in a layout this loom neither reads nor carries is refused `format-unknown`.
+    The carry holds the id lock and the library's lock itself and carries nothing a second time, and the rest writes only what differs, so a `loom upgrade` beside it does no harm. A quilt already in this loom's layout carries nothing, `carried` all zero; one in a layout this loom neither reads nor carries is refused `format-unknown`.
     """
     from loom import layout
-    from loom.cli.report import counted
     from loom.identity import is_agent
-    from loom.library.carry import carry
-    from loom.scan.quilt import load_quilt, reviewer_identity
-    from loom.scan.scan import scan
+    from loom.scan.quilt import reviewer_identity
+    from loom.upgrade import upgrade
+    from loom.writes import WriteRefused
 
     if is_agent(_str(body, "author") or reviewer_identity(root)[0]):
         raise ApiError(
             "author-only", "An agent reads and annotates; only the author brings the quilt forward", status=403
         )
-    if not layout.carriable(root):
-        why = layout.refusal(root)
-        if why is not None:
-            raise ApiError("format-unknown", why, status=409)
-        return {"ok": True, "result": "already current", "carried": _carried(None)}
-    done = carry(root, scan(load_quilt(root, older=True)), write=True)
-    layout.stamp(root)
-    return {
-        "ok": True,
-        "result": f"brought the quilt forward to format {layout.NUMBER}, {counted(len(done.references), 'work')} carried into the library",
-        "carried": _carried(done),
-    }
+    why = None if layout.carriable(root) else layout.refusal(root)
+    if why is not None:
+        raise ApiError("format-unknown", why, status=409)
+    try:
+        done = upgrade(root)
+    except WriteRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
+    return {"ok": True, "result": done.verdict(), "carried": _carried(done.carried), "agents": done.agents()}
 
 
 def _carried(done: Carried | None) -> dict[str, Any]:

@@ -1,6 +1,6 @@
 """The one way a work comes into the library (`docs/specs/write-api.md` §6): a file dropped, a file on the command line, or a pasted text, each becoming one row, `added`, `here`, `question` or `cannot`, and an `added` row a reference.
 
-A drop waits in `.loom/local/incoming/<sha256>/` as `document.<suffix>` with `arrived.json` (`{name, size, when, not}`), until it is taken; what each act on it wrote is in its `act.json`, which an undo reads. A drop lets go of its file only once its act is recorded and these very bytes stand in the store with a reference naming them, so a crash never costs the only copy. Every act holds the library's lock and decides against the library as it is then; no lock is held while the network is asked.
+A drop waits in `.loom/local/incoming/<sha256>/` as `document.<suffix>` with `arrived.json` (`{name, size, when, not}`), until it is taken; what each act on it wrote is in its `act.json`, which an undo reads, and which the same bytes dropped again leave standing. A drop lets go of its file only once its act is recorded and these very bytes stand in the store with a reference naming them, so a crash never costs the only copy. A source is packed into its one form inside the take (`documents.pack`), checked and limited as it streams, so a damaged or outsized archive is a `cannot` row before anything is stored, and a drop no work can be made of goes. Every act holds the library's lock and decides against the library as it is then; no lock is held while the network is asked.
 
 Nothing is filed under a work unless the person says it is that work (`for`, an answer) or, for a paper an agent asked to be fetched, the file states that work's identifier. A file is offered as an existing work only by an identifier it states, never by its title or byline (the rulings of 2026-11-21 on `library-views.md` Opens 6 and 18); one stating an identifier the library has asks the one question.
 """
@@ -13,7 +13,8 @@ import os
 import re
 import secrets
 import shutil
-from collections.abc import Iterator
+import unicodedata
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,12 +22,23 @@ from typing import TYPE_CHECKING, Any, Protocol
 
 from loom.clock import stamp
 from loom.library import documents, log
-from loom.library.entries import identifiers, matchable, read_entry, short, surnames, title, year
+from loom.library.entries import (
+    entries_in,
+    entry_fault,
+    expand_strings,
+    identifiers,
+    matchable,
+    read_entry,
+    short,
+    strings_of,
+    surnames,
+    title,
+    year,
+)
 from loom.library.node import SUFFIX, Node, NodeUnreadable, read_node
 from loom.library.references import Minter, attach, make
 from loom.library.store import NodeRefused, folder, remove_node
 from loom.paths import INCOMING, LIBRARY_LOCK
-from loom.scan.bib import raw_entries
 
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
@@ -251,10 +263,10 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
     return {"incoming": sha, "name": shown, "size": got}
 
 
-def receive_file(root: Path, path: Path) -> str:
-    """Keep a file on disk as a drop, as `receive` keeps an upload, and say its drop; the file itself is never touched."""
+def receive_file(root: Path, path: Path, *, name: str = "") -> str:
+    """Keep a file on disk as a drop, as `receive` keeps an upload, under `name` (default its own), and say its drop; the file itself is never touched."""
     with path.open("rb") as fh:
-        return str(receive(root, path.name, fh, path.stat().st_size)["incoming"])
+        return str(receive(root, name or path.name, fh, path.stat().st_size)["incoming"])
 
 
 def _acts(d: Path) -> list[dict[str, Any]]:
@@ -324,12 +336,13 @@ def _references(root: Path) -> dict[str, Node]:
 
 @dataclass
 class Library:
-    """The references as they stand: by id, by entry key folded to lower case, by each identifier they state as compared, and by the hash of each document they hold."""
+    """The references as they stand: by id, by entry key case folded as check 9 folds it, by each identifier they state as compared, with the identifiers each states as written, and by the hash of each document they hold."""
 
     refs: dict[str, Node] = field(default_factory=dict)
     by_key: dict[str, str] = field(default_factory=dict)
     by_id: dict[str, set[str]] = field(default_factory=dict)
     by_doc: dict[str, str] = field(default_factory=dict)
+    stated: dict[str, list[str]] = field(default_factory=dict)
 
     @classmethod
     def read(cls, root: Path) -> Library:
@@ -337,8 +350,9 @@ class Library:
         for ref, node in lib.refs.items():
             entry = read_entry(node.body)
             if entry is not None:
-                lib.by_key.setdefault(entry.key.lower(), ref)
-                for x in identifiers(entry.fields):
+                lib.by_key.setdefault(entry.key.casefold(), ref)
+                lib.stated[ref] = identifiers(entry.fields)
+                for x in lib.stated[ref]:
                     lib.by_id.setdefault(matchable(x), set()).add(ref)
             for digest in (node.pdf, node.tex):
                 if digest:
@@ -346,8 +360,28 @@ class Library:
         return lib
 
     def stating(self, ids: list[str]) -> list[str]:
-        """The references stating any of `ids`, in id order."""
+        """The references stating any of `ids`, any version of an arXiv number, in id order: those a dropped file is offered as."""
         return sorted({r for x in ids for r in self.by_id.get(matchable(x), set())})
+
+    def same_version(self, ids: list[str]) -> list[str]:
+        """The references stating any of `ids` as that very version, in id order: an arXiv number with a version is met by that version or by one stating none, and one without by any; what a pasted identifier or entry is held as, since each version is a work of its own (`nodes.md` §7)."""
+        return sorted(
+            {
+                r
+                for r in self.stating(ids)
+                for x in ids
+                if any(matchable(y) == matchable(x) and _versions_meet(x, y) for y in self.stated.get(r, []))
+            }
+        )
+
+    def holder(self, but: str = "") -> Callable[[str], str | None]:
+        """The short name of the work whose entry has a key, ignoring case, other than `but`; for `entries.entry_fault`."""
+
+        def held(key: str) -> str | None:
+            ref = self.by_key.get(key.casefold())
+            return self.shown(ref)["short"] if ref is not None and ref != but else None
+
+        return held
 
     def shown(self, ref: str) -> dict[str, Any]:
         """What a row says of a reference: its short name, title, surnames and year."""
@@ -360,6 +394,12 @@ class Library:
             "authors": surnames(fields),
             "year": year(fields),
         }
+
+
+def _versions_meet(a: str, b: str) -> bool:
+    """Whether two identifiers matched as compared name one version: alike when either states no version."""
+    va, vb = (re.search(r"v\d+$", x) if x.startswith("arxiv:") else None for x in (a, b))
+    return va is None or vb is None or va.group(0) == vb.group(0)
 
 
 # ---- taking in --------------------------------------------------------------------------------------------------------
@@ -459,43 +499,67 @@ def _take_drop(t: _Take, n: int, drop: str, work: str, *, new: bool = False, for
         # a drop taken already, its bytes held under a work: the same file given again is here
         held = t.lib.by_doc.get("sha256:" + drop)
         if held is not None and _acts(d):
-            return [
-                Row(
-                    drop,
-                    n,
-                    name,
-                    "here",
-                    **t.lib.shown(held),
-                    why=f"loom holds these very bytes as {t.lib.shown(held)['short']}'s",
-                )
-            ]
+            return [_here(t, n, drop, name, held)]
         raise IntakeRefused("no-such-incoming", f"nothing waits as {drop[:12]}: drop it again", 404)
     if work and work not in t.lib.refs:
         raise IntakeRefused("no-such-work", f"the library has no work {work}", 404)
+    if any(unicodedata.category(c) == "Cc" for c in name):
+        # a NUL or a line break, which no entry or file of loom's holds: refused before anything is stored
+        return [
+            _cannot(
+                t,
+                d,
+                n,
+                drop,
+                name,
+                "bad-name",
+                f"{_printable(name)} has a control character in its name; rename the file without it and drop it again",
+            )
+        ]
     kind = TAKEN[f.suffix]
     if kind == "bib":
         # each entry a row, as a pasted text's; the file's own bytes are the person's, and its entries are kept by the references made of them
-        rows = _take_text(t, n, f.read_text(encoding="utf-8", errors="replace"))
+        rows = _take_text(t, n, f.read_text(encoding="utf-8", errors="replace"), where=f" in {name}")
         if t.write:
             shutil.rmtree(d, ignore_errors=True)
         return rows
-    which = "pdf" if kind == "pdf" else "tex"
-    digest = "sha256:" + drop if which == "pdf" else "sha256:" + hashlib.sha256(documents.source_tar(f)).hexdigest()
+    if kind == "pdf":
+        return _take_document(t, n, d, f, name, "pdf", "sha256:" + drop, None, work, arrived, new=new, force=force)
+    # a source is packed, checked and limited as it streams, into the drop's own folder, before anything is stored
+    packed = d / f".packed.{os.getpid()}.{secrets.token_hex(4)}.tmp"
+    try:
+        try:
+            with packed.open("wb") as out:
+                digest = documents.pack(f, out, name=name, work=d)
+        except documents.NotASource as exc:
+            return [_cannot(t, d, n, drop, name, "not-a-source", str(exc))]
+        return _take_document(t, n, d, f, name, "tex", digest, packed, work, arrived, new=new, force=force)
+    finally:
+        packed.unlink(missing_ok=True)
+
+
+def _take_document(
+    t: _Take,
+    n: int,
+    d: Path,
+    f: Path,
+    name: str,
+    which: str,
+    digest: str,
+    packed: Path | None,
+    work: str,
+    arrived: dict[str, Any],
+    *,
+    new: bool,
+    force: bool,
+) -> list[Row]:
+    """A PDF or a source, `digest` its hash in the store and `packed` a source's one form ready to store: here, filed, asked about, or a work of its own."""
     if digest in t.lib.by_doc:
-        # these very bytes are held already: nothing is written, and the drop goes, since the store keeps them
+        # these very bytes are held already: nothing is written, and the drop lets its file go, since the store keeps them; an act it records stays, so its undo stands
         held = t.lib.by_doc[digest]
-        if t.write and _let_go(t.root, d, digest, which):
+        if t.write and _let_go(t.root, d, digest, which) and not _acts(d):
             _remove_drop(d)
-        return [
-            Row(
-                drop,
-                n,
-                name,
-                "here",
-                **t.lib.shown(held),
-                why=f"loom holds these very bytes as {t.lib.shown(held)['short']}'s",
-            )
-        ]
+        return [_here(t, n, d.name, name, held)]
     stated = _stated(f, name, which)
     others = (
         []
@@ -503,10 +567,32 @@ def _take_drop(t: _Take, n: int, drop: str, work: str, *, new: bool = False, for
         else [r for r in t.lib.stating(stated) if r != work and r not in (arrived.get("not") or [])]
     )
     if work and not others:
-        return [_file_under(t, n, d, f, name, which, digest, work)]
+        return [_file_under(t, n, d, f, name, which, digest, work, packed)]
     if others:
         return [_ask(t, n, d, name, which, stated, [*([work] if work else []), *others])]
-    return [_add_new(t, n, d, f, name, which, digest, stated)]
+    return [_add_new(t, n, d, f, name, which, digest, stated, packed)]
+
+
+def _here(t: _Take, n: int, drop: str, name: str, held: str) -> Row:
+    shown = t.lib.shown(held)
+    return Row(drop, n, name, "here", **shown, why=f"loom holds these very bytes as {shown['short']}'s")
+
+
+def _cannot(t: _Take, d: Path, n: int, drop: str, name: str, code: str, why: str) -> Row:
+    """A drop no work can be made of, whatever is asked: nothing is stored, and its file goes, since taking it again would say the same; an earlier act on the same bytes keeps its record, and so its undo."""
+    if t.write:
+        if _acts(d):
+            for p in (waiting_file(d), d / ARRIVED):
+                if p is not None:
+                    p.unlink(missing_ok=True)
+        else:
+            shutil.rmtree(d, ignore_errors=True)
+    return Row(drop, n, name, "cannot", code=code, why=why)
+
+
+def _printable(name: str) -> str:
+    """A name as a sentence can show it, each control character a space."""
+    return "".join(" " if unicodedata.category(c) == "Cc" else c for c in name)
 
 
 def _stated(f: Path, name: str, which: str) -> list[str]:
@@ -543,7 +629,9 @@ def _ask(t: _Take, n: int, d: Path, name: str, which: str, stated: list[str], ca
     return Row(d.name, n, name, "question", question=qid, document=document, candidates=shown)
 
 
-def _file_under(t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: str, ref: str) -> Row:
+def _file_under(
+    t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: str, ref: str, packed: Path | None
+) -> Row:
     """File a document under the work the person named, replacing nothing it holds."""
     node = t.lib.refs[ref]
     if getattr(node, which):
@@ -557,9 +645,14 @@ def _file_under(t: _Take, n: int, d: Path, f: Path, name: str, which: str, diges
         )
     act = ""
     if t.write:
-        _store(t.root, f, which)
+        fresh = _store(t.root, f, which, digest, packed)
         before = _file_hash(t.root, ref)
-        attach(t.root, ref, which, digest, by=t.by, kind="person", source=name)
+        try:
+            attach(t.root, ref, which, digest, by=t.by, kind="person", source=name)
+        except NodeRefused:
+            if fresh:
+                _forget(t.root, digest)
+            raise
         act = _push(
             d,
             {
@@ -587,9 +680,11 @@ def _file_under(t: _Take, n: int, d: Path, f: Path, name: str, which: str, diges
     )
 
 
-def _add_new(t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: str, stated: list[str]) -> Row:
+def _add_new(
+    t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: str, stated: list[str], packed: Path | None
+) -> Row:
     """A work of its own: its entry looked up by the identifier it states when the network may be used, else what the document says of itself."""
-    fields, etype, found_by, looked = _entry_for(t, f, name, which, stated)
+    fields, etype, found_by, looked = _entry_for(t, packed, name, which, stated)
     text = _bibtex(etype, _key(t, fields), fields)
     if not t.write:
         return Row(
@@ -606,15 +701,19 @@ def _add_new(t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: 
             unconfirmed=found_by in log.LOOKABLE and not looked,
             identifier=_identifier(text),
         )
-    _store(t.root, f, which)
+    fresh = _store(t.root, f, which, digest, packed)
     try:
         node = make(
             t.root, text, t.mint(), by=t.by, kind="person", how="drop" if which == "pdf" else "source",
             found_by=found_by, looked_up=looked, source=name,
             pdf=digest if which == "pdf" else None, tex=digest if which == "tex" else None,
         )  # fmt: skip
-    except NodeRefused as exc:
-        return Row(d.name, n, name, "cannot", code="refused", why=str(exc))
+    except NodeRefused:
+        # the document brought for it is not left in the store named by no reference
+        if fresh:
+            _forget(t.root, digest)
+        why = entry_fault(text, holder=t.lib.holder()) or f"loom could not keep {name} as a work, by a fault of its own"
+        return Row(d.name, n, name, "cannot", code="refused", why=why)
     act = _push(d, {"kind": "added", "made": node.id, "after": _file_hash(t.root, node.id)})
     _let_go(t.root, d, digest, which)
     t.lib = Library.read(t.root)
@@ -632,8 +731,10 @@ def _add_new(t: _Take, n: int, d: Path, f: Path, name: str, which: str, digest: 
     )
 
 
-def _entry_for(t: _Take, f: Path, name: str, which: str, stated: list[str]) -> tuple[dict[str, str], str, str, bool]:
-    """The fields, entry type, `found_by` and whether looked up, of a new work's entry."""
+def _entry_for(
+    t: _Take, packed: Path | None, name: str, which: str, stated: list[str]
+) -> tuple[dict[str, str], str, str, bool]:
+    """The fields, entry type, `found_by` and whether looked up, of a new work's entry; `packed` a source's one form, which its title and authors are read from."""
     from loom.refs.lookup import look_up
 
     found_by = stated[0].partition(":")[0] if stated else "none"
@@ -649,8 +750,8 @@ def _entry_for(t: _Take, f: Path, name: str, which: str, stated: list[str]) -> t
         if named and named != Path(name).stem:
             fields["title"] = named
             found_by = found_by if stated else "title"
-    else:
-        fields.update(_source_says(f))
+    elif packed is not None:
+        fields.update(_source_says(packed))
         if fields and not stated:
             found_by = "entry"
     for x in stated[:1]:
@@ -661,13 +762,9 @@ def _entry_for(t: _Take, f: Path, name: str, which: str, stated: list[str]) -> t
     return fields, "misc" if found_by == "none" else "article", found_by, False
 
 
-def _source_says(f: Path) -> dict[str, str]:
-    """The title and authors a source's main file states, which a source says exactly and is not guessed."""
-    files = documents.unpack(f.read_bytes(), f.name)
-    mains = [k for k, v in files.items() if k.endswith(".tex") and b"\\documentclass" in v[:100_000]]
-    if not mains:
-        return {}
-    text = files[sorted(mains, key=lambda k: (k.count("/"), k))[0]].decode("utf-8", errors="replace")
+def _source_says(packed: Path) -> dict[str, str]:
+    """The title and authors a source's main file states, which a source says exactly and is not guessed; read from its one form, `pack`'s."""
+    text = documents.main_text(packed)
     out: dict[str, str] = {}
     for cmd, key in (("title", "title"), ("author", "author")):
         if m := re.search(rf"\\{cmd}\s*(?:\[[^\]]*\])?\s*\{{", text):
@@ -691,7 +788,7 @@ def _key(t: _Take, fields: dict[str, str]) -> str:
     taken = {read_entry(n.body).key for n in t.lib.refs.values() if read_entry(n.body)}  # type: ignore[union-attr]
     base = key_for(fields, taken) or "work"
     key, letter = base, ord("a")
-    while key.lower() in t.lib.by_key:
+    while key.casefold() in t.lib.by_key:
         key, letter = f"{base}{chr(letter)}", letter + 1
     return key
 
@@ -703,8 +800,14 @@ def _bibtex(etype: str, key: str, fields: dict[str, str]) -> str:
     return f"@{etype}{{{key},\n{body}}}\n"
 
 
-def _store(root: Path, f: Path, which: str) -> str:
-    return documents.put_pdf(root, f, link=True) if which == "pdf" else documents.put_source(root, f)
+def _store(root: Path, f: Path, which: str, digest: str, packed: Path | None) -> bool:
+    """Put a drop's document in the store, a source as `packed` holds it; whether the store did not hold it before."""
+    fresh = not documents.held(root, digest, which)
+    if which == "pdf":
+        documents.put_pdf(root, f, link=True)
+    elif packed is not None:
+        documents.keep_packed(root, packed, digest)
+    return fresh
 
 
 def _file_hash(root: Path, ref: str) -> str | None:
@@ -717,13 +820,13 @@ def _file_hash(root: Path, ref: str) -> str | None:
 # ---- pasted text ------------------------------------------------------------------------------------------------------
 
 
-def _take_text(t: _Take, n: int, text: str) -> list[Row]:
-    """A pasted text as rows: each BibTeX entry it holds, or each line as one identifier."""
+def _take_text(t: _Take, n: int, text: str, *, where: str = " in what you pasted") -> list[Row]:
+    """A pasted text or a dropped `.bib` as rows: each BibTeX entry it holds, with the `@string` abbreviations it defines written out, or each line as one identifier; `where` names it in a refusal."""
     from loom.refs.lookup import recognise
 
     if text.lstrip().startswith("@"):
-        entries = raw_entries(text)
-        if not entries:
+        found = entries_in(text)
+        if not found:
             return [
                 Row(
                     _text_id(text),
@@ -734,9 +837,39 @@ def _take_text(t: _Take, n: int, text: str) -> list[Row]:
                     why="this BibTeX names no entry loom can read",
                 )
             ]
-        return [_take_entry(t, n, entry.strip() + "\n", key) for key, entry in entries.items()]
+        strings = strings_of(text)
+        first: dict[str, str] = {}
+        rows = []
+        for key, entry, _at in found:
+            whole = expand_strings(entry.strip(), strings) + "\n"
+            again = first.get(key.casefold())
+            if again is None:
+                first[key.casefold()] = whole
+                rows.append(_take_entry(t, n, whole, key, where=where))
+            else:
+                rows.append(_pasted_twice(t, n, whole, key, again, where))
+        return rows
     rows = [_take_identifier(t, n, line, recognise(line)) for line in (x.strip() for x in text.splitlines()) if line]
     return rows or [Row(_text_id(text), n, "", "cannot", code="not-recognised", why="nothing was pasted")]
+
+
+def _pasted_twice(t: _Take, n: int, text: str, key: str, first: str, where: str) -> Row:
+    """An entry whose key an entry before it in the same text has: `here` when it is the same entry, else `key-taken`, naming the first by its short name."""
+    rid = _text_id(text)
+    held = t.lib.by_key.get(key.casefold())
+    if re.sub(r"\s+", "", text) == re.sub(r"\s+", "", first):
+        shown = t.lib.shown(held) if held is not None else {}
+        return Row(rid, n, key, "here", **shown, why=f"{key} is{where} twice, the same entry both times")
+    entry = read_entry(first)
+    named = short(entry.fields, key) if entry is not None else key
+    return Row(
+        rid,
+        n,
+        key,
+        "cannot",
+        code="key-taken",
+        why=f"{named} has the key {key} already, above it{where}; give this entry another key",
+    )
 
 
 def _text_id(text: str) -> str:
@@ -747,6 +880,7 @@ _CANNOT = {"missing": "missing", "unreachable": "unreachable"}
 
 
 def _take_identifier(t: _Take, n: int, line: str, rec: Any) -> Row:
+    """One pasted identifier: `here` when a work states that very version of it, else a work of its own, looked up where the network may be used."""
     from loom.refs.lookup import look_up
 
     rid = _text_id(line)
@@ -754,7 +888,7 @@ def _take_identifier(t: _Take, n: int, line: str, rec: Any) -> Row:
         code = "no-service" if rec.kind in ("isbn", "mr") else "not-recognised"
         return Row(rid, n, line, "cannot", code=code, why=look_up(rec, online=False).message)
     stated = [f"{rec.kind}:{rec.value}"]
-    if held := t.lib.stating(stated):
+    if held := t.lib.same_version(stated):
         return Row(rid, n, line, "here", **t.lib.shown(held[0]), why=f"{t.lib.shown(held[0])['short']} states {line}")
     if t.online:
         found = look_up(rec, online=True, http=t.http)
@@ -770,14 +904,16 @@ def _take_identifier(t: _Take, n: int, line: str, rec: Any) -> Row:
     )
 
 
-def _take_entry(t: _Take, n: int, text: str, key: str) -> Row:
-    """One pasted entry: `here` when a work has its key and its text or an identifier agrees, or states its identifier; `cannot` (`key-taken`) when a work has its key and is another; else a work of its own."""
+def _take_entry(t: _Take, n: int, text: str, key: str, *, where: str = " in what you pasted") -> Row:
+    """One pasted entry: `here` when a work has its key and its text or an identifier agrees, or states that very version of its identifier; `cannot` (`key-taken`) when a work has its key and is another; else a work of its own."""
     rid = _text_id(text)
     entry = read_entry(text)
     stated = identifiers(entry.fields) if entry else []
-    held = t.lib.by_key.get(key.lower())
+    held = t.lib.by_key.get(key.casefold())
     if held:
-        same = re.sub(r"\s+", "", t.lib.refs[held].body) == re.sub(r"\s+", "", text) or held in t.lib.stating(stated)
+        same = re.sub(r"\s+", "", t.lib.refs[held].body) == re.sub(r"\s+", "", text) or held in t.lib.same_version(
+            stated
+        )
         if same:
             return Row(rid, n, key, "here", **t.lib.shown(held), why=f"the library has {key}")
         return Row(
@@ -786,9 +922,9 @@ def _take_entry(t: _Take, n: int, text: str, key: str) -> Row:
             key,
             "cannot",
             code="key-taken",
-            why=f"{t.lib.shown(held)['short']} has the key {key}; change the key in what you paste",
+            why=f"{t.lib.shown(held)['short']} has the key {_key_of(t.lib.refs[held]) or key} already; give the entry{where} another key",
         )
-    if stating := t.lib.stating(stated):
+    if stating := t.lib.same_version(stated):
         return Row(
             rid,
             n,
@@ -797,10 +933,12 @@ def _take_entry(t: _Take, n: int, text: str, key: str) -> Row:
             **t.lib.shown(stating[0]),
             why=f"{t.lib.shown(stating[0])['short']} states the same identifier",
         )
-    return _add_entry(t, n, rid, key, text, "entry", False)
+    return _add_entry(t, n, rid, key, text, "entry", False, where=where)
 
 
-def _add_entry(t: _Take, n: int, rid: str, name: str, text: str, found_by: str, looked: bool) -> Row:
+def _add_entry(
+    t: _Take, n: int, rid: str, name: str, text: str, found_by: str, looked: bool, *, where: str = ""
+) -> Row:
     entry = read_entry(text)
     fields = entry.fields if entry else {}
     unconfirmed = found_by in log.LOOKABLE and not looked
@@ -830,8 +968,16 @@ def _add_entry(t: _Take, n: int, rid: str, name: str, text: str, found_by: str, 
             looked_up=looked,
             source=name,
         )
-    except NodeRefused as exc:
-        return Row(rid, n, name, "cannot", code="refused", why=str(exc))
+    except NodeRefused:
+        why = entry_fault(text, holder=t.lib.holder(), where=where)
+        return Row(
+            rid,
+            n,
+            name,
+            "cannot",
+            code="refused",
+            why=why or f"loom could not keep {name} as a work, by a fault of its own",
+        )
     t.lib = Library.read(t.root)
     return Row(
         rid,
@@ -843,6 +989,11 @@ def _add_entry(t: _Take, n: int, rid: str, name: str, text: str, found_by: str, 
         unconfirmed=unconfirmed,
         identifier=_identifier(text),
     )
+
+
+def _key_of(node: Node) -> str:
+    entry = read_entry(node.body)
+    return entry.key if entry is not None else ""
 
 
 def _identifier(text: str) -> str:
@@ -978,8 +1129,14 @@ def _take_back(root: Path, d: Path, last: dict[str, Any], lib: Library, by: str)
     if kind == "unfiled":
         ref, which, digest = last["ref"], last["which"], last["hash"]
         node = lib.refs.get(ref)
+        if node is not None and getattr(node, which) == digest:
+            # an unfile cut short after its record and before the document came off: the work is whole already
+            _let_go(root, d, digest, which)
+            return f"its {which} is on {lib.shown(ref)['short']} as it was"
         if node is None or getattr(node, which):
-            raise IntakeRefused("changed", f"{ref} is gone or holds a {which} again", 409)
+            raise IntakeRefused(
+                "changed", f"{lib.shown(ref)['short'] if node else ref} is gone or holds a {which} again", 409
+            )
         attach(root, ref, which, digest, by=by, kind="person")
         _let_go(root, d, digest, which)
         return f"its {which} is back on {lib.shown(ref)['short']}"
@@ -1067,7 +1224,8 @@ def unfile(root: Path, ref: str, *, which: str = "pdf", by: str) -> dict[str, An
                 "has-results", f"results were read off {lib.shown(ref)['short']}; delete the work instead", 409
             )
         src = documents.path_of(root, digest, which)
-        sha = digest.removeprefix("sha256:") if which == "pdf" else hashlib.sha256(src.read_bytes()).hexdigest()
+        # a source's `tex` is the hash of the very file the store holds, as a PDF's `pdf` is
+        sha = documents.hex_of(digest)
         d = incoming(root) / sha
         d.mkdir(parents=True, exist_ok=True)
         if waiting_file(d) is None:
@@ -1078,8 +1236,12 @@ def unfile(root: Path, ref: str, *, which: str = "pdf", by: str) -> dict[str, An
         }
         arrived["not"] = sorted({*arrived.get("not", []), ref})
         _write_json(d / ARRIVED, arrived)
+        # the act is recorded before the document comes off, so one cut short is finished by running it again or undone whole; an unfile of this very document left so is the one taken up
+        acts = _acts(d)
+        meant = {"kind": "unfiled", "ref": ref, "which": which, "hash": digest}
+        pending = acts[-1] if acts and {k: acts[-1].get(k) for k in meant} == meant else None
+        act = str(pending["id"]) if pending is not None else _push(d, meant)
         attach(root, ref, which, None, by=by, kind="person")
-        act = _push(d, {"kind": "unfiled", "ref": ref, "which": which, "hash": digest})
         row = Row(sha, 0, arrived["name"], "cannot", code="received", why="it waits to be taken")
         return {"incoming": sha, "act": act, "row": row.to_json()}
 

@@ -254,6 +254,7 @@ def write_nodes(root: Path, nodes: Iterable[Node], *, new: bool = False) -> list
     with locked(root / LIBRARY_LOCK):
         target = folder(root)
         _roll_back(root)
+        _roll_forward(root)
         with NodeIndex.open(root) as index:
             # every writer holds this lock while its temporary file exists, so one seen now is a killed writer's
             for name in index.leftovers:
@@ -396,6 +397,13 @@ def _roll_back(root: Path) -> list[str]:
     return names
 
 
+def _roll_forward(root: Path) -> None:
+    """Finish a delete of a work that its act left part done (`acts.finish`), so no writer works on a library holding part of a deleted work."""
+    from loom.library.acts import finish
+
+    finish(root)
+
+
 def _flush_folder(target: Path) -> None:
     """Flush the folder itself, so the renames are on the disk; a system that cannot is passed over."""
     with contextlib.suppress(OSError):
@@ -430,6 +438,7 @@ def remove_node(root: Path, node_id: str) -> bool:
         raise ValueError(f"{node_id!r} is not a node's id")
     with locked(root / LIBRARY_LOCK):
         _roll_back(root)
+        _roll_forward(root)
         if not exists(root, node_id):
             return False
         (folder(root) / file_name(node_id)).unlink()

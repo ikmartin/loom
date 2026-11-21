@@ -12,9 +12,9 @@ The leak shows only when two sets disagree on a name, and no real quilt's sets d
 
 ## Rough design
 
-Give every fragment that names a macro set the scoped path the comparison uses: its macros as configuration for that typesetting and no formula of definitions, so `define` and `macroPrefix` go. Measure first what a scoped typesetting costs per set against the shared one, on the largest demo (kpsv, sixteen sets), since a landmark, a digest document and a digest node's preview each name a set.
+Give every fragment that names a macro set the scoped path the comparison uses: its macros as configuration for that typesetting and no formula of definitions, so `define` and `macroPrefix` go. Measure first what a scoped typesetting costs per set against the shared one, on the demo with the most landmarks, since a landmark's view and its nodes' previews each name a set.
 
-**The test is already in the fixture.** `\Hom` is defined one way by the `Kre99` set and another by the three `canon:widgets-v*` sets. Open `/canon/widgets-v1`, then the Kre99 digest (or the reverse) in the same page, and assert that each renders `\Hom` with its own definition; today the second shows the first's.
+**The test needs a set of its own.** The fixture's other definition of `\Hom`, its `Kre99` digest's set, went with the digests, and every set it has now agrees on it. Give the fixture a landmark whose preamble defines `\Hom` otherwise, open `/canon/widgets-v1` and then that landmark in the same page, and assert that each renders `\Hom` with its own definition; today the second shows the first's.
 
 ## Blast radius
 

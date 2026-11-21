@@ -606,7 +606,7 @@ def upgrade_layer(
 ) -> LayerReport:
     """Refresh the generated files of an existing `.loom/agents/instructions/`; keep edited mode files and write `.new` beside them. Nothing where `.loom/agents/instructions/` is absent or not a directory of the quilt's own (`blocker`).
 
-    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. A skill of the person's at one of loom's paths is left alone (`theirs`), and loom's own of a mode that is gone is taken away (`removed`). With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
+    The permission files keep the variant they are in (`variant`) unless `shell` says which; with none, MCP. They, the root lines and the skills (`ai.skills`) are those of `apps`, by default the apps the quilt is set up for (`clients.chosen`), so a quilt set up for one app stays so. A skill of the person's at one of loom's paths, or a mode file they edited of a mode that is gone, is left alone (`theirs`), and loom's own skill and mode file of a mode that is gone are taken away (`removed`). With `write` false nothing is written and the report says what would be: `loom doctor`'s dry run, byte for byte what `loom upgrade` compares.
     """
     from loom.ai.clients import chosen
     from loom.ai.skills import write_skills
@@ -662,6 +662,7 @@ def upgrade_layer(
         if rel in rep.kept:
             continue  # the record keeps the hash of what was shipped last time, so a later upgrade still sees the edit
         new_versions[Path(rel).name] = sha(shipped)
+    _gone_modes(root, texts, recorded, rep, write=write)
     if write:
         (ai / VERSION_FILE).write_text(
             "\n".join(f"{k} {v}" for k, v in sorted(new_versions.items())) + "\n", encoding="utf-8"
@@ -685,6 +686,27 @@ def upgrade_layer(
     rep.removed += skills.removed
     rep.theirs += skills.theirs
     return rep
+
+
+def _gone_modes(root: Path, texts: dict[str, str], recorded: dict[str, str], rep: LayerReport, *, write: bool) -> None:
+    """Take away loom's own file of each mode the quilt no longer has (`removed`), as `upgrade_layer` does.
+
+    Loom's own is a file whose text has the hash `.loom-modes-version` records for its name; one the person edited, or one loom never recorded, is left, the edited one named in `theirs`. Nothing is read or removed through a link (`read_plain`).
+    """
+    folder = f"{AI}/modes"
+    if blocker(root, folder, folder=True) or not (root / folder).is_dir():
+        return
+    for p in sorted((root / folder).glob("*.md")):
+        rel = f"{folder}/{p.name}"
+        text = read_plain(root, rel)
+        if rel in texts or p.name not in recorded or text is None:
+            continue
+        if sha(text) != recorded[p.name]:
+            rep.theirs.append(rel)
+            continue
+        if write:
+            p.unlink()
+        rep.removed.append(rel)
 
 
 def write_permissions(

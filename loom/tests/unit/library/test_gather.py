@@ -7,8 +7,8 @@ from pathlib import Path
 
 from loom.library import log
 from loom.library.checks import check
-from loom.library.entries import read_entry
-from loom.library.gather import bibitem_entry, gather, strings_of
+from loom.library.entries import read_entry, strings_of
+from loom.library.gather import bibitem_entry, gather
 from loom.library.store import read, write_node
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
@@ -111,3 +111,82 @@ def test_a_bibitem_is_its_text_and_the_identifiers_it_writes(tmp_path: Path) -> 
 
 def test_strings_are_read_from_braces_and_quotes() -> None:
     assert strings_of('@string{a = {A {b}}}\n@STRING(c = "C")\n') == {"a": "A {b}", "c": "C"}
+
+
+BAD = "\n@article{Bad1,\n  title   = {Widgets lost},\n  journal = jnotdefined,\n}\n"
+
+
+def test_an_entry_the_checks_refuse_is_left_out_at_its_line_and_the_rest_are_made(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    (root / "refs.bib").write_text(BIB + BAD)
+    done = gather(scan(load_quilt(root)))
+    assert sorted(refs(root)) == ["Jon19", "Smi24"]
+    [refused] = done.refused
+    line = (BIB + BAD).splitlines().index("@article{Bad1,") + 1
+    assert (refused.key, refused.file, refused.line, refused.ref) == ("Bad1", "refs.bib", line, "")
+    assert refused.why == (
+        "Bad1: its journal is jnotdefined, an abbreviation no @string in refs.bib defines; write it out in braces instead"
+    )
+
+
+def test_a_followed_entry_that_turns_bad_leaves_its_work_as_it_was_and_the_rest_go_on(tmp_path: Path) -> None:
+    """The review's M-2: a person removes a `@string` an entry of theirs leans on; gathering says so and goes on, so the works list is never down for one entry."""
+    root = quilt(tmp_path)
+    gather(scan(load_quilt(root)))
+    before = refs(root)
+    (root / "refs.bib").write_text(
+        BIB.replace("@string{JEx = {Journal of Examples}}\n", "") + "\n@article{New1, title = {New}}\n"
+    )
+    (root / "main.tex").write_text(MAIN % "" + "")
+    done = gather(scan(load_quilt(root)))
+    got = refs(root)
+    assert got["Jon19"] == before["Jon19"] and "New1" in got
+    [refused] = done.refused
+    assert refused.key == "Jon19" and refused.ref and "its journal is JEx" in refused.why
+    assert check(root) == []
+
+
+def test_a_build_gathers_and_says_each_entry_refused_to_the_person(tmp_path: Path) -> None:
+    from loom.render.build import build
+
+    root = quilt(tmp_path)
+    (root / "refs.bib").write_text(BIB + BAD)
+    report = build(load_quilt(root), tex=False)
+    assert sorted(refs(root)) == ["Jon19", "Smi24"]
+    [said] = [d for d in report.diagnostics if d.code == "loom:bib-entry-refused"]
+    assert (said.severity, said.class_, said.owner) == ("warning", "latex", "person")
+    assert [(loc.file, loc.line) for loc in said.locations] == [
+        ("refs.bib", (BIB + BAD).count("\n", 0, (BIB + BAD).index("@article{Bad1")) + 1)
+    ]
+    assert said.message.endswith("; until then the library holds no work for Bad1") and ".node" not in said.message
+    assert any(d["code"] == "loom:bib-entry-refused" for d in report.manifest["diagnostics"])
+    # a second build makes nothing again and says the entry again, since it is still refused
+    again = build(load_quilt(root), tex=False)
+    assert sorted(refs(root)) == ["Jon19", "Smi24"]
+    assert [d.code for d in again.diagnostics if d.code == "loom:bib-entry-refused"] == ["loom:bib-entry-refused"]
+    (root / "config.toml").write_text(
+        '[quilt]\nprefix = "tq"\nmain = "main.tex"\n[lint]\ndisable = ["loom:bib-entry-refused"]\n'
+    )
+    assert not [d for d in build(load_quilt(root), tex=False).diagnostics if d.code == "loom:bib-entry-refused"]
+
+
+def test_nothing_due_takes_no_lock_and_writes_nothing(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    gather(scan(load_quilt(root)))
+    for lock in (root / ".loom/local").glob("*.lock"):
+        lock.unlink()
+    before = {p: p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file() and ".loom/cache" not in p.as_posix()}
+    done = gather(scan(load_quilt(root)))
+    assert (done.made, done.followed, done.refused) == ([], [], [])
+    after = {p: p.stat().st_mtime_ns for p in root.rglob("*") if p.is_file() and ".loom/cache" not in p.as_posix()}
+    assert after == before
+
+
+def test_two_keys_alike_but_for_case_are_one_work(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    (root / "refs.bib").write_text(
+        BIB + "\n@article{SMI24, title = {Shouting}}\n@article{STRASSE1, title = {A}}\n@article{Straße1, title = {B}}\n"
+    )
+    done = gather(scan(load_quilt(root)))
+    assert sorted(refs(root)) == ["Jon19", "STRASSE1", "Smi24"] and done.refused == []
+    assert {c[0] for c in done.conflicts} == {"SMI24", "Straße1"}

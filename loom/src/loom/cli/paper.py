@@ -68,7 +68,7 @@ def bibliography_groups(quilt: Quilt) -> tuple[list[Group], dict[str, Any]]:
     data = {
         "made": len(done.made),
         "followed": len(done.followed),
-        "refused": [{"key": k, "why": why} for k, why in done.refused],
+        "refused": [{"key": r.key, "why": r.why, "file": r.file, "line": r.line} for r in done.refused],
         "missing": [{"document": d, "bib": name} for d, name in done.missing],
     }
     groups: list[Group] = []
@@ -79,7 +79,9 @@ def bibliography_groups(quilt: Quilt) -> tuple[list[Group], dict[str, Any]]:
         groups.append(Group("library", [Item(said)], limit=None, counted=False))
     if done.refused:
         groups.append(
-            Group("library, entries not taken", [Item(f"{k}: {why}") for k, why in done.refused], problem=True)
+            Group(
+                "library, entries not taken", [Item(f"{r.file}:{r.line}: {r.why}") for r in done.refused], problem=True
+            )
         )
     if done.missing:
         groups.append(

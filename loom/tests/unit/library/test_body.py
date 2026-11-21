@@ -196,7 +196,8 @@ def test_a_work_s_own_commands_that_point_are_read_from_its_macros() -> None:
         "\\newcommand{\\eq}[1]{(\\ref{#1})}\n\\newcommand\\Lem[1]{Lemma~\\ref{lem:#1}}\n\\newcommand{\\cf}[2][see]{#1 \\cite{#2}}\n"
         "\\def\\thm#1{Theorem \\ref{#1}}\n\\newcommand{\\R}{\\mathbb{R}}\n\\renewcommand{\\ref}[1]{x}\n"
     )
-    assert sorted(given) == ["Lem", "cf", "eq", "thm"], "a command that points; never one loom reads already"
+    assert sorted(given) == ["Lem", "R", "cf", "eq", "thm"], "every command it defines; never one loom reads already"
+    assert given["R"].uses == () and given["eq"].uses == (("ref", "#1"),)
     said = [
         (p.via, p.command, p.target)
         for p in wrapped("\\eq{a} \\Lem{b} \\cf{C1,C2} \\cf[cf.]{C3} \\thm{d} \\R % \\eq{e}\n", given)

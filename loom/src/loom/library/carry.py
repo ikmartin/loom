@@ -375,13 +375,14 @@ def _references(root: Path, result: ScanResult, works: list[_Work], out: Carried
     An entry is checked by itself before anything of it is stored, so an entry the checks refuse leaves no document behind; a write refused by the rest of the store is said the same way. A reference holding another document of a kind leaves the folder in place, said. Not writing, the ids are minted all the same.
     """
     minter = Minter.of(result)
-    held = held_keys(root)
+    # keys folded as check 9 folds them, so a key a reference holds in another case (`STRASSE1`, `Straße1`) is held
+    held = {key.casefold(): ref for key, ref in held_keys(root).items()}
     holding: dict[str, dict[str, str | None]] = {}
     stored: set[tuple[str, str]] = set()
     for w in works:
         where = _rel(root, w.folder) if w.folder is not None else ""
         stays = f"; its documents stay in {where}" if w.folder is not None else ""
-        ref = held.get(w.key.lower())
+        ref = held.get(w.key.casefold())
         refused = _refused(w.text, minter.prefix) if ref is None else ""
         if refused:
             out.problems.append(
@@ -405,7 +406,7 @@ def _references(root: Path, result: ScanResult, works: list[_Work], out: Carried
                 )
                 w.kept = True
                 continue
-            held[w.key.lower()] = ref
+            held[w.key.casefold()] = ref
             holding[ref] = dict(found)
             out.references[w.key] = ref
             stored |= {(k, d) for k, d in found.items() if d}

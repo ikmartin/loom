@@ -1,17 +1,18 @@
 """A reference's BibTeX entry read for what the views and the intake need: its identifiers, and its words decoded (`library-views.md` §2, "Names").
 
-The entry stays as its source wrote it (`docs/specs/nodes.md` §7); nothing here rewrites one but `expand_strings`, which gathering uses where an entry leans on a `@string` its file defines. Words are decoded as a reader sees them: braces dropped, TeX's accents made characters (`Kova{\\v{c}}` is "Kovač"), dashes made dashes, and mathematics kept between `$` for the viewer to draw.
+The entry stays as its source wrote it (`docs/specs/nodes.md` §7); nothing here rewrites one but `expand_strings`, which gathering and the intake use where an entry leans on a `@string` its text defines. Words are decoded as a reader sees them: braces dropped, TeX's accents made characters (`Kova{\\v{c}}` is "Kovač"), dashes made dashes, and mathematics kept between `$` for the viewer to draw.
 """
 
 from __future__ import annotations
 
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from loom.library.body import entry_of
 from loom.scan.bib import parse_bib
+from loom.scan.tokenize import match_group
 
 #: TeX's accent commands, each with the combining character it puts on its letter.
 ACCENTS = {
@@ -225,6 +226,87 @@ def link(fields: Mapping[str, str]) -> str | None:
         if scheme == "arxiv":
             return f"https://arxiv.org/abs/{value}"
     return None
+
+
+_STRING = re.compile(r"@string\s*[{(]\s*([A-Za-z][\w:.-]*)\s*=\s*", re.I)
+_ANY_ENTRY = re.compile(r"@(\w+)\s*[{(]")
+#: What precedes an abbreviation in a field: the field's name, and any parts joined to it before by `#`.
+_BEFORE_WORD = r"([A-Za-z][\w\-:.+]*)\s*=\s*(?:(?:\{(?:[^{}]|\{[^{}]*\})*\}|\"[^\"]*\"|[^\s,#{}\"=]+)\s*#\s*)*"
+
+
+def strings_of(text: str) -> dict[str, str]:
+    """The `@string` abbreviations a `.bib` or a pasted text defines, by name, each value as its braces or quotes hold it."""
+    out: dict[str, str] = {}
+    for m in _STRING.finditer(text):
+        rest = text[m.end() :].lstrip()
+        if rest[:1] == "{" and (close := match_group(rest, 0)) > 0:
+            out[m.group(1)] = rest[1 : close - 1]
+        elif rest[:1] == '"' and (close := rest.find('"', 1)) > 0:
+            out[m.group(1)] = rest[1:close]
+    return out
+
+
+def entries_in(text: str) -> list[tuple[str, str, int]]:
+    """Every entry of a `.bib` or a pasted text, in order: its key, its text exactly, and the offset it begins at.
+
+    `@string`, `@preamble` and `@comment` are left out, and so is an entry with no key or never closed; two entries with one key are both listed, the person's to be told of.
+    """
+    out: list[tuple[str, str, int]] = []
+    for m in _ANY_ENTRY.finditer(text):
+        if m.group(1).lower() in ("comment", "preamble", "string"):
+            continue
+        opening = text[m.end() - 1]
+        end = match_group(text, m.end() - 1, opening, "}" if opening == "{" else ")")
+        key = re.match(r"\s*([^,]+?)\s*,", text[m.end() : end]) if end > 0 else None
+        if key:
+            out.append((key.group(1), text[m.start() : end], m.start()))
+    return out
+
+
+def entry_fault(text: str, *, holder: Callable[[str], str | None] | None = None, where: str = "") -> str | None:
+    """What in an entry keeps it from being a work's, as a sentence a person acts on; None when nothing in the entry itself does.
+
+    Parameters
+    ----------
+    text : str
+        One entry, as pasted, dropped, gathered or written in a work's tab.
+    holder : callable, optional
+        The short name of the work that has a key already, ignoring case, or None; nothing is said of keys without it.
+    where : str, default ''
+        Where an `@string` could stand, said after "no @string": " in drafting/refs.bib", " in what you pasted".
+
+    Returns
+    -------
+    str or None
+        Naming the entry by its key and the part of it to change, never a file of loom's.
+    """
+    found = entry_of(text)
+    if found is None:
+        return "this is not a BibTeX entry loom can read: an entry is @type{key, field = {value}, …}"
+    if found.type in ("string", "preamble", "comment"):
+        return f"an @{found.type} is not the entry of a work"
+    key = found.key
+    if not key:
+        return "the entry has no key, which documents cite the work by: write one after its opening brace"
+    if holder is not None and (other := holder(key)):
+        return f"{other} has the key {key} already; give this entry another key"
+    if found.bare:
+        said = [f"its {name} is {word}" if name else f"it uses {word}" for name, word in _bare_fields(text, found.bare)]
+        if len(said) == 1:
+            return f"{key}: {said[0]}, an abbreviation no @string{where} defines; write it out in braces instead"
+        return f"{key}: {', '.join(said[:-1])} and {said[-1]}, abbreviations no @string{where} defines; write each out in braces instead"
+    if found.outside:
+        return f"{key} has more after its closing brace ({found.outside[:40]!r}); keep only the entry"
+    return None
+
+
+def _bare_fields(text: str, bare: tuple[str, ...]) -> list[tuple[str, str]]:
+    """Each abbreviation an entry uses, with the field it stands in, '' where none is found."""
+    out = []
+    for word in bare:
+        m = re.search(_BEFORE_WORD + re.escape(word) + r"(?![^\s,#{}\"=])", text)
+        out.append((m.group(1).lower() if m else "", word))
+    return out
 
 
 def expand_strings(text: str, strings: Mapping[str, str]) -> str:
