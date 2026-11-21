@@ -13,7 +13,7 @@
 	import { can, known, write, type WriteResult } from '$lib/write';
 	import { linkName } from '$lib/workspace/names';
 	import { staysOpen, typeOf } from './annotationTypes';
-	import { changedFrom, earlier, hand, handPayload, keepLook, lookOf, plainOf, retype, takeSeed, typeById, typesPayload, withLook, withType, type Draft, type Hand } from './annotating.svelte';
+	import { changedFrom, earlier, whyApart, hand, handPayload, keepLook, lookOf, plainOf, retype, takeSeed, typeById, typesPayload, withLook, withType, type Draft, type Hand } from './annotating.svelte';
 	import { annotate, edit, remove as removeAnnotation, reply as replyTo, resolve } from './history.svelte';
 	import Changed from './Changed.svelte';
 	import LookControls from './LookControls.svelte';
@@ -268,6 +268,10 @@
 				<LookControls {look} disabled={busy} onpick={(c, done) => void pickLook(c, done)} />
 				{#if from}<Changed name={from.name} disabled={busy} onreset={() => void reset()} onupdate={allowed['types-save'] ? () => void update() : undefined} />{/if}
 			</div>
+		{/if}
+		{#if a && m && whyApart(m, a)}
+			<!-- a note on no block: the reason the manifest gives, in its own words -->
+			<div class="earlier" data-testid="popup-unplaced">On no block now. {whyApart(m, a)}</div>
 		{/if}
 		{#if a?.refound && a.target.page}
 			<!-- a changed PDF keeps no version, so there is nothing to open: where the mark was found again is all there is to say -->

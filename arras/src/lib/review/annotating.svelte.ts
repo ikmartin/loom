@@ -397,6 +397,11 @@ export function isUnplaced(m: Pick<Manifest, 'unplaced'>, a: Annotation): boolea
 	return !!m.unplaced?.some((u) => u.id === a.id);
 }
 
+/** Why `a` is on no block, in the manifest's own sentence (`unplaced[].why`); '' for a note on a block. */
+export function whyApart(m: Pick<Manifest, 'unplaced'>, a: Annotation): string {
+	return a.target.key ? '' : (m.unplaced?.find((u) => u.id === a.id)?.why ?? '');
+}
+
 /** The notes on no block written in this document that the Comments list shows, under its filter: `apart`, after everything in `order`. */
 export function apartOf(m: Manifest | null | undefined, s: Pick<Annotating, 'apart' | 'hidden' | 'todo' | 'layer'>, showSettled = ui.showSettled): Annotation[] {
 	if (!m || s.layer === 'changes') return [];

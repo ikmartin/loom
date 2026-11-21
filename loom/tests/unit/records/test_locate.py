@@ -243,6 +243,6 @@ def test_a_note_placed_on_no_block_is_listed_apart_and_counted_on_none(q: Path) 
     records = Records(q, result.quilt.history_dir)
     records.apply(result, manifest)
     (listed,) = manifest["unplaced"]
-    assert listed["id"] == whole and listed["key"] == CONSIDERED and "no longer holds" in listed["why"]
+    assert listed["id"] == whole and listed["key"] == CONSIDERED and "which block it is cannot be told" in listed["why"]
     states = records.key_states(result)
     assert states[CONSIDERED].open == {} and states[CONSIDERED].detached == 0

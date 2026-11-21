@@ -4,7 +4,7 @@ import type { Annotation, Manifest } from '$lib/manifest/types';
 import { masterUrl } from '$lib/nav';
 import { itemForQuilt } from '$lib/workspace/links';
 import { keyName, linkName } from '$lib/workspace/names';
-import { APART, apartIn, apartOf, documentOf, notesApart, notesHere, noteUrl, placeOf, PLAIN } from './annotating.svelte';
+import { APART, apartIn, apartOf, documentOf, notesApart, notesHere, noteUrl, placeOf, PLAIN, whyApart } from './annotating.svelte';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 
@@ -68,7 +68,7 @@ describe('a note on no block whose written key names nothing now', () => {
 	it('is listed in, and opens from, the document the manifest gives it', () => {
 		const m = withUnplaced();
 		m.annotations.w = note('w');
-		m.unplaced = [...(m.unplaced ?? []), { id: 'w', key: 'drafting/sections/gone.tex#lemma:3', why: 'its key names no block now', document: 'drafting/talk.tex' }];
+		m.unplaced = [...(m.unplaced ?? []), { id: 'w', key: 'drafting/sections/gone.tex#lemma:3', why: 'The block it was written on is gone, and nothing says where its words went.', document: 'drafting/talk.tex' }];
 		expect(documentOf(m, m.annotations.w)).toBe('drafting/talk.tex');
 		expect(apartIn(m, 'drafting/talk.tex')).toEqual(['w']);
 		expect(apartIn(m, 'drafting/main.tex')).toEqual(['u']);
@@ -78,9 +78,19 @@ describe('a note on no block whose written key names nothing now', () => {
 	it('falls back to the default document where the manifest gives none', () => {
 		const m = withUnplaced();
 		m.annotations.w = note('w');
-		m.unplaced = [{ id: 'w', key: 'sy-0FFF', why: 'its key names no block now', document: '' }];
+		m.unplaced = [{ id: 'w', key: 'sy-0FFF', why: 'The block it was written on is gone, and nothing says where its words went.', document: '' }];
 		const main = m.masters.find((d) => d.default)?.path;
 		expect(main).toBeTruthy();
 		expect(documentOf(m, m.annotations.w)).toBe(main);
+	});
+});
+
+describe('why a note is on no block', () => {
+	it('is the manifest’s own sentence for a note on no block, and nothing for one on a block', () => {
+		const m = withUnplaced();
+		m.unplaced = [{ id: 'u', key: 'sy-000A', why: 'Its block is in a file no document reads now; it is back on that block once a document reads the file again.', document: 'drafting/main.tex' }];
+		expect(whyApart(m, m.annotations.u)).toMatch(/^Its block is in a file no document reads now/);
+		const placed = Object.values(m.annotations).find((a) => a.target.key);
+		expect(placed && whyApart(m, placed)).toBe('');
 	});
 });

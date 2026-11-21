@@ -54,7 +54,7 @@ describe("the quilt's To do", () => {
 		a.target = { ...a.target, key: '' };
 		a.detached = true;
 		// its written key names nothing now: an id whose block went, in a file no document reads
-		x.unplaced = [{ id: a.id, key: 'sy-0FFF', why: 'its key names no block now', document: 'drafting/talk.tex' }];
+		x.unplaced = [{ id: a.id, key: 'sy-0FFF', why: 'The block it was written on is gone, and nothing says where its words went.', document: 'drafting/talk.tex' }];
 		const todo = todoOf(x);
 		const group = todo.find((g) => g.annotations.some((n) => n.id === a.id));
 		expect(group?.path).toBe('drafting/talk.tex');

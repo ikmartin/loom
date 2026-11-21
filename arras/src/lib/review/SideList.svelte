@@ -9,7 +9,7 @@
 	import { repliesTo } from '$lib/annotations';
 	import { ui } from '$lib/ui.svelte';
 	import { staysOpen, typeOf } from './annotationTypes';
-	import { APART, apartOf, authors, changePasses, entries, isTodo, notesApart, notesOf, placeOf, plain, type Annotating, type Layer } from './annotating.svelte';
+	import { APART, apartOf, whyApart, authors, changePasses, entries, isTodo, notesApart, notesOf, placeOf, plain, type Annotating, type Layer } from './annotating.svelte';
 	import { authorOf, changeById } from './changes';
 	import { dotVars } from '$lib/fragments/gutter';
 	import ChangeCard from './ChangeCard.svelte';
@@ -152,7 +152,7 @@
 {#snippet apartHead()}
 	<div class="apart" data-testid="apart-head">
 		<span class="sec">{APART}</span>
-		<p class="nsub">Notes written here on a block that was deleted, or changed so far that which block it is cannot be told.</p>
+		<p class="nsub">Notes written here that no block of the text holds now; each says why.</p>
 	</div>
 {/snippet}
 
@@ -162,6 +162,7 @@
 		<div class="ch"><span class="dot2" style={dotVars(a)}></span><span class="who">{a.author.label ?? a.author.id}</span><span>{typeLine(a)}</span></div>
 		{#if a.quote}<div class="q"><TexProse text={a.quote} /></div>{/if}
 		{#if plain(a.body_html)}<div class="ct"><Prose html={a.body_html} /></div>{:else}<div class="ct none">No comment</div>{/if}
+		{#if m && whyApart(m, a)}<div class="ct none" data-testid="apart-why">{whyApart(m, a)}</div>{/if}
 		{#if staysOpen(m, a) || replies}
 			<div class="cf">
 				{#if staysOpen(m, a)}<span class="stat" class:done={a.status !== 'open'}>{a.status === 'open' ? 'Open' : 'Resolved'}</span>{/if}

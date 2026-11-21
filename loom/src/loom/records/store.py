@@ -139,14 +139,14 @@ def placed_key(result: ScanResult, ann: Annotation) -> str | None:
 
 
 def _why_unplaced(result: ScanResult, key: str) -> str:
-    """Why a note on `key` is on no block, in words: its key names nothing, or a block in a file no document reads now, or a block that no longer holds its text."""
+    """Why a note on `key` is on no block, as a sentence a viewer shows as it is: its key names nothing, or a block in a file no document reads now, or a block that no longer holds its text."""
     owner = result.assembly.regions[key].container if key in result.assembly.regions else key
     node = result.nodes.get(owner)
     if node is None:
-        return "its key names no block now"
+        return "The block it was written on is gone, and nothing says where its words went."
     if node.kind not in ("master", "file") and not node.reached_by:
-        return "its block is in a file no document reads now"
-    return "its key names a block that no longer holds the text it was written on, and nothing says which block does"
+        return "Its block is in a file no document reads now; it is back on that block once a document reads the file again."
+    return "Its block was deleted, or changed so far that which block it is cannot be told."
 
 
 def written_in(result: ScanResult, ann: Annotation) -> str:
