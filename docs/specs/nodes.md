@@ -2,7 +2,7 @@
 
 It specifies the files the library holds: one file for each node, with the ids, the header, the body, and the edges a file may state. What the design is for and why it has this shape is [`docs/design/library.md`](../design/library.md); where the two disagree about a shape, this page wins.
 
-**Built:** reading and writing a file (§1–5), the checks (§11), the index loom derives from the files (§13) and the tag log (§14), in `loom/src/loom/library/`. **Not built yet:** anything that makes a node from a work, so no command writes these files and no view shows them; `digests.md` still specifies what loom writes, and the change that makes loom write nodes from works rewrites it in the same commit.
+**Built:** reading and writing a file (§1–5), the checks (§11), the index loom derives from the files (§13), the tag log (§14), and references and macros nodes made from the works a quilt holds (§7, §8), in `loom/src/loom/library/`. **Not built yet:** statements and proofs made from a work (digesting), so `digests.md` still specifies how a work's results are read, and the change that digests into nodes rewrites it.
 
 A rule marked **[decided]** was settled by the author on 2026-11-20. The others complete the format and are his to change.
 
@@ -126,6 +126,8 @@ What a statement's text needs is listed on the statement. What an argument rests
 - **[decided]** Each version of a paper is a reference of its own, with its own entry and its own stored documents. That two references are one paper is a relation (§9), not something a file states.
 - A reference whose work has results is the `source` of their nodes. Nothing in the reference lists them.
 
+**How a reference is made.** Every way a work comes in makes one (`library/references.py`): a file dropped or given to `loom library add` and a pasted text (the intake, `write-api.md` §6); an entry of a bibliography a person's document or a landmark reads, which loom gathers when the library's works are read or added to (`library/gather.py`); a quilt made by an earlier loom, brought forward once (`loom upgrade`); and a TeX source dropped alone. Its stem is minted as `loom id --next` mints one (§3). Its documents are kept by hash, a PDF as `.loom/library/documents/<hex>.pdf` and a TeX source as one file, an uncompressed tar of its files with their names sorted and every owner, mode and time fixed, `<hex>.tar`, so the same source hashes alike however it came; `pdf` and `tex` name these hashes. How it was made, from what, and whether its details were looked up are recorded in the library's log (`.loom/records/library/log.jsonl`), never in its file: a reference made from an identifier with no look-up after it is unconfirmed. Gathering makes a reference for an entry key no reference holds, compared ignoring case, leaves alone a key whose work the person deleted until the work is added again, and rewrites a reference it made when its `.bib` entry changes, until someone edits the reference in loom.
+
 A document of the quilt, a draft among them, is not a reference and has no node (`docs/design/library.md`, "A draft is not in the library").
 
 ## 8. Macros
@@ -136,6 +138,8 @@ A document of the quilt, a draft among them, is not a reference and has no node 
 - It holds nothing that typesets, no text, no `\documentclass`, no `\begin{document}`, no `\title`, no `\input`, and no `\newtheorem`, which no body needs (§4).
 - It applies to exactly the nodes whose `source` is its reference, and to no other. Each node is typeset with its own work's macros alone, so two works that define one command differently do not meet.
 - A node with no `source`, and a node whose reference has no macros node, uses only what loom's own preamble gives every node.
+
+A reference's macros node is made when the reference first holds a TeX source, and made again when its source changes (`library/macros.py`): from the source's main file, the one declaring its class, up to `\begin{document}`, every item this section allows is taken whole, as the source wrote it and in its order; a local `.sty` or `.tex` file the preamble loads is read in its place, a package's file between `\makeatletter` and `\makeatother`, and a `\usepackage` is kept for a package the source does not hold, before what its other packages define. Everything else is left out. A preamble defining nothing this section allows makes no node, and a reference whose source is taken off loses its macros node.
 
 ## 9. Edges
 
@@ -164,7 +168,7 @@ The formats of the records, and of what loom reads from Lean, are not specified 
 
 - **Lean.** Declarations live in the quilt's Lean project and name their nodes there.
 - **A state.** Whether a node is digested, verified against its source, accepted by Lean or attested is computed from records that name the node's hash (§1).
-- **Who made it, when and how.** That is the record of the act.
+- **Who made it, when and how.** That is the record of the act: for a reference, the library's log (§7).
 - **What loom finds again.** A node's place on a page, the order of a work's nodes, what points at a node, and what a statement depends on through its proofs.
 
 ## 11. Checks
