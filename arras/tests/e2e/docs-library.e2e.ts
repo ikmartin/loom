@@ -84,6 +84,16 @@ test('the Library button opens the picker over Docs, which finds, sorts and open
 	await expect(page).toHaveURL(/\/master\//);
 });
 
+/** Hovers the draft's `nth` citation, made to name `node`, until the card shows `shows`: a draft drawn again between the two (the manifest is read each second) takes the planted name away, as it would not take a name the publisher wrote. */
+async function cardOf(page: Page, nth: number, node: string, shows: string): Promise<void> {
+	await expect(async () => {
+		await page.mouse.move(0, 0);
+		await citing(page, nth, node);
+		await page.locator('.fragment span.cite').nth(nth).hover();
+		await expect(page.getByTestId('cite-card')).toContainText(shows, { timeout: 2000 });
+	}).toPass({ timeout: 20000 });
+}
+
 /** Has the draft's `nth` citation name `node`, as its fragment will once citations resolve to the library's nodes (`dialect.md`, a citation carrying no target until then). */
 async function citing(page: Page, nth: number, node: string): Promise<void> {
 	await expect(page.locator('.fragment span.cite').nth(nth)).toBeAttached();
@@ -93,9 +103,7 @@ async function citing(page: Page, nth: number, node: string): Promise<void> {
 test("a citation's card shows the cited result and opens its work beside the draft at its place; a stub's offers to locate it or have it read", async ({ page }) => {
 	await open(page);
 	const card = page.getByTestId('cite-card');
-	await citing(page, 0, 'tq-0203');
-	await page.locator('.fragment span.cite').nth(0).hover();
-	await expect(card).toContainText('Proposition 2.1');
+	await cardOf(page, 0, 'tq-0203', 'Proposition 2.1');
 	await expect(card).toContainText('Arden 2024 · page 7');
 	await expect(card).toContainText('matches the paper');
 	await card.getByRole('button', { name: 'open at its place' }).click();
@@ -105,9 +113,7 @@ test("a citation's card shows the cited result and opens its work beside the dra
 	await expect(page.getByRole('group', { name: 'controls for Arden 2024' }).getByTestId('page-at')).toHaveValue('7');
 	await expect(page.getByTestId('work-item').getByTestId('pdf-page-7')).toBeInViewport({ ratio: 0.3 });
 	await expect(card).toHaveCount(0);
-	await citing(page, 1, 'tq-04A1');
-	await page.locator('.fragment span.cite').nth(1).hover();
-	await expect(card).toContainText('Theorem 2.3');
+	await cardOf(page, 1, 'tq-04A1', 'Theorem 2.3');
 	await expect(card).toContainText('Okafor 2022');
 	await expect(card).toContainText('Loom knows this result only by its number. Nobody has read it.');
 	await expect(card.getByRole('button', { name: 'locate in PDF' })).toBeVisible();
