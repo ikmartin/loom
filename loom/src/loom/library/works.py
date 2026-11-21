@@ -12,6 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from loom.clock import now
 from loom.library import log
 from loom.library.body import pointers
 from loom.library.entries import identifiers, link, read_entry, short, surnames, title, year
@@ -85,7 +86,7 @@ def generation(result: ScanResult, *, doc: str | None = None) -> int:
     Returns
     -------
     int
-        The time, in milliseconds, at which this process first saw the library as it now stands: its nodes and tags (the index's generation), the library's log, the documents' citations and, given `doc`, its cite labels. A number given again while none of these has changed, so `since` answers `unchanged`, and never a smaller one, a restarted publisher's included.
+        The time, in milliseconds, at which this process first saw the library as it now stands: its nodes and tags (the index's generation), the library's log, the documents' citations and, given `doc`, its cite labels. A number given again while none of these has changed, so `since` answers `unchanged`, and never a smaller one, a restarted publisher's included. The time is the clock's, LOOM_FIXED_TIME's under it, so a fixture's first answer is that time and each change after it one more.
     """
     root = result.quilt.root
     with NodeIndex.open(root) as index:
@@ -96,7 +97,7 @@ def generation(result: ScanResult, *, doc: str | None = None) -> int:
     kept = _GENERATIONS.get((root, doc))
     if kept is not None and kept[0] == seen:
         return kept[1]
-    gen = max(time.time_ns() // 1_000_000, kept[1] + 1 if kept else 0)
+    gen = max(int(now().timestamp() * 1000), kept[1] + 1 if kept else 0)
     _GENERATIONS[(root, doc)] = (seen, gen)
     return gen
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import secrets
+import re
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -21,6 +21,7 @@ from loom.library.node import SUFFIX, Node, file_name
 from loom.library.store import NodeRefused, folder, read, remove_node, write_node
 from loom.locks import locked
 from loom.paths import LIBRARY_DELETING, LIBRARY_LOCK, LIBRARY_UNDO
+from loom.records.ids import TOKEN, draw
 
 #: The undos of the deletes this process has under way, which `finish` leaves to them.
 _active: set[str] = set()
@@ -190,7 +191,9 @@ def delete(root: Path, ref: str, *, by: str, kind: str) -> str:
         undos = root / LIBRARY_UNDO
         for aside in undos.glob(".u-*.tmp") if undos.is_dir() else []:
             shutil.rmtree(aside, ignore_errors=True)  # an undo a killed delete was writing, which nothing names
-        undo = "u-" + secrets.token_hex(6)
+        # past every undo kept and every one the log names, since `finish` and `restore` find a delete's acts by it
+        named = {str(a["undo"]) for a in log.replay(root).lines if a.get("undo")}
+        undo = draw("u-", named | ({p.name for p in undos.iterdir()} if undos.is_dir() else set()), seed=ref)
         taken = _taken_with(root, ref)
         on = set(taken)
         records, _problems = replay_notes(root)
@@ -289,7 +292,7 @@ def restore(root: Path, undo: str, *, by: str, kind: str) -> str:
     """
     from loom.records import log as notes
 
-    if not undo.startswith("u-") or not all(c in "0123456789abcdef" for c in undo[2:]):
+    if not re.fullmatch(rf"u-{TOKEN}", undo):
         raise ActRefused("no-such-undo", f"{undo[:24]} names no delete", 404)
     home = root / LIBRARY_UNDO / undo
     with locked(root / LIBRARY_LOCK):

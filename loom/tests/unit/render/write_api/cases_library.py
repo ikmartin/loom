@@ -186,7 +186,13 @@ def _library_undo(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     row = succeeds(s, "library-take", {"items": [{"incoming": drop}]})["rows"][0]
     assert succeeds(s, "library-undo", {"id": row["id"], "act": row["act"]})["result"].endswith("taken out again")
     assert _library_files(q) == before
-    refuses(s, "library-undo", {"id": "0" * 64}, 404, "no-such-intake", "names no drop")
+    # a pasted work is taken back as a drop's is; done twice, nothing stands to take back
+    pasted = succeeds(s, "library-take", {"items": [{"text": ENTRY}]})["rows"][0]
+    undone = {"id": pasted["id"], "act": pasted["act"]}
+    assert succeeds(s, "library-undo", undone)["result"] == "Ostrander 2018 was taken out again"
+    assert _library_files(q) == before
+    refuses(s, "library-undo", undone, 404, "no-such-intake", "nothing to take back")
+    refuses(s, "library-undo", {"id": "0" * 64}, 404, "no-such-intake", "nothing to take back")
     refuses(s, "library-undo", {"id": "../config"}, 404, "no-such-intake", "names no drop")
     refuses(s, "library-undo", {"id": drop, "author": "Referee (Agent)"}, 403, "author-only", "only the author")
 
@@ -199,8 +205,14 @@ def _library_unfile(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
     assert succeeds(s, "library-take", {"items": [{"incoming": drop, "for": man12}]})["rows"][0]["under"] is True
     filed = _library_files(q)
     said = succeeds(s, "library-unfile", {"ref": man12})
-    assert said["incoming"] == drop and said["row"]["state"] == "cannot"
-    refuses(s, "library-unfile", {"ref": man12}, 409, "no-document", "holds no pdf")
+    # the drop waits again under its own name, as the manifest lists it
+    assert said["incoming"] == drop and said["row"] == {
+        "id": drop,
+        "item": 0,
+        "name": "schedule.pdf",
+        "state": "received",
+    }
+    refuses(s, "library-unfile", {"ref": man12}, 409, "no-document", "holds no PDF")
     refuses(s, "library-unfile", {"ref": "tq-0ZZZ-ref"}, 404, "no-such-work", "no work")
     refuses(s, "library-unfile", {"ref": man12, "which": "djvu"}, 400, "bad-field", "pdf or tex")
     succeeds(s, "library-undo", {"id": drop, "act": said["act"]})

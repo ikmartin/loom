@@ -11,14 +11,13 @@ How they are made:
 - With no TeX, and so no compile: `library-works` with `doc` answers `cited_as` null throughout, since a document's cite labels come from its compile.
 - The reads first, on the quilt as it is, then the writes, each after the ones it needs, since a write changes what a read would answer.
 
-Loom reads one clock and draws some ids without regard to LOOM_FIXED_TIME, so this script holds them still: the works list's `gen` (`library.works`, the wall clock in milliseconds) reads the fixed time, and the ids the intake and the acts answer with (`x-…` acts, `q-…` questions, `u-…` undos, from `secrets.token_hex`) come from one fixed sequence. Everything else is loom's as it runs.
+Under the fixed clock loom answers alike on every run: the works list's `gen` is the fixed time, and the ids the intake and the acts answer with (`x-…` acts, `q-…` questions, `u-…` undos) are drawn from one fixed sequence (`loom.records.ids`).
 
 Usage: uv run python scripts/gen_library_views.py [--check]   (--check writes nothing and exits 1 when a written file is stale)
 """
 
 from __future__ import annotations
 
-import hashlib
 import io
 import json
 import os
@@ -27,9 +26,7 @@ import shutil
 import socket
 import sys
 import tempfile
-from datetime import datetime
 from pathlib import Path
-from types import SimpleNamespace
 from typing import Any, NoReturn
 
 LOOM_DIR = Path(__file__).resolve().parent.parent
@@ -67,23 +64,6 @@ def _isolated(home: Path) -> None:
     )
     for name in (*AGENT_MARKERS, "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"):
         os.environ.pop(name, None)
-
-
-def _held_still() -> None:
-    """Hold still the clock and the ids that loom draws without regard to LOOM_FIXED_TIME.
-
-    `library.works` reads `time.time_ns` for `gen`, and `library.intake` and `library.acts` draw their `x-`, `q-` and `u-` ids from `secrets.token_hex`; each module's own name is replaced, so nothing else in loom is touched. The sequence is the order of the calls, which this script fixes.
-    """
-    from loom.library import acts, intake, works
-
-    fixed_ns = int(datetime.fromisoformat(FIXED.replace("Z", "+00:00")).timestamp()) * 1_000_000_000
-    works.time = SimpleNamespace(time_ns=lambda: fixed_ns)  # type: ignore[assignment,attr-defined]
-    drawn = iter(range(1, 1 << 30))
-
-    def token_hex(nbytes: int = 32) -> str:
-        return hashlib.sha256(f"library-views {next(drawn)}".encode()).hexdigest()[: 2 * nbytes]
-
-    intake.secrets = acts.secrets = SimpleNamespace(token_hex=token_hex)  # type: ignore[assignment,attr-defined]
 
 
 def _no_network(*args: Any, **kwargs: Any) -> NoReturn:
@@ -193,7 +173,6 @@ ENTRY = """@article{Cortez07,
 def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     """Each sample by its file's name, less `.json`: the endpoint, the request and loom's answer."""
     _isolated(tmp / "home")
-    _held_still()
     _offline()
     from loom.render.api import ApiError, handle
     from loom.render.endpoints.library import receive_stream
@@ -259,16 +238,20 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     reprint = dropped("bellamy-reprint.pdf", _pdf("bellamy-reprint"))
     call("library-take.has-document", "library-take", {"items": [{"incoming": reprint, "for": BELLAMY}]})
 
-    # -- the question (two works state its arXiv number) answered: by a work it does not offer, by one it offers, and as a work of its own
+    # -- the question (two works state its arXiv number) answered: by a work it does not offer, then by one it offers, Arden's second version, its PDF taken off first, under which it is filed on the person's word though the other states the number too
     first = question["rows"][0]["question"]
     call("library-answer.not-a-candidate", "library-answer", {"question": first, "same": CORTEZ})
-    same = call("library-answer.same", "library-answer", {"question": first, "same": ARDEN})
-    # the answer naming a work asks the question again under a new id while another work states the number too
-    again = same.get("row", {}).get("question", first)
-    call("library-answer", "library-answer", {"question": again, "same": None})
+    call(None, "library-unfile", {"ref": ARDEN_V2})
+    call("library-answer.same", "library-answer", {"question": first, "same": ARDEN_V2})
+    # and another file stating the number, as a work of its own
+    reprint_v3 = dropped("2504.01234v3 (1).pdf", _pdf("2504.01234v3 (1)"))
+    second = call(None, "library-take", {"items": [{"incoming": reprint_v3}]})["rows"][0]["question"]
+    call("library-answer", "library-answer", {"question": second, "same": None})
 
-    # -- a pasted work's row names no drop, so it has no undo
-    call("library-undo.no-such-intake", "library-undo", {"id": pasted["rows"][0]["id"]})
+    # -- a pasted work taken out again, as a drop's add is; and the same undo again, which finds nothing standing
+    row = pasted["rows"][0]
+    call("library-undo.pasted", "library-undo", {"id": row["id"], "act": row["act"]})
+    call("library-undo.no-such-intake", "library-undo", {"id": row["id"], "act": row["act"]})
 
     # -- a work's PDF taken off it, and put back by undoing that
     off = call("library-unfile", "library-unfile", {"ref": BELLAMY})

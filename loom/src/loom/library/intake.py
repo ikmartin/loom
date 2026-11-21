@@ -1,6 +1,6 @@
 """The one way a work comes into the library (`docs/specs/write-api.md` §6): a file dropped, a file on the command line, or a pasted text, each becoming one row, `added`, `here`, `question` or `cannot`, and an `added` row a reference.
 
-A drop waits in `.loom/local/incoming/<sha256>/` as `document.<suffix>` with `arrived.json` (`{name, size, when, not}`), until it is taken; what each act on it wrote is in its `act.json`, which an undo reads, and which the same bytes dropped again leave standing. A drop lets go of its file only once its act is recorded and these very bytes stand in the store with a reference naming them, so a crash never costs the only copy. A source is packed into its one form inside the take (`documents.pack`), checked and limited as it streams, so a damaged or outsized archive is a `cannot` row before anything is stored, and a drop no work can be made of goes. Every act holds the library's lock and decides against the library as it is then; no lock is held while the network is asked.
+A drop waits in `.loom/local/incoming/<sha256>/` as `document.<suffix>` with `arrived.json` (`{name, size, when, not}`), until it is taken; what each act on it wrote is in its `act.json`, which an undo reads, and which the same bytes dropped again leave standing; `arrived.json` stays while any act stands, so a drop that waits again keeps its name and its `not`. A pasted line or entry that is added records its act the same way, in `incoming/<row id>/act.json` with no file beside it. A drop lets go of its file only once its act is recorded and these very bytes stand in the store with a reference naming them, so a crash never costs the only copy. A source is packed into its one form inside the take (`documents.pack`), checked and limited as it streams, so a damaged or outsized archive is a `cannot` row before anything is stored; a `cannot` drop goes, since taking it again would say the same, except one refused `has-document`, which waits for the work's own document to be taken off. Every act holds the library's lock and decides against the library as it is then; no lock is held while the network is asked.
 
 Nothing is filed under a work unless the person says it is that work (`for`, an answer) or, for a paper an agent asked to be fetched, the file states that work's identifier. A file is offered as an existing work only by an identifier it states, never by its title or byline (the rulings of 2026-11-21 on `library-views.md` Opens 6 and 18); one stating an identifier the library has asks the one question.
 """
@@ -16,7 +16,7 @@ import shutil
 import unicodedata
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -39,11 +39,15 @@ from loom.library.node import SUFFIX, Node, NodeUnreadable, read_node
 from loom.library.references import Minter, attach, make
 from loom.library.store import NodeRefused, folder, remove_node
 from loom.paths import INCOMING, LIBRARY_LOCK
+from loom.records.ids import draw
 
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
 
+#: What a take answers each item with; a drop that waits again after an unfile or an undo is a row in state `received`, as the manifest's `arriving` lists it, and never a take's.
 STATES = ("added", "here", "question", "cannot")
+#: How a sentence names each kind of document a work holds.
+WORD = {"pdf": "PDF", "tex": "TeX source"}
 #: How much of an upload is read at a time, and what a receive leaves free on the disk beside the file it keeps.
 CHUNK = 1 << 20
 SPARE = 256 << 20
@@ -87,7 +91,7 @@ class Item:
 
 @dataclass
 class Row:
-    """What became of one item, in exactly one of `STATES`."""
+    """What became of one item, in exactly one of `STATES`; or a drop that waits, `received`."""
 
     id: str
     item: int
@@ -143,8 +147,8 @@ def incoming(root: Path) -> Path:
 
 
 def drop_dir(root: Path, drop: str) -> Path:
-    """One drop's folder; `no-such-intake` (404) for an id that is not one's shape, which is never made into a path."""
-    if not re.fullmatch(r"[0-9a-f]{64}", drop):
+    """One drop's folder, or a pasted row's, which holds its act alone; `no-such-intake` (404) for an id of neither shape, which is never made into a path."""
+    if not re.fullmatch(r"[0-9a-f]{64}|t-[0-9a-f]{16}", drop):
         raise IntakeRefused("no-such-intake", f"{drop[:24]} names no drop", 404)
     return incoming(root) / drop
 
@@ -256,8 +260,11 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
         d.mkdir(exist_ok=True)
         if waiting_file(d) is None:
             os.replace(tmp, d / f"{FILE}{suffix}")
-            if not (d / ARRIVED).is_file():
-                _write_json(d / ARRIVED, {"name": shown, "size": got, "when": stamp(), "not": []})
+            # bytes taken before and arriving again wait under the name they came with now, still known not to be the works they were
+            before = _read_json(d / ARRIVED) or {}
+            _write_json(
+                d / ARRIVED, {"name": shown, "size": got, "when": stamp(), "not": list(before.get("not") or [])}
+            )
     finally:
         tmp.unlink(missing_ok=True)
     return {"incoming": sha, "name": shown, "size": got}
@@ -275,7 +282,9 @@ def _acts(d: Path) -> list[dict[str, Any]]:
 
 
 def _push(d: Path, act: dict[str, Any]) -> str:
-    act = {"id": "x-" + secrets.token_hex(6), "when": stamp(), **act}
+    """Record an act on a drop or a pasted row, its id drawn past every act any of them records; `ids.draw`, so a fixed sequence under LOOM_FIXED_TIME."""
+    taken = {str(a.get("id")) for p in d.parent.glob(f"*/{ACT}") for a in _acts(p.parent)}
+    act = {"id": draw("x-", taken, seed=d.name), "when": stamp(), **act}
     _write_json(d / ACT, {"acts": [*_acts(d), act]})
     return str(act["id"])
 
@@ -285,15 +294,21 @@ def _named(root: Path, digest: str) -> bool:
     return any(digest in (n.pdf, n.tex) for n in _references(root).values())
 
 
+def _drop_file(d: Path) -> None:
+    """Remove the file a drop holds and the question asked of it; what arrived with it stays while an act on it stands."""
+    f = waiting_file(d)
+    if f is not None:
+        f.unlink(missing_ok=True)
+    (d / QUESTION).unlink(missing_ok=True)
+
+
 def _let_go(root: Path, d: Path, digest: str, which: str) -> bool:
     """Remove a drop's file only when these very bytes stand in the store and a reference names them; whether the drop holds no file now."""
-    f = waiting_file(d)
-    if f is None:
+    if waiting_file(d) is None:
         return True
     if not (documents.held(root, digest, which) and _named(root, digest)):
         return False
-    f.unlink(missing_ok=True)
-    (d / ARRIVED).unlink(missing_ok=True)
+    _drop_file(d)
     return True
 
 
@@ -582,9 +597,7 @@ def _cannot(t: _Take, d: Path, n: int, drop: str, name: str, code: str, why: str
     """A drop no work can be made of, whatever is asked: nothing is stored, and its file goes, since taking it again would say the same; an earlier act on the same bytes keeps its record, and so its undo."""
     if t.write:
         if _acts(d):
-            for p in (waiting_file(d), d / ARRIVED):
-                if p is not None:
-                    p.unlink(missing_ok=True)
+            _drop_file(d)
         else:
             shutil.rmtree(d, ignore_errors=True)
     return Row(drop, n, name, "cannot", code=code, why=why)
@@ -614,13 +627,16 @@ def _stated(f: Path, name: str, which: str) -> list[str]:
 
 
 def _ask(t: _Take, n: int, d: Path, name: str, which: str, stated: list[str], candidates: list[str]) -> Row:
-    """The one question, "is this one of these works?", its candidates those a stated identifier names and the work it was dropped on."""
-    qid = "q-" + secrets.token_hex(6)
+    """The one question, "is this one of these works?", its candidates those a stated identifier names and the work it was dropped on.
+
+    A candidate's `how` is the identifier it states too, as `arxiv:2504.01234v3`, which the viewer words; None for the work dropped on when it states none. The question's id is drawn past every question waiting, since an answer finds its drop by it.
+    """
+    asked = {
+        str(q.get("question")) for p in incoming(t.root).glob(f"*/{QUESTION}") if isinstance(q := _read_json(p), dict)
+    }
+    qid = draw("q-", asked, seed=d.name)
     shown = [
-        {
-            **t.lib.shown(c),
-            "how": f"it states {', '.join(x for x in stated if c in t.lib.stating([x])) or 'nothing against it'}",
-        }
+        {**t.lib.shown(c), "how": next((x for x in stated if c in t.lib.stating([x])), None)}
         for c in dict.fromkeys(candidates)
     ]
     document = {"name": name, "kind": which, "identifiers": stated}
@@ -635,13 +651,14 @@ def _file_under(
     """File a document under the work the person named, replacing nothing it holds."""
     node = t.lib.refs[ref]
     if getattr(node, which):
+        # the drop waits: once the work's own is taken off, the same take files it
         return Row(
             d.name,
             n,
             name,
             "cannot",
             code="has-document",
-            why=f"{t.lib.shown(ref)['short']} holds a {which} already; take it off first",
+            why=f"{t.lib.shown(ref)['short']} holds a {WORD[which]} already; take it off first",
         )
     act = ""
     if t.write:
@@ -676,6 +693,7 @@ def _file_under(
         found_by="entry",
         tex=which == "tex" or bool(node.tex),
         under=True,
+        identifier=_identifier(node.body),
         act=act,
     )
 
@@ -709,11 +727,11 @@ def _add_new(
             pdf=digest if which == "pdf" else None, tex=digest if which == "tex" else None,
         )  # fmt: skip
     except NodeRefused:
-        # the document brought for it is not left in the store named by no reference
+        # the document brought for it is not left in the store named by no reference, and the drop goes, since taking it again would say the same
         if fresh:
             _forget(t.root, digest)
         why = entry_fault(text, holder=t.lib.holder()) or f"loom could not keep {name} as a work, by a fault of its own"
-        return Row(d.name, n, name, "cannot", code="refused", why=why)
+        return _cannot(t, d, n, d.name, name, "refused", why)
     act = _push(d, {"kind": "added", "made": node.id, "after": _file_hash(t.root, node.id)})
     _let_go(t.root, d, digest, which)
     t.lib = Library.read(t.root)
@@ -978,6 +996,8 @@ def _add_entry(
             code="refused",
             why=why or f"loom could not keep {name} as a work, by a fault of its own",
         )
+    # recorded under the row's id as a drop's add is under its drop, so `undo` takes it back the same way
+    act = _push(incoming(t.root) / rid, {"kind": "added", "made": node.id, "after": _file_hash(t.root, node.id)})
     t.lib = Library.read(t.root)
     return Row(
         rid,
@@ -988,6 +1008,7 @@ def _add_entry(
         found_by=found_by,
         unconfirmed=unconfirmed,
         identifier=_identifier(text),
+        act=act,
     )
 
 
@@ -1025,7 +1046,7 @@ def answer(
     question : str
         The question's id.
     same : str or None
-        A candidate's reference id, or None.
+        A candidate's reference id, under which the drop is filed on the person's word, whatever else the file states; or None.
     by : str
         Who answers.
     online : bool, default False
@@ -1059,19 +1080,19 @@ def answer(
                 arrived["not"] = sorted({*arrived.get("not", []), *refs})
                 _write_json(d / ARRIVED, arrived)
             t = _Take(root, by, online, True, http, result, lib=Library.read(root))
-            return _take_drop(t, 0, d.name, same or "")[0]
+            return _take_drop(t, 0, d.name, same or "", force=same is not None)[0]
     raise IntakeRefused("no-such-question", f"no drop waits on {question}", 404)
 
 
 def undo(root: Path, drop: str, *, by: str, act: str = "") -> tuple[str, Row | None]:
-    """Take back the last act on a drop, touching only what it left, each part checked by its content.
+    """Take back the last act on a drop or a pasted row, touching only what it left, each part checked by its content.
 
     Parameters
     ----------
     root : Path
         The quilt.
     drop : str
-        The drop's id.
+        The drop's id, or a pasted row's.
     by : str
         Who undoes it.
     act : str, default ''
@@ -1080,12 +1101,12 @@ def undo(root: Path, drop: str, *, by: str, act: str = "") -> tuple[str, Row | N
     Returns
     -------
     tuple of (str, Row or None)
-        What was done, in words, and the drop's row when it waits again.
+        What was done, in words, and the drop's row, `received`, when it waits again.
 
     Raises
     ------
     IntakeRefused
-        `no-such-intake` (404), `not-last` (409), `not-new` (409) once a node of the work's has been made, `changed` (409) when a file differs from what the act left.
+        `no-such-intake` (404) when no act on it stands, `not-last` (409), `not-new` (409) once a node of the work's has been made, `changed` (409) when a file differs from what the act left, the work is gone, or the document it would put back is on this machine no more.
     """
     d = drop_dir(root, drop)
     with library_lock(root):
@@ -1094,57 +1115,68 @@ def undo(root: Path, drop: str, *, by: str, act: str = "") -> tuple[str, Row | N
             if waiting_file(d) is not None:
                 shutil.rmtree(d, ignore_errors=True)
                 return "the drop was discarded", None
-            raise IntakeRefused("no-such-intake", f"{drop[:12]} names no drop", 404)
+            raise IntakeRefused(
+                "no-such-intake", "there is nothing to take back: it is undone already, or was never taken in", 404
+            )
         last = acts[-1]
         if act and last.get("id") != act:
             raise IntakeRefused("not-last", "another act on this drop came after it, or it is undone already", 409)
-        lib = Library.read(root)
-        said = _take_back(root, d, last, lib, by)
+        said = _take_back(root, d, last, Library.read(root), by)
         rest = acts[:-1]
         if rest:
             _write_json(d / ACT, {"acts": rest})
         else:
             (d / ACT).unlink(missing_ok=True)
         f = waiting_file(d)
-        if not rest and f is not None and last.get("kind") != "unfiled":
+        if not rest and (f is None or last.get("kind") != "unfiled"):
+            # nothing stands on it now, so it goes whole, with any file an add's undo gave back to it: the add taken back is the person's no to it
             shutil.rmtree(d, ignore_errors=True)
             return said, None
-        row = (
-            Row(
-                drop,
-                0,
-                str((_read_json(d / ARRIVED) or {}).get("name") or drop[:12]),
-                "cannot",
-                code="received",
-                why="it waits to be taken",
-            )
-            if f
-            else None
-        )
-        return said, row
+        return said, _received(d) if f is not None else None
+
+
+def _received(d: Path) -> Row:
+    """A drop that waits to be taken, as `arriving` lists it: `received`, by the name it arrived under."""
+    f = waiting_file(d)
+    name = (_read_json(d / ARRIVED) or {}).get("name") or (f.name if f is not None else d.name[:12])
+    return Row(d.name, 0, str(name), "received")
 
 
 def _take_back(root: Path, d: Path, last: dict[str, Any], lib: Library, by: str) -> str:
+    """Reverse one act, refused `changed` or `not-new` in a sentence when what it left is not what stands; what `undo` says it did.
+
+    An unfile's undo finds its document in the drop when an add's undo above it forgot it from the store, and puts it back in the store before the work names it again.
+    """
     kind = last.get("kind")
     if kind == "unfiled":
         ref, which, digest = last["ref"], last["which"], last["hash"]
-        node = lib.refs.get(ref)
-        if node is not None and getattr(node, which) == digest:
+        word, node = WORD.get(which, which), lib.refs.get(ref)
+        if node is None:
+            raise IntakeRefused("changed", f"the work its {word} was taken off is no longer in the library", 409)
+        named = lib.shown(ref)["short"]
+        if getattr(node, which) == digest:
             # an unfile cut short after its record and before the document came off: the work is whole already
+            _is_again(d, ref)
             _let_go(root, d, digest, which)
-            return f"its {which} is on {lib.shown(ref)['short']} as it was"
-        if node is None or getattr(node, which):
+            return f"its {word} is on {named} as it was"
+        if getattr(node, which):
+            raise IntakeRefused("changed", f"{named} holds another {word} now; take it off first", 409)
+        if not (documents.held(root, digest, which) or _store_waiting(root, d, digest, which)):
             raise IntakeRefused(
-                "changed", f"{lib.shown(ref)['short'] if node else ref} is gone or holds a {which} again", 409
+                "changed", f"the {word} taken off {named} is on this machine no more; drop it on {named} again", 409
             )
         attach(root, ref, which, digest, by=by, kind="person")
+        _is_again(d, ref)
         _let_go(root, d, digest, which)
-        return f"its {which} is back on {lib.shown(ref)['short']}"
+        return f"its {word} is back on {named}"
     if made := last.get("made"):
+        if made not in lib.refs:
+            raise IntakeRefused("changed", "the work it added is no longer in the library", 409)
+        named = lib.shown(made)["short"]
         if _file_hash(root, made) != last.get("after"):
-            raise IntakeRefused("changed", f"{lib.shown(made)['short']} has changed since it was added", 409)
+            raise IntakeRefused("changed", f"{named} has changed since it was added", 409)
         if _has_nodes(root, made):
-            raise IntakeRefused("not-new", f"{lib.shown(made)['short']} has results now; delete the work instead", 409)
+            raise IntakeRefused("not-new", f"{named} has results now; delete the work instead", 409)
         which = "pdf" if lib.refs[made].pdf else "tex"
         digest = getattr(lib.refs[made], which) or ""
         _restore_file(root, d, digest, which)
@@ -1152,15 +1184,41 @@ def _take_back(root: Path, d: Path, last: dict[str, Any], lib: Library, by: str)
         remove_node(root, made)
         log.record(root, "undone", made, by=by, kind="person", act=last.get("id"))
         _forget(root, digest)
-        return f"{lib.shown(made)['short']} was taken out again"
+        return f"{named} was taken out again"
     attached = last.get("attached") or {}
-    ref, which = attached.get("ref", ""), attached.get("which", "pdf")
+    ref, which = str(attached.get("ref", "")), str(attached.get("which", "pdf"))
+    word = WORD.get(which, which)
+    if ref not in lib.refs:
+        raise IntakeRefused("changed", f"the work its {word} was filed under is no longer in the library", 409)
+    named = lib.shown(ref)["short"]
     if _file_hash(root, ref) != attached.get("after"):
-        raise IntakeRefused("changed", f"{lib.shown(ref)['short']} has changed since the document was filed", 409)
+        raise IntakeRefused("changed", f"{named} has changed since the {word} was filed", 409)
     _restore_file(root, d, str(attached.get("hash", "")), which)
     attach(root, ref, which, None, by=by, kind="person")
     _forget(root, str(attached.get("hash", "")))
-    return f"the {which} is off {lib.shown(ref)['short']} again"
+    return f"the {word} is off {named} again"
+
+
+def _is_again(d: Path, ref: str) -> None:
+    """Take `ref` out of a drop's `not`, its document being on that work again."""
+    arrived = _read_json(d / ARRIVED)
+    if isinstance(arrived, dict) and ref in (arrived.get("not") or []):
+        _write_json(d / ARRIVED, {**arrived, "not": [r for r in arrived["not"] if r != ref]})
+
+
+def _store_waiting(root: Path, d: Path, digest: str, which: str) -> bool:
+    """Put the document `digest` back in the store from the file its drop holds, when that file is it; whether it did.
+
+    An add's undo forgets a document no reference names and gives the drop the file, so this is where an unfile's undo under it finds the document.
+    """
+    f = waiting_file(d)
+    if f is None or documents.hash_file(f) != digest:
+        return False
+    if which == "pdf":
+        documents.put_pdf(root, f, link=True)
+    else:
+        documents.keep_packed(root, f, digest)
+    return True
 
 
 def _restore_file(root: Path, d: Path, digest: str, which: str) -> None:
@@ -1218,7 +1276,7 @@ def unfile(root: Path, ref: str, *, which: str = "pdf", by: str) -> dict[str, An
             raise IntakeRefused("no-such-work", f"the library has no work {ref}", 404)
         digest = getattr(node, which)
         if not digest:
-            raise IntakeRefused("no-document", f"{lib.shown(ref)['short']} holds no {which}", 409)
+            raise IntakeRefused("no-document", f"{lib.shown(ref)['short']} holds no {WORD[which]}", 409)
         if _has_nodes(root, ref):
             raise IntakeRefused(
                 "has-results", f"results were read off {lib.shown(ref)['short']}; delete the work instead", 409
@@ -1232,6 +1290,7 @@ def unfile(root: Path, ref: str, *, which: str = "pdf", by: str) -> dict[str, An
             shutil.copyfile(src, d / f"{FILE}{documents.SUFFIX[which]}")
         arrived = _read_json(d / ARRIVED) or {
             "name": f"{lib.shown(ref)['short']}{documents.SUFFIX[which]}",
+            "size": src.stat().st_size,
             "when": stamp(),
         }
         arrived["not"] = sorted({*arrived.get("not", []), ref})
@@ -1242,32 +1301,21 @@ def unfile(root: Path, ref: str, *, which: str = "pdf", by: str) -> dict[str, An
         pending = acts[-1] if acts and {k: acts[-1].get(k) for k in meant} == meant else None
         act = str(pending["id"]) if pending is not None else _push(d, meant)
         attach(root, ref, which, None, by=by, kind="person")
-        row = Row(sha, 0, arrived["name"], "cannot", code="received", why="it waits to be taken")
-        return {"incoming": sha, "act": act, "row": row.to_json()}
+        return {"incoming": sha, "act": act, "row": _received(d).to_json()}
 
 
 def waiting(root: Path) -> list[dict[str, Any]]:
-    """The drops that wait on the person, as rows: each in state `question`, or `received` for a file not yet taken; what the manifest's `arriving` lists."""
+    """The drops that wait on the person, as rows, oldest first: each in state `question`, or `received` for a file not yet taken; what the manifest's `arriving` lists."""
     out: list[dict[str, Any]] = []
-    for d in sorted(incoming(root).glob("*")) if incoming(root).is_dir() else []:
-        f = waiting_file(d)
-        if f is None:
+    folders = list(incoming(root).glob("*")) if incoming(root).is_dir() else []
+    for d in sorted(folders, key=lambda d: (str((_read_json(d / ARRIVED) or {}).get("when", "")), d.name)):
+        if waiting_file(d) is None:
             continue
-        arrived = _read_json(d / ARRIVED) or {}
-        name = str(arrived.get("name") or f.name)
+        row = _received(d)
         q = _read_json(d / QUESTION)
         if isinstance(q, dict):
-            out.append(
-                Row(
-                    d.name,
-                    0,
-                    name,
-                    "question",
-                    question=q["question"],
-                    document=q["document"],
-                    candidates=q["candidates"],
-                ).to_json()
+            row = replace(
+                row, state="question", question=q["question"], document=q["document"], candidates=q["candidates"]
             )
-        else:
-            out.append({"id": d.name, "item": 0, "name": name, "state": "received"})
+        out.append(row.to_json())
     return out

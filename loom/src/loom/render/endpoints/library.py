@@ -94,7 +94,9 @@ def _intake(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
         if which not in ("pdf", "tex"):
             raise ApiError("bad-field", "which is pdf or tex")
         off = unfile(root, ref, which=which, by=who)
-        return {"ok": True, "result": f"took the {which} off {ref}; it waits to be taken in", **off}
+        from loom.library.intake import WORD
+
+        return {"ok": True, "result": f"took the {WORD[which]} off {_named(root, ref)}; it waits to be taken in", **off}
     except IntakeRefused as exc:
         raise _refused(exc) from exc
 
@@ -133,7 +135,7 @@ def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
         if endpoint == "library-restore":
             undo = _str(body, "undo", required=True) or ""
             ref = restore(root, undo, by=who, kind="person")
-            return {"ok": True, "result": f"put back {ref}", "ref": ref}
+            return {"ok": True, "result": f"put back {_named(root, ref)}", "ref": ref}
         ref = _str(body, "ref", required=True) or ""
         if endpoint == "library-look-up":
             quilt = load_quilt(root)
@@ -146,15 +148,26 @@ def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, A
                     status=409,
                 )
             look_up(root, ref, by=who, kind="person")
-            return {"ok": True, "result": f"looked {ref} up", "ref": ref}
+            return {"ok": True, "result": f"looked {_named(root, ref)} up", "ref": ref}
         if endpoint == "library-entry":
             bibtex = _str(body, "bibtex", required=True) or ""
             edit_entry(root, ref, bibtex, by=who, kind="person")
-            return {"ok": True, "result": f"rewrote the entry of {ref}", "ref": ref}
+            return {"ok": True, "result": f"rewrote the entry of {_named(root, ref)}", "ref": ref}
+        named = _named(root, ref)
         undo = delete(root, ref, by=who, kind="person")
-        return {"ok": True, "result": f"deleted {ref}", "undo": undo}
+        return {"ok": True, "result": f"deleted {named}", "undo": undo}
     except ActRefused as exc:
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
+
+
+def _named(root: Path, ref: str) -> str:
+    """A work as a person reads it in a write's `result`, its short name (`Smith 2024`); its key, or else its ref, when its entry names neither author nor title."""
+    from loom.library.entries import read_entry, short
+    from loom.library.store import read
+
+    node = read(root, ref)
+    entry = read_entry(node.body) if node is not None else None
+    return short(entry.fields, entry.key) if entry is not None else ref
 
 
 def _library_receive(root: Path, body: dict[str, Any]) -> dict[str, Any]:

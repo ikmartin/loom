@@ -13,12 +13,26 @@ from typing import Any
 import pytest
 
 from loom.library import documents, log
+from loom.library.acts import delete
 from loom.library.checks import check
-from loom.library.intake import IntakeRefused, Item, answer, receive, take, undo, unfile, waiting, waiting_file
+from loom.library.intake import (
+    IntakeRefused,
+    Item,
+    Library,
+    answer,
+    receive,
+    take,
+    undo,
+    unfile,
+    waiting,
+    waiting_file,
+)
 from loom.library.node import Node
-from loom.library.store import read, write_node
+from loom.library.store import NodeRefused, read, write_node
+from loom.library.works import generation
 from loom.paths import INCOMING, LIBRARY_DOCUMENTS
 from loom.scan.quilt import load_quilt
+from loom.scan.scan import scan
 from tests.unit._pdfs import lines_pdf
 
 ME = {"by": "A. Author"}
@@ -488,3 +502,252 @@ def test_an_unfile_cut_short_before_the_document_comes_off_is_finished_or_undone
     undo(root, off["incoming"], act=off["act"], **ME)
     back = read(root, pasted["ref"])
     assert back is not None and back.pdf == held.pdf
+
+
+# ---- the question settled, and what a drop that waits again says --------------------------------------------------------
+
+
+def test_naming_one_of_two_candidates_files_the_drop_under_it(tmp_path: Path) -> None:
+    """The person's answer is the person's word: it files under the work named, though another work states the identifier too."""
+    root = quilt(tmp_path)
+    v1, v2 = rows(root, Item(text="arXiv:2401.01234v1\narXiv:2401.01234v2"))
+    drop = dropped(root, "2401.01234v3.pdf", a_pdf(tmp_path, ["Widgets"]))
+    [asked] = rows(root, Item(drop=drop))
+    assert asked["state"] == "question" and [c["ref"] for c in asked["candidates"]] == [v1["ref"], v2["ref"]]
+    filed = answer(root, asked["question"], v2["ref"], **ME).to_json()
+    assert (filed["state"], filed["ref"], filed["under"]) == ("added", v2["ref"], True), filed
+    node = read(root, v2["ref"])
+    assert node is not None and node.pdf == "sha256:" + drop and waiting(root) == []
+
+
+def test_a_candidate_s_how_is_the_identifier_it_states_too(tmp_path: Path) -> None:
+    """`how` is the identifier, which the viewer words; the work a file was dropped on, stating none of them, has none."""
+    root = quilt(tmp_path)
+    [held] = rows(root, Item(text="arXiv:2401.01234v1"))
+    [plain] = rows(root, Item(text="@article{Smi24, title = {Widgets}}\n"))
+    drop = dropped(root, "2401.01234v3.pdf", a_pdf(tmp_path, ["Widgets"]))
+    [asked] = rows(root, Item(drop=drop, work=plain["ref"]))
+    assert [(c["ref"], c["how"]) for c in asked["candidates"]] == [
+        (plain["ref"], None),
+        (held["ref"], "arxiv:2401.01234v3"),
+    ]
+    assert waiting(root)[0]["candidates"] == asked["candidates"]
+
+
+def filed_and_off(tmp_path: Path, name: str = "smith-widgets.pdf") -> tuple[Path, str, str, dict[str, Any]]:
+    """A quilt whose one work had a PDF dropped on it and taken off again: the quilt, the work, the drop, and what `unfile` answered."""
+    root = quilt(tmp_path)
+    [work] = rows(root, Item(text="@article{Smi24, title = {Widgets}}\n"))
+    drop = dropped(root, name, a_pdf(tmp_path, ["w"]))
+    rows(root, Item(drop=drop, work=work["ref"]))
+    return root, work["ref"], drop, unfile(root, work["ref"], **ME)
+
+
+def test_a_drop_that_waits_again_is_a_received_row_as_arriving_lists_it(tmp_path: Path) -> None:
+    """Unfile and undo answer the drop that waits again as `arriving` lists it, in a state of its own, never as a refusal."""
+    root, ref, drop, off = filed_and_off(tmp_path)
+    [listed] = waiting(root)
+    assert off["row"] == listed and set(listed) == {"id", "item", "name", "state"} and listed["state"] == "received"
+    [back] = rows(root, Item(drop=drop, work=ref))
+    _, again = undo(root, drop, act=back["act"], **ME)
+    assert again is not None and again.to_json() == waiting(root)[0] == listed
+
+
+def test_a_drop_that_waits_again_keeps_its_name_and_the_works_it_is_not(tmp_path: Path) -> None:
+    """What arrived with a drop stays while an act on it stands: an unfile and an undo say its own name, and its `not` holds."""
+    root, ref, drop, off = filed_and_off(tmp_path)
+    assert off["row"]["name"] == "smith-widgets.pdf"
+    [back] = rows(root, Item(drop=drop, work=ref))
+    _, again = undo(root, drop, act=back["act"], **ME)
+    assert again is not None and again.name == "smith-widgets.pdf"
+    assert json.loads((root / INCOMING / drop / "arrived.json").read_text())["not"] == [ref]
+    # once the unfile is undone, the PDF on the work again, it is that work; the same bytes received again wait under the name they came with now
+    undo(root, drop, act=off["act"], **ME)
+    assert json.loads((root / INCOMING / drop / "arrived.json").read_text())["not"] == []
+    assert dropped(root, "copy.pdf", a_pdf(tmp_path, ["w"])) == drop
+    assert waiting(root) == [{"id": drop, "item": 0, "name": "copy.pdf", "state": "received"}]
+
+
+def held_whole(root: Path) -> None:
+    """Every document a reference names is in the store."""
+    for ref, node in Library.read(root).refs.items():
+        for which in ("pdf", "tex"):
+            digest = getattr(node, which)
+            assert digest is None or documents.held(root, digest, which), (ref, which)
+
+
+@pytest.mark.parametrize(
+    "acts",
+    [
+        ["unfile", "take-for"],
+        ["unfile", "take"],
+        ["unfile", "take-for", "unfile", "take-for"],
+        ["unfile", "take", "unfile-new", "take-for"],
+    ],
+    ids=["filed-again", "a-work-of-its-own", "twice", "on-a-new-work-then-back"],
+)
+def test_every_undo_of_acts_on_one_drop_leaves_the_store_whole(tmp_path: Path, acts: list[str]) -> None:
+    """The views session's 500: an unfile's undo after a take's undo found the store without the document. Each undo, last first, puts back what its act took, and the work ends with its PDF as before."""
+    root, ref, drop, off = filed_and_off(tmp_path)
+    done, new = [off["act"]], ""
+    for act in acts[1:]:
+        if act.startswith("unfile"):
+            done.append(unfile(root, new if act == "unfile-new" else ref, **ME)["act"])
+            continue
+        [row] = rows(root, Item(drop=drop, work=ref if act == "take-for" else ""))
+        assert row["state"] == "added", row
+        done.append(row["act"])
+        new = row["ref"]
+    held_whole(root)
+    for act in reversed(done):
+        undo(root, drop, act=act, **ME)
+        held_whole(root)
+    node = read(root, ref)
+    assert node is not None and node.pdf == "sha256:" + drop and documents.held(root, node.pdf, "pdf")
+    assert waiting(root) == []
+
+
+def test_an_unfile_s_undo_is_refused_in_a_sentence_when_its_document_is_gone(tmp_path: Path) -> None:
+    """With the drop's file and the store's copy both gone, the undo says so and changes nothing."""
+    root, ref, drop, off = filed_and_off(tmp_path)
+    [back] = rows(root, Item(drop=drop, work=ref))
+    undo(root, drop, act=back["act"], **ME)
+    (root / INCOMING / drop / "document.pdf").unlink()
+    with pytest.raises(IntakeRefused) as gone:
+        undo(root, drop, act=off["act"], **ME)
+    assert (gone.value.code, gone.value.message) == (
+        "changed",
+        "the PDF taken off Widgets is on this machine no more; drop it on Widgets again",
+    )
+    node = read(root, ref)
+    assert node is not None and node.pdf is None
+
+
+def test_a_row_filed_under_a_work_names_the_identifier_its_entry_states(tmp_path: Path) -> None:
+    """`identifier` is the first identifier the work's entry states, as on a row that made the work."""
+    root = quilt(tmp_path)
+    [work] = rows(root, Item(text="@article{Smi24, title = {Widgets}, doi = {10.1000/w}}\n"))
+    [row] = rows(root, Item(drop=dropped(root, "w.pdf", a_pdf(tmp_path, ["w"])), work=work["ref"]))
+    assert (row["state"], row["under"], row["identifier"]) == ("added", True, "doi:10.1000/w")
+
+
+# ---- a paste taken back ----------------------------------------------------------------------------------------------
+
+
+def test_a_pasted_work_is_taken_out_again_as_a_drop_s_add_is(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    first, second = rows(root, Item(text="arXiv:2209.01234v2\n10.1000/w.1"))
+    assert first["act"] and second["act"] and first["act"] != second["act"]
+    said, waits = undo(root, first["id"], act=first["act"], **ME)
+    assert said == "arXiv:2209.01234v2 was taken out again" and waits is None and read(root, first["ref"]) is None
+    assert log.replay(root).of(first["ref"])[-1]["event"] == "undone"
+    assert not (root / INCOMING / first["id"]).exists()
+    with pytest.raises(IntakeRefused) as again:
+        undo(root, first["id"], act=first["act"], **ME)
+    assert again.value.code == "no-such-intake"
+    # refused, as a drop's add is, once the work has results or has changed
+    node = read(root, second["ref"])
+    assert node is not None
+    write_node(root, Node(id="tq-0009", taxon="lemma", source=second["ref"], body="A lemma.\n"))
+    with pytest.raises(IntakeRefused) as results:
+        undo(root, second["id"], act=second["act"], **ME)
+    assert results.value.code == "not-new"
+    (root / ".loom/library/nodes/tq-0009.node").unlink()
+    write_node(root, replace(node, body=node.body.replace("10.1000/w.1", "10.1000/w.2")))
+    with pytest.raises(IntakeRefused) as changed:
+        undo(root, second["id"], act=second["act"], **ME)
+    assert changed.value.code == "changed" and read(root, second["ref"]) is not None
+    # an entry of a dropped .bib is taken back the same way
+    [entry] = rows(root, Item(drop=dropped(root, "refs.bib", b"@article{Bib1, title={B}}\n")))
+    undo(root, entry["id"], act=entry["act"], **ME)
+    assert read(root, entry["ref"]) is None
+
+
+# ---- a drop refused --------------------------------------------------------------------------------------------------
+
+
+def test_a_drop_refused_goes_but_one_refused_has_document_waits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`has-document` waits, since once the work's own is taken off the same take files it; a drop whose entry the checks refuse goes, as every other refused drop, since taking it again would say the same."""
+    import loom.library.intake as intake
+
+    root, ref, _, _ = filed_and_off(tmp_path)
+    rows(root, Item(drop=dropped(root, "a.pdf", a_pdf(tmp_path, ["a"])), work=ref))
+    later = dropped(root, "b.pdf", a_pdf(tmp_path, ["b"]))
+    [row] = rows(root, Item(drop=later, work=ref))
+    assert (row["state"], row["code"], row["why"]) == (
+        "cannot",
+        "has-document",
+        "Widgets holds a PDF already; take it off first",
+    )
+    assert {"id": later, "item": 0, "name": "b.pdf", "state": "received"} in waiting(root)
+    unfile(root, ref, **ME)
+    [filed] = rows(root, Item(drop=later, work=ref))
+    assert filed["state"] == "added"
+
+    def refused(*_a: Any, **_k: Any) -> Node:
+        raise NodeRefused([])
+
+    monkeypatch.setattr(intake, "make", refused)
+    gone = dropped(root, "c.pdf", a_pdf(tmp_path, ["c"]))
+    [no] = rows(root, Item(drop=gone))
+    assert (no["state"], no["code"]) == ("cannot", "refused")
+    assert not (root / INCOMING / gone).exists() and gone not in {w["id"] for w in waiting(root)}
+
+
+# ---- a fixed clock ---------------------------------------------------------------------------------------------------
+
+
+def test_under_a_fixed_clock_two_runs_answer_alike(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """LOOM_FIXED_TIME holds still the works list's generation and the ids of acts, questions and undos, as it holds loom's other ids, so a fixture made twice is the same."""
+    monkeypatch.setenv("LOOM_FIXED_TIME", "2026-09-19T09:00:00Z")
+
+    def run(where: Path) -> list[Any]:
+        where.mkdir()
+        root = quilt(where)
+        [pasted] = rows(root, Item(text="arXiv:2401.01234v1"))
+        [asked] = rows(root, Item(drop=dropped(root, "2401.01234v3.pdf", a_pdf(where, ["x"]))))
+        own = answer(root, asked["question"], None, **ME)
+        [again] = rows(root, Item(drop=dropped(root, "2401.01234v4.pdf", a_pdf(where, ["y"]))))
+        undone = delete(root, pasted["ref"], by="A. Author", kind="person")
+        return [
+            pasted["act"],
+            own.act,
+            asked["question"],
+            again["question"],
+            undone,
+            generation(scan(load_quilt(root))),
+        ]
+
+    first = run(tmp_path / "a")
+    assert first == run(tmp_path / "b")
+    assert first[-1] == 1789808400000, "the fixed time, in milliseconds"
+    assert first[2] != first[3], "a question's id, its record gone once answered, is not drawn again for another drop"
+
+
+def test_the_drops_that_wait_are_listed_oldest_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`arriving` lists the drops in the order they came, as the manifest says, not by their bytes' hash."""
+    root = quilt(tmp_path)
+    for day, name in (("03", "third.pdf"), ("01", "first.pdf"), ("02", "second.pdf")):
+        monkeypatch.setenv("LOOM_FIXED_TIME", f"2026-01-{day}T09:00:00Z")
+        dropped(root, name, a_pdf(tmp_path, [name], name))
+    assert [row["name"] for row in waiting(root)] == ["first.pdf", "second.pdf", "third.pdf"]
+
+
+def test_a_write_s_result_names_the_work_as_a_person_reads_it(tmp_path: Path) -> None:
+    """The sentence a write answers with names a work by its short name, never by its reference's id."""
+    from loom.render.api import handle
+
+    root, ref, _drop, _off = filed_and_off(tmp_path)
+    (root / "config.toml").write_text('[quilt]\nprefix = "tq"\n\n[author]\nname = "A. Author"\n')
+    said = [
+        handle(
+            root,
+            "library-entry",
+            {"ref": ref, "bibtex": "@article{Smi24, author = {Smith, Jane}, title = {Widgets}, year = {2024}}\n"},
+        )["result"],
+        handle(root, "library-delete", {"ref": ref})["result"],
+    ]
+    assert said == ["rewrote the entry of Smith 2024", "deleted Smith 2024"], said
+    assert not any(ref in s for s in said)
