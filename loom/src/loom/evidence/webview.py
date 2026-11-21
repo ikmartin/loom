@@ -12,7 +12,7 @@ from functools import cached_property
 from typing import TYPE_CHECKING, Any
 
 from loom.evidence.log import Evidence, Record
-from loom.evidence.status import states, status
+from loom.evidence.status import Status, brief, states, status
 from loom.evidence.web import DraftWeb, Here, rests_on
 
 if TYPE_CHECKING:
@@ -57,6 +57,7 @@ class Drafts:
     evidence: Evidence
     lean_now: Callable[[Record], bool]
     _status: dict[str, str] = field(default_factory=dict, repr=False)
+    _standing: dict[str, Status] = field(default_factory=dict, repr=False)
     _rests: dict[str, list[str]] = field(default_factory=dict, repr=False)
     _uses: dict[str, tuple[list[str], list[tuple[str, int]]]] = field(default_factory=dict, repr=False)
     _words: dict[str, str] = field(default_factory=dict, repr=False)
@@ -111,18 +112,25 @@ class Drafts:
             r.on.name for r in self.evidence.records if r.on and r.on.kind == "label" and r.kind in ("lean", "attested")
         }
 
-    def lean(self, key: str) -> str:
-        """A result's `lean` (§5.2), computed only where a record speaks of its label."""
-        if key not in self._status:
+    def standing(self, key: str) -> Status:
+        """How a result stands (§5.2), computed only where a record speaks of its label; `Status(None)`, `lean` `none`, elsewhere."""
+        if key not in self._standing:
             node = self._keys[key]
-            if not set(node.labels) & self._formal:
-                self._status[key] = "none"
-            else:
-                self._status[key] = status(self.evidence, self.web, Here("block", key), lean_now=self.lean_now).lean
+            named = set(node.labels) & self._formal
+            here = Here("block", key)
+            self._standing[key] = (
+                status(self.evidence, self.web, here, lean_now=self.lean_now) if named else Status(None)
+            )
+        return self._standing[key]
+
+    def lean(self, key: str) -> str:
+        """A result's `lean` word, what a list by status orders by."""
+        if key not in self._status:
+            self._status[key] = self.standing(key).lean
         return self._status[key]
 
     def row(self, key: str, doc: str | None = None) -> dict[str, Any]:
-        """A result as a list sends it (`ROW`): its key, its name and title, its taxon's word, its document, `paper` null for a draft's, and its `lean`.
+        """A result as a list sends it (`ROW`): its key, its name and title, its taxon's word, its document, `paper` null for a draft's, and how it stands, `reading` and `lean` (`status.brief`).
 
         Its document is `doc` where that reads it, else the first of its `homes`; its number is the one the build published for that document.
         """
@@ -140,7 +148,9 @@ class Drafts:
             "taxon": taxon.lower(),
             "source": {"doc": home},
             "paper": None,
-            "lean": self.lean(key),
+            # how it stands, never a bare word: the reading of a paper (none for a draft's), the Lean word, its role and what it waits on
+            "reading": self.standing(key).reading,
+            "lean": brief(self.standing(key)),
         }
 
     def scope(self, scope: str, doc: str | None) -> list[str]:

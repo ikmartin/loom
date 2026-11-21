@@ -84,7 +84,8 @@ def test_a_draft_lists_its_own_results_in_document_order_with_their_marks(root: 
     assert (
         first["source"] == {"doc": DOC}
         and first["paper"] is None
-        and first["lean"] == "none"
+        and first["reading"] is None
+        and first["lean"] == {"lean": "none", "role": None, "waiting_on": []}
         and first["taxon"] == "definition"
     )
     assert webview.listing(d, "draft", OTHER_DOC)["count"] == 1
@@ -334,3 +335,33 @@ def test_a_read_under_the_same_scan_and_unchanged_files_answers_from_the_last(
     fresh = scan(load_quilt(root))
     monkeypatch.setitem(base._SCANS, root.resolve(), lambda: fresh)
     assert _drafts(root) is not third
+
+
+def test_a_row_carries_how_its_result_stands_never_a_bare_word(root: Path) -> None:
+    import hashlib
+
+    from loom.evidence.log import write
+    from loom.evidence.subjects import Who
+
+    text = (
+        (root / DOC)
+        .read_text(encoding="utf-8")
+        .replace("is a polynomial in $h$", r"is a polynomial in $h$ (\\cite[Theorem 2.1]{Calloway14})")
+    )
+    (root / DOC).write_text(text, encoding="utf-8")
+    (root / "lean").mkdir()
+    (root / "lean" / "C.lean").write_text("theorem c : True := trivial\n", encoding="utf-8")
+    d = _d(root)
+    key = _key(d, "thm:count")
+    subject = d.web.subject(Here("block", key))
+    assert subject is not None
+    digest = "sha256:" + hashlib.sha256((root / "lean" / "C.lean").read_bytes()).hexdigest()
+    declaration = {"name": "c", "kind": "theorem", "role": "states", "names": {"label": "thm:count"}, "statement": digest, "axioms": [], "sorry": False}  # fmt: skip
+    write(root, "lean", Who("loom"), on=subject, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": digest}, files={"lean/C.lean": digest}, declarations=[declaration], assumed=[], uses=[], replay={"tool": "leanchecker", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+    row = webview.focus(_d(root), "all", None, key)["row"]
+    # Lean accepted it, and it cites a result of a work nothing answers for: the mark the person needs, not "unattested" alone
+    assert row["reading"] is None and row["lean"] == {
+        "lean": "unattested",
+        "role": "proved",
+        "waiting_on": [{"cite": "Calloway14 Theorem 2.1", "why": "unknown"}],
+    }

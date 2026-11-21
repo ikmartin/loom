@@ -5,14 +5,14 @@ Computed when they are read, never stored; a read under the same scan and the sa
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from loom.evidence.asks import Standing, open_asks
 from loom.evidence.log import Evidence, Record
-from loom.evidence.status import Status, gate, status
+from loom.evidence.status import Status, brief, gate, status
 from loom.evidence.web import DraftWeb, Here, Web
 
 if TYPE_CHECKING:
@@ -87,7 +87,7 @@ def _name(manifest: dict[str, Any], key: str, doc: str | None) -> str:
     return f"{taxon} {number}".strip() if number else taxon
 
 
-def _questions(asks: list[Standing]) -> list[Row]:
+def _questions(asks: list[Standing], every: Mapping[str, Any]) -> list[Row]:
     out = []
     for s in asks:
         a = s.ask
@@ -107,10 +107,30 @@ def _questions(asks: list[Standing]) -> list[Row]:
                     "text": a.get("text"),
                     "choices": list(a.get("choices", [])),
                     "quote": a.get("quote"),
+                    "under": _under(every.get(str(a.get("under") or ""))),
                 },
             )
         )
     return out
+
+
+def _under(task: Any) -> dict[str, Any] | None:
+    """The task an agent's question was asked under, as a row names it so the viewer can say what the agent was doing: its id, its `what` and its place; None where it names none."""
+    if task is None:
+        return None
+    return {"task": task.id, "what": task.what, "on": dict(task.on), "ref": task.get("ref")}
+
+
+def _how(found: Status | None) -> dict[str, Any]:
+    """A result's `reading` and `lean` as a row carries them (`status.brief`); `none` for one no record names."""
+    found = found or Status(None)
+    return {"reading": found.reading, "lean": brief(found)}
+
+
+def _at(evidence: Evidence, record: str | None) -> str | None:
+    """When a record was written, by its id; None for none."""
+    found = evidence.by_id(record) if record else None
+    return found.at if found is not None else None
 
 
 def _fetch(asks: list[Standing]) -> list[Row]:
@@ -184,7 +204,7 @@ def working(gathered: Gathered, sessions: frozenset[str]) -> Gathered:
     return Gathered({**gathered.rows, AGENTS: marked})
 
 
-def _accepted_changed(manifest: dict[str, Any], result: ScanResult) -> list[Row]:
+def _accepted_changed(manifest: dict[str, Any], result: ScanResult, standing: dict[str, Status]) -> list[Row]:
     """Today's ledger read through its own resolver, as the build publishes it (`manifest["unresolved"]`): a result whose acceptance went stale (`earlier-change`). A result never accepted is not listed, nor one taken in from a copy or a pull, which Proposed edits and the incoming pull show."""
     out = []
     keys = manifest.get("keys", {})
@@ -202,7 +222,7 @@ def _accepted_changed(manifest: dict[str, Any], result: ScanResult) -> list[Row]
                 "accepted-changed",
                 docs,
                 since=str(acceptance.get("date") or ""),
-                fields={"key": key, "name": _name(manifest, key, doc), "doc": doc},
+                fields={"key": key, "name": _name(manifest, key, doc), "doc": doc, **_how(standing.get(key))},
             )
         )
     return out
@@ -242,7 +262,7 @@ def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], boo
     return out
 
 
-def _attested_changed(results: list[_Result], manifest: dict[str, Any]) -> list[Row]:
+def _attested_changed(results: list[_Result], manifest: dict[str, Any], evidence: Evidence) -> list[Row]:
     """A result whose attestation no longer holds, each keyed by its result (its first block), so one label on two texts is two rows.
 
     One whose own text or a notation row changed is a row of its own. One changed only through members of its closure rests under the first of its `causes` that is such a row, matched by the member's label and its hash now, so under the text it reads by that label; where none is, it is a row of its own.
@@ -276,6 +296,9 @@ def _attested_changed(results: list[_Result], manifest: dict[str, Any]) -> list[
                 "changed": "statement" if own[r.key] else "used",
                 "causes": [{"changed": {c.key[0]: c.key[1]}, "then": c.then, "now": c.now} for c in r.status.causes],
                 "attestation": r.status.attestation,
+                "attested_at": _at(evidence, r.status.attestation),
+                "reading": r.status.reading,
+                "lean": brief(r.status),
                 "resting": [],
             },
         )
@@ -317,8 +340,9 @@ def _attest(
                     "source": {"doc": doc},
                     "what": "statement and proof" if r.status.role in ("proved", "unproved") else "statement only",
                     "paper": None,
-                    "lean": r.status.lean_record,
-                    "waiting_on": [{w.key[0]: w.key[1], "why": w.why} for w in r.status.waiting_on],
+                    "record": r.status.lean_record,
+                    "reading": r.status.reading,
+                    "lean": brief(r.status),
                 },
             )
         )
@@ -393,13 +417,13 @@ def gather(
     results = _results(evidence, drafts, lean_now)
     gathered = Gathered()
     gathered.rows = {
-        "questions": _questions(asks),
+        "questions": _questions(asks, asks_log.replay(root).asks),
         "fetch": _fetch(asks),
         "cited": [],
         "check": [],
         "attest": _attest(results, manifest, evidence, web, lean_now),
-        "accepted-changed": _accepted_changed(manifest, result),
-        "attested-changed": _attested_changed(results, manifest),
+        "accepted-changed": _accepted_changed(manifest, result, {r.key: r.status for r in results}),
+        "attested-changed": _attested_changed(results, manifest, evidence),
         "edits": _edits(result, reviewer, manifest),
         AGENTS: _agents(asks),
     }
@@ -455,11 +479,14 @@ def find(gathered: Gathered, row: str) -> Row | None:
 
 
 def body_of(row: Row, manifest: dict[str, Any]) -> dict[str, Any]:
-    """What an open row's body is drawn from, beyond its fields: an accepted result's change as the build published it, a proposed edit's change and its patch; the rest draw from their fields until formalization and the library give their bodies more."""
+    """What an open row's body is drawn from, beyond its fields: an accepted result's change as the build published it, a proposed edit's change and its patch, when an attestation that no longer holds was made; the rest draw from their fields until formalization and the library give their bodies more."""
     if row.kind == "accepted-changed":
         entry = manifest.get("keys", {}).get(row.fields["key"], {})
         return {"acceptance": entry.get("acceptance"), "review_fragment": entry.get("review_fragment")}
     if row.kind == "edits":
         change = next((c for c in manifest.get("changes", []) if c.get("id") == row.fields["change"]), None)
         return {"change": change}
+    if row.kind == "attested-changed":
+        # "What you attested, on …": the rest of what was attested comes with formalization
+        return {"at": row.fields["attested_at"]}
     return {}

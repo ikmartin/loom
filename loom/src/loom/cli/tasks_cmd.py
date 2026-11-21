@@ -299,7 +299,13 @@ def ask_command(
     stray = [d for d in drafts if d not in scan(quilt).masters] if drafts else []
     if stray:
         raise ContentError(f"{stray[0]} is not a document of this quilt; --for names a draft by its path")
+    from loom.evidence.asks import working_on
+
+    task = working_on(root, session)
+    # the session it asks in, and the task that session is working on, which the person's row names
     mine = {"session": session} if session else {}
+    if task:
+        mine["under"] = task
     try:
         if ref is not None:
             if not link:

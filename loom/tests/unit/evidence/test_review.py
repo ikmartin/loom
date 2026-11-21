@@ -362,3 +362,44 @@ def test_a_result_is_named_by_its_taxon_and_the_number_the_build_published() -> 
     }
     assert review._name(manifest, "k", "b.tex") == "Lemma 1" and review._name(manifest, "k", "c.tex") == "Lemma 3.3"
     assert review._name({"nodes": {"k": {"taxon": "Remark", "numbers": {}}}}, "k", "a.tex") == "Remark"
+
+
+def test_a_row_about_a_result_carries_how_it_stands_and_one_attested_when_it_was(root: Path) -> None:
+    _lean(root, "lem:balanced")
+    [row] = _rows(_gather(root), "attest")
+    record = replay(root).about("label", "lem:balanced", of="lean")[-1]
+    assert row["record"] == record.id and row["reading"] is None
+    assert row["lean"] == {"lean": "unattested", "role": "proved", "waiting_on": []}
+    for label in ("def:connected", "def:cycle"):
+        _lean(root, label)
+    for label in ("def:connected", "def:cycle", "lem:balanced"):
+        _attest(root, label)
+    _edit(root, "is connected.", "is connected after its loops are removed.")
+    g = _gather(root)
+    [changed] = _rows(g, "attested-changed")
+    attestation = replay(root).by_id(changed["attestation"])
+    assert attestation is not None and changed["attested_at"] == attestation.at
+    # its text changed, so no Lean record is on it now and it has no role
+    assert changed["lean"] == {"lean": "changed", "role": None, "waiting_on": []}
+    found = review.find(g, changed["row"])
+    assert found is not None and review.body_of(found, {}) == {"at": attestation.at}
+
+
+def test_a_question_names_the_task_its_session_was_working_on(tmp_path: Path) -> None:
+    from loom.evidence.asks import replay as replay_asks
+    from loom.evidence.asks import working_on
+    from tests.helpers import json_of
+    from tests.unit._quilts import demo, new_session
+
+    q = demo(tmp_path)
+    session = new_session(q, "digesting", AGENT.name)
+    task = ask(q, PERSON, "digest", "agent", {"ref": "dm-00B1-ref"}, origin=[DOC], ref="dm-00B1-ref", scope="all")
+    say(q, AGENT, "took", task.id, session=session)
+    assert working_on(q, session) == task.id and working_on(q, "s-2026-11-21-zzzzzz") is None
+    asked = json_of("ask", "Remark 2.5 too?", "--on", "dm-0003", "--as", AGENT.name, "--json", cwd=q, env={"LOOM_MCP_SESSION": session})["task"]  # fmt: skip
+    assert replay_asks(q).asks[asked].get("under") == task.id
+    [row] = _rows(review.gather(q, scan(load_quilt(q)), {}), "questions")
+    assert row["under"] == {"task": task.id, "what": "digest", "on": {"ref": "dm-00B1-ref"}, "ref": "dm-00B1-ref"}
+    # a task said done, or withdrawn, is no longer what the session works on
+    say(q, AGENT, "done", task.id, made=["dm-00B7"])
+    assert working_on(q, session) is None

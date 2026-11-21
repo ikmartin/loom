@@ -387,7 +387,16 @@ def parse_ask(raw: dict[str, Any]) -> Ask:
             # the loom session an agent asked in, by which its own ask is told from another conversation's
             if by.kind != "agent" or not isinstance(raw["session"], str) or not re.fullmatch(SESSION, raw["session"]):
                 raise ValueError("session is the asking agent's loom session")
-        _what_fields({k: v for k, v in raw.items() if k != "session"})
+        if "under" in raw:
+            # the task the asking session was working on, which the person's row names
+            if (
+                by.kind != "agent"
+                or to != "person"
+                or not isinstance(raw["under"], str)
+                or not ID.fullmatch(raw["under"])
+            ):
+                raise ValueError("under is the task an agent's session was working on when it asked the person")
+        _what_fields({k: v for k, v in raw.items() if k not in ("session", "under")})
     except ValueError as exc:
         raise ValueError(f"{aid}: {exc}") from None
     return Ask(aid, str(what), str(to), by, at, raw["on"], tuple(origin), raw["words"], raw)
@@ -772,6 +781,20 @@ def place_of(quilt: Any, text: str) -> tuple[dict[str, Any], list[str]]:
     raise ContentError(
         f"nothing of this quilt is named {name}: give a result's label or key, a node's id, a work's id, or a document's path"
     )
+
+
+def working_on(root: Path, session: str | None) -> str | None:
+    """The task `session` is working on, which an ask of the person it makes is asked under: the last ask to an agent it took that is neither withdrawn nor said done; None for none."""
+    if not session:
+        return None
+    taken = [
+        (str(t.get("at", "")), found.id)
+        for found in replay(root).asks.values()
+        if found.to == "agent" and found.withdrawn is None and not found.done
+        for t in found.took
+        if t.get("session") == session
+    ]
+    return max(taken)[1] if taken else None
 
 
 def answered_unseen(root: Path, found: Ask) -> bool:

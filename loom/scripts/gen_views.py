@@ -103,10 +103,11 @@ def _history(root: Path) -> None:
     write(root, "attested", person, on=subject, lean=record.id, statements={record.get("declarations")[0]["name"]: "sha256:" + "b" * 64}, closure=stale, rulings=[])  # fmt: skip
     for name, digest in web.notation(here).items():
         write(root, "attested", person, on=Subject("macro", name, digest))
-    ask(root, agent, "question", "person", {"label": "sy-0007"}, origin=["drafting/main.tex"], text="The lemma's composite: of the two maps or of their involutions?", choices=["the maps", "the involutions"])  # fmt: skip
-    ask(root, agent, "paper", "person", {"ref": "sy-00A1-ref"}, origin=["drafting/main.tex"], ref="sy-00A1-ref", link="https://doi.org/10.1000/example.1999.2", want="pdf", words="The publisher's page asks for a login.")  # fmt: skip
     read = ask(root, person, "read", "agent", {"node": "sy-00B7"}, origin=["drafting/main.tex"], nodes=["sy-00B7"])
     say(root, agent, "took", read.id, session="s-2026-09-16-a8k2rx")
+    # asked by the session working on that task, which the person's row names
+    ask(root, agent, "question", "person", {"label": "sy-0007"}, origin=["drafting/main.tex"], text="The lemma's composite: of the two maps or of their involutions?", choices=["the maps", "the involutions"], under=read.id)  # fmt: skip
+    ask(root, agent, "paper", "person", {"ref": "sy-00A1-ref"}, origin=["drafting/main.tex"], ref="sy-00A1-ref", link="https://doi.org/10.1000/example.1999.2", want="pdf", words="The publisher's page asks for a login.")  # fmt: skip
 
 
 def _first_row(answer: dict[str, Any]) -> str:
@@ -140,6 +141,8 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     call("review-list.questions", "review-list", {"kind": "questions"})
     call("review-list.draft", "review-list", {"doc": "drafting/main.tex"})
     call("review-row", "review-row", lambda: {"row": _first_row(listed)})
+    changed = next(r["row"] for g in listed["groups"] for r in g["rows"] if g["kind"] == "attested-changed")
+    call("review-row.attested-changed", "review-row", {"row": changed})
     task = next(r for g in listed["groups"] for r in g["rows"] if g["kind"] == "agents")
     question = next(r for g in listed["groups"] for r in g["rows"] if g["kind"] == "questions")
     web = call("web-list", "web-list", {"scope": "all", "open": ["drafting/main.tex"]})

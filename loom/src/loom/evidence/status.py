@@ -9,6 +9,7 @@ import hashlib
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Any
 
 from loom.evidence.log import Evidence, Record
 from loom.evidence.subjects import Subject
@@ -304,6 +305,15 @@ def _own_statement(
     if settled and elaborated and own.lean in ("failed", "waiting", "formalized"):
         return None
     return "unattested"
+
+
+def brief(found: Status) -> dict[str, Any]:
+    """How a result stands as a row of a list carries it (`docs/specs/evidence.md` §6, §8): the Lean word with its role and what it waits on, so a row never reads a bare word; the reading of the paper is the row's `reading` beside it."""
+    return {
+        "lean": found.lean,
+        "role": found.role,
+        "waiting_on": [{w.key[0]: w.key[1], "why": w.why} for w in found.waiting_on],
+    }
 
 
 def status(
