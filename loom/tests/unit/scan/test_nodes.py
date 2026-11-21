@@ -34,7 +34,7 @@ def test_example_single_file_paper(tmp_path: Path) -> None:
     assert not [d for d in r.diagnostics if d.severity == "error"], [d.message for d in r.diagnostics]
 
 
-def test_env_node_without_id_qualified_key_and_regions(tmp_path: Path) -> None:
+def test_a_statement_with_a_label_and_no_id_is_keyed_by_the_label_and_still_named_by_its_place(tmp_path: Path) -> None:
     r = make_quilt(
         tmp_path,
         {
@@ -53,13 +53,19 @@ Second, unlabelled.
         },
     )
     nodes = r.nodes
-    assert "drafting/main.tex#lemma:1" in nodes and "drafting/main.tex#lemma:2" in nodes
-    assert nodes["drafting/main.tex#lemma:1"].aliases == ["lem:human"]
+    # the second lemma is still the second: the first's label renumbers nothing
+    assert "lem:human" in nodes and "drafting/main.tex#lemma:2" in nodes and "drafting/main.tex#lemma:1" not in nodes
+    assert nodes["lem:human"].aliases == ["lem:human"] and nodes["lem:human"].place == "drafting/main.tex#lemma:1"
     assert "drafting/main.tex#section:1" in nodes
-    assert r.assembly.regions["drafting/main.tex#lemma:1#eq:main"].where == "statement"
-    assert r.assembly.labels["eq:main"] == "drafting/main.tex#lemma:1#eq:main"
+    assert r.assembly.regions["lem:human#eq:main"].where == "statement"
+    assert r.assembly.labels["eq:main"] == "lem:human#eq:main"
+    # the place names it still, and its region by the place
+    assert r.named("drafting/main.tex#lemma:1") == "lem:human"
+    assert r.named("drafting/main.tex#lemma:1#eq:main") == "lem:human#eq:main"
+    assert r.node_named("drafting/main.tex#lemma:1#eq:main") is nodes["lem:human"]
+    assert r.named("drafting/main.tex#lemma:3") is None
     infos = [d for d in r.diagnostics if d.code == "loom:unlabelled-node"]
-    assert len(infos) == 2
+    assert len(infos) == 2  # neither has an id
 
 
 def test_example_two_proofs_and_positional_keys(tmp_path: Path) -> None:

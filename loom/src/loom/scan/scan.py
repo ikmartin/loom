@@ -20,7 +20,7 @@ from loom.scan.expand import Expansion, expand_master
 from loom.scan.graph import Graph
 from loom.scan.memo import reading
 from loom.scan.model import Diagnostic, Fix, Location, SourceFile, Taxon
-from loom.scan.nodes import Assembly, assemble
+from loom.scan.nodes import Assembly, NodeRec, assemble
 from loom.scan.preamble import PreambleClosure, build_closure, taxa_conflicts, taxa_union
 from loom.scan.quilt import Quilt
 from loom.scan.relations import RelationRec, find_relations
@@ -69,6 +69,53 @@ class ScanResult:
     @property
     def nodes(self):  # type: ignore[no-untyped-def]
         return self.assembly.nodes
+
+    def named(self, key: str) -> str | None:
+        """The key of the block or region `key` names now: itself, or the one its place names.
+
+        A statement's place key (`FILE#ENV:N`), its proofs' (`.../proof`) and its regions' (`...#LABEL`) still name it once a label or an id keys it, so a record or a link written on the place finds the block: a label added later to a statement that had none must not lose the notes already on it (`Assembly.places`).
+
+        Parameters
+        ----------
+        key : str
+            A key as a record, a link or a command names it.
+
+        Returns
+        -------
+        str or None
+            A key of `nodes` or of the regions; None when `key` names neither, now or by its place.
+
+        See Also
+        --------
+        node_named : the block itself.
+        """
+        regions, places = self.assembly.regions, self.assembly.places
+        if key in self.nodes or key in regions:
+            return key
+        if key in places:
+            return places[key]
+        head, sep, label = key.rpartition("#")
+        if sep and head in places and f"{places[head]}#{label}" in regions:
+            return f"{places[head]}#{label}"
+        return None
+
+    @cached_property
+    def shared_labels(self) -> dict[str, list[NodeRec]]:
+        """Each label two or more statements carry, with those statements in file order: a label a draft copied to a new file defines again, which keys neither (`nodes._keyable_labels`)."""
+        out: dict[str, list[NodeRec]] = {}
+        for n in sorted(self.assembly.nodes.values(), key=lambda n: (n.file, n.start)):
+            if n.kind == "environment":
+                for label in set(n.labels):
+                    out.setdefault(label, []).append(n)
+        return {label: found for label, found in out.items() if len(found) > 1}
+
+    def node_named(self, key: str) -> NodeRec | None:
+        """The block `key` names now, by its key or its place (`named`); a region's is the block it is in; None for neither."""
+        found = self.named(key)
+        if found is None:
+            return None
+        region = self.assembly.regions.get(found)
+        return self.assembly.nodes.get(region.container if region is not None else found)
 
     @cached_property
     def external_reach(self) -> dict[str, frozenset[str]]:

@@ -73,7 +73,8 @@ def materialize(text: str, result: ScanResult) -> str:
 
     def repl(m: re.Match[str]) -> str:
         key = m.group(1)
-        n = result.nodes.get(key)
+        # a child keyed by a label stands as its place's key (`NodeRec.marker`)
+        n = result.nodes.get(result.named(key) or key)
         if n is None:
             raise LookupError(f"the version stands for {key}, which the quilt no longer has")
         src = result.files[n.file]

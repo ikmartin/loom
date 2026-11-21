@@ -6,9 +6,11 @@ Ownership is a partition of each file: every character belongs to the innermost 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 
+from loom.paths import LOOM
 from loom.scan.bib import citekey_slug
 from loom.scan.directives import HEAD_LINES, file_level, parse_directives, within
 from loom.scan.envtree import FileEnvs, labels_in, scan_environments
@@ -88,6 +90,10 @@ class NodeRec:
     )  # direct child claimants (nodes, proofs, sections) in offset order
     conflict: list[str] = field(default_factory=list)  # kind "conflict": the files that each define this id
     conflict_of: str | None = None  # a demoted definition: the id it claimed, which a placeholder now holds
+    # statements and their proofs keyed by an id or a label: the key their place gives them (`FILE#ENV:N`, `.../proof`), which still names them (`Assembly.places`)
+    place: str | None = None
+    # one keyed by a label: the key its parent's own text names it by (`owntext`), its place's, so a label taking the key moves no hash
+    marker: str | None = None
 
     @property
     def derived_of(self) -> str | None:
@@ -127,6 +133,8 @@ class Assembly:
     nodes: dict[str, NodeRec] = field(default_factory=dict)
     regions: dict[str, RegionRec] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)  # label -> key (ids, aliases, section labels, region keys)
+    # a statement's place key (and its proofs') -> the key it has: a label or an id given since leaves the place naming it, so a record on it is not lost
+    places: dict[str, str] = field(default_factory=dict)
     envs: dict[str, FileEnvs] = field(default_factory=dict)
     sections: dict[str, list[SectionUnit]] = field(default_factory=dict)  # per master
     diagnostics: list[Diagnostic] = field(default_factory=list)
@@ -197,7 +205,7 @@ def assemble(
         solo = Expansion(master=path, text=src.clean, segments=[Segment(path, 0, len(src.clean), 0, 0)])
         asm.sections[path] = find_sections(solo, files)
     conflicted = _conflicted_ids(asm, files, slugs)
-    _statement_nodes(asm, files, taxa, slugs, masters, conflicted)
+    _statement_nodes(asm, files, taxa, slugs, masters, conflicted, _keyable_labels(asm, files, slugs))
     _section_nodes(asm, files, slugs, masters, default_master, conflicted)
     _placeholders(asm, files, conflicted)
     _container_nodes(asm, files, masters)
@@ -380,6 +388,44 @@ def defined_by(paths: list[str], definitions: int = 2) -> str:
     return f"defined {times} in {paths[0]}"
 
 
+#: A label a key can be as it is: in a link, a record and a file name.
+_KEY_SHAPED = re.compile(r"[A-Za-z][A-Za-z0-9:._-]*")
+#: How other keys begin, which a label key must not.
+_OTHER_KEYS = ("equation:", "prose:", "n-")
+
+
+def _anchor(label: str) -> str:
+    """`label` as the viewer's anchor (`render.markup.slug`): punctuation folded to one hyphen, lower-cased."""
+    return re.sub(r"[^A-Za-z0-9]+", "-", label).strip("-").lower() or "x"
+
+
+def _keyable_labels(asm: Assembly, files: dict[str, SourceFile], slugs: set[str]) -> set[str]:
+    """The labels that key the statement carrying them first: shaped as a key, not an id, defined once in the quilt, and read as an anchor no other label is.
+
+    Every `\\label` of every scanned file is counted, so a label a draft copied to a new file defines again keys neither; the anchor is folded as the viewer folds it, so `thm:main` and `Thm-Main` would share one and key nothing.
+    """
+    counts: Counter[str] = Counter()
+    for src in files.values():
+        if not src.ignored:
+            counts.update(lab for lab, _ in labels_in(src.clean, [(0, len(src.clean))]))
+    anchors = Counter(_anchor(lab) for lab in counts)
+    return {
+        lab
+        for lab, n in counts.items()
+        if n == 1 and label_shaped(lab, slugs) and lab not in files and anchors[_anchor(lab)] == 1
+    }
+
+
+def label_shaped(label: str, slugs: set[str]) -> bool:
+    """Whether `label` is shaped as a key a label gives: key characters only, no id, and none of the forms other keys take (`equation:`, a document's path)."""
+    return (
+        bool(_KEY_SHAPED.fullmatch(label))
+        and not is_id_shaped(label, slugs)
+        and not label.startswith(_OTHER_KEYS)
+        and not label.endswith((".tex", ".md"))
+    )
+
+
 def _statement_nodes(
     asm: Assembly,
     files: dict[str, SourceFile],
@@ -387,7 +433,9 @@ def _statement_nodes(
     slugs: set[str],
     masters: list[str],
     conflicted: dict[str, list[str]],
+    keyable: set[str],
 ) -> None:
+    """Each theorem-like environment's node: keyed by its id; else, in the person's own files, by its first label where that label keys (`_keyable_labels`); else by its place, `FILE#ENV:N`, N counting every statement of that name in the file, so a label given or taken renumbers nothing."""
     for path, fe in asm.envs.items():
         src = files[path]
         counts: dict[str, int] = {}
@@ -401,7 +449,14 @@ def _statement_nodes(
             conflict_of = node_id if node_id in conflicted else None
             if conflict_of:
                 node_id = None  # demoted: the placeholder holds the id and claims every label; this record claims none
-            key = node_id or f"{path}#{env.name}:{counts[env.name]}"
+            place = f"{path}#{env.name}:{counts[env.name]}"
+            # an agent's copy and a digest keep what they key by: their labels are loom's, made for them
+            own_file = path not in asm.digest_files and not path.startswith(f"{LOOM}/")
+            by_label = first if node_id is None and conflict_of is None and own_file and first in keyable else None
+            key = node_id or by_label or place
+            if key != place:
+                # a label added later to a statement that had none must not lose the notes already on it
+                asm.places[place] = key
             taxon = taxa.get(env.name) or asm.digest_taxa.get(path, {}).get(env.name)
             rec = NodeRec(
                 key=key,
@@ -418,6 +473,8 @@ def _statement_nodes(
                 label_offsets={lab: off for lab, off in found},
                 aliases=[] if conflict_of else [lab for lab in labels if lab != node_id],
                 conflict_of=conflict_of,
+                place=place if key != place else None,
+                marker=place if by_label else None,
             )
             asm.nodes[key] = rec
             asm._env_keys[(path, env.start)] = key
@@ -580,11 +637,16 @@ def _proof_nodes(
             found = labels_in(src.clean, own)
             labels = [lab for lab, _ in found]
             first = labels[0] if labels else None
+            statement = asm.nodes[stmt_key]
+            place = None
             if first and is_id_shaped(first, slugs):
                 key, pid = first, first
             else:
                 count += 1
                 key, pid = (f"{stmt_key}/proof" if count == 1 else f"{stmt_key}/proof/{count}"), None
+                if statement.place:
+                    place = f"{statement.place}/proof" if count == 1 else f"{statement.place}/proof/{count}"
+                    asm.places[place] = key
             rec = NodeRec(
                 key=key,
                 kind="proof",
@@ -602,10 +664,12 @@ def _proof_nodes(
                 attach_via=via,
                 ordinal=count,
                 order=order,
+                place=place,
+                marker=place if statement.marker else None,
             )
             asm.nodes[key] = rec
             asm._env_keys[(path, proof.start)] = key
-            asm.nodes[stmt_key].proofs.append(key)
+            statement.proofs.append(key)
         if count > 1:
             asm.diagnostics.append(
                 Diagnostic(

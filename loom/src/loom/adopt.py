@@ -55,12 +55,12 @@ def _history(result: ScanResult) -> History:
 def _shape(result: ScanResult, document: str) -> tuple[dict[str, str], dict[str, tuple[str, int, int]], dict[str, str]]:
     """Mask node bodies recursively, retaining independent statement and proof choices.
 
-    A node with no id, keyed by its file and position (`drafting/main.tex#remark:2`), stays in the skeleton as prose: its key differs between the document and its flat snapshot, so it can be offered only as a document-level change.
+    A node with no id, keyed by its file and position (`drafting/main.tex#remark:2`) or by its label, stays in the skeleton as prose: its key differs between the document and its flat snapshot, so it can be offered only as a document-level change.
     """
     nodes = [
         n
         for n in result.nodes.values()
-        if document in n.reached_by and n.kind in ("environment", "proof") and "#" not in n.key
+        if document in n.reached_by and n.kind in ("environment", "proof") and "#" not in n.key and not n.marker
     ]
     spans: dict[str, tuple[str, int, int]] = {}
     for n in nodes:
