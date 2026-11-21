@@ -318,7 +318,6 @@ def test_the_generation_moves_when_a_node_or_a_tag_changes_and_not_otherwise(tmp
     root = quilt(tmp_path, aged=True)
     with NodeIndex.open(root) as index:
         first = index.generation()
-        assert first == 1
         assert index.refresh().generation == first, "nothing changed"
         lemma = index.node("tq-00K3")
         assert lemma is not None
@@ -375,3 +374,128 @@ def test_punctuation_alone_finds_nothing(root: Path) -> None:
     with NodeIndex.open(root) as index:
         assert index.search("*") == [] and index.search('"') == [] and index.search("\\") == []
         assert len(index.search("")) == 4, "the empty search is every statement"
+
+
+def test_the_generation_never_goes_back(root: Path) -> None:
+    """N-9: a view holding a generation must never meet it again after the index is made again."""
+    with NodeIndex.open(root) as index:
+        held = index.generation()
+        index.rebuild()
+        assert index.generation() > held, "made again at will"
+        held = index.generation()
+    (root / NODE_INDEX).unlink()
+    with NodeIndex.open(root) as index:
+        assert index.generation() > held, "made again from nothing"
+
+
+def test_a_file_put_back_to_its_size_and_time_is_still_seen(tmp_path: Path) -> None:
+    """N-15: its change time moved, which no one sets by hand."""
+    root = quilt(tmp_path, aged=True)
+    path = root / LIBRARY_NODES / "tq-00A4.node"
+    with NodeIndex.open(root) as index:
+        assert found(index, "widget")[0] == "tq-00A4"
+        before = path.stat()
+        path.write_bytes(path.read_bytes().replace(b"widget", b"gadget"))
+        os.utime(path, ns=(before.st_atime_ns, before.st_mtime_ns))
+        assert path.stat().st_size == before.st_size
+        index.refresh()
+        assert "tq-00A4" in found(index, "gadget")
+
+
+def _work(root: Path, author: str, key: str = "Mul19") -> None:
+    put(
+        root,
+        Node(
+            id="tq-0R00-ref",
+            taxon="reference",
+            body=f"@article{{{key},\n  author = {{{author}}},\n  title = {{Sheaves}},\n  year = {{2019}},\n}}\n",
+        ),
+    )
+    put(root, Node(id="tq-0R01", taxon="lemma", number="1.1", source="tq-0R00-ref", body="A sheaf.\n"))
+
+
+@pytest.mark.parametrize("author", ['M\\"uller, Karl', 'M{\\"u}ller, Karl', 'M\\"{u}ller, Karl', "Müller, Karl"])
+def test_a_work_s_author_written_in_tex_is_found_as_written_and_without_accents(root: Path, author: str) -> None:
+    """N-11: `M\"uller` is indexed as "Müller", not as `m` and `uller`."""
+    _work(root, author)
+    with NodeIndex.open(root) as index:
+        assert found(index, "Müller") == ["tq-0R01"]
+        assert found(index, "muller") == ["tq-0R01"]
+
+
+def test_named_letters_and_accents_written_in_tex_are_read() -> None:
+    from loom.library.index import _accents
+
+    assert (
+        _accents('Erd\\H{o}s and {\\o}ystein and G{\\"o}del and Kova{\\v c} and \\L{}ojasiewicz')
+        == "Erdős and øystein and Gödel and Kovač and Łojasiewicz"
+    )
+
+
+def test_a_citekey_is_found_ignoring_the_case_of_any_letter(root: Path) -> None:
+    """N-13: the index folds keys as the checks do, not as SQLite's NOCASE, which folds ASCII alone."""
+    _work(root, "Müller, Karl", key="Müller19")
+    with NodeIndex.open(root) as index:
+        assert index.keyed("MÜLLER19") == frozenset({"tq-0R00-ref"})
+        row = index.reference("müller19")
+        assert row is not None and row.id == "tq-0R00-ref"
+
+
+def test_a_folder_where_the_index_belongs_is_replaced(root: Path) -> None:
+    """N-19."""
+    (root / NODE_INDEX).mkdir(parents=True)
+    (root / NODE_INDEX / "junk").write_text("x")
+    with NodeIndex.open(root) as index:
+        assert index.count() == 9
+
+
+def test_an_index_at_this_version_missing_a_table_is_made_again(root: Path) -> None:
+    """N-19: a damaged index is made again, not refused on every question."""
+    with NodeIndex.open(root):
+        pass
+    db = sqlite3.connect(root / NODE_INDEX)
+    db.execute("DROP TABLE anchors")
+    db.commit()
+    db.close()
+    with NodeIndex.open(root) as index:
+        assert index.anchor_number("tq-00K3-eq00") == "3.3"
+
+
+def test_an_anchor_s_number_is_read_by_its_key(root: Path) -> None:
+    """N-21: by the owner the anchor names, which the table's key starts with, not a scan."""
+    with NodeIndex.open(root) as index:
+        plans: list[str] = []
+        real = index.db
+
+        class Spy:
+            def execute(self, sql: str, args: object = ()) -> sqlite3.Cursor:
+                if "FROM anchors" in sql:
+                    plans.extend(r[3] for r in real.execute("EXPLAIN QUERY PLAN " + sql, args))  # type: ignore[arg-type]
+                return real.execute(sql, args)  # type: ignore[arg-type]
+
+        index.db = Spy()  # type: ignore[assignment]
+        try:
+            assert index.anchor_number("tq-00K3-eq00") == "3.3"
+            assert index.anchor_number("not an anchor") is None
+        finally:
+            index.db = real
+        assert plans and all(p.startswith("SEARCH") for p in plans), plans
+
+
+def test_a_snippet_in_a_long_display_is_the_line_that_holds_the_word() -> None:
+    """N-12: a hit in a display of two hundred lines is not the display."""
+    lines = "\n".join(f"  a_{{{i}}} &= b_{{{i}}} + c_{{{i}}} \\\\" for i in range(200))
+    body = f"Before.\n\\begin{{align}}\n{lines}\n  z &= \\zeta\n\\end{{align}}\nAfter.\n"
+    hit = snippet(body, ["zeta"])
+    assert hit is not None
+    assert hit.match == "z &= \\zeta" and (hit.before, hit.after) == ("…", "…")
+    one = (
+        "x = "
+        + " + ".join(f"y_{{{i}}}" for i in range(200))
+        + " + \\zeta + "
+        + " + ".join(f"w_{{{i}}}" for i in range(200))
+    )
+    long = snippet(f"\\[ {one} \\]\n", ["zeta"])
+    assert long is not None and "\\zeta" in long.match and len(long.match) <= 160
+    short = snippet("Then $a + \\zeta$ holds.\n", ["zeta"])
+    assert short is not None and short.match == "$a + \\zeta$"

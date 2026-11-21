@@ -11,6 +11,7 @@ import contextlib
 import json
 import os
 import re
+import shutil
 import sqlite3
 import time
 import unicodedata
@@ -27,7 +28,9 @@ from loom.paths import LIBRARY_NODES, NODE_INDEX, TAG_LOG
 from loom.scan.bib import parse_bib
 
 #: The index's own number: an index of another is made again. Raised whenever what the index holds or how it is read changes.
-VERSION = 1
+VERSION = 2
+#: The longest formula a snippet's match is whole; inside a longer one the match is the line of it that holds the word, and inside a longer line, as much of the line around the word as fits.
+LONG = 160
 #: Nanoseconds before the last update within which a file is read again though its size and time agree, since a change in the same tick leaves them as they were.
 RACY = 2_000_000_000
 #: Commands whose names carry no meaning, left out of a body's indexed words; any other command's name is a word, so `\Hom`, `\alpha` and `\otimes` find the statements that use them. `\begin` and `\end` take their environment's name with them.
@@ -52,7 +55,7 @@ _TOKEN = re.compile(r"[^\W_]+")
 _NUMBER = re.compile(r"[A-Za-z]?\d+(?:\.\d+)+[a-z]?|[A-Z](?:\.\d+)+")
 
 _SCHEMA = """
-CREATE TABLE files(name TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, hash TEXT NOT NULL, node TEXT);
+CREATE TABLE files(name TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL, ctime_ns INTEGER NOT NULL, inode INTEGER NOT NULL, hash TEXT NOT NULL, node TEXT);
 CREATE TABLE nodes(
     id TEXT PRIMARY KEY, kind TEXT NOT NULL, taxon TEXT NOT NULL, number TEXT, title TEXT, source TEXT, pages TEXT,
     parent TEXT, empty INTEGER NOT NULL, hash TEXT NOT NULL, citekey TEXT, numkey TEXT, pagekey TEXT, position INTEGER,
@@ -62,7 +65,7 @@ CREATE INDEX nodes_source ON nodes(source);
 CREATE INDEX nodes_parent ON nodes(parent);
 CREATE INDEX nodes_taxon ON nodes(taxon);
 CREATE INDEX nodes_number ON nodes(number);
-CREATE INDEX nodes_citekey ON nodes(citekey COLLATE NOCASE);
+CREATE INDEX nodes_citekey ON nodes(citekey);
 CREATE INDEX nodes_folded ON nodes(id COLLATE NOCASE);
 CREATE INDEX nodes_stubs ON nodes(source) WHERE kind = 'statement' AND empty = 1;
 CREATE TABLE edges(src TEXT NOT NULL, kind TEXT NOT NULL, dst TEXT NOT NULL, PRIMARY KEY (src, kind, dst)) WITHOUT ROWID;
@@ -147,7 +150,43 @@ def _work(entry_text: str) -> tuple[str | None, str]:
         return None, ""
     fields = next(iter(parse_bib(entry_text).values()), None)
     got = fields.fields if fields else {}
-    return entry.key, " ".join([entry.key, *(words(got.get(k, "")) for k in ("author", "title", "year"))])
+    return entry.key, " ".join([entry.key, *(words(_accents(got.get(k, ""))) for k in ("author", "title", "year"))])
+
+
+#: TeX's accent commands, each with the combining character it puts on its letter, so `M\"uller` is indexed as "Müller", which "Muller" finds too.
+_ACCENTS = {
+    "'": "\u0301", "`": "\u0300", "^": "\u0302", '"': "\u0308", "~": "\u0303", "=": "\u0304", ".": "\u0307",
+    "u": "\u0306", "v": "\u030c", "H": "\u030b", "c": "\u0327", "d": "\u0323", "b": "\u0331", "k": "\u0328", "r": "\u030a",
+}  # fmt: skip
+_LETTERS = {
+    "ss": "ß",
+    "o": "ø",
+    "O": "Ø",
+    "ae": "æ",
+    "AE": "Æ",
+    "oe": "œ",
+    "OE": "Œ",
+    "aa": "å",
+    "AA": "Å",
+    "l": "ł",
+    "L": "Ł",
+    "i": "ı",
+    "j": "ȷ",
+}
+_ACCENT = re.compile(r"\\([`'^\"~=.]|[uvHcdbkr](?![A-Za-z]))\s*(?:\{\s*(\\?[A-Za-z])\s*\}|(\\?[A-Za-z]))")
+_LETTER = re.compile(r"\\(ss|ae|AE|oe|OE|aa|AA|[oOlLij])(?![A-Za-z])")
+
+
+def _accents(text: str) -> str:
+    """`text` with TeX's accents and named letters made characters, braces around them dropped."""
+
+    def accent(m: re.Match[str]) -> str:
+        letter = m.group(2) or m.group(3) or ""
+        letter = _LETTERS.get(letter[1:], letter[1:]) if letter.startswith("\\") else letter
+        return unicodedata.normalize("NFC", letter + _ACCENTS[m.group(1)])
+
+    text = _ACCENT.sub(accent, text)
+    return re.sub(r"\{([^{}\\]*)\}", r"\1", _LETTER.sub(lambda m: _LETTERS[m.group(1)], text))
 
 
 class NodeIndex:
@@ -186,6 +225,9 @@ class NodeIndex:
         """
         path = root / NODE_INDEX
         path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_dir() and not path.is_symlink():
+            # a folder where the index belongs holds nothing of anyone's: the cache is loom's
+            shutil.rmtree(path)
         for attempt in (1, 2):
             db: sqlite3.Connection | None = None
             try:
@@ -209,11 +251,11 @@ class NodeIndex:
         try:
             db.execute("PRAGMA synchronous = NORMAL")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version == VERSION:
+            if version == VERSION and _complete(db):
                 return db
             db.execute("BEGIN IMMEDIATE")
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version != VERSION:
+            if version != VERSION or not _complete(db):
                 for kind, name in db.execute(
                     "SELECT type, name FROM sqlite_master WHERE type IN ('table', 'view')"
                 ).fetchall():
@@ -229,6 +271,11 @@ class NodeIndex:
                             "this Python's SQLite has no FTS5, which the library's index needs; a Python from python.org, Homebrew or uv has it"
                         ) from exc
                     raise
+                # a new index's generation starts from the clock, past any an index before it gave out
+                db.execute(
+                    "INSERT OR REPLACE INTO meta(key, value) VALUES ('generation', ?)",
+                    (str(time.time_ns() // 1_000_000),),
+                )
                 db.execute(f"PRAGMA user_version = {VERSION}")
             db.execute("COMMIT")
             return db
@@ -257,8 +304,11 @@ class NodeIndex:
         """
         self.db.execute("BEGIN IMMEDIATE")
         try:
+            kept = self.generation()
             for table in ("files", "nodes", "edges", "anchors", "tags", "meta", "words"):
                 self.db.execute(f"DELETE FROM {table}")
+            # a generation says "changed" and must never repeat, so it outlives the index's contents
+            self._set_meta("generation", str(kept))
             self.db.execute("COMMIT")
         except BaseException:
             self.db.execute("ROLLBACK")
@@ -318,11 +368,14 @@ class NodeIndex:
         last = int(self._meta("refreshed") or 0)
         if not last:
             return False
-        known = {name: (size, mtime) for name, size, mtime in self.db.execute("SELECT name, size, mtime_ns FROM files")}
+        known = {
+            name: tuple(stamp)
+            for name, *stamp in self.db.execute("SELECT name, size, mtime_ns, ctime_ns, inode FROM files")
+        }
         if len(known) != len(present):
             return False
         for name, st in present.items():
-            if known.get(name) != (st.st_size, st.st_mtime_ns) or st.st_mtime_ns >= last - RACY:
+            if known.get(name) != _stamp(st) or st.st_mtime_ns >= last - RACY:
                 return False
         return self._tags_due(last) is None
 
@@ -339,8 +392,8 @@ class NodeIndex:
         """Read what differs among `present` under the write lock; `only` limits the update to those files, and then neither the tags nor the time of the last update move."""
         folder = self.root / LIBRARY_NODES
         last = int(self._meta("refreshed") or 0)
-        rows = self.db.execute("SELECT name, size, mtime_ns, hash FROM files")
-        known = {name: (size, mtime, digest) for name, size, mtime, digest in rows if only is None or name in only}
+        rows = self.db.execute("SELECT name, size, mtime_ns, ctime_ns, inode, hash FROM files")
+        known = {name: (tuple(stamp[:4]), stamp[4]) for name, *stamp in rows if only is None or name in only}
         read = changed = 0
         works: set[str] = set()
         fresh: set[str] = set()
@@ -348,7 +401,7 @@ class NodeIndex:
         # references first, so a statement read in the same pass finds its work's words
         for name, st in sorted(present.items(), key=lambda item: not item[0].endswith(f"-ref{SUFFIX}")):
             was = known.get(name)
-            if was and was[0] == st.st_size and was[1] == st.st_mtime_ns and st.st_mtime_ns < last - RACY:
+            if was and was[0] == _stamp(st) and st.st_mtime_ns < last - RACY:
                 continue
             try:
                 data = (folder / name).read_bytes()
@@ -356,10 +409,10 @@ class NodeIndex:
                 continue
             read += 1
             digest = node_hash(data)
-            if was and was[2] == digest:
+            if was and was[1] == digest:
                 self.db.execute(
-                    "UPDATE files SET size = ?, mtime_ns = ?, hash = ? WHERE name = ?",
-                    (st.st_size, st.st_mtime_ns, digest, name),
+                    "UPDATE files SET size = ?, mtime_ns = ?, ctime_ns = ?, inode = ? WHERE name = ?",
+                    (*_stamp(st), name),
                 )
                 continue
             changed += 1
@@ -370,8 +423,8 @@ class NodeIndex:
             with contextlib.suppress(NodeUnreadable):
                 node = read_node(data, name)
             self.db.execute(
-                "INSERT INTO files(name, size, mtime_ns, hash, node) VALUES (?, ?, ?, ?, ?)",
-                (name, st.st_size, st.st_mtime_ns, digest, node.id if node else None),
+                "INSERT INTO files(name, size, mtime_ns, ctime_ns, inode, hash, node) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (name, *_stamp(st), digest, node.id if node else None),
             )
             if node is not None:
                 works |= self._remember(node, digest)
@@ -417,7 +470,9 @@ class NodeIndex:
         """Put a node in; the works whose words must be made again."""
         citekey = None
         if node.kind == ids.REFERENCE:
-            citekey, _ = _work(node.body)
+            key, _ = _work(node.body)
+            # kept folded, as the checks compare keys (`casefold`, not SQLite's NOCASE, which folds ASCII alone)
+            citekey = key.casefold() if key else None
         first_page = (node.pages or "").split("-")[0] or None
         cur = self.db.execute(
             f"INSERT INTO nodes({_ROW}, citekey, numkey, pagekey, header, body) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -529,11 +584,12 @@ class NodeIndex:
         str or None
             The number as `\\ref` prints it, without the parentheses `\\eqref` adds.
         """
-        row = self.db.execute("SELECT number FROM anchors WHERE anchor = ?", (anchor,)).fetchone()
+        owner = ids.anchor_owner(anchor)
+        row = self.db.execute("SELECT number FROM anchors WHERE owner = ? AND anchor = ?", (owner, anchor)).fetchone()
         return row[0] if row else None
 
     def keyed(self, key: str) -> frozenset[str]:
-        rows = self.db.execute("SELECT id FROM nodes WHERE citekey = ? COLLATE NOCASE AND kind = 'reference'", (key,))
+        rows = self.db.execute("SELECT id FROM nodes WHERE citekey = ? AND kind = 'reference'", (key.casefold(),))
         return frozenset(r[0] for r in rows)
 
     def same_but_case(self, node_id: str) -> list[str]:
@@ -573,7 +629,7 @@ class NodeIndex:
     def reference(self, citekey: str) -> Row | None:
         """The reference whose entry's key is `citekey`, compared ignoring case, or None."""
         found = self.db.execute(
-            f"SELECT {_ROW} FROM nodes WHERE citekey = ? COLLATE NOCASE AND kind = 'reference' ORDER BY id", (citekey,)
+            f"SELECT {_ROW} FROM nodes WHERE citekey = ? AND kind = 'reference' ORDER BY id", (citekey.casefold(),)
         ).fetchone()
         return _row(found) if found else None
 
@@ -776,7 +832,7 @@ class NodeIndex:
 def snippet(body: str, terms: list[str], before: int = 60, after: int = 60) -> Snippet | None:
     """Where the first of `terms` to occur stands in `body`, the last term also as the start of a longer word, matched as the index matches: ignoring case and accents, not in a comment, an id or an environment's name; None when none occurs.
 
-    A match is the whole word it starts, and inside a formula the whole formula. The words around it run about `before` and `after` characters and are cut at a space outside mathematics, whitespace made single spaces.
+    A match is the whole word it starts, and inside a formula the whole formula, or in one longer than `LONG` the line of it that holds the word (cut to `LONG` around the word when longer still), with "…" on both sides and no words around it. The words around a match run about `before` and `after` characters and are cut at a space outside mathematics, whitespace made single spaces.
     """
     text = blank_comments(body)
     folded, owner = _folded(_searchable(text))
@@ -795,7 +851,11 @@ def snippet(body: str, terms: list[str], before: int = 60, after: int = 60) -> S
     maths = _maths(text)
     for lo, hi in maths:
         if lo <= start < hi:
-            start, stop = lo, max(stop, hi)
+            if hi - lo <= LONG:
+                start, stop = lo, max(stop, hi)
+            else:
+                start, stop = _line(text, lo, hi, start, stop)
+                return Snippet("…", re.sub(r"\s+", " ", text[start:stop]).strip(), "…")
             break
 
     def outside(i: int) -> bool:
@@ -818,6 +878,21 @@ def snippet(body: str, terms: list[str], before: int = 60, after: int = 60) -> S
     return Snippet(
         lead + tidy(text[left:start]).lstrip(), tidy(text[start:stop]), tidy(text[stop:right]).rstrip() + tail
     )
+
+
+def _line(text: str, lo: int, hi: int, start: int, stop: int) -> tuple[int, int]:
+    """The line of the formula `text[lo:hi]` that holds the match `text[start:stop]`, ended by a line feed or `\\\\`, and when that is longer than `LONG`, the match with what of it fits around it cut at spaces."""
+    left = max(text.rfind("\n", lo, start), text.rfind("\\\\", lo, start))
+    left = lo if left < 0 else left + (1 if text[left] == "\n" else 2)
+    ends = [i for i in (text.find("\n", stop, hi), text.find("\\\\", stop, hi)) if i >= 0]
+    right = min(ends) if ends else hi
+    if right - left <= LONG:
+        return left, right
+    room = max(0, (LONG - (stop - start)) // 2)
+    spaces = [i for i in range(max(left, start - room), start) if text[i].isspace()]
+    left = spaces[0] + 1 if spaces else start
+    spaces = [i for i in range(stop, min(right, stop + room)) if text[i].isspace()]
+    return left, spaces[-1] if spaces else stop
 
 
 def _searchable(text: str) -> str:
@@ -852,6 +927,11 @@ def _maths(text: str) -> list[tuple[int, int]]:
     return [(m.start(), m.end()) for m in _MATH.finditer(text)]
 
 
+def _stamp(st: os.stat_result) -> tuple[int, int, int, int]:
+    """What says a file is as it was: its size, its modification time, its change time, which nothing can set by hand, and its inode."""
+    return (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+
+
 def _scan(folder: Path) -> dict[str, os.stat_result]:
     """Each node file directly in `folder`, by name, with its `stat`; empty when there is no folder."""
     present: dict[str, os.stat_result] = {}
@@ -866,6 +946,16 @@ def _scan(folder: Path) -> dict[str, os.stat_result]:
 def _row(record: Any) -> Row:
     id_, kind, taxon, number, title, source, pages, parent, empty, digest = record
     return Row(id_, kind, taxon, number, title, source, pages, parent, bool(empty), digest)
+
+
+#: The tables an index holds, each of which must be there for it to be used.
+_TABLES = ("files", "nodes", "edges", "anchors", "tags", "meta", "words")
+
+
+def _complete(db: sqlite3.Connection) -> bool:
+    """Whether an index holds every table it should: one at this version missing one is made again rather than refused on every question."""
+    have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    return all(t in have for t in _TABLES)
 
 
 def _remove(path: Path) -> None:
