@@ -572,3 +572,46 @@ def test_muller_finds_mueller_written_either_way(root: Path) -> None:
             "Müller",
             'M{\\"u}ller',
         }
+
+
+@pytest.mark.parametrize(
+    ("written", "typed"),
+    [
+        ("Østergaard", "ostergaard"),
+        ("{\\O}stergaard", "ostergaard"),
+        ("Łukasiewicz", "lukasiewicz"),
+        ("\\L{}ukasiewicz", "lukasiewicz"),
+        ("Ostergaard", "Østergaard"),
+        ("Æsop", "aesop"),
+    ],
+)
+def test_a_letter_of_its_own_is_found_as_it_is_typed_in_ascii(root: Path, written: str, typed: str) -> None:
+    """N-11: ø, ł, æ and their like are letters of their own to Unicode, folded to the ASCII a person types; what is shown is as written."""
+    put(root, Node(id="tq-0T01", taxon="remark", number="8.1", source="tq-00A1-ref", body=f"As {written} showed.\n"))
+    with NodeIndex.open(root) as index:
+        hits = index.search(typed)
+        assert [h.row.id for h in hits] == ["tq-0T01"]
+        assert hits[0].snippet is not None and hits[0].snippet.match == written
+
+
+def test_a_word_in_a_command_s_group_is_shown_without_the_group_s_braces() -> None:
+    """N-28: `\\emph{finite}` shows `finite`; a group that is part of a word, `{K}ova`, shows its braces."""
+    hit = snippet("A set \\emph{finite} here.\n", ["finite"])
+    assert hit is not None and hit.match == "finite"
+    joined = snippet("By {K}ova\\v{c} here.\n", ["kovac"])
+    assert joined is not None and joined.match == "{K}ova\\v{c}"
+
+
+def test_an_index_held_open_is_made_again_when_a_sweep_removes_it(tmp_path: Path) -> None:
+    """N-26: a publisher holds an index across requests; the build's sweep may remove the cache under it."""
+    import shutil
+
+    root = quilt(tmp_path)
+    with NodeIndex.open(root) as index:
+        held = index.generation()
+        shutil.rmtree(root / NODE_INDEX.rsplit("/", 1)[0])
+        put(root, Node(id="tq-0T02", taxon="remark", number="8.2", source="tq-00A1-ref", body="A remark on gadgets.\n"))
+        index.refresh()
+        assert found(index, "gadgets") == ["tq-0T02"]
+        assert index.generation() > held
+        assert (root / NODE_INDEX).is_file()

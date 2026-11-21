@@ -28,7 +28,7 @@ from loom.paths import LIBRARY_NODES, NODE_INDEX, TAG_LOG
 from loom.scan.bib import parse_bib
 
 #: The index's own number: an index of another is made again. Raised whenever what the index holds or how it is read changes.
-VERSION = 4
+VERSION = 5
 #: The longest formula a snippet's match is whole; inside a longer one the match is the line of it that holds the word, and inside a longer line, as much of the line around the word as fits.
 LONG = 160
 #: Nanoseconds before the last update within which a file is read again though its size and time agree, since a change in the same tick leaves them as they were.
@@ -143,8 +143,14 @@ def words(body: str) -> str:
 
 
 def plain(text: str) -> str:
-    """`text` as the index and a search compare it, past what SQLite's tokenizer folds (case and accents): compatibility forms made plain (NFKC, so ﬁ is fi and ℝ is R) and case folded in full (ß is ss)."""
-    return unicodedata.normalize("NFKC", text).casefold()
+    """`text` as the index and a search compare it, past what SQLite's tokenizer folds (case and accents): compatibility forms made plain (NFKC, so ﬁ is fi and ℝ is R), case folded in full (ß is ss), and the letters with a stroke or of their own that a name is typed without (`STROKES`: ø as o, ł as l, æ as ae)."""
+    return unicodedata.normalize("NFKC", text).casefold().translate(STROKES)
+
+
+#: Letters Unicode and SQLite's tokenizer hold as letters of their own, not as a letter with an accent, each as a person types it in ASCII, so `ostergaard` finds Østergaard and `lukasiewicz` Łukasiewicz; lower case, since `plain` folds case first.
+STROKES = str.maketrans(
+    {"ø": "o", "ł": "l", "đ": "d", "ħ": "h", "ı": "i", "ŧ": "t", "ð": "d", "æ": "ae", "œ": "oe", "þ": "th"}
+)
 
 
 def natural(value: str | None) -> str | None:
@@ -220,11 +226,12 @@ def _detex(text: str) -> tuple[str, list[int], list[int]]:
         if command or (m.group("g") is not None and after):
             keep(m.start(), m.end())
         elif m.group("g") is not None:
-            # the group's letters stand for the whole group, braces and all, so a match on them shows them
             if m.group("g"):
                 keep(m.start() + 1, m.end() - 1)
-                starts[-len(m.group("g"))] = m.start()
-                ends[-1] = m.end()
+                if (m.start() and text[m.start() - 1].isalnum()) or text[m.end() : m.end() + 1].isalnum():
+                    # part of a word, as `{K}ova` is: a match on its letters shows the braces too
+                    starts[-len(m.group("g"))] = m.start()
+                    ends[-1] = m.end()
         else:
             made = _made(m)
             out.extend(made)
@@ -256,6 +263,8 @@ class NodeIndex:
         self.root = root
         self.db = db
         self._works: dict[str, str] = {}
+        #: The file this connection holds, by inode: one removed or replaced under it (a sweep of the cache, a person) is made again at the next `refresh`.
+        self._inode = _inode(root / NODE_INDEX)
         #: Temporary files of writers the last look at the folder found, which a writer holding the library's lock removes.
         self.leftovers: list[str] = []
 
@@ -377,13 +386,20 @@ class NodeIndex:
     def refresh(self) -> Refreshed:
         """Bring the index up to date with the files and the tag log.
 
-        The folder is looked at once, without the write lock; only when something differs is the lock taken, and what was seen is read under it. The time of the update is taken before the look, so a file that changes while it is read is read again at the next.
+        The folder is looked at once, without the write lock; only when something differs is the lock taken, and what was seen is read under it. The time of the update is taken before the look, so a file that changes while it is read is read again at the next. An index whose file was removed under it (a sweep of the cache) is made again first.
 
         Returns
         -------
         Refreshed
             What was read and changed.
         """
+        path = self.root / NODE_INDEX
+        if _inode(path) != self._inode:
+            # the file this connection holds is gone, and SQLite would answer every write "readonly database"
+            self.db.close()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self.db = self._connect(path)
+            self._inode = _inode(path)
         started = time.time_ns()
         present, self.leftovers = _scan(self.root / LIBRARY_NODES)
         if self._unchanged(present):
@@ -971,7 +987,11 @@ def _folded(text: str) -> tuple[str, list[int]]:
     out: list[str] = []
     owner: list[int] = []
     for i, ch in enumerate(text):
-        plain = "".join(c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c)).casefold()
+        plain = (
+            "".join(c for c in unicodedata.normalize("NFKD", ch) if not unicodedata.combining(c))
+            .casefold()
+            .translate(STROKES)
+        )
         out.append(plain)
         owner.extend([i] * len(plain))
     return "".join(out), owner
@@ -992,6 +1012,13 @@ def _maths(text: str) -> list[tuple[int, int]]:
 def _stamp(st: os.stat_result) -> tuple[int, int, int, int]:
     """What says a file is as it was: its size, its modification time, its change time, which nothing can set by hand, and its inode."""
     return (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+
+
+def _inode(path: Path) -> int | None:
+    try:
+        return path.stat().st_ino
+    except OSError:
+        return None
 
 
 #: The name a writer gives a node's file before it renames it into place, `.<id>.node.<pid>.tmp`; nothing else in the folder is a writer's.
