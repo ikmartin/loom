@@ -205,7 +205,9 @@ def assemble(
         solo = Expansion(master=path, text=src.clean, segments=[Segment(path, 0, len(src.clean), 0, 0)])
         asm.sections[path] = find_sections(solo, files)
     conflicted = _conflicted_ids(asm, files, slugs)
-    _statement_nodes(asm, files, taxa, slugs, masters, conflicted, _keyable_labels(asm, files, slugs))
+    # the files documents read, the documents among them: labels key statements only there
+    read = reached_any | set(expansions)
+    _statement_nodes(asm, files, taxa, slugs, masters, conflicted, _keyable_labels(files, slugs, read), read)
     _section_nodes(asm, files, slugs, masters, default_master, conflicted)
     _placeholders(asm, files, conflicted)
     _container_nodes(asm, files, masters)
@@ -399,14 +401,14 @@ def _anchor(label: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "-", label).strip("-").lower() or "x"
 
 
-def _keyable_labels(asm: Assembly, files: dict[str, SourceFile], slugs: set[str]) -> set[str]:
-    """The labels that key the statement carrying them first: shaped as a key, not an id, defined once in the quilt, and read as an anchor no other label is.
+def _keyable_labels(files: dict[str, SourceFile], slugs: set[str], reached: set[str]) -> set[str]:
+    """The labels that key the statement carrying them first: shaped as a key, not an id, defined once among the files documents read (`reached`), and read as an anchor no other label is.
 
-    Every `\\label` of every scanned file is counted, so a label a draft copied to a new file defines again keys neither; the anchor is folded as the viewer folds it, so `thm:main` and `Thm-Main` would share one and key nothing.
+    Every `\\label` of every file a document reads is counted, so a label a draft copied to a new document defines again keys neither, while a backup or a fragment no document reads changes no key; the anchor is folded as the viewer folds it, so `thm:main` and `Thm-Main` would share one and key nothing.
     """
     counts: Counter[str] = Counter()
-    for src in files.values():
-        if not src.ignored:
+    for path, src in files.items():
+        if not src.ignored and path in reached:
             counts.update(lab for lab, _ in labels_in(src.clean, [(0, len(src.clean))]))
     anchors = Counter(_anchor(lab) for lab in counts)
     return {
@@ -434,8 +436,9 @@ def _statement_nodes(
     masters: list[str],
     conflicted: dict[str, list[str]],
     keyable: set[str],
+    reached: set[str],
 ) -> None:
-    """Each theorem-like environment's node: keyed by its id; else, in the person's own files, by its first label where that label keys (`_keyable_labels`); else by its place, `FILE#ENV:N`, N counting every statement of that name in the file, so a label given or taken renumbers nothing."""
+    """Each theorem-like environment's node: keyed by its id; else, in the person's own files a document reads (`reached`), by its first label where that label keys (`_keyable_labels`); else by its place, `FILE#ENV:N`, N counting every statement of that name in the file, so a label given or taken renumbers nothing."""
     for path, fe in asm.envs.items():
         src = files[path]
         counts: dict[str, int] = {}
@@ -451,7 +454,7 @@ def _statement_nodes(
                 node_id = None  # demoted: the placeholder holds the id and claims every label; this record claims none
             place = f"{path}#{env.name}:{counts[env.name]}"
             # an agent's copy and a digest keep what they key by: their labels are loom's, made for them
-            own_file = path not in asm.digest_files and not path.startswith(f"{LOOM}/")
+            own_file = path in reached and path not in asm.digest_files and not path.startswith(f"{LOOM}/")
             by_label = first if node_id is None and conflict_of is None and own_file and first in keyable else None
             key = node_id or by_label or place
             if key != place:

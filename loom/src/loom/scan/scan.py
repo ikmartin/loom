@@ -101,10 +101,10 @@ class ScanResult:
 
     @cached_property
     def shared_labels(self) -> dict[str, list[NodeRec]]:
-        """Each label two or more statements carry, with those statements in file order: a label a draft copied to a new file defines again, which keys neither (`nodes._keyable_labels`)."""
+        """Each label two or more statements of files a document reads carry, with those statements in file order: a label a draft copied to a new document defines again, which keys neither (`nodes._keyable_labels`); a statement in a file no document reads is no record's, as everywhere (`docs/design/writes.md`)."""
         out: dict[str, list[NodeRec]] = {}
         for n in sorted(self.assembly.nodes.values(), key=lambda n: (n.file, n.start)):
-            if n.kind == "environment":
+            if n.kind == "environment" and n.reached_by:
                 for label in set(n.labels):
                     out.setdefault(label, []).append(n)
         return {label: found for label, found in out.items() if len(found) > 1}

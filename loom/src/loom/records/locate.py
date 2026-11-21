@@ -176,16 +176,20 @@ def follow(
             # a label two statements carry, a draft copied to a new file: a record about a place is the one in the document it was written in, else on none
             documents = {result.current_document(d) or d for d in (context or {}).get("documents") or []}
             mine = [n for n in shared if documents & set(n.reached_by)]
-            if len(mine) > 1 and context:
-                # the document holds it twice (LaTeX warns of it): the one holding more of its recorded neighbours than any other, with none against it
-                sides = [(_sides(result, n, context), n) for n in mine]
-                best = max(held for (held, _), _ in sides)
-                mine = [n for (held, against), n in sides if held == best and not against] if best else []
+            if len(mine) > 1:
+                # the document holds it twice (LaTeX warns of it): the one its recorded neighbours stand by most, more holding than saying it is not, and where two tie, the one holding the record's very text
+                score = {id(n): (lambda s: s[0] - s[1])(_sides(result, n, context or {})) for n in mine}
+                best = max(score.values())
+                top = [n for n in mine if score[id(n)] == best]
+                mine = top if len(top) == 1 else [n for n in top if block_hash(result, n.key) == want]
             return mine[0] if len(mine) == 1 else None
         holder = result.nodes.get(result.assembly.labels.get(label, ""))
         if holder is not None and holder.kind == "environment":
             # the label stays on its statement, which an id now keys: the key names that statement, or its proof at the same place
             node = holder if key == label else _proof_at(result, holder, key)
+            if node is None:
+                # the label went to a statement with no proof there: the proof's record goes with its text
+                return _by_place(result, key, None, want, edit=edit, near=near, quote=quote, context=context or {})
         else:
             # the label renamed or deleted: the record goes with its text, as a place's does
             return _by_place(result, key, None, want, edit=edit, near=near, quote=quote, context=context or {})

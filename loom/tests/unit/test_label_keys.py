@@ -215,3 +215,52 @@ def test_a_suggested_edit_on_a_statement_s_place_is_kept_on_it_once_a_label_keys
     edit(q / NOTES, "\\begin{lemma}\nAn unlabelled", "\\begin{lemma}\\label{lem:gadgets}\nAn unlabelled")
     ok("changes", "--keep", edit_id, cwd=q)
     assert "which stays put." in (q / NOTES).read_text(encoding="utf-8")
+
+
+# ---- after the review ------------------------------------------------------------------------------------------
+
+
+def test_a_proof_s_note_stays_on_it_when_its_statement_s_label_moves_to_one_with_no_proof(q: Path) -> None:
+    """The proof's text never changed; the label's new statement has no proof, so the note goes with its text (K-1)."""
+    ann = note(q, "lem:first/proof", "--quote", "holds a point")
+    edit(q / NOTES, "\\begin{lemma}\\label{lem:first}\n", "\\begin{lemma}\n")
+    edit(q / NOTES, "\\begin{lemma}\nAn unlabelled", "\\begin{lemma}\\label{lem:first}\nAn unlabelled")
+    assert on(q, ann) == f"{NOTES}#lemma:1/proof"
+
+
+def test_a_label_repeated_just_above_keeps_the_note_on_the_statement_holding_its_text(q: Path) -> None:
+    """Both copies sit between like neighbours; the one holding the note's very text decides (K-2)."""
+    ann = note(q, "lem:first", "--quote", "never empty")
+    edit(
+        q / NOTES,
+        "\\section{Labelled}\n",
+        "\\section{Labelled}\n\\begin{lemma}\\label{lem:first}\nAnother lemma under the same label.\n\\end{lemma}\n",
+    )
+    assert on(q, ann) == f"{NOTES}#lemma:2"
+
+
+def test_a_file_no_document_reads_changes_no_key_and_holds_no_acceptance(q: Path) -> None:
+    """A backup holding a copy of the statements: the paper's labels still key them, and the acceptance stays off the backup (K-3)."""
+    ok("accept", "lem:first", "--as", WHO, "--force", "--yes", cwd=q)
+    (q / "drafting/scratch.tex").write_text(TEXT, encoding="utf-8")
+    r = scanned(q)
+    assert "lem:first" in r.nodes and "drafting/scratch.tex#lemma:1" in r.nodes
+    keys = json_of("status", "--json", cwd=q)["keys"]
+    assert keys["lem:first"]["state"] == "accepted"
+    assert keys.get("drafting/scratch.tex#lemma:1", {}).get("state") != "accepted"
+
+
+def test_accept_refuses_a_region_key(q: Path) -> None:
+    from tests.helpers import refused
+
+    refused(
+        "accept",
+        "thm:second#eq:finite",
+        "--as",
+        WHO,
+        "--force",
+        "--yes",
+        cwd=q,
+        code=2,
+        match="is not a statement or proof key",
+    )

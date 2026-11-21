@@ -286,8 +286,8 @@ def accept(
     for k in keys:
         key = resolve_key(result, k)
         require_text(result, key)
-        n = result.nodes[key]
-        if n.kind not in ("environment", "proof"):
+        n = result.nodes.get(key)
+        if n is None or n.kind not in ("environment", "proof"):
             raise EnvError(f"{key} is not a statement or proof key")
         if n.derived_of:
             raise EnvError(
