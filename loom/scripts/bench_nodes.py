@@ -175,7 +175,7 @@ def phase(name: str, root: Path, repeat: int) -> dict[str, Any]:
     from loom.library.checks import check
     from loom.library.index import NodeIndex
     from loom.library.node import Node
-    from loom.library.store import write_node
+    from loom.library.store import write_node, write_nodes
     from loom.paths import LIBRARY_NODES, NODE_INDEX
 
     out: dict[str, Any] = {}
@@ -257,6 +257,20 @@ def phase(name: str, root: Path, repeat: int) -> dict[str, Any]:
             out["files read when nothing changed"] = done.read
         fresh = Node(id="tq-ZZZ0", taxon="remark", source=f"{ref}", pages="9", body="A new remark on compact sets.\n")
         out["write one node (checked, locked, indexed) ms"], _ = timed(lambda: write_node(root, fresh), repeat)
+        sixty = [
+            Node(
+                id=f"tq-ZZ{i:02d}",
+                taxon="lemma",
+                source=f"{ref}",
+                number=f"99.{i}",
+                uses=(f"tq-ZZ{i + 1:02d}",) if i < 59 else (),
+                body=f"Lemma {i} on compact sets.\n",
+            )
+            for i in range(60)
+        ]
+        out["write sixty nodes pointing at each other in one act ms"], _ = timed(
+            lambda: write_nodes(root, sixty), repeat
+        )
     elif name == "check":
         out["check the whole store ms"], diags = timed(lambda: check(root), max(1, repeat // 2))
         out["check failures"] = len(diags)

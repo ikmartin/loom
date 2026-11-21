@@ -199,6 +199,8 @@ class NodeIndex:
         self.root = root
         self.db = db
         self._works: dict[str, str] = {}
+        #: Temporary files of writers the last look at the folder found, which a writer holding the library's lock removes.
+        self.leftovers: list[str] = []
 
     # ---- making and keeping ------------------------------------------------------------------------------------------
 
@@ -326,7 +328,7 @@ class NodeIndex:
             What was read and changed.
         """
         started = time.time_ns()
-        present = _scan(self.root / LIBRARY_NODES)
+        present, self.leftovers = _scan(self.root / LIBRARY_NODES)
         if self._unchanged(present):
             return Refreshed(0, 0, 0, False, self.generation())
         return self._update(present, started, None)
@@ -932,15 +934,18 @@ def _stamp(st: os.stat_result) -> tuple[int, int, int, int]:
     return (st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
 
 
-def _scan(folder: Path) -> dict[str, os.stat_result]:
-    """Each node file directly in `folder`, by name, with its `stat`; empty when there is no folder."""
+def _scan(folder: Path) -> tuple[dict[str, os.stat_result], list[str]]:
+    """Each node file directly in `folder`, by name, with its `stat`, and the names of writers' temporary files (`.<name>.node.<pid>.tmp`); empty when there is no folder."""
     present: dict[str, os.stat_result] = {}
+    leftovers: list[str] = []
     with contextlib.suppress(FileNotFoundError, NotADirectoryError):
         with os.scandir(folder) as entries:
             for entry in entries:
                 if entry.name.endswith(SUFFIX) and entry.is_file():
                     present[entry.name] = entry.stat()
-    return present
+                elif entry.name.startswith(".") and entry.name.endswith(".tmp") and SUFFIX + "." in entry.name:
+                    leftovers.append(entry.name)
+    return present, leftovers
 
 
 def _row(record: Any) -> Row:

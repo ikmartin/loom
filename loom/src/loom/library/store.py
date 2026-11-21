@@ -1,6 +1,6 @@
 """The library's folder of nodes, `.loom/library/nodes/`: reading one node, and writing or removing one.
 
-A write is checked first, the file against itself and against the store as the index holds it, and refused with every failure (`NodeRefused`), so loom never writes a file the checks would report. What a write breaks in other files, an anchor another body points at among them, is not refused: it is reported when those files are checked. A write holds the library's lock, so two writers see each other's nodes, and lands by renaming a whole file into place.
+A write is of one node or several at once, checked first as a whole: each file against itself, the rest of the batch and the store as the index holds it, so two new results that point at each other go in together; and refused whole with every failure (`NodeRefused`), so loom never writes a file the checks would report. What a write breaks in other files, an anchor another body points at among them, is not refused: it is reported when those files are checked. A write holds the library's lock and looks at the folder once, removing the temporary files of writers killed midway; each file is flushed to the disk and renamed into place, or with `new` linked into a place nothing holds, so two writers of one new id never both win. Every function here takes an id only once the grammar of §3 says it is one, and reads a file only by its exact name, so neither a path nor an id in the wrong case reaches a file it does not name.
 """
 
 from __future__ import annotations
@@ -8,13 +8,15 @@ from __future__ import annotations
 import contextlib
 import os
 import re
+from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from loom.library import ids
+from loom.library.body import entry_of, labels
 from loom.library.checks import check_file, diagnostics
 from loom.library.index import NodeIndex
-from loom.library.node import SUFFIX, Node, Problem, file_name, node_bytes, node_hash, read_node
+from loom.library.node import SUFFIX, Node, NodeUnreadable, Problem, file_name, node_bytes, node_hash, read_node
 from loom.locks import locked
 from loom.paths import ANNOTATION_LOG, LEDGER, LIBRARY_LOCK, LIBRARY_NODES, TAG_LOG
 from loom.scan.alloc import git_mentions, visible_locals
@@ -47,15 +49,22 @@ def node_ids(root: Path) -> list[str]:
         return []
 
 
+def exists(root: Path, node_id: str) -> bool:
+    """Whether the library holds a file named exactly `node_id`: an id in another case, on a file system blind to case, is not it."""
+    if ids.parse_id(node_id) is None or not (folder(root) / file_name(node_id)).is_file():
+        return False
+    return file_name(node_id) in os.listdir(folder(root))
+
+
 def read(root: Path, node_id: str) -> Node | None:
-    """The node `node_id` read from its file, or None when the library has no such file.
+    """The node `node_id` read from its file, or None when the library has no file of exactly that name.
 
     Parameters
     ----------
     root : Path
         The quilt.
     node_id : str
-        The node's id.
+        The node's id; anything the grammar of §3 does not make one reads as absent.
 
     Returns
     -------
@@ -67,11 +76,47 @@ def read(root: Path, node_id: str) -> Node | None:
     NodeUnreadable
         When the file fails a check reading it takes.
     """
+    if ids.parse_id(node_id) is None:
+        return None
     try:
         data = (folder(root) / file_name(node_id)).read_bytes()
     except FileNotFoundError:
         return None
-    return read_node(data, file_name(node_id))
+    try:
+        return read_node(data, file_name(node_id))
+    except NodeUnreadable:
+        # on a file system blind to case, `TQ-0003` opens `tq-0003.node`, which is another id's file
+        if not exists(root, node_id):
+            return None
+        raise
+
+
+class _Batch:
+    """A `checks.StoreView` of the store as the index holds it with a batch of nodes over it, which a batch is checked against."""
+
+    def __init__(self, index: NodeIndex, nodes: dict[str, Node]) -> None:
+        self.index = index
+        self.nodes = nodes
+
+    def kind(self, node_id: str) -> str | None:
+        return self.nodes[node_id].kind if node_id in self.nodes else self.index.kind(node_id)
+
+    def empty(self, node_id: str) -> bool:
+        return self.nodes[node_id].empty if node_id in self.nodes else self.index.empty(node_id)
+
+    def anchors(self, node_id: str) -> frozenset[str]:
+        if node_id in self.nodes:
+            return frozenset(p.target for p in labels(self.nodes[node_id].body))
+        return self.index.anchors(node_id)
+
+    def keyed(self, key: str) -> frozenset[str]:
+        folded = key.casefold()
+        here = {
+            n.id
+            for n in self.nodes.values()
+            if n.kind == ids.REFERENCE and (e := entry_of(n.body)) and e.key.casefold() == folded
+        }
+        return frozenset(here | (self.index.keyed(key) - set(self.nodes)))
 
 
 def next_stem(result: ScanResult) -> str:
@@ -116,7 +161,7 @@ def next_proof(root: Path, statement: str) -> str:
     return ids.mint_proof(statement, seen)
 
 
-def write_node(root: Path, node: Node) -> str:
+def write_node(root: Path, node: Node, *, new: bool = False) -> str:
     """Write a node's file, after checking it against itself and the library as it stands.
 
     Parameters
@@ -125,6 +170,8 @@ def write_node(root: Path, node: Node) -> str:
         The quilt.
     node : Node
         The node, new or replacing the file of its id.
+    new : bool, default False
+        Refuse it when the library holds its id already, as a node minted for the first time is written.
 
     Returns
     -------
@@ -138,38 +185,129 @@ def write_node(root: Path, node: Node) -> str:
 
     See Also
     --------
+    write_nodes : several at once, checked together.
     remove_node : take a node's file out.
     """
-    data = node_bytes(node)
-    name = node.file_name
+    return write_nodes(root, [node], new=new)[0]
+
+
+def write_nodes(root: Path, nodes: Iterable[Node], *, new: bool = False) -> list[str]:
+    """Write several nodes' files as one act, checked together: each against itself, the others and the library, so results that point at each other go in at once.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    nodes : iterable of Node
+        The nodes, each new or replacing the file of its id; no id twice.
+    new : bool, default False
+        Refuse any whose id the library holds already.
+
+    Returns
+    -------
+    list of str
+        Each written file's hash, in the order given.
+
+    Raises
+    ------
+    NodeRefused
+        With every failure the files would have; nothing is written.
+    """
+    batch = list(nodes)
+    found: list[Diagnostic] = []
+    data: dict[str, bytes] = {}
+    for node in batch:
+        name = file_name(node.id)
+        problems: list[Problem] = []
+        if ids.parse_id(node.id) is None:
+            problems.append(Problem(3, f"{node.id!r} is not a node's id, as tq-00K3 is."))
+        elif node.id in data:
+            problems.append(Problem(3, f"{name} is written twice in one act."))
+        if len({a for a, _ in node.anchors}) != len(node.anchors):
+            problems.append(Problem(5, f"{name}'s `anchors` gives one anchor two numbers."))
+        try:
+            data[node.id] = node_bytes(node)
+        except UnicodeEncodeError:
+            problems.append(
+                Problem(1, f"{name} holds a character UTF-8 cannot write, such as half of a surrogate pair.")
+            )
+        if problems:
+            found += diagnostics(name if ids.parse_id(node.id) else "?.node", node, problems)
+    if found:
+        raise NodeRefused(found)
     with locked(root / LIBRARY_LOCK):
+        target = folder(root)
         with NodeIndex.open(root) as index:
-            _node, found = check_file(name, data, index)
-            same = index.same_but_case(node.id)
-            if same:
-                found += diagnostics(
-                    name,
-                    node,
-                    [
+            # every writer holds this lock while its temporary file exists, so one seen now is a killed writer's
+            for name in index.leftovers:
+                with contextlib.suppress(OSError):
+                    (target / name).unlink()
+            view = _Batch(index, {n.id: n for n in batch})
+            for node in batch:
+                name = file_name(node.id)
+                _n, said = check_file(name, data[node.id], view)
+                found += said
+                problems = []
+                if same := [x for x in index.same_but_case(node.id) if x not in view.nodes]:
+                    problems.append(
                         Problem(
                             3,
                             f"{name}'s id differs from {', '.join(same)}'s only in case, and a file system blind to case holds one file for both.",
                         )
-                    ],
-                )
+                    )
+                if new and (index.kind(node.id) is not None or (target / name).exists()):
+                    problems.append(
+                        Problem(3, f"{name} is in the library already, and this write makes only new nodes.")
+                    )
+                found += diagnostics(name, node, problems)
             if found:
                 raise NodeRefused(found)
-            target = folder(root)
             target.mkdir(parents=True, exist_ok=True)
-            temporary = target / f".{name}.{os.getpid()}.tmp"
+            for node in batch:
+                _place(target, file_name(node.id), data[node.id], new=new)
+            _flush_folder(target)
+            index.take([file_name(n.id) for n in batch])
+    return [node_hash(data[n.id]) for n in batch]
+
+
+def _place(target: Path, name: str, data: bytes, *, new: bool) -> None:
+    """Write `data` as `target/name` whole: to a temporary file flushed to the disk, then renamed into place, or with `new` linked into a place nothing holds."""
+    temporary = target / f".{name}.{os.getpid()}.tmp"
+    try:
+        with temporary.open("wb") as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        if new:
             try:
-                temporary.write_bytes(data)
-                os.replace(temporary, target / name)
-            finally:
-                with contextlib.suppress(FileNotFoundError):
-                    temporary.unlink()
-            index.take([name])
-    return node_hash(data)
+                os.link(temporary, target / name)
+            except FileExistsError:
+                raise NodeRefused(
+                    diagnostics(
+                        name,
+                        None,
+                        [
+                            Problem(
+                                3, f"{name} was written by another hand meanwhile, and this write makes only new nodes."
+                            )
+                        ],
+                    )
+                ) from None
+        else:
+            os.replace(temporary, target / name)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            temporary.unlink()
+
+
+def _flush_folder(target: Path) -> None:
+    """Flush the folder itself, so the renames are on the disk; a system that cannot is passed over."""
+    with contextlib.suppress(OSError):
+        fd = os.open(target, os.O_RDONLY)
+        try:
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def remove_node(root: Path, node_id: str) -> bool:
@@ -185,11 +323,17 @@ def remove_node(root: Path, node_id: str) -> bool:
     Returns
     -------
     bool
-        Whether there was a file to remove.
+        Whether there was a file of exactly that name to remove.
+
+    Raises
+    ------
+    ValueError
+        When `node_id` is no node's id, which never reaches a path.
     """
+    if ids.parse_id(node_id) is None:
+        raise ValueError(f"{node_id!r} is not a node's id")
     with locked(root / LIBRARY_LOCK):
-        try:
-            (folder(root) / file_name(node_id)).unlink()
-        except FileNotFoundError:
+        if not exists(root, node_id):
             return False
+        (folder(root) / file_name(node_id)).unlink()
     return True
