@@ -212,6 +212,11 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     works = call("library-works", "library-works", {})
     call("library-works.doc", "library-works", {"doc": DOC})
     call("library-works.unchanged", "library-works", {"since": works["gen"]})
+    # where the notes on a stored paper stand on its pages, which the reader draws them from
+    placed = call("library-places", "library-places", {"ref": BELLAMY})
+    call("library-places.page", "library-places", {"ref": BELLAMY, "pages": [2]})
+    call("library-places.unchanged", "library-places", {"ref": BELLAMY, "since": placed["gen"]})
+    call("library-places.no-document", "library-places", {"ref": CORTEZ})
 
     # -- a drop on the quilt that has not said whether loom may use the network (library-views.md Open 36): received, refused, taken again with `online: false`, and undone; and a look-up there
     paper = receive("library-receive", "2209.01234v2.pdf", _pdf("2209.01234v2"), on=unasked)

@@ -125,6 +125,34 @@ def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     return {"ok": True, "result": f"{len(rows)} works", "gen": gen, "works": rows}
 
 
+def _library_places(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-places` (library-views.md §3.3): where each annotation on a work's stored PDF stands on its pages, for the reader to draw; `pages` limits it to those; `since` is answered `unchanged` while the work's PDF and the annotation log stand."""
+    from loom.library.places import PlacesRefused, places
+
+    ref = _str(body, "ref", required=True) or ""
+    pages = body.get("pages")
+    if pages is not None and not (
+        isinstance(pages, list) and all(isinstance(p, int) and not isinstance(p, bool) and p > 0 for p in pages)
+    ):
+        raise ApiError("bad-field", "pages is a list of page numbers, from 1")
+    since = body.get("since")
+    if since is not None and (not isinstance(since, int) or isinstance(since, bool)):
+        raise ApiError("bad-field", "since is the gen of an earlier answer, a number")
+    try:
+        found = places(_scan(root), ref, pages)
+    except PlacesRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
+    if since == found.gen:
+        return {"ok": True, "result": "unchanged", "gen": found.gen, "unchanged": True}
+    return {
+        "ok": True,
+        "result": f"{len(found.places)} placed",
+        "gen": found.gen,
+        "pdf": found.pdf,
+        "places": found.places,
+    }
+
+
 def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     """The person's acts on one work (library-views.md §3.1, §7): `library-look-up`, `library-entry`, `library-delete` and `library-restore`; the author's."""
     from loom.library.acts import ActRefused, delete, edit_entry, look_up, restore
@@ -294,6 +322,7 @@ HANDLERS: dict[str, Handler] = {
     "library-look-up": _library_act,
     "library-entry": _library_act,
     "library-works": plain(_library_works),
+    "library-places": plain(_library_places),
     "library-receive": plain(_library_receive),
     "library-take": _intake,
     "library-answer": _intake,
@@ -303,7 +332,7 @@ HANDLERS: dict[str, Handler] = {
     "locate": plain(_locate),
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
-READS: tuple[str, ...] = ("locate", "library-works")
+READS: tuple[str, ...] = ("locate", "library-works", "library-places")
 #: The ones the publisher does not rebuild after: the reads, a file received and not yet taken, and the upgrade, after which a waiting publisher builds as it starts (`ServeSession.bring_forward`).
 NO_REBUILD: tuple[str, ...] = (*READS, "library-receive", "library-upgrade")
 #: The ones that change records alone, so the publication builds from the last scan.

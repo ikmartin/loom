@@ -20,6 +20,24 @@ from tests.unit.render.write_api._cases import (
 )
 
 
+@case("library-places")
+def _library_places(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    s = serve(showcase(tmp_path))
+    builds = s.builds
+    said = succeeds(s, "library-places", {"ref": "sh-0403-ref"})
+    assert said["pdf"].startswith("sha256:") and said["places"] and isinstance(said["gen"], int), said
+    assert all(set(p) == {"annotation", "page", "rects"} for p in said["places"])
+    two = succeeds(s, "library-places", {"ref": "sh-0403-ref", "pages": [2]})
+    assert {p["page"] for p in two["places"]} == {2}
+    assert succeeds(s, "library-places", {"ref": "sh-0403-ref", "since": said["gen"]})["unchanged"] is True
+    # a read publishes nothing
+    assert s.builds == builds
+    refuses(s, "library-places", {"ref": "sh-0404-ref"}, 409, "no-document", "holds no PDF")
+    refuses(s, "library-places", {"ref": "sh-0ZZZ-ref"}, 404, "no-such-ref", "no work")
+    refuses(s, "library-places", {"ref": "sh-0403-ref", "pages": [0]}, 400, "bad-field", "page numbers")
+    refuses(s, "library-places", {}, 400, "missing-field", "ref")
+
+
 @case("locate")
 def _locate(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s = serve(showcase(tmp_path))
