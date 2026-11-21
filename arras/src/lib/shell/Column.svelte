@@ -16,6 +16,7 @@
 	import WebColumn from './column/web/WebColumn.svelte';
 	import { wb } from '$lib/views/web/state.svelte';
 	import { docsState } from '$lib/views/docs/docs.svelte';
+	import { served } from '$lib/library/served.svelte';
 	import Picker from '$lib/views/docs/Picker.svelte';
 	import FormalizePanel from '$lib/formalize/FormalizePanel.svelte';
 	import { formalize } from '$lib/formalize/state.svelte';
@@ -235,7 +236,7 @@
 						{#if docsState.served}
 							<div class="colbtns">
 								<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>
-								<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>
+								{#if served.has('notes')}<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>{/if}
 							</div>
 						{/if}
 					</div>

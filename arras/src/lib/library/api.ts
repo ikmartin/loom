@@ -5,6 +5,7 @@ import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { discardChanges, keepChanges, type ChangeAnswer } from '$lib/review/history.svelte';
+import { library as libraryWords } from '$lib/words/library';
 import type { FormalMarks, FormalPlan, NotesAnswer, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
 
 export interface ApiError {
@@ -125,7 +126,17 @@ export const call = async <T extends Gen>(name: string, body: Record<string, unk
 
 const since = (s?: number) => (s === undefined ? {} : { since: s });
 export const works = (doc?: string, s?: number) => call<WorksAnswer>('library-works', { ...(doc ? { doc } : {}), ...since(s) });
-export const work = (ref: string, s?: number) => call<WorkAnswer>('library-work', { ref, ...since(s) });
+/** What a work's tab says when its work has left the library. */
+const gone = libraryWords.works.gone;
+/** A work's tab: `library-work` where it is served; else the work's row of the list, with no outline, since nothing reads a work's results yet (phase 3), so its tab still opens its paper. */
+export const work = async (ref: string, s?: number): Promise<Answer<WorkAnswer>> => {
+	if (await serves('library-work')) return call<WorkAnswer>('library-work', { ref, ...since(s) });
+	const all = await works();
+	if (!all.ok) return all;
+	const w = all.value.works.find((x) => x.ref === ref);
+	if (!w) return { ok: false, error: { code: 'no-such-ref', message: gone } };
+	return { ok: true, value: { gen: all.value.gen, ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, holds: { pdf: w.holds.pdf, pages: null, tex: w.holds.tex }, entry: '', link: w.link, outline: null, marks: [], unplaced: [] } };
+};
 export const digestScopes = (target: { ref: string } | { all: true }, s?: number) => call<DigestScopes>('library-digest-scopes', { ...target, ...since(s) });
 export const places = (target: { ref: string; pages: number[] } | { node: string }, s?: number) => call<PlacesAnswer>('library-places', { ...target, ...since(s) });
 export const node = (target: { node: string; brief?: boolean } | { ref: string; item: string }, s?: number) => call<NodeAnswer>('library-node', { ...target, ...since(s) });

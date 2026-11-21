@@ -10,6 +10,7 @@
 	import { COLUMNS, lib, type Column } from './state.svelte';
 	import { menus } from './menus.svelte';
 	import DigestMenu from './DigestMenu.svelte';
+	import { served } from '$lib/library/served.svelte';
 
 	let { works }: { works: Work[] } = $props();
 
@@ -108,10 +109,10 @@
 						{/if}
 					{/each}
 					<td class="act">
-						<span class="menuwrap">
+						{#if served.has('library-digest')}<span class="menuwrap">
 							<button type="button" class="ctl" onclick={(e) => { e.stopPropagation(); menus.toggle(`row:${w.ref}`); }} data-testid="row-digest">{words.works.digest}</button>
 							{#if menus.open === `row:${w.ref}`}<DigestMenu target={w} />{/if}
-						</span>
+						</span>{/if}
 						<span class="menuwrap">
 							<button type="button" class="ctl ib" title={words.works.rowMenu} aria-label={words.works.rowMenu} onclick={(e) => { e.stopPropagation(); menus.toggle(`more:${w.ref}`); }} data-testid="row-more"><span aria-hidden="true">⋯</span></button>
 							{#if menus.open === `more:${w.ref}`}

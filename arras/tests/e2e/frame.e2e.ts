@@ -158,7 +158,6 @@ test("a quilt an earlier loom made: the frame's head, one sentence and one butto
 	const answers: (() => Promise<void>)[] = [];
 	await page.route('**/_api/library-upgrade', (route) => new Promise<void>((done) => answers.push(() => route.fulfill(next()).then(done))));
 	let next: () => { status: number; json: unknown } = () => ({ status: 409, json: { error: { code: 'format-unknown', message: "this quilt's .loom/format says 7, and this loom reads format 2" } } });
-	await servePapers(page);
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto('/');
 	const old = page.getByTestId('format-old');

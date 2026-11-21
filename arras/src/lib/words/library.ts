@@ -43,6 +43,8 @@ export const library = {
 		locate: 'locate in PDF',
 		/** The outline of a work of which loom has a PDF and no outline, and nothing digested. */
 		nothingDigested: 'No results digested yet.',
+		/** A work's outline in the column while nothing reads a work's results: said, rather than drawing nothing. */
+		notReadYet: "Loom does not read a work's sections and results yet, so its outline is empty. The paper opens here as it is.",
 		/** The outline while the survey of a TeX source is still being read. */
 		reading: 'Reading the TeX source…',
 		/** The button under the outline that digests what was ticked. */
@@ -51,6 +53,8 @@ export const library = {
 		cancel: 'cancel'
 	},
 	works: {
+		/** A work's tab when the work has left the library since it was opened. */
+		gone: 'This work is no longer in the library.',
 		/** The search over the list of works. */
 		search: 'find a work by title or author',
 		/** Beside the search while it narrows the list. */

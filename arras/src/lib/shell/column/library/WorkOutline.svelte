@@ -127,6 +127,8 @@
 		</ul>
 		<div class="small grey pad">{words.column.notRead} · <button type="button" class="linkish small" onclick={() => void locate()} data-testid="locate-in-pdf">{words.column.locate}</button></div>
 	{/if}
+{:else}
+	<p class="small grey pad" data-testid="outline-not-read">{words.column.notReadYet}</p>
 {/if}
 
 <style>

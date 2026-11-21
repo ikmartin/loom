@@ -11,13 +11,14 @@
 	import MarkedDoc from '$lib/pdf/MarkedDoc.svelte';
 	import PdfBar from '$lib/pdf/PdfBar.svelte';
 	import { paperPlace } from '$lib/pdf/place.svelte';
+	import { served } from '$lib/library/served.svelte';
 	import { message } from '$lib/shell/message.svelte';
 	import { library as words } from '$lib/words/library';
 	import { lib } from './state.svelte';
 	import { menus } from './menus.svelte';
 
 	let { work, beside = false }: { work: WorkAnswer; /** Beside a draft in Docs: the reader without the digest marks or their menu. */ beside?: boolean } = $props();
-	const marks = $derived(!beside && lib.overlay);
+	const marks = $derived(!beside && lib.overlay && served.has('library-places'));
 
 	const ref = $derived(work.ref);
 	const url = $derived(work.holds.pdf ? api.pdfUrl(work.holds.pdf) : '');
@@ -105,14 +106,15 @@
 	{#if !beside}<div class="tb">
 		<PdfBar view={reader.view} notes={reader.notes} {desk} of={work.short} part="read" writes={desk.writes} />
 		<span class="grow"></span>
-		<span class="menuwrap">
+		<!-- the digest marks where the source serves their places -->
+		{#if served.has('library-places')}<span class="menuwrap">
 			<button type="button" class="btn quiet" aria-expanded={menus.open === `view:${ref}`} onclick={() => menus.toggle(`view:${ref}`)} data-testid="reader-view">{words.reader.view}</button>
 			{#if menus.open === `view:${ref}`}
 				<div class="menu viewmenu">
 					<button type="button" class="mi" role="menuitemcheckbox" aria-checked={lib.overlay} onclick={() => (lib.overlay = !lib.overlay)} data-testid="overlay-toggle"><span class="chk">{lib.overlay ? '✓' : ''}</span>{words.reader.overlay}</button>
 				</div>
 			{/if}
-		</span>
+		</span>{/if}
 	</div>{/if}
 	<div class="doc">
 		<MarkedDoc
@@ -135,9 +137,10 @@
 		/>
 		{#if offered}
 			<div class="selpop" style:left="{offered.at.left}px" style:top="{offered.at.top + offered.at.height + 8}px" data-testid="selection-popup">
-				<button type="button" class="pri" onclick={() => void mark()} data-testid="mark-to-digest"><Mark kind="marked" size={11} /> {words.reader.mark}</button>
+				<!-- marking to digest and asking an agent where the source serves digesting and asking -->
+				{#if served.has('library-digest')}<button type="button" class="pri" onclick={() => void mark()} data-testid="mark-to-digest"><Mark kind="marked" size={11} /> {words.reader.mark}</button>{/if}
 				<button type="button" onclick={() => void highlight()}>{words.reader.highlight}</button>
-				<button type="button" onclick={() => (asking = !asking)}>{words.reader.ask}</button>
+				{#if served.has('review-task')}<button type="button" onclick={() => (asking = !asking)}>{words.reader.ask}</button>{/if}
 				{#if asking}
 					<form class="askrow" onsubmit={(e) => void ask(e)}>
 						<input class="search" type="text" bind:value={question} placeholder={words.reader.askPlaceholder} aria-label={words.reader.askPlaceholder} use:focused data-testid="ask-field" />

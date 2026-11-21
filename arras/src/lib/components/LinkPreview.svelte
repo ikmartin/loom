@@ -63,6 +63,9 @@
 		cited = null;
 	}
 
+	/** What a hover is over: a link, or a citation naming a target, which the publisher draws as text with no link (`dialect.md`). */
+	const hovered = (el: Element | null): Element | null => el?.closest?.('a') ?? el?.closest?.('span.cite[data-target]') ?? null;
+
 	/** The library node a hovered citation names, where the library's reads are served and the manifest has no item by that name. */
 	function libraryCite(a: Element): string | null {
 		const named = a.closest<HTMLElement>('span.cite[data-target]')?.dataset.target;
@@ -131,7 +134,7 @@
 				clearTimeout(hideTimer);
 				return;
 			}
-			const a = el?.closest?.('a') ?? null;
+			const a = hovered(el);
 			if (!a || a === pending) return;
 			if (a === anchor) {
 				clearTimeout(hideTimer);
@@ -151,7 +154,7 @@
 		const out = (e: MouseEvent) => {
 			const from = e.target as Element | null;
 			const to = e.relatedTarget as Node | null;
-			const fromLink = from?.closest?.('a');
+			const fromLink = hovered(from);
 			if (pending && fromLink === pending && !(to && pending.contains(to))) {
 				clearTimeout(showTimer);
 				pending = null;

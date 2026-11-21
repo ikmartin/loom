@@ -7,6 +7,7 @@
 	import { shown } from './works';
 	import AddWorkPanel from './AddWorkPanel.svelte';
 	import DigestMenu from './DigestMenu.svelte';
+	import { served } from '$lib/library/served.svelte';
 	import WorksTable from './WorksTable.svelte';
 	import WorksThumbs from './WorksThumbs.svelte';
 
@@ -39,10 +40,11 @@
 			<button type="button" class="btn" aria-expanded={menus.open === 'add'} data-testid="add-work" onclick={() => menus.toggle('add')}>{words.works.add}</button>
 			{#if menus.open === 'add'}<div class="menu addpanel" data-testid="add-panel"><AddWorkPanel /></div>{/if}
 		</span>
-		<span class="menuwrap">
+		<!-- digesting is offered where the source serves it -->
+		{#if served.has('library-digest')}<span class="menuwrap">
 			<button type="button" class="btn" aria-expanded={menus.open === 'all'} data-testid="digest-all" onclick={() => menus.toggle('all')}>{words.works.digest}</button>
 			{#if menus.open === 'all'}<DigestMenu target="all" />{/if}
-		</span>
+		</span>{/if}
 	</div>
 	{#if lib.layout === 'thumbs'}
 		<WorksThumbs works={list} />

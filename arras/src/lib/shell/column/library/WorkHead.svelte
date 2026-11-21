@@ -3,6 +3,7 @@
 	import type { WorkAnswer } from '$lib/library/types';
 	import { menus } from '$lib/views/library/menus.svelte';
 	import DigestMenu from '$lib/views/library/DigestMenu.svelte';
+	import { served } from '$lib/library/served.svelte';
 	import { library as words } from '$lib/words/library';
 
 	let { work }: { work: WorkAnswer } = $props();
@@ -13,9 +14,10 @@
 </script>
 
 <div class="wk-title" data-testid="work-title">{work.title}</div>
-<div class="wk-meta">{meta} · <button type="button" class="linkish" aria-expanded={entry} onclick={() => (entry = !entry)} data-testid="work-entry">{words.column.entry} {entry ? '▾' : '▸'}</button></div>
+<!-- the entry's fold where the work's read gives the entry -->
+<div class="wk-meta">{meta}{#if work.entry} · <button type="button" class="linkish" aria-expanded={entry} onclick={() => (entry = !entry)} data-testid="work-entry">{words.column.entry} {entry ? '▾' : '▸'}</button>{/if}</div>
 {#if entry}<pre class="entry">{work.entry}</pre>{/if}
-{#if work.holds.pdf || work.holds.tex}
+{#if (work.holds.pdf || work.holds.tex) && served.has('library-digest')}
 	<span class="menuwrap">
 		<button type="button" class="btn" aria-expanded={menus.open === `work:${work.ref}`} onclick={() => menus.toggle(`work:${work.ref}`)} data-testid="work-digest">{words.works.digest}</button>
 		{#if menus.open === `work:${work.ref}`}<DigestMenu target={work} left />{/if}

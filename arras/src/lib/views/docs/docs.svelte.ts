@@ -4,7 +4,7 @@ import * as api from '$lib/library/api';
 
 class DocsState {
 	picker = $state(false);
-	/** Whether the source serves the library's reads; where it does not, Docs' column keeps today's Library shelf. */
+	/** Whether the source serves the library's works list; where it does not, Docs' column offers no Library button. */
 	served = $state<boolean | null>(null);
 	#asked = false;
 

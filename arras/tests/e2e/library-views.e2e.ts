@@ -1,9 +1,9 @@
 // The Library view on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/`), as the author settled it (`docs/design/mockups/library-round-6/`): the list of works and its thumbnails, adding a work, the digest menus, a work's tab with its outline, the result beside its page and the digest marks, deleting with undo; and the rules that hold everywhere: no control but the four view names changes view, no id is drawn, and nothing is asked for before it is shown.
 import { expect, test, type Page, type Request } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { paperBytes } from '../../src/lib/library/fixtures/paper';
 
-/** One of the showcase quilt's stored papers, as a file the person drops on the intake. */
-const PAPER = readFileSync('../loom/tests/quilts/showcase/.loom/library/storage/arxiv/2504.01234v1/paper.pdf');
+/** A paper of two pages, as a file the person drops on the intake. */
+const PAPER = Buffer.from(paperBytes(2));
 
 async function open(page: Page): Promise<Request[]> {
 	const asked: Request[] = [];
