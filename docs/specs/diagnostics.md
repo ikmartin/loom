@@ -96,7 +96,7 @@ Arras displays this diagnostic on the block with a link to its row in a working-
 
 Review:
 
-- `loom:retired-ledger-key` (info, model): a ledger row whose key no longer exists.
+- `loom:retired-ledger-key` (info, model): a ledger row whose key no longer exists and whose text no block holds either (a row on a key named by place goes with its text, `records.store.Records.placed`).
 - `loom:detached-annotation` (info, model): annotations whose selectors no longer match, with a count per key.
 - `loom:previous-key-match` (info, model): an acceptance row matches the text of a differently keyed proof.
 - `loom:foreign-annotations` (warning, internal): a line of `.loom/records/annotations/log.jsonl` that is not a review event, or of `.loom/records/edits/log.jsonl` that is not a suggested edit's; it is skipped and the rest of the log still loads.

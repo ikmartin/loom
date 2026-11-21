@@ -3,6 +3,7 @@
 // Nothing here reads a type's id to decide anything: a type's `open`, `notes` and look do.
 
 import type { Annotation, AnnotationType, Look, Manifest, PendingChange } from '$lib/manifest/types';
+import { placeUrl } from '$lib/nav';
 import { keyName } from '$lib/workspace/names';
 import { ui } from '$lib/ui.svelte';
 import { COLORS, STYLES, typeOf } from './annotationTypes';
@@ -202,6 +203,10 @@ export class Annotating {
 	tool = $state<Tool>(null);
 	/** The top-level annotations and the pending changes read here, by id, in reading order: those with a mark in the order their first marks stand, then those on the whole document and the changes drawn nowhere. The fragment sets it as it wires. */
 	order = $state<string[]>([]);
+	/** The top-level notes written in this document that are on no block now, by id: listed apart, after everything in `order`, and opened beside their card. The fragment sets it as it wires. */
+	apart = $state<string[]>([]);
+	/** A note on no block a link asked for: its popup opens beside its card once the list shows it. */
+	reveal = $state<string | null>(null);
 	/** The annotation or change whose popup is open, or null. */
 	open = $state<string | null>(null);
 	/** What the list and the stepper go through. */
@@ -224,6 +229,8 @@ export class Annotating {
 	show: (id: string) => boolean = () => false;
 	/** Close the popup; registered by the fragment. */
 	close: () => void = () => {};
+	/** Open annotation `id`'s popup beside `trigger`, for a note with no mark in the text, or close it when it is open already; registered by the fragment. */
+	openAt: (trigger: HTMLElement, id: string) => void = () => {};
 }
 
 /**
@@ -342,15 +349,21 @@ export function says(a: Annotation): boolean {
 	return plain(a.body_html) !== '';
 }
 
-/** The document `a` is read in, as Review's To do groups it: the document it names; else, for a key, the document it is, or the first that reaches its node; a cited work's citekey; a project PDF's path. */
+/** The document `a` is read in, as Review's To do groups it: the document it names; else, for a key, the document it is, or the first that reaches its node; a cited work's citekey; a project PDF's path. A note on no block is in the document the manifest gives it (`unplaced[].document`), and a note on a block no document reads under the default document, so no group is ever headed by a bare key. */
 export function documentOf(m: Manifest, a: Annotation): string {
 	if (a.in) return a.in;
 	if (a.target.file) return a.target.file;
 	if (a.target.work) return a.target.work;
 	const key = a.target.key;
+	if (!key) return m.unplaced?.find((u) => u.id === a.id)?.document || defaultDocument(m);
 	if (m.masters.some((x) => x.path === key)) return key;
 	const owner = m.regions?.[key]?.container ?? m.keys[key]?.node ?? key;
-	return m.nodes[owner]?.reached_by?.[0] ?? key;
+	return m.nodes[owner]?.reached_by?.[0] ?? (defaultDocument(m) || key);
+}
+
+/** The quilt's default document, or its first; '' in a quilt with none. */
+function defaultDocument(m: Pick<Manifest, 'masters'>): string {
+	return m.masters.find((d) => d.default)?.path ?? m.masters[0]?.path ?? '';
 }
 
 /**
@@ -371,15 +384,51 @@ export function notesOf(m: Manifest | null | undefined, s: Pick<Annotating, 'ord
 	return s.order.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a && !a.in_reply_to && !!typeOf(m, a)?.notes);
 }
 
-/** How many notes are read here: what the Notes badge on this item's toolbar counts, and what its list holds. */
-export function notesHere(m: Manifest | null | undefined, s: Pick<Annotating, 'order'>): number {
-	return notesOf(m, s).length;
+/** How many notes are read here: what the Notes badge on this item's toolbar counts, and what its list holds, those on no block included. */
+export function notesHere(m: Manifest | null | undefined, s: Pick<Annotating, 'order' | 'apart'>): number {
+	return notesOf(m, s).length + notesApart(m, s).length;
 }
 
-/** Where `a` stands, in the words a reader uses: the page of a PDF or a work, else the key's name. */
+/** What the group of notes on no block is called in a document's lists, and where such a note is said to stand. */
+export const APART = 'On no block now';
+
+/** Whether `a` is on no block: the block it was written on was deleted or changed past telling which it is (`unplaced`), so it names no key. */
+export function isUnplaced(m: Pick<Manifest, 'unplaced'>, a: Annotation): boolean {
+	return !!m.unplaced?.some((u) => u.id === a.id);
+}
+
+/** Why `a` is on no block, in the manifest's own sentence (`unplaced[].why`); '' for a note on a block. */
+export function whyApart(m: Pick<Manifest, 'unplaced'>, a: Annotation): string {
+	return a.target.key ? '' : (m.unplaced?.find((u) => u.id === a.id)?.why ?? '');
+}
+
+/** The notes on no block written in this document that the Comments list shows, under its filter: `apart`, after everything in `order`. */
+export function apartOf(m: Manifest | null | undefined, s: Pick<Annotating, 'apart' | 'hidden' | 'todo' | 'layer'>, showSettled = ui.showSettled): Annotation[] {
+	if (!m || s.layer === 'changes') return [];
+	return s.apart.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a && passes(m, a, s, showSettled));
+}
+
+/** The notes on no block written in this document whose type is listed in Notes, which its Notes list shows apart at its end. */
+export function notesApart(m: Manifest | null | undefined, s: Pick<Annotating, 'apart'>): Annotation[] {
+	if (!m) return [];
+	return s.apart.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a && !a.in_reply_to && !!typeOf(m, a)?.notes);
+}
+
+/** The top-level notes on no block that were written in the document at `path`, by id in the order they were written: what its fragment lists apart. */
+export function apartIn(m: Manifest, path: string): string[] {
+	return (m.unplaced ?? []).map((u) => m.annotations[u.id]).filter((a): a is Annotation => !!a && !a.in_reply_to && documentOf(m, a) === path).map((a) => a.id);
+}
+
+/** Where `a` stands, in the words a reader uses: the page of a PDF or a work, `APART` for a note on no block, else the key's name. */
 export function placeOf(m: Manifest, a: Annotation): string {
 	if (a.target.page) return `page ${a.target.page}`;
+	if (!a.target.key) return APART;
 	return keyName(m, a.target.key);
+}
+
+/** Where a link to `a` opens: its place in the document that reads it (`placeUrl`), or for a note on no block the document it was written in, its popup open beside its card in the list. */
+export function noteUrl(m: Manifest, a: Annotation): string {
+	return placeUrl(m, a.target.key || documentOf(m, a), a.id, a.in);
 }
 
 /** What "Written on earlier words" shows for `a`: the words it was written on and the version to open (`fragment`, '' where none is kept), or null when its words still stand. One carried onto new words when a change was kept names the words it was written on. */

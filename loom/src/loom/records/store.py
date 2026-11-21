@@ -21,6 +21,7 @@ from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, EDIT_LOG, LINKS, REVIEW
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
+from loom.records.locate import block_hash, follow
 from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used
@@ -99,6 +100,8 @@ class ResolvedAnnotation:
     on_changes: list[str] = field(default_factory=list)
     # taken in from a PDF's own annotation that is still in the file as it is now: that annotation's reference
     hides: str | None = None
+    # on no block: its key names one that no longer holds the text it was written on, or none, and nothing says where that text went (`records.locate.follow`); its `target` is '', so nothing downstream names a block for it, and the manifest lists it in `unplaced`
+    unplaced: bool = False
 
 
 def is_document_path(result: ScanResult, path: str) -> bool:
@@ -106,120 +109,67 @@ def is_document_path(result: ScanResult, path: str) -> bool:
     return path.endswith(".tex") and not path.startswith("prose:")
 
 
-#: The scan the block hashes below were read from, and each key's hash; one scan at a time, held as one tuple so that a thread reading it never mixes two scans.
-_BLOCK_HASHES: tuple[ScanResult, dict[str, str]] | None = None
+#: Each scan's placements by annotation id (`placed_key`), with the annotation log's size and time they were read at; one scan at a time.
+_PLACED: tuple[ScanResult, tuple[int, int], dict[str, str | None]] | None = None
 
 
-def _block_hash(result: ScanResult, key: str) -> str:
-    """A block's hash as a record's `against` holds it (`key_hash`), remembered for the scan it was read from."""
-    global _BLOCK_HASHES
-    held = _BLOCK_HASHES
-    if held is None or held[0] is not result:
-        held = _BLOCK_HASHES = (result, {})
-    known = held[1].get(key)
-    if known is None:
-        known = held[1][key] = key_hash(result, key)
-    return known
+def placed_key(result: ScanResult, ann: Annotation) -> str | None:
+    """The key of the block `ann` is shown on now, as `Records.resolved` places it, which may not be the key it was written on; None for one on no block. What a listing names a note by.
 
-
-def written_on(result: ScanResult, key: str, node: NodeRec | None, want: str) -> NodeRec | None:
-    """The block a record on `key` was written on: `node`, the block `key` names now, unless `key` is named by its place in its file and no longer holds the text `want` hashes while exactly one other block of that file does.
-
-    A key named by place (`FILE#proof:3`) names another block once a block is put in before it, so a record goes with the text it was written against wherever that now stands. A labelled key always names its own block, and so does a region inside one. None when `key` is gone and no block of its file holds that text.
-
-    Parameters
-    ----------
-    result : ScanResult
-    key : str
-        The key the record names.
-    node : NodeRec or None
-        The block `key` names now; None when it names none.
-    want : str
-        The record's `against`: the hash of the block's text when it was written; '' moves nothing.
-
-    Returns
-    -------
-    NodeRec or None
+    A note the scan does not know (written since) is named by the key it was written on. What is remembered is kept for one scan and one state of the annotation log, so a note restated by a write since is placed again.
     """
-    if not want or "#" not in key or key in result.assembly.regions:
-        return node
-    if node is not None and _block_hash(result, node.key) == want:
-        return node
-    path = node.file if node is not None else key.split("#", 1)[0]
-    same = [n for n in result.nodes.values() if n.file == path and n is not node and _block_hash(result, n.key) == want]
-    return same[0] if len(same) == 1 else node
+    global _PLACED
+    log = result.quilt.root / ANNOTATION_LOG
+    try:
+        st = log.stat()
+        stamp_ = (st.st_mtime_ns, st.st_size)
+    except OSError:
+        stamp_ = (0, 0)
+    held = _PLACED
+    if held is None or held[0] is not result or held[1] != stamp_:
+        records = Records(result.quilt.root, result.quilt.history_dir)
+        held = _PLACED = (
+            result,
+            stamp_,
+            {
+                r.annotation.id: None if r.unplaced else (r.target or r.annotation.target_key)
+                for r in records.resolved(result)
+            },
+        )
+    return held[2].get(ann.id, ann.target_key)
 
 
-def named_by_place(result: ScanResult, key: str, node: NodeRec | None) -> bool:
-    """Whether `key` names a block by its place in its file (`FILE#proof:3`), which another block takes once one is put in before it.
+def _why_unplaced(result: ScanResult, key: str) -> str:
+    """Why a note on `key` is on no block, as a sentence a viewer shows as it is: its key names nothing, or a block in a file no document reads now, or a block that no longer holds its text."""
+    owner = result.assembly.regions[key].container if key in result.assembly.regions else key
+    node = result.nodes.get(owner)
+    if node is None:
+        return "The block it was written on is gone, and nothing says where its words went."
+    if node.kind not in ("master", "file") and not node.reached_by:
+        return "Its block is in a file no document reads now; it is back on that block once a document reads the file again."
+    return "Its block was deleted, or changed so far that which block it is cannot be told."
 
-    The scan's record of the block decides, not the key's shape: a key made from a label (`FILE#lab`) has a `#` too, and names its own block. A region inside a block is not named by place. A key that names no block now is taken as named by place, the kind that stops naming one.
+
+def written_in(result: ScanResult, ann: Annotation) -> str:
+    """The document a note on no block is listed in and opened from: the one it names (`in`), else the first that read its block's file when it was written and is a document still (`context.documents`), else one that reads the block its key names now, or the document its key is, else the quilt's default document; '' in a quilt with none.
+
+    Every note on no block belongs to exactly one document, so no reader is left without a place to find it.
     """
-    if "#" not in key or key in result.assembly.regions:
-        return False
-    return node is None or key.split("#", 1)[1] not in node.labels
-
-
-def line_before(result: ScanResult, node: NodeRec) -> str:
-    """The last line with words above `node` in its file: what a suggested edit on a key named by place records beside the block's text (`near`), to tell the block from another that reads the same."""
-    source = result.files.get(node.file)
-    if source is None:
-        return ""
-    return source.text[: node.start].rstrip().rsplit("\n", 1)[-1].strip()
-
-
-def alike(result: ScanResult, node: NodeRec) -> list[NodeRec]:
-    """The other blocks of `node`'s file that hold the same text under the same line above: the ones a suggested edit on a key named by place could not be told from (`filed_on`)."""
-    text, above = _block_hash(result, node.key), line_before(result, node)
-    return [
-        n
-        for n in result.nodes.values()
-        if n.file == node.file
-        and n is not node
-        and _block_hash(result, n.key) == text
-        and line_before(result, n) == above
-    ]
-
-
-def filed_on(
-    result: ScanResult, key: str, node: NodeRec | None, want: str, near: str = "", quoted: bool = False
-) -> NodeRec | None:
-    """The block a suggested edit on `key` was filed on, or None when that cannot be told.
-
-    An edit is written into a person's file, so where `written_on` falls back on whatever block the key names now, this answers no block: an edit on a key named by place goes only where the text it was filed on, and the line above it, say.
-
-    Parameters
-    ----------
-    result : ScanResult
-    key : str
-        The key the edit names.
-    node : NodeRec or None
-        The block `key` names now; None when it names none.
-    want : str
-        The edit's `against`: the hash of the block's text when it was filed; '' is no evidence, and the key's block is answered.
-    near : str, default ''
-        The line above the block when the edit was filed (`line_before`); '' for an edit filed before that was recorded.
-    quoted : bool, default False
-        Whether the edit quotes words of the block, which `place` then needs to stand there once.
-
-    Returns
-    -------
-    NodeRec or None
-        For a key not named by place, `node`. Else the one block of the file that holds the text; among several that hold it, the one whose line above is `near`; and when none holds it, the block the key names now only for an edit that quotes words and whose line above still stands there. None otherwise: the edit is unplaced.
-    """
-    if not want or not named_by_place(result, key, node):
-        return node
-    path = node.file if node is not None else key.split("#", 1)[0]
-    same: list[NodeRec] = [n for n in result.nodes.values() if n.file == path and _block_hash(result, n.key) == want]
-    if len(same) == 1:
-        return same[0]
-    if not near:
-        return None
-    if same:
-        under = [n for n in same if line_before(result, n) == near]
-        return under[0] if len(under) == 1 else None
-    # its block has changed: with no words quoted nothing says the block now at its place is the one, and the new text would replace or join a body it was not written for
-    return node if quoted and node is not None and line_before(result, node) == near else None
+    named = [ann.in_doc] if ann.in_doc else []
+    named += [str(d) for d in (ann.context or {}).get("documents") or []]
+    for path in named:
+        found = result.current_document(path)
+        if found:
+            return found
+    key = ann.target_key
+    if key in result.masters:
+        return key
+    owner = result.assembly.regions[key].container if key in result.assembly.regions else key
+    node = result.nodes.get(owner)
+    for path in node.reached_by if node is not None else []:
+        if path in result.masters:
+            return str(path)
+    return result.default_master or (result.masters[0] if result.masters else "")
 
 
 #: Acceptance states by (reviewer, the ledger as read), each kept for the one scan it was computed against; see `Records.key_states`.
@@ -357,6 +307,24 @@ class Records:
         self._previous_key_matches(result, states, current_hashes)
         return states
 
+    def placed(self, result: ScanResult) -> dict[str, AcceptRow]:
+        """The reviewer's latest rows by the key of the block each is on now: a row is a claim about exact text, so it goes with that text as a record does (`records.locate.follow`, with the row's `context`), and is on no block where nothing says which; a row written before `context` was recorded stays on a stable key's block.
+
+        Two rows that land on one block leave it to the one whose text it holds, or whose key it is; neither, and the block has none.
+        """
+        claims: dict[str, list[AcceptRow]] = {}
+        for key, row in self.latest.items():
+            found = follow(result, key, result.nodes.get(key), row.text, context=row.context)
+            if found is not None:
+                claims.setdefault(found.key, []).append(row)
+        out: dict[str, AcceptRow] = {}
+        for key, rows in claims.items():
+            if len(rows) > 1:
+                rows = [r for r in rows if r.text == block_hash(result, key)] or [r for r in rows if r.key == key]
+            if len(rows) == 1:
+                out[key] = rows[0]
+        return out
+
     def _acceptance_states(self, result: ScanResult) -> tuple[dict[str, KeyState], dict[str, str]]:
         """The states and their causes, from the ledger and the scan; and the current hash of every key, which the review facts compare against."""
         states: dict[str, KeyState] = {}
@@ -365,10 +333,11 @@ class Records:
             self._hash_cache = (result, {k: key_hash(result, k) for k, n in result.nodes.items() if n.kind in kinds})
         current_hashes = dict(self._hash_cache[1])
         current_hashes.update({k: hash_text(t) for k, t in result.dependencies.texts.items() if t is not None})
+        placed = self.placed(result)
         for key, n in result.nodes.items():
             if n.kind not in kinds:
                 continue
-            row = (self.shared_latest if n.external else self.latest).get(key)
+            row = (self.shared_latest if n.external else placed).get(key)
             ks = KeyState(key=key, state="draft", row=row)
             if n.kind == "section":
                 # A section is a container, not a claim: no state, and `loom accept` refuses one. It is carried here only so that its review facts are computed, because `loom annotate` accepts a section as a target and an annotation filed on one was stored and then shown nowhere (DR-172).
@@ -527,7 +496,7 @@ class Records:
         for res in self.resolved(result):
             a = res.annotation
             ks = states.get(res.target or a.target_key)
-            if ks is None:
+            if ks is None or res.unplaced:
                 continue
             # what awaits an answer, which is what a count is for: an untyped annotation, or one of a type that only informs, asks nothing
             if a.in_reply_to is None and a.status == "open" and self.opens(a):
@@ -644,13 +613,29 @@ class Records:
                 if n is None:
                     region = result.assembly.regions.get(target)
                     n = result.nodes.get(region.container) if region else None
-                # a key named by place goes with the block it was written on, once a block put in before it renumbers the keys
-                moved = written_on(result, target, n, a.target_hash)
-                if moved is not None and moved is not n:
-                    n, target = moved, moved.key
+                # a key named by place goes with the text it was written on, and is never read on the block that took its place
+                found = follow(
+                    result,
+                    target,
+                    n,
+                    a.target_hash,
+                    quote=a.selector.exact if a.selector else "",
+                    context=a.context,
+                )
+                if found is None and n is not None:
+                    out.append(
+                        ResolvedAnnotation(
+                            a, rec, None, True, self._recorded(a, None), target="", in_doc=in_doc, unplaced=True
+                        )
+                    )
+                    continue
+                if found is not None and found is not n:
+                    n, target = found, found.key
                 if n is None:
                     out.append(
-                        ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=target, in_doc=in_doc)
+                        ResolvedAnnotation(
+                            a, rec, None, True, self._recorded(a, None), target="", in_doc=in_doc, unplaced=True
+                        )
                     )
                     continue
                 if in_doc and in_doc not in n.reached_by:
@@ -874,7 +859,7 @@ class Records:
         opening: set[str] = set()
         for res in self.resolved(result):
             # one resolved needs nothing more, so the finding counts the open ones its fix acts on
-            if res.detached and res.annotation.status == "open":
+            if res.detached and not res.unplaced and res.annotation.status == "open":
                 detached.setdefault(res.target, []).append(res.annotation.id)
                 if self.opens(res.annotation):
                     opening.add(res.annotation.id)
@@ -895,8 +880,9 @@ class Records:
                 )
             )
         diags.extend(self._gone_documents(result, states))
+        followed = {row.key for row in self.placed(result).values()}
         for key in sorted(self.latest):
-            if key not in result.nodes:
+            if key not in result.nodes and key not in followed:
                 diags.append(
                     Diagnostic(
                         "info",
@@ -1085,7 +1071,8 @@ class Records:
                 entry["derived"] = derived[key]
         anns: dict[str, Any] = {}
         # oldest first, whichever clone wrote it: published in this order (`publish.WRITTEN_IN_ORDER`)
-        for res in sorted(self.resolved(result), key=lambda r: r.annotation.created):
+        resolved = sorted(self.resolved(result), key=lambda r: r.annotation.created)
+        for res in resolved:
             a = res.annotation
             anns[a.id] = {
                 "id": a.id,
@@ -1093,6 +1080,7 @@ class Records:
                 "created": a.created,
                 # an annotation on a cited work names the work by identifier; the citekey and the page travel beside it so a viewer needs no lookup to say where it is (plan 0.13 item 2)
                 "target": {
+                    # '' for one on no block: no block is named so, and nothing that reads a key throws on it
                     "key": res.target,
                     "hash": a.target_hash,
                     "work": res.work or None,
@@ -1136,6 +1124,17 @@ class Records:
                 "version": None,
             }
         manifest["annotations"] = anns
+        # the notes placed on no block, which a reader is shown apart from every block (§9, `unplaced`)
+        manifest["unplaced"] = [
+            {
+                "id": res.annotation.id,
+                "key": res.annotation.target_key,
+                "document": written_in(result, res.annotation),
+                "why": _why_unplaced(result, res.annotation.target_key),
+            }
+            for res in resolved
+            if res.unplaced and res.annotation.in_reply_to is None
+        ]
         manifest["diagnostics"].extend(d.to_dict() for d in self.diagnostics(result, states))
 
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The list beside a text. **Comments**: every annotation and pending change here in reading order, a card each, which opens it at its mark: an annotation's with its colour, author, quoted words and comment (a PDF's mark not found again on the changed file says so, having none), a change's with its words out and in and Keep and Discard (`ChangeCard`). Where the text has changes, All, Annotations and Changes choose what is listed, and with annotations alone the text shows what the person has kept. To do keeps the changes and the open annotations of types that stay open, from others than the reader; the filter leaves out people, an edit made in the file being its own, and shows or hides the resolved. **Notes**: the annotations here whose type is listed in Notes, in reading order, each a link to where it was left. Both are built from the manifest; nobody edits them.
+	// The list beside a text. **Comments**: every annotation and pending change here in reading order, a card each, which opens it at its mark: an annotation's with its colour, author, quoted words and comment (a PDF's mark not found again on the changed file says so, having none), a change's with its words out and in and Keep and Discard (`ChangeCard`). Where the text has changes, All, Annotations and Changes choose what is listed, and with annotations alone the text shows what the person has kept. To do keeps the changes and the open annotations of types that stay open, from others than the reader; the filter leaves out people, an edit made in the file being its own, and shows or hides the resolved. **Notes**: the annotations here whose type is listed in Notes, in reading order, each a link to where it was left. In a document, both end with the notes written in it that are on no block now (`APART`), each by its own words, opening its popup beside its card. Both are built from the manifest; nobody edits them.
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -9,7 +9,7 @@
 	import { repliesTo } from '$lib/annotations';
 	import { ui } from '$lib/ui.svelte';
 	import { staysOpen, typeOf } from './annotationTypes';
-	import { authors, changePasses, entries, isTodo, notesOf, placeOf, plain, type Annotating, type Layer } from './annotating.svelte';
+	import { APART, apartOf, whyApart, authors, changePasses, entries, isTodo, notesApart, notesOf, placeOf, plain, type Annotating, type Layer } from './annotating.svelte';
 	import { authorOf, changeById } from './changes';
 	import { dotVars } from '$lib/fragments/gutter';
 	import ChangeCard from './ChangeCard.svelte';
@@ -19,7 +19,7 @@
 	const m = $derived(store.manifest);
 	const seq = $derived(entries(m, notes));
 	/** Everyone who wrote here, whether the filter shows them or not. */
-	const all = $derived(m ? notes.order.map((id) => m.annotations[id]).filter((a): a is Annotation => !!a) : []);
+	const all = $derived(m ? [...notes.order, ...notes.apart].map((id) => m.annotations[id]).filter((a): a is Annotation => !!a) : []);
 	const changes = $derived(m ? notes.order.map((id) => changeById(m, id)).filter((c) => !!c) : []);
 	const people = $derived.by(() => {
 		const out = authors(m, all);
@@ -34,6 +34,9 @@
 		['changes', 'Changes']
 	];
 	const here = $derived(notesOf(m, notes));
+	/** The notes written here that are on no block now: the Comments list's under its filter, and the Notes list's. */
+	const apart = $derived(apartOf(m, notes));
+	const apartNotes = $derived(notesApart(m, notes));
 
 	let filtering = $state(false);
 	let list = $state<HTMLElement | null>(null);
@@ -42,6 +45,19 @@
 	$effect(() => {
 		void notes.open;
 		list?.querySelector('.card.on')?.scrollIntoView({ block: 'nearest' });
+	});
+
+	// a note on no block a link asked for opens beside its card, once the list shows it
+	$effect(() => {
+		const id = notes.reveal;
+		void apart.length;
+		void apartNotes.length;
+		if (!id || !list) return;
+		const card = list.querySelector<HTMLElement>(`[data-apart="${CSS.escape(id)}"]`);
+		if (!card) return;
+		notes.reveal = null;
+		card.scrollIntoView({ block: 'nearest' });
+		notes.openAt(card, id);
 	});
 
 	function who(id: string, shown: boolean): void {
@@ -70,8 +86,12 @@
 					<div class="nfoot"><span>{m ? placeOf(m, a) : ''}</span><span class="go">Go to it →</span></div>
 				</a>
 			{:else}
-				<div class="sempty">No notes here yet. Annotate with a type listed in Notes.</div>
+				{#if !apartNotes.length}<div class="sempty">No notes here yet. Annotate with a type listed in Notes.</div>{/if}
 			{/each}
+			{#if apartNotes.length}
+				{@render apartHead()}
+				{#each apartNotes as a (a.id)}{@render apartCard(a)}{/each}
+			{/if}
 		</div>
 	{:else}
 		<div class="shead">
@@ -119,11 +139,38 @@
 				</div>
 				{/if}
 			{:else}
-				<div class="sempty">{notes.todo && !filtered ? 'Nothing to do.' : filtered || notes.todo ? 'Nothing matches the filter.' : changes.length ? 'No comments or changes.' : 'No comments.'}</div>
+				{#if !apart.length}<div class="sempty">{notes.todo && !filtered ? 'Nothing to do.' : filtered || notes.todo ? 'Nothing matches the filter.' : changes.length ? 'No comments or changes.' : 'No comments.'}</div>{/if}
 			{/each}
+			{#if apart.length}
+				{@render apartHead()}
+				{#each apart as a (a.id)}{@render apartCard(a)}{/each}
+			{/if}
 		</div>
 	{/if}
 </aside>
+
+{#snippet apartHead()}
+	<div class="apart" data-testid="apart-head">
+		<span class="sec">{APART}</span>
+		<p class="nsub">Notes written here that no block of the text holds now; each says why.</p>
+	</div>
+{/snippet}
+
+{#snippet apartCard(a: Annotation)}
+	{@const replies = m ? repliesTo(m, a.id).length : 0}
+	<div class="card" class:on={notes.open === a.id} class:settled={a.status !== 'open'} role="button" tabindex="0" data-testid="apart-card" data-annotation={a.id} data-apart={a.id} onclick={(e) => notes.openAt(e.currentTarget, a.id)} onkeydown={(e) => e.key === 'Enter' && notes.openAt(e.currentTarget, a.id)}>
+		<div class="ch"><span class="dot2" style={dotVars(a)}></span><span class="who">{a.author.label ?? a.author.id}</span><span>{typeLine(a)}</span></div>
+		{#if a.quote}<div class="q"><TexProse text={a.quote} /></div>{/if}
+		{#if plain(a.body_html)}<div class="ct"><Prose html={a.body_html} /></div>{:else}<div class="ct none">No comment</div>{/if}
+		{#if m && whyApart(m, a)}<div class="ct none" data-testid="apart-why">{whyApart(m, a)}</div>{/if}
+		{#if staysOpen(m, a) || replies}
+			<div class="cf">
+				{#if staysOpen(m, a)}<span class="stat" class:done={a.status !== 'open'}>{a.status === 'open' ? 'Open' : 'Resolved'}</span>{/if}
+				{#if replies}<span class="none">{replies} {replies === 1 ? 'reply' : 'replies'}</span>{/if}
+			</div>
+		{/if}
+	</div>
+{/snippet}
 
 <style>
 	.side {
@@ -352,6 +399,18 @@
 	.stat.done {
 		color: var(--ink-faint);
 		border-color: var(--rule-strong);
+	}
+	.apart {
+		display: grid;
+		gap: 2px;
+		margin-top: 6px;
+		padding-top: 10px;
+		border-top: 1px solid var(--rule);
+	}
+	.apart:first-child {
+		margin-top: 0;
+		padding-top: 0;
+		border-top: 0;
 	}
 	.sempty {
 		padding: 16px 4px;

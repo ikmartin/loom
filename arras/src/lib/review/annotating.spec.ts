@@ -146,7 +146,7 @@ describe('the Notes list', () => {
 			r: row({ id: 'r', type: 'note', in_reply_to: 'n1' })
 		};
 		// what is read here, in reading order: a note of another document never is
-		const here = { order: ['n2', 'q', 'n1', 'r'] };
+		const here = { order: ['n2', 'q', 'n1', 'r'], apart: [] };
 		expect(notesOf(m, here).map((a) => a.id)).toEqual(['n2', 'n1']);
 		expect(notesHere(m, here)).toBe(2);
 	});

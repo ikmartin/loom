@@ -7,7 +7,7 @@
 	import DiffView from '$lib/components/DiffView.svelte';
 	import { shortDate } from '$lib/badges';
 	import { store } from '$lib/manifest/client.svelte';
-	import { placeUrl } from '$lib/nav';
+	import { noteUrl } from './annotating.svelte';
 	import { linkName } from '$lib/workspace/names';
 	import { can } from '$lib/write';
 	import { typeOf } from './annotationTypes';
@@ -100,7 +100,7 @@
 				{#each on as a, i (a!.id)}{i ? ', ' : ''}<button type="button" class="lnk" data-testid="change-here-open" data-annotation={a!.id} onclick={() => onannotation?.(a!.id)}>{typeOf(m, a!)?.name ?? 'Annotation'} · {a!.author.label ?? a!.author.id}</button>{/each}
 			</div>
 		{/if}
-		{#if answers && m}<div class="here" data-testid="change-answers">It answers <a href={placeUrl(m, answers.target.key, answers.id, answers.in)}>{linkName(m, `quilt:${answers.id}`)}</a>; Keep resolves it.</div>{/if}
+		{#if answers && m}<div class="here" data-testid="change-answers">It answers <a href={noteUrl(m, answers)}>{linkName(m, `quilt:${answers.id}`)}</a>; Keep resolves it.</div>{/if}
 		{#if c.comment_html}<div class="cmt shown" data-testid="change-comment"><Prose html={c.comment_html} /></div>{/if}
 		{#if allowed.annotate}
 			<textarea class="cmt" rows="2" placeholder="Add a comment" aria-label="Comment on these words" data-testid="change-comment-field" bind:value={text} disabled={busy}></textarea>

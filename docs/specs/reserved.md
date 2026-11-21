@@ -44,10 +44,9 @@ Prefixes: `change-` and `history-` belong to the safe write path; `library-` to 
 
 | field | on | owner |
 |---|---|---|
-| `context` | annotations and edits: the neighbours either side, `twin`, and the quote's count in the quilt | the safe write path |
 | the annotation types `dead-end` and `claim` | a quilt's `annotation-types.toml` | the learner's work |
 
-`near`, the line above a block named by its place, is written on created edits already (`loom suggest`).
+`near`, the line above a block named by its place, is written on created edits already (`loom suggest`), and `context`, what tells a record's block from others, on created annotations and edits (`docs/design/writes.md`, "Where a record goes").
 
 ## The manifest
 
@@ -56,7 +55,6 @@ Loom writes none of these, so `manifest.md`, which says loom writes every top-le
 | field | holds | owner |
 |---|---|---|
 | `published` | the number of this publication | the speed work |
-| `unplaced` | the records that could be placed on no block | the safe write path makes it; Review and the page of notes draw it |
 | `suggested_works` | the works an agent suggested and nobody has added or dismissed | the library |
 | `formal`, and `keys[K].formal` | the formal proposals, and each key's formal state | formalization; Review's list of proposals reads it |
 | `diagnostics[*].class` | whose problem a code is, so that a person is shown only problems in their own text | Review; every part that adds a code gives its class |

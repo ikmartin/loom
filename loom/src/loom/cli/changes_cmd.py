@@ -140,7 +140,7 @@ def changes_command(
             (
                 c.id,
                 c.kind,
-                c.key or c.path,
+                c.key or c.path or (f"on no block (suggested on {c.edit.target_key})" if c.edit else ""),
                 f"“{_short(c.old, 30)}” → “{_short(c.new, 30)}”",
                 (f"by {c.author}" if c.author else "") + (f" ({c.state})" if c.state != "ready" else ""),
             )

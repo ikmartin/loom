@@ -480,7 +480,8 @@ def suggested(result: ScanResult) -> list[Pending]:
             id=edit.id,
             kind="suggested",
             path=node.file if node is not None else "",
-            key=node.key if node is not None else edit.target_key,
+            # on no block, its key is no block's: never the one that took the key it was suggested on
+            key=node.key if node is not None else None,
             documents=documents_reaching(result, [node.file]) if node is not None else [],
             old=edit.selector.exact if edit.selector else "",
             new=edit.with_text,

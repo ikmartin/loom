@@ -11,6 +11,7 @@ import { sessionView } from '$lib/sessions/sessions.svelte';
 import { isWorkLink, locate, parseWorkLink, resultPlace } from '$lib/worklink';
 import { anchorId, keyTarget, keyUrl, nodeUrl } from '$lib/nav';
 import { isDocument } from '$lib/review/run';
+import { documentOf } from '$lib/review/annotating.svelte';
 import { itemFromPath, itemKey, pathFor, type Item } from './item';
 export { itemForFile } from './item';
 import { workspace } from './store.svelte';
@@ -188,6 +189,12 @@ function threadOf(m: Manifest, id: string): string {
 /** Where an annotation is read: its target, with the annotation to open there. One on a project PDF opens the file at its page; one on a cited work its page, or the work's Info for one on the whole work. A box round an equation is filed under the region's key (`KEY#label`), and is read in the node that holds it. */
 function noteItem(m: Manifest, id: string, target: { key: string; page?: number | null; file?: string | null }): Item | null {
 	if (target.file) return { kind: 'file', id: target.file, ...(target.page ? { anchor: `page=${target.page}` } : {}), note: id };
+	// a note on no block names no key: it opens in the document it was written in, beside its card in the list; '' never matches a reference with no identifier
+	if (!target.key) {
+		const a = m.annotations[id];
+		const doc = a ? documentOf(m, a) : '';
+		return isDocument(m, doc) ? { kind: 'document', id: doc, note: id } : null;
+	}
 	const work = Object.values(m.references).find((r) => r.work === target.key || r.works?.includes(target.key));
 	if (work) return target.page ? { kind: 'work', id: work.citekey, place: { page: target.page, annot: id } } : { kind: 'work', id: work.citekey, view: 'info' };
 	if (isDocument(m, target.key)) return { kind: 'document', id: target.key, note: id };

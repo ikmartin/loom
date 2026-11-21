@@ -322,6 +322,15 @@ def work_of(root: Path, annotation: Any) -> str | None:
     return None
 
 
+def _placed(result: Any, a: Any) -> str | None:
+    """Where `a` is shown now, with a scan to say (`records.store.placed_key`); the key it was written on without one, or for a note on a work."""
+    if result is None or a.anchor is not None or a.page is not None:
+        return str(a.target_key)
+    from loom.records.store import placed_key
+
+    return placed_key(result, a)
+
+
 def annotation_row(root: Path, a: Any, result: Any = None) -> dict[str, Any]:
     """One annotation or reply as a message carries it and `loom since` reports it: whole, with the words it is on.
 
@@ -330,7 +339,8 @@ def annotation_row(root: Path, a: Any, result: Any = None) -> dict[str, Any]:
     row: dict[str, Any] = {
         "id": a.id,
         "type": a.type,
-        "target": a.target_key,
+        # the block it is shown on now, with the scan; null for one on no block
+        "target": _placed(result, a),
         "work": work_of(root, a),
         "page": a.page or (a.anchor.page if a.anchor else None),
         "act": "replied" if a.in_reply_to else "created",

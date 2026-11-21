@@ -45,6 +45,9 @@ class Edit:
     placement: str
     near: str = ""  # on a key named by place: the line above its block when it was written; '' when none was recorded
     edge: str | None = None  # a body's head or foot when written (`body_edge`); '' an empty body; None: unrecorded
+    context: dict[str, Any] | None = (
+        None  # what tells its block from others when it was written (`records.locate.context_of`); None: unrecorded
+    )
     comment: str = ""
     answers: str | None = None  # the annotation it answers
     status: str = "open"
@@ -129,6 +132,7 @@ def replay(root: Path) -> tuple[list[Edit], list[str]]:
                 target_hash=str(e.get("against") or ""),
                 near=str(e.get("near") or ""),
                 edge=e["edge"] if isinstance(e.get("edge"), str) else None,
+                context=dict(e["context"]) if isinstance(e.get("context"), dict) else None,
                 selector=Selector.from_dict(anchor) if isinstance(anchor, dict) else None,
                 with_text=e["with"],
                 placement=placement,
@@ -195,19 +199,22 @@ def node_of(result: ScanResult, key: str) -> NodeRec | None:
 
 
 def home(result: ScanResult, edit: Edit) -> NodeRec | None:
-    """The block `edit` is on now, or None when no block can be said to be it (`filed_on`).
+    """The block `edit` is on now, or None when no block can be said to be it (`records.locate.follow`).
 
     A key named by a label names its block. A key named by its place in its file names another block once one is put in before it, so an edit on one goes with the text it was filed on and the line above it, wherever they now stand, and is on no block when they do not say which.
     """
-    from loom.records.store import filed_on
+    from loom.records.locate import follow
 
-    return filed_on(
+    return follow(
         result,
         edit.target_key,
         node_of(result, edit.target_key),
         edit.target_hash,
-        edit.near,
+        edit=True,
+        near=edit.near,
         quoted=edit.selector is not None,
+        quote=edit.selector.exact if edit.selector else "",
+        context=edit.context,
     )
 
 
@@ -352,6 +359,56 @@ def edge_of(result: ScanResult, node: NodeRec, placement: str) -> str:
     return text.rstrip()[-EDGE:] if placement == "after" else text.lstrip()[:EDGE]
 
 
+def beside_of(result: ScanResult, node: NodeRec, span: tuple[int, int], placement: str) -> str | None:
+    """What `loom suggest` records of the file beside an insertion after (`after`) or before (`before`) the quote at `span` of `node`'s own text (`context["beside"]`): the file's next or last `CONTEXT` characters, comments left out (`uncommented`), a kept block's text among them, which the block's own text leaves out; None where the quote is not in one piece of the file."""
+    from loom.records.selectors import CONTEXT
+
+    _, pieces = Records.own_pieces(result, node)
+    at = Records.to_file_span(pieces, span)
+    if at is None:
+        return None
+    text = uncommented(result.files[node.file].text)
+    found = text[at[1] : at[1] + CONTEXT] if placement == "after" else text[max(0, at[0] - CONTEXT) : at[0]]
+    return " ".join(found.split()) if found.split() else found
+
+
+#: A LaTeX comment: from an unescaped `%` to the end of its line.
+_COMMENT = re.compile(r"(?<!\\)%[^\n]*")
+
+
+def uncommented(text: str) -> str:
+    """`text` with every LaTeX comment blanked out character for character, so offsets still hold and no comment is ever recorded or compared (`beside_of`, `_file_beside`)."""
+    return _COMMENT.sub(lambda m: " " * len(m.group(0)), text)
+
+
+def _one_side_stands(selector: Selector, own: str, span: tuple[int, int]) -> bool:
+    """Whether the words recorded right before (`prefix`) or right after (`suffix`) a replacement's quote still stand beside it at `span`, the two nearest of either side at least: the quote found there is the one it was suggested on. True where neither side recorded a word."""
+    a, b = span
+    before, after = selector.prefix.split()[-2:], selector.suffix.split()[:2]
+    if not before and not after:
+        return True
+    if before and own[:a].split()[-len(before) :] == before:
+        return True
+    return bool(after) and own[b:].split()[: len(after)] == after
+
+
+def _file_beside(edit: Edit, text: str, at: int) -> str | None:
+    """Why the file's words recorded beside an insertion's place (`context["beside"]`) no longer stand there in `text`, its file, at `at`; None when they do, or none was recorded. Words recorded as only whitespace say the file ended there."""
+    beside = (edit.context or {}).get("beside")
+    if not isinstance(beside, str) or edit.selector is None or edit.placement == "replace":
+        return None
+    side = "after" if edit.placement == "after" else "before"
+    if not beside.split():
+        stands = not (text[at:] if side == "after" else text[:at]).strip()
+    else:
+        stands = (_after(text, at, beside) if side == "after" else _before(text, at, beside)) is not None
+    return (
+        None
+        if stands
+        else f"the words of its file right {side} the text {edit.id} quotes have changed since it was suggested"
+    )
+
+
 def _after(text: str, at: int, words: str) -> tuple[int, int] | None:
     """Where `words` stands when it stands right after `at` in `text`, whitespace before it skipped and inside it compared normalised; `(at, at)` for words that are only whitespace, None when they do not stand there."""
     if not words.split():
@@ -452,7 +509,7 @@ def place(result: ScanResult, edit: Edit) -> Placed:
     Raises
     ------
     Unplaced
-        When its key is gone or, named by place, no longer says which block (`filed_on`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again; and when the body a whole-body replacement would replace has changed since it was suggested (`_same_body`).
+        When its key is gone or, named by place, no longer says which block (`records.locate.follow`; a block found by its place and the line above alone, its text changed since, says so only while no other block of its file holds the quote); when its quote no longer stands in the text exactly once, found as written (`find_written`); when the quoted words are no place for an edit (`misplaced`); when an insertion's recorded neighbours no longer stand beside its place (`_beside`), so that text the person wrote there since is never written beside again; and when the body a whole-body replacement would replace has changed since it was suggested (`_same_body`).
     """
     from loom.scan.owntext import key_hash
 
@@ -508,6 +565,10 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         changed = _beside(edit, own, (a, b))
         if changed is not None:
             raise Unplaced(f"{changed} in {node.key}, so it is not written in blind")
+        if edit.placement == "replace" and not _one_side_stands(edit.selector, own, (a, b)):
+            raise Unplaced(
+                f"the words either side of the text {edit.id} quotes have both changed since it was suggested, in {node.key}, so where it goes is not known"
+            )
         if edit.placement == "after":
             span, text = (b, b), _joined(own, b, new, before=False) if new else ""
         elif edit.placement == "before":
@@ -521,16 +582,19 @@ def place(result: ScanResult, edit: Edit) -> Placed:
         at = (x, x) if x is not None else None
     if at is None:
         raise Unplaced(f"the place {edit.id} names in {node.key} is not in one piece of its file")
+    if (moved := _file_beside(edit, uncommented(result.files[node.file].text), at[0])) is not None:
+        raise Unplaced(f"{moved} in {node.key}, so it is not written in blind")
     return Placed(node.key, node.file, own, span, at, text, edit.target_hash != key_hash(result, node.key))
 
 
 def _by_place_alone(result: ScanResult, edit: Edit, node: NodeRec) -> bool:
-    """Whether `edit`'s block was found by its place and the line above alone: its key is named by place and the block no longer holds the text the edit was written against (`filed_on`'s last answer)."""
-    from loom.records.store import named_by_place
+    """Whether `edit`'s block was found by its place and the line above alone: one filed with no `context`, whose key is named by place, on a block that no longer holds the text it was written against. One with `context` was placed by what it recorded (`records.locate.follow`)."""
+    from loom.records.locate import named_by_place
     from loom.scan.owntext import key_hash
 
     return (
         bool(edit.target_hash)
+        and not edit.context
         and named_by_place(result, edit.target_key, node_of(result, edit.target_key))
         and key_hash(result, node.key) != edit.target_hash
     )

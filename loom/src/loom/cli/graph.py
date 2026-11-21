@@ -207,7 +207,8 @@ def _downstream_records(result: ScanResult, key: str) -> tuple[list[dict[str, An
     annotations = [
         {
             "id": a.id,
-            "target": a.target_key,
+            # the block it is shown on now, which may not be the key it was written on
+            "target": res.target,
             "type": a.type,
             "status": a.status,
             "author": a.author_id,
@@ -219,7 +220,7 @@ def _downstream_records(result: ScanResult, key: str) -> tuple[list[dict[str, An
         }
         for res in records.resolved(result)
         for a in [res.annotation]
-        if a.target_key in targets
+        if not res.unplaced and res.target in targets
     ]
     return ledger, annotations
 

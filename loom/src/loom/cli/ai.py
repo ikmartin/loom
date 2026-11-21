@@ -630,12 +630,13 @@ def ai_annotations(
         type_id = named.id if named else None
     resolved = Records(root, result.quilt.history_dir).resolved(result)
     if f_target is not None and f_target not in result.nodes:
-        if not any(f_target in (a.annotation.target_key, a.work) for a in resolved):
+        if not any(f_target in (a.annotation.target_key, a.target, a.work) for a in resolved):
             raise NotFoundError("key", f"{f_target} is no key of this quilt and no annotation's target")
     rows = [
         {
             "id": a.annotation.id,
-            "target": a.annotation.target_key,
+            # the block it is shown on now, which may not be the key it was written on; null for one on no block
+            "target": None if a.unplaced else (a.target or a.annotation.target_key),
             # an annotation on a cited work: the citekey the agent knows it by, and the page (plan 0.13 item 2)
             "work": a.work or None,
             "page": a.annotation.anchor.page if a.annotation.anchor else None,
@@ -653,7 +654,7 @@ def ai_annotations(
         }
         for a in resolved
         if (f_by is None or a.annotation.author_id == f_by)
-        and (f_target is None or f_target in (a.annotation.target_key, a.work))
+        and (f_target is None or f_target in (None if a.unplaced else (a.target or a.annotation.target_key), a.work))
     ]
     rows = [r for r in rows if (not type_id or r["type"] == type_id) and (not f_status or r["status"] == f_status)]
     proposals = proposals_by(root, f_by) if f_by else []

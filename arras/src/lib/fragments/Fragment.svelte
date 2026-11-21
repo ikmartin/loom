@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Annotating } from '$lib/review/annotating.svelte';
-	import { passes } from '$lib/review/annotating.svelte';
+	import { apartIn, passes } from '$lib/review/annotating.svelte';
+	import { typeOf } from '$lib/review/annotationTypes';
 	import { acted, prune } from '$lib/review/acted.svelte';
 	import { authorOf, changeById, changesIn, pending } from '$lib/review/changes';
 	import type { Macro } from '$lib/manifest/types';
@@ -237,6 +238,7 @@
 		if (annotations) {
 			annotations.show = (id) => !!el && made.open(el, id);
 			annotations.close = () => made.close();
+			annotations.openAt = (trigger, id) => made.toggle(trigger, [id]);
 		}
 		return () => {
 			made.destroy();
@@ -312,6 +314,9 @@
 			for (const c of changesIn(m, master)) add(c.id);
 		}
 		if (ids.join(' ') !== annotations.order.join(' ')) annotations.order = ids;
+		// the notes written here that are on no block now: listed apart, after everything above
+		const apart = master ? apartIn(m, master) : [];
+		if (apart.join(' ') !== annotations.apart.join(' ')) annotations.apart = apart;
 	}
 
 	/** Draw the margin's icons again, a frame from now, once the layout they measure has settled. */
@@ -571,6 +576,12 @@
 			if (!el || note !== id) return;
 		}
 		const at = el.querySelector<HTMLElement>(`:is(${MARKS})[data-annotation~="${CSS.escape(id)}"]`);
+		// a note on no block has no mark: the list beside the text shows it apart, and it opens beside its card there
+		if (!at && annotations?.apart.includes(id)) {
+			if (annotations.side !== 'notes' || !typeOf(store.manifest, store.manifest?.annotations[id] ?? {})?.notes) annotations.side = 'comments';
+			annotations.reveal = id;
+			return;
+		}
 		if (!at || !popup) return;
 		if (popup.current() !== id) popup.open(el, id);
 		else at.scrollIntoView({ block: 'center' });

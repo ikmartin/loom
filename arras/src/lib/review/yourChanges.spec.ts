@@ -47,6 +47,19 @@ describe("the quilt's To do", () => {
 		expect(ids).not.toContain('a-2026-09-16-bns3an');
 		expect(todo.every((g) => g.label && g.annotations.length)).toBe(true);
 	});
+
+	it('lists an open note on no block under the document the manifest gives it, and heads no group with a bare key', () => {
+		const x = structuredClone(m);
+		const a = x.annotations['a-2026-09-16-ecnav2'];
+		a.target = { ...a.target, key: '' };
+		a.detached = true;
+		// its written key names nothing now: an id whose block went, in a file no document reads
+		x.unplaced = [{ id: a.id, key: 'sy-0FFF', why: 'The block it was written on is gone, and nothing says where its words went.', document: 'drafting/talk.tex' }];
+		const todo = todoOf(x);
+		const group = todo.find((g) => g.annotations.some((n) => n.id === a.id));
+		expect(group?.path).toBe('drafting/talk.tex');
+		expect(todo.every((g) => g.label && !g.label.startsWith('sy-'))).toBe(true);
+	});
 });
 
 describe('what Review counts', () => {

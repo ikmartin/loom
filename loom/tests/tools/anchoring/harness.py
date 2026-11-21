@@ -2,12 +2,13 @@
 
 Usage: python harness.py PAPER_DIR OUT_DIR RESULTS_JSON
 
-Truth is tracked by anchors (file, offset) moved through every text operation the scenario performs: each target's block start and its quote's start. A record is `right` when it resolves to the block now at the truth anchor and, when it quotes, to the truth quote offset; `wrong` when it resolves anywhere else while not detached; `detached` when shown detached on a key that still names a block (`honest` when its truth is gone, `miss` when its block and words still stand); `lost` when its key names nothing now.
+Truth is tracked by anchors (file, offset) moved through every text operation the scenario performs: each target's block start and its quote's start. A record is `right` when it resolves to the block now at the truth anchor and, when it quotes, to the truth quote offset; `wrong` when it resolves anywhere else while not detached; `detached` when shown detached on a key that still names a block (`honest` when its truth is gone, or its block stands in a file no document reads now; `miss` when its block and words still stand); `lost` when its key names nothing now; `untouched` when detached or lost while its block stands with its text unchanged and no other block of the documents holds that text, where nothing could be meant but that block.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import sys
@@ -25,13 +26,13 @@ from loom.scan.labels import is_id_shaped, rename_labels
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 
-try:
-    from loom.records.store import place_context
-except ImportError:  # today's code has none
+try:  # what `loom suggest` records to find an edit's block again by, where loom has it
+    from loom.records.locate import context_of as place_context
+except ImportError:
     place_context = None
 
 try:  # what `loom suggest` records on a key named by place, where loom has it
-    from loom.records.store import line_before, named_by_place
+    from loom.records.locate import line_before, named_by_place
 except ImportError:
     line_before = named_by_place = None
 
@@ -41,6 +42,16 @@ def near_of(result, key: str, node) -> dict:
     if named_by_place is None or not named_by_place(result, key, node):
         return {}
     return {"near": line_before(result, node)}
+
+
+#: Whether the records are read as a loom before `context` filed them (`run.py --old`).
+OLD = False
+
+#: Where each statement targeted has a restatement, its very words without its labels, made before any record is filed: '' none; `far`, at the end of its file (`run.py --pretwin`); `near`, right after it and its proofs (`run.py --pretwin-near`). Every record on a statement then had an exact twin when it was written.
+PRETWIN = ""
+
+#: Where each twin `PRETWIN` made stands, as `twin:TID` anchors, which every scenario's workspace carries.
+TWINS: dict[str, tuple[str, int] | None] = {}
 
 WORD = re.compile(r"^[A-Za-z][A-Za-z,.;:'-]*$")
 
@@ -62,6 +73,7 @@ class Target:
     stmt_start: int | None = None  # for proofs: their statement's start, so moves carry both
     stmt_end: int | None = None
     labels: list[str] = field(default_factory=list)
+    read: bool = True  # whether a document read its block when the records were filed
 
 
 def _plain_window(own: str, n: int = 6) -> tuple[int, int] | None:
@@ -112,10 +124,22 @@ def pick_targets(result) -> list[Target]:
         fs = Records.to_file_span(pieces, span)
         if fs is None:
             return
-        t = Target(f"{kind}{sum(1 for x in out if x.kind == kind) + 1}", kind, key or n.key, n.key, n.file, n.start, n.end, fs[0], quote, labels=list(n.labels))
+        t = Target(
+            f"{kind}{sum(1 for x in out if x.kind == kind) + 1}",
+            kind,
+            key or n.key,
+            n.key,
+            n.file,
+            n.start,
+            n.end,
+            fs[0],
+            quote,
+            labels=list(n.labels),
+        )
         if n.kind == "proof" and n.of:
             st = result.nodes[n.of]
             t.stmt_start, t.stmt_end = st.start, st.end
+        t.read = n.kind == "master" or bool(n.reached_by)
         out.append(t)
 
     def spread(items, k):
@@ -146,7 +170,9 @@ def pick_targets(result) -> list[Target]:
     empty = [p for p in pa if len(Records.own_pieces(result, p)[0].split()) <= 2]
     if len(empty) >= 2:
         n = empty[len(empty) // 2]
-        out.append(Target(f"proof-empty1", "proof-empty", n.key, n.key, n.file, n.start, n.end, -1, ""))
+        out.append(
+            Target("proof-empty1", "proof-empty", n.key, n.key, n.file, n.start, n.end, -1, "", read=bool(n.reached_by))
+        )
     ids = [n for n in nodes if n.kind == "environment" and n.id]
     for n in spread(ids, 2):
         add("stmt-id", n)
@@ -155,7 +181,11 @@ def pick_targets(result) -> list[Target]:
         add("sec-label", n)
     for n in spread([s for s in secs if not s.labels and len(Records.own_pieces(result, s)[0].split()) > 30], 1):
         add("sec-none", n)
-    regs = [r for r in result.assembly.regions.values() if not r.file.startswith(".loom") and r.where in ("statement",) or r.where.startswith("proof:")]
+    regs = [
+        r
+        for r in result.assembly.regions.values()
+        if not r.file.startswith(".loom") and r.where in ("statement",) or r.where.startswith("proof:")
+    ]
     regs = [r for r in regs if not r.file.startswith(".loom") and not result.nodes[r.container].id]
     for r in spread(regs, 1) + regs[len(regs) // 2 :] + regs:
         if any(x.kind == "eq" for x in out):
@@ -181,6 +211,70 @@ def pick_targets(result) -> list[Target]:
     return out
 
 
+EXERCISES = (
+    "\\begin{{{env}}}\\label{{{p}-9X01}}\nExercise: show that every finite tree with at least two vertices has a leaf.\n\\end{{{env}}}\n\\begin{{proof}}\n\\end{{proof}}\n\n"
+    "\\begin{{{env}}}\\label{{{p}-9X02}}\nExercise: show that the complete graph on five vertices is not planar.\n\\end{{{env}}}\n\\begin{{proof}}\n\\end{{proof}}\n\n"
+    "\\begin{{{env}}}\\label{{{p}-9X03}}\nEvery planar graph is five colourable, by a counting argument on degrees.\n\\end{{{env}}}\n"
+    "\\begin{{proof}}\nInduct on vertices: a vertex of degree at most five exists, remove it, colour the rest, and recolour along a Kempe chain.\n\\end{{proof}}\n"
+    "\\begin{{proof}}\nUse the discharging method with charges six minus degree on every vertex, and reduce to unavoidable configurations.\n\\end{{proof}}\n\n"
+    "\\begin{{{env}}}\\label{{{p}-9X04}}\nLet f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is injective then f is an isomorphism.\n\\end{{{env}}}\n\n"
+    "\\begin{{{env}}}\nLet f be a morphism of finite dimensional vector spaces over k of equal dimension. If f is surjective then f is an isomorphism.\n\\end{{{env}}}\n\n"
+)
+
+
+def add_exercises(root: Path, targets: list[Target], main: str) -> None:
+    """Two exercises with ids and empty answers, a theorem with an id and two proofs, and a lemma with an id and a look-alike after it, put at the end of the main file's body before any record is filed; the second empty answer (`id-empty`), the theorem's first proof (`id-proof`) and the lemma (`id-lookalike`) become targets. What an id's proofs, numbered by their place, empty answers, all alike, and a look-alike beside an id's block ask of placement."""
+    if not main:
+        return
+    q = load_quilt(root)
+    # an environment the paper gives proofs to
+    owner = next(
+        (n for n in scan(q).nodes.values() if n.kind == "environment" and n.env and n.proofs and n.reached_by), None
+    )
+    if owner is None:
+        return
+    env = owner.env
+    f = root / main
+    text = f.read_text(encoding="utf-8", errors="surrogateescape")
+    at = body_end(text)
+    if any(x.file == main and x.start >= at for x in targets):
+        return
+    f.write_text(
+        text[:at] + EXERCISES.format(env=env, p=q.config.prefix) + text[at:], encoding="utf-8", errors="surrogateescape"
+    )
+    result = scan(load_quilt(root))
+    empty = result.nodes.get(f"{q.config.prefix}-9X02/proof")
+    first = result.nodes.get(f"{q.config.prefix}-9X03/proof")
+    if empty is not None:
+        targets.append(
+            Target("id-empty1", "id-empty", empty.key, empty.key, empty.file, empty.start, empty.end, -1, "")
+        )
+    for tid, kind, n in (
+        ("id-proof1", "id-proof", first),
+        ("id-lookalike1", "id-lookalike", result.nodes.get(f"{q.config.prefix}-9X04")),
+    ):
+        if n is None:
+            continue
+        own, pieces = Records.own_pieces(result, n)
+        span = _plain_window(own)
+        fs = Records.to_file_span(pieces, span) if span else None
+        if span and fs:
+            targets.append(
+                Target(
+                    tid,
+                    kind,
+                    n.key,
+                    n.key,
+                    n.file,
+                    n.start,
+                    n.end,
+                    fs[0],
+                    own[span[0] : span[1]],
+                    labels=list(n.labels),
+                )
+            )
+
+
 # ---------------------------------------------------------------- filing
 
 
@@ -188,20 +282,34 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
     result = scan(load_quilt(root))
     recs = []
     for t in targets:
-        if t.kind == "proof-empty":
-            said = _one_comment(result, ("human", "Tester"), t.key, f"whole-block note on {t.tid}", None, None, None, None)
+        if t.kind in ("proof-empty", "id-empty"):
+            said = _one_comment(
+                result, ("human", "Tester"), t.key, f"whole-block note on {t.tid}", None, None, None, None
+            )
             recs.append({"tid": t.tid, "type": "ann", "id": said.split()[0], "quoted": False})
-            event = {"event": "created", "when": stamp(), "author": "Agent Tester", "kind": "agent", "target": t.key, "against": _version(result, t.key) or key_hash(result, t.key), "anchor": None, "with": "The answer an agent wrote for this problem.", "placement": "replace"}
+            event = {
+                "event": "created",
+                "when": stamp(),
+                "author": "Agent Tester",
+                "kind": "agent",
+                "target": t.key,
+                "against": _version(result, t.key) or key_hash(result, t.key),
+                "anchor": None,
+                "with": "The answer an agent wrote for this problem.",
+                "placement": "replace",
+            }
             event.update(near_of(result, t.key, result.nodes[t.key]))
-            if place_context:
-                event["context"] = place_context(result, result.nodes[t.key])
+            if place_context and (found := place_context(result, result.nodes[t.key])):
+                event["context"] = found
             recs.append({"tid": t.tid, "type": "edit", "id": E.append_new(root, event, today()), "quoted": False})
             t.file_hits = 0  # type: ignore[attr-defined]
             continue
         said = _one_comment(result, ("human", "Tester"), t.key, f"note on {t.tid}", t.quote, None, None, None)
         recs.append({"tid": t.tid, "type": "ann", "id": said.split()[0], "quoted": True})
-        if t.kind in ("stmt-none", "proof-of-none", "proof-alone", "stmt-label", "sec-none"):
-            said = _one_comment(result, ("human", "Tester"), t.key, f"whole-block note on {t.tid}", None, None, None, None)
+        if t.kind != "master":
+            said = _one_comment(
+                result, ("human", "Tester"), t.key, f"whole-block note on {t.tid}", None, None, None, None
+            )
             recs.append({"tid": t.tid, "type": "ann", "id": said.split()[0], "quoted": False})
         node_key = result.assembly.regions[t.key].container if t.key in result.assembly.regions else t.key
         node = result.nodes[node_key]
@@ -211,7 +319,9 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
         for k in range(2, len(words)):
             short = " ".join(words[:k])
             if len(find_quote(own, short)) == 1:
-                said = _one_comment(result, ("human", "Tester"), t.key, f"short-quote note on {t.tid}", short, None, None, None)
+                said = _one_comment(
+                    result, ("human", "Tester"), t.key, f"short-quote note on {t.tid}", short, None, None, None
+                )
                 recs.append({"tid": t.tid, "type": "ann", "id": said.split()[0], "quoted": True, "short": short})
                 break
         text = result.files[t.file].text
@@ -231,8 +341,8 @@ def file_records(root: Path, targets: list[Target]) -> list[dict]:
             "placement": "replace",
         }
         event.update(near_of(result, t.key, node))
-        if place_context:
-            event["context"] = place_context(result, node, t.quote)
+        if place_context and (found := place_context(result, node, t.quote)):
+            event["context"] = found
         eid = E.append_new(root, event, today())
         recs.append({"tid": t.tid, "type": "edit", "id": eid, "quoted": True})
     return recs
@@ -247,6 +357,7 @@ class WS:
         self.files: dict[str, str] = {}
         self.anchors: dict[str, tuple[str, int] | None] = {}
         self.renamed: dict[str, str] = {}
+        self.changed = False  # whether any text was changed: a scenario that changes nothing in a paper is not run
 
     def load(self, path: str) -> str:
         if path not in self.files:
@@ -255,6 +366,7 @@ class WS:
 
     def insert(self, path: str, pos: int, text: str) -> None:
         t = self.load(path)
+        self.changed = True
         self.files[path] = t[:pos] + text + t[pos:]
         for k, v in self.anchors.items():
             if v and v[0] == path and v[1] >= pos:
@@ -262,6 +374,7 @@ class WS:
 
     def replace(self, path: str, a: int, b: int, text: str, keep: dict[str, int] | None = None) -> None:
         t = self.load(path)
+        self.changed = True
         self.files[path] = t[:a] + text + t[b:]
         d = len(text) - (b - a)
         for k, v in self.anchors.items():
@@ -277,6 +390,7 @@ class WS:
     def move(self, path: str, a: int, b: int, dest: str, dpos_before_cut: int) -> None:
         """Cut [a, b) of `path` and paste it at `dpos_before_cut` of `dest` (an offset read before the cut)."""
         t = self.load(path)
+        self.changed = True
         cut = t[a:b]
         inside = {k: v[1] - a for k, v in self.anchors.items() if v and v[0] == path and a <= v[1] < b}
         self.files[path] = t[:a] + t[b:]
@@ -301,6 +415,7 @@ class WS:
 
     def rename(self, old: str, new: str) -> None:
         self.load(old)
+        self.changed = True
         self.files[new] = self.files.pop(old)
         self.renamed[old] = new
         for k, v in self.anchors.items():
@@ -319,7 +434,13 @@ class WS:
 
 
 def body_end(text: str) -> int:
-    for pat in (r"\\bibliographystyle", r"\\bibliography\{", r"\\begin\{thebibliography\}", r"\\printbibliography", r"\\end\{document\}"):
+    for pat in (
+        r"\\bibliographystyle",
+        r"\\bibliography\{",
+        r"\\begin\{thebibliography\}",
+        r"\\printbibliography",
+        r"\\end\{document\}",
+    ):
         m = re.search(pat, text)
         if m:
             return m.start()
@@ -365,7 +486,9 @@ def insert_section_above(ws: WS, targets: list[Target]) -> None:
         m = re.search(r"\\(section)(\*?)\{", text)
         if not m:
             continue
-        ws.insert(path, m.start(), f"\\section{m.group(2)}{{A section a co-author added}}\nSome words of the new section.\n\n")
+        ws.insert(
+            path, m.start(), f"\\section{m.group(2)}{{A section a co-author added}}\nSome words of the new section.\n\n"
+        )
 
 
 def _body_of(text: str, start: int) -> tuple[int, int]:
@@ -389,7 +512,7 @@ def light_edit(ws: WS, targets: list[Target]) -> None:
             continue
         q = ws.anchors[f"q:{t.tid}"]
         text = ws.load(path)
-        if t.kind == "proof-empty":
+        if t.kind in ("proof-empty", "id-empty"):
             a, b = _body_of(text, s)
             ws.insert(path, b, "The person's own answer, written in.\n")
             continue
@@ -431,7 +554,12 @@ def heavy_edit(ws: WS, targets: list[Target]) -> None:
         if a > qa or b < qb:
             continue
         labs = "".join(m.group(0) for m in re.finditer(r"\\label\{[^}]*\}", text[a:b]) if not (qa <= m.start() < qb))
-        new = "Rewritten by a co-author: the argument now runs differently, and " + text[qa:qb] + " in the new wording, with more words after." + labs
+        new = (
+            "Rewritten by a co-author: the argument now runs differently, and "
+            + text[qa:qb]
+            + " in the new wording, with more words after."
+            + labs
+        )
         ws.replace(path, a, b, new, keep={f"q:{t.tid}": new.index(text[qa:qb])})
 
 
@@ -452,7 +580,16 @@ def move_statements(ws: WS, targets: list[Target]) -> None:
     """Each annotated statement (with its proof) and each unattached proof cut and pasted at the end of the body."""
     done = set()
     for t in targets:
-        if t.kind not in ("stmt-label", "stmt-none", "stmt-id", "proof-of-label", "proof-of-none", "proof-alone", "proof-empty", "eq"):
+        if t.kind not in (
+            "stmt-label",
+            "stmt-none",
+            "stmt-id",
+            "proof-of-label",
+            "proof-of-none",
+            "proof-alone",
+            "proof-empty",
+            "eq",
+        ):
             continue
         sa = ws.anchors.get(f"stmt:{t.tid}") or ws.anchors[f"blk:{t.tid}"]
         if sa is None or sa in done:
@@ -518,7 +655,7 @@ def rename_label_scn(ws: WS, targets: list[Target], result) -> None:
 
 def delete_statements(ws: WS, targets: list[Target]) -> None:
     for t in targets:
-        if t.kind not in ("stmt-label", "stmt-none", "stmt-id", "proof-alone", "proof-empty"):
+        if t.kind not in ("stmt-label", "stmt-none", "stmt-id", "proof-alone", "proof-empty", "id-empty", "id-proof"):
             continue
         sa = ws.anchors.get(f"blk:{t.tid}")
         if sa is None:
@@ -527,7 +664,7 @@ def delete_statements(ws: WS, targets: list[Target]) -> None:
         text = ws.load(path)
         _, e = _body_of(text, s)
         e = text.find("}", e) + 1
-        if t.kind not in ("proof-alone", "proof-empty"):
+        if t.kind not in ("proof-alone", "proof-empty", "id-empty", "id-proof"):
             m = re.match(r"\s*\\begin\{proof\}", text[e:])
             if m:
                 _, pe = _body_of(text, e + m.end() - len("\\begin{proof}"))
@@ -557,7 +694,11 @@ def label_reused(ws: WS, targets: list[Target]) -> None:
         e = _stmt_span(text, s, True)
         ws.replace(path, s, e, "")
         text = ws.load(path)
-        ws.insert(path, body_end(text), f"\\begin{{{name}}}\\label{{{t.labels[0]}}}\nA different result that took over the label.\n\\end{{{name}}}\n")
+        ws.insert(
+            path,
+            body_end(text),
+            f"\\begin{{{name}}}\\label{{{t.labels[0]}}}\nA different result that took over the label.\n\\end{{{name}}}\n",
+        )
 
 
 def duplicate_label(ws: WS, targets: list[Target]) -> None:
@@ -579,16 +720,28 @@ def duplicate_label(ws: WS, targets: list[Target]) -> None:
 
 
 def rename_file(ws: WS, targets: list[Target], cfg_main: str) -> None:
+    """Each target file renamed, and every line that brings it in (`\\input`, `\\include`, `\\nest`) changed to the new name, as an author renaming a file does."""
     files = {ws.anchors[f"blk:{t.tid}"][0] for t in targets}
     for path in files:
         new = re.sub(r"([^/]+)\.tex$", r"renamed-\1.tex", path)
         ws.rename(path, new)
         if path == cfg_main:
             ws.config_main = new  # type: ignore[attr-defined]
+        old_stem, new_stem = Path(path).stem, Path(new).stem
+        for f in sorted(p.relative_to(ws.root).as_posix() for p in ws.root.rglob("*.tex") if ".loom" not in p.parts):
+            if f in ws.renamed:
+                f = ws.renamed[f]
+            text = ws.load(f)
+            for m in reversed(list(re.finditer(r"\\(?:input|include|nest)\{([^}]*)\}", text))):
+                arg = m.group(1)
+                name = arg.rsplit("/", 1)[-1]
+                if name in (old_stem, old_stem + ".tex"):
+                    at = m.start(1) + len(arg) - len(name)
+                    ws.replace(f, at, at + len(old_stem), new_stem)
 
 
-def split_file(ws: WS, targets: list[Target]) -> None:
-    """The second half of each target file's body moved into its own file, \\input in its place."""
+def split_file(ws: WS, targets: list[Target], cfg_main: str) -> None:
+    """The second half of each target file's body moved into its own file, \\input in its place, named as LaTeX finds it: relative to the main file's directory."""
     for path in {ws.anchors[f"blk:{t.tid}"][0] for t in targets}:
         text = ws.load(path)
         end = body_end(text)
@@ -600,7 +753,7 @@ def split_file(ws: WS, targets: list[Target]) -> None:
         part = path.rsplit("/", 1)[0] + f"/{stem}-part2.tex" if "/" in path else f"{stem}-part2.tex"
         ws.files[part] = ""
         ws.move(path, cut, end, part, 0)
-        rel = part.removesuffix(".tex")
+        rel = os.path.relpath(part, os.path.dirname(cfg_main) or ".").removesuffix(".tex")
         ws.insert(path, cut, f"\\input{{{rel}}}\n")
 
 
@@ -624,11 +777,199 @@ SCENARIOS = {
     "split-file+insert-above": ["split", "insert"],
     "label-reused": ["label_reused"],
     "duplicate-label": ["duplicate_label"],
+    # blocks competing for a record's place (the independent review of anchoring, A-3, A-4, A-2, A-8)
+    "copy-then-edit-original": ["copy_to_end", "light"],
+    "swap": ["swap"],
+    "swap+light-edit": ["swap", "light"],
+    "delete+move-in": ["move_in"],
+    "backup+rename-file+light-edit": ["backup", "rename_file", "light"],
+    "label-moved": ["label_move"],
+    # an author restates each targeted statement in the main file and comments out the `\\input` of its file to compile faster
+    "comment-out-input": ["comment_input"],
+    # with `--pretwin`: each statement's twin deleted, its own block untouched
+    "delete-twin": ["delete_twin"],
+    # each statement with an id copied, its labels left out, right below or above it, and the original then edited where it stands, keeping its id
+    "copy-below-then-edit": ["copy_below"],
+    "copy-above-then-edit": ["copy_above"],
 }
 
 
-def apply_scenario(root: Path, name: str, targets: list[Target], result, cfg_main: str) -> WS:
+def _stmt_end(text: str, s: int) -> int:
+    """The end of the statement or proof that starts at `s`, its own `\\end{...}` included."""
+    _, e = _body_of(text, s)
+    return text.find("}", e) + 1
+
+
+def _later_block(text: str, after: int) -> tuple[int, int] | None:
+    """The next theorem-like block or proof that starts after `after`: its span, or None."""
+    m = re.compile(r"^\\begin\{(\w+)\}", re.M).search(text, after)
+    while m and m.group(1) in (
+        "document",
+        "equation",
+        "align",
+        "itemize",
+        "enumerate",
+        "figure",
+        "table",
+        "center",
+        "tabular",
+    ):
+        m = re.compile(r"^\\begin\{(\w+)\}", re.M).search(text, m.end())
+    if not m:
+        return None
+    return m.start(), _stmt_end(text, m.start())
+
+
+def copy_to_end(ws: WS, targets: list[Target]) -> None:
+    """A co-author copies each statement, verbatim, to the end of its file, to make a variant later."""
+    for t in targets:
+        if not t.kind.startswith("stmt"):
+            continue
+        sa = ws.anchors.get(f"blk:{t.tid}")
+        if sa is None:
+            continue
+        path, s = sa
+        text = ws.load(path)
+        copy = text[s : _stmt_end(text, s)]
+        end = text.rfind("\\end{document}")
+        ws.insert(path, end if end >= 0 else len(text), "\n" + copy + "\n\n")
+
+
+def swap(ws: WS, targets: list[Target]) -> None:
+    """Each statement moved to the end of its file, and the next block after it moved up into its place."""
+    for t in targets:
+        if not t.kind.startswith("stmt"):
+            continue
+        sa = ws.anchors.get(f"blk:{t.tid}")
+        if sa is None:
+            continue
+        path, s = sa
+        text = ws.load(path)
+        e = _stmt_end(text, s)
+        nxt = _later_block(text, e)
+        if nxt is None:
+            continue
+        end = text.rfind("\\end{document}")
+        ws.move(path, s, e, path, end if end >= 0 else len(text))
+        text = ws.load(path)
+        nxt = _later_block(text, s)
+        if nxt is None:
+            continue
+        ws.move(path, nxt[0], nxt[1], path, s)
+
+
+def move_in(ws: WS, targets: list[Target]) -> None:
+    """Each statement deleted, and the next block after it moved up into its place."""
+    for t in targets:
+        if not t.kind.startswith("stmt"):
+            continue
+        sa = ws.anchors.get(f"blk:{t.tid}")
+        if sa is None:
+            continue
+        path, s = sa
+        text = ws.load(path)
+        e = _stmt_end(text, s)
+        nxt = _later_block(text, e)
+        if nxt is None:
+            continue
+        ws.replace(path, s, e, "")
+        text = ws.load(path)
+        nxt = _later_block(text, s)
+        if nxt is not None:
+            ws.move(path, nxt[0], nxt[1], path, s)
+
+
+def backup(ws: WS, targets: list[Target]) -> None:
+    """The author keeps a backup of each targeted file beside the paper, in no document."""
+    for path in {ws.anchors[f"blk:{t.tid}"][0] for t in targets if ws.anchors.get(f"blk:{t.tid}")}:
+        if "\\documentclass" in ws.load(path):
+            continue  # a backup of a document is a second document, not a backup in none
+        dest = ws.root / "backup" / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(ws.load(path))
+
+
+def label_move(ws: WS, targets: list[Target]) -> None:
+    """Each id or section label moved off its block onto the next block of its file."""
+    for t in targets:
+        if t.kind not in ("stmt-id", "sec-label", "id-lookalike"):
+            continue
+        sa = ws.anchors.get(f"blk:{t.tid}")
+        if sa is None:
+            continue
+        path, s = sa
+        text = ws.load(path)
+        e = text.find("\n", s) if t.kind == "sec-label" else _stmt_end(text, s)
+        m = re.search(r"\\label\{([^}]*)\}", text[s:e])
+        nxt = _later_block(text, e)
+        if not m or nxt is None:
+            continue
+        label = m.group(0)
+        head = text.find("\n", nxt[0])
+        ws.insert(path, head, label)
+        ws.replace(path, s + m.start(), s + m.end(), "")
+
+
+def delete_twins(ws: WS) -> None:
+    """Each statement's twin, made before filing (`--pretwin`), deleted: the statement itself untouched."""
+    for k in [k for k in ws.anchors if k.startswith("twin:")]:
+        at = ws.anchors[k]
+        if at is None:
+            continue
+        path, s = at
+        text = ws.load(path)
+        ws.replace(path, s, _stmt_end(text, s), "")
+
+
+def copy_beside(ws: WS, targets: list[Target], below: bool) -> None:
+    """Each statement with an id copied, its labels left out, right below or above it to make a variant, and the original then edited, a sentence added at the end of its body: the id never moved."""
+    for t in targets:
+        if t.kind not in ("stmt-id", "id-lookalike"):
+            continue
+        sa = ws.anchors.get(f"blk:{t.tid}")
+        if sa is None:
+            continue
+        path, s = sa
+        text = ws.load(path)
+        e = _stmt_end(text, s)
+        copy = re.sub(r"\\label\{[^}]*\}", "", text[s:e])
+        ws.insert(path, e if below else s, ("\n" + copy + "\n") if below else (copy + "\n\n"))
+        path, s = ws.anchors[f"blk:{t.tid}"]
+        text = ws.load(path)
+        a, b = _body_of(text, s)
+        while b > a and text[b - 1] in " \n\t":
+            b -= 1
+        ws.insert(path, b, " Indeed, a co-author added this sentence.")
+
+
+def comment_out_input(ws: WS, targets: list[Target], cfg_main: str) -> None:
+    """Each targeted statement restated, labels left out, at the end of the main file's body, and every line that brings in a targeted file other than the main one commented out."""
+    files = {ws.anchors[f"blk:{t.tid}"][0] for t in targets if ws.anchors.get(f"blk:{t.tid}")} - {cfg_main}
+    if not files or not cfg_main:
+        return
+    restated = ""
+    for t in targets:
+        at = ws.anchors.get(f"blk:{t.tid}")
+        if not t.kind.startswith("stmt") or at is None or at[0] not in files:
+            continue
+        text = ws.load(at[0])
+        restated += re.sub(r"\\label\{[^}]*\}", "", text[at[1] : _stmt_end(text, at[1])]) + "\n\n"
+    stems = {Path(f).with_suffix("").as_posix() for f in files}
+    for f in sorted(p.relative_to(ws.root).as_posix() for p in ws.root.rglob("*.tex") if ".loom" not in p.parts):
+        text = ws.load(f)
+        here = os.path.dirname(cfg_main)
+        for m in reversed(list(re.finditer(r"^[ \t]*\\(?:input|include|nest)\{([^}]*)\}", text, re.M))):
+            named = os.path.normpath(os.path.join(here, m.group(1))).removesuffix(".tex")
+            if named in stems:
+                ws.insert(f, m.start(), "% ")
+    if restated:
+        main = ws.load(cfg_main)
+        ws.insert(cfg_main, body_end(main), restated)
+
+
+def apply_scenario(root: Path, name: str, targets: list[Target], result, cfg_main: str, doc: str = "") -> WS:
     ws = WS(root)
+    ws.anchors.update(TWINS)
     for t in targets:
         ws.anchors[f"blk:{t.tid}"] = (t.file, t.start)
         ws.anchors[f"q:{t.tid}"] = (t.file, t.qstart) if t.qstart >= 0 else None
@@ -656,11 +997,27 @@ def apply_scenario(root: Path, name: str, targets: list[Target], result, cfg_mai
         elif step == "rename_file":
             rename_file(ws, targets, cfg_main)
         elif step == "split":
-            split_file(ws, targets)
+            split_file(ws, targets, doc or cfg_main)
+        elif step == "delete_twin":
+            delete_twins(ws)
+        elif step in ("copy_below", "copy_above"):
+            copy_beside(ws, targets, below=step == "copy_below")
+        elif step == "comment_input":
+            comment_out_input(ws, targets, doc or cfg_main)
         elif step == "label_reused":
             label_reused(ws, targets)
         elif step == "duplicate_label":
             duplicate_label(ws, targets)
+        elif step == "copy_to_end":
+            copy_to_end(ws, targets)
+        elif step == "swap":
+            swap(ws, targets)
+        elif step == "move_in":
+            move_in(ws, targets)
+        elif step == "backup":
+            backup(ws, targets)
+        elif step == "label_move":
+            label_move(ws, targets)
     ws.write()
     new_main = getattr(ws, "config_main", None)
     if new_main:
@@ -693,7 +1050,17 @@ def classify(root: Path, targets: list[Target], recs: list[dict], ws: WS) -> lis
     R = Records(root)
     res_by_id = {r.annotation.id: r for r in R.resolved(result)}
     edits = {e.id: e for e in E.replay(root)[0]}
+    from loom.pending import suggested
+
+    # where each unplaced edit is listed (`loom changes`, Review's cards): a block names it only while it is placed there
+    listed = {p.id: p.key for p in suggested(result) if p.state == "unplaced"}
     tmap = {t.tid: t for t in targets}
+    # how many blocks of the documents hold each text now
+    texts = Counter(
+        key_hash(result, n.key)
+        for n in result.nodes.values()
+        if n.kind not in ("master", "file", "conflict") and n.reached_by and not n.file.startswith(".loom")
+    )
     out = []
     for rec in recs:
         t = tmap[rec["tid"]]
@@ -702,11 +1069,17 @@ def classify(root: Path, targets: list[Target], recs: list[dict], ws: WS) -> lis
         if t.kind == "master" and blk:
             truth = result.nodes.get(blk[0])
         q = ws.anchors.get(f"q:{t.tid}")
-        row = {"tid": t.tid, "kind": t.kind, "type": rec["type"], "quoted": rec["quoted"], "truth": truth.key if truth else None}
+        row = {
+            "tid": t.tid,
+            "kind": t.kind,
+            "type": rec["type"],
+            "quoted": rec["quoted"],
+            "truth": truth.key if truth else None,
+        }
         if rec["type"] == "ann":
             r = res_by_id[rec["id"]]
-            key = r.target or r.annotation.target_key
-            n = result.nodes.get(key)
+            key = r.target
+            n = result.nodes.get(key) if key else None
             if n is None and key in result.assembly.regions:
                 n = result.nodes.get(result.assembly.regions[key].container)
             row["now"] = key
@@ -737,9 +1110,38 @@ def classify(root: Path, targets: list[Target], recs: list[dict], ws: WS) -> lis
                 row["now"] = placed.key
             except E.Unplaced:
                 row["outcome"] = "lost" if node is None else "detached"
+                if listed.get(rec["id"]) and (truth is None or listed[rec["id"]] != truth.key):
+                    # unplaced, and still listed on a block, which is not its own
+                    row["outcome"] = "wrong"
+                    row["detail"] = "unplaced-listed-on-a-block"
+        now_block = result.nodes.get(row["now"]) if row.get("now") else None
+        if now_block is None and row.get("now") in result.assembly.regions:
+            now_block = result.nodes.get(result.assembly.regions[row["now"]].container)
+        if row["outcome"] == "detached" and now_block is not None and (truth is None or now_block.key != truth.key):
+            # detached, and still named on a block that is not its own: shown on the wrong block
+            row["outcome"] = "wrong"
+            row["detail"] = "detached-on-another-block"
+        if row["outcome"] in ("detached", "lost") and truth is not None:
+            written = (
+                res_by_id[rec["id"]].annotation.target_hash if rec["type"] == "ann" else edits[rec["id"]].target_hash
+            )
+            unread = t.read and truth.kind != "master" and not truth.reached_by
+            if unread:
+                # its file is read by no document now: on no block is as right as its own
+                row["detail"] = "honest-unread"
+                out.append(row)
+                continue
+            if key_hash(result, truth.key) == written and texts[written] == 1 and (q is not None or not rec["quoted"]):
+                # its block stands with its very text, which no other block of the documents holds: nothing else could be meant
+                row["outcome"] = "untouched"
+                row["detail"] = "miss"
+                out.append(row)
+                continue
         if row["outcome"] == "detached":
             alive = truth is not None and q is not None if rec["quoted"] else truth is not None
-            row["detail"] = ("miss" if alive else "honest") + ("" if truth is not None and row["now"] == truth.key else "-elsewhere")
+            row["detail"] = ("miss" if alive else "honest") + (
+                "" if truth is not None and row["now"] == truth.key else "-elsewhere"
+            )
         if row["outcome"] == "lost":
             alive = truth is not None and (q is not None or not rec["quoted"])
             row["detail"] = "miss" if alive else "honest"
@@ -747,6 +1149,49 @@ def classify(root: Path, targets: list[Target], recs: list[dict], ws: WS) -> lis
             row["detail"] = "other-block" if truth is None or row["now"] != truth.key else "other-words"
         out.append(row)
     return out
+
+
+def add_twins(root: Path, targets: list[Target]) -> None:
+    """A restatement of each targeted statement, its words without its labels (which LaTeX and loom refuse twice), where `PRETWIN` says; every target's offsets are carried past them, and each twin's place kept in `TWINS`."""
+    ws = WS(root)
+    for t in targets:
+        ws.anchors[f"blk:{t.tid}"] = (t.file, t.start)
+        ws.anchors[f"q:{t.tid}"] = (t.file, t.qstart) if t.qstart >= 0 else None
+        if t.stmt_start is not None:
+            ws.anchors[f"stmt:{t.tid}"] = (t.file, t.stmt_start)
+    for t in targets:
+        if not t.kind.startswith("stmt"):
+            continue
+        path, s = ws.anchors[f"blk:{t.tid}"]
+        text = ws.load(path)
+        copy = re.sub(r"\\label\{[^}]*\}", "", text[s : _stmt_end(text, s)])
+        if PRETWIN == "near":
+            at = _stmt_span(text, s, True)
+        else:
+            end = text.rfind("\\end{document}")
+            at = end if end >= 0 else len(text)
+        ws.insert(path, at, "\n" + copy + "\n\n")
+        ws.anchors[f"twin:{t.tid}"] = (path, at + 1)
+    ws.write()
+    for t in targets:
+        path, s = ws.anchors[f"blk:{t.tid}"]
+        t.start, t.end = s, t.end + (s - t.start)
+        q = ws.anchors.get(f"q:{t.tid}")
+        if q is not None:
+            t.qstart = q[1]
+        if t.stmt_start is not None and t.stmt_end is not None:
+            st = ws.anchors[f"stmt:{t.tid}"][1]
+            t.stmt_start, t.stmt_end = st, t.stmt_end + (st - t.stmt_start)
+    # a twin put in before a block renumbers the keys named by place: each target is named by its block's key now
+    result = scan(load_quilt(root))
+    for t in targets:
+        if t.kind == "master":
+            continue
+        n = node_at(result, t.file, t.start, "")
+        if n is not None and n.key != t.block:
+            t.key = n.key + t.key[len(t.block) :] if t.key.startswith(t.block) else t.key
+            t.block = n.key
+    TWINS.update({k: v for k, v in ws.anchors.items() if k.startswith("twin:")})
 
 
 def main(paper: Path, out: Path, results: Path, only: list[str] | None = None) -> None:
@@ -758,8 +1203,23 @@ def main(paper: Path, out: Path, results: Path, only: list[str] | None = None) -
     (base / ".loom" / "local" / "serve.json").unlink(missing_ok=True)
     result = scan(load_quilt(base))
     targets = pick_targets(result)
-    recs = file_records(base, targets)
     cfg_main = load_quilt(base).config.main if hasattr(load_quilt(base).config, "main") else ""
+    # the document the scan reads first, which a configured main file that is not there leaves to the scan
+    doc = getattr(result, "default_master", None) or (result.masters[0] if result.masters else cfg_main)
+    add_exercises(base, targets, doc)
+    TWINS.clear()
+    if PRETWIN:
+        add_twins(base, targets)
+    result = scan(load_quilt(base))
+    recs = file_records(base, targets)
+    if OLD:
+        # records as a loom before `context` wrote them: every created event without it
+        for log in (base / ".loom/records/annotations/log.jsonl", base / ".loom/records/edits/log.jsonl"):
+            if log.exists():
+                lines = [json.loads(line) for line in log.read_text().splitlines() if line]
+                log.write_text(
+                    "".join(json.dumps({k: v for k, v in e.items() if k != "context"}) + "\n" for e in lines)
+                )
     all_rows = {}
     for name in SCENARIOS:
         if only and name not in only:
@@ -768,15 +1228,25 @@ def main(paper: Path, out: Path, results: Path, only: list[str] | None = None) -
         if work.exists():
             shutil.rmtree(work)
         shutil.copytree(base, work)
-        ws = apply_scenario(work, name, targets, result, cfg_main)
+        ws = apply_scenario(work, name, targets, result, cfg_main, doc)
+        if not ws.changed:
+            # nothing in this paper for the scenario to change
+            shutil.rmtree(work)
+            continue
         try:
             rows = classify(work, targets, recs, ws)
         except Exception as exc:  # report and go on
             rows = [{"error": repr(exc)}]
         all_rows[name] = rows
         c = Counter(r.get("outcome", "error") for r in rows)
-        print(f"{paper.name:10s} {name:28s} " + " ".join(f"{k}={c[k]}" for k in ("right", "wrong", "detached", "lost", "error") if c[k]), flush=True)
-    results.write_text(json.dumps({"targets": [t.__dict__ for t in targets], "records": recs, "rows": all_rows}, indent=1))
+        print(
+            f"{paper.name:10s} {name:28s} "
+            + " ".join(f"{k}={c[k]}" for k in ("right", "wrong", "untouched", "detached", "lost", "error") if c[k]),
+            flush=True,
+        )
+    results.write_text(
+        json.dumps({"targets": [t.__dict__ for t in targets], "records": recs, "rows": all_rows}, indent=1)
+    )
 
 
 if __name__ == "__main__":

@@ -790,7 +790,7 @@ def test_status_filters_and_never_fails(tmp_path: Path) -> None:
     j = status_json(q)
     envelope = {"verdict", "ok", "exit", "groups", "notes"}
     assert set(j) - envelope == {
-        "summary", "keys", "agent_documents", "undigested", "retired", "digests", "reading", "unmatched",
+        "summary", "keys", "agent_documents", "undigested", "retired", "digests", "reading", "unmatched", "unplaced",
     }  # fmt: skip
     assert j["summary"]["incomplete"] == 1
 
