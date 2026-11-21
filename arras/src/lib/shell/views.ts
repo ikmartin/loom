@@ -1,4 +1,4 @@
-// The column's two primary views, the reading address Docs returns to, and the development shelf's indexes.
+// The column's four views, the reading address Docs returns to, and the development shelf's indexes.
 
 import type { Manifest } from '$lib/manifest/types';
 import { isAgentDocument } from '$lib/manifest/documents';
@@ -11,12 +11,18 @@ export interface Index {
 	href: string;
 }
 
-/** Docs is reading and writing; Review is the quilt's management. The column's two tabs choose one. */
-export type Primary = 'docs' | 'review';
+/** The four views (`docs/design/library.md`, "The views"): Docs for drafting, the Library for works and reading, the Web for navigating results, Review for what waits on the person. Only their names in the column change view. */
+export type Primary = 'docs' | 'library' | 'web' | 'review';
 
-/** Which primary view a page is under, by its route id: Review holds `/review` and its sections, and every other page is read under Docs. */
+export const VIEWS: readonly Primary[] = ['docs', 'library', 'web', 'review'];
+
+/** Which view a page is under, by its route id: Review holds `/review` and its sections, the Library `/library`, the Web `/web`, and every other page is read under Docs. */
 export function primaryOf(routeId: string | null): Primary {
-	return routeId === '/review' || (routeId ?? '').startsWith('/review/') ? 'review' : 'docs';
+	const id = routeId ?? '';
+	if (id === '/review' || id.startsWith('/review/')) return 'review';
+	if (id === '/library') return 'library';
+	if (id === '/web') return 'web';
+	return 'docs';
 }
 
 /**

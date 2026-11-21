@@ -37,6 +37,12 @@
 	/* what floats over the text — the focused pane's toolbar and the popups it opens — casts this one shadow */
 	--float-shadow: 0 6px 24px rgb(0 0 0 / 12%);
 
+	/* the library's marks (`marks/Mark.svelte`), one vocabulary on every surface: a person's yes, what waits on a person, nothing yet, and a place the person marked; drawn from the states so the dark theme follows */
+	--mark-yes: var(--state-accepted);
+	--mark-wait: var(--state-stale);
+	--mark-none: var(--ink-faint);
+	--mark-person: var(--link);
+
 	/* states: text and wash, named for the state rather than for a severity role */
 	--state-accepted: #0f6e56;
 	--state-accepted-wash: #e1f5ee;
@@ -92,7 +98,7 @@
 	--rad-card: 12px;
 	--rail-left: 252px;
 	--rail-right: 236px;
-	--rail-folded: 44px; /* the column folded to its rail */
+	--rail-folded: 60px; /* the column folded to its strip of the four view names */
 	--tab-h: 30px; /* a pane's tab strip; a tab narrows to 1.5 times this before the strip scrolls */
 	--env-accent: 3px; /* the per-taxon rule down an environment's left edge, and the boundary the left gutter ends at */
 	--rail-a: 267px;

@@ -30,6 +30,7 @@
 	import { panel } from '$lib/shell/panel.svelte';
 	import { sessionView } from '$lib/sessions/sessions.svelte';
 	import { startReporting } from '$lib/here.svelte';
+	import { frame } from '$lib/words/frame';
 
 	let { children } = $props();
 
@@ -139,12 +140,12 @@
 </script>
 
 <svelte:head>
-	<title>{m ? m.corpus.name : 'arras'}</title>
+	<title>{m ? m.corpus.name : frame.column.unnamed}</title>
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
 <Column
-	label={m ? m.corpus.name : 'arras'}
+	label={m ? m.corpus.name : frame.column.unnamed}
 	primary={primaryOf(page.route.id)}
 	{docsHref}
 	indexes={indexesOf(m)}
@@ -159,11 +160,11 @@
 >
 	{#if store.problem && !m}
 		<main class="page">
-			<h1>Problems</h1>
+			<h1>{frame.page.problems}</h1>
 			<Diagnostics items={[store.problem]} />
 		</main>
 	{:else if !m}
-		<main class="page"><p class="muted">Loading manifest…</p></main>
+		<main class="page"><p class="muted">{frame.page.loading}</p></main>
 	{:else if inReading}
 		<Workspace />
 	{:else}

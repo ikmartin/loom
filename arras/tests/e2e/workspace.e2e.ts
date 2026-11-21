@@ -552,13 +552,14 @@ test.describe('the divider', () => {
 });
 
 test.describe('a narrow window', () => {
-	test('the column goes first, folded to its rail, and the stored choice is not rewritten', async ({ page }) => {
+	test('the column goes first, folded to its strip of the four views, and the stored choice is not rewritten', async ({ page }) => {
 		await serve(page, (m) => (m.references.Kre99.artifacts.pdf = true));
 		await page.setViewportSize({ width: 1100, height: 800 });
 		await page.goto('/library/Kre99');
 		await expect(page.locator('.panel.away')).toHaveCount(1);
-		expect((await page.getByTestId('column').boundingBox())!.width).toBeLessThanOrEqual(45);
-		// what must stay in reach stays: unfold and the session's dot
+		expect((await page.getByTestId('column').boundingBox())!.width).toBeLessThanOrEqual(61);
+		// what must stay in reach stays: unfold, the four views and the session's dot
+		for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`strip-${v}`)).toBeVisible();
 		await expect(page.getByTestId('panel-fold')).toBeVisible();
 		await expect(page.getByTestId('session-footer')).toBeVisible();
 		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').panel)).not.toBe(false);

@@ -5,6 +5,7 @@
 	import { canonUrl, keyUrl, masterUrl, threadUrl, workUrl } from '$lib/nav';
 	import { shelf } from '$lib/library';
 	import { landmarkName } from '$lib/workspace/history';
+	import { frame } from '$lib/words/frame';
 
 	let el: HTMLElement | undefined = $state();
 
@@ -22,7 +23,7 @@
 		const works = shelf(m).map((r) => ({
 			id: `work:${r.citekey}`,
 			title: `${r.citekey} · ${r.title}`,
-			section: 'work',
+			section: `${frame.views.docs.name} · work`,
 			keywords: r.text,
 			handler: () => void goto(workUrl(r.opens))
 		}));
@@ -40,7 +41,8 @@
 			return {
 				id: s.key,
 				title: landmark ? landmarkName(m, landmark) : `${s.key} ${s.title && s.title !== s.key ? '· ' + s.title : ''}`,
-				section: s.taxon || s.kind || 'node',
+				// the palette is a person naming where to go, as the four views' names are; each result says the view it opens in, all of them Docs' pages today
+				section: `${frame.views.docs.name} · ${s.taxon || s.kind || 'node'}`,
 				keywords: [...(s.aliases ?? []), ...(s.tags ?? []), s.excerpt ?? ''].join(' '),
 				handler: () => void goto(url)
 			};
