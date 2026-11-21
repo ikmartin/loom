@@ -116,6 +116,12 @@ class FakeWeb:
         hashes = {h(b.text) for b in self._holders(name, near)}
         return hashes.pop() if len(hashes) == 1 else None
 
+    def texts(self, key: tuple[str, str]) -> set[str]:
+        if key[0] == "node":
+            n = self.w.nodes.get(key[1])
+            return {h(n.text)} if n else set()
+        return {h(b.text) for b in self.w.blocks.values() if b.label == key[1]}
+
     def holder(self, key: tuple[str, str], near: Here) -> Here | None:
         found = self._holders(key[1], near) if key[0] == "label" else []
         return Here("block", found[0].key) if found and len({b.text for b in found}) == 1 else None
@@ -358,7 +364,7 @@ def earned(
     seen: frozenset[str] = frozenset(),
     proof: bool = True,
 ) -> list[str]:
-    """Why the result at `here` has not earned `formalized`, [] when it has; with `proof` False, why its own Lean statement is not attested, as an assumption needs.
+    """Why the result at `here` has not earned `formalized`, [] when it has; with `proof` False, why it does not count as an assumption: its own statement attested over Lean that elaborated, and what its statement uses in the library settled.
 
     From the rulings: Lean on the text now that elaborated (accepted, replayed) and, for a proof, has no `sorry`, no result of the person's stated as an axiom, and every axiom beyond Lean's three a library node or another of the person's results stated as one; the person's attestation on the text now of its statements, covering the closure as it reads now with the Lean records' uses, every notation row attested now; and for a proof also no citation, every node under it and the node itself read and compared now, each assumed node formalized itself and each assumed result of the person's with its own statement attested, round nothing already asked of.
     """
@@ -406,6 +412,9 @@ def earned(
         if not any(r.on is not None and r.on.hash == digest for r in ev.about("macro", name, of="attested")):
             out.append("a notation row not attested in its definition now")
     if not proof:
+        # an assumption's own statement: every library node it uses read and compared, every citation answered
+        if web.cited(here) or any(not _compared_now(ev, web, k[1]) for k in web.closure(here) if k[0] == "node"):
+            out.append("a library node or citation its statement uses not settled")
         return out
     if web.cited(here):
         out.append("a citation nothing answers for")
@@ -413,14 +422,14 @@ def earned(
     if any(not _compared_now(ev, web, n) for n in nodes):
         out.append("a node under it, or itself, not read and compared now")
     for kind, name in dict.fromkeys(assumed):
+        # one standard for a library node and a result of the person's: itself read and compared if a node, its own statement attested
+        there = Here("node", name) if kind == "node" else web.holder((kind, name), here)
         if name in seen | {s.name}:
             out.append("an assumption that comes round")
-        elif kind == "node" and (not _compared_now(ev, web, name) or earned(ev, web, Here("node", name), lean_now, seen | {s.name})):  # fmt: skip
-            out.append("an assumed node not settled")
-        elif kind == "label":
-            there = web.holder((kind, name), here)
-            if there is None or earned(ev, web, there, lean_now, seen | {s.name}, proof=False):
-                out.append("an assumed result of the person's whose own statement is not attested")
+        elif there is None or (kind == "node" and not _compared_now(ev, web, name)):
+            out.append("an assumption nothing settles")
+        elif earned(ev, web, there, lean_now, seen | {s.name}, proof=False):
+            out.append("an assumption whose own statement does not count")
     return out
 
 

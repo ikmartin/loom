@@ -251,60 +251,75 @@ def gate(
 ) -> tuple[Waiting, ...]:
     """What keeps a result from reading formalized (`docs/specs/evidence.md` §5.2).
 
-    `uses` are nodes that must be read and compared with their paper on their text now: those its closure holds, as it reads now and as attested, and a node asked of itself. `assumed` are what its Lean rests on as axioms (`relative_to`): a node must be that too and formalized itself; a result of the person's must have its own Lean statement attested on its text now (`_own_statement`), read as `near` reads its label. `cites` are citations no node answers for yet. What nothing can say of waits, so nothing resting on the library reads formalized before the library can answer for it; an assumption that comes round to a result already asked of is never settled.
+    `uses` are nodes that must be read and compared with their paper on their text now: those its closure holds, as it reads now and as attested, and a node asked of itself. `assumed` are what its Lean rests on as axioms (`relative_to`), a library node or a result of the person's, each held to one standard (`_assumption`). `cites` are citations no node answers for yet. What nothing can say of waits, so nothing resting on the library reads formalized before the library can answer for it.
     """
     out: list[Waiting] = [Waiting(("cite", c), "unknown") for c in dict.fromkeys(cites)]
-    for key, must_attest in [(("node", n), False) for n in uses] + [(k, True) for k in assumed]:
+    for node in uses:
+        key = ("node", node)
         if any(w.key == key for w in out):
             continue
-        kind, name = key
-        if kind == "label":
-            why = _own_statement(evidence, web, name, near, lean_now, seen)
-            if why:
-                out.append(Waiting(key, why))
+        why = _read_and_compared(evidence, web, node)
+        if why:
+            out.append(Waiting(key, why))
+    for key in assumed:
+        if any(w.key == key for w in out):
             continue
-        here = Here("node", name)
-        subject, stub = web.subject(here), web.stub(here)
-        if subject is None or stub is None:
-            out.append(Waiting(key, "unknown"))
-        elif stub:
-            out.append(Waiting(key, "stub"))
-        elif not any(
-            r.on is not None and r.on.hash == subject.hash for r in evidence.about("node", name, of="compared")
-        ):
-            out.append(Waiting(key, "unchecked"))
-        elif must_attest and (
-            name in seen or status(evidence, web, here, lean_now=lean_now, _seen=seen | {name}).lean != "formalized"
-        ):
-            out.append(Waiting(key, "unattested"))
+        why = _assumption(evidence, web, key, near, lean_now, seen)
+        if why:
+            out.append(Waiting(key, why))
     return tuple(out)
 
 
-def _own_statement(
+def _read_and_compared(evidence: Evidence, web: Web, node: str) -> str | None:
+    """Why a library node is not settled as a statement is used, None when it is: `unknown` where nothing can say of it, `stub` unread, `unchecked` not compared with its paper on its text now."""
+    here = Here("node", node)
+    subject, stub = web.subject(here), web.stub(here)
+    if subject is None or stub is None:
+        return "unknown"
+    if stub:
+        return "stub"
+    if not any(r.on is not None and r.on.hash == subject.hash for r in evidence.about("node", node, of="compared")):
+        return "unchecked"
+    return None
+
+
+def _assumption(
     evidence: Evidence,
     web: Web,
-    label: str,
+    key: tuple[str, str],
     near: Here | None,
     lean_now: Callable[[Record], bool],
     seen: frozenset[str],
 ) -> str | None:
-    """Why a result of the person's that another's Lean assumes is not settled, None when it is: its own Lean statement attested on its text now.
+    """Why a statement another's Lean assumes does not count yet, None when it does; one standard for a library node stated as an axiom and a result of the person's assumed for now.
 
-    That is, its status holds a person's attestation, with nothing changed and its notation attested, over a Lean record that elaborated (`ok`, the replay passed), whether or not that Lean proves it yet; `unknown` where no one text answers to the label, `unattested` otherwise.
+    It counts once its own statement is attested on its text now (its status holds a person's attestation, nothing changed and its notation attested) over Lean that elaborated (`ok`, the replay passed), whether or not that Lean proves it, since its proof is what is assumed; a node is read and compared itself; and every library node its statement uses is read and compared and every citation answered, what only its proof uses not needed. `unknown` where nothing can say of it, a node's `stub` or `unchecked`, else `unattested`; an assumption that comes round to a result already asked of never counts.
     """
-    holder = getattr(web, "holder", None)
-    there = holder(("label", label), near) if holder is not None and near is not None else None
-    if there is None:
-        return "unknown"
-    if label in seen:
+    kind, name = key
+    if kind == "node":
+        there: Here | None = Here("node", name)
+        why = _read_and_compared(evidence, web, name)
+        if why:
+            return why
+    else:
+        holder = getattr(web, "holder", None)
+        there = holder(key, near) if holder is not None and near is not None else None
+        if there is None:
+            return "unknown"
+    assert there is not None
+    if name in seen:
         return "unattested"
-    own = status(evidence, web, there, lean_now=lean_now, _seen=seen | {label})
+    own = status(evidence, web, there, lean_now=lean_now, _seen=seen | {name})
     record = evidence.by_id(own.lean_record) if own.lean_record else None
     elaborated = record is not None and bool(record.get("ok")) and (record.get("replay") or {}).get("exit") == 0
-    settled = own.attestation is not None and not own.causes and not own.unattested_notation
-    if settled and elaborated and own.lean in ("failed", "waiting", "formalized"):
-        return None
-    return "unattested"
+    attested = own.attestation is not None and not own.causes and not own.unattested_notation
+    if not (attested and elaborated and own.lean in ("failed", "waiting", "formalized")):
+        return "unattested"
+    cited = getattr(web, "cited", None)
+    statement_uses = [k[1] for k in web.closure(there) if k[0] == "node"]
+    if gate(evidence, web, statement_uses, [], lean_now, cites=list(cited(there)) if cited is not None else []):
+        return "unattested"
+    return None
 
 
 def brief(found: Status) -> dict[str, Any]:
@@ -415,9 +430,13 @@ def status(
         if never:
             return replace(found, lean="unattested")
         return replace(found, lean="waiting" if waiting else "formalized")
-    if not on_text and said:
-        # the person attested another text of this label, of a Lean that still stands: this text is not what they gave their word for
-        earlier = said[-1]
+    # an attestation of a text that no block bearing the label still has: this block's earlier text, which moved; one another block still has is that block's, never this one's
+    texts = getattr(web, "texts", None)
+    now_borne: set[str] = set(texts(subject.key)) if texts is not None else set()
+    moved = [a for a in said if a.on is not None and a.on.hash not in now_borne]
+    if not on_text and moved:
+        # the person attested this block's earlier text, of a Lean that still stands: this text is not what they gave their word for
+        earlier = moved[-1]
         if any(statements_of(r) == dict(earlier.get("statements", {})) for r in standing):
             changed, never = notation_of(evidence, web, here)
             causes = causes_of(earlier, web, here, now) + changed

@@ -268,7 +268,8 @@ def test_a_draft_copied_keeps_what_was_said_and_a_copy_changed_does_not(root: Pa
     copy = ("lem:balanced", "drafting/copy.tex")
     assert _status(root, copy).lean == "formalized"
     _edit(root, "on a tree vanishes", "on a forest vanishes", file="drafting/copy.tex")
-    assert _status(root, copy).lean == "changed"
+    # the original still has the attested text, so the copy's new text is one the person never attested
+    assert _status(root, copy).lean == "rerun"
     assert _status(root).lean == "formalized"
 
 

@@ -228,7 +228,18 @@ def test_a_copied_draft_keeps_what_was_said_until_the_copy_is_changed(root: Path
     put(root, {B: doc("", lemma % "Every widget is finite.")})
     assert lean_of(root, "lem:r", M) == lean_of(root, "lem:r", B) == "formalized"
     put(root, {B: doc("", lemma % "Every widget is countable.")})
-    assert lean_of(root, "lem:r", M) == "formalized" and lean_of(root, "lem:r", B) == "changed"
+    # main.tex still has the text attested: the copy's new text is one the person never attested, which loom runs Lean on
+    assert lean_of(root, "lem:r", M) == "formalized" and lean_of(root, "lem:r", B) == "rerun"
+
+
+def test_one_label_on_two_texts_from_the_start_never_crosses_when_one_is_attested(root: Path) -> None:
+    lemma = r"\begin{lemma}\label{lem:r}%s\end{lemma}"
+    put(root, {M: doc("", lemma % "Every widget is finite."), B: doc("", lemma % "Every widget is countable.")})
+    lean_and_attest(root, "lem:r", M)
+    assert lean_of(root, "lem:r", M) == "formalized" and lean_of(root, "lem:r", B) == "rerun"
+    # once main.tex's text moves, no block keeps the attested text, and main.tex reads it as its own earlier text
+    put(root, {M: doc("", lemma % "Every widget is finite and nonempty.")})
+    assert lean_of(root, "lem:r", M) == "changed"
 
 
 TWO_LEMMAS = r"\begin{lemma}\label{lem:r}Every widget is finite.\end{lemma}"

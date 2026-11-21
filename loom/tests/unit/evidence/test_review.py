@@ -403,3 +403,12 @@ def test_a_question_names_the_task_its_session_was_working_on(tmp_path: Path) ->
     # a task said done, or withdrawn, is no longer what the session works on
     say(q, AGENT, "done", task.id, made=["dm-00B7"])
     assert working_on(q, session) is None
+
+
+def test_a_text_never_attested_beside_an_attested_one_is_not_an_attested_result_that_changed(root: Path) -> None:
+    other = "drafting/b.tex"
+    (root / other).write_text(MAIN.replace("vanishes, as in", "is zero, as in"), encoding="utf-8")
+    for label in ("def:connected", "def:cycle", "lem:balanced"):
+        _lean(root, label, DOC)
+        _attest(root, label, DOC)
+    assert _rows(_gather(root), "attested-changed") == []

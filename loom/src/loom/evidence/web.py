@@ -72,6 +72,9 @@ class Web(Protocol):
     def holder(self, key: tuple[str, str], near: Here) -> Here | None:
         """The block bearing a label as `near` reads it, where one text answers; None otherwise and for anything but a label."""
 
+    def texts(self, key: tuple[str, str]) -> set[str]:
+        """Every hash what `key` names has now, in any document: a label's, each block bearing it; a node's, its one text."""
+
 
 class Blank:
     """A web that knows no text: every question is answered with nothing, so nothing reads as done and an ask a node would close stays open."""
@@ -102,6 +105,9 @@ class Blank:
 
     def holder(self, key: tuple[str, str], near: Here) -> Here | None:
         return None
+
+    def texts(self, key: tuple[str, str]) -> set[str]:
+        return set()
 
 
 class Joined:
@@ -142,6 +148,9 @@ class Joined:
 
     def holder(self, key: tuple[str, str], near: Here) -> Here | None:
         return self.draft.holder(key, near) if key[0] == "label" else None
+
+    def texts(self, key: tuple[str, str]) -> set[str]:
+        return (self.library if key[0] == "node" else self.draft).texts(key)
 
 
 def fold(text: str) -> str:
@@ -431,6 +440,10 @@ class DraftWeb:
                     if key.strip():
                         out.append(f"{key.strip()} {locator}".strip())
         return list(dict.fromkeys(out))
+
+    def texts(self, key: tuple[str, str]) -> set[str]:
+        """The hash of each block bearing a label now, in any document; empty for anything but a label."""
+        return {self._hash(n) for n in self.bearing.get(key[1], [])} if key[0] == "label" else set()
 
     def holder(self, key: tuple[str, str], near: Here) -> Here | None:
         """The block bearing a label as `near` reads it: the one text in a document that reads `near`, else the quilt's one; None where none or two texts answer."""
