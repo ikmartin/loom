@@ -898,14 +898,14 @@ def test_a_restore_never_opens_an_edit_whose_words_stand_elsewhere(q: Path) -> N
     assert p.read_text().count("the fixed points are those of") == 1
 
 
-def test_discarding_a_change_that_brings_a_kept_edits_words_back_records_it_kept(q: Path) -> None:
-    """The review's finding 7: a restore takes a Keep out, Your Changes lists that as the person's edit, and Discard writes the words back."""
+def test_a_restore_that_takes_a_kept_edit_out_lists_no_row_and_the_edit_is_kept_again(q: Path) -> None:
+    """A restore is the person's own act, so it goes into their look and lists no row; the edit it took out is open again, and Keep writes its words back."""
     first = record(q, "First")
     call(q, "change-keep", {"changes": [FIXED]})
     restore(q, first)
     assert status(q, FIXED) == "open"
-    (change,) = [x.id for x in waiting(q) if x.kind == "edit" and x.path == LEMMA]
-    call(q, "change-discard", {"changes": [change]})
+    assert [x.id for x in waiting(q) if x.kind == "edit" and x.path == LEMMA] == []
+    call(q, "change-keep", {"changes": [FIXED]})
     assert b"the fixed points are those of" in (q / LEMMA).read_bytes()
     assert status(q, FIXED) == "kept" and [x.id for x in waiting(q) if x.id == FIXED] == []
 
