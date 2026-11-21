@@ -15,10 +15,10 @@ The steps, in order:
     demos      the copies of those quilts under demos/
     tools      the list of the agent's tools
     reference  the command reference
-    views      a sample request and answer for each of Review's and the Web's reads and writes, which the viewer's sample data is
     principles the tables in the design's list of principles
     pages      the pages TeX makes of the quilts' documents, which the viewer's served suites read (TeX)
     fixture    the conformance fixture and its two copies (TeX)
+    views      a sample request and answer for each of Review's and the Web's reads and writes, which the viewer's sample data is; after `fixture`, whose manifest they are made from and which makes docs/specs/fixture/ again from nothing, so the copies do not carry them
 
 It ends by saying what changed, by path. The viewer's bundle is not regenerated here: it is vendored at a release (`loom/scripts/vendor_arras.py`).
 
@@ -81,13 +81,6 @@ STEPS = [
         ("loom/docs/cli-reference.md",),
     ),
     Step(
-        "views",
-        [*PY, "scripts/gen_views.py"],
-        [*PY, "scripts/gen_views.py", "--check"],
-        "loom",
-        ("docs/specs/fixture/views",),
-    ),
-    Step(
         "principles",
         [sys.executable, "scripts/checks/principles.py", "--write"],
         [sys.executable, "scripts/checks/principles.py"],
@@ -110,6 +103,13 @@ STEPS = [
         ".",
         ("docs/specs/fixture", "loom/tests/fixture", "arras/tests/fixture"),
         tex=True,
+    ),
+    Step(
+        "views",
+        [*PY, "scripts/gen_views.py"],
+        [*PY, "scripts/gen_views.py", "--check"],
+        "loom",
+        ("docs/specs/fixture/views",),
     ),
 ]
 

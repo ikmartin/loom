@@ -39,3 +39,14 @@ def test_the_step_writes_and_clears_its_own_samples_and_leaves_another_generator
     assert not (out / "review-gone.json").exists() and (out / "review-list.json").is_file()
     # a check reads its own files alone, so another generator's file never makes it stale
     assert mod["main"](True, out) == 0
+
+
+def test_no_step_of_the_regeneration_writes_inside_a_folder_a_later_step_writes() -> None:
+    """A step may make its folder again from nothing, as the fixture's refresh does, so the views' samples are written after it and a whole `scripts/regen` leaves them."""
+    steps = runpy.run_path(str(LOOM_DIR.parent / "scripts" / "regen"), run_name="not_main")["STEPS"]
+    for i, early in enumerate(steps):
+        for late in steps[i + 1 :]:
+            inside = [(e, w) for e in early.paths for w in late.paths if e.startswith(w.rstrip("/") + "/")]
+            assert not inside, (
+                f"{early.name} writes {inside[0][0]}, inside {inside[0][1]}, which {late.name} writes after it"
+            )
