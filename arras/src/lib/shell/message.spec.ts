@@ -38,4 +38,27 @@ describe("the column's message", () => {
 		await message.undo((why) => why);
 		expect(message.said).toBeNull();
 	});
+
+	it('goes by itself after a message taken down from under the pointer, which is told of no leaving', async () => {
+		message.post('Added a work.', () => ({ ok: true }));
+		message.hold();
+		message.clear();
+		message.post('Deleted a work.', () => ({ ok: true }));
+		message.hold();
+		await message.undo((why) => why);
+		message.post('Marked on page 7, to digest.');
+		vi.advanceTimersByTime(MESSAGE_FOR);
+		expect(message.said).toBeNull();
+	});
+
+	it('keeps the pointer\'s hold on a box a new message replaces', () => {
+		message.post('First.');
+		message.hold();
+		message.post('Second.');
+		vi.advanceTimersByTime(MESSAGE_FOR * 2);
+		expect(message.said?.text).toBe('Second.');
+		message.release();
+		vi.advanceTimersByTime(MESSAGE_FOR);
+		expect(message.said).toBeNull();
+	});
 });

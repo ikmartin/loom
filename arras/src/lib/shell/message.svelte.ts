@@ -19,17 +19,19 @@ class ColumnMessage {
 	#timer: ReturnType<typeof setTimeout> | null = null;
 	#held = 0;
 
-	/** Says `text` in the column's foot, with `undo` offered when given. */
+	/** Says `text` in the column's foot, with `undo` offered when given. A message posted while none shows starts with nothing holding it, since its box is new under the pointer and the keyboard; one that replaces a message on screen keeps the holds on that box. */
 	post(text: string, undo?: Said['undo']): void {
 		this.#stop();
+		if (!this.said) this.#held = 0;
 		this.undoing = false;
 		this.said = { text, undo };
 		this.#start();
 	}
 
-	/** Takes the message down. */
+	/** Takes the message down, and with its box every hold on it: a box taken from under the pointer or the keyboard is told of no leaving. */
 	clear(): void {
 		this.#stop();
+		this.#held = 0;
 		this.said = null;
 		this.undoing = false;
 	}

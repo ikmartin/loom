@@ -1,4 +1,4 @@
-// The frame at each width the layout defines: the column open beside two panes; the column folded to its strip below 1200px; one pane below the workspace's two-pane width. At each, what must stay in reach does, every pane draws its toolbar, and nothing scrolls sideways.
+// The frame at each width the layout defines: the column open beside two panes; the column folded to its strip below 1200px; one pane below the workspace's two-pane width. At each, what must stay in reach does, every pane draws its toolbar, and nothing scrolls sideways; and the column's message, which goes by itself however the last one was ended.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane } from '../workspace';
 import { PDF } from '../manifest';
@@ -95,4 +95,30 @@ test("the quilt's name is not a way anywhere, and the head's icons are 28 px tar
 		expect(target.height).toBeGreaterThanOrEqual(28);
 		expect(glyph.width).toBeGreaterThanOrEqual(16);
 	}
+});
+
+test("a message dismissed by mouse lets the next go by itself, and one dismissed by keyboard hands the keyboard to the foot's next control", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/review?fixture=round6');
+	await page.getByTestId('review-kind-agents').click();
+	const tasks = page.getByTestId('review-task');
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	const said = page.getByTestId('column-message');
+	await expect(said).toContainText('Task deleted.');
+	// dismissed with the pointer: the box goes from under it
+	await said.getByTestId('column-message-dismiss').click();
+	await expect(said).toHaveCount(0);
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await expect(said).toContainText('Task deleted.');
+	await page.mouse.move(900, 600);
+	await expect(said).toHaveCount(0, { timeout: 9000 });
+	// dismissed from the keyboard
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await said.getByTestId('column-message-dismiss').focus();
+	await page.keyboard.press('Enter');
+	await expect(said).toHaveCount(0);
+	await expect(page.getByTestId('legend-open')).toBeFocused();
 });
