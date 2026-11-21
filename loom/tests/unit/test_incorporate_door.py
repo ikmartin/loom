@@ -237,9 +237,9 @@ def test_an_act_whose_history_lines_landed_and_were_followed_is_left_not_put_bac
 
 
 def test_a_history_line_loom_writes_after_a_crash_settles_the_act_first(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Every writer of the history from outside an act settles what a crash left first, as `loom live`, a draft closed and Keep all's line do through `append_entry`, so none leaves an act stuck (R-2)."""
+    """Every writer of the history from outside an act settles what a crash left first, as `loom live`, a draft closed and Keep all's line do through `append_entry`, so none leaves an act stuck (R-2), and says so, as a command that draws an id does."""
     q, token = ready(tmp_path)
     ledger_writes: list[Path] = []
     real = writes._append_line
@@ -255,10 +255,38 @@ def test_a_history_line_loom_writes_after_a_crash_settles_the_act_first(
     with pytest.raises(Died):
         incorporate(scan(q), COPY, token)
     monkeypatch.undo()
+    capsys.readouterr()
     append_entry(q.history_dir, "live", {"path": "drafting/old.tex"}, "Tester")
+    assert "loom: finished adopt:" in capsys.readouterr().err
     assert not writes.read_journal(q.root).begun
     assert [e.action for e in load_history(q.history_dir).entries][-3:] == ["stamp", "adopt", "live"]
     assert recorded_folders_stand(q)
+
+
+@pytest.mark.parametrize("command", [("ai", "refresh", COPY), ("ai", "close", COPY, "--yes")])
+def test_a_command_that_writes_a_history_line_after_a_crash_says_what_it_settled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: tuple[str, ...]
+) -> None:
+    """`loom ai refresh` and `loom ai close` settle an adoption cut between its two history lines before their own line, and say so on stderr, as a command that draws an id does."""
+    from tests.helpers import ok
+
+    q, token = ready(tmp_path)
+    ledger_writes: list[Path] = []
+    real = writes._append_line
+
+    def second_dies(path: Path, text: str, full: bool = False) -> tuple[int, int]:
+        if path.name == "ledger.jsonl":
+            ledger_writes.append(path)
+            if len(ledger_writes) == 2:
+                raise Died
+        return real(path, text, full)
+
+    monkeypatch.setattr(writes, "_append_line", second_dies)
+    with pytest.raises(Died):
+        incorporate(scan(q), COPY, token)
+    monkeypatch.undo()
+    assert "loom: finished adopt:" in ok(*command, cwd=q.root).stderr
+    assert not writes.read_journal(q.root).begun and recorded_folders_stand(q)
 
 
 def test_a_step_recorded_beside_a_left_act_takes_a_number_its_folders_do_not(

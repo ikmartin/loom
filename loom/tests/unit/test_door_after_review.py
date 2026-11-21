@@ -276,6 +276,111 @@ def test_a_left_act_whose_files_a_later_act_wrote_is_left_and_the_later_act_stan
     assert all((hist / e.dir).is_dir() for e in h.entries if e.dir)
 
 
+# ---- R-8: a later act itself cut short --------------------------------------------------------------------------
+
+#: The file-system calls a kill can fall before or after, as the review's kill harness counts them.
+STEPS = ("replace", "rename", "unlink", "remove", "rmdir", "fsync", "mkdir", "chmod")
+
+
+def dying_at_step(mp: pytest.MonkeyPatch, root: Path, k: int) -> list[int]:
+    """Make the process die at the `k`-th file-system step it takes holding `root`'s door lock, just before or just after a call of `STEPS` or a full flush (0: never); returns the count, which a run that never dies reads for its number of steps."""
+    import fcntl
+
+    from loom.locks import holding
+    from loom.paths import WRITES_LOCK
+    from tests.unit.test_write_safety import Died
+
+    lock = root / WRITES_LOCK
+    count = [0]
+
+    def point() -> None:
+        if holding(lock):
+            count[0] += 1
+            if count[0] == k:
+                raise Died
+
+    def wrapped(real):  # type: ignore[no-untyped-def]
+        def call(*a, **kw):  # type: ignore[no-untyped-def]
+            point()
+            out = real(*a, **kw)
+            point()
+            return out
+
+        return call
+
+    for name in STEPS:
+        mp.setattr(os, name, wrapped(getattr(os, name)))
+    real_fcntl = fcntl.fcntl
+    full = getattr(fcntl, "F_FULLFSYNC", None)
+    mp.setattr(fcntl, "fcntl", lambda fd, cmd, *a: (wrapped(real_fcntl) if cmd == full else real_fcntl)(fd, cmd, *a))
+    return count
+
+
+def test_a_left_act_is_never_put_back_over_a_later_act_cut_short_at_any_of_its_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """R-1's sequence with the second import itself killed, at each step it takes holding the door: recovery finishes the second act, puts it back or leaves it, and never puts the left act back over a file the second wrote; the history names only folders that stand, and the draft is there exactly when the history says the paper came in (R-8)."""
+    import shutil
+
+    from loom import writes
+    from loom.history.ledger import load_history
+    from tests.helpers import run
+    from tests.unit.test_paper import bare_quilt, paper_dir
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    p = paper_dir(tmp_path)
+    base = bare_quilt(tmp_path)
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=base)
+    restore()
+    (base / "main/refs.bib").write_bytes(b"% the person's own bibliography\n")
+    (first,) = begun(base, "import")
+    # a later moment, so the second import's history line is not the first's
+    monkeypatch.setenv("LOOM_FIXED_TIME", "2026-11-22T09:00:00Z")
+
+    def second(k: int) -> Path:
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q, symlinks=True)
+        with pytest.MonkeyPatch.context() as mp:
+            count = dying_at_step(mp, q, k)
+            try:
+                run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+            except Died:
+                pass
+        assert k or count[0] > 20, count  # the whole import, counted
+        steps.append(count[0])
+        return q
+
+    steps: list[int] = []
+    second(0)
+    for k in range(1, steps[0] + 1):
+        q = second(k)
+        later = [e for e in begun(q, "import") if e["act"] != first["act"]]
+        files = later[0]["files"] if later else {}
+        held = {rel: (q / rel).read_bytes() if (q / rel).is_file() else None for rel in files}
+        hist = q / ".loom/records/history"
+        said = writes.recover(q, hist)
+        assert not any(s.startswith(f"undid {first['act']}") for s in said), (k, said)
+        events = {e["event"] for e in writes_lines(q) if later and e["act"] == later[0]["act"]}
+        for rel, (before, after) in files.items():
+            if "done" in events:
+                assert writes._holds(q, rel, after), (k, rel, said)
+            elif "aborted" in events:
+                assert not (q / rel).exists() if before is None else writes._holds(q, rel, before), (k, rel, said)
+            else:
+                assert ((q / rel).read_bytes() if (q / rel).is_file() else None) == held[rel], (k, rel, said)
+        h = load_history(hist)
+        assert all((hist / e.dir).is_dir() for e in h.entries if e.dir), (k, said)
+        assert any(e.action == "import" for e in h.entries) == (q / "main/main.tex").is_file(), (k, said)
+        shutil.rmtree(q)
+
+
+def writes_lines(root: Path) -> list[dict]:
+    p = root / ".loom/local/writes.jsonl"
+    return [json.loads(x) for x in p.read_text().splitlines()] if p.is_file() else []
+
+
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
 
 

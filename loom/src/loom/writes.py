@@ -665,7 +665,7 @@ def _temps(root: Path, rel: str) -> list[Path]:
 
 @dataclass
 class Journal:
-    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act also names (`crossed`)."""
+    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled)."""
 
     offset: int = 0
     begun: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)
@@ -695,6 +695,18 @@ class Journal:
         elif event == "aborted":
             self.begun.pop(act, None)
             self.crossed.pop(act, None)
+
+    def crossing(self, act: str) -> list[str]:
+        """The files of `act`, begun and not settled, that a later act also names: one done since (`crossed`), or one begun after it and not settled, which may have written them before it was cut short."""
+        at, entry = self.begun[act]
+        mine = entry.get("files")
+        out = set(self.crossed.get(act, []))
+        if isinstance(mine, dict):
+            for other_at, e in self.begun.values():
+                theirs = e.get("files")
+                if other_at > at and isinstance(theirs, dict):
+                    out |= set(mine) & set(theirs)
+        return sorted(out)
 
     def append(self, root: Path, entry: dict[str, Any], *, full: bool = False) -> None:
         """Append `entry` to the quilt's journal and take it in; under the lock, so nothing else was appended since this was read."""
@@ -1005,7 +1017,7 @@ BY_HAND = "it stays until it is settled by hand, which loom does not yet do"
 
 
 def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] | tuple[str, ...] = ()) -> _Verdict:
-    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act done since wrote too (`Journal.crossed`): one of those still holding this act's bytes holds the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`)."""
+    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`)."""
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
@@ -1024,10 +1036,10 @@ def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] 
         )
     over = [rel for rel in crossed if rel in holds and holds[rel][1]]
     if over:
-        # a later act, done, wrote these files too and they hold this act's bytes, which are that act's now: putting them back would take its work out
+        # a later act wrote these files too, or was cut short writing them, and they hold this act's bytes, which may be that act's now: putting them back could take its work out
         return _Verdict(
             "left",
-            f"a later act wrote {_named(over)} since, so putting this one back would take that act's work out, and recovery changed nothing: {_where(holds)}",
+            f"a later act wrote {_named(over)} too, or was cut short writing it, so putting this one back could take that act's work out, and recovery changed nothing: {_where(holds)}",
             holds,
             settles=f"Loom will not put it back over that act, so {BY_HAND}.",
         )
@@ -1077,7 +1089,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
 
     said: list[str] = []
     for act_id, (_, e) in list(j.begun.items()):
-        v = _judge(root, history, e, j.crossed.get(act_id, ()))
+        v = _judge(root, history, e, j.crossing(act_id))
         if v.how == "left":
             said.append(f"left {act_id}: {v.why}")
             continue
@@ -1156,7 +1168,7 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, str]]:
     out: list[tuple[str, list[str], str, str]] = []
     j = read_journal(root)
     for act_id, (_, e) in j.begun.items():
-        v = _judge(root, history, e, j.crossed.get(act_id, ()))
+        v = _judge(root, history, e, j.crossing(act_id))
         if v.how != "left":
             continue
         if not v.trusted:
@@ -1590,7 +1602,7 @@ def is_staging() -> bool:
 
 
 def settle_for_history(history: Path) -> list[str]:
-    """Settle what a crash left before a line goes into the history `history` from outside an act, as an act and `cli._quilt.drawing_ids` do, so no step is read or written against an act in flight; returns what was done, in words.
+    """Settle what a crash left before a line goes into the history `history` from outside an act, as an act and `cli._quilt.drawing_ids` do, so no step is read or written against an act in flight; says what was done on stderr, as `drawing_ids` does, and returns it.
 
     Nothing where this thread holds the door's lock already (it settled as it took it) or the ledger's, which comes after the door's in the order every holder takes them; nothing outside a quilt.
     """
@@ -1601,7 +1613,13 @@ def settle_for_history(history: Path) -> list[str]:
     root = next((p for p in history.resolve().parents if (p / LOOM).is_dir() and (p / "config.toml").is_file()), None)
     if root is None or holding(root / WRITES_LOCK) or holding(history / LEDGER):
         return []
-    return recover(root, history)
+    said = recover(root, history)
+    if said:
+        import click
+
+        for line in said:
+            click.echo(f"loom: {line}", err=True)
+    return said
 
 
 def history_of(root: Path) -> Path:
