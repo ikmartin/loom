@@ -116,17 +116,62 @@ def statements_of(record: Record) -> dict[str, str]:
     return {d["name"]: d["statement"] for d in record.get("declarations", []) if d.get("role") == "states"}
 
 
-def causes_of(attestation: Record, web: Web, here: Here) -> list[Cause]:
-    """What changed since an attestation on a result was made: the result's own text, and each member of its closure as `here` reads it."""
+#: The axioms a proof may rest on and still read proved: Lean's own three. A `sorry` is `sorryAx`; any other axiom must be one the record itself states, a result it assumes.
+STANDARD_AXIOMS = frozenset({"propext", "Classical.choice", "Quot.sound"})
+
+
+def states(record: Record, subject: Subject) -> bool:
+    """Whether a `lean` record has a declaration stating `subject`: a record that states nothing of a result is not about it."""
+    return any(
+        d.get("role") == "states" and d.get("names") == {subject.kind: subject.name}
+        for d in record.get("declarations", [])
+    )
+
+
+def proves(record: Record, subject: Subject) -> bool:
+    """Whether Lean accepted `subject` whole in this record: `ok`, the kernel's replay passed, and every declaration stating it free of `sorry` and of any axiom beyond Lean's own three and the results the record itself states as axioms."""
+    if not record.get("ok") or (record.get("replay") or {}).get("exit") != 0:
+        return False
+    decls = record.get("declarations", [])
+    stated = {d["name"] for d in decls if d.get("kind") == "axiom"}
+    for d in decls:
+        if d.get("role") != "states" or d.get("names") != {subject.kind: subject.name}:
+            continue
+        if d.get("sorry") or set(d.get("axioms", [])) - STANDARD_AXIOMS - stated:
+            return False
+    return True
+
+
+def closure_now(web: Web, here: Here, leans: list[Record]) -> dict[tuple[str, str], str | None]:
+    """What the statement at `here` uses as it reads now, and what each Lean record of it says its declarations rest on, each with its hash now (None where nothing answers)."""
+    out: dict[tuple[str, str], str | None] = dict(web.closure(here))
+    for lean in leans:
+        for raw in lean.get("uses", []):
+            member = Subject.from_dict(raw, ("node", "label"))
+            out.setdefault(member.key, web.resolve(member.key, here))
+    return out
+
+
+def causes_of(
+    attestation: Record, web: Web, here: Here, now: dict[tuple[str, str], str | None] | None = None
+) -> list[Cause]:
+    """Why an attestation no longer holds: the result's own text changed, a member of the closure as it reads now is not attested at its hash now (`then` null for one it never named), or a member it named no longer has its hash."""
     out: list[Cause] = []
     subject = web.subject(here)
     if attestation.on is not None and (subject is None or subject.hash != attestation.on.hash):
         out.append(Cause(attestation.on.key, attestation.on.hash, subject.hash if subject else None))
-    for raw in attestation.get("closure", []):
-        member = Subject.from_dict(raw, ("node", "label"))
-        now = web.resolve(member.key, here)
-        if now != member.hash:
-            out.append(Cause(member.key, member.hash, now))
+    members = (Subject.from_dict(raw, ("node", "label")) for raw in attestation.get("closure", []))
+    attested = {m.key: m.hash for m in members}
+    reads: dict[tuple[str, str], str | None] = now if now is not None else dict(web.closure(here))
+    for key, digest in reads.items():
+        # a member it never named is a cause even where nothing answers for it now
+        if key not in attested or attested[key] != digest:
+            out.append(Cause(key, attested.get(key), digest))
+    # what it named must still be what `here` reads under that name, alone: a label two texts answer to near it holds nothing
+    for key, then in attested.items():
+        answer = web.resolve(key, here)
+        if answer != then and all(c.key != key for c in out):
+            out.append(Cause(key, then, answer))
     return out
 
 
@@ -163,12 +208,13 @@ def gate(
     assumed: Iterable[str],
     lean_now: Callable[[Record], bool],
     seen: frozenset[str] = frozenset(),
+    cites: Iterable[str] = (),
 ) -> tuple[Waiting, ...]:
     """The library results that keep a result from reading formalized (`docs/specs/evidence.md` §5.2).
 
-    `uses` are the nodes its statement's closure holds: each must be read and compared with its paper on its text now. `assumed` are the nodes its Lean states as axioms: each must be that, and its own Lean statement attested (its status `formalized`). A node nothing can say of waits, so a result resting on the library never reads formalized before the library can answer for it.
+    `uses` are the nodes its statement's closure holds, as it reads now and as it was attested: each must be read and compared with its paper on its text now. `assumed` are the nodes its Lean states as axioms: each must be that, and its own Lean statement attested (its own status `formalized`). `cites` are the draft's citations of one result of a work that no node answers for yet. A node nothing can say of waits, so a result resting on the library never reads formalized before the library can answer for it.
     """
-    out: list[Waiting] = []
+    out: list[Waiting] = [Waiting(("cite", c), "unknown") for c in dict.fromkeys(cites)]
     for node, must_attest in [(n, False) for n in uses] + [(n, True) for n in assumed]:
         if any(w.key == ("node", node) for w in out):
             continue
@@ -239,42 +285,66 @@ def status(
         ]
         proposal = open_[-1].id if open_ else None
     base = Status(subject, reading, compared_before, how, sought, proposal, accepted=web.acceptance(here))
-    leans = evidence.about(kind, name, of="lean")
+    # a record that states nothing of this result is not about it; one on another text speaks for that text
+    leans = [r for r in evidence.about(kind, name, of="lean") if states(r, subject)]
     if not leans:
         return base
     standing = [r for r in leans if lean_now(r)]
     if not standing:
         return replace(base, lean="rerun")
-    latest = standing[-1]
-    current = latest if latest.on is not None and latest.on.hash == subject.hash else None
-    if current is None:
-        found = replace(base, lean="rerun", lean_record=latest.id)
-    else:
+    mine = [r for r in standing if r.on is not None and r.on.hash == subject.hash]
+    current = mine[-1] if mine else None
+    latest = current or standing[-1]
+    found = replace(base, lean_record=latest.id)
+    if current is not None:
         assumed = tuple(Subject.from_dict(a, ("node",)) for a in current.get("assumed", []))
-        found = replace(
-            base, role=_role(current, subject), relative_to=assumed, lean_record=current.id, lean_since=current.at
-        )
-    said = [r for r in evidence.about(kind, name, of="attested") if r.by.kind == "person"]
-    attestation = said[-1] if said else None
-    if attestation is not None and dict(attestation.get("statements", {})) == statements_of(latest):
-        found = replace(found, attestation=attestation.id)
+        found = replace(found, role=_role(current, subject), relative_to=assumed, lean_since=current.at)
+    # every standing record on this text says what Lean rested on, whether or not it states the result: its uses count
+    on_this = [
+        r
+        for r in evidence.about(kind, name, of="lean")
+        if lean_now(r) and r.on is not None and r.on.hash == subject.hash
+    ]
+    now = closure_now(web, here, on_this or [latest])
+    # a web written before citations were asked of it (a test's) cites nothing
+    cited = getattr(web, "cited", None)
+    cites: list[str] = list(cited(here)) if cited is not None else []
+    said = [r for r in evidence.about(kind, name, of="attested") if r.by.kind == "person" and r.on is not None]
+    on_text = [a for a in said if a.on is not None and a.on.hash == subject.hash]
+    fitting = [a for a in on_text if dict(a.get("statements", {})) == statements_of(latest)]
+    if fitting:
+        attestation = fitting[-1]
         changed, never = notation_of(evidence, web, here)
-        causes = causes_of(attestation, web, here) + changed
+        causes = causes_of(attestation, web, here, now) + changed
+        found = replace(found, attestation=attestation.id, unattested_notation=tuple(never))
         if causes:
-            return replace(found, lean="changed", causes=tuple(causes), unattested_notation=tuple(never))
+            return replace(found, lean="changed", causes=tuple(causes))
         if current is None:
-            return replace(found, unattested_notation=tuple(never))
-        uses = [m["node"] for m in attestation.get("closure", []) if "node" in m]
-    else:
-        if current is None:
-            return found
-        never = notation_of(evidence, web, here)[1]
-        uses = [k[1] for k in web.closure(here) if k[0] == "node"]
-        attestation = None
-    waiting = gate(evidence, web, uses, [a.name for a in found.relative_to], lean_now, _seen | {name})
+            return replace(found, lean="rerun")
+        attested_nodes = [m["node"] for m in attestation.get("closure", []) if "node" in m]
+        uses = [k[1] for k in now if k[0] == "node"] + attested_nodes
+        waiting = gate(evidence, web, uses, [a.name for a in found.relative_to], lean_now, _seen | {name}, cites)
+        found = replace(found, waiting_on=waiting)
+        if not proves(current, subject):
+            return replace(found, lean="failed")
+        if never:
+            return replace(found, lean="unattested")
+        return replace(found, lean="waiting" if waiting else "formalized")
+    if not on_text and said:
+        # the person attested another text of this label, of a Lean that still stands: this text is not what they gave their word for
+        earlier = said[-1]
+        if any(statements_of(r) == dict(earlier.get("statements", {})) for r in standing):
+            changed, never = notation_of(evidence, web, here)
+            causes = causes_of(earlier, web, here, now) + changed
+            return replace(
+                found, lean="changed", attestation=earlier.id, causes=tuple(causes), unattested_notation=tuple(never)
+            )
+    if current is None:
+        return replace(found, lean="rerun")
+    never = notation_of(evidence, web, here)[1]
+    uses = [k[1] for k in now if k[0] == "node"]
+    waiting = gate(evidence, web, uses, [a.name for a in found.relative_to], lean_now, _seen | {name}, cites)
     found = replace(found, unattested_notation=tuple(never), waiting_on=waiting)
-    if not current.get("ok"):
+    if not proves(current, subject):
         return replace(found, lean="failed")
-    if attestation is None or never:
-        return replace(found, lean="unattested")
-    return replace(found, lean="waiting" if waiting else "formalized")
+    return replace(found, lean="unattested")

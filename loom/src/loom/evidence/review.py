@@ -283,7 +283,7 @@ def _attest(
                     "what": "statement and proof" if r.status.role in ("proved", "unproved") else "statement only",
                     "paper": None,
                     "lean": r.status.lean_record,
-                    "waiting_on": [{"node": w.key[1], "why": w.why} for w in r.status.waiting_on],
+                    "waiting_on": [{w.key[0]: w.key[1], "why": w.why} for w in r.status.waiting_on],
                 },
             )
         )

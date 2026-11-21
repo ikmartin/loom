@@ -5,9 +5,11 @@ Appended under the log's lock and never rewritten, so two clones' lines merge by
 
 from __future__ import annotations
 
+import bisect
 import json
+import os
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -74,16 +76,19 @@ class Evidence:
     _declined: dict[str, Record] = field(default_factory=dict, repr=False)
 
     def add(self, record: Record) -> None:
-        """Take in one record read or just written; the indexes follow."""
+        """Take in one record read or just written; the indexes follow. A line a merge kept twice is the record it repeats, so its second copy is passed over wherever it stands (`loom:repeated-id` reports it)."""
+        if record.id in self._ids:
+            return
         self.records.append(record)
-        self._ids.setdefault(record.id, record)
+        self._ids[record.id] = record
         if record.on is not None:
-            self._about.setdefault(record.on.key, []).append(record)
+            # by when it was written, not where a merge put it; a line of the same second after those before it in the file
+            bisect.insort_right(self._about.setdefault(record.on.key, []), record, key=lambda r: r.at)
         if record.kind == "declined":
             self._declined.setdefault(str(record.get("proposal")), record)
 
     def about(self, kind: str, name: str, *, of: str | None = None) -> list[Record]:
-        """Every record on the thing `kind`, `name` names, at any hash, oldest first; with `of`, only records of that kind."""
+        """Every record on the thing `kind`, `name` names, at any hash, oldest first by `at`, records of one second in the order read; with `of`, only records of that kind."""
         found = self._about.get((kind, name), [])
         return [r for r in found if of is None or r.kind == of]
 
@@ -99,14 +104,76 @@ class Evidence:
         """Every record of one kind, oldest first."""
         return [r for r in self.records if r.kind == kind]
 
+    def ids(self) -> Collection[str]:
+        """Every record's id, for drawing a new one."""
+        return self._ids.keys()
+
+    def copy(self) -> Evidence:
+        """A copy whose lists and indexes are its own, which a replay extends while a reader holds the first."""
+        return Evidence(
+            list(self.records),
+            list(self.problems),
+            {k: list(v) for k, v in self._about.items()},
+            dict(self._ids),
+            dict(self._declined),
+        )
+
 
 def log_path(root: Path) -> Path:
     """The log's file in `root`."""
     return root / EVIDENCE_LOG
 
 
-#: The last replay of each log, by its path, with the size, time and inode it was read at.
-_MEMO: dict[str, tuple[tuple[int, int, int], Evidence]] = {}
+@dataclass(frozen=True)
+class Read:
+    """How far a replay read a log: its inode, the bytes read (to the end of the last whole line), the lines read, and the bytes just before that end, by which the file is known for the same one grown."""
+
+    ino: int
+    size: int
+    lines: int
+    tail: bytes
+
+
+#: The last replay of each log, by its path: how far it read, and what it read.
+_MEMO: dict[str, tuple[Read, Evidence]] = {}
+#: How many bytes before where a replay stopped must be unchanged for the file to be read on from there.
+_TAIL = 64
+
+
+def grown(path: Path, held: Read | None) -> tuple[bytes, int, bytes] | None:
+    """The bytes appended to `path` since `held` read it, as whole lines, and the offset they start at; None when the file is not that one grown (another inode, shorter, or changed before where the replay stopped), which is read again whole.
+
+    A last line not yet ended is returned apart and not counted as read: a writer may be appending it now, and a line torn by a writer that died is ended by the next writer (`append_line` starts on a new line), then read and reported.
+    """
+    with path.open("rb") as fh:
+        st = os.fstat(fh.fileno())
+        if held is None or st.st_ino != held.ino or st.st_size < held.size:
+            return None
+        if held.size:
+            fh.seek(max(0, held.size - _TAIL))
+            if fh.read(min(_TAIL, held.size)) != held.tail:
+                return None
+        fh.seek(held.size)
+        more = fh.read()
+    end = more.rfind(b"\n") + 1
+    return more[:end], held.size, more[end:]
+
+
+def _whole(path: Path) -> tuple[bytes, int, bytes]:
+    with path.open("rb") as fh:
+        data = fh.read()
+    end = data.rfind(b"\n") + 1
+    return data[:end], 0, data[end:]
+
+
+def stopped(path: Path, start: int, chunk: bytes, lines: int) -> Read:
+    """Where a replay that read `chunk` from `start` stopped."""
+    size = start + len(chunk)
+    with path.open("rb") as fh:
+        fh.seek(max(0, size - _TAIL))
+        tail = fh.read(min(_TAIL, size))
+        ino = os.fstat(fh.fileno()).st_ino
+    return Read(ino, size, lines + chunk.count(b"\n"), tail)
 
 
 def replay(root: Path) -> Evidence:
@@ -120,26 +187,36 @@ def replay(root: Path) -> Evidence:
     Returns
     -------
     Evidence
-        In the order written. Read again only when the file's size, time or inode moved since the last replay; a caller must not change what it is given.
+        In the order written, the first of two lines under one id standing for both. A replay reads on from where the last one stopped while the file is that one grown, and reads it whole otherwise; what it returns is a copy a later replay does not change, and a caller must not change it either.
     """
     path = log_path(root)
-    try:
-        st = path.stat()
-    except FileNotFoundError:
+    if not path.is_file():
         return Evidence()
-    stamp_ = (st.st_size, st.st_mtime_ns, st.st_ino)
     held = _MEMO.get(str(path))
-    if held is not None and held[0] == stamp_:
-        return held[1]
-    found = _read(path.read_text(encoding="utf-8"))
-    _MEMO[str(path)] = (stamp_, found)
-    return found
+    found = grown(path, held[0] if held else None)
+    if found is None or held is None:
+        chunk, start, rest = _whole(path)
+        value, lines = Evidence(), 0
+    else:
+        chunk, start, rest = found
+        if not chunk and not rest.strip():
+            return held[1]
+        value, lines = held[1].copy(), held[0].lines
+    _read(chunk.decode("utf-8"), value, lines)
+    _MEMO[str(path)] = (stopped(path, start, chunk, lines), value)
+    if rest.strip():
+        # a last line with no line feed: read when it is a whole record, as a hand-written one is, and read again once ended
+        try:
+            value = value.copy()
+            value.add(parse(json.loads(rest.decode("utf-8"))))
+        except (ValueError, UnicodeDecodeError):
+            pass
+    return value
 
 
-def _read(text: str) -> Evidence:
-    """Parse the log's text; a line that fails `check` is reported by its number and skipped."""
-    out = Evidence()
-    for n, line in enumerate(text.splitlines(), 1):
+def _read(text: str, out: Evidence, before: int = 0) -> Evidence:
+    """Parse lines of the log into `out`, numbering them from `before`; a line that fails `parse` is reported by its number and skipped."""
+    for n, line in enumerate(text.splitlines(), before + 1):
         if not line.strip():
             continue
         try:
@@ -449,9 +526,18 @@ def write(root: Path, kind: str, by: Who, *, on: Subject | None = None, **fields
     except ValueError as exc:
         raise EvidenceRefused(str(exc)) from None
     with locked(path):
-        line["id"] = draw(f"ev-{at[:10]}-", {r.id for r in replay(root).records})
+        line["id"] = draw(f"ev-{at[:10]}-", replay(root).ids())
         record = parse(line)
-        text = json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n"
-        with path.open("a", encoding="utf-8") as fh:
-            fh.write(text)
+        append_line(path, json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     return record
+
+
+def append_line(path: Path, text: str) -> None:
+    """Append one line to a log, under its lock: on a line of its own even where a writer that died left the last one unended, which then reads as one bad line and not as the start of this one."""
+    with path.open("a+b") as fh:
+        fh.seek(0, os.SEEK_END)
+        ended = True
+        if fh.tell():
+            fh.seek(-1, os.SEEK_END)
+            ended = fh.read(1) == b"\n"
+        fh.write((b"" if ended else b"\n") + text.encode("utf-8") + b"\n")

@@ -9,6 +9,8 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from loom.identity import is_agent
+
 #: The three things a record can be about, by the key that names each in a record.
 KINDS = ("node", "label", "macro")
 #: A text's hash, as records write it.
@@ -18,7 +20,7 @@ NODE = re.compile(r"[A-Za-z0-9]+-[0-9A-Z]{4}(?:-ref|-macros|-proof[0-9A-Z]{2})?"
 #: A work's id.
 REFERENCE = re.compile(r"[A-Za-z0-9]+-[0-9A-Z]{4}-ref")
 #: A macro's name without its backslash, as `scan.macros` reads it: letters (and `@`), or one other character.
-MACRO = re.compile(r"[A-Za-z@]+|[^A-Za-z@\s]")
+MACRO = re.compile(r"[A-Za-z@]+|\{[A-Za-z@*]+\}|[^A-Za-z@\s{}]")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 #: The longest label a record takes.
 LONGEST = 256
@@ -130,7 +132,7 @@ class Who:
 
     @classmethod
     def from_dict(cls, raw: Any) -> Who:
-        """Read who a record says acted; ValueError when it says nothing a reader can trust."""
+        """Read who a record says acted; ValueError when it says nothing a reader can trust, a person whose name says it is an agent's among it."""
         if not isinstance(raw, dict):
             raise ValueError("`by` is an object")
         kind = raw.get("kind")
@@ -140,5 +142,7 @@ class Who:
         if kind in ("person", "agent") and set(raw) == {"kind", "name"} and isinstance(name, str) and name.strip():
             if _CONTROL.search(name) or len(name) > LONGEST:
                 raise ValueError(f"{name!r} is not a name")
+            if kind == "person" and is_agent(name):
+                raise ValueError(f"{name} calls itself an agent, so it does not act as a person")
             return cls(kind, name)
         raise ValueError("`by` names loom, or a person or an agent with a name")
