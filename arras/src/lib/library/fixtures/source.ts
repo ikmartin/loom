@@ -216,7 +216,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			w.holds = { ...w.holds, pdf: null };
 			f.gen++;
 			changed();
-			return ok({ incoming, act: `x-${f.gen}`, row: { id: incoming, item: 0, name: `${w.short}.pdf`, state: 'cannot', code: 'received', why: 'it waits to be taken' } });
+			return ok({ incoming, act: `x-${f.gen}`, row: { id: incoming, item: 0, name: `${w.short}.pdf`, state: 'received' } });
 		},
 		'library-entry': (b) => {
 			const w = f.works.find((x) => x.ref === b.ref);
@@ -235,7 +235,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 				const id = `d-${f.gen}-${item}`;
 				f.taken[id] = added.ref;
 				// an added row as the intake sends it (`write-api.md` §6): a file is found by the identifier it states, else by its name
-				return { id, item, name, state: 'added', ...(it.text ? {} : { act: `x-${f.gen}-${item}` }), ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: arxiv ? 'arxiv' : it.text ? 'none' : 'title', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null, under: !!it.for };
+				return { id, item, name, state: 'added', act: `x-${f.gen}-${item}`, ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: arxiv ? 'arxiv' : it.text ? 'none' : 'title', tex: arxiv && !offline, unconfirmed: offline && arxiv, identifier: arxiv ? `arxiv:${name}` : null, under: !!it.for };
 			});
 			changed();
 			return ok({ rows });

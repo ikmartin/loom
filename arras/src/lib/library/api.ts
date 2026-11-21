@@ -206,12 +206,12 @@ export const discard = (change: string) => built('change-discard', { changes: [c
 export const accept = (key: string) => built('review-accept', { keys: [key] }, () => write('review-accept', { keys: [key] }));
 
 /** A row the intake answers with (`write-api.md` §6), with what the message needs (§3.5 of the views' spec). */
-/** A row of the intake (`write-api.md` §6), in one of four states: `added` (the work, how it was found, its `act` for an undo), `here` (the work held already, and why), `question` (the file's own words and the works it may be), `cannot` (a code and why). */
+/** A row of the intake (`write-api.md` §6), in one of four states once taken: `added` (the work, how it was found, its `act` for an undo), `here` (the work held already, and why), `question` (the file's own words and the works it may be), `cannot` (a code and why); `received` for a drop that waits to be taken, as an unfiled document does. */
 export interface TakeRow {
 	id: string;
 	item: number;
 	name: string;
-	state: 'added' | 'here' | 'question' | 'cannot';
+	state: 'added' | 'here' | 'question' | 'cannot' | 'received';
 	act?: string;
 	ref?: string;
 	short?: string;
