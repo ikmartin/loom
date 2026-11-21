@@ -42,9 +42,7 @@ def test_a_person_marks_a_place_on_a_works_page_to_digest(tmp_path: Path) -> Non
     mark = _mark(q, ck)
     found = _annotations(q)[mark]
     assert found.purpose == "to-digest" and found.to_dict()["purpose"] == "to-digest"  # type: ignore[attr-defined]
-    note = handle(
-        q, "annotate", {"target": ck, "page": PAGE, "quote": WORDS, "message": "a note", "author": PERSON}
-    )
+    note = handle(q, "annotate", {"target": ck, "page": PAGE, "quote": WORDS, "message": "a note", "author": PERSON})
     assert "purpose" not in _annotations(q)[str(note["result"]).split()[0]].to_dict()  # type: ignore[attr-defined]
 
 
