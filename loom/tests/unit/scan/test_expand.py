@@ -138,12 +138,16 @@ class _Kpsewhich:
         self.calls.append(cmd[1] if len(cmd) == 2 else " ".join(cmd[1:]))
         lines = []
         for name in cmd[1:]:
-            found = [
-                *(Path(d) / f for d, _, fs in os.walk(self.home, followlinks=True) for f in fs if f == name),
-                *([self.dist / name] if name in (self.dist / "ls-R").read_text().split() else []),
-                *([self.inputs / name] if (self.inputs / name).is_file() else []),
-            ]
-            lines += [f"{found[0]}\n"] if found else []
+            # a name whose suffix kpsewhich does not know is looked for with `.tex` added, as TeX does
+            for asked in (name, name + ".tex") if name.rsplit(".", 1)[-1] not in ("tex", "sty", "cls") else (name,):
+                found = [
+                    *(Path(d) / f for d, _, fs in os.walk(self.home, followlinks=True) for f in fs if f == asked),
+                    *([self.dist / asked] if asked in (self.dist / "ls-R").read_text().split() else []),
+                    *([self.inputs / asked] if (self.inputs / asked).is_file() else []),
+                ]
+                if found:
+                    lines.append(f"{found[0]}\n")
+                    break
         return subprocess.CompletedProcess(
             cmd, 0 if len(lines) == len(cmd) - 1 else 1, stdout="".join(lines), stderr=""
         )
@@ -242,3 +246,21 @@ def test_a_file_two_names_could_be_is_asked_about_alone(tmp_path: Path, kpsewhic
     got = expand._probe("/usr/bin/kpsewhich", "", ["x.tex", "sub/x.tex"], str(tmp_path))
     assert got["x.tex"] is None and got["sub/x.tex"] is not None and got["sub/x.tex"].endswith("sub/x.tex")
     assert kpsewhich.calls == ["x.tex sub/x.tex", "x.tex", "sub/x.tex"]
+
+
+def test_a_dotted_name_kpsewhich_finds_with_tex_added_is_a_system_file(tmp_path: Path, kpsewhich: _Kpsewhich) -> None:
+    """`\\input{pgfplots.revision}` reads `pgfplots.revision.tex`, which kpsewhich prints for the name as asked: that line is the name's answer, alone and in a folder's one run, and does not send the folder back to a run a name."""
+    from loom.scan.expand import AGAIN
+
+    (kpsewhich.home / "pgfplots.revision.tex").write_text("% the revision\n")
+    root = tmp_path / "quilt"
+    root.mkdir()
+    assert resolve_inclusion(root, "gone") == (None, "missing")
+    assert resolve_inclusion(root, "pgfplots.revision") == (None, "system")
+    (kpsewhich.home / "pgfplots.revision.tex").unlink()
+    assert resolve_inclusion(root, "pgfplots.revision") == (None, "missing")
+    (kpsewhich.home / "pgfplots.revision.tex").write_text("% the revision\n")
+    kpsewhich.now += AGAIN
+    assert resolve_inclusion(root, "gone") == (None, "missing")
+    assert resolve_inclusion(root, "pgfplots.revision") == (None, "system")
+    assert kpsewhich.calls == ["gone.tex", "pgfplots.revision", "pgfplots.revision", "gone.tex pgfplots.revision"]

@@ -93,7 +93,7 @@ def _ghostscript() -> tuple[str, int, int] | None:
 
 
 def _reads_pdf(said: str) -> bool:
-    """Whether the `dvisvgm` here could have read the PDF, as `converters` names the machine and as it said failing: with `mutool` or a Ghostscript, unless it said it can use neither ("mutool is required"), which it says of a Ghostscript too new and of a `mutool` it cannot run."""
+    """Whether the `dvisvgm` here could have read the PDF, as `converters` names the machine and as it said failing: with `mutool` or a Ghostscript, unless it said it can use neither ("mutool is required"), which it says of a Ghostscript too new, whatever `mutool` is beside it. With no Ghostscript it says only that it could not count the pages, so there a `mutool` it cannot run counts as one it can, and the draft is rendered again at every build."""
     return "mutool is required" not in said and (shutil.which("mutool") is not None or _ghostscript() is not None)
 
 

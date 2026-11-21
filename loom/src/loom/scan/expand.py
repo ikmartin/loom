@@ -153,8 +153,8 @@ def _probe(exe: str | None, texinputs: str, names: list[str], cwd: str) -> dict[
 
 
 def _names(line: str, name: str) -> bool:
-    """Whether a file `kpsewhich` printed is one for `name`."""
-    return line == name or line.endswith("/" + name)
+    """Whether a file `kpsewhich` printed is one for `name`: the name itself, or the name with `.tex` added, which is what `kpsewhich` looks for, as TeX does, where a name's suffix is not one it knows (`pgfplots.revision`)."""
+    return any(line == asked or line.endswith("/" + asked) for asked in (name, name + ".tex"))
 
 
 def resolve_inclusion(
