@@ -220,3 +220,70 @@ def test_a_review_table_left_in_a_config_is_unknown_and_warned_of() -> None:
 
     cfg = QuiltConfig.from_dict({"quilt": {"name": "x"}, "review": {"track_edits": True}})
     assert "config.toml: unknown table [review]; ignored" in cfg.warnings
+
+
+# ---- the person's own acts go into their look (P-1) --------------------------------------------------------------
+
+AGENT_MARKERS = ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI")
+
+
+@pytest.fixture
+def person(q: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """`q` with its look taken as `loom serve` takes it, in a shell no agent runs."""
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt
+
+    for marker in AGENT_MARKERS:
+        monkeypatch.delenv(marker, raising=False)
+    take(load_quilt(q), "Tester")
+    return q
+
+
+def edits(q: Path) -> list[str]:
+    """The paths of the in-place changes waiting."""
+    return sorted(c["path"] for c in json_of("changes", "--json", cwd=q)["changes"] if c["kind"] == "edit")
+
+
+@pytest.mark.parametrize(
+    "act",
+    [
+        ["mv", "drafting/main.tex", "drafting/paper.tex"],
+        ["new", "lemma", "A new lemma"],
+        ["history", "restore", "widgets-v1", "--to", "drafting/restored.tex"],
+        ["linearize", "drafting/main.tex", "--to", "drafting/flat.tex", "--no-check", "--keep-shared"],
+    ],
+)
+def test_the_person_s_own_act_is_not_listed_back_to_them(person: Path, act: list[str]) -> None:
+    ok(*act, cwd=person)
+    assert edits(person) == []
+
+
+def test_a_settings_save_and_a_restore_are_not_listed_back(person: Path) -> None:
+    from loom.config_edit import set_values
+    from loom.render.api import handle
+    from loom.scan.quilt import load_quilt
+
+    set_values(load_quilt(person), {"quilt.name": "Renamed"})
+    assert edits(person) == []
+    handle(person, "history-restore", {"document": "drafting/main.tex", "version": "widgets-v1", "author": "Tester"})
+    assert edits(person) == []
+
+
+def test_an_agent_s_edit_waiting_in_a_file_stays_listed_when_the_person_s_act_writes_it_too(person: Path) -> None:
+    """The act's change is merged into the look by lines; the agent's, elsewhere in the file, still waits."""
+    from loom.config_edit import set_values
+    from loom.scan.quilt import load_quilt
+
+    cfg = person / "config.toml"
+    cfg.write_text(cfg.read_text().rstrip("\n") + "\n# an agent's line\n")
+    set_values(load_quilt(person), {"quilt.name": "Renamed"})
+    rows = [c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"]
+    assert [c["path"] for c in rows] == ["config.toml"] and "an agent's line" in rows[0]["new"]
+    assert not any("Renamed" in c["new"] for c in rows)
+
+
+def test_an_agent_s_act_is_listed_for_the_person_to_keep(person: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("AI_AGENT", "1")
+    ok("new", "lemma", "An agent's lemma", "--as", "Referee Agent", cwd=person)
+    monkeypatch.delenv("AI_AGENT")
+    assert edits(person)

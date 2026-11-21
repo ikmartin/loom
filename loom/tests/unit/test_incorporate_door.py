@@ -538,3 +538,43 @@ def test_a_page_saved_after_its_base_was_checked_is_never_written_over(
         write_page(scan(q), page, "The agent's whole page.\n", actor="Some Agent", session=None, seen=seen)
     assert refused.value.code == "changed" and "has changed since you read it" in str(refused.value)
     assert "The person's own line." in (q.root / page.path).read_text(encoding="utf-8")
+
+
+# ---- the person's look follows their act (P-1) ------------------------------------------------------------------
+
+
+def looked_by_the_person(q, monkeypatch: pytest.MonkeyPatch) -> str:  # type: ignore[no-untyped-def]
+    from loom.looks import take
+    from loom.scan.quilt import reviewer_identity, save_author
+
+    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
+        monkeypatch.delenv(marker, raising=False)
+    if not reviewer_identity(q.root)[0]:
+        save_author("Tester")
+    who = reviewer_identity(q.root)[0]
+    take(q, who)
+    return who
+
+
+def test_an_adoption_the_person_takes_in_is_not_listed_back_to_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.pending import in_place
+
+    q, token = ready(tmp_path)
+    who = looked_by_the_person(q, monkeypatch)
+    incorporate(scan(q), COPY, token)
+    assert [p.path for p in in_place(scan(q), who)] == []
+
+
+def test_a_pull_the_person_takes_in_is_not_listed_back_and_cannot_be_discarded_behind_its_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    compiled: list[str],  # noqa: F811
+) -> None:
+    from loom.pending import in_place
+
+    q, state = pulled(tmp_path)
+    who = looked_by_the_person(q, monkeypatch)
+    sync.incorporate(q, state)
+    assert [p.path for p in in_place(scan(q), who)] == []

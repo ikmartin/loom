@@ -1116,6 +1116,12 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
             said.append(f"finished {act_id}")
             said += _relook(root, act_id, e)
+            if not e.get("look"):
+                texts = {
+                    rel: tuple(fetch(history, d) if d else None for d in ab)
+                    for rel, ab in (e.get("files") or {}).items()
+                }
+                _follow_look(root, history, str(e.get("kind")), e.get("actor"), texts)  # type: ignore[arg-type]
             continue
         failed = [
             rel
@@ -1227,6 +1233,104 @@ def _where(holds: dict[str, tuple[bool, bool]], *, kept: bool = False) -> str:
     }
     parts = [f"{_named(rels)} {label}" for label, rels in groups.items() if rels]
     return "; ".join(parts) + ("; the texts before and after are kept in the history" if kept else "")
+
+
+#: The acts that put their words into the person's look themselves (`pending`, `tasks`): `_follow_look` leaves them alone.
+OWN_LOOK = frozenset({"keep", "undo", "discard", "tick"})
+
+#: A file's bytes that are not an open text file's (`looks.open_texts`): not UTF-8, a NUL early on, or past the limit.
+_NOT_TEXT: Any = object()
+
+
+def _text_of(data: bytes | None) -> Any:
+    """`data` as an open text file's text (`looks.open_texts`), None for a file that is not there, `_NOT_TEXT` for one that is no text."""
+    from loom.files import TEXT_LIMIT
+
+    if data is None:
+        return None
+    if len(data) > TEXT_LIMIT or b"\x00" in data[:8192]:
+        return _NOT_TEXT
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return _NOT_TEXT
+
+
+def merge_lines(base: str, ours: str, theirs: str) -> str | None:
+    """`ours` with `theirs`'s change from `base` made in it, line by line; None where the two changed lines that meet or touch, which only a person can merge."""
+    lines = _LINE.findall(base)
+
+    def hunks(other: str) -> list[tuple[int, int, list[str]]]:
+        them = _LINE.findall(other)
+        ops = difflib.SequenceMatcher(None, lines, them, autojunk=False).get_opcodes()
+        return [(i1, i2, them[j1:j2]) for tag, i1, i2, j1, j2 in ops if tag != "equal"]
+
+    mine, other = hunks(ours), hunks(theirs)
+    if any(a[0] <= b[1] and b[0] <= a[1] for a in mine for b in other):
+        return None
+    out: list[str] = []
+    at = 0
+    for i1, i2, new in sorted(mine + other, key=lambda h: (h[0], h[1])):
+        out += lines[at:i1] + new
+        at = i2
+    return "".join(out + lines[at:])
+
+
+def _follow_look(
+    root: Path, history: Path, kind: str, actor: str | None, files: dict[str, tuple[bytes | None, bytes | None]]
+) -> None:
+    """After an act the person made through loom, give the reviewer's look what it wrote, so the person's own act is never listed back to them as a change to keep (Keep, the undo, Discard and a tick do this themselves, `OWN_LOOK`).
+
+    A file the look held as it was before the act now holds what the act wrote; one with another change waiting in it gets the act's change merged in by lines, and keeps its look where the two meet (`merge_lines`), so nothing waiting is taken in unseen; a file the act made goes in when it is an open text file. An agent's act changes no look: the person has not seen it. Nothing before a first look. The act has happened whatever this does, so a failure here leaves the look as it was.
+    """
+    from loom.identity import agent_marker, is_agent
+
+    if kind in OWN_LOOK or agent_marker() or (actor and is_agent(actor)):
+        return
+    try:
+        from loom.files import Shown, is_latex_aux
+        from loom.looks import _write as write_look
+        from loom.looks import read_look
+        from loom.records.snapshots import read_raw, write_raw
+        from loom.scan.hashing import sha256
+        from loom.scan.quilt import load_quilt, reviewer_identity
+
+        who = reviewer_identity(root)[0]
+        look = read_look(root, who) if who else None
+        if look is None:
+            return
+        shown: Any = None
+        moved = False
+        for rel, (before, after) in files.items():
+            was, now = _text_of(before), _text_of(after)
+            if was is _NOT_TEXT or now is _NOT_TEXT or is_latex_aux(rel):
+                continue
+            held = look.files.get(rel)
+            if held is None:
+                if was is None and now is not None:
+                    shown = shown or Shown.of(load_quilt(root))
+                    if shown.is_shown(rel):
+                        look.files[rel] = write_raw(root, now, history)
+                        moved = True
+                continue
+            if now is not None and held == sha256(now):
+                continue
+            if was is not None and held == sha256(was):
+                new = now
+            else:
+                seen = read_raw(root, held, history)
+                new = merge_lines(was, seen, now) if seen is not None and was is not None and now is not None else None
+                if new is None:
+                    continue
+            if new is None:
+                look.files.pop(rel, None)
+            else:
+                look.files[rel] = write_raw(root, new, history)
+            moved = True
+        if moved:
+            write_look(root, look)
+    except (OSError, ValueError):
+        return
 
 
 def _relook(root: Path, act_id: str, entry: dict[str, Any]) -> list[str]:
@@ -1479,6 +1583,14 @@ class Act:
         _append_records(self.root, [r for r in self.records if "at" not in r])
         self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
         _save_index(self.root, self.journal)
+        if not self.look:
+            _follow_look(
+                self.root,
+                self.history,
+                self.kind,
+                self.actor,
+                {rel: (self.before.get(rel), changed[rel]) for rel in changed},
+            )
         self._follow()
 
     def _follow(self) -> None:
