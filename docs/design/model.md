@@ -105,6 +105,8 @@ A **relation** links two results (same notion, generalises, specialises, depends
 
 The details are `docs/specs/digests.md`.
 
+This is the library as built. Its redesign, as one store of nodes with works, proofs and macros among them, is decided and not built yet (see [README](README.md#decided-not-yet-built)): [`library.md`](library.md).
+
 **Open.** The library is organised around what a draft cites: the bibliography is gathered from landmarks, fetching follows a work's own references, and uncited works are demoted. The Learner reads works nobody cites yet, so a work that is read must be as first-class as one that is cited. A work added by hand already is (plan 0.24.2); one only read, in no bibliography, is not yet (see [README](README.md#decided-not-yet-built)).
 
 ## Notes

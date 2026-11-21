@@ -62,13 +62,14 @@ Two markers keep the text honest:
 - **Open problems as nodes,** with the attempts, claims and dead ends about them attached as notes.
 - **A reader-first library.** Works that are read but not cited are first-class; the bibliography, fetching and the graph stop assuming a draft. See `docs/specs/digests.md`.
 - **The viewer's Library.** A Library view of the works; the frame it stands in, and Review as the quilt's management, are built. See `model.md` and plan 0.20.
+- **The library as a web of results.** The library rebuilt as one store of nodes, a file each: statements, proofs, works and their macros, joined by a small closed set of edges, with evidence in records and formalization on top; digests, the bibliography file as loom's own store, and ids made from a citekey give way to it. See [`library.md`](library.md) and `docs/specs/nodes.md`.
 - **Later:** running code to test claims (not in the next weeks).
 
 ## Where things live
 
 | what | where |
 |---|---|
-| this design | `docs/design/`: this file, `principles.md`, `model.md`, `agents.md`, `invariants.md`, `writes.md` |
+| this design | `docs/design/`: this file, `principles.md`, `model.md`, `agents.md`, `invariants.md`, `writes.md`, `library.md` |
 | how loom writes a person's file: the lock, the journal, recovery | `docs/design/writes.md` |
 | formats: the loom–arras interface, the source contract, digests, diagnostics | `docs/specs/` |
 | commands and their options | `loom <command> --help`, generated into `loom/docs/cli-reference.md` |

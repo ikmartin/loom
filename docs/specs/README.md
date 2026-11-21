@@ -12,6 +12,7 @@ This directory specifies what loom publishes into `.loom/cache/site/`, which the
 - `fixture.md` : the fixture and how it is used.
 - `write-api.md` : the write API, the HTTP form of loom's local commands that the viewer calls.
 - `reserved.md` : the names work in progress will add to all of the above, none of them built yet.
+- `nodes.md` : the library's nodes, one file each: ids, the header, the body, references, macros and proofs, and the edges a file states. Not built yet; it replaces most of `digests.md` when it is.
 - `tools/validate-dialect.py` : the fragment validator both codebases vendor; `tools/refresh-fixture.sh` : regenerates `fixture/` and both vendored snapshots.
 
 ## Changing what crosses
