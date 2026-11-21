@@ -232,8 +232,8 @@ def _by_place(
         return None
     if node is not None and block_hash(result, node.key) == want:
         others = [n for n in documents if n is not node and block_hash(result, n.key) == want]
-        if not others and not twin:
-            # its very text stands once, at its own key, and stood once: its block
+        if not others and copies == 1:
+            # its very text stands once, at its own key, and stood once: its block, whatever look-alike stood beside it, which would have had to be rewritten into its very words to take its key
             return node
         told = _told(result, [node, *others], context, twin)
         if told is not None or not _all_against(result, [node, *others], context, twin):
@@ -583,15 +583,21 @@ def _sides(result: ScanResult, block: NodeRec, context: dict[str, Any], skip: No
     return held, against
 
 
+def _clear(result: ScanResult, block: NodeRec, context: dict[str, Any]) -> bool:
+    """Whether `block`, holding the very text of a record whose context recorded a twin, may be the record's: no recorded neighbour against it, and both beside it where the context recorded copies of its very text (with a copy beside it, one neighbour is no evidence), one where it recorded only a look-alike."""
+    held, against = _sides(result, block, context)
+    return not against and held >= (2 if int(context.get("copies") or 1) > 1 else 1)
+
+
 def _all_against(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any], twin: bool) -> bool:
-    """Whether none of `blocks`, holding the very text of a record whose context recorded a twin, has a recorded neighbour beside it and none against it: none of them is its block, and one that reads like it between both its neighbours may be."""
-    return twin and all(_sides(result, n, context)[1] or not _sides(result, n, context)[0] for n in blocks)
+    """Whether none of `blocks`, holding the very text of a record whose context recorded a twin, may be the record's (`_clear`): then one that reads like it between both its neighbours may be."""
+    return twin and not any(_clear(result, n, context) for n in blocks)
 
 
 def _told(result: ScanResult, blocks: list[NodeRec], context: dict[str, Any], twin: bool) -> NodeRec | None:
-    """Among blocks holding a record's very text, the one that is its: where its context recorded a twin or two copies, only one with a recorded neighbour beside it and none against it, and among several such the one with both beside it; where it recorded none, the one with both neighbours beside it."""
+    """Among blocks holding a record's very text, the one that is its: where its context recorded a twin or copies, only one that may be (`_clear`), and among several such the one with both neighbours beside it; where it recorded none, the one with both neighbours beside it."""
     if twin:
-        clear = [n for n in blocks if _sides(result, n, context)[0] and not _sides(result, n, context)[1]]
+        clear = [n for n in blocks if _clear(result, n, context)]
         if len(clear) <= 1:
             return clear[0] if clear else None
         blocks = clear

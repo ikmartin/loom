@@ -828,3 +828,28 @@ def test_a_copy_put_beside_an_ids_block_then_edited_takes_none_of_its_records(ou
     write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + P + pair + N + B})
     assert shown(out, a) == X2.strip()
     assert list(accepted(out)) == [X2.strip()]
+
+
+def test_a_deleted_propositions_note_goes_to_no_twin_that_stood_right_after_it(out: Path) -> None:
+    """D-4: a proposition and its empty proof, its copy right after them; the proposition and its proof deleted, a block put in above. The copy keeps one recorded neighbour and none against, but with a copy recorded beside it one neighbour is no evidence: the note is on none."""
+    A = env("remark", "We fix a field k throughout.")
+    L = env("lemma", "Every planar graph is five colourable by an easy induction on vertices.")
+    LP = proof("Remove a vertex of degree at most five and colour the rest.")
+    T = env("proposition", "Every finite graph with minimum degree three contains an even cycle.")
+    N = env("remark", "A remark a co-author put in above.")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + L + LP + T + proof() + T})
+    a = note(out, "drafting/s1.tex#proposition:1", "say which cycle")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": N + A + L + LP + T})
+    assert shown(out, a) is None
+
+
+def test_a_moved_statement_with_a_look_alike_beside_it_keeps_its_note_at_its_own_key(out: Path) -> None:
+    """C-1's shortcut with one copy recorded: the injective proposition, its surjective look-alike recorded as a twin, moved to the end; its very text stands once at its own key, which no look-alike could take without being rewritten into its words."""
+    A = env("remark", "We fix a field k throughout.")
+    B = env("remark", "Both fail in infinite dimension.")
+    C = env("remark", "This closes the section.")
+    X = env("proposition", INJ)
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + X + B + env("lemma", SUR) + C})
+    a = note(out, "drafting/s1.tex#proposition:1", "cite rank-nullity")
+    write(out, {"drafting/main.tex": main_with("s1"), "drafting/s1.tex": A + B + env("lemma", SUR) + C + X})
+    assert shown(out, a) == X.strip()
