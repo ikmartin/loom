@@ -6,6 +6,7 @@ One boundary, read two ways: `denied_by` is the predicate loom's own commands as
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import TYPE_CHECKING
@@ -37,7 +38,7 @@ from loom.paths import (
 )
 
 if TYPE_CHECKING:
-    from loom.scan.quilt import QuiltConfig
+    from loom.scan.quilt import Quilt, QuiltConfig
 
 CONFIG = "config.toml"
 #: Where an agent always writes, whatever the list says: the sessions, its copies and its scratch.
@@ -160,6 +161,45 @@ def denied_by(config: QuiltConfig, rel: str) -> str | None:
     if rel in (CONFIG, config.research_state):
         return rel
     return next((p.text for p in deny_list(config.agents_deny)[0] if p.matches(rel)), None)
+
+
+def places_to_deny(config: QuiltConfig, paths: Iterable[str]) -> list[str]:
+    """The `[agents] deny` entries that would protect each of the person's files `paths` (quilt-relative) nothing protects yet: a file's directory, or the file itself at the quilt's top, shallowest first, so one entry covering another's files leaves the second out."""
+    import dataclasses
+
+    added: list[str] = []
+    for rel in sorted(set(paths), key=lambda r: (r.count("/"), r)):
+        if denied_by(dataclasses.replace(config, agents_deny=[*config.agents_deny, *added]), rel) is not None:
+            continue
+        parent = PurePosixPath(rel).parent.as_posix()
+        added.append(f"/{rel}" if parent == "." else f"{parent}/")
+    return added
+
+
+def deny_documents(quilt: Quilt, paths: Iterable[str]) -> list[str]:
+    """Add to `[agents] deny` what `places_to_deny` gives for the person's files `paths`, as `loom import` and `loom init --from` do for the paper they bring in.
+
+    The config is read as the act staging on this thread holds it, if one does, so a `main` set in the same act stands; the person's entries are kept as written, a refused one among them. Returns the entries added: none when everything is covered, or when the config is laid out in a way loom cannot edit (`ConfigRefused`).
+    """
+    import tomllib
+
+    from loom.config_edit import ConfigRefused, set_values
+    from loom.scan.quilt import QuiltConfig
+    from loom.writes import staged
+
+    path = quilt.root / CONFIG
+    held, data = staged(path)
+    text = data.decode("utf-8") if held and data is not None else path.read_text(encoding="utf-8")
+    table = tomllib.loads(text).get("agents", {})
+    written = table.get("deny", []) if isinstance(table, dict) else []
+    added = places_to_deny(QuiltConfig.from_dict(tomllib.loads(text)), paths)
+    if not added or not isinstance(written, list):
+        return []
+    try:
+        set_values(quilt, {"agents.deny": [*written, *added]})
+    except ConfigRefused:
+        return []
+    return added
 
 
 def always_denied(config: QuiltConfig, why: str) -> bool:

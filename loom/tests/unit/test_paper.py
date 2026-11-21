@@ -197,6 +197,47 @@ def test_import_asks_before_writing(tmp_path: Path) -> None:
     assert "the paper as received is landmark main, step 0001" in said(r2)
 
 
+def test_a_quilt_made_from_a_paper_denies_agents_its_directory_in_the_act_that_sets_main(tmp_path: Path) -> None:
+    """The drafted document's directory, its assets in it, goes into `[agents] deny` with `main`; the original outside the quilt adds nothing."""
+    from loom.scan.quilt import load_quilt
+
+    q = imported(tmp_path)
+    cfg = load_quilt(q).config
+    assert cfg.agents_deny == ["main/"] and cfg.main == "main/main.tex"
+    journal = [json.loads(x) for x in (q / ".loom/local/writes.jsonl").read_text().splitlines()]
+    acts = {e["act"] for e in journal if e["event"] == "begin" and "config.toml" in e.get("files", {})}
+    assert len(acts) == 1  # the config's main and its deny, one act with the import's step
+
+
+def test_import_adds_only_a_place_no_entry_covers_and_keeps_the_person_s_entries(tmp_path: Path) -> None:
+    from loom.scan.quilt import load_quilt
+
+    p = paper_dir(tmp_path)
+    q = bare_quilt(tmp_path)
+    cfg = q / "config.toml"
+    cfg.write_text(cfg.read_text().replace("deny = []", 'deny = ["!negated", "notes/"]'))
+    dry = ok("import", str(p / "main.tex"), "--dry-run", "--json", cwd=q)
+    assert json.loads(dry.stdout)["denied"] == ["main/"]
+    assert 'deny = ["!negated", "notes/"]' in cfg.read_text()  # a dry run writes nothing
+    r = ok("import", str(p / "main.tex"), "--yes", cwd=q)
+    assert "config.toml: agents may not write main/, so they propose changes there" in said(r)
+    assert 'deny = ["!negated", "notes/", "main/"]' in cfg.read_text()
+    again = ok("import", str(p / "main.tex"), "--to", "main/main-2.tex", "--yes", cwd=q)
+    assert "agents may not write" not in said(again) and load_quilt(q).config.agents_deny == ["notes/", "main/"]
+    ok("import", str(p / "main.tex"), "--to", "other/paper.tex", "--yes", cwd=q)
+    assert load_quilt(q).config.agents_deny == ["notes/", "main/", "other/"]
+
+
+def test_a_paper_directory_made_a_quilt_denies_its_original_s_places_too(tmp_path: Path) -> None:
+    """The paper as received stays the person's where it lies in the quilt: a file at the top by name, a directory by its name."""
+    from loom.scan.quilt import load_quilt
+
+    p = paper_dir(tmp_path)
+    ok("init", str(p), "--from", str(p / "main.tex"), "--prefix", "pp", "--yes", cwd=tmp_path)
+    deny = load_quilt(p).config.agents_deny
+    assert set(deny) == {"main/", "/main.tex", "/preamble.tex", "sections/", "figures/", "/refs.bib"}
+
+
 def test_import_refuses_line_anchoring_with_the_paper_s_lines_and_fix_anchoring(tmp_path: Path) -> None:
     """The draft gains \\usepackage{loom}; the lines the refusal reports are the paper's as received, which that insertion must not shift, and the landmark keeps them as they were."""
     bad = RESULTS.replace("\\begin{lemma}\\label{lem:a}\nAlpha", "\\begin{lemma}\\label{lem:a} Alpha").replace(

@@ -250,6 +250,18 @@ def _untypeset_fix(reason: str) -> str:
     return "the paper typesets on its next build once that is fixed; nothing needs importing again"
 
 
+def _inside(root: Path, files: list[Path]) -> list[str]:
+    """The quilt-relative paths of those `files` that lie inside the quilt at `root`."""
+    top = root.resolve()
+    out = []
+    for f in files:
+        try:
+            out.append(f.resolve().relative_to(top).as_posix())
+        except ValueError:
+            continue
+    return out
+
+
 def run_import(
     quilt: Quilt,
     paper: Path,
@@ -284,7 +296,14 @@ def run_import(
             f"loom import {shlex.quote(str(paper))} --to {taken.with_name(f'{taken.stem}-{n}.tex').as_posix()}"
         )
     arrows = [(Path(src).relative_to(plan.paper_dir).as_posix(), dest) for dest, src in sorted(plan.assets.items())]
+    from loom.agents import deny_documents, places_to_deny
     from loom.tex.runner import compile_tex, stage_sources
+
+    # the person's files the import brings in or reads inside the quilt, which agents propose changes to rather than make
+    originals = _inside(
+        root, [plan.paper_dir / n for n in (plan.master_rel, *plan.inlined)] + [Path(s) for s in plan.assets.values()]
+    )
+    denial = places_to_deny(quilt.config, [plan.dest_rel, *plan.assets, *originals])
 
     ident: IdentityResult | None = None
     with tempfile.TemporaryDirectory(prefix="loom-identity-") as tmp:
@@ -316,6 +335,7 @@ def run_import(
             + f"{len(draft.insertions)} ids",
             *(f"  {src} -> {dest}" for src, dest in arrows),
             *(f"  {name} -> not copied; it lies outside the paper directory" for name in plan.outside),
+            *([f"  config.toml: agents may not write {', '.join(denial)} ([agents] deny)"] if denial else []),
         ]
         if dry_run:
             return Imported(
@@ -331,6 +351,7 @@ def run_import(
                     "written": sorted([plan.dest_rel, *plan.assets]),
                     "inlined": list(plan.inlined),
                     "outside": list(plan.outside),
+                    "denied": denial,
                 },
             )
         if not yes:
@@ -385,12 +406,15 @@ def run_import(
             document_name=f"{name}.tex",
         )
         main_set = set_main(load_quilt(root), plan.dest_rel)
+        denied = deny_documents(load_quilt(root), [plan.dest_rel, *written, *originals])
     written.append(plan.dest_rel)
     after = scan(load_quilt(root))
     wrote = [Item(f"{plan.master_rel} -> {plan.dest_rel}, {len(draft.insertions)} ids inserted")]
     wrote += [Item(f"{src} -> {dest}") for src, dest in arrows if dest in written]
     if main_set:
         wrote.append(Item(f"config.toml: main = {plan.dest_rel}"))
+    if denied:
+        wrote.append(Item(f"config.toml: agents may not write {', '.join(denied)}, so they propose changes there"))
     groups = [Group("written", wrote, limit=None)]
     if plan.outside:
         groups.append(
@@ -431,6 +455,7 @@ def run_import(
         "inlined": list(plan.inlined),
         "outside": list(plan.outside),
         "main": plan.dest_rel if main_set else None,
+        "denied": denied,
         "identity": None if ident is None else ("skipped" if ident.skipped else "pass" if ident.passed else "fail"),
         "typeset": untypeset is None,
         "untypeset": untypeset,
