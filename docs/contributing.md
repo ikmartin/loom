@@ -22,7 +22,7 @@ The workspace's documents and loom are GPL-3.0-or-later; arras AGPL-3.0-or-later
 
 `scripts/verify` is the one verification command, and CI runs it and nothing else, one lane per workflow (`loom.yml`, `arras.yml`, `docs.yml`). It ends by printing the branch's latest CI runs; read them.
 
-- `scripts/verify` (`fast`): the everyday lane, while working. loom's ruff, format check, mypy and unit tier; arras's svelte-check and vitest; the work queue, principles and hard-wrap checks. It judges only what the change did: nothing in it compares the working tree with git or a committed generated file with its generator, so a file not yet added, or a generated file left for whoever merges (see "Working in parallel"), does not fail it.
+- `scripts/verify` (`fast`): the everyday lane, while working. loom's ruff, format check, mypy and unit tier; arras's svelte-check and vitest; the work queue, principles, hard-wrap and machine-path checks. It judges only what the change did: nothing in it compares the working tree with git or a committed generated file with its generator, so a file not yet added, or a generated file left for whoever merges (see "Working in parallel"), does not fail it.
 - `scripts/verify full`: before a commit. Adds the checks `fast` leaves out (loom's tests marked `tree`: the tracked-file guard, and every test that reads a committed generated file as it stands, which are the quilts, tool list and command reference against their generators, the generated quilts' expected lint and doctor on the demo; the fixture copies; the vendored bundle), loom's TeX tier, whether the pages the served suites read are what a fresh compile makes, an arras build, the three Playwright suites and the figure script.
 - `scripts/verify paper`: the paper tier, by hand, with `LOOM_PAPER_FIXTURES` naming a directory holding `0805.2065/` and `1709.09864/`. Never in CI.
 - `scripts/verify client`: the real-client tier, by hand, after a change to what loom generates for an agent client. It runs Claude Code against the generated settings and spends on the account of whoever runs it, so it never runs in CI.
@@ -81,6 +81,7 @@ Each of these has a place of its own, so that two changes made at once do not to
 
 - Never edit anything under `~/notes/`. Paper sources, the author's included, are copies under the workspace's gitignored `tests/fixtures/`, never committed, and neither are the quilts `demos/build.py` builds from them.
 - Prose is never hard-wrapped: one line per paragraph, in Markdown, docstrings and comments. `scripts/checks/hardwrap.py` enforces it on added lines.
+- The repository is public, so nothing committed names a person's machine or holds a secret: no home folder, per-user temporary folder, email address or token, in text or in a binary. Write `~/…`, `/Users/someone/…` or `<scratch>/…` instead. `scripts/checks/machine_paths.py` enforces it on every file git would commit; its `PENDING` list holds the files the author has yet to decide on, and only shrinks.
 - Docstrings follow `CLAUDE.md`'s two styles and describe the current state only; review documentation with its ten passes.
 - A path loom uses inside a quilt is named once, in `loom/src/loom/paths.py`; `loom/tests/unit/test_paths.py` refuses one spelled out anywhere else.
 
