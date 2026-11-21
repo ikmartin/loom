@@ -12,6 +12,7 @@ import stat
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
@@ -294,16 +295,20 @@ def record_rules(root: Path, generated: str, *, before: list[str] | None = None)
         _write(root, f"{AI}/{RULES_FILE}", said)
 
 
-def _write(root: Path, rel: str, text: str) -> None:
+#: `_write`'s `expect` for a text not made from the file it replaces.
+_UNREAD: Any = object()
+
+
+def _write(root: Path, rel: str, text: str, expect: str | None = _UNREAD) -> None:
     """Write one file of the agent layer whole or not at all, or refuse in a sentence where it cannot be written.
 
-    A person's file goes through the door (`loom.writes.put`), loom's own record in `.loom/` beside it: each written beside and moved into place, keeping the file's mode, so a write cut short (a full disk, a size limit) leaves the person's file as it was; a file without write permission is refused, as writing it in place would be.
+    `expect` is the text a person's file was read as when `text` was made from it, None for a file that was absent (`writes.put`'s `expect`), so a save made since is refused (`changed`) rather than overwritten. A person's file goes through the door (`loom.writes.put`), loom's own record in `.loom/` beside it: each written beside and moved into place, keeping the file's mode, so a write cut short (a full disk, a size limit) leaves the person's file as it was; a file without write permission is refused, as writing it in place would be.
     """
     import errno
     import secrets
 
     from loom.paths import LOOM
-    from loom.writes import WriteRefused, put
+    from loom.writes import ANY, WriteRefused, put
 
     p = root / rel
     tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}.tmp")
@@ -312,7 +317,8 @@ def _write(root: Path, rel: str, text: str) -> None:
             if p.exists() and not os.access(p, os.W_OK):
                 raise PermissionError(errno.EACCES, os.strerror(errno.EACCES), str(p))
             # a person's file: through the door, which writes it beside and moves it into place, keeping its mode
-            put(root, None, rel, text.encode("utf-8"), kind="agents")
+            seen = ANY if expect is _UNREAD else (None if expect is None else expect.encode("utf-8"))
+            put(root, None, rel, text.encode("utf-8"), kind="agents", expect=seen)
             return
         # loom's own record of the layer, in `.loom/`, written beside and moved into place without reading what is there
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -333,12 +339,13 @@ def _write(root: Path, rel: str, text: str) -> None:
 class Settings:
     """What loom makes of Claude Code's permission file in one quilt.
 
-    `text` is what loom writes, None where it leaves the file alone, and `why` says for what; `dropped` is each rule of loom's own it takes out, `allow RULE` or `deny RULE`, since it no longer renders it.
+    `text` is what loom writes, None where it leaves the file alone, and `why` says for what; `dropped` is each rule of loom's own it takes out, `allow RULE` or `deny RULE`, since it no longer renders it; `read` is the file's text `text` was merged into, None where there was none, which the write expects to find (`writes.put`'s `expect`).
     """
 
     text: str | None
     why: str = ""
     dropped: list[str] = field(default_factory=list)
+    read: str | None = None
 
 
 def settings_for(root: Path, generated: str) -> Settings:
@@ -392,7 +399,7 @@ def settings_for(root: Path, generated: str) -> Settings:
         merged.setdefault(kind, lists[kind])
     out = dict(there)
     out["permissions"] = merged
-    return Settings(bom + json.dumps(out, indent=2, ensure_ascii=False) + "\n", dropped=dropped)
+    return Settings(bom + json.dumps(out, indent=2, ensure_ascii=False) + "\n", dropped=dropped, read=text)
 
 
 def settings_left(root: Path, config: QuiltConfig | None = None) -> str:
@@ -454,6 +461,8 @@ class Permissions:
     merged: list[str] = field(default_factory=list)
     theirs: list[str] = field(default_factory=list)
     dropped: list[str] = field(default_factory=list)
+    #: the person's text a merged file was made from, which its write expects to find
+    read: dict[str, str | None] = field(default_factory=dict)
     #: Claude Code's `Settings.dropped`, as `record_rules` takes it.
     rules_out: list[str] = field(default_factory=list)
 
@@ -474,6 +483,7 @@ def permission_files(
             out.theirs.append(CLAUDE_SETTINGS)
         else:
             out.texts[CLAUDE_SETTINGS] = got.text
+            out.read[CLAUDE_SETTINGS] = got.read
             if got.text != bare[CLAUDE_SETTINGS]:
                 out.merged.append(CLAUDE_SETTINGS)
             out.dropped = [f"{CLAUDE_SETTINGS}: {d}" for d in got.dropped]
@@ -560,9 +570,9 @@ def ensure_root_line(
             kept = [line if x in replaced else x for x in lines]
             # two old lines become one: the first keeps its place
             kept = [x for i, x in enumerate(kept) if x != line or kept.index(line) == i]
-            _write(root, name, "\n".join(kept) + "\n")
+            _write(root, name, "\n".join(kept) + "\n", expect=there)
             continue
-        _write(root, name, existing.rstrip("\n") + ("\n\n" if existing.strip() else "") + line + "\n")
+        _write(root, name, existing.rstrip("\n") + ("\n\n" if existing.strip() else "") + line + "\n", expect=there)
     return written
 
 
@@ -593,7 +603,7 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
     for rel, text in made.texts.items():
         if rel == CLAUDE_SETTINGS:
             record_rules(root, generated, before=made.rules_out)
-        _write(root, rel, text)
+        _write(root, rel, text, **({"expect": made.read[rel]} if rel in made.read else {}))
         rep.written.append(rel)
     if CLAUDE_SETTINGS in made.texts:
         # before the file and after it, so a write that fails at any point leaves the record naming every rule of loom's there
@@ -726,7 +736,7 @@ def write_permissions(
         if write:
             if rel == CLAUDE_SETTINGS:
                 record_rules(root, generated, before=made.rules_out)
-            _write(root, rel, text)
+            _write(root, rel, text, **({"expect": made.read[rel]} if rel in made.read else {}))
         written.append(rel)
     if write and CLAUDE_SETTINGS in made.texts:
         # before the file and after it, so a write that fails at any point leaves the record naming every rule of loom's there

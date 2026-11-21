@@ -367,3 +367,57 @@ def test_the_door_refuses_a_file_that_is_not_a_regular_file_without_waiting_on_i
     with pytest.raises(writes.WriteRefused) as refused:
         writes.put(q.root, None, "drafting/pipe.tex", b"text\n", kind="agents")
     assert refused.value.code == "not-a-file" and begun(q.root) == []
+
+
+# ---- a write made from an earlier read (D-2) ---------------------------------------------------------------------
+
+
+def saving_before_the_act(monkeypatch: pytest.MonkeyPatch, path: Path, line: bytes) -> None:
+    """The person saves `path` the moment loom's act opens: after loom's writer read it, before the act reads it under the lock."""
+    real = writes.act
+    done: list[bool] = []
+
+    def act(*a: object, **k: object):  # type: ignore[no-untyped-def]
+        if not done:
+            done.append(True)
+            path.write_bytes((path.read_bytes() if path.exists() else b"") + line)
+        return real(*a, **k)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(writes, "act", act)
+
+
+@pytest.mark.parametrize("case", ["gitignore", "root line"])
+def test_a_file_saved_after_loom_read_it_is_never_written_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, case: str
+) -> None:
+    from loom.ai.layout import ensure_root_line
+    from loom.gitignore import ensure
+
+    q = made(tmp_path, TEXT)
+    target = q.root / (".gitignore" if case == "gitignore" else "CLAUDE.md")
+    target.write_text("the person's first line\n", encoding="utf-8")
+    saving_before_the_act(monkeypatch, target, b"the person's line, saved while loom waited\n")
+    with pytest.raises(writes.WriteRefused) as refused:
+        ensure(q.root) if case == "gitignore" else ensure_root_line(q.root, True, shell=True)
+    assert refused.value.code == "changed"
+    assert "saved while loom waited" in target.read_text(encoding="utf-8")
+
+
+def test_a_page_saved_after_its_base_was_checked_is_never_written_over(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The `--base` check is made again against what the act reads, and `from` is that text (D-2)."""
+    from loom.pages import read as read_page
+    from loom.pages import state_page
+    from loom.pages import write as write_page
+
+    q = made(tmp_path, TEXT)
+    result = scan(q)
+    page = state_page(q.config)
+    write_page(result, page, "The first state.\n", actor="Tester", session=None)
+    seen = read_page(q.root, page)
+    saving_before_the_act(monkeypatch, q.root / page.path, b"The person's own line.\n")
+    with pytest.raises(writes.WriteRefused) as refused:
+        write_page(scan(q), page, "The agent's whole page.\n", actor="Some Agent", session=None, seen=seen)
+    assert refused.value.code == "changed" and "has changed since you read it" in str(refused.value)
+    assert "The person's own line." in (q.root / page.path).read_text(encoding="utf-8")

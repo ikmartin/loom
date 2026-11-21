@@ -74,7 +74,9 @@ def ensure(root: Path) -> list[str]:
     from loom.writes import put
 
     p = root / ".gitignore"
-    existing = p.read_text(encoding="utf-8") if p.is_file() else ""
+    raw = p.read_bytes() if p.is_file() else None
+    existing = raw.decode("utf-8") if raw is not None else ""
     text = existing.rstrip("\n") + ("\n" if existing else "") + CLIENT_COMMENT + "\n".join(lines) + "\n"
-    put(root, None, ".gitignore", text.encode("utf-8"), kind="agents")
+    # the text it was made from is expected under the lock, so a line saved since is never written over
+    put(root, None, ".gitignore", text.encode("utf-8"), kind="agents", expect=raw)
     return lines

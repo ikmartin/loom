@@ -89,6 +89,6 @@ def write(
     if current == body:
         Report(f"{page.name} already reads so; nothing written", data=data).emit(as_json)
         return
-    write_page(result, page, body, actor=name, session=found.id if found else None)
+    write_page(result, page, body, actor=name, session=found.id if found else None, seen=current)
     log_run(found.id if found else None, f"loom write {target}", root)
     Report(f"wrote {page.name}{linking}", data=data).emit(as_json)

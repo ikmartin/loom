@@ -1307,6 +1307,10 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
         a._commit()
 
 
+#: `put`'s `expect` when the caller's bytes do not come from the file: whatever it holds is replaced.
+ANY: Any = object()
+
+
 def put(
     root: Path,
     history: Path | None,
@@ -1316,6 +1320,7 @@ def put(
     kind: str,
     actor: str | None = None,
     new: bool = False,
+    expect: bytes | None = ANY,
 ) -> None:
     """Write one person's file whole through the door: as part of the act staging on this thread when one is, else as an act of its own.
 
@@ -1335,18 +1340,25 @@ def put(
         Who asked for it.
     new : bool, default False
         Refuse (`exists`) when the file is there already, as a command that makes a new file must.
+    expect : bytes or None, optional
+        What the caller read the file as, `data` being made from it (None: absent): refused (`changed`) when the file holds anything else under the lock, so a save made since the caller read it is never overwritten. Default `ANY`, for bytes that do not come from the file.
 
     Raises
     ------
     WriteRefused
-        `exists`, `outside-quilt`, or `changed` from the commit.
+        `exists`, `changed`, `outside-quilt`, or `changed` from the commit.
     """
     if _MAKING.get() == os.path.realpath(root):
         _make(root, contained(root, rel), data, new)
         return
     with act(root, history if history is not None else history_of(root), kind, actor) as w:
-        if new and w.read(rel) is not None:
+        now = w.read(rel)
+        if new and now is not None:
             raise WriteRefused("exists", f"{rel} exists already; nothing was written", status=409)
+        if expect is not ANY and now != expect:
+            raise WriteRefused(
+                "changed", f"{rel} changed since loom read it, so nothing was written; run this again", status=409
+            )
         w.replace(rel, data)
 
 
