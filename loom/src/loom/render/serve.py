@@ -161,9 +161,7 @@ def write_serve_json(root: Path, port: int) -> str:
         from loom.errors import EnvError
         from loom.machine import token_file
 
-        raise EnvError(
-            f"cannot keep the server's write token in {token_file(root).parent}: {exc.strerror or exc}; make that folder writable, then start the server again"
-        ) from exc
+        raise EnvError(_could_not("the server's write token", token_file(root).parent, exc)) from exc
     p = root / SERVE_JSON
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(
@@ -337,19 +335,17 @@ def hold_viewer(source: Path) -> tuple[Path, Path]:
             mark.touch()
             aside = _let_go(home)
     except OSError as exc:
-        why = exc.strerror or (
-            exc.args[0][0][2] if isinstance(exc, shutil.Error) and exc.args and exc.args[0] else str(exc)
-        )
-        raise EnvError(
-            f"cannot keep the viewer in {home}: {why}; make that folder writable, with room for about 11 MB, then start the server again"
-        ) from exc
+        raise EnvError(_could_not("the viewer", home, exc, room="about 11 MB")) from exc
     for folder in aside:
         shutil.rmtree(folder, ignore_errors=True)
     return home / key / "viewer", mark
 
 
 def _copy_at_rest(source: Path, dest: Path) -> None:
-    """Copy the bundle at `source` to `dest`, keeping the copy only if the bundle's listing, each file's path, size and modification time, is the same after the copy as before it; a bundle changed meanwhile, being vendored, is copied again after a rest, `_COPIES` times at most."""
+    """Copy the bundle at `source` to `dest`, keeping the copy only if the bundle's listing, each file's path, size and modification time, is the same after the copy as before it.
+
+    A bundle being vendored changes under the copy: a listing that differs, or a file of it gone while it is listed or copied, is copied again after a rest, `_COPIES` times at most. A copy that fails while the bundle's listing stands as it was is not the bundle's doing, and its error is raised.
+    """
     import shutil
 
     from loom.errors import EnvError
@@ -362,17 +358,58 @@ def _copy_at_rest(source: Path, dest: Path) -> None:
             for st in [os.lstat(os.path.join(folder, name))]
         )
 
+    def still(before: list[tuple[str, int, int]]) -> bool:
+        try:
+            return listing() == before
+        except OSError:
+            return False
+
     for attempt in range(_COPIES):
         if attempt:
             time.sleep(_REST)
-        before = listing()
-        shutil.copytree(source, dest)
-        if listing() == before:
+        try:
+            before = listing()
+        except OSError:
+            continue
+        try:
+            shutil.copytree(source, dest)
+        except OSError:
+            shutil.rmtree(dest, ignore_errors=True)
+            if still(before):
+                raise
+            continue
+        if still(before):
             return
         shutil.rmtree(dest, ignore_errors=True)
     raise EnvError(
         f"the viewer at {source} changed each of the {_COPIES} times loom copied it; start the server again once it has been vendored or built"
     )
+
+
+def _could_not(what: str, folder: Path, exc: OSError, room: str = "") -> str:
+    """What to say when loom cannot keep `what` in `folder`: why, and the step that mends it, by the cause: a file where a folder belongs, the folder's lock unreadable, no room, or no permission."""
+    import errno
+    import shutil
+
+    where = Path(exc.filename) if isinstance(exc.filename, str) else folder
+    if isinstance(exc, shutil.Error) and exc.args and exc.args[0]:
+        why = str(exc.args[0][0][2])
+    else:
+        why = exc.strerror or str(exc)
+    said = f"cannot keep {what} in {folder}: {why}"
+    if exc.errno in (errno.EEXIST, errno.ENOTDIR):
+        # the file in the way is `where` itself (File exists) or the nearest of its folders that is a file (Not a directory)
+        blocker = next((p for p in (where, *where.parents) if os.path.lexists(p) and not p.is_dir()), where)
+        return f"{said}; a file stands at {blocker} where loom keeps a folder: move it, then start the server again"
+    if exc.errno == errno.ENOSPC or "No space left" in why:
+        return f"{said}; free {room or 'some room'} there, then start the server again"
+    if exc.errno in (errno.EACCES, errno.EPERM) and where.name == ".lock" and os.path.lexists(where):
+        return f"{said}; loom cannot open its lock {where}: make it readable, then start the server again"
+    if exc.errno in (errno.EACCES, errno.EPERM, errno.EROFS) or "Permission denied" in why:
+        return (
+            f"{said}; make that folder writable{', with room for ' + room if room else ''}, then start the server again"
+        )
+    return f"{said}; start the server again once that is mended"
 
 
 def _viewer_key(version: str, pid: int) -> str:
@@ -395,12 +432,16 @@ def _real_folder(path: Path) -> bool:
 
 
 def _holds_only(path: Path, names: set[str]) -> bool:
-    """Whether `path` is a real folder holding nothing but real folders named in `names`: what loom makes, looked at without following a link."""
+    """Whether `path` is a real folder holding nothing but real folders named in `names`, and files whose names begin with a dot, as Finder leaves (`.DS_Store`): what loom makes, looked at without following a link."""
     if not _real_folder(path):
         return False
     try:
         with os.scandir(path) as entries:
-            return all(e.name in names and e.is_dir(follow_symlinks=False) for e in entries)
+            return all(
+                (e.name in names and e.is_dir(follow_symlinks=False))
+                or (e.name.startswith(".") and e.is_file(follow_symlinks=False))
+                for e in entries
+            )
     except OSError:
         return False
 

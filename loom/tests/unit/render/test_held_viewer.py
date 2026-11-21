@@ -232,6 +232,7 @@ def test_a_mark_that_names_no_process_holds_nothing_and_stops_no_start(tmp_path:
     "name", [".staged-²-0000abcd", ".staged-99999999999999999999-0000abcd", ".removing-0-0000abcd"]
 )
 def test_a_folder_aside_that_names_no_process_is_left_and_stops_no_start(tmp_path: Path, name: str) -> None:
+    """A folder set aside is let go once the process its name gives is gone; one whose name gives no positive decimal pid in range is left, and no start fails on it."""
     (viewers() / name / "viewer").mkdir(parents=True)
     HeldBundle(bundle(tmp_path / "bundle", "950"))
     assert (viewers() / name / "viewer").is_dir()
@@ -263,7 +264,56 @@ def test_a_copy_of_a_bundle_changed_while_it_is_copied_is_taken_again(
     assert (now.path / "index.html").read_text() == "<p>vendored whole</p>\n" and len(copies) == 2
 
 
-def test_a_bundle_never_at_rest_stops_the_start_and_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("when", ["during the copy", "in the listing before it", "in the listing after it"])
+def test_a_file_of_the_bundle_removed_while_it_is_copied_is_the_bundle_changing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, when: str
+) -> None:
+    """A vendoring empties the bundle before it copies the build in, so a file can go during the copy, or between a listing's walk and its look at the file: the copy is taken again, as for a listing that differs, and the start goes on."""
+    import shutil
+
+    from loom.render import serve
+
+    source = bundle(tmp_path / "bundle", "1050")
+    gone = source / "_app" / "gone.js"
+    gone.write_text("gone\n")
+    copy, lstat, copies, looks = shutil.copytree, os.lstat, [], []
+
+    def removed_in_copy(src, dst, *a, **k):  # type: ignore[no-untyped-def]
+        """The bundle's first copy removes `gone.js` as it copies the first file of `_app/`, once that folder is listed, so that the copy of `gone.js` fails, whichever file of it comes first."""
+        if Path(src) == source:
+            copies.append(1)
+            if len(copies) == 1 and when == "during the copy":
+
+                def copy_first(s, d, **kw):  # type: ignore[no-untyped-def]
+                    if Path(s).parent == gone.parent:
+                        gone.unlink(missing_ok=True)
+                    return shutil.copy2(s, d, **kw)
+
+                k["copy_function"] = copy_first
+        return copy(src, dst, *a, **k)
+
+    def removed_in_listing(path, *a, **k):  # type: ignore[no-untyped-def]
+        """The first listing's look at `gone.js`, or the second's, finds it gone, as the walk saw it a moment before."""
+        if Path(path) == gone:
+            looks.append(1)
+            if len(looks) == (1 if when == "in the listing before it" else 2):
+                gone.unlink()
+        return lstat(path, *a, **k)
+
+    monkeypatch.setattr(shutil, "copytree", removed_in_copy)
+    monkeypatch.setattr(os, "lstat", removed_in_listing)
+    monkeypatch.setattr(serve, "_REST", 0.0)
+    now = HeldBundle(source)
+    assert len(copies) == (1 if when == "in the listing before it" else 2)
+    assert not (now.path / "_app" / "gone.js").exists()
+    assert (now.path / "index.html").read_text() == "<p>the viewer</p>\n"
+
+
+@pytest.mark.parametrize("how", ["a file rewritten", "a file removed"])
+def test_a_bundle_never_at_rest_stops_the_start_and_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, how: str
+) -> None:
+    """A bundle that changes during each copy, a file rewritten after it or a file removed during it, stops the start once loom has copied it five times, with the message about the bundle, never the one about loom's folder; nothing is kept."""
     import shutil
 
     from loom.errors import EnvError
@@ -273,16 +323,109 @@ def test_a_bundle_never_at_rest_stops_the_start_and_says_so(tmp_path: Path, monk
     copy = shutil.copytree
 
     def always_changing(src, dst, *a, **k):  # type: ignore[no-untyped-def]
-        out = copy(src, dst, *a, **k)
-        if Path(src) == source:
+        if Path(src) != source:
+            return copy(src, dst, *a, **k)
+        if how == "a file rewritten":
+            out = copy(src, dst, *a, **k)
             (source / "index.html").write_text(f"<p>{os.urandom(4).hex()}</p>\n")
-        return out
+            return out
 
+        def copy_removing(s, d, **kw):  # type: ignore[no-untyped-def]
+            """Removes `gone.js` as a file of `_app/` is copied, once that folder is listed, so that its copy fails."""
+            if Path(s).parent == source / "_app":
+                (source / "_app" / "gone.js").unlink(missing_ok=True)
+            return shutil.copy2(s, d, **kw)
+
+        try:
+            return copy(src, dst, *a, **{**k, "copy_function": copy_removing})
+        finally:
+            (source / "_app" / "gone.js").write_text(f"{os.urandom(4).hex()}\n")
+
+    (source / "_app" / "gone.js").write_text("gone\n")
     monkeypatch.setattr(shutil, "copytree", always_changing)
     monkeypatch.setattr(serve, "_REST", 0.0)
-    with pytest.raises(EnvError, match="changed each of the 5 times"):
+    with pytest.raises(EnvError, match="changed each of the 5 times") as said:
         HeldBundle(source)
+    assert "cannot keep the viewer" not in str(said.value)
     assert held() == {}
+
+
+def test_a_copy_that_fails_while_the_bundle_is_at_rest_names_loom_s_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A copy that fails while the bundle's listing stands as it was is not the bundle's doing: the start stops at once with the message about loom's folder."""
+    import errno
+    import shutil
+
+    from loom.errors import EnvError
+
+    source = bundle(tmp_path / "bundle", "1150")
+    copy, copies = shutil.copytree, []
+
+    def full(src, dst, *a, **k):  # type: ignore[no-untyped-def]
+        if Path(src) == source:
+            copies.append(1)
+            raise OSError(errno.ENOSPC, "No space left on device", str(dst))
+        return copy(src, dst, *a, **k)
+
+    monkeypatch.setattr(shutil, "copytree", full)
+    with pytest.raises(EnvError, match="cannot keep the viewer in .*No space left on device; free about 11 MB there"):
+        HeldBundle(source)
+    assert len(copies) == 1 and held() == {}
+
+
+@pytest.mark.parametrize("where", ["a version", "a folder being removed"])
+def test_a_dot_file_in_loom_s_folder_is_part_of_its_shape(tmp_path: Path, where: str) -> None:
+    """Finder leaves a `.DS_Store` in a folder a person opens: a version holding one is served and let go like any other, and a folder set aside holding one is deleted once its remover is gone."""
+    first = HeldBundle(bundle(tmp_path / "old", "1170"))
+    first.close()
+    if where == "a version":
+        (viewers() / "1170" / ".DS_Store").write_bytes(b"\0\0\0\1Bud1")
+        again = HeldBundle(bundle(tmp_path / "old", "1170"))
+        assert again.path == viewers() / "1170" / "viewer" and held() == {"1170": [str(os.getpid())]}
+        again.close()
+        HeldBundle(bundle(tmp_path / "new", "1171"))
+        assert held() == {"1171": [str(os.getpid())]}
+    else:
+        aside = viewers() / ".removing-99999999-0000abcd"
+        (viewers() / "1170").rename(aside)
+        (aside / ".DS_Store").write_bytes(b"\0\0\0\1Bud1")
+        HeldBundle(bundle(tmp_path / "new", "1171"))
+        assert not aside.exists()
+
+
+@pytest.mark.parametrize("cause", ["a file at viewers", "a file at loom's place", "an unreadable lock", "no write"])
+def test_a_start_that_cannot_keep_the_viewer_says_what_to_mend(tmp_path: Path, cause: str) -> None:
+    """The message names the cause: a file where loom keeps a folder, by its path; a lock that cannot be read; a folder that cannot be written. Only the last asks for a writable folder."""
+    from loom.errors import EnvError
+    from loom.machine import data_dir
+
+    lock = viewers() / ".lock"
+    if cause == "a file at viewers":
+        data_dir().mkdir(parents=True, exist_ok=True)
+        viewers().write_text("")
+        mend = f"a file stands at {viewers()} where loom keeps a folder: move it"
+    elif cause == "a file at loom's place":
+        data_dir().parent.mkdir(parents=True, exist_ok=True)
+        data_dir().write_text("")
+        mend = f"a file stands at {data_dir()} where loom keeps a folder: move it"
+    elif cause == "an unreadable lock":
+        viewers().mkdir(parents=True)
+        lock.write_text("")
+        lock.chmod(0o200)
+        mend = f"loom cannot open its lock {lock}: make it readable"
+    else:
+        viewers().mkdir(parents=True)
+        viewers().chmod(0o500)
+        mend = "make that folder writable, with room for about 11 MB"
+    try:
+        with pytest.raises(EnvError) as said:
+            HeldBundle(bundle(tmp_path / "bundle", "1180"))
+    finally:
+        lock.chmod(0o600) if cause == "an unreadable lock" else None
+        viewers().chmod(0o700) if cause == "no write" else None
+    assert str(said.value).startswith(f"cannot keep the viewer in {viewers()}: ") and mend in str(said.value)
+    assert ("writable" in str(said.value)) == (cause == "no write")
 
 
 @pytest.mark.parametrize("what", ["the viewers", "the token", "the port"])
@@ -330,4 +473,5 @@ def test_a_server_that_cannot_start_names_what_it_could_not_do(tmp_path: Path, w
             assert f"cannot keep the viewer in {viewers()}" in said_it, said.stderr
         else:
             assert f"cannot keep the server's write token in {data_dir() / 'tokens'}" in said_it, said.stderr
+            assert f"a file stands at {data_dir() / 'tokens'} where loom keeps a folder" in said_it, said.stderr
         assert "cannot listen on port" not in said_it
