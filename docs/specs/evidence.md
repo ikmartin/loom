@@ -2,7 +2,7 @@
 
 This page specifies two logs loom keeps under `.loom/records/`: the **evidence log**, what someone did to a text (digested it, compared it with its paper, ran Lean on it, attested it), and the **asks log**, what a person asked of an agent and an agent of a person. It wins over `docs/design/library.md` about a shape, as that wins about what a record means. The node files these records speak of are `nodes.md`'s.
 
-What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). A library node's status waits for the node store, and Review's lists and the viewer's reads and writes are not built yet; nothing writes a record of evidence yet but the tests.
+What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a draft's result's status (§5, `status.py`, over the drafts' web, `web.py`). Review's lists and their reads and writes (§6, §7, `review.py`) are built for all that needs no node: questions, papers to fetch, Lean statements to attest, accepted and attested results that changed, proposed edits, and what waits for an agent. A library node's status, and the lists `cited` and `check`, wait for the node store; nothing writes a record of evidence yet but the tests.
 
 ## 1. Files
 
@@ -131,7 +131,7 @@ Every `asked` line has `event` (`asked`), `id`, `at`, `by`, `what`, `to` (`agent
 
 | `what` | to | asked by | its fields |
 | --- | --- | --- | --- |
-| `read` | agent | person | `nodes`: the stubs to read |
+| `read` | agent | person | `nodes`: the stubs to read; `marks`, the person's marks to digest that show where (`manifest.md`, annotations' `purpose`) |
 | `digest` | agent | person | `ref`; `scope`: `uses`, `marked`, `chosen` or `all`; `nodes` where the scope names results, `marks` (the ids of the person's marks to digest on the work's pages, annotations whose `purpose` is `to-digest`, `manifest.md`) where it names marks |
 | `ask` | agent | person | `text`, the person's question; `quote`, the words it is on, where they selected some |
 | `correct` | agent | person | `text`, what the person says differs; `on` is the node |
@@ -250,3 +250,46 @@ The function is built and answers for a draft's results now; it answers for a no
 **The gate.** A result reads `formalized` only when Lean accepted it on its text now, the person's attestation holds, and every library result under it is settled: each node its attested closure holds is read (not a stub) and compared with its paper on its text now, and each node its Lean assumes (`relative_to`) is that too and its own Lean statement attested, its own status `formalized`. Status computes this itself, from whatever records exist, and does not trust it to the act that wrote them, so an attestation written by hand over an unread or unchecked result still leaves it short of `formalized`. Between the two, Lean accepted and the attestation holding but a library result under it not yet settled, the result reads `waiting`, and `waiting_on` names each such result and why. Attesting itself waits for the closure's nodes to be read and compared (`formal-attest`, not built yet, refuses them as `unchecked`), so before an attestation `waiting_on` is said beside `unattested` for the request to name what will keep the result from reading formalized. A node no web can say anything of (before the node store, every node) settles nothing: under an attestation it is a cause with `now` null, and assumed it waits as `unknown`.
 
 A row of notation is attested once, in its definition, and holds wherever that definition is used: a changed definition is looked at once, and every result using it holds again once it is. A changed definition of a result's closure is not: each result resting on it is attested again, one by one.
+
+## 6. Review's lists
+
+What waits for the person, each kind a rule saying what puts a row in and what takes it out, computed each time it is read from the evidence, the asks, the scan and the published manifest, and never stored (`loom/src/loom/evidence/review.py`). A row is what one decision is about: it carries the ids it is addressed by and the fields its words are drawn from, never loom's own words, which are the viewer's.
+
+**A row** is `{row, kind, docs, …}` with its kind's fields. `row` is made from what it is about (`questions:t-2026-11-21-w2c6ga`, `attest:drafting/main.tex#lemma:1`, `edits:e-2026-11-21-k2m9xq`), so it stays the same while that waits. `docs` are the drafts it concerns: an ask's `from`, the documents that read a result's blocks, a change's documents.
+
+**Ranks.** Under Everything the kinds come in the order of who waits, as the integrator ruled after round six: `questions`, `fetch`, `cited`, `check`, `attest`, then `accepted-changed`, `attested-changed`, `edits`, and what waits for an agent, `agents`, last and apart. The column draws them alphabetically by the viewer's words; that is the viewer's.
+
+**Within a kind**, rows an agent is stopped on until the person acts come first, then rows a draft rests on, then the rest; ties oldest first, by when what put the row in was written.
+
+**A draft** narrows every list and count to the rows whose `docs` hold it; a row may concern two drafts, and counts once in each.
+
+| kind | in | out | fields |
+| --- | --- | --- | --- |
+| `questions` | an open `question` ask, from an agent to the person | answered, or withdrawn by its agent | `question`, `by`, `on`, `text`, `choices`, `quote` |
+| `fetch` | an open `paper` ask | withdrawn, or the work holds the document wanted (with the node store) | `task`, `ref`, `link`, `want`, `by`, `words` |
+| `cited` | a stub a draft rests on that no open ask covers; a citation of a work that names no result, with no `mention` holding | with the node store, not built yet | |
+| `check` | a statement node with a body whose `reading` is `unchecked`; an open `proposed` correction | with the node store, not built yet | |
+| `attest` | a draft's result whose `lean` is `unattested` (§5.2) and that may be attested now, no node of its closure unread or uncompared; what it assumes in Lean does not hold it back here, only from reading formalized | attested, or Lean restated | `result`, `name`, `source`, `what` (`statement and proof` for a proved theorem, else `statement only`), `paper`, `lean`, `waiting_on` |
+| `accepted-changed` | a result of the person's whose acceptance went stale, as the build publishes the ledger through its own resolver (`manifest.md`, `unresolved` with cause `earlier-change`) | accepted again, or its text back as accepted | `key`, `name`, `doc` |
+| `attested-changed` | a draft's result whose `lean` is `changed` | attested again on the text now, or restated | `result`, `name`, `doc`, `changed` (`statement` when its own text or a notation row changed, else `used`), `causes`, `attestation`, `resting` |
+| `edits` | each change waiting on the person as Review lists it today (`pending.pending`): an agent's suggested edits, and in a quilt that tracks edits, the in-place changes since the person's look | kept, discarded or undone | `change`, `kind` (`suggested` or `edit`), `doc`, `key`, `where`, `by`, `state`, `broke` (null until a compile's line is read, the views spec's Open 26) |
+| `agents` | an open ask to an agent | it produces what it asked for (§4.3), or is withdrawn | `task`, `kind` (its `what`), `on`, `working` (`{by}` while a live session took it, else null), `asked_at`, and the ask's own fields |
+
+**Nested rows.** In `attested-changed`, a result whose only causes are members of its closure is nested under the first such member, in the order its attestation names them, that is itself listed, as one of that row's `resting`; otherwise it is a row of its own. So a changed definition is one row, with each result resting on it beneath to be attested again one by one.
+
+A result never accepted is not listed, nor a result taken in from an agent's copy or a pull, which the views spec shows as a proposed edit and as the incoming pull. Problems are on their document, in Docs.
+
+## 7. The reads and writes
+
+Endpoints of the write API, in Review's family (`render/endpoints/review.py`; rows in `write-api.md`). The reads change nothing and the publisher does not rebuild after them; the writes change the asks log alone, and the publication that follows builds from the last scan, which tells the viewer something changed. Every write is the person's: a declared agent is refused `author-only` (403), and with no reviewer name `no-reviewer` (409).
+
+| endpoint | sends | answers |
+| --- | --- | --- |
+| `review-counts` | `{}` | `{everything, kinds: {KIND: n}, agents, drafts: [{doc, n}]}`, `drafts` being the person's documents |
+| `review-list` | `{kind?, doc?}`: `all` (the default), `agents` or a kind | `{groups: [{kind, rows}]}`, in rank order with `agents` last, empty groups left out |
+| `review-row` | `{row}` | `{row, body}`: for `accepted-changed` the key's published `acceptance` and `review_fragment`; for `edits` the published change; `{}` for the rest until formalization and the library give their bodies more. `no-such-row` (404) when nothing waits under that id now |
+| `review-answer` | `{question, choice?, text?}` | records `answered` (§4.2); `closed` (409) when answered or withdrawn already, `no-such-task` (404), `refused` (409) for a choice it does not offer |
+| `review-task` | `{kind, on, text?, docs?}` | records an ask of an agent and answers `{task}`. `read`: `on.nodes`, `on.marks`; `digest`: `on.ref`, `on.scope`, `on.nodes`, `on.marks`; `ask`: `on.ref` with `on.page`, or `on.key` a block, with `on.quote` and `text`; `correct`: `on.node` and `text`; `restate`: `on.result` a draft's block, and `text`, what differs; `which-result`: `on.key` the citing block and `on.ref`. A formalization is `formal-ask`'s (not built yet). `refused` (400) for an ask not of its shape, `no-such-result` (404) |
+| `review-task-delete` | `{task}` | records `withdrawn`; `closed` (409) when withdrawn already, `no-such-task` (404) |
+
+`review-accept` and the proposed edits' endpoints stay as they are. The views spec's `gen`, the library's generation, is the publisher's to keep and is not in these answers yet.

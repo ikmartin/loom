@@ -85,6 +85,8 @@ class Status:
     accepted: str | None = None
     waiting_on: tuple[Waiting, ...] = ()
     lean_record: str | None = field(default=None, compare=False)
+    #: When loom wrote the current Lean record: since when the result has waited for the person's word.
+    lean_since: str | None = field(default=None, compare=False)
     attestation: str | None = field(default=None, compare=False)
 
 
@@ -249,7 +251,9 @@ def status(
         found = replace(base, lean="rerun", lean_record=latest.id)
     else:
         assumed = tuple(Subject.from_dict(a, ("node",)) for a in current.get("assumed", []))
-        found = replace(base, role=_role(current, subject), relative_to=assumed, lean_record=current.id)
+        found = replace(
+            base, role=_role(current, subject), relative_to=assumed, lean_record=current.id, lean_since=current.at
+        )
     said = [r for r in evidence.about(kind, name, of="attested") if r.by.kind == "person"]
     attestation = said[-1] if said else None
     if attestation is not None and dict(attestation.get("statements", {})) == statements_of(latest):

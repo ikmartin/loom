@@ -232,8 +232,12 @@ def _what_fields(raw: dict[str, Any]) -> None:
     what = raw["what"]
     base = {"id", "what", "to", "on", "from", "words"}
     if what == "read":
-        _keys(raw, base | {"nodes"})
+        _keys(raw, base | {"nodes"}, frozenset({"marks"}))
         _node_list(raw["nodes"], "nodes")
+        if "marks" in raw and (
+            not isinstance(raw["marks"], list) or not all(isinstance(m, str) and m for m in raw["marks"])
+        ):
+            raise ValueError("marks is a list of the marks' ids")
     elif what == "digest":
         _keys(raw, base | {"ref", "scope"}, frozenset({"nodes", "marks"}))
         if not isinstance(raw["ref"], str) or not REFERENCE.fullmatch(raw["ref"]):
