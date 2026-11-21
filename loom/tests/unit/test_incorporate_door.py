@@ -163,6 +163,79 @@ def test_an_adoption_cut_short_is_put_back_once_the_history_has_moved_on(
     assert [e.action for e in load_history(q.history_dir).entries][-1] == "move"
 
 
+def recorded_folders_stand(q) -> bool:  # type: ignore[no-untyped-def]
+    """Whether every step the ledger names has its folder, and every folder a step."""
+    h = load_history(q.history_dir)
+    return all((q.history_dir / e.dir).is_dir() for e in h.entries if e.dir) and h.unrecorded_dirs() == []
+
+
+def test_a_stamp_after_a_crash_settles_the_act_first(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A command that draws an id holds the door's lock, and settles what a crash left before it reads the history, so its step is never numbered against an act in flight (D-1)."""
+    from tests.helpers import ok
+
+    q, token = ready(tmp_path)
+
+    def die(*_a: object, **_k: object) -> None:
+        raise Died
+
+    monkeypatch.setattr(writes, "_append_guarded", die)
+    with pytest.raises(Died):
+        incorporate(scan(q), COPY, token)
+    monkeypatch.undo()
+    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
+        monkeypatch.delenv(marker, raising=False)
+    said = ok("stamp", DOC, "-m", "between", cwd=q.root).stderr
+    assert "finished adopt:" in said
+    assert not writes.read_journal(q.root).begun
+    assert [e.action for e in load_history(q.history_dir).entries][-3:] == ["stamp", "adopt", "stamp"]
+    assert recorded_folders_stand(q)
+
+
+def test_an_act_whose_history_lines_landed_and_were_followed_is_left_not_put_back(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Putting it back would leave its landed lines naming folders it removed: recovery leaves it, says so, and every line keeps its folder (D-1)."""
+    q, token = ready(tmp_path)
+    ledger_writes: list[Path] = []
+    real = writes._append_line
+
+    def second_dies(path: Path, text: str, full: bool = False) -> tuple[int, int]:
+        if path.name == "ledger.jsonl":
+            ledger_writes.append(path)
+            if len(ledger_writes) == 2:
+                raise Died
+        return real(path, text, full)
+
+    monkeypatch.setattr(writes, "_append_line", second_dies)
+    with pytest.raises(Died):
+        incorporate(scan(q), COPY, token)
+    monkeypatch.undo()
+    append_entry(q.history_dir, "move", {"from": "a.tex", "to": "b.tex", "moved": False}, "Tester")
+    said = recovered(q)
+    assert said and said[0].startswith("left adopt:") and "another step was recorded after them" in said[0]
+    assert all((q.history_dir / e.dir).is_dir() for e in load_history(q.history_dir).entries if e.dir)
+
+
+def test_a_step_recorded_beside_a_left_act_takes_a_number_its_folders_do_not(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An act recovery must leave keeps its step folders; the next step is numbered past them, so no two folders carry one number (D-11)."""
+    from tests.helpers import ok
+
+    q, token = ready(tmp_path)
+    restore = dying_before_the_rename(monkeypatch, after=2)
+    with pytest.raises(Died):
+        incorporate(scan(q), COPY, token)
+    restore()
+    (q.root / DOC).write_text(TEXT + "% the person's line\n", encoding="utf-8")
+    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
+        monkeypatch.delenv(marker, raising=False)
+    said = ok("stamp", DOC, "-m", "mine", cwd=q.root).stderr
+    assert "left adopt:" in said
+    numbers = [name[:4] for name in steps(q)]
+    assert len(numbers) == len(set(numbers)), steps(q)
+
+
 def test_a_document_saved_since_its_preview_is_not_written(tmp_path: Path) -> None:
     q, token = ready(tmp_path)
     saved = TEXT.replace("Original introduction.", "The person's own introduction.")

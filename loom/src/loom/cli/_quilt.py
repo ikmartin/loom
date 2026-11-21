@@ -54,11 +54,17 @@ def drawing_ids(quilt_path: str | None) -> Iterator[None]:
     """
     from loom.cli.report import Progress
     from loom.paths import WRITES_LOCK
+    from loom.writes import recover
 
-    root = open_quilt(quilt_path).root
+    quilt = open_quilt(quilt_path)
+    root = quilt.root
     wait = lambda: Progress("waiting for another loom writing to this quilt")  # noqa: E731
-    with locked(root / WRITES_LOCK, patience=wait), locked(root / ID_LOCK, patience=wait):
-        yield
+    with locked(root / WRITES_LOCK, patience=wait):
+        # what a crash left is settled first, as every act settles it, so no step is read or numbered against an act in flight
+        for said in recover(root, quilt.history_dir):
+            click.echo(f"loom: {said}", err=True)
+        with locked(root / ID_LOCK, patience=wait):
+            yield
 
 
 def draws_ids(command: Callable[..., Any]) -> Callable[..., Any]:

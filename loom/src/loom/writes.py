@@ -859,6 +859,14 @@ def _guard_holds(root: Path, log: str, at: int, lines: list[str]) -> bool:
     return _landed(root, log, at, lines) is not None
 
 
+def _tangled(root: Path, log: str, at: int, lines: list[str]) -> bool:
+    """Whether some of `lines` landed where they were planned in `log` and another line follows them: putting the act back would leave those lines naming what it removed, and taking them out would rewrite a line another writer numbered after them."""
+    p = _log_path(root, log)
+    have = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()] if p.is_file() else []
+    mine = next((k for k in range(len(lines), 0, -1) if have[at : at + k] == lines[:k]), 0)
+    return mine > 0 and len(have) > at + mine
+
+
 def _append_guarded(root: Path, records: list[dict[str, Any]], *, unless_there: bool = False) -> None:
     """Append guarded record lines (`Act.log`'s `at`): each log's lines all at once under its lock, only while it holds the number of lines they were planned after; WriteRefused (`changed`) when another writer has added one since, before any is written. With `unless_there`, as recovery finishing an act, the lines already there where they were planned are kept and the rest appended."""
     for log, (at, lines) in _guards(records).items():
@@ -901,6 +909,14 @@ def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
     )
     if all(after for _, after in holds.values()) and guards_hold:
         return _Verdict("finish", holds=holds)
+    if not guards_hold and any(
+        _tangled(root, log, at, lines) for log, (at, lines) in _guards(entry.get("records") or []).items()
+    ):
+        return _Verdict(
+            "left",
+            f"its history lines were written and another step was recorded after them, so putting it back would leave those lines naming what it removed, and recovery changed nothing: {_where(holds)}",
+            holds,
+        )
     texts = {rel: [fetch(history, d) if d else None for d in ab] for rel, ab in files.items()}
     lacking = [rel for rel, ab in files.items() if any(d and x is None for d, x in zip(ab, texts[rel], strict=True))]
     if lacking:

@@ -110,7 +110,9 @@ class History:
         return sorted(d for d in self.dir.iterdir() if d.is_dir() and _STEP_DIR.match(d.name) and d.name not in named)
 
     def next_step(self) -> int:
-        return max((e.step or 0 for e in self.entries), default=0) + 1
+        """The number the next step takes: past every step the ledger names and every step folder there is, so a step never shares a number with the folder an act the door left holds (`writes.left`)."""
+        on_disk = [int(d.name[:4]) for d in self.unrecorded_dirs()]
+        return max([*(e.step or 0 for e in self.entries), *on_disk], default=0) + 1
 
     def resolve_step(self, ref: str) -> Entry | None:
         """A step by number (`3`, `0003`), by name (`paper-v2`), or by its directory (`0004-paper-v2`)."""
