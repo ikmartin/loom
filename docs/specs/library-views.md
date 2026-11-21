@@ -160,17 +160,19 @@ The order of a work's nodes is the one §2 gives, ruled with the node store; a n
 
 - The PDF: `GET /_api/library/pdf/<hex>`. pdf.js reads it whole, as today: a paper of 30 pages is 0.3 to 2 MB. **Open 11.** A book of several hundred pages would show its first page late. Proposal: this address answers `Range` requests, so pdf.js fetches the pages in view; not needed at the sizes in use.
 - The person's annotations on the work, as today, from the annotation log, keyed by the reference's id (Open 12, closed).
-- **`library-places`.** Asked only while the overlay is on, for the pages in view and their neighbours. Given `{"ref": REF, "pages": [12, 13]}`, or `{"node": NODE}` for one node's place (a use followed into another work, a crop in Review, "open at its place"). Answers:
+- **`library-places`**, where each annotation on the work's PDF stands on its pages (built by the node store). The reader asks it for the whole work, `{"ref": REF}`, as it opens, and again with `since` whenever the annotations change, and draws a note anchored by its words alone where the answer places it, in the Library and beside a draft alike; one that records its own place (a box, a drawing) is drawn there without it. `pages` answers only those pages. Answers:
 
 ```json
-{"gen": 41, "pdf": "sha256:41b7…", "places": [
-  {"node": "tq-00K3", "name": "Lemma 3.2", "number": "3.2", "page": 12, "rects": [[72.0, 388.5, 540.0, 470.2]], "paper": "unchecked", "lean": null},
-  {"mark": "m-7f3a", "page": 6, "rects": [[70.1, 352.0, 541.3, 401.8]], "paper": "marked"}]}
+{"gen": 1789808400000, "pdf": "sha256:e16e…", "places": [
+  {"annotation": "a-2026-09-17-f0jzdb", "page": 1, "rects": [[110.0, 308.0, 358.0, 311.0]]},
+  {"annotation": "a-2026-09-15-77htp8", "page": 2, "rects": [[82.8, 97.7, 473.9, 111.1]]}]}
 ```
 
-`pdf` is the document the rectangles are on, which the reader opens. A node's place is found again, never stored in its file (`nodes.md` §10): its text matched against the words of the page its `pages` names, by the normalisation a quotation is checked under; a stub's place is the mark that names it (below). A node with no place found has no entry. A mark's place is its annotation's, placed as every annotation on a PDF is. Rectangles are in points from the page's top left, as `annotate`'s are. Kept by the node's hash and the PDF's hash. From: index, store (word boxes), annotations. Cost: on the first ask for a page, its word boxes (poppler, about 50 ms a page, kept by the PDF's hash) and a match for each node on it; then 5 ms and 2 KB a page.
+By page, then by when each was written; `rects` one `[x0, y0, x1, y1]` a line, in points from the page's top left, as `annotate`'s are; `pdf` the document they are on. Every annotation on the work's PDF that stands somewhere has an entry, notes, highlights and marks alike: a text anchor's rectangles are those it recorded, or its quotation found among the page's word boxes, read from the PDF the first time a page is asked for and kept by the PDF's hash; a box's are its record and a mark's its own place, either where a changed copy found it again. A detached one, one whose words are not found, and a note on the whole work have none, and the reader lists them and draws them nowhere. `since` equal to `gen` answers `{"gen", "unchanged": true}`. Refusals: `no-such-ref` (404), `no-document` (409, a work holding no PDF), `bad-field` and `missing-field` (400). Nothing is made before it is asked for, and it writes nothing. From: annotations, store (word boxes).
 
-The overlay is off until a person turns it on, and the viewer remembers it once they have (ruled with the spec's merge, as `library.md` says; round six draws it on). The backend is the same either way, since places are asked for only while it is on.
+**With the digest (phase 3)** a work's nodes join the places: an entry `{"node", "name", "number", "page", "rects", "paper", "lean"}` for each node on the pages asked for, and `{"node": NODE}` asks for one node's place (a use followed into another work, a crop in Review, "open at its place"). A node's place is found again, never stored in its file (`nodes.md` §10): its text matched against the words of the page its `pages` names, by the normalisation a quotation is checked under; a stub's place is the mark that names it (below). A node with no place found has no entry. Kept by the node's hash and the PDF's hash. The digest marks ask for the pages in view and their neighbours, only while the overlay is on, and are offered where `library-digest` is served too; a mark to digest is an annotation, which the reader draws in its look. Round six's fixture answers node entries already, and the two-way check compares only its annotation entries with loom's.
+
+The overlay is off until a person turns it on, and the viewer remembers it once they have (ruled with the spec's merge, as `library.md` says; round six draws it on). The backend is the same either way: the reader asks for its annotations' places whether the overlay is on or not, and the nodes' only while it is.
 
 **Writes.**
 
@@ -474,7 +476,7 @@ Every write the views make, in one place. "Built" marks one that exists today. T
 | thumbnail | about 25 KB | 0.2 s first, then a file | be made for a card not scrolled into view |
 | `library-work` | about 15 KB for 60 results | 10 ms with a survey | compile in the request; the survey's compile is a job |
 | `library-digest-scopes` | under 1 KB | 10 ms | make a survey except to count `all` |
-| `library-places` | 2 KB a page | 5 ms, 50 ms a page first | be asked while the overlay is off |
+| `library-places` | about 100 bytes an annotation | under 30 ms warm, 150 ms first on a paper of 30 pages (measured by the node store) | make anything before it is asked; read a page's words twice; ask for nodes while the overlay is off |
 | `library-node` | under 8 KB | 5 ms | read any file but the node's, its macros node's and, for an item, the survey |
 | `library-find` | under 2 KB | 30 ms, about 1 s first | guess a mark |
 | `review-counts` | under 1 KB | 20 ms | read a body |
