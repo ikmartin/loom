@@ -4,7 +4,7 @@
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
-	import type { CitedRow, CitedStub, Rect, ReviewBody } from '$lib/library/types';
+	import type { CitedRow, CitedStub, Rect, ReviewBody, RowBody } from '$lib/library/types';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
@@ -15,7 +15,7 @@
 	type Find = { query: string; hits: { page: number; rects: Rect[] }[]; pages: number };
 
 	let { row, stub }: { row: Extract<CitedRow, { stubs: unknown }>; stub: CitedStub } = $props();
-	const body = new Read<ReviewBody & { cite?: Cite; find?: Find; pdf?: string | null }>();
+	const body = new Read<ReviewBody & { body: RowBody & { cite?: Cite; find?: Find; pdf?: string | null } }>();
 	let hit = $state(0);
 	let page = $state(1);
 	let chosen = $state<{ page: number; text: string; rects: number[][]; left: number; top: number } | null>(null);
@@ -28,7 +28,7 @@
 		void body.load(`${id}#${node}`, (s) => api.reviewRow(id, s, node));
 	});
 
-	const find = $derived(body.value?.find);
+	const find = $derived(body.value?.body.find);
 	const at = $derived(find?.hits.length ? find.hits[hit % find.hits.length] : { page, rects: [] as Rect[] });
 
 	function selected(e: { page: number; text: string; rects: number[][]; client: { left: number; top: number; width: number; height: number } }): void {
@@ -43,13 +43,13 @@
 		chosen = null;
 		const done = await api.call<{ gen: number; annotation?: string }>('annotate', { target: row.ref, page: c.page, quote: c.text, rects: c.rects, purpose: 'to-digest', node: stub.node });
 		if (!done.ok) return message.post(said(done.error));
-		const asked = await api.ask('read', { node: stub.node }, { nodes: [stub.node] }, stub.rests.docs);
+		const asked = await api.ask('read', { nodes: [stub.node], ...(done.value.annotation ? { marks: [done.value.annotation] } : {}) }, '', stub.rests.docs);
 		message.post(asked.ok ? words.cited.markedOn(c.page) : said(asked.error));
 	}
 </script>
 
-{#if body.value?.cite}
-	{@const cite = body.value.cite}
+{#if body.value?.body.cite}
+	{@const cite = body.value.body.cite}
 	<div class="cmp">
 		<div>
 			<div class="crop-cap">{words.cited.citesHere(cite.where)}</div>
@@ -67,7 +67,7 @@
 						<button type="button" class="linkish" onclick={() => (page = (page % find.pages) + 1)}>{words.cited.nextPage}</button>
 					{/if}
 				</div>
-				{#if body.value.pdf}<Crop pdf={body.value.pdf} place={at} pad={at.rects.length ? 110 : 0} onselect={selected} />{/if}
+				{#if body.value.body.pdf}<Crop pdf={body.value.body.pdf} place={at} pad={at.rects.length ? 110 : 0} onselect={selected} />{/if}
 				{#if chosen}
 					<div class="selpop" style:left="{chosen.left}px" style:top="{chosen.top}px">
 						<button type="button" class="btn primary" onclick={mark}><Mark kind="marked" size={11} /> {words.cited.mark}</button>

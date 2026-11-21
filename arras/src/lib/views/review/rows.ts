@@ -2,8 +2,20 @@
 
 import type { MarkKind } from '$lib/marks/Mark.svelte';
 import { paperMark } from '$lib/marks/marks';
-import type { ReviewRow, TaskRow } from '$lib/library/types';
+import type { AskedOn, ReviewRow, TaskRow } from '$lib/library/types';
 import { review as words } from '$lib/words/review';
+
+/** The names of what a row names by id (`names.svelte.ts`): undefined while unread, or for what nothing names. */
+export interface Names {
+	work(ref: string): { short: string; title: string } | undefined;
+	node(id: string): { name: string; short: string } | undefined;
+	result(label: string): string | undefined;
+}
+
+const short = (n: Names, ref?: string) => (ref ? n.work(ref)?.short : undefined) ?? words.someWork;
+const result = (n: Names, label?: string) => (label ? n.result(label) : undefined) ?? words.someResult;
+/** The draft result an ask's place names, by its label or its block. */
+const placed = (n: Names, on: AskedOn) => result(n, on.label ?? on.block?.key);
 
 /** Names in the paper's order, their numbers read naturally (5.7 before 5.9 before 5.10), as a row names its results. */
 export function inPaperOrder(names: string[]): string[] {
@@ -16,31 +28,34 @@ export function inPaperOrder(names: string[]): string[] {
 }
 
 /** A row's first line. An agent's question is drawn with the agent's name apart (`question`), so it has none here. */
-export function line(r: ReviewRow): string {
+export function line(r: ReviewRow, n: Names): string {
 	switch (r.kind) {
 		case 'accepted-changed':
 			return words.at(words.file(r.doc), r.name);
 		case 'questions':
 			return '';
 		case 'attested-changed':
-			return words.at(words.file(r.doc), r.title ? `${r.name}, ${r.title}` : r.name);
+			return words.at(words.file(r.doc), r.name);
 		case 'cited':
 			return r.citation !== undefined ? words.cited.namesNone(r.doc, r.where, r.short) : words.at(r.short, words.results(inPaperOrder(r.stubs.map((s) => s.name))));
 		case 'check':
 			return r.correction !== undefined ? words.at(r.short, words.check.correction(r.name)) : words.at(r.short, words.results(inPaperOrder(r.nodes.map((n) => n.name))));
 		case 'attest':
-			return words.at('doc' in r.source ? words.file(r.source.doc) : r.source.short, r.title ? `${r.name}, ${r.title}` : r.name);
-		case 'fetch':
-			return words.at(r.short, r.title);
+			return words.at('doc' in r.source ? words.file(r.source.doc) : r.source.short, r.name);
+		case 'fetch': {
+			const w = n.work(r.ref);
+			return w ? words.at(w.short, w.title) : words.someWork;
+		}
 		case 'edits':
 			return words.at(words.file(r.doc), r.where);
 	}
 }
 
 /** An agent's question: the agent's name, then where it asked and what. */
-export function question(r: Extract<ReviewRow, { kind: 'questions' }>): { by: string; rest: string } {
+export function question(r: Extract<ReviewRow, { kind: 'questions' }>, n: Names): { by: string; rest: string } {
 	const o = r.on;
-	const where = o.digesting ? words.questions.digesting(o.digesting) : o.doc && o.name ? words.questions.onResult(o.doc, o.name) : o.short && o.page ? words.questions.onPage(o.short, o.page) : words.questions.on(o.short ?? o.name ?? (o.doc ? words.file(o.doc) : ''));
+	const node = o.node ? n.node(o.node) : undefined;
+	const where = o.ref ? (o.page ? words.questions.onPage(short(n, o.ref), o.page) : words.questions.on(short(n, o.ref))) : o.label || o.block ? words.questions.onResult(r.docs[0] ?? '', placed(n, o)) : o.node ? words.questions.on(node ? words.of(node.name, node.short) : words.someResult) : words.questions.on(o.document ? words.file(o.document) : '');
 	return { by: r.by, rest: words.questions.asks(where) + r.text };
 }
 
@@ -62,9 +77,10 @@ export function quiet(r: ReviewRow): string {
 		case 'attest':
 			return words.attest.what[r.what];
 		case 'attested-changed':
-			return r.changed === 'statement' ? words.attested.statement(words.day(r.attested_at)) : words.attested.used(r.resting);
+			// results resting under it are counted; else what changed, its own text or what it uses
+			return r.resting.length ? words.attested.used(r.resting.length) : r.changed === 'statement' ? words.attested.statement : words.attested.uses;
 		case 'edits':
-			return r.broke ? words.edits.broke(r.doc, r.broke.line) : words.edits.by(r.by);
+			return r.broke ? words.edits.broke(r.doc, r.broke.line) : r.by ? words.edits.by(r.by) : '';
 		default:
 			return '';
 	}
@@ -90,27 +106,37 @@ export function marks(r: ReviewRow): [MarkKind | null, MarkKind | null] {
 const OPENS = new Set<ReviewRow['kind']>(['questions', 'accepted-changed', 'edits', 'check', 'cited', 'attest', 'attested-changed']);
 export const opens = (r: ReviewRow): boolean => OPENS.has(r.kind);
 
-/** A task's sentence, from what was asked and of what; an ask of a kind loom does not make here is drawn with the words it carries. */
-export function task(t: TaskRow): string {
+/** A task's sentence, from what was asked and of what, each named by its id; an ask of a kind loom does not make here is drawn with the words it carries. */
+export function task(t: TaskRow, n: Names): string {
 	const o = t.on;
-	const short = o.short ?? '';
+	const doc = t.docs[0] ?? '';
+	const nodes = (t.nodes ?? []).map((id) => n.node(id));
+	const target = t.target?.node ? (n.node(t.target.node)?.name ?? words.someResult) : result(n, t.target?.label);
 	switch (t.what) {
-		case 'digest':
-			return o.scope === 'marked' ? words.agents.digestMarked(o.count ?? 0, short) : o.scope === 'all' ? words.agents.digestAll(short) : o.scope === 'uses' ? words.agents.digestUses(short) : words.agents.digestChosen(o.count ?? 0, short);
+		case 'digest': {
+			const of = short(n, t.ref ?? o.ref);
+			const count = (t.scope === 'marked' ? t.marks : t.nodes)?.length ?? 0;
+			return t.scope === 'marked' ? words.agents.digestMarked(count, of) : t.scope === 'all' ? words.agents.digestAll(of) : t.scope === 'uses' ? words.agents.digestUses(of) : words.agents.digestChosen(count, of);
+		}
 		case 'read':
-			return words.agents.read(o.names ?? [], short);
+			return words.agents.read(
+				nodes.map((x) => x?.name ?? words.someResult),
+				nodes.find((x) => x)?.short ?? words.someWork
+			);
 		case 'ask':
-			return o.doc ? words.agents.askResult(o.doc, o.name ?? '', t.text ?? '') : words.agents.askPage(short, o.page ?? 1, t.text ?? '');
-		case 'correct':
-			return words.agents.correct(o.name ?? '', short, t.text ?? '');
+			return o.ref ? words.agents.askPage(short(n, o.ref), o.page ?? 1, t.text ?? '') : words.agents.askResult(doc, placed(n, o), t.text ?? '');
+		case 'correct': {
+			const node = o.node ? n.node(o.node) : undefined;
+			return words.agents.correct(node?.name ?? words.someResult, node?.short ?? words.someWork, t.text ?? '');
+		}
 		case 'restate':
-			return words.agents.restate(o.name ?? '', o.doc ?? '');
+			return words.agents.restate(target, doc);
 		case 'which-result':
-			return words.agents.whichResult(short, o.where ?? '');
+			return words.agents.whichResult(short(n, t.cites), placed(n, o));
 		case 'formalize':
-			return words.agents.formalize(o.name ?? '', o.doc ?? '');
+			return words.agents.formalize(target, doc);
 		default:
-			return t.text ?? '';
+			return t.text ?? t.words ?? '';
 	}
 }
 

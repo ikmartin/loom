@@ -28,7 +28,7 @@
 	}
 </script>
 
-{#if body.value?.statement}<Statement fragment={body.value.statement.fragment} />{/if}
+{#if body.value?.body.statement}<Statement fragment={body.value.body.statement.fragment} />{/if}
 {#if row.kind === 'edits' && row.broke}
 	<p class="note">{words.edits.inPlace(row.by, row.doc, words.edits.errors[row.broke.error] ?? row.broke.error, row.broke.line)}</p>
 {/if}

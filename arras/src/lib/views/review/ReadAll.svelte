@@ -14,7 +14,7 @@
 	async function all(): Promise<void> {
 		busy = true;
 		for (const s of stubs) {
-			const done = await api.ask('read', { node: s.node }, { nodes: [s.node] }, s.docs);
+			const done = await api.ask('read', { nodes: [s.node] }, '', s.docs);
 			if (!done.ok) {
 				busy = false;
 				return message.post(said(done.error));

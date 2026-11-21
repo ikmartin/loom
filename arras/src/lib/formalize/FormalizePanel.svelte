@@ -4,7 +4,7 @@
 	import type { FormalPlan, NodeAnswer, PlanRow as Row } from '$lib/library/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import Mark from '$lib/marks/Mark.svelte';
-	import { leanMark, paperMark } from '$lib/marks/marks';
+	import { leanMark, paperMark, hasLean } from '$lib/marks/marks';
 	import NodeBody from '$lib/node/NodeBody.svelte';
 	import { THEOREMS } from '$lib/node/taxa';
 	import { message } from '$lib/shell/message.svelte';
@@ -81,7 +81,7 @@
 	<div class="fzi" data-testid="formalize-item">
 		<button type="button" class="fold" aria-expanded={o !== undefined} aria-label={r.name} onclick={() => show(r)}><Icon name={o !== undefined ? 'caret' : 'right'} size={14} /></button>
 		<span class="slot">{#if r.paper}<Mark kind={paperMark(r.paper)} />{/if}</span>
-		<span class="slot">{#if r.lean}<Mark kind={leanMark(r.lean)} />{/if}</span>
+		<span class="slot">{#if hasLean(r.lean)}<Mark kind={leanMark(r.lean)} />{/if}</span>
 		<span class="nm">{r.name}{#if r.title}<span class="tl">{' ' + r.title}</span>{/if}{#if r.source && 'short' in r.source}<span class="src">{' · ' + r.source.short}</span>{/if}</span>
 		{#if extra}{@render extra()}{/if}
 	</div>

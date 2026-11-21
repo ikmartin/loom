@@ -4,7 +4,7 @@
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
-	import type { AttestRow, ReviewBody } from '$lib/library/types';
+	import type { AttestRow, ReviewBody, RowBody } from '$lib/library/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import NodeBody from '$lib/node/NodeBody.svelte';
@@ -15,7 +15,7 @@
 	import Restate from './Restate.svelte';
 
 	type Part = { part: string; draft?: string; lean: string; reading: string; by?: string; from?: 'statement' | 'macros' };
-	type Body = ReviewBody & { observation?: string; parts?: Part[]; notation?: Part[]; uses_attested?: { result: string; name: string; title?: string; at: string }[]; supporting?: string[]; difference?: { by: string; text: string } };
+	type Body = ReviewBody & { body: RowBody & { observation?: string; parts?: Part[]; notation?: Part[]; uses_attested?: { result: string; name: string; title?: string; at: string }[]; supporting?: string[]; difference?: { by: string; text: string } } };
 
 	let { row }: { row: AttestRow } = $props();
 	const body = new Read<Body>();
@@ -29,7 +29,7 @@
 		void body.load(id, (s) => api.reviewRow(id, s));
 	});
 
-	const b = $derived(body.value);
+	const b = $derived(body.value?.body);
 	const by = $derived(b?.parts?.[0]?.by ?? '');
 	const where = $derived('doc' in row.source ? words.file(row.source.doc) : row.source.short);
 	/** A result of a work, which the person did not write: its words are the paper's. */

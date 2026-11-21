@@ -35,6 +35,8 @@ test('the column shows a kind alone, and a draft narrows the list and the counts
 	await page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).click();
 	await expect(page.getByTestId('review-row')).toHaveCount(1);
 	await expect(count(page, 'review-kind-all')).toHaveText('9');
+	// the kinds are counted for every draft only, so under a draft they show none
+	await expect(count(page, 'review-kind-check')).toHaveText('');
 	await page.getByTestId('review-kind-all').click();
 	await expect(count(page, 'review-kind-all')).toHaveText('29');
 	await expect(page).toHaveURL(/\/review/);
@@ -44,7 +46,7 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await open(page);
 	await page.getByTestId('review-kind-questions').click();
 	const first = page.getByTestId('review-row').first();
-	await expect(first).toContainText('Claude Code asks, digesting Okafor 2022: your mark on page 7');
+	await expect(first).toContainText('Claude Code asks, on Okafor 2022, page 7: your mark on page 7');
 	await first.getByRole('button', { expanded: false }).click();
 	await first.getByRole('button', { name: 'only the proposition', exact: true }).click();
 	await expect(page.getByTestId('column-message')).toContainText('Answered. Claude Code is told.');
@@ -63,7 +65,7 @@ test('a proposed edit opens to its change and is kept; one made in place that br
 	await expect(broke).toContainText('bounds.tex has not compiled since this edit (line 14)');
 	await broke.getByRole('button', { expanded: false }).click();
 	await expect(broke.getByTestId('review-statement').locator('span.change[data-side="new"]').first()).toHaveText('Suppose');
-	await expect(broke).toContainText('Claude Code made this edit in place. bounds.tex has not compiled since: the command it adds is not defined (line 14).');
+	await expect(broke).toContainText('This edit was made in place. bounds.tex has not compiled since: the command it adds is not defined (line 14).');
 	await expect(broke.getByRole('button', { name: 'undo the edit' })).toBeVisible();
 	const first = page.getByTestId('review-row').first();
 	await first.getByRole('button', { expanded: false }).click();
@@ -193,7 +195,7 @@ test('a Lean statement to attest shows it part by part beside the Lean and the a
 test('an attested definition that changed is asked about in three steps, and each result resting on it again', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-attested-changed').click();
-	const def = page.getByTestId('review-row').filter({ hasText: 'main.tex · Definition 3.7, Connected' });
+	const def = page.getByTestId('review-row').filter({ hasText: 'main.tex · Definition 3.7' });
 	await expect(def).toContainText('changed since you attested it · 2 results rest on it');
 	await def.getByRole('button', { expanded: false }).first().click();
 	await expect(def).toContainText('What you attested, on 12 Nov');
@@ -210,7 +212,7 @@ test('an attested definition that changed is asked about in three steps, and eac
 	await def.getByRole('button', { name: 'still states it' }).first().click();
 	await expect(def).toHaveCount(0);
 	const cor = page.getByTestId('review-row').filter({ hasText: 'main.tex · Corollary 3.5' });
-	await expect(cor).toContainText('its statement changed since you attested it, 20 Nov');
+	await expect(cor).toContainText('its statement changed since you attested it');
 	await cor.getByRole('button', { expanded: false }).first().click();
 	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
 });

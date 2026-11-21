@@ -6,6 +6,7 @@
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
 	import { task } from './rows';
+	import { reviewNames } from './names.svelte';
 
 	let { row }: { row: TaskRow } = $props();
 
@@ -22,7 +23,7 @@
 	<div class="rr-h">
 		<span class="slot" aria-hidden="true">{row.working ? '▸' : '·'}</span>
 		<span class="slot"></span>
-		<span class="tx">{task(row)}</span>
+		<span class="tx">{task(row, reviewNames)}</span>
 		<span class="meta">{#if row.working}<span class="who">{row.working.by}</span> {words.agents.working}{:else}{words.agents.waiting}{/if}</span>
 		<button type="button" class="del" onclick={withdraw}>{words.agents.delete}</button>
 		<span class="chev"></span>

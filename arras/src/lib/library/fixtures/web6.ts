@@ -1,6 +1,6 @@
 // The Web's part of round six's fixture: the prototype's web of results, main.tex's and bounds.tex's with the library's they rest on, answered as `web-list`, `web-group`, `web-search`, `web-focus` and `web-graph` will answer them. Status is given as the evidence lane's fields, which the viewer only draws. Written from the spec (`docs/specs/library-views.md` §5) until those reads are served.
 
-import type { LeanStatus, Paper, Row, WebFocus, WebGraph, WebList, WebScope, WebSearch, WebSection } from '../types';
+import type { Lean, Paper, Row, WebFocus, WebGraph, WebList, WebScope, WebSearch, WebSection } from '../types';
 
 const MAIN = 'drafting/main.tex';
 const BOUNDS = 'drafting/bounds.tex';
@@ -77,20 +77,19 @@ export function growWeb(): void {
 const uses = (id: string) => [...(W[id].s ?? []), ...(W[id].p ?? [])];
 const usedBy = (id: string) => Object.keys(W).filter((k) => uses(k).includes(id));
 
-/** A result's two statuses, as the evidence lane's status gives them. */
-function status(n: N): { paper: Paper | null; lean: LeanStatus | null } {
-	const lean = (l: LeanStatus['lean'], role: LeanStatus['role'] = 'proved'): LeanStatus => ({ lean: l, role });
-	if (n.src.endsWith('.tex')) return { paper: null, lean: n.st === 'formal' ? lean('formalized', n.name.startsWith('Definition') ? 'defined' : 'proved') : n.st === 'leanq' ? lean('unattested') : lean('none') };
-	if (n.st === 'assumed') return { paper: 'matches', lean: lean('formalized', 'assumed') };
-	if (n.st === 'leanq') return { paper: 'matches', lean: lean('unattested') };
-	return { paper: n.st === 'checked' ? 'matches' : (n.st as Paper), lean: null };
+/** A result's two statuses, as the evidence lane's status gives them: `lean` its status's word (`evidence.md` §8). */
+function status(n: N): { paper: Paper | null; lean: Lean } {
+	if (n.src.endsWith('.tex')) return { paper: null, lean: n.st === 'formal' ? 'formalized' : n.st === 'leanq' ? 'unattested' : 'none' };
+	if (n.st === 'assumed') return { paper: 'matches', lean: 'formalized' };
+	if (n.st === 'leanq') return { paper: 'matches', lean: 'unattested' };
+	return { paper: n.st === 'checked' ? 'matches' : (n.st as Paper), lean: 'none' };
 }
 
-/** A result as a list sends it. */
+/** A result as a list sends it (`ROW`): its title null where it has none. */
 export function rowOf(id: string, refs: Record<string, string>): Row {
 	const n = W[id];
 	const source = own(id) ? { doc: n.src } : { ref: refOf(refs, n.src), short: SHORT[n.src][0] };
-	return { result: id, name: n.name, ...(n.title ? { title: n.title } : {}), taxon: n.name.split(' ')[0].toLowerCase(), source, ...status(n), ...(own(id) && n.st === 'unformal' ? { choose: true } : {}) };
+	return { result: id, name: n.name, title: n.title ?? null, taxon: n.name.split(' ')[0].toLowerCase(), source, ...status(n) };
 }
 
 /** Number order, read naturally: 3.2 before 3.10. */
@@ -150,19 +149,20 @@ export function webList(refs: Record<string, string>, a: { scope: WebScope; doc?
 	if (a.scope === 'deps') sections.push({ head: 'uses', doc, groups: works(ids, true) });
 	if (a.scope === 'all') {
 		const docs = [...new Set(ids.filter(own).map((k) => W[k].src))].sort((x, y) => (x === MAIN ? -1 : y === MAIN ? 1 : x.localeCompare(y)));
-		sections.push({ head: 'drafts', groups: docs.map((d) => ({ group: d, doc: d, n: ids.filter((k) => W[k].src === d).length, ...(open.has(d) ? { rows: ids.filter((k) => W[k].src === d).map(row) } : {}) })) });
+		sections.push({ head: 'drafts', groups: docs.map((d) => ({ group: d, n: ids.filter((k) => W[k].src === d).length, ...(open.has(d) ? { rows: ids.filter((k) => W[k].src === d).map(row) } : {}) })) });
 	}
 	if (a.scope === 'all' || a.scope === 'library') sections.push({ head: 'library', groups: works(ids, false) });
 	return { count: ids.length, sections, ...(a.scope === 'all' || a.scope === 'library' ? { undigested: 295 } : {}) };
 }
 
-/** `web-group`: a group's rows, by the document or the work's reference. */
-export function webGroup(refs: Record<string, string>, a: { scope: WebScope; doc?: string; group: string }): Row[] {
+/** `web-group`: a group's rows, by the document or the work's reference, and how many it holds. */
+export function webGroup(refs: Record<string, string>, a: { scope: WebScope; doc?: string; group: string }): { group: string; n: number; rows: Row[] } {
 	const work = Object.keys(SHORT).find((w) => refOf(refs, w) === a.group);
-	return Object.keys(W)
+	const rows = Object.keys(W)
 		.filter((k) => inScope(k, a.scope, a.doc) && (W[k].src === a.group || W[k].src === work))
 		.sort(byNum)
 		.map((k) => rowOf(k, refs));
+	return { group: a.group, n: rows.length, rows };
 }
 
 const words = (id: string) => (W[id].body ?? W[id].ex ?? '').replace(/\\[()[\]]/g, '');
@@ -176,7 +176,7 @@ export function webSearch(refs: Record<string, string>, a: { scope: WebScope; do
 	const hits = [...ids.filter(named).sort(byNum), ...ids.filter((k) => !named(k) && said(k)).sort(byNum)].slice(0, 50).map((k) => {
 		const w = words(k);
 		const i = w.toLowerCase().indexOf(q);
-		return { row: rowOf(k, refs), ...(i < 0 ? {} : { snippet: { before: (i > 40 ? '…' : '') + w.slice(Math.max(0, i - 40), i), match: w.slice(i, i + q.length), after: w.slice(i + q.length, i + q.length + 70) + (w.length > i + q.length + 70 ? '…' : '') } }) };
+		return { row: rowOf(k, refs), ...(i < 0 ? { snippet: null } : { snippet: { before: (i > 40 ? '…' : '') + w.slice(Math.max(0, i - 40), i), match: w.slice(i, i + q.length), after: w.slice(i + q.length, i + q.length + 70) + (w.length > i + q.length + 70 ? '…' : '') } }) };
 	});
 	return { count: hits.length, hits };
 }

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Row, WebList } from '$lib/library/types';
 import { HEIGHT, inView, lay } from './window';
 
-const row = (i: number): Row => ({ result: `r${i}`, name: `Lemma ${i}`, taxon: 'lemma', source: { ref: 'w', short: 'W' }, paper: 'unchecked', lean: null });
+const row = (i: number): Row => ({ result: `r${i}`, name: `Lemma ${i}`, taxon: 'lemma', title: null, source: { ref: 'w', short: 'W' }, paper: 'unchecked', lean: null });
 
 describe("the Web's list in a window", () => {
 	it('lays out a draft and what it rests on at five thousand results, and draws a few dozen of them', () => {

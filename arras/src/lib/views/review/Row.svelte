@@ -6,6 +6,7 @@
 	import { review as words } from '$lib/words/review';
 	import { line, marks, opens, question, quiet } from './rows';
 	import { rv } from './state.svelte';
+	import { reviewNames } from './names.svelte';
 	import Question from './rows/Question.svelte';
 	import Change from './rows/Change.svelte';
 	import Check from './rows/Check.svelte';
@@ -18,7 +19,7 @@
 	let { row }: { row: ReviewRow } = $props();
 	const open = $derived(rv.open.has(row.row));
 	const [paper, lean] = $derived(marks(row));
-	const asked = $derived(row.kind === 'questions' ? question(row) : null);
+	const asked = $derived(row.kind === 'questions' ? question(row, reviewNames) : null);
 	const meta = $derived(quiet(row));
 	const openable = $derived(opens(row));
 </script>
@@ -26,7 +27,7 @@
 {#snippet head()}
 	<span class="slot">{#if paper}<Mark kind={paper} />{/if}</span>
 	<span class="slot">{#if lean}<Mark kind={lean} />{/if}</span>
-	<span class="tx">{#if asked}<span class="who">{asked.by}</span>{asked.rest}{:else}{line(row)}{/if}</span>
+	<span class="tx">{#if asked}<span class="who">{asked.by}</span>{asked.rest}{:else}{line(row, reviewNames)}{/if}</span>
 	{#if meta}<span class="meta" class:problem={row.kind === 'edits' && row.broke}>{meta}</span>{/if}
 {/snippet}
 

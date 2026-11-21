@@ -103,7 +103,7 @@
 							<p class="whead">{l.sec.head === 'draft' ? words.file(l.sec.doc ?? '') : l.sec.head === 'uses' ? words.list.uses(l.sec.doc ?? '') : l.sec.head === 'drafts' ? words.list.drafts : words.list.library}</p>
 						{:else if l.kind === 'group'}
 							<button type="button" class="wdoc" aria-expanded={l.open} data-testid="web-group" onclick={() => turn(l.group)}>
-								<Icon name={l.open ? 'caret' : 'right'} size={15} /><span>{l.group.doc ? words.file(l.group.doc) : l.group.short}</span>{#if l.group.title}<span class="wt">{l.group.title}</span>{/if}<span class="n">{l.group.n}</span>
+								<Icon name={l.open ? 'caret' : 'right'} size={15} /><span>{l.group.short ?? words.file(l.group.group)}</span>{#if l.group.title}<span class="wt">{l.group.title}</span>{/if}<span class="n">{l.group.n}</span>
 							</button>
 						{:else if l.kind === 'row'}
 							<WebRow row={l.row} source={l.source} indent={l.indent} choosing />

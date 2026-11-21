@@ -9,6 +9,7 @@
 	import Group from './Group.svelte';
 	import Row from './Row.svelte';
 	import Task from './Task.svelte';
+	import { reviewNames } from './names.svelte';
 	import ReadAll from './ReadAll.svelte';
 	import { stubsOf } from './rows';
 	import SeeIt from './SeeIt.svelte';
@@ -22,6 +23,8 @@
 	});
 
 	const groups = $derived((rv.list.value?.groups ?? []).filter((g) => g.rows.length));
+	// the works and results the rows name by id, read once each
+	$effect(() => reviewNames.want(groups.flatMap((g) => g.rows)));
 </script>
 
 <main class="rvw" data-testid="review-view">

@@ -5,7 +5,7 @@ import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, lookUp, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
 import { notesAnswer } from './notes6';
 import { formalMarks, formalPlan, growWeb, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
-import { ask, attest, body, close, counts, fragmentOf, list, markStub, unwithdraw, withdraw } from './review6';
+import { ask, attest, body, close, counts, fragmentOf, list, markStub, taskOf, unwithdraw, withdraw } from './review6';
 import type { ReviewKind, TaskRow, WebScope } from '../types';
 
 type Body = Record<string, unknown>;
@@ -22,6 +22,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 	const ok = <T>(value: T): Answer<T & Gen> => ({ ok: true, value: structuredClone({ gen: f.gen, ...value }) as T & Gen });
 	const no = (code: string, message = code) => ({ ok: false as const, error: { code, message } });
 	const changed = () => onChange(f.gen);
+	const answered = new Set<string>();
 
 	const reads: Record<string, (b: Body) => Answer<Gen>> = {
 		// asked for a draft, each work says the label that draft cites it by, as round six's main.tex does
@@ -48,7 +49,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 		'formal-plan': (b) => ok(formalPlan(REF, b.targets as string[], (b.assume as string[]) ?? [])),
 		notes: (b) => ok(notesAnswer(f.notes, b as { sort: string; orphaned?: boolean; group?: string; offset?: number })),
 		'web-list': (b) => ok(webList(REF, b as { scope: WebScope; doc?: string; sort: string; open?: string[]; offset?: number })),
-		'web-group': (b) => ok({ rows: webGroup(REF, b as { scope: WebScope; doc?: string; group: string }) }),
+		'web-group': (b) => ok(webGroup(REF, b as { scope: WebScope; doc?: string; group: string })),
 		'web-search': (b) => ok(webSearch(REF, b as { scope: WebScope; doc?: string; q: string })),
 		'web-focus': (b) => {
 			const a = webFocus(REF, b as { scope: WebScope; doc?: string; result: string; more?: boolean });
@@ -58,15 +59,15 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			const a = webGraph(REF, b as { scope: WebScope; doc?: string; result: string });
 			return a ? ok(a) : no('no-such-result');
 		},
-		'review-counts': (b) => ok(counts(f.review, checkRows(f), b.doc as string | undefined)),
-		'review-list': (b) => ok(list(f.review, checkRows(f), b.kind as ReviewKind | 'all' | 'agents', b.doc as string | undefined)),
+		'review-counts': () => ok(counts(f.review, checkRows(f))),
+		'review-list': (b) => ok(list(f.review, checkRows(f), (b.kind ?? 'all') as ReviewKind | 'all' | 'agents', b.doc as string | undefined)),
 		'review-row': (b) => {
 			const a = body(f.review, b.row as string, b.node as string | undefined);
 			if (!a) return no('no-such-row');
 			// a cited result's locate… draws the work's PDF, by its hash
 			const cited = b.node ? f.review.rows.find((r) => r.row === b.row && r.kind === 'cited') : undefined;
 			const pdf = cited && 'ref' in cited ? (f.works.find((w) => w.ref === cited.ref)?.holds.pdf ?? null) : undefined;
-			return ok(pdf === undefined ? a : { ...a, pdf });
+			return ok(pdf === undefined ? a : { ...a, body: { ...a.body, pdf } });
 		}
 	};
 
@@ -127,31 +128,34 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			changed();
 			return ok({});
 		},
+		// an ask of an agent, as `evidence.md` §7 takes it: the place and what the kind needs in `on`, the person's words in `text`
 		'review-task': (b) => {
-			// the task's sentence needs the work's words, which the publisher adds from the reference the ask names
-			const on = { ...(b.on as TaskRow['on']) };
-			const w = f.works.find((x) => x.ref === on.ref);
-			if (w) on.short = w.short;
+			const on = (b.on ?? {}) as Record<string, unknown>;
+			const text = (b.text as string) ?? '';
+			const docs = (b.docs as string[]) ?? [];
+			const made = taskOf(String(b.kind), on, text);
+			if (!made) return no('bad-field', 'kind is read, digest, ask, correct, restate or which-result');
 			// a stub asked for leaves the cited results; its row goes with its last
-			if (b.what === 'read') {
-				const nodes = (b.nodes as string[]) ?? [];
-				for (const r of f.review.rows) if (r.kind === 'cited' && r.citation === undefined) {
-					const named = r.stubs.filter((s) => nodes.includes(s.node));
-					if (named.length) {
-						on.short = r.short;
-						on.names = named.map((s) => s.name);
-					}
-					r.stubs = r.stubs.filter((s) => !nodes.includes(s.node));
-				}
+			if (b.kind === 'read') {
+				const nodes = (on.nodes as string[]) ?? [];
+				for (const r of f.review.rows) if (r.kind === 'cited' && r.citation === undefined) r.stubs = r.stubs.filter((s) => !nodes.includes(s.node));
 				f.review.rows = f.review.rows.filter((r) => !(r.kind === 'cited' && r.citation === undefined && !r.stubs.length));
 			}
-			if (b.what === 'which-result') close(f.review, (r) => r.kind === 'cited' && r.citation === (b.on as { citation?: string }).citation);
-			const task = ask(f.review, b.what as string, on, (b.from as string[]) ?? [], (b.text as string) || (b.words as string) || undefined);
+			if (b.kind === 'which-result') close(f.review, (r) => r.kind === 'cited' && r.citation !== undefined && r.key === on.key && r.ref === on.ref);
+			const task = ask(f.review, String(b.kind), made.place, docs, made.fields);
 			f.gen++;
 			changed();
 			return ok({ task });
 		},
-		'review-answer': (b) => closing((r) => r.kind === 'questions' && r.task === b.task),
+		// an answer closes the question; a second, or one to a question withdrawn, is refused `closed`
+		'review-answer': (b) => {
+			if (answered.has(b.question as string)) return no('closed', 'this question is answered or withdrawn already; reload Review');
+			if (!close(f.review, (r) => r.kind === 'questions' && r.question === b.question)) return no('no-such-task');
+			answered.add(b.question as string);
+			f.gen++;
+			changed();
+			return ok({});
+		},
 		'review-task-delete': (b) => {
 			if (!(b.undo === true ? unwithdraw(f.review, b.task as string) : withdraw(f.review, b.task as string))) return no('no-such-task');
 			f.gen++;
@@ -169,7 +173,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 		'formal-ask': (b) => {
 			const plan = formalPlan(REF, b.targets as string[], (b.assume as string[]) ?? []);
 			if (plan.stops.length) return no('needs-label', `${plan.stops.map((r) => r.name).join(', ')} needs a label`);
-			const tasks = plan.targets.map((t) => ask(f.review, 'formalize', { name: t.name, doc: t.doc }, [t.doc]));
+			const tasks = plan.targets.map((t) => ask(f.review, 'formalize', { label: t.key }, [t.doc], { target: { label: t.key } }));
 			f.gen++;
 			changed();
 			return ok({ tasks });

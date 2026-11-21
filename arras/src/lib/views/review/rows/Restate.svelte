@@ -10,8 +10,7 @@
 	let differs = $state('');
 
 	async function send(): Promise<void> {
-		const target = /^tq-/.test(result) ? { node: result } : { label: result };
-		const done = await api.ask('restate', target, { target, differs: differs.trim() }, docs);
+		const done = await api.ask('restate', { result }, differs.trim(), docs);
 		asking = false;
 		message.post(done.ok ? words.restate.asked : said(done.error));
 	}

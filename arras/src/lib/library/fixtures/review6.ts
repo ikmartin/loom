@@ -3,6 +3,8 @@
 import type { AcceptedChangedRow, AttestRow, AttestedChangedRow, CheckRow, CitedRow, EditRow, FetchRow, QuestionRow, ReviewBody, ReviewCounts, ReviewGroup, ReviewKind, ReviewList, ReviewRow, TaskRow } from '../types';
 
 const MAIN = 'drafting/main.tex';
+/** A content hash for a text the fixture names, `sha256:` and 64 hexadecimal digits. */
+const sha = (of: string) => 'sha256:' + Array.from({ length: 64 }, (_, i) => '0123456789abcdef'[(of.charCodeAt(i % of.length) + i * 7) % 16]).join('');
 const BOUNDS = 'drafting/bounds.tex';
 
 /** The kinds in the order the list draws them under Everything: by who is waiting. */
@@ -50,13 +52,14 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	const rows: ReviewRow[] = [];
 
 	const questions: QuestionRow[] = [
-		{ row: 'questions:t-2026-11-21-w2c6ga', kind: 'questions', docs: [MAIN], task: 't-2026-11-21-w2c6ga', by: 'Claude Code', on: { digesting: 'Okafor 2022', ref: refs.okafor, short: 'Okafor 2022', page: 7 }, text: 'your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?', choices: ['both', 'only the proposition'] },
-		{ row: 'questions:t-2026-11-21-k4dq2m', kind: 'questions', docs: [MAIN], task: 't-2026-11-21-k4dq2m', by: 'Claude Code', on: { doc: MAIN, key: 'thm:count', name: 'Theorem 3.4' }, text: 'should the count include the zero weighting?', choices: ['yes', 'no'] }
+		{ row: 'questions:t-2026-11-21-w2c6ga', kind: 'questions', docs: [MAIN], question: 't-2026-11-21-w2c6ga', by: 'Claude Code', on: { ref: refs.okafor, page: 7 }, text: 'your mark on page 7 takes in Remark 2.5 and Proposition 2.6. Digest both, or only the proposition?', choices: ['both', 'only the proposition'], quote: null },
+		// on a draft's result by its label, which the served manifest names (the static suite's main.tex's Theorem 2.1)
+		{ row: 'questions:t-2026-11-21-k4dq2m', kind: 'questions', docs: [MAIN], question: 't-2026-11-21-k4dq2m', by: 'Claude Code', on: { label: 'sy-0003' }, text: 'should the count include the zero weighting?', choices: ['yes', 'no'], quote: null }
 	];
 	const fetch: FetchRow[] = [
-		{ row: 'fetch:t-2026-11-21-pq0d4n', kind: 'fetch', docs: [BOUNDS], task: 't-2026-11-21-pq0d4n', ref: refs.jones, short: 'Jones 2019', title: 'Covering estimates', link: 'https://doi.org/10.1000/example.2019.17', by: 'Claude Code' },
-		{ row: 'fetch:t-2026-11-21-r8ms1v', kind: 'fetch', docs: [BOUNDS], task: 't-2026-11-21-r8ms1v', ref: refs.ostrander, short: 'Ostrander 2020', title: 'Widget categories and their duals', link: 'https://doi.org/10.1000/example.2020.4', by: 'Claude Code' },
-		{ row: 'fetch:t-2026-11-21-h2zk7c', kind: 'fetch', docs: [MAIN], task: 't-2026-11-21-h2zk7c', ref: refs.lindqvist, short: 'Lindqvist and Ueda 2017', title: 'Height functions on weighting lattices', link: 'https://doi.org/10.1000/example.2017.31', by: 'Claude Code' }
+		{ row: 'fetch:t-2026-11-21-pq0d4n', kind: 'fetch', docs: [BOUNDS], task: 't-2026-11-21-pq0d4n', ref: refs.jones, link: 'https://doi.org/10.1000/example.2019.17', want: 'pdf', by: 'Claude Code', words: "The publisher's page asks for a login." },
+		{ row: 'fetch:t-2026-11-21-r8ms1v', kind: 'fetch', docs: [BOUNDS], task: 't-2026-11-21-r8ms1v', ref: refs.ostrander, link: 'https://doi.org/10.1000/example.2020.4', want: 'pdf', by: 'Claude Code', words: '' },
+		{ row: 'fetch:t-2026-11-21-h2zk7c', kind: 'fetch', docs: [MAIN], task: 't-2026-11-21-h2zk7c', ref: refs.lindqvist, link: 'https://doi.org/10.1000/example.2017.31', want: 'pdf', by: 'Claude Code', words: '' }
 	];
 	const cited: CitedRow[] = [
 		{ row: `cited:${refs.okafor}`, kind: 'cited', docs: [MAIN], ref: refs.okafor, short: 'Okafor 2022', holds: { pdf: true, tex: false }, stubs: [{ node: 'tq-04A1', name: 'Theorem 2.3', rests: { docs: [MAIN] }, not_in_source: false, marked: false }, { node: 'tq-04A2', name: 'Corollary 4.2', rests: { docs: [MAIN] }, not_in_source: false, marked: false }] },
@@ -137,8 +140,8 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 		]
 	};
 	const attest: AttestRow[] = [
-		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null },
-		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches' }
+		{ row: 'attest:lem:forest', kind: 'attest', docs: [MAIN], result: 'lem:forest', name: 'Lemma 3.3', source: { doc: MAIN }, what: 'statement and proof', paper: null, lean: 'ev-2026-11-21-l3an9e', waiting_on: [] },
+		{ row: 'attest:tq-00K5', kind: 'attest', docs: [BOUNDS], result: 'tq-00K5', name: 'Proposition 3.4', source: { ref: refs.smith, short: 'Smith 2024' }, what: 'statement only', paper: 'matches', lean: 'ev-2026-11-21-k5ob2q', waiting_on: [] }
 	];
 	const accepted: AcceptedChangedRow[] = ACCEPTED.map(([doc, key, name, html]) => {
 		const row = `accepted-changed:${key}`;
@@ -147,24 +150,27 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 		return { row, kind: 'accepted-changed', docs: [doc], key, name, doc };
 	});
 	const attested: AttestedChangedRow[] = [
-		{ row: 'attested-changed:cor:cycle', kind: 'attested-changed', docs: [MAIN], result: 'cor:cycle', name: 'Corollary 3.5', doc: MAIN, attested_at: '2026-11-20T16:02:00Z', changed: 'statement', resting: 0 },
-		{ row: 'attested-changed:def:connected', kind: 'attested-changed', docs: [MAIN], result: 'def:connected', name: 'Definition 3.7', title: 'Connected', doc: MAIN, attested_at: '2026-11-12T10:40:00Z', changed: 'used', resting: 2 }
+		{ row: 'attested-changed:cor:cycle', kind: 'attested-changed', docs: [MAIN], result: 'cor:cycle', name: 'Corollary 3.5', doc: MAIN, changed: 'statement', causes: [{ changed: { label: 'cor:cycle' }, then: sha('cor:cycle then'), now: sha('cor:cycle now') }], attestation: 'ev-2026-11-20-c35att', resting: [] },
+		// a changed definition: its own text changed, and the results resting on it come under it, each to be attested again
+		{ row: 'attested-changed:def:connected', kind: 'attested-changed', docs: [MAIN], result: 'def:connected', name: 'Definition 3.7', doc: MAIN, changed: 'statement', causes: [{ changed: { label: 'def:connected' }, then: sha('def:connected then'), now: sha('def:connected now') }], attestation: 'ev-2026-11-12-d37att', resting: [{ result: 'prop:tree', name: 'Proposition 3.8' }, { result: 'lem:bridge', name: 'Lemma 3.9' }] }
 	];
 	const edits: EditRow[] = EDITS.map((e) => {
 		const row = `edits:${e.change}`;
 		fragments[`fixture/edits/${e.change}.html`] = e.html;
 		bodies[row] = { statement: { fragment: `fixture/edits/${e.change}.html` } };
-		return { row, kind: 'edits', docs: [e.doc], change: e.change, type: e.type, doc: e.doc, key: e.key, where: e.where, by: 'Claude Code', broke: e.broke ?? null };
+		return { row, kind: 'edits', docs: [e.doc], change: e.change, type: e.type, doc: e.doc, key: e.key, where: e.where, by: e.type === 'suggested' ? 'Claude Code' : null, state: 'ready', broke: e.broke ?? null };
 	});
 	rows.push(...questions, ...fetch, ...cited, ...checks, ...attest, ...accepted, ...attested, ...edits);
 
 	const tasks: TaskRow[] = [
-		{ row: 'agents:t-2026-11-21-dg01', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-dg01', what: 'digest', on: { ref: refs.okafor, short: 'Okafor 2022', scope: 'marked', count: 2 }, working: { by: 'Claude Code' }, asked_at: '2026-11-21T08:10:00Z' },
-		{ row: 'agents:t-2026-11-21-tr02', kind: 'agents', docs: [BOUNDS], task: 't-2026-11-21-tr02', what: 'transcribe', on: {}, text: 'Transcribe the second proof of Proposition 3.4 of Smith 2024, from Halberd and Ravel 2021, pages 22–23', working: null, asked_at: '2026-11-21T08:20:00Z' },
-		{ row: 'agents:t-2026-11-21-as03', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-as03', what: 'ask', on: { doc: MAIN, key: 'thm:count/proof', name: 'proof of Theorem 3.4' }, text: 'does the count need the median order?', working: null, asked_at: '2026-11-21T08:30:00Z' },
-		{ row: 'agents:t-2026-11-21-dg04', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-dg04', what: 'digest', on: { ref: refs.vance, short: 'Vance et al. 2023', scope: 'all' }, working: null, asked_at: '2026-11-21T08:40:00Z' },
-		{ row: 'agents:t-2026-11-21-7h3qfw', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-7h3qfw', what: 'read', on: { ref: refs.okafor, short: 'Okafor 2022', names: ['Theorem 2.3'] }, working: null, asked_at: '2026-11-21T09:00:00Z' },
-		{ row: 'agents:t-2026-11-21-mc06', kind: 'agents', docs: [BOUNDS], task: 't-2026-11-21-mc06', what: 'macros', on: {}, text: 'Check the macros of Smith 2024 against its preamble', working: null, asked_at: '2026-11-21T09:10:00Z' }
+		{ row: 'agents:t-2026-11-21-dg01', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-dg01', what: 'digest', on: { ref: refs.okafor }, working: { by: 'Claude Code' }, asked_at: '2026-11-21T08:10:00Z', ref: refs.okafor, scope: 'marked', marks: ['a-2026-11-20-okf6', 'a-2026-11-20-okf7'], words: '' },
+		// round six lists tasks no write on this page makes, which a sentence of their own words draws
+		{ row: 'agents:t-2026-11-21-tr02', kind: 'agents', docs: [BOUNDS], task: 't-2026-11-21-tr02', what: 'transcribe', on: { ref: refs.smith }, working: null, asked_at: '2026-11-21T08:20:00Z', words: 'Transcribe the second proof of Proposition 3.4 of Smith 2024, from Halberd and Ravel 2021, pages 22–23' },
+		// on a block by its key, which the served manifest names (the static suite's proof of Theorem 2.1)
+		{ row: 'agents:t-2026-11-21-as03', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-as03', what: 'ask', on: { block: { key: 'sy-0004', hash: sha('sy-0004'), context: {} } }, working: null, asked_at: '2026-11-21T08:30:00Z', text: 'does the count need the median order?', words: '' },
+		{ row: 'agents:t-2026-11-21-dg04', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-dg04', what: 'digest', on: { ref: refs.vance }, working: null, asked_at: '2026-11-21T08:40:00Z', ref: refs.vance, scope: 'all', words: '' },
+		{ row: 'agents:t-2026-11-21-7h3qfw', kind: 'agents', docs: [MAIN], task: 't-2026-11-21-7h3qfw', what: 'read', on: { node: 'tq-04A1' }, working: null, asked_at: '2026-11-21T09:00:00Z', nodes: ['tq-04A1'], words: '' },
+		{ row: 'agents:t-2026-11-21-mc06', kind: 'agents', docs: [BOUNDS], task: 't-2026-11-21-mc06', what: 'macros', on: { ref: refs.smith }, working: null, asked_at: '2026-11-21T09:10:00Z', words: 'Check the macros of Smith 2024 against its preamble' }
 	];
 	return { rows, tasks, bodies, fragments, seq: 0 };
 }
@@ -172,14 +178,13 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 /** The rows a draft concerns, all when `doc` is none. */
 const forDoc = <T extends { docs: string[] }>(rows: T[], doc?: string) => (doc ? rows.filter((r) => r.docs.includes(doc)) : rows);
 
-/** `review-counts`, over the rows as `extra` (the Library's results to check) completes them: the kinds for one draft where `doc` names one, the drafts always each. */
-export function counts(r: ReviewFixture, extra: ReviewRow[], doc?: string): Omit<ReviewCounts, 'gen'> {
+/** `review-counts`, over the rows as `extra` (the Library's results to check) completes them: every kind, and each draft's rows in `drafts`. */
+export function counts(r: ReviewFixture, extra: ReviewRow[]): Omit<ReviewCounts, 'gen'> {
 	const all = [...extra, ...r.rows];
-	const here = forDoc(all, doc);
 	const kinds: Partial<Record<ReviewKind, number>> = {};
-	for (const k of LIST_ORDER) kinds[k] = here.filter((x) => x.kind === k).length;
+	for (const k of LIST_ORDER) kinds[k] = all.filter((x) => x.kind === k).length;
 	const docs = [...new Set(all.flatMap((x) => x.docs))].sort((a, b) => (a === MAIN ? -1 : b === MAIN ? 1 : a.localeCompare(b)));
-	return { everything: here.length, kinds, agents: forDoc(r.tasks, doc).length, drafts: docs.map((d) => ({ doc: d, n: all.filter((x) => x.docs.includes(d)).length })) };
+	return { everything: all.length, kinds, agents: r.tasks.length, drafts: docs.map((d) => ({ doc: d, n: all.filter((x) => x.docs.includes(d)).length })) };
 }
 
 /** `review-list`: a kind's group, or every kind's in the list's order with the tasks' group last. */
@@ -189,14 +194,16 @@ export function list(r: ReviewFixture, extra: ReviewRow[], kind: ReviewKind | 'a
 	const firstCheck = all.findIndex((x) => x.kind === 'check');
 	all.splice(firstCheck < 0 ? all.length : firstCheck, 0, ...extra);
 	const group = (k: ReviewKind | 'agents'): ReviewGroup => ({ kind: k, rows: k === 'agents' ? forDoc(r.tasks, doc) : forDoc(all.filter((x) => x.kind === k), doc) });
-	if (kind === 'all') return { groups: [...LIST_ORDER.map(group), group('agents')] };
+	// empty groups are left out
+	if (kind === 'all') return { groups: [...LIST_ORDER.map(group), group('agents')].filter((g) => g.rows.length) };
 	return { groups: [group(kind)] };
 }
 
-/** `review-row`: a row's body, by the row's id; for a cited result's `locate…`, by its row and its node. */
+/** `review-row`: the row as it waits now and its body, by the row's id (`{}` where the row has no body); for a cited result's `locate…`, the body by its row and its node. */
 export function body(r: ReviewFixture, row: string, node?: string): Omit<ReviewBody, 'gen'> | null {
-	const b = r.bodies[node ? `${row}#${node}` : row];
-	return b ? { row, ...b } : null;
+	const now = [...r.rows, ...r.tasks].find((x) => x.row === row);
+	if (!now) return null;
+	return { row: now, body: r.bodies[node ? `${row}#${node}` : row] ?? {} };
 }
 
 /** Takes away the row whose `field` is `value`, as acting on it closes it; false where none was there. */
@@ -232,11 +239,34 @@ export function unwithdraw(r: ReviewFixture, task: string): boolean {
 	return true;
 }
 
-/** A task asked now, as `review-task` and `library-digest` make one. */
-export function ask(r: ReviewFixture, what: string, on: TaskRow['on'], docs: string[], text?: string): string {
+/** A task asked now, as `review-task`, `library-digest` and `formal-ask` make one: its place, and the ask's own fields by its `what` (`evidence.md` §4.1). */
+export function ask(r: ReviewFixture, what: string, on: TaskRow['on'], docs: string[], fields: Partial<TaskRow> = {}): string {
 	const task = `t-2026-11-21-n${(++r.seq).toString().padStart(3, '0')}`;
-	r.tasks.push({ row: `agents:${task}`, kind: 'agents', docs, task, what, on, ...(text ? { text } : {}), working: null, asked_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z') });
+	r.tasks.push({ row: `agents:${task}`, kind: 'agents', docs, task, what, on, working: null, asked_at: new Date().toISOString().replace(/\.\d+Z$/, 'Z'), words: '', ...fields });
 	return task;
+}
+
+/** An ask's place and its own fields by its kind, as loom makes them from `review-task`'s `on` and `text` (`evidence.md` §7); null for a kind it does not make. */
+export function taskOf(kind: string, on: Record<string, unknown>, text: string): { place: TaskRow['on']; fields: Partial<TaskRow> } | null {
+	const block = (key: unknown) => ({ block: { key: String(key ?? ''), hash: sha(String(key ?? '')), context: {} } });
+	switch (kind) {
+		case 'read': {
+			const nodes = (on.nodes as string[] | undefined) ?? [];
+			return nodes.length ? { place: { node: nodes[0] }, fields: { nodes, ...(on.marks ? { marks: on.marks as string[] } : {}) } } : null;
+		}
+		case 'digest':
+			return { place: { ref: String(on.ref) }, fields: { ref: String(on.ref), ...(on.scope ? { scope: on.scope as TaskRow['scope'] } : {}), ...(on.nodes ? { nodes: on.nodes as string[] } : {}), ...(on.marks ? { marks: on.marks as string[] } : {}) } };
+		case 'correct':
+			return { place: { node: String(on.node) }, fields: { text } };
+		case 'ask':
+			return { place: on.ref ? { ref: String(on.ref), ...(on.page ? { page: on.page as number } : {}) } : block(on.key), fields: { text, ...(on.quote ? { quote: String(on.quote) } : {}) } };
+		case 'restate':
+			return { place: { label: String(on.result) }, fields: { target: { label: String(on.result) }, differs: text } };
+		case 'which-result':
+			return { place: block(on.key), fields: { cites: String(on.ref ?? '') } };
+		default:
+			return null;
+	}
 }
 
 /** The fixture's fragment for a path, for its source's `fragment`. */

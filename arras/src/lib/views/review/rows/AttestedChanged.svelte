@@ -4,7 +4,7 @@
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
-	import type { AttestedChangedRow, ReviewBody, Statement as Text } from '$lib/library/types';
+	import type { AttestedChangedRow, ReviewBody, RowBody, Statement as Text } from '$lib/library/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { message } from '$lib/shell/message.svelte';
@@ -15,7 +15,7 @@
 	import SeeItLink from '../SeeItLink.svelte';
 
 	type Resting = { result: string; name: string; statement: Text; lean: string; attested_again: boolean };
-	type Body = ReviewBody & { observation?: string; at?: string; then?: Text; now?: Text; lean?: string; resting?: Resting[] };
+	type Body = ReviewBody & { body: RowBody & { observation?: string; at?: string; then?: Text; now?: Text; lean?: string; resting?: Resting[] } };
 
 	let { row }: { row: AttestedChangedRow } = $props();
 	const body = new Read<Body>();
@@ -28,7 +28,7 @@
 		void body.load(id, (s) => api.reviewRow(id, s));
 	});
 
-	const b = $derived(body.value);
+	const b = $derived(body.value?.body);
 
 	async function still(result: string, name: string): Promise<void> {
 		if (!b?.observation) return;
@@ -43,7 +43,7 @@
 	<div class="step">
 		<div class="stepn">1</div>
 		<div class="stepb">
-			<div class="steph">{words.attested.then(words.day(b.at ?? row.attested_at))}</div>
+			<div class="steph">{b.at ? words.attested.then(words.day(b.at)) : words.attested.thenUndated}</div>
 			<div class="cmp">
 				<div class="citebox"><Statement fragment={b.then.fragment} /></div>
 				<div><div class="crop-cap">{words.attested.leanThen}</div>{#if b.lean}<Lean code={b.lean} />{/if}</div>
@@ -66,7 +66,7 @@
 				<button type="button" class="btn" disabled={busy} onclick={() => still(row.result, row.name)}>{words.attested.still}</button>
 				<Restate result={row.result} docs={row.docs} label={words.restate.ask} />
 			</div>
-			<p class="note after">{row.changed === 'statement' ? words.attested.leanSame : words.attested.eachAgain(row.name)}</p>
+			<p class="note after">{row.resting.length ? words.attested.eachAgain(row.name) : words.attested.leanSame}</p>
 		</div>
 	</div>
 	{#if b.resting?.length}

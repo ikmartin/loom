@@ -2,7 +2,7 @@
 	// The graph (7b): four columns, two steps back, what the focus uses, the focus, and what uses it; a solid line for a use by a statement and a dashed one for a use by a proof; a column holding more than it draws ends in "and 3 more · in the list". Laid out in columns here, with no simulation; a box puts its result in focus.
 	import type { Row, WebGraph } from '$lib/library/types';
 	import Mark from '$lib/marks/Mark.svelte';
-	import { leanMark, paperMark } from '$lib/marks/marks';
+	import { leanMark, paperMark, hasLean } from '$lib/marks/marks';
 	import { web as words } from '$lib/words/web';
 	import { wb } from './state.svelte';
 	import { capped } from './window';
@@ -72,7 +72,7 @@
 					<g class="n" role="button" tabindex="0" aria-label={r.name} data-testid="web-node" onclick={() => wb.follow(r)} onkeydown={(e) => go(e, r)}>
 						<rect class="box" class:focus x={b.x} y={b.y} width={b.w} height={b.h} rx="8" />
 						{#if r.paper}<g transform="translate({b.x + 9} {b.y + 11})"><Mark kind={paperMark(r.paper)} /></g>{/if}
-						{#if r.lean}<g transform="translate({b.x + 24} {b.y + 11})"><Mark kind={leanMark(r.lean)} /></g>{/if}
+						{#if hasLean(r.lean)}<g transform="translate({b.x + 24} {b.y + 11})"><Mark kind={leanMark(r.lean)} /></g>{/if}
 						<text x={b.x + 42} y={b.y + 21} class:bold={focus}>{cut(r.name, b.w - 46, 6.2)}</text>
 						<text class="sub" x={b.x + 42} y={b.y + 36}>{cut(sub(r), b.w - 50, 6.1)}</text>
 						{#if focus && graph.excerpt}<text class="sub" x={b.x + 12} y={b.y + 64}>{cut(graph.excerpt, b.w - 24, 6.3)}</text>{/if}

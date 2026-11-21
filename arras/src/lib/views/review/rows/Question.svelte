@@ -12,7 +12,7 @@
 
 	async function answer(choice: number | null): Promise<void> {
 		busy = true;
-		const done = await api.answer(row.task, choice, choice === null ? own.trim() : '');
+		const done = await api.answer(row.question, choice, choice === null ? own.trim() : '');
 		busy = false;
 		message.post(done.ok ? words.questions.answered(row.by) : said(done.error));
 	}

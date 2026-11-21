@@ -64,7 +64,8 @@ describe("round six's fixture", () => {
 		expect(c.drafts).toEqual([{ doc: 'drafting/main.tex', n: 20 }, { doc: 'drafting/bounds.tex', n: 9 }]);
 		const l = ok<ReviewList>(await src.call('review-list', { kind: 'all' }));
 		expect(l.groups.map((g) => g.kind)).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'attested-changed', 'edits', 'agents']);
-		expect(ok<ReviewCounts>(await src.call('review-counts', { doc: 'drafting/bounds.tex' })).everything).toBe(9);
+		// a draft's count is its entry in drafts; the list narrows to it
+		expect(ok<ReviewList>(await src.call('review-list', { doc: 'drafting/bounds.tex' })).groups.reduce((n, g) => n + (g.kind === 'agents' ? 0 : g.rows.length), 0)).toBe(9);
 		// a yes in the Library leaves Review's row of that work
 		await src.call('library-check', { node: 'tq-00K3', hash: 'sha256:x' });
 		const after = ok<ReviewList>(await src.call('review-list', { kind: 'check' }));

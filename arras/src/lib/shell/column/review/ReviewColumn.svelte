@@ -13,12 +13,13 @@
 	import { pullLabel } from '$lib/review/proposed';
 
 	$effect(() => {
-		const doc = rv.doc ?? undefined;
 		void gen.gen;
-		void rv.counts.load(`counts:${doc ?? ''}`, (s) => api.reviewCounts(doc, s));
+		void rv.counts.load('counts', (s) => api.reviewCounts(s));
 	});
 
 	const counts = $derived(rv.counts.value);
+	// a draft's count is its entry in `drafts`; the kinds are counted for every draft only, so under a draft they show none
+	const draft = $derived(rv.doc ? counts?.drafts.find((d) => d.doc === rv.doc) : undefined);
 	const kinds = $derived(COLUMN_ORDER.filter((k) => counts?.kinds[k] !== undefined));
 	const inList = $derived(page.route.id === '/review');
 
@@ -39,16 +40,16 @@
 	<p class="rl">{words.column.waiting}</p>
 	<nav class="navl" aria-label={words.column.nav}>
 		<button type="button" class:on={on('all')} aria-current={on('all') ? 'true' : undefined} data-testid="review-kind-all" use:hovercard={{ text: words.column.everythingHover, place: 'beside' }} onclick={() => pick('all')}
-			>{words.column.everything}<span class="n">{counts?.everything ?? ''}</span></button
+			>{words.column.everything}<span class="n">{rv.doc ? (draft?.n ?? '') : (counts?.everything ?? '')}</span></button
 		>
 		{#each kinds as k (k)}
 			<button type="button" class:on={on(k)} aria-current={on(k) ? 'true' : undefined} data-testid="review-kind-{k}" use:hovercard={{ text: words.kinds[k].hover, place: 'beside' }} onclick={() => pick(k)}
-				>{words.kinds[k].name}<span class="n">{counts?.kinds[k]}</span></button
+				>{words.kinds[k].name}<span class="n">{rv.doc ? '' : counts?.kinds[k]}</span></button
 			>
 		{/each}
 		<div class="rule"></div>
 		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
-			>{words.kinds.agents.name}<span class="n">{counts?.agents ?? ''}</span></button
+			>{words.kinds.agents.name}<span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
 		>
 		<div class="rule"></div>
 		{#if m?.incoming}

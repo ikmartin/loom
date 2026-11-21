@@ -302,7 +302,7 @@ export function nodeAnswer(f: Fixture, args: { node?: string; ref?: string; item
 		const base = { gen: f.gen, name: `${r.tax} ${r.num}`, ...(r.title ? { title: r.title } : {}), taxon: r.tax.toLowerCase(), work, pages: String(r.page ?? '') };
 		if (!r.p || (!args.node && !r.p)) return { ...base, digested: null, paper: null };
 		const b = r.node ? BODY[r.node] : undefined;
-		const uses = (b?.uses ?? []).map((u) => (u === 'tq-00B7' ? { result: u, name: 'Lemma 2.1', taxon: 'lemma', source: { ref: REF.jones, short: 'Jones 2019' }, paper: 'stub' as const, lean: null } : { result: u, name: 'Definition 2.1', title: 'Widget', taxon: 'definition', source: null, paper: 'matches' as const, lean: null }));
+		const uses = (b?.uses ?? []).map((u) => (u === 'tq-00B7' ? { result: u, name: 'Lemma 2.1', title: null, taxon: 'lemma', source: { ref: REF.jones, short: 'Jones 2019' }, paper: 'stub' as const, lean: null } : { result: u, name: 'Definition 2.1', title: 'Widget', taxon: 'definition', source: null, paper: 'matches' as const, lean: null }));
 		return {
 			...base,
 			node: r.node,
@@ -387,7 +387,7 @@ export function digest(f: Fixture, refs: string[] | 'all', scope: string, chosen
 		if (!row || (!row.holds.pdf && !row.holds.tex)) continue;
 		const list = f.results[ref];
 		if (!row.holds.tex || !list) {
-			if (refs !== 'all' || scope === 'used') tasks.push(ask(f.review, 'digest', { ref, short: row.short, scope: scope as 'uses' | 'marked' | 'chosen' | 'all', count: scope === 'marked' ? (f.marks[ref]?.length ?? 0) : chosen.length }, row.used_in));
+			if (refs !== 'all' || scope === 'used') tasks.push(ask(f.review, 'digest', { ref }, row.used_in, { ref, scope: (scope === 'used' ? 'uses' : scope) as 'uses' | 'marked' | 'chosen' | 'all', ...(scope === 'marked' ? { marks: (f.marks[ref] ?? []).map((m) => m.mark) } : scope === 'chosen' ? { nodes: chosen } : {}) }));
 			continue;
 		}
 		list.forEach((r, i) => {

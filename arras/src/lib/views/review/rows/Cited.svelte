@@ -14,7 +14,7 @@
 	const toggle = (node: string) => (rv.sub = { ...rv.sub, [row.row]: open === node ? null : node });
 
 	async function read(node: string, docs: string[]): Promise<void> {
-		const done = await api.ask('read', { node }, { nodes: [node] }, docs);
+		const done = await api.ask('read', { nodes: [node] }, '', docs);
 		message.post(done.ok ? words.cited.asked : said(done.error));
 	}
 </script>

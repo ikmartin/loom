@@ -56,6 +56,12 @@ export const review = {
 	},
 	/** A row's first line: where it is, as "main.tex · Lemma 3.3" or "Smith 2024 · 9 results". */
 	at: (where: string, what: string) => `${where} · ${what}`,
+	/** A library result with its work: "Theorem 2.3 of Okafor 2022". */
+	of: (name: string, short: string) => `${name} of ${short}`,
+	/** In place of a work's name while it is read, or where nothing names it. */
+	someWork: 'a paper',
+	/** In place of a result's name while it is read, or where nothing names it. */
+	someResult: 'a result',
 	/** A document's path drawn as its file's name. */
 	file,
 	/** A work's results in a row's first line: named where one or two ("Theorem 2.3 and Corollary 4.2", "Lemmas 5.7 and 5.9"), else counted. */
@@ -236,6 +242,8 @@ export const review = {
 	attested: {
 		/** The first step's head. */
 		then: (date: string) => `What you attested, on ${date}`,
+		/** The same, where the attestation's date is not sent. */
+		thenUndated: 'What you attested',
 		/** Over the Lean the person attested. */
 		leanThen: 'the Lean you attested, as Lean prints it',
 		/** The second step's head. */
@@ -259,7 +267,9 @@ export const review = {
 		/** The column's message after "still states it". */
 		attestedAgain: 'Attested again.',
 		/** An attested-changed row's quiet line, where the result's own statement changed. */
-		statement: (date: string) => `its statement changed since you attested it, ${date}`,
+		statement: 'its statement changed since you attested it',
+		/** An attested-changed row's quiet line, where what its statement uses changed and nothing rests on it. */
+		uses: 'what it uses changed since you attested it',
 		/** An attested-changed row's quiet line, where a definition changed that results rest on. */
 		used: (n: number) => (n === 1 ? 'changed since you attested it · 1 result rests on it' : `changed since you attested it · ${n} results rest on it`)
 	},
@@ -268,8 +278,6 @@ export const review = {
 	questions: {
 		/** An agent's question, after the agent's name: where it was asked. */
 		asks: (where: string) => ` asks, ${where}: `,
-		/** Where a question was asked, while the agent digested a work. */
-		digesting: (short: string) => `digesting ${short}`,
 		/** Where a question was asked, on a draft's result. */
 		onResult: (doc: string, name: string) => `on ${file(doc)}, ${name}`,
 		/** Where a question was asked, on a page of a work. */
@@ -295,7 +303,7 @@ export const review = {
 		/** A proposed edit's quiet line when its document has not compiled since an agent made it in place. */
 		broke: (doc: string, line: number) => `${file(doc)} has not compiled since this edit (line ${line})`,
 		/** Under an edit made in place that stopped its document compiling: who made it, and TeX's reason in words. */
-		inPlace: (by: string, doc: string, why: string, line: number) => `${by} made this edit in place. ${file(doc)} has not compiled since: ${why} (line ${line}).`,
+		inPlace: (by: string | null, doc: string, why: string, line: number) => `${by ? `${by} made this edit in place` : 'This edit was made in place'}. ${file(doc)} has not compiled since: ${why} (line ${line}).`,
 		/** TeX's reasons, as that line says them; one not here is shown as TeX gives it. */
 		errors: { 'Undefined control sequence': 'the command it adds is not defined' } as Record<string, string>,
 		/** Keeps a proposed edit. */
@@ -348,7 +356,7 @@ export const review = {
 		askResult: (doc: string, name: string, text: string) => `Answer, on ${file(doc)}, ${name}: ${text}`,
 		correct: (name: string, short: string, text: string) => `Correct ${name} of ${short}: ${text}`,
 		restate: (name: string, doc: string) => `Restate the Lean of ${name} of ${file(doc)}`,
-		whichResult: (short: string, where: string) => `Say which result of ${short} ${where} cites`,
+		whichResult: (short: string, where: string) => `Say which result of ${short} ${/^proof /.test(where) ? `the ${where}` : where} cites`,
 		formalize: (name: string, doc: string) => `Formalize ${name} of ${file(doc)}`
 	},
 	/** Names joined as a sentence lists them. */

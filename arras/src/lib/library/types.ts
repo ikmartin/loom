@@ -3,12 +3,17 @@
 /** How a library node's reading of its paper stands (`evidence.md` §5.2, `reading`), or `marked`, a place the person marked to digest and nothing read from yet. */
 export type Paper = 'stub' | 'unchecked' | 'matches' | 'marked';
 
-/** How a result's Lean stands, as `evidence.md` §5.2 computes it. */
+/** How a result's Lean stands, `evidence.md` §5.2's `lean`. */
+export type Lean = 'none' | 'rerun' | 'failed' | 'unattested' | 'changed' | 'waiting' | 'formalized';
+
+/** What keeps a result from reading formalized (`evidence.md` §5.2): a node, one of the person's results its Lean assumes, or a citation's key with its locator where it has one; and why. */
+export type WaitingOn = ({ node: string } | { label: string } | { cite: string }) & { why: 'stub' | 'unchecked' | 'unattested' | 'unknown' };
+
+/** How a result's Lean stands, as `evidence.md` §5.2 computes it, with its role and what it waits on. */
 export interface LeanStatus {
-	lean: 'none' | 'rerun' | 'failed' | 'unattested' | 'changed' | 'waiting' | 'formalized';
+	lean: Lean;
 	role?: 'proved' | 'unproved' | 'assumed' | 'defined';
-	/** Each library result that keeps it from reading formalized, and why. */
-	waiting_on?: { node: string; why: 'stub' | 'unchecked' | 'unattested' | 'unknown' }[];
+	waiting_on?: WaitingOn[];
 }
 
 /** How a node's text was made (`evidence.md` §3.1). */
@@ -131,16 +136,15 @@ export interface PlacesAnswer extends Gen {
 	places: Place[];
 }
 
-/** A result wherever results are listed (§2, "A result in a list"). */
+/** A result wherever results are listed (§2, "A result in a list"; `evidence.md` §8): `title` null where it has none, `paper` null for a draft's result, `lean` its status's. */
 export interface Row {
 	result: string;
 	name: string;
-	title?: string;
+	title: string | null;
 	taxon: string;
 	source: { ref: string; short: string } | { doc: string } | null;
 	paper: Paper | null;
-	lean: LeanStatus | null;
-	choose?: boolean;
+	lean: Lean | null;
 }
 
 /** What a body points at, drawn in the pointer's place: a result's name and number and its mark, or an anchor's number; `work` marks a result of another work, drawn as a citation with the result as its locator. */
@@ -217,36 +221,45 @@ export interface AcceptedChangedRow extends RowBase {
 	doc: string;
 }
 
-/** Where an agent's question was asked: a place, and the work it was digesting when it asked, where it was. */
+/** The place an ask is tied to (`evidence.md` §4.1), by ids: a node, a draft's label, a block of a document, a work or one of its pages, or a document. The viewer looks each up to name it. */
 export interface AskedOn {
-	digesting?: string;
-	ref?: string;
-	short?: string;
-	page?: number;
 	node?: string;
-	doc?: string;
-	key?: string;
-	name?: string;
+	label?: string;
+	block?: { key: string; hash?: string; context?: unknown };
+	ref?: string;
+	page?: number;
+	document?: string;
 }
 
 export interface QuestionRow extends RowBase {
 	kind: 'questions';
-	task: string;
+	/** The ask's id, which `review-answer` names. */
+	question: string;
 	by: string;
 	on: AskedOn;
 	text: string;
 	choices: string[];
+	quote: string | null;
+}
+
+/** A cause of an attestation's going stale (`evidence.md` §5.2): what changed, by its label or node, and its hash then and now, either null. */
+export interface Cause {
+	changed: { label: string } | { node: string } | { notation: string };
+	then: Hash | null;
+	now: Hash | null;
 }
 
 export interface AttestedChangedRow extends RowBase {
 	kind: 'attested-changed';
 	result: string;
 	name: string;
-	title?: string;
 	doc: string;
-	attested_at: string;
 	changed: 'statement' | 'used';
-	resting: number;
+	causes: Cause[];
+	/** The attestation's record. */
+	attestation: string;
+	/** The results that rest under this one, each attested again one by one. */
+	resting: { result: string; name: string }[];
 }
 
 /** A stub a draft cites, in a cited row. */
@@ -283,20 +296,22 @@ export interface AttestRow extends RowBase {
 	kind: 'attest';
 	result: string;
 	name: string;
-	title?: string;
 	source: { doc: string } | { ref: string; short: string };
 	what: 'statement and proof' | 'statement only';
 	paper: Paper | null;
+	/** The Lean record to attest. */
+	lean: string;
+	waiting_on: WaitingOn[];
 }
 
 export interface FetchRow extends RowBase {
 	kind: 'fetch';
 	task: string;
 	ref: string;
-	short: string;
-	title: string;
 	link: string;
+	want: 'pdf' | 'tex';
 	by: string;
+	words: string;
 }
 
 export interface EditRow extends RowBase {
@@ -306,32 +321,35 @@ export interface EditRow extends RowBase {
 	doc: string;
 	key: string;
 	where: string;
-	by: string;
+	/** Who suggested it; null for an edit made in place. */
+	by: string | null;
+	state: string;
 	broke: { line: number; error: string } | null;
 }
 
 export type ReviewRow = AcceptedChangedRow | QuestionRow | AttestedChangedRow | CitedRow | CheckRow | AttestRow | FetchRow | EditRow;
 
-/** What a task waiting for an agent was asked of (`evidence.md` §4.1's `what`) and the names its sentence needs. */
+/** A task waiting for an agent: what was asked (`evidence.md` §4.1's `what`), where, by ids, and the ask's own fields by its `what`, from which the viewer names it. */
 export interface TaskRow extends RowBase {
 	kind: 'agents';
 	task: string;
 	what: string;
-	on: {
-		ref?: string;
-		short?: string;
-		scope?: 'uses' | 'marked' | 'chosen' | 'all';
-		count?: number;
-		names?: string[];
-		page?: number;
-		doc?: string;
-		key?: string;
-		name?: string;
-		where?: string;
-	};
-	text?: string;
+	on: AskedOn;
 	working: { by: string } | null;
 	asked_at: string;
+	words?: string;
+	nodes?: string[];
+	marks?: string[];
+	ref?: string;
+	scope?: 'uses' | 'marked' | 'chosen' | 'all';
+	text?: string;
+	quote?: string;
+	target?: { label?: string; node?: string };
+	differs?: string;
+	cites?: string;
+	state?: string[];
+	prove?: string[];
+	assume?: string[];
 }
 
 /** One group of the list (`review-list`), in the order the list draws them. */
@@ -350,12 +368,16 @@ export interface CorrectionBody {
 	runs: ['=' | '-' | '+', string][];
 }
 
-/** A row's body (`review-row`), its fields by its kind. */
-export interface ReviewBody extends Gen {
-	row: string;
-	/** accepted-changed and edits: the text with its change marked. */
+/** A row's body's fields, by its kind (`review-row`): accepted-changed's and edits' the text with its change marked. */
+export interface RowBody {
 	statement?: Statement;
 	[field: string]: unknown;
+}
+
+/** `review-row`: the row as it waits now, and its body (`{}` where its kind has none yet). */
+export interface ReviewBody extends Gen {
+	row: ReviewRow | TaskRow;
+	body: RowBody;
 }
 
 // ---- the Web (`docs/specs/library-views.md` §5) ----
@@ -389,15 +411,17 @@ export interface WebList extends Gen {
 	more?: number;
 }
 
-/** `web-group`: an opened group's rows. */
+/** `web-group`: an opened group's rows, as `web-list` counts it. */
 export interface WebGroupAnswer extends Gen {
+	group: string;
+	n: number;
 	rows: Row[];
 }
 
-/** `web-search`: hits, each with the words of its statement around the match where the match is there. */
+/** `web-search`: hits, each with the words of its statement around the match where the match is there, null for a hit on the name or title. */
 export interface WebSearch extends Gen {
 	count: number;
-	hits: { row: Row; snippet?: { before: string; match: string; after: string } }[];
+	hits: { row: Row; snippet: { before: string; match: string; after: string } | null }[];
 }
 
 /** A result's text in the focus card: a draft's fragment, or a library node's body as `library-node` gives it. */

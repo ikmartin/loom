@@ -133,9 +133,9 @@ export const find = (ref: string, q: string) => call<FindAnswer>('library-find',
 /** Where a Web read looks: its scope, and the draft where the scope names one. */
 export type InScope = { scope: WebScope; doc?: string };
 const scoped = (w: InScope) => ({ scope: w.scope, ...(w.doc && (w.scope === 'draft' || w.scope === 'deps') ? { doc: w.doc } : {}) });
-export const webList = (w: InScope, sort: 'document' | 'status', open: string[], offset = 0, s?: number) => call<WebList>('web-list', { ...scoped(w), sort, ...(open.length ? { open } : {}), ...(offset ? { offset } : {}), ...since(s) });
+export const webList = (w: InScope, sort: 'document' | 'status', open: string[], offset = 0, s?: number) => call<WebList>('web-list', { ...scoped(w), ...(sort === 'status' ? { sort } : {}), ...(open.length ? { open } : {}), ...(offset ? { offset } : {}), ...since(s) });
 export const webGroup = (w: InScope, group: string, s?: number) => call<WebGroupAnswer>('web-group', { ...scoped(w), group, ...since(s) });
-export const webSearch = (w: InScope, q: string) => call<WebSearch>('web-search', { ...scoped(w), q, limit: 50 });
+export const webSearch = (w: InScope, q: string) => call<WebSearch>('web-search', { ...scoped(w), q });
 export const webFocus = (w: InScope, result: string, more: boolean, s?: number) => call<WebFocus>('web-focus', { ...scoped(w), result, ...(more ? { more: true } : {}), ...since(s) });
 export const webGraph = (w: InScope, result: string, s?: number) => call<WebGraph>('web-graph', { ...scoped(w), result, ...since(s) });
 export const notes = (sort: 'work' | 'date', orphaned: boolean, more?: { group?: string; offset: number }, s?: number) => call<NotesAnswer>('notes', { sort, orphaned, ...(more?.group ? { group: more.group } : {}), ...(more ? { offset: more.offset } : {}), ...since(s) });
@@ -143,8 +143,9 @@ export const deleteNote = (annotation: string) => call<WriteDone>('delete', { an
 export const formalMarks = (doc: string, s?: number) => call<FormalMarks>('formal-marks', { doc, ...since(s) });
 export const formalPlan = (targets: string[], assume: string[]) => call<FormalPlan>('formal-plan', { targets, assume });
 export const formalAsk = (targets: string[], assume: string[]) => call<WriteDone & { tasks: string[] }>('formal-ask', { targets, assume });
-export const reviewCounts = (doc?: string, s?: number) => call<ReviewCounts>('review-counts', { ...(doc ? { doc } : {}), ...since(s) });
-export const reviewList = (kind: ReviewKind | 'all' | 'agents', doc?: string, s?: number) => call<ReviewList>('review-list', { kind, ...(doc ? { doc } : {}), ...since(s) });
+/** Review's counts, a draft's among them (`drafts`). */
+export const reviewCounts = (s?: number) => call<ReviewCounts>('review-counts', { ...since(s) });
+export const reviewList = (kind: ReviewKind | 'all' | 'agents', doc?: string, s?: number) => call<ReviewList>('review-list', { ...(kind === 'all' ? {} : { kind }), ...(doc ? { doc } : {}), ...since(s) });
 export const reviewRow = (row: string, s?: number, node?: string) => call<ReviewBody>('review-row', { row, ...(node ? { node } : {}), ...since(s) });
 
 // ---- the writes ----
@@ -158,15 +159,16 @@ export const lookUp = (ref: string, once = false) => call<WriteDone>('library-lo
 /** Takes received files and pasted works in; `online: false` takes them without the network, each reference's details unconfirmed. */
 export const take = (items: ({ incoming: string; for?: string } | { text: string })[], online?: false) => call<WriteDone & { rows: TakeRow[] }>('library-take', { items, ...(online === false ? { online } : {}) });
 export const undoTake = (id: string, act?: string) => call<WriteDone>('library-undo', { id, ...(act ? { act } : {}) });
-export const answer = (task: string, choice: number | null, words: string) => call<WriteDone>('review-answer', { task, ...(choice === null ? {} : { choice }), words });
+/** Answers an agent's question (`review-answer`): one of its choices, the person's words, or both. */
+export const answer = (question: string, choice: number | null, text: string) => call<WriteDone>('review-answer', { question, ...(choice === null ? {} : { choice }), ...(text ? { text } : {}) });
 export const takeCorrection = (correction: string) => call<WriteDone>('library-correction-take', { correction });
 export const declineCorrection = (correction: string) => call<WriteDone>('library-correction-decline', { correction });
 export const attest = (result: string, observation: string) => call<WriteDone>('formal-attest', { result, observation });
 export const mention = (citation: string) => call<WriteDone>('library-mention', { citation });
 /** Withdraws a task (`review-task-delete`); `undo`, the column's undo of that, puts the same task back as it stood. */
 export const withdraw = (task: string, undo = false) => call<WriteDone>('review-task-delete', { task, ...(undo ? { undo: true } : {}) });
-/** Asks an agent (`review-task`): an `asked` line of the asks log (`evidence.md` §4.1), `fields` those of its `what`, `from` the drafts it is asked for. */
-export const ask = (what: string, on: Record<string, unknown>, fields: Record<string, unknown>, from: string[], words = '') => call<WriteDone & { task: string }>('review-task', { what, on, ...fields, from, words });
+/** Asks an agent (`review-task`, `evidence.md` §7): `kind` what is asked, `on` the place and what the kind needs, `text` the person's words, `docs` the person's drafts it is for (by default those that read the place). */
+export const ask = (kind: string, on: Record<string, unknown>, text = '', docs?: string[]) => call<WriteDone & { task: string }>('review-task', { kind, on, ...(text ? { text } : {}), ...(docs?.length ? { docs } : {}) });
 
 /** A write that is built today: to the publisher through `write()`, which names the reviewer and the session, or, for keep and discard, through the history that offers their undo; to the fixture as any other. */
 async function built(name: string, body: Record<string, unknown>, send: () => Promise<{ ok: boolean; error?: ApiError }>): Promise<Answer<WriteDone>> {

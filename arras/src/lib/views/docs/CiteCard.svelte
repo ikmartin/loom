@@ -43,7 +43,7 @@
 		beside(found.ok ? (found.value.hits[0]?.page ?? 1) : 1);
 	}
 	async function ask(): Promise<void> {
-		const done = await api.ask('read', { node }, { nodes: [node] }, doc ? [doc] : []);
+		const done = await api.ask('read', { nodes: [node] }, '', doc ? [doc] : []);
 		message.post(done.ok ? words.card.asked : said(done.error));
 		ondone();
 	}

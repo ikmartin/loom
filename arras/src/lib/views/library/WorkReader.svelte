@@ -85,7 +85,7 @@
 		offered = null;
 		asking = false;
 		question = '';
-		const done = await api.ask('ask', { ref, page: o.page }, { text, quote: o.text }, lib.works.value?.works.find((w) => w.ref === ref)?.used_in ?? []);
+		const done = await api.ask('ask', { ref, page: o.page, quote: o.text }, text, lib.works.value?.works.find((w) => w.ref === ref)?.used_in ?? []);
 		message.post(done.ok ? words.reader.asked : said(done.error));
 	}
 

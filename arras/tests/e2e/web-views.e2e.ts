@@ -28,7 +28,8 @@ test('a draft and what it rests on lists the draft, then the library a work at a
 	// a result named in the card is followed from there, and the trail goes back
 	await page.getByTestId('web-standing').getByRole('button', { name: 'Proposition 2.1 of Arden 2024' }).click();
 	await expect(card).toContainText('Proposition 2.1');
-	await expect(card).toContainText('assumed in Lean');
+	// a list's row carries its Lean status as a word, with no role, so an assumed result reads formalized
+	await expect(card).toContainText('formalized');
 	await page.locator('.trail').getByRole('button', { name: 'Theorem 3.4' }).click();
 	await expect(card).toContainText('Theorem 3.4 Bounded balanced weightings');
 	await expect(page.getByTestId('web-standing')).toContainText('Not formalized. It rests on');
