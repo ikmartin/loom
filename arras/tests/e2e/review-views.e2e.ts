@@ -291,3 +291,62 @@ test('no control in Review changes view, and no id is drawn', async ({ page }) =
 	const text = await page.locator('body').innerText();
 	expect(text).not.toMatch(/\b(tq-[0-9A-Z]{4}|t-2026-|ev-2026-|m-2026-|c-[0-9a-f]{8})/);
 });
+
+test("the review's round: locate washes the words found at reading size, a page the PDF lacks says so, and a library result to attest speaks of the paper", async ({ page }) => {
+	await page.route('**/digests/storage/**', (route) => route.fulfill({ body: PAPER, contentType: 'application/pdf' }));
+	await open(page);
+	await page.getByTestId('review-kind-cited').click();
+	const okafor = page.getByTestId('review-row').filter({ hasText: 'Okafor 2022 · ' });
+	await okafor.getByRole('button', { expanded: false }).first().click();
+	await okafor.getByTestId('review-sub').filter({ hasText: 'Theorem 2.3' }).getByRole('button', { name: 'locate…' }).click();
+	const crop = okafor.getByTestId('review-crop');
+	await expect(crop.locator('.mark.on')).toHaveCount(1);
+	const canvas = (await crop.locator('canvas').boundingBox())!;
+	expect(canvas.width).toBeGreaterThan(612);
+	// the crops of a work whose PDF is shorter than its places say so, in words
+	await page.getByTestId('review-kind-check').click();
+	const smith = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · ' });
+	await smith.getByRole('button', { expanded: false }).first().click();
+	for (const sub of await smith.getByTestId('review-sub').all()) {
+		const head = sub.getByRole('button').first();
+		if ((await head.getAttribute('aria-expanded')) !== 'true') await head.click();
+		await expect(sub.getByTestId('review-crop').or(sub.getByTestId('review-crop-missing'))).toBeVisible();
+	}
+	await expect(page.locator('body')).not.toContainText('Invalid page request');
+	await page.getByTestId('review-kind-attest').click();
+	const prop = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · Proposition 3.4' });
+	await prop.getByRole('button', { expanded: false }).first().click();
+	await expect(prop).toContainText('Smith 2024, as the paper has it');
+	await expect(prop.locator('table.att th').nth(1)).toHaveText('the paper');
+	await expect(prop).toContainText('Does the Lean say what the paper says?');
+	await expect(prop).not.toContainText('as you wrote it');
+});
+
+test("the review's round: a task deleted comes back on undo, results are named in the paper's order, the column fits, the pull has its card, and see it lands at the result", async ({ page }) => {
+	await serve(page, (m) => {
+		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [], changes: [] };
+	});
+	await open(page);
+	const label = page.getByTestId('review-kind-accepted-changed');
+	expect((await label.boundingBox())!.height).toBeLessThanOrEqual(30);
+	await expect(page.getByTestId('review-kind-incoming')).toHaveAttribute('aria-description', /collaborator's changes/);
+	await page.getByTestId('review-kind-check').click();
+	await expect(page.getByTestId('review-row').filter({ hasText: 'Arden 2024 · Lemmas' })).toContainText('Arden 2024 · Lemmas 5.7 and 5.9');
+	await page.getByTestId('review-kind-agents').click();
+	const tasks = page.getByTestId('review-task');
+	await tasks.first().hover();
+	const del = tasks.first().getByRole('button', { name: 'delete' });
+	const box = (await del.boundingBox())!;
+	expect(box.height).toBeGreaterThanOrEqual(28);
+	await del.click();
+	await expect(tasks).toHaveCount(5);
+	await page.getByTestId('column-message-undo').click();
+	await expect(tasks).toHaveCount(6);
+	await page.getByTestId('review-kind-edits').click();
+	const first = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
+	await first.getByRole('button', { expanded: false }).click();
+	await first.getByTestId('see-it').click();
+	const over = page.getByTestId('review-over');
+	const at = over.locator('#sy-0002-proof');
+	await expect(at).toBeInViewport();
+});

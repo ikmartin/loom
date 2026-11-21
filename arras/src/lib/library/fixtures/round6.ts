@@ -360,7 +360,8 @@ export function placesOf(f: Fixture, args: { ref?: string; node?: string; pages?
 		list.forEach((r, i) => {
 			if (!r.node || !r.p || r.p === 'stub') return;
 			if (args.node && r.node !== args.node) return;
-			const page = ((i % 3) + 1) as number;
+			// on the first two pages, which every stand-in PDF the fixture serves has
+			const page = ((i % 2) + 1) as number;
 			if (args.pages && !args.pages.includes(page)) return;
 			const top = 120 + ((i * 97) % 520);
 			out.push({ node: r.node, name: `${r.tax} ${r.num}`, number: r.num, page, rects: [[72, top, 540, top + 46]], paper: r.p as Paper, lean: r.l ?? null });

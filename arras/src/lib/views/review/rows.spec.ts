@@ -64,4 +64,10 @@ describe("round six's rows", () => {
 		expect(task(t('formalize', { name: 'Theorem 3.4', doc: 'drafting/main.tex' }))).toBe('Formalize Theorem 3.4 of main.tex');
 		expect(task(t('digest', { short: 'Okafor 2022', scope: 'marked', count: 1 }))).toBe('Digest the place you marked in Okafor 2022');
 	});
+
+	it("names a work's results in the paper's order, whatever order they come in", async () => {
+		const { inPaperOrder } = await import('./rows');
+		expect(words.results(inPaperOrder(['Lemma 5.9', 'Lemma 5.7']))).toBe('Lemmas 5.7 and 5.9');
+		expect(inPaperOrder(['Lemma 5.10', 'Theorem 5.9', 'Corollary A.1', 'Lemma 5.7'])).toEqual(['Lemma 5.7', 'Theorem 5.9', 'Lemma 5.10', 'Corollary A.1']);
+	});
 });

@@ -52,7 +52,7 @@
 		>
 		<div class="rule"></div>
 		{#if m?.incoming}
-			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" onclick={() => pick('incoming')}>{pullLabel(m)}</button>
+			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}>{pullLabel(m)}</button>
 		{/if}
 	</nav>
 	{#if counts?.drafts.length}
@@ -92,11 +92,12 @@
 	}
 	.navl button {
 		font: inherit;
+		font-size: 12.5px;
 		text-align: left;
 		display: flex;
 		align-items: baseline;
-		gap: 8px;
-		padding: 4px 8px;
+		gap: 6px;
+		padding: 4px 6px;
 		border: 0;
 		border-radius: 6px;
 		background: none;

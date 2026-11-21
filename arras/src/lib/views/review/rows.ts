@@ -5,6 +5,16 @@ import { paperMark } from '$lib/marks/marks';
 import type { ReviewRow, TaskRow } from '$lib/library/types';
 import { review as words } from '$lib/words/review';
 
+/** Names in the paper's order, their numbers read naturally (5.7 before 5.9 before 5.10), as a row names its results. */
+export function inPaperOrder(names: string[]): string[] {
+	const num = (n: string) => (/(\S+)$/.exec(n)?.[1] ?? '').split('.').map((x) => (Number.isNaN(+x) ? x.charCodeAt(0) + 1000 : +x));
+	return [...names].sort((a, b) => {
+		const [x, y] = [num(a), num(b)];
+		for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+		return 0;
+	});
+}
+
 /** A row's first line. An agent's question is drawn with the agent's name apart (`question`), so it has none here. */
 export function line(r: ReviewRow): string {
 	switch (r.kind) {
@@ -15,9 +25,9 @@ export function line(r: ReviewRow): string {
 		case 'attested-changed':
 			return words.at(words.file(r.doc), r.title ? `${r.name}, ${r.title}` : r.name);
 		case 'cited':
-			return r.citation !== undefined ? words.cited.namesNone(r.doc, r.where, r.short) : words.at(r.short, words.results(r.stubs.map((s) => s.name)));
+			return r.citation !== undefined ? words.cited.namesNone(r.doc, r.where, r.short) : words.at(r.short, words.results(inPaperOrder(r.stubs.map((s) => s.name))));
 		case 'check':
-			return r.correction !== undefined ? words.at(r.short, words.check.correction(r.name)) : words.at(r.short, words.results(r.nodes.map((n) => n.name)));
+			return r.correction !== undefined ? words.at(r.short, words.check.correction(r.name)) : words.at(r.short, words.results(inPaperOrder(r.nodes.map((n) => n.name))));
 		case 'attest':
 			return words.at('doc' in r.source ? words.file(r.source.doc) : r.source.short, r.title ? `${r.name}, ${r.title}` : r.name);
 		case 'fetch':

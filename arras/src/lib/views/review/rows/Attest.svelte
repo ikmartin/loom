@@ -32,6 +32,8 @@
 	const b = $derived(body.value);
 	const by = $derived(b?.parts?.[0]?.by ?? '');
 	const where = $derived('doc' in row.source ? words.file(row.source.doc) : row.source.short);
+	/** A result of a work, which the person did not write: its words are the paper's. */
+	const library = $derived('ref' in row.source);
 	const named = $derived((b?.parts ?? []).filter((p) => p.part));
 
 	async function yes(): Promise<void> {
@@ -45,13 +47,13 @@
 
 {#if b}
 	{#if b.statement}
-		<div class="crop-cap">{words.attest.asWritten(where)}</div>
+		<div class="crop-cap">{library ? words.attest.asPaper(where) : words.attest.asWritten(where)}</div>
 		<div class="citebox"><Statement fragment={b.statement.fragment} /></div>
 	{/if}
 	{#if b.parts?.length}
-		<div class="crop-cap gap">{words.attest.partByPart(by)}</div>
+		<div class="crop-cap gap">{library ? words.attest.partByPaper(by) : words.attest.partByPart(by)}</div>
 		<table class="att">
-			<thead><tr><th></th><th>{words.attest.draft}</th><th>{words.attest.lean}</th><th class="ag">{words.attest.reading(by)}</th></tr></thead>
+			<thead><tr><th></th><th>{library ? words.attest.paper : words.attest.draft}</th><th>{words.attest.lean}</th><th class="ag">{words.attest.reading(by)}</th></tr></thead>
 			<tbody>
 				{#each [...b.parts, ...(b.notation ?? [])] as p (p.part + p.lean)}
 					<tr>
@@ -79,7 +81,7 @@
 	{#if b.difference}
 		<div class="diverge"><span class="w">{words.attest.found(b.difference.by)}</span><div>{b.difference.text}</div></div>
 	{/if}
-	<p class="ask">{words.attest.ask}</p>
+	<p class="ask">{library ? words.attest.askPaper : words.attest.ask}</p>
 	<div class="answers">
 		<button type="button" class="btn" disabled={busy} onclick={yes}>{words.attest.yes}</button>
 		<Restate result={row.result} docs={row.docs} label={words.attest.no} />

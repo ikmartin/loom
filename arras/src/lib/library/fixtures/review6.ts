@@ -33,7 +33,8 @@ const ACCEPTED: [string, string, string, string][] = [
 ];
 
 const EDITS: { change: string; type: 'suggested' | 'edit'; doc: string; key: string; where: string; html: string; broke?: { line: number; error: string } }[] = [
-	{ change: 'c-1a2b3c4d', type: 'suggested', doc: MAIN, key: 'thm:rank/proof', where: 'proof of Theorem 3.1', html: p(`Since ${m('\\mathcal{Z}(Q) = \\ker \\partial')}, ${ch('g', 'the rank of the kernel is the rank of the source less the rank of the image', `by rank–nullity, ${m('\\operatorname{rank} \\mathcal{Z}(Q) = |A(Q)| - \\operatorname{rank} \\partial')}`)}, and Proposition 2.1 gives ${m('\\operatorname{rank} \\partial')}.`) },
+	// keyed as the static suite's main.tex keys its proof, so see it lands on a block that is there
+	{ change: 'c-1a2b3c4d', type: 'suggested', doc: MAIN, key: 'sy-0002/proof', where: 'proof of Theorem 3.1', html: p(`Since ${m('\\mathcal{Z}(Q) = \\ker \\partial')}, ${ch('g', 'the rank of the kernel is the rank of the source less the rank of the image', `by rank–nullity, ${m('\\operatorname{rank} \\mathcal{Z}(Q) = |A(Q)| - \\operatorname{rank} \\partial')}`)}, and Proposition 2.1 gives ${m('\\operatorname{rank} \\partial')}.`) },
 	{ change: 'c-2b3c4d5e', type: 'suggested', doc: BOUNDS, key: 'thm:radius', where: 'Theorem 1', html: p(`The bound follows from ${ch('h', '[Smi24]', '[Smi24, Proposition 3.4]')}.`) },
 	{ change: 'c-3c4d5e6f', type: 'suggested', doc: MAIN, key: 'def:divergence', where: 'Definition 2.2', html: p(`the weight arriving at ${m('v')} less the weight ${ch('i', 'leaving at', 'leaving')} it.`) },
 	{ change: 'c-4d5e6f70', type: 'edit', doc: BOUNDS, key: 'lem:thin', where: 'Lemma 2', html: p(`${ch('j', 'Let', 'Suppose')} ${m('W')} is thin ${ch('k', '', 'and its boundary lies in \\Wid')}.`), broke: { line: 14, error: 'Undefined control sequence' } },

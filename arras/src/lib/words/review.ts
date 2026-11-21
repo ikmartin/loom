@@ -27,6 +27,8 @@ export const review = {
 		record: 'Record',
 		/** Hover card on Record. */
 		recordHover: 'Every version of your documents loom kept, the sessions agents worked in, and everything done in this quilt.',
+		/** Hover card on a collaborator's pull, under the kinds. */
+		pullHover: "A collaborator's changes to your project, fetched for you to read and take in whole, or not.",
 		/** The column's list of kinds, its accessible name. */
 		nav: 'What waits for you'
 	},
@@ -164,6 +166,8 @@ export const review = {
 		matched: (name: string) => `${name} matches the paper.`,
 		/** Over the crop of the paper beside a result. */
 		page: (short: string, page: number) => `${short}, page ${page}`,
+		/** In place of the crop where the place is on a page the paper's PDF does not have. */
+		noPage: "This page is not in the paper's PDF.",
 		/** In place of the crop where loom knows no place on the paper for the result. */
 		noPlace: 'Loom does not know where this stands on the paper yet.',
 		/** In place of a result's text that could not be read. */
@@ -184,10 +188,16 @@ export const review = {
 		what: { 'statement and proof': 'statement and proof', 'statement only': 'statement only' } as Record<string, string>,
 		/** Over the result's whole statement. */
 		asWritten: (where: string) => `${where}, as you wrote it`,
+		/** Over a library result's whole statement. */
+		asPaper: (short: string) => `${short}, as the paper has it`,
 		/** Over the table of parts. */
 		partByPart: (by: string) => `Part by part: what you wrote, the Lean that states it, and ${by}'s reading of the Lean`,
+		/** Over the table of parts of a library result. */
+		partByPaper: (by: string) => `Part by part: what the paper says, the Lean that states it, and ${by}'s reading of the Lean`,
 		/** The table's heads. */
 		draft: 'your draft',
+		/** The table's first head for a library result. */
+		paper: 'the paper',
 		lean: 'Lean, as Lean prints it',
 		reading: (by: string) => `${by}’s reading`,
 		/** Over a part of notation the statement defines. */
@@ -202,6 +212,8 @@ export const review = {
 		found: (by: string) => `${by} found`,
 		/** The question. */
 		ask: 'Does the Lean say what you wrote?',
+		/** The question for a library result. */
+		askPaper: 'Does the Lean say what the paper says?',
 		/** The person's yes. */
 		yes: 'yes, I attest it',
 		/** The person's no, which opens a field for what differs. */
@@ -324,7 +336,7 @@ export const review = {
 		waiting: 'waiting',
 		/** The quiet link on a task's row, on hover, that withdraws it. */
 		delete: 'delete',
-		/** The column's message once a task is withdrawn. */
+		/** The column's message once a task is withdrawn, with `undo`, which asks for it again. */
 		deleted: 'Task deleted.',
 		/** A task's sentence, from what was asked and of what (`docs/specs/library-views.md` §4.3). */
 		digestMarked: (n: number, short: string) => (n === 1 ? `Digest the place you marked in ${short}` : `Digest the ${n} places you marked in ${short}`),
