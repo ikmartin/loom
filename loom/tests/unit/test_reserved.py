@@ -59,3 +59,22 @@ def test_a_part_of_the_manifest_that_is_not_built_adds_nothing() -> None:
         "agents",
         "formal",
     ]
+
+
+def test_a_path_some_part_of_loom_uses_is_not_on_the_page() -> None:
+    """A path leaves the page when it is built: once a module beyond `loom.paths` and the agents' boundary reads its constant, the page no longer names it, as `.loom/library/nodes/` left it when the node store was built."""
+    import ast
+
+    src = Path(paths.__file__).parent
+    used: set[str] = set()
+    for module in src.rglob("*.py"):
+        if module.name in ("paths.py", "agents.py") and module.parent == src:
+            continue
+        tree = ast.parse(module.read_text(encoding="utf-8"))
+        used |= {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
+        used |= {n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)}
+    named = {k: v for k, v in vars(paths).items() if k.isupper() and isinstance(v, str) and v.startswith(".loom/")}
+    on_page = set(re.findall(r"`(\.loom/[^`]*?)/?`", PAGE))
+    built = sorted(f"{k} = {v}" for k, v in named.items() if v in on_page and k in used)
+    assert built == [], f"built, and still on the page of reserved names: {built}"
+    assert paths.LIBRARY_NODES not in on_page

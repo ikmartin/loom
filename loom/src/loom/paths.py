@@ -52,6 +52,9 @@ SOURCE_SYNC = f"{RECORDS}/source-sync.json"
 RETIRED = f"{RECORDS}/retired"
 #: Each person's last look at the open files, which Review's Your Changes reads.
 LOOKED = f"{RECORDS}/looked"
+#: The tags put on the library's nodes and taken off them, one line an act (`library.tags`).
+TAGS = f"{RECORDS}/tags"
+TAG_LOG = f"{TAGS}/log.jsonl"
 #: The default of `[quilt] history`; code reads the setting, never this.
 HISTORY = f"{RECORDS}/history"
 #: Reserved for work not built yet (docs/specs/reserved.md): nothing writes these, and an agent is already kept from them.
@@ -69,6 +72,8 @@ LINKS = f"{LIBRARY}/links.jsonl"
 LINKS_REMOVED = f"{LIBRARY}/links-removed.jsonl"
 #: Reserved (docs/specs/reserved.md): the works an agent suggested.
 SUGGESTED_WORKS = f"{LIBRARY}/suggested.jsonl"
+#: The library's nodes, one `<id>.node` file each (docs/specs/nodes.md).
+LIBRARY_NODES = f"{LIBRARY}/nodes"
 #: Loom's store of other people's documents, keyed by the work's identifier.
 STORAGE = f"{LIBRARY}/storage"
 #: What the store holds and what each copy in it was taken from (`refs/intake.py`, `refs/scan.py`).
@@ -146,6 +151,8 @@ BLOCK_SPANS = f"{BLOCKS}/spans"
 LIBRARY_CACHE = f"{CACHE}/library"
 STORE_BOXES = f"{LIBRARY_CACHE}/boxes"
 RESOLVED = f"{LIBRARY_CACHE}/resolve"
+#: What the library's nodes and the tag log are asked by: made when first asked for, brought up to date at each asking, and made again at will (`library.index`).
+NODE_INDEX = f"{LIBRARY_CACHE}/nodes.sqlite3"
 #: What marks on a PDF are found by: word boxes of a PDF outside the store, by its hash, and where each mark was found again.
 MARKS = f"{CACHE}/marks"
 MARK_BOXES = f"{MARKS}/boxes"

@@ -96,7 +96,7 @@ Two ways to say the same thing drift apart. Consequence: `\input` is transclusio
 
 ### P5. The graph is defined by labels and environments, never by paths.
 
-Where a file lives carries no meaning. Consequence: one file per node and twelve lemmas in one section file are the same graph at two granularities. `nodes/` is a convention `loom new` follows, not a rule the scanner enforces, and no directory exists to hold a property loom can compute.
+Where a file lives carries no meaning. Consequence: one file per node and twelve lemmas in one section file are the same graph at two granularities. `nodes/` is a convention `loom new` follows, not a rule the scanner enforces, and no directory exists to hold a property loom can compute. A node of the library is named by its file, `<id>.node`, which states its id when the file is written and infers nothing from where it sits.
 
 ### P6. Config only for what the preamble cannot say.
 

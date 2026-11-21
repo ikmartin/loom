@@ -1,0 +1,11 @@
++++
+schema = 1
+id = "tq-00B1-ref"
+taxon = "reference"
++++
+@article{Jon19,
+  author  = {Jones, Alex},
+  title   = {Covering estimates},
+  journal = {Journal of Examples},
+  year    = {2019},
+}

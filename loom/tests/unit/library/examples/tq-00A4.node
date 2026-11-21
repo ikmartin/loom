@@ -1,0 +1,11 @@
++++
+schema = 1
+id = "tq-00A4"
+taxon = "definition"
+number = "2.1"
+title = "Widget"
+source = "tq-00A1-ref"
+label = "def:widget"
+pages = "4"
++++
+A \emph{widget} is a compact set $W \subset \mathbb{R}^n$ whose boundary lies in $\Wid$.

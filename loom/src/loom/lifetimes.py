@@ -34,8 +34,10 @@ from loom.paths import (
     INCORPORATION_PREVIEWS,
     KINDS,
     LIBRARY_CACHE,
+    LIBRARY_NODES,
     MARK_BOXES,
     MARKS,
+    NODE_INDEX,
     REFOUND,
     RESOLVED,
     SCRATCH,
@@ -446,6 +448,10 @@ _FOLDERS = (
 )
 
 
+#: The node index's name in `LIBRARY_CACHE`.
+_NODE_INDEX = within(LIBRARY_CACHE, NODE_INDEX)
+
+
 class _Rules:
     """What keeps a file under `.loom/cache/` that the build does not name: each folder's own rule of what it is still for."""
 
@@ -483,6 +489,9 @@ class _Rules:
             if first == "boxes" and len(PurePosixPath(name).parts) > 2:
                 # a stored work's word boxes, its source's among them, while the work's folder, `<scheme>/<id>`, is in the store
                 return (self.root / STORAGE).joinpath(*work).is_dir()
+            if first in (_NODE_INDEX, f"{_NODE_INDEX}-journal"):
+                # the index of the library's nodes, and its journal while a write to it is under way, while the library has nodes
+                return (self.root / LIBRARY_NODES).is_dir()
             # an answer of a lookup, which loom can only ask again online, while an entry of the library asks it
             return first == "resolve" and name in self.answers
         # `blocks/`, `marks/` and anything else: named by the build or not at all
