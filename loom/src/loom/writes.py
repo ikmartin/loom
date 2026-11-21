@@ -1005,7 +1005,7 @@ BY_HAND = "it stays until it is settled by hand, which loom does not yet do"
 
 
 def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] | tuple[str, ...] = ()) -> _Verdict:
-    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act done since wrote too (`Journal.crossed`); reads, never writes. A left act's verdict says what settles it (`settles`)."""
+    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act done since wrote too (`Journal.crossed`): one of those still holding this act's bytes holds the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`)."""
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
@@ -1022,11 +1022,12 @@ def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] 
             holds,
             settles=f"Its files are as it left them, but loom can neither record the rest of its history nor put it back, so {BY_HAND}.",
         )
-    if crossed:
-        # a later act, done, wrote these files too: their bytes are that act's now, and putting this one back would take its work out
+    over = [rel for rel in crossed if rel in holds and holds[rel][1]]
+    if over:
+        # a later act, done, wrote these files too and they hold this act's bytes, which are that act's now: putting them back would take its work out
         return _Verdict(
             "left",
-            f"a later act wrote {_named(list(crossed))} since, so putting this one back would take that act's work out, and recovery changed nothing: {_where(holds)}",
+            f"a later act wrote {_named(over)} since, so putting this one back would take that act's work out, and recovery changed nothing: {_where(holds)}",
             holds,
             settles=f"Loom will not put it back over that act, so {BY_HAND}.",
         )
