@@ -39,7 +39,7 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     given = body.get("changes")
     if body.get("all") is True:
         document = _str(body, "document")
-        if endpoint == "change-keep" and result.quilt.config.track_edits and who and read_look(root, who) is None:
+        if endpoint == "change-keep" and who and read_look(root, who) is None:
             keep_all(result.quilt, who)
             return {"ok": True, "result": "took your first look", "done": [], "refused": []}
         ids = [c.id for c in pending(result, who) if document is None or document in c.documents]

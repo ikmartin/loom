@@ -44,13 +44,6 @@ def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (root / "tasks.md").write_text(
         "# Tasks\n\n- [ ] read the first proof again\n- [x] write the second answer\n", encoding="utf-8"
     )
-    from loom.config_edit import set_values
-    from loom.scan.quilt import load_quilt
-
-    try:
-        set_values(load_quilt(root), {"review.track_edits": True})
-    except Exception:  # noqa: BLE001 -- a loom from before edit tracking refuses the table
-        pass
     call(root, "change-keep", {"all": True})  # the first look
     return root
 

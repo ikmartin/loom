@@ -6,7 +6,6 @@
 	import { draft } from './draft.svelte';
 	import Chips from './Chips.svelte';
 	import Row from './Row.svelte';
-	import Toggle from './Toggle.svelte';
 
 	let { config, editable, canUpdate }: { config: QuiltSettings; editable: boolean; canUpdate: boolean } = $props();
 	const deny = $derived((draft.value('agents.deny') as string[] | undefined) ?? []);
@@ -63,9 +62,6 @@
 	</Row>
 	<Row id="agents.protected" stack>
 		<Chips test="agents-protected" fixed items={agents.protected} />
-	</Row>
-	<Row id="review.track_edits" refused={draft.refused['review.track_edits']}>
-		<Toggle label="Review edits made in place" test="config-review.track_edits" disabled={!editable} checked={draft.value('review.track_edits') === true} set={(on) => draft.set('review.track_edits', on)} />
 	</Row>
 </div>
 {#if agents.layer}
