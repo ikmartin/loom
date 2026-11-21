@@ -35,6 +35,10 @@
 		<path d="M9 21H3v-6" />
 		<path d="m21 3-7 7" />
 		<path d="m3 21 7-7" />
+	{:else if name === 'fold'}
+		<!-- the column's fold: two chevrons pointing the way it goes; the strip turns it round -->
+		<path d="m12.75 6-6 6 6 6" />
+		<path d="m18.75 6-6 6 6 6" />
 	{:else if name === 'close'}
 		<path d="M18 6 6 18" />
 		<path d="m6 6 12 12" />
