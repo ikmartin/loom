@@ -368,8 +368,6 @@ def test_an_import_writes_claude_code_s_permission_file_with_its_entries_in_the_
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """What the import says is protected is protected for Claude Code at once, not after the next upgrade (P-6)."""
-    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
-        monkeypatch.delenv(marker, raising=False)
     p = paper_dir(tmp_path)
     ok("init", str(tmp_path / "q"), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
     q = tmp_path / "q"

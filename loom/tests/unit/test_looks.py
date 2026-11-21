@@ -231,8 +231,6 @@ def test_a_track_edits_left_in_a_config_says_the_look_is_kept_now_at_its_line(q:
 
 # ---- the person's own acts go into their look (P-1) --------------------------------------------------------------
 
-AGENT_MARKERS = ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI")
-
 
 @pytest.fixture
 def person(q: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -240,8 +238,6 @@ def person(q: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     from loom.looks import take
     from loom.scan.quilt import load_quilt
 
-    for marker in AGENT_MARKERS:
-        monkeypatch.delenv(marker, raising=False)
     take(load_quilt(q), "Tester")
     return q
 
@@ -301,8 +297,6 @@ def test_an_agent_s_edit_before_the_first_serve_is_listed(tmp_path: Path, monkey
     from loom.render.serve import ServeSession
     from loom.scan.quilt import load_quilt, save_author
 
-    for marker in AGENT_MARKERS:
-        monkeypatch.delenv(marker, raising=False)
     save_author("Tester")
     q = tmp_path / "fresh"
     ok("init", str(q), "--prefix", "fr", "--ai", "none", "--yes", cwd=tmp_path)

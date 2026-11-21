@@ -547,8 +547,6 @@ def looked_by_the_person(q, monkeypatch: pytest.MonkeyPatch) -> str:  # type: ig
     from loom.looks import take
     from loom.scan.quilt import reviewer_identity, save_author
 
-    for marker in ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI"):
-        monkeypatch.delenv(marker, raising=False)
     if not reviewer_identity(q.root)[0]:
         save_author("Tester")
     who = reviewer_identity(q.root)[0]
