@@ -389,18 +389,23 @@ _CACHE: dict[str, tuple[tuple[float, int], History]] = {}
 
 
 def load_history(hist_dir: Path) -> History:
-    """The history under `hist_dir`; empty when there is no ledger. A malformed line or a step out of order is a problem, reported and skipped, never a refusal."""
+    """The history under `hist_dir`; empty when there is no ledger. A malformed line or a step out of order is a problem, reported and skipped, never a refusal. Inside an act that stages loom's records (`writes.staging`), the lines it has staged are read after the ledger's own, so the act's later steps are numbered after its earlier ones."""
+    from loom.writes import staged_lines
+
     ledger = hist_dir / LEDGER
-    if not ledger.is_file():
+    pending = staged_lines(ledger)
+    if not ledger.is_file() and not pending:
         return History(dir=hist_dir)
-    st = ledger.stat()
-    sig = (st.st_mtime, st.st_size)
-    cached = _CACHE.get(str(ledger))
-    if cached is not None and cached[0] == sig:
-        return cached[1]
+    if not pending:
+        st = ledger.stat()
+        sig = (st.st_mtime, st.st_size)
+        cached = _CACHE.get(str(ledger))
+        if cached is not None and cached[0] == sig:
+            return cached[1]
     hist = History(dir=hist_dir)
     last_step = 0
-    for i, raw in enumerate(ledger.read_text(encoding="utf-8").splitlines(), start=1):
+    own = ledger.read_text(encoding="utf-8").splitlines() if ledger.is_file() else []
+    for i, raw in enumerate([*own, *pending], start=1):
         if not raw.strip():
             continue
         try:
@@ -424,19 +429,26 @@ def load_history(hist_dir: Path) -> History:
                 continue
             last_step = data["step"]
         hist.entries.append(e)
-    _CACHE[str(ledger)] = (sig, hist)
+    if not pending:
+        _CACHE[str(ledger)] = (sig, hist)
     return hist
 
 
 def append_entry(hist_dir: Path, action: str, data: dict[str, Any], actor: str | None) -> Entry:
-    """Append one line and return it as an Entry; `when` is the clock's (LOOM_FIXED_TIME honoured)."""
-    hist_dir.mkdir(parents=True, exist_ok=True)
+    """Append one line and return it as an Entry; `when` is the clock's (LOOM_FIXED_TIME honoured). Inside an act that stages loom's records (`writes.staging`), the line is staged into the act, to land right after the lines the ledger holds now, or the act is put back whole."""
+    from loom.writes import stage_line, staged_lines
+
     ledger = hist_dir / LEDGER
     when = stamp()
     line: dict[str, Any] = {"when": when, "actor": actor, "action": action}
     line.update(data)
+    pending = staged_lines(ledger)
     existing = ledger.read_text(encoding="utf-8") if ledger.is_file() else ""
-    n = sum(1 for ln in existing.splitlines() if ln.strip()) + 1
+    n = sum(1 for ln in existing.splitlines() if ln.strip()) + len(pending) + 1
+    if stage_line(ledger, json.dumps(line, ensure_ascii=False)):
+        _CACHE.pop(str(ledger), None)
+        return Entry(n, action, when, actor, dict(data))
+    hist_dir.mkdir(parents=True, exist_ok=True)
     with ledger.open("a", encoding="utf-8") as fh:
         if existing and not existing.endswith("\n"):
             fh.write("\n")

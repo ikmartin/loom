@@ -160,7 +160,8 @@ def test_record_failure_restores_source_and_history(quilt, monkeypatch):
         incorporate(scan(quilt), COPY, preview["token"])
     assert (quilt.root / DOC).read_text() == TEXT
     assert (quilt.history_dir / "ledger.jsonl").read_bytes() == ledger
-    assert sorted(p.name for p in quilt.history_dir.iterdir()) == entries
+    # the text store is written ahead, as every act's is, and holds only what was read; no step was made
+    assert sorted(p.name for p in quilt.history_dir.iterdir() if p.name != "texts") == entries
     assert not (quilt.root / ".loom/records/review-origins.json").exists()
     monkeypatch.setattr(origins, "write", original_write)
     incorporate(scan(quilt), COPY, preview["token"])

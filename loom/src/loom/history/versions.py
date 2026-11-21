@@ -48,7 +48,13 @@ def read_version(history: History, key: str, ref: str) -> tuple[Version, str]:
         if history.resolve_step(ref) is None:
             raise LookupError(f"no step {ref} in the history")
         raise LookupError(f"{key} has no version at step {ref}")
+    from loom.writes import staged
+
     p = version_path(history, v)
+    held, data = staged(p)
+    if held and data is not None:
+        # a version an act staging loom's records has made and not yet written (`writes.staging`)
+        return v, data.decode("utf-8")
     if not p.is_file():
         raise LookupError(f"the record for {key}@{v.step} is missing: {_shown(p)}")
     return v, p.read_text(encoding="utf-8")

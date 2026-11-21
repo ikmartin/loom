@@ -15,6 +15,7 @@ import stat
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -558,6 +559,21 @@ def _put_back(root: Path, rel: str, before: bytes | None, after: bytes | None) -
     return True
 
 
+def _prune(root: Path, history: Path, rels: list[str]) -> None:
+    """Remove the folders left empty under `.loom/` or the history directory once the files an act made in them are taken out again: a history step's folder with nothing in it would read as a step interrupted before its line (`history.steps.refuse_interrupted`). A folder of the person's is never removed."""
+    from loom.paths import LOOM
+
+    tops = [Path(os.path.realpath(d)) for d in (root / LOOM, history)]
+    for rel in rels:
+        d = Path(os.path.realpath(root / rel)).parent
+        while any(d != top and d.is_relative_to(top) for top in tops):
+            try:
+                d.rmdir()
+            except OSError:
+                break
+            d = d.parent
+
+
 def _temps(root: Path, rel: str) -> list[Path]:
     t = _target(root, rel)
     return list(t.parent.glob(f".{t.name}.*{TEMP}")) if t.parent.is_dir() else []
@@ -753,6 +769,8 @@ def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
     for rec in records:
         if not isinstance(rec, dict) or not _log_ok(root, history, rec.get("log")):
             return "a record goes somewhere other than loom's own logs"
+        if "at" in rec and (not isinstance(rec["at"], int) or isinstance(rec["at"], bool) or rec["at"] < 0):
+            return "a record's place in its log is not a line number"
         text = rec.get("line")
         try:
             line = json.loads(text) if isinstance(text, str) else None
@@ -801,9 +819,56 @@ def _append_record(root: Path, log: str, line: str, *, unless_there: bool = Fals
         _append_line(p, line)
 
 
-def _append_records(root: Path, records: list[dict[str, str]], *, unless_there: bool = False) -> None:
+def _append_records(root: Path, records: list[dict[str, Any]], *, unless_there: bool = False) -> None:
+    """Append an act's record lines: the guarded ones first, each log's all at once at the line they were planned for or none (`_append_guarded`), then the rest."""
+    _append_guarded(root, [r for r in records if "at" in r], unless_there=unless_there)
     for rec in records:
-        _append_record(root, rec["log"], rec["line"], unless_there=unless_there)
+        if "at" not in rec:
+            _append_record(root, rec["log"], rec["line"], unless_there=unless_there)
+
+
+def _line_count(p: Path) -> int:
+    """How many lines of the log `p` say something, as `history.ledger.append_entry` numbers them."""
+    return sum(1 for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()) if p.is_file() else 0
+
+
+def _guards(records: list[dict[str, Any]]) -> dict[str, tuple[int, list[str]]]:
+    """An act's guarded record lines by log: the number of lines the log held when they were planned, and the lines in order."""
+    out: dict[str, tuple[int, list[str]]] = {}
+    for rec in records:
+        if "at" in rec:
+            at, lines = out.setdefault(rec["log"], (int(rec["at"]), []))
+            lines.append(rec["line"])
+    return out
+
+
+def _landed(root: Path, log: str, at: int, lines: list[str]) -> int | None:
+    """How many of `lines`, planned to follow the first `at` lines of `log`, are there already: the log holds the first `at` lines and then a beginning of `lines` and nothing more. None when it holds anything else, and the lines can no longer land where they were planned."""
+    p = _log_path(root, log)
+    have = [ln for ln in p.read_text(encoding="utf-8").splitlines() if ln.strip()] if p.is_file() else []
+    if len(have) < at or len(have) > at + len(lines):
+        return None
+    return len(have) - at if have[at:] == lines[: len(have) - at] else None
+
+
+def _guard_holds(root: Path, log: str, at: int, lines: list[str]) -> bool:
+    """Whether `lines` can still land where they were planned in `log` (`_landed`): recovery finishes an act whose guarded lines can, and puts back one whose cannot."""
+    return _landed(root, log, at, lines) is not None
+
+
+def _append_guarded(root: Path, records: list[dict[str, Any]], *, unless_there: bool = False) -> None:
+    """Append guarded record lines (`Act.log`'s `at`): each log's lines all at once under its lock, only while it holds the number of lines they were planned after; WriteRefused (`changed`) when another writer has added one since, before any is written. With `unless_there`, as recovery finishing an act, the lines already there where they were planned are kept and the rest appended."""
+    for log, (at, lines) in _guards(records).items():
+        p = _log_path(root, log)
+        with locked(p):
+            have = _landed(root, log, at, lines) if unless_there else (0 if _line_count(p) == at else None)
+            if have is None:
+                raise WriteRefused(
+                    "changed",
+                    "the history recorded another step while loom was writing this one, so nothing was written; try again",
+                )
+            for line in lines[have:]:
+                _append_line(p, line)
 
 
 # ---- recovery -------------------------------------------------------------------------------------------------------
@@ -828,7 +893,10 @@ def _judge(root: Path, history: Path, entry: dict[str, Any]) -> _Verdict:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
     files: dict[str, list[str | None]] = entry.get("files") or {}
     holds = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
-    if all(after for _, after in holds.values()):
+    guards_hold = all(
+        _guard_holds(root, log, at, lines) for log, (at, lines) in _guards(entry.get("records") or []).items()
+    )
+    if all(after for _, after in holds.values()) and guards_hold:
         return _Verdict("finish", holds=holds)
     texts = {rel: [fetch(history, d) if d else None for d in ab] for rel, ab in files.items()}
     lacking = [rel for rel, ab in files.items() if any(d and x is None for d, x in zip(ab, texts[rel], strict=True))]
@@ -874,6 +942,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             now = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
             said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now, kept=True)}")
             continue
+        _prune(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
         j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
         said.append(f"undid {act_id}")
     return said
@@ -1024,14 +1093,19 @@ class Act:
         self.edits: list[str] = []
         self.undone: list[str] = []
         self.look: dict[str, Any] | None = None
-        self.records: list[dict[str, str]] = []
+        self.records: list[dict[str, Any]] = []
         self.follow: list[Callable[[], None]] = []
+        #: whether loom's own records are staged into this act (`staging`), and a nested act joins it
+        self.staging = False
 
     # what the caller reads
 
     def read(self, rel: str) -> bytes | None:
         """The file's bytes now, under the lock; None for one that is not there. The last read before the file is staged (`replace`) is what the act replaces, and the commit refuses if the file holds anything else by then."""
         rel = contained(self.root, rel)
+        if self.staging and rel in self.after:
+            # an act that stages loom's records reads what it has staged, so a joined act or a record writer builds on it
+            return self.after[rel]
         data = _read(self.root, rel)
         if rel not in self.after:
             self.before[rel] = data
@@ -1086,13 +1160,24 @@ class Act:
         """Name a suggested edit's `<edit>:<generation>` as one whose Keep this act undoes; kept apart from `edits`, so the journal's `wrote` still says only what loom wrote."""
         self.undone.append(gen)
 
-    def log(self, log: Path, line: dict[str, Any] | str) -> None:
-        """A record line written with the act, after its files and before `done`; recovery appends it too when it finishes the act. A dict is written as the edit and annotation logs write theirs; a string is the line exactly. WriteRefused (`outside-quilt`) for a log that is not one of loom's own (`_logs`)."""
+    def log(self, log: Path, line: dict[str, Any] | str, *, at: int | None = None) -> None:
+        """A record line written with the act, after its files and before `done`; recovery appends it too when it finishes the act. A dict is written as the edit and annotation logs write theirs; a string is the line exactly. WriteRefused (`outside-quilt`) for a log that is not one of loom's own (`_logs`).
+
+        With `at`, the line is guarded: it lands only while the log holds `at` lines before the act's first guarded line for it, as a history step's line must, whose number counts the lines before it; when another writer has added a line since, the act is put back whole (`_append_guarded`).
+        """
         text = line if isinstance(line, str) else json.dumps(line, ensure_ascii=False, sort_keys=True)
         name = _log_name(self.root, log)
         if not _log_ok(self.root, self.history, name):
             raise WriteRefused("outside-quilt", f"{log} is not one of loom's own logs")
-        self.records.append({"log": name, "line": text})
+        rec: dict[str, Any] = {"log": name, "line": text}
+        if at is not None:
+            rec["at"] = at
+        self.records.append(rec)
+
+    def lines(self, log: Path) -> list[str]:
+        """The record lines this act holds for `log`, in order."""
+        name = _log_name(self.root, log)
+        return [r["line"] for r in self.records if r["log"] == name]
 
     def then(self, fn: Callable[[], None]) -> None:
         """A step after `done` and still under the lock (a rescan, the look, carrying annotations); recovery never replays it."""
@@ -1132,16 +1217,20 @@ class Act:
             begin["look"] = self.look
         self.journal.append(self.root, begin, full=True)
         done: list[str] = []
+        guarded = [r for r in self.records if "at" in r]
         try:
             for rel, data in changed.items():
                 _install(self.root, rel, data, self.before.get(rel))
                 done.append(rel)
+            # a guarded line refused (another writer moved its log on) puts the whole act back, files with it
+            _append_guarded(self.root, guarded)
         except Exception as exc:
             # each file already written goes back while it holds what loom wrote; one changed since is the person's
             kept = [rel for rel in reversed(done) if not _put_back(self.root, rel, self.before.get(rel), changed[rel])]
             for rel in changed:
                 for tmp in _temps(self.root, rel):
                     tmp.unlink(missing_ok=True)
+            _prune(self.root, self.history, [rel for rel in done if self.before.get(rel) is None and rel not in kept])
             if not kept:
                 why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
                 self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
@@ -1149,7 +1238,7 @@ class Act:
             _save_index(self.root, self.journal)
             raise
         # every file holds its after bytes: the act has happened, and a failure from here on is recovery's to finish
-        _append_records(self.root, self.records)
+        _append_records(self.root, [r for r in self.records if "at" not in r])
         self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
         _save_index(self.root, self.journal)
         self._follow()
@@ -1170,20 +1259,25 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
     history : Path
         The quilt's history directory (`[quilt] history`): the text store is there; the lock and the journal are in `.loom/local/`.
     kind : str
-        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`.
+        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`, `adopt`, `pull`.
     actor : str, optional
         Who asked for it, for the journal.
 
     Yields
     ------
     Act
-        Read, decide and stage through it; an exception out of the block writes nothing.
+        Read, decide and stage through it; an exception out of the block writes nothing. Inside an act that stages loom's records on this thread (`staging`), that act itself, joined.
 
     Raises
     ------
     WriteRefused
-        From the commit: a file changed at the last read before its rename, and the act was undone.
+        From the commit: a file changed at the last read before its rename, or a guarded record line can no longer land where it was planned, and the act was undone.
     """
+    outer = _STAGING.get()
+    if outer is not None and os.path.realpath(outer.root) == os.path.realpath(root):
+        # an act opened inside one that stages loom's records joins it: one transaction, which the outer act commits
+        yield outer
+        return
     with locked(root / WRITES_LOCK):
         j = read_journal(root)
         if j.begun:
@@ -1192,3 +1286,73 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
         a = Act(root, history, kind, actor, j)
         yield a
         a._commit()
+
+
+#: The act on this thread that takes loom's own records (`staging`); None when no act does.
+_STAGING: ContextVar[Act | None] = ContextVar("loom_writes_staging", default=None)
+
+
+@contextmanager
+def staging(a: Act) -> Iterator[Act]:
+    """Make `a` the act that takes loom's own records on this thread until the block ends.
+
+    Inside it the history's step files and ledger lines, the review origins and the sync record are staged into `a` (`stage`, `stage_line`) instead of written; a reader of them sees what is staged (`staged`, `staged_lines`); and an `act` opened inside joins `a` rather than committing apart. So the act writes the person's files and the records that say what happened to them as one transaction, which recovery finishes or puts back whole. Adoption and a pull use it.
+    """
+    a.staging = True
+    token = _STAGING.set(a)
+    try:
+        yield a
+    finally:
+        _STAGING.reset(token)
+
+
+def _staging_rel(path: Path) -> tuple[Act, str] | None:
+    """The act staging on this thread and `path` relative to its quilt; None when no act stages, or `path` is outside its quilt."""
+    a = _STAGING.get()
+    if a is None:
+        return None
+    rel = os.path.relpath(os.path.abspath(path), os.path.abspath(a.root))
+    if rel.startswith(".."):
+        return None
+    return a, Path(rel).as_posix()
+
+
+def stages(path: Path) -> bool:
+    """Whether an act staging on this thread takes `path`, a file in its quilt."""
+    return _staging_rel(path) is not None
+
+
+def stage(path: Path, data: bytes | None) -> bool:
+    """Stage `path`'s new bytes (None removes it) into the act staging on this thread; False, staging nothing, when none is, and the caller writes the file itself."""
+    found = _staging_rel(path)
+    if found is None:
+        return False
+    a, rel = found
+    a.replace(rel, data)
+    return True
+
+
+def staged(path: Path) -> tuple[bool, bytes | None]:
+    """Whether the act staging on this thread has staged `path`, and the bytes it staged (None for a removal)."""
+    found = _staging_rel(path)
+    if found is None or found[1] not in found[0].after:
+        return False, None
+    return True, found[0].after[found[1]]
+
+
+def stage_line(log: Path, line: str) -> bool:
+    """Stage `line` for the log `log`, one of loom's own (`Act.log`), into the act staging on this thread, guarded to land right after the lines the log holds now and those the act already holds for it; False when no act stages."""
+    found = _staging_rel(log)
+    if found is None:
+        return False
+    a = found[0]
+    held = a.lines(log)
+    first = next((r["at"] for r in a.records if r["log"] == _log_name(a.root, log) and "at" in r), None)
+    a.log(log, line, at=first if first is not None else _line_count(log) - len(held))
+    return True
+
+
+def staged_lines(log: Path) -> list[str]:
+    """The lines the act staging on this thread holds for the log `log`, in order; [] when no act stages."""
+    found = _staging_rel(log)
+    return found[0].lines(log) if found is not None else []
