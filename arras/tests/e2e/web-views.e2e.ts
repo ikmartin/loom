@@ -103,3 +103,32 @@ test('where the Web is not served, it says so', async ({ page }) => {
 	await page.goto('/web');
 	await expect(page.getByTestId('web-view')).toHaveText('The Web shows every result and what it rests on once loom serves it.');
 });
+
+test('at the size a reviewer measured, the list draws only the rows in view, reads a group and the next rows as they come into view, and draws a hit with its mathematics', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/web?fixture=round6&web=large');
+	await expect(page.getByTestId('web-list')).toContainText(/5,?1\d\d results/);
+	// nothing is in focus until the person chooses
+	await expect(page.getByTestId('web-none')).toHaveText('Choose a result to see what it uses and what uses it.');
+	expect(await page.getByTestId('web-row').count()).toBeLessThan(120);
+	// a group far down, open and not sent, is read when scrolled to
+	const scroller = page.getByTestId('web-list').locator('.wscroll');
+	await scroller.evaluate((e) => (e.scrollTop = e.scrollHeight / 2));
+	await expect(page.getByTestId('web-row').filter({ hasText: /Lemma \d+\.\d+/ }).first()).toBeVisible();
+	await expect(page.locator('.pending')).toHaveCount(0, { timeout: 10000 });
+	expect(await page.getByTestId('web-row').count()).toBeLessThan(120);
+	// by status, the rest comes in as the end comes into view
+	await page.getByRole('button', { name: 'by status' }).click();
+	await expect.poll(async () => scroller.evaluate((e) => e.scrollHeight)).toBeGreaterThan(200 * 28);
+	for (let i = 0; i < 4; i++) {
+		await scroller.evaluate((e) => (e.scrollTop = e.scrollHeight));
+		await page.waitForTimeout(150);
+	}
+	await expect.poll(async () => scroller.evaluate((e) => e.scrollHeight)).toBeGreaterThan(200 * 28 * 2);
+	// a hit's words drawn as the statement is: no dollar signs, its mathematics typeset
+	await page.getByTestId('web-search').fill('polynomial in');
+	const hit = page.getByTestId('web-hit').first();
+	await expect(hit).toBeVisible();
+	await expect(hit).not.toContainText('$');
+	await expect(hit.locator('.math, mjx-container').first()).toBeAttached();
+});

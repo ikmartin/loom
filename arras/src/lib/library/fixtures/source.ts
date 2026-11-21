@@ -4,7 +4,7 @@ import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
 import { addWork, check, checkRows, digest, fixturePdfUrl, lookUp, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
 import { notesAnswer } from './notes6';
-import { formalMarks, formalPlan, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
+import { formalMarks, formalPlan, growWeb, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
 import { ask, attest, body, close, counts, fragmentOf, list, markStub } from './review6';
 import type { ReviewKind, TaskRow, WebScope } from '../types';
 
@@ -14,10 +14,12 @@ type Body = Record<string, unknown>;
 const CITED: Record<string, string> = { arden24: '[1]', okafor: '[2]', arden25: '[3]', vance: '[4]' };
 
 /** A source over a fresh copy of round six's data; `onChange` hears each write's new generation. */
-export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'unasked' } = {}): Source & { data: Fixture } {
+export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { network?: 'asked' | 'unasked'; web?: 'large' } = {}): Source & { data: Fixture } {
 	const f = round6();
 	if (o.network) f.network = o.network;
-	const ok = <T>(value: T): Answer<T & Gen> => ({ ok: true, value: { gen: f.gen, ...value } as T & Gen });
+	if (o.web === 'large') growWeb();
+	// a copy, as an answer over the wire is: the fixture changes its own objects in place, and a view keeps an answer whole
+	const ok = <T>(value: T): Answer<T & Gen> => ({ ok: true, value: structuredClone({ gen: f.gen, ...value }) as T & Gen });
 	const no = (code: string, message = code) => ({ ok: false as const, error: { code, message } });
 	const changed = () => onChange(f.gen);
 

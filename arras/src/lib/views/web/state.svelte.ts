@@ -48,15 +48,10 @@ class WebState {
 		void api.serves('web-list').then((yes) => (this.served = yes));
 	}
 
-	/** The focus stands in for none chosen, and leaves the trail at the first result followed. */
-	#standIn = false;
-
-	/** Puts `row` in focus, at the end of the trail; `standIn` for the first result of the list, shown until the person follows one. */
-	follow(row: Row, standIn = false): void {
+	/** Puts `row` in focus, at the end of the trail. */
+	follow(row: Row): void {
 		if (this.at === row.result) return;
-		const kept = this.#standIn ? [] : this.trail.filter((t) => t.result !== row.result);
-		this.trail = [...kept, { result: row.result, name: row.name, ...(row.title ? { title: row.title } : {}) }].slice(-TRAIL);
-		this.#standIn = standIn;
+		this.trail = [...this.trail.filter((t) => t.result !== row.result), { result: row.result, name: row.name, ...(row.title ? { title: row.title } : {}) }].slice(-TRAIL);
 		this.more = false;
 	}
 

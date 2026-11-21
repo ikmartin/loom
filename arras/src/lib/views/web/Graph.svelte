@@ -5,6 +5,7 @@
 	import { leanMark, paperMark } from '$lib/marks/marks';
 	import { web as words } from '$lib/words/web';
 	import { wb } from './state.svelte';
+	import { capped } from './window';
 
 	let { graph }: { graph: WebGraph } = $props();
 	let width = $state(0);
@@ -14,11 +15,12 @@
 	const layout = $derived.by(() => {
 		const W = Math.max(width, 600);
 		const cw = (W - 60) / 4;
+		// five of a column of more than six, whatever the read sent, the rest said
 		const cols: { rows: Row[]; more: number; x: number; w: number }[] = [
-			{ rows: graph.columns.back, more: graph.more.back, x: 0, w: cw - 10 },
-			{ rows: graph.columns.uses, more: graph.more.uses, x: cw + 20, w: cw },
+			{ ...capped(graph.columns.back, graph.more.back), x: 0, w: cw - 10 },
+			{ ...capped(graph.columns.uses, graph.more.uses), x: cw + 20, w: cw },
 			{ rows: [graph.focus], more: 0, x: 2 * cw + 40, w: cw + 10 },
-			{ rows: graph.columns.used_by, more: graph.more.used_by, x: 3 * cw + 70, w: cw - 20 }
+			{ ...capped(graph.columns.used_by, graph.more.used_by), x: 3 * cw + 70, w: cw - 20 }
 		];
 		const most = Math.max(...cols.map((c) => c.rows.length + (c.more ? 1 : 0)));
 		const H = Math.max(380, TOP + most * 54);

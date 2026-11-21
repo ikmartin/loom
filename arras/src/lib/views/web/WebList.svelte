@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The Web's list (7a, 7a draft, 7a search): a search, how many results, and by document or by status. By document, the draft's results, then the library's it rests on a work at a time; under everything, the drafts and the works folded. A folded group is read when it opens (`web-group`). A search shows its hits, each with the words around the match.
+	// The Web's list (7a, 7a draft, 7a search): a search, how many results, and by document or by status. By document, the draft's results, then the library's it rests on a work at a time; under everything, the drafts and the works folded. Drawn in a window (`window.ts`): only the lines in view are drawn, a group whose rows were not sent is read (`web-group`) when it comes into view open, and by status the next two hundred are read as the list's end comes into view. A search shows its hits, each with the words around the match drawn as the statement is.
 	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
@@ -8,17 +8,17 @@
 	import { web as words } from '$lib/words/web';
 	import { wb } from './state.svelte';
 	import WebRow from './WebRow.svelte';
+	import Snippet from './Snippet.svelte';
+	import { inView, lay } from './window';
 	import { formalize } from '$lib/formalize/state.svelte';
 
 	let found = $state<WebSearch | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
-	let offset = $state(0);
 
 	$effect(() => {
 		const w = wb.where;
 		const sort = wb.sort;
 		void gen.gen;
-		offset = 0;
 		void wb.list.load(`${w.scope}:${w.doc}:${sort}`, (s) => api.webList(w, sort, [], 0, s));
 	});
 	$effect(() => {
@@ -36,21 +36,43 @@
 	const list = $derived(wb.list.value);
 	/** A group starts open under what a draft rests on, folded elsewhere; the person's turn flips it. */
 	const isOpen = (sec: WebSection, g: WebGroup) => (sec.head === 'uses') !== wb.turned.has(g.group);
+	const rowsOf = (g: WebGroup): Row[] | null => g.rows ?? wb.groups.get(g.group) ?? null;
 
-	async function turn(sec: WebSection, g: WebGroup): Promise<void> {
+	// the window: the list's scroll and height, and the lines in view
+	let scroller = $state<HTMLElement | null>(null);
+	let scrolled = $state(0);
+	let tall = $state(600);
+	const laid = $derived(list ? lay(list, isOpen, rowsOf) : { lines: [], height: 0 });
+	const shown = $derived(inView(laid.lines, scrolled, scrolled + tall));
+
+	/** Groups being read, so one in view is asked for once. */
+	const reading = new Set<string>();
+	$effect(() => {
+		for (const l of shown) if (l.kind === 'pending' && !reading.has(l.group)) void readGroup(l.group);
+		// by status, the next two hundred as the list's end comes into view
+		if (list?.rows && list.more && shown.some((l) => l.kind === 'note')) void more();
+	});
+
+	async function readGroup(group: string): Promise<void> {
+		reading.add(group);
+		const a = await api.webGroup(wb.where, group);
+		if (a.ok) wb.groups.set(group, a.value.rows);
+		reading.delete(group);
+	}
+
+	function turn(g: WebGroup): void {
 		if (wb.turned.has(g.group)) wb.turned.delete(g.group);
 		else wb.turned.add(g.group);
-		if (isOpen(sec, g) && !g.rows && !wb.groups.has(g.group)) {
-			const a = await api.webGroup(wb.where, g.group);
-			if (a.ok) wb.groups.set(g.group, a.value.rows);
-		}
 	}
-	const rowsOf = (g: WebGroup): Row[] => g.rows ?? wb.groups.get(g.group) ?? [];
 
+	let fetching = false;
 	async function more(): Promise<void> {
-		offset += 200;
-		const a = await api.webList(wb.where, 'status', [], offset);
-		if (a.ok && list?.rows) wb.list.value = { ...list, rows: [...list.rows, ...(a.value.rows ?? [])], more: a.value.more };
+		if (fetching || !list?.rows) return;
+		fetching = true;
+		const at = list.rows.length;
+		const a = await api.webList(wb.where, 'status', [], at);
+		if (a.ok && wb.list.value?.rows) wb.list.value = { ...wb.list.value, rows: [...wb.list.value.rows, ...(a.value.rows ?? [])], more: a.value.more };
+		fetching = false;
 	}
 </script>
 
@@ -63,32 +85,36 @@
 			<button type="button" class:on={wb.sort === 'status'} aria-pressed={wb.sort === 'status'} onclick={() => (wb.sort = 'status')}>{words.list.byStatus}</button>
 		</span>
 	</div>
-	<div class="wscroll">
+	<div class="wscroll" bind:this={scroller} bind:clientHeight={tall} onscroll={() => (scrolled = scroller?.scrollTop ?? 0)}>
 		{#if found}
 			{#each found.hits as h (h.row.result)}
 				<WebRow row={h.row} choosing />
-				{#if h.snippet}<p class="hit" data-testid="web-hit">{h.snippet.before}<mark>{h.snippet.match}</mark>{h.snippet.after}</p>{/if}
+				{#if h.snippet}<Snippet snippet={h.snippet} />{/if}
 			{:else}<p class="outscope">{words.list.nothing}</p>{/each}
 		{:else if wb.list.error}
 			<p class="outscope">{wb.list.error.code === 'not-served' ? words.list.notServed : words.list.failed(said(wb.list.error))}</p>
 		{:else if !list}
 			<p class="outscope">{words.list.loading}</p>
-		{:else if list.rows}
-			{#each list.rows as r (r.result)}<WebRow row={r} choosing />{/each}
-			{#if list.more}<button type="button" class="linkish more" onclick={more}>{words.list.more(list.more)}</button>{/if}
 		{:else}
-			{#each list.sections ?? [] as sec, i (i)}
-				<p class="whead">{sec.head === 'draft' ? words.file(sec.doc ?? '') : sec.head === 'uses' ? words.list.uses(sec.doc ?? '') : sec.head === 'drafts' ? words.list.drafts : words.list.library}</p>
-				{#each sec.rows ?? [] as r (r.result)}<WebRow row={r} source={false} choosing />{/each}
-				{#each sec.groups ?? [] as g (g.group)}
-					{@const open = isOpen(sec, g)}
-					<button type="button" class="wdoc" aria-expanded={open} data-testid="web-group" onclick={() => turn(sec, g)}>
-						<Icon name={open ? 'caret' : 'right'} size={15} /><span>{g.doc ? words.file(g.doc) : g.short}</span>{#if g.title}<span class="wt">{g.title}</span>{/if}<span class="n">{g.n}</span>
-					</button>
-					{#if open}{#each rowsOf(g) as r (r.result)}<WebRow row={r} source={false} indent choosing />{/each}{/if}
+			<div class="window" style:height="{laid.height}px" data-testid="web-window">
+				{#each shown as l (l.kind === 'row' ? `r:${l.row.result}:${l.top}` : `${l.kind}:${l.top}`)}
+					<div class="line" style:top="{l.top}px">
+						{#if l.kind === 'head'}
+							<p class="whead">{l.sec.head === 'draft' ? words.file(l.sec.doc ?? '') : l.sec.head === 'uses' ? words.list.uses(l.sec.doc ?? '') : l.sec.head === 'drafts' ? words.list.drafts : words.list.library}</p>
+						{:else if l.kind === 'group'}
+							<button type="button" class="wdoc" aria-expanded={l.open} data-testid="web-group" onclick={() => turn(l.group)}>
+								<Icon name={l.open ? 'caret' : 'right'} size={15} /><span>{l.group.doc ? words.file(l.group.doc) : l.group.short}</span>{#if l.group.title}<span class="wt">{l.group.title}</span>{/if}<span class="n">{l.group.n}</span>
+							</button>
+						{:else if l.kind === 'row'}
+							<WebRow row={l.row} source={l.source} indent={l.indent} choosing />
+						{:else if l.kind === 'pending'}
+							<span class="pending"></span>
+						{:else}
+							<p class="outscope">{list.rows ? words.list.more(list.more ?? 0) : words.list.undigested(list.undigested ?? 0)}</p>
+						{/if}
+					</div>
 				{/each}
-			{/each}
-			{#if list.undigested}<p class="outscope">{words.list.undigested(list.undigested)}</p>{/if}
+			</div>
 		{/if}
 	</div>
 	{#if wb.chosen.size}

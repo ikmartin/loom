@@ -37,8 +37,8 @@ export const web = {
 		undigested: (n: number) => (n === 1 ? 'and 1 work with no results digested' : `and ${n} works with no results digested`),
 		/** Where the search finds nothing. */
 		nothing: 'nothing matches',
-		/** At the foot of the list by status, where more is there to read. */
-		more: (n: number) => `show ${n} more`,
+		/** At the foot of the list by status, where more is read as it comes into view. */
+		more: (n: number) => `${n} more`,
 		/** While the first answer has not come. */
 		loading: 'Reading the web…',
 		/** Where the Web's reads failed, with the publisher's reason. */
@@ -55,6 +55,8 @@ export const web = {
 		clear: 'clear'
 	},
 	focus: {
+		/** In the card's place while no result is chosen. */
+		choose: 'Choose a result to see what it uses and what uses it.',
 		/** The trail of results followed, its accessible name. */
 		trail: 'Results followed',
 		/** In place of a statement loom knows only by its number. */

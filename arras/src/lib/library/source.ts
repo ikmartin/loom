@@ -17,15 +17,16 @@ function wanted(): boolean {
 	}
 }
 
-/** Whether this visit's fixture plays a quilt that has not said whether loom may use the network (`?network=unasked`, kept for the tab). */
-function unasked(): boolean {
+/** Whether this visit's fixture was asked for with `?<name>=<value>`, kept for the tab: `?network=unasked`, a quilt that has not said whether loom may use the network; `?web=large`, the Web at the size a reviewer measured. */
+function kept(name: string, value: string): boolean {
 	try {
-		if (new URL(window.location.href).searchParams.get('network') === 'unasked') sessionStorage.setItem(KEY + '.network', 'unasked');
-		return sessionStorage.getItem(KEY + '.network') === 'unasked';
+		if (new URL(window.location.href).searchParams.get(name) === value) sessionStorage.setItem(`${KEY}.${name}`, value);
+		return sessionStorage.getItem(`${KEY}.${name}`) === value;
 	} catch {
 		return false;
 	}
 }
+const unasked = () => kept('network', 'unasked');
 
 let chosen: Promise<void> | null = null;
 let fixture = false;
@@ -39,7 +40,7 @@ export function chooseSource(): Promise<void> {
 		if (!wanted()) return;
 		fixture = true;
 		const { fixtureSource } = await import('./fixtures/source');
-		const made = fixtureSource((gen) => library.heard(gen), { network: unasked() ? 'unasked' : 'asked' });
+		const made = fixtureSource((gen) => library.heard(gen), { network: unasked() ? 'unasked' : 'asked', ...(kept('web', 'large') ? { web: 'large' as const } : {}) });
 		useSource(made);
 		library.heard(made.data.gen);
 	})();

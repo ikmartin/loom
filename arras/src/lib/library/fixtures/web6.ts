@@ -56,6 +56,24 @@ const W: Record<string, N> = {
 const SHORT: Record<string, [string, string]> = { arden24: ['Arden 2024', 'Cycle spaces of finite quivers'], arden25: ['Arden 2025', 'Cycle spaces of finite quivers'], okafor: ['Okafor 2022', 'Median orders on weighting lattices'], smith: ['Smith 2024', 'Widgets and their bounds'], jones: ['Jones 2019', 'Covering estimates'] };
 
 const own = (id: string) => W[id].src.endsWith('.tex');
+/** A work's reference: the Library's for round six's works, its own key for a work of the large web. */
+const refOf = (refs: Record<string, string>, w: string) => refs[w] ?? `${w}-ref`;
+
+/** Grows the web to the size a reviewer measured: sixty works of eighty results each that Theorem 3.4 rests on, 5,140 results in a draft and what it rests on. Once, for `?web=large`. */
+export function growWeb(): void {
+	if (SHORT.syn0) return;
+	for (let g = 0; g < 60; g++) {
+		SHORT[`syn${g}`] = [`Author ${g} ${2000 + (g % 25)}`, `A paper of the large web, ${g + 1}`];
+		for (let i = 1; i <= 80; i++) {
+			const id = `syn${g}-${i}`;
+			W[id] = { name: `Lemma ${Math.ceil(i / 10)}.${i}`, src: `syn${g}`, st: i % 5 ? 'checked' : 'unchecked', ex: `A result of the large web, ${g}.${i}: a weighting of height at most $h$ is a polynomial in $h$.` };
+			W['thm:count'].p!.push(id);
+		}
+	}
+	for (let i = 0; i < 325; i++) {
+		W[`own:${i}`] = { name: `Lemma 9.${i + 1}`, src: MAIN, st: 'unformal', ex: 'A lemma of the large draft.' };
+	}
+}
 const uses = (id: string) => [...(W[id].s ?? []), ...(W[id].p ?? [])];
 const usedBy = (id: string) => Object.keys(W).filter((k) => uses(k).includes(id));
 
@@ -71,7 +89,7 @@ function status(n: N): { paper: Paper | null; lean: LeanStatus | null } {
 /** A result as a list sends it. */
 export function rowOf(id: string, refs: Record<string, string>): Row {
 	const n = W[id];
-	const source = own(id) ? { doc: n.src } : { ref: refs[n.src], short: SHORT[n.src][0] };
+	const source = own(id) ? { doc: n.src } : { ref: refOf(refs, n.src), short: SHORT[n.src][0] };
 	return { result: id, name: n.name, ...(n.title ? { title: n.title } : {}), taxon: n.name.split(' ')[0].toLowerCase(), source, ...status(n), ...(own(id) && n.st === 'unformal' ? { choose: true } : {}) };
 }
 
@@ -89,11 +107,20 @@ function closure(ids: string[]): Set<string> {
 	return seen;
 }
 
+/** Each draft's closure, computed once a read, since the web does not change under a read. */
+const closures = new Map<string, Set<string>>();
+
 export function inScope(id: string, scope: WebScope, doc = MAIN): boolean {
 	if (scope === 'all') return true;
 	if (scope === 'library') return !own(id);
 	if (scope === 'draft') return W[id].src === doc;
-	return closure(Object.keys(W).filter((k) => W[k].src === doc)).has(id);
+	let c = closures.get(doc);
+	if (!c) {
+		c = closure(Object.keys(W).filter((k) => W[k].src === doc));
+		closures.set(doc, c);
+		queueMicrotask(() => closures.delete(doc));
+	}
+	return c.has(id);
 }
 
 /** The order of the list by status: not read, not compared, Lean accepted and not attested, not formalized, matches the paper, assumed, formalized. */
@@ -112,10 +139,11 @@ export function webList(refs: Record<string, string>, a: { scope: WebScope; doc?
 		return { count: all.length, rows: all.slice(at, at + 200).map(row), more: Math.max(0, all.length - at - 200) };
 	}
 	const open = new Set(a.open ?? []);
+	// open groups under what a draft rests on carry their rows for the first three only; the rest are read as they come into view
 	const works = (list: string[], openAll: boolean) =>
-		[...new Set(list.filter((k) => !own(k)).map((k) => W[k].src))].sort().map((w) => {
+		[...new Set(list.filter((k) => !own(k)).map((k) => W[k].src))].sort().map((w, i) => {
 			const ks = list.filter((k) => W[k].src === w);
-			return { group: refs[w], short: SHORT[w][0], title: SHORT[w][1], n: ks.length, ...(openAll || open.has(refs[w]) ? { rows: ks.map(row) } : {}) };
+			return { group: refOf(refs, w), short: SHORT[w][0], title: SHORT[w][1], n: ks.length, ...((openAll && i < 3) || open.has(refOf(refs, w)) ? { rows: ks.map(row) } : {}) };
 		});
 	const sections: WebSection[] = [];
 	if (a.scope === 'draft' || a.scope === 'deps') sections.push({ head: 'draft', doc, rows: ids.filter((k) => W[k].src === doc).map(row) });
@@ -130,7 +158,7 @@ export function webList(refs: Record<string, string>, a: { scope: WebScope; doc?
 
 /** `web-group`: a group's rows, by the document or the work's reference. */
 export function webGroup(refs: Record<string, string>, a: { scope: WebScope; doc?: string; group: string }): Row[] {
-	const work = Object.keys(refs).find((w) => refs[w] === a.group);
+	const work = Object.keys(SHORT).find((w) => refOf(refs, w) === a.group);
 	return Object.keys(W)
 		.filter((k) => inScope(k, a.scope, a.doc) && (W[k].src === a.group || W[k].src === work))
 		.sort(byNum)

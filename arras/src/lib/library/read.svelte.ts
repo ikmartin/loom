@@ -4,7 +4,8 @@ import type { Answer, ApiError } from './api';
 import type { Gen } from './types';
 
 export class Read<T extends Gen> {
-	value = $state<T | null>(null);
+	// raw: an answer is replaced whole, never changed in place, and a list of thousands is not made reactive row by row
+	value = $state.raw<T | null>(null);
 	error = $state<ApiError | null>(null);
 	busy = $state(false);
 	#key: string | null = null;

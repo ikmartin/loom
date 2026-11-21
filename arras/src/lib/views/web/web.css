@@ -354,3 +354,43 @@
 	font-size: 11px;
 	color: var(--ink-faint);
 }
+.wv .window {
+	position: relative;
+}
+.wv .window .line {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+.wv .window .wl,
+.wv .window .wdoc {
+	height: 28px;
+	min-height: 0;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.wv .window .wdoc {
+	height: 30px;
+}
+.wv .window .whead {
+	margin: 0;
+	padding: 12px 16px 4px;
+	height: 32px;
+	box-sizing: border-box;
+}
+.wv .window .outscope {
+	margin: 0;
+	padding: 6px 16px;
+}
+.wv .pending {
+	display: block;
+	height: 10px;
+	margin: 9px 16px 9px 52px;
+	border-radius: 4px;
+	background: var(--ann-neutral-wash);
+}
+.wv .none {
+	margin: 40px 0 0;
+	color: var(--ink-faint);
+	text-align: center;
+}
