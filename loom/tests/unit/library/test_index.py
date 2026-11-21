@@ -424,11 +424,13 @@ def test_a_work_s_author_written_in_tex_is_found_as_written_and_without_accents(
 
 
 def test_named_letters_and_accents_written_in_tex_are_read() -> None:
-    from loom.library.index import _accents
+    from loom.library.index import _detex
 
-    assert (
-        _accents('Erd\\H{o}s and {\\o}ystein and G{\\"o}del and Kova{\\v c} and \\L{}ojasiewicz')
-        == "Erdős and øystein and Gödel and Kovač and Łojasiewicz"
+    written = "Erd\\H{o}s and {\\o}ystein and G{\\\"o}del and Kova{\\v c} and \\L{}ojasiewicz and {K}\\'{\\i}t"
+    assert _detex(written)[0] == "Erdős and øystein and Gödel and Kovač and Łojasiewicz and Kít"
+    assert _detex("\\textbf{word}")[0] == "\\textbf{word}", "a command keeps its group"
+    assert _detex("x^{} {} \\{a\\} \\v")[0] == "x^  \\{a\\} \\v", (
+        "an empty group goes; an escaped brace and a lone accent stay"
     )
 
 
@@ -511,3 +513,62 @@ def test_a_word_is_found_as_its_letters_are_folded_in_full(root: Path, written: 
         hits = index.search(typed)
         assert [h.row.id for h in hits] == ["tq-0P01"]
         assert hits[0].snippet is not None and hits[0].snippet.match == written
+
+
+#: One name written each way a quilt's files write it: composed, decomposed, and in TeX three ways.
+KOVAC = ["Kovač", "Kovač", "Kova\\v{c}", "Kova{\\v{c}}", "{K}ova{\\v c}"]
+
+
+@pytest.mark.parametrize("written", KOVAC)
+@pytest.mark.parametrize("typed", ["kovac", "Kovač", "KOVAČ"])
+def test_a_name_is_found_however_its_accent_is_written_and_shown_as_written(
+    root: Path, written: str, typed: str
+) -> None:
+    """In a work's author, a statement's title and its words alike, matched without case or accents; what is shown keeps both as written."""
+    put(
+        root,
+        Node(
+            id="tq-0R00-ref",
+            taxon="reference",
+            body=f"@article{{Kov20,\n  author = {{{written}, Ana}},\n  title = {{Sheaves}},\n  year = {{2020}},\n}}\n",
+        ),
+    )
+    put(root, Node(id="tq-0R01", taxon="lemma", number="1.1", source="tq-0R00-ref", body="A sheaf.\n"))
+    put(
+        root,
+        Node(
+            id="tq-0R02",
+            taxon="theorem",
+            number="1.2",
+            title=f"The {written} bound",
+            source="tq-00A1-ref",
+            body="A bound.\n",
+        ),
+    )
+    put(
+        root,
+        Node(
+            id="tq-0R03", taxon="remark", number="1.3", source="tq-00A1-ref", body=f"As {written} showed, it holds.\n"
+        ),
+    )
+    with NodeIndex.open(root) as index:
+        hits = {h.row.id: h for h in index.search(typed)}
+        assert set(hits) == {"tq-0R01", "tq-0R02", "tq-0R03"}
+        assert hits["tq-0R01"].where == "work"
+        assert hits["tq-0R02"].where == "name" and hits["tq-0R02"].row.title == f"The {written} bound"
+        said = hits["tq-0R03"].snippet
+        assert hits["tq-0R03"].where == "text" and said is not None
+        assert said.match == written, "the word as the file writes it"
+
+
+def test_muller_finds_mueller_written_either_way(root: Path) -> None:
+    for i, name in enumerate(["Müller", 'M\\"uller', "Müller", 'M{\\"u}ller']):
+        put(root, Node(id=f"tq-0S{i:02d}", taxon="remark", number=f"2.{i}", source="tq-00A1-ref", body=f"By {name}.\n"))
+    with NodeIndex.open(root) as index:
+        assert sorted(found(index, "Muller")) == ["tq-0S00", "tq-0S01", "tq-0S02", "tq-0S03"]
+        assert {h.snippet.match for h in index.search("muller") if h.snippet} == {
+            "Müller",
+            'M\\"uller',
+            "Müller",
+            'M{\\"u}ller',
+        }

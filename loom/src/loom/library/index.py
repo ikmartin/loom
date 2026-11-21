@@ -28,7 +28,7 @@ from loom.paths import LIBRARY_NODES, NODE_INDEX, TAG_LOG
 from loom.scan.bib import parse_bib
 
 #: The index's own number: an index of another is made again. Raised whenever what the index holds or how it is read changes.
-VERSION = 3
+VERSION = 4
 #: The longest formula a snippet's match is whole; inside a longer one the match is the line of it that holds the word, and inside a longer line, as much of the line around the word as fits.
 LONG = 160
 #: Nanoseconds before the last update within which a file is read again though its size and time agree, since a change in the same tick leaves them as they were.
@@ -136,9 +136,9 @@ class Refreshed:
 
 
 def words(body: str) -> str:
-    """The words of a body as the index holds them, made plain (`plain`): comments, the arguments of `\\ref`, `\\cite` and `\\label`, environments' names and `QUIET`'s commands left out, every other command's name a word."""
+    """The words of a body as the index holds them, TeX's accents read (`_detex`) and made plain (`plain`): comments, the arguments of `\\ref`, `\\cite` and `\\label`, environments' names and `QUIET`'s commands left out, every other command's name a word."""
     text = _POINTED.sub(" ", blank_comments(body))
-    text = _ENVIRONMENT.sub(" ", text)
+    text = _detex(_ENVIRONMENT.sub(" ", text))[0]
     return plain(_COMMAND.sub(lambda m: " " if m.group(1) in QUIET else f" {m.group(1)} ", text))
 
 
@@ -161,9 +161,7 @@ def _work(entry_text: str) -> tuple[str | None, str]:
         return None, ""
     fields = next(iter(parse_bib(entry_text).values()), None)
     got = fields.fields if fields else {}
-    return entry.key, " ".join(
-        [plain(entry.key), *(words(_accents(got.get(k, ""))) for k in ("author", "title", "year"))]
-    )
+    return entry.key, " ".join([plain(entry.key), *(words(got.get(k, "")) for k in ("author", "title", "year"))])
 
 
 #: TeX's accent commands, each with the combining character it puts on its letter, so `M\"uller` is indexed as "Müller", which "Muller" finds too.
@@ -186,20 +184,66 @@ _LETTERS = {
     "i": "ı",
     "j": "ȷ",
 }
-_ACCENT = re.compile(r"\\([`'^\"~=.]|[uvHcdbkr](?![A-Za-z]))\s*(?:\{\s*(\\?[A-Za-z])\s*\}|(\\?[A-Za-z]))")
-_LETTER = re.compile(r"\\(ss|ae|AE|oe|OE|aa|AA|[oOlLij])(?![A-Za-z])")
+_ACCENT = r"(?:[`'^\"~=.]|[uvHcdbkr](?![A-Za-z]))"
+_NAMED = r"(?:ss|ae|AE|oe|OE|aa|AA|[oOlLij])(?![A-Za-z])"
+#: What `_detex` reads, in order: an accent with braces around it (`{\"u}`) or without (`\"u`, `\"{u}`, `\v c`), a named letter with braces or without (`{\o}`, `\o`, `\L{}`), any other command, which keeps the group after it, and a group of plain text, whose braces go (`{K}ova`).
+_TEXED = re.compile(
+    rf"\{{\s*\\(?P<a1>{_ACCENT})\s*(?:\{{\s*(?P<b1>\\?[A-Za-z])\s*\}}|(?P<c1>\\?[A-Za-z]))\s*\}}"
+    rf"|\\(?P<a2>{_ACCENT})\s*(?:\{{\s*(?P<b2>\\?[A-Za-z])\s*\}}|(?P<c2>\\?[A-Za-z]))"
+    rf"|\{{\s*\\(?P<n1>{_NAMED})\s*\}}"
+    rf"|\\(?P<n2>{_NAMED})(?:\{{\}})?"
+    r"|(?P<cmd>\\[A-Za-z@]+)"
+    r"|(?<!\\)\{(?P<g>[^{}\\]*)\}"
+)
 
 
-def _accents(text: str) -> str:
-    """`text` with TeX's accents and named letters made characters, braces around them dropped."""
+def _detex(text: str) -> tuple[str, list[int], list[int]]:
+    """`text` as search reads it, TeX's accents and named letters made the characters they print (`M\\"uller` is Müller, `{\\o}` is ø) and the braces of a plain group dropped (`{K}ova` is Kova); and for each character, where in `text` it starts and ends.
 
-    def accent(m: re.Match[str]) -> str:
-        letter = m.group(2) or m.group(3) or ""
-        letter = _LETTERS.get(letter[1:], letter[1:]) if letter.startswith("\\") else letter
-        return unicodedata.normalize("NFC", letter + _ACCENTS[m.group(1)])
+    A group right after a command keeps its braces, so `\\textbf{word}` does not run into one word. Used by `words` and `snippet` alike, so a snippet's match is the text as written.
+    """
+    out: list[str] = []
+    starts: list[int] = []
+    ends: list[int] = []
 
-    text = _ACCENT.sub(accent, text)
-    return re.sub(r"\{([^{}\\]*)\}", r"\1", _LETTER.sub(lambda m: _LETTERS[m.group(1)], text))
+    def keep(lo: int, hi: int) -> None:
+        out.extend(text[lo:hi])
+        starts.extend(range(lo, hi))
+        ends.extend(range(lo + 1, hi + 1))
+
+    pos = 0
+    command = False
+    for m in _TEXED.finditer(text):
+        keep(pos, m.start())
+        after = command and not text[pos : m.start()].strip()
+        command = m.group("cmd") is not None
+        if command or (m.group("g") is not None and after):
+            keep(m.start(), m.end())
+        elif m.group("g") is not None:
+            # the group's letters stand for the whole group, braces and all, so a match on them shows them
+            if m.group("g"):
+                keep(m.start() + 1, m.end() - 1)
+                starts[-len(m.group("g"))] = m.start()
+                ends[-1] = m.end()
+        else:
+            made = _made(m)
+            out.extend(made)
+            starts.extend([m.start()] * len(made))
+            ends.extend([m.end()] * len(made))
+        pos = m.end()
+    keep(pos, len(text))
+    return "".join(out), starts, ends
+
+
+def _made(m: re.Match[str]) -> str:
+    """What one accent or named letter `_TEXED` matched prints; under an accent `\\i` and `\\j` are the letters i and j."""
+    name = m.group("n1") or m.group("n2")
+    if name:
+        return {"i": "i", "j": "j"}.get(name, _LETTERS[name])
+    letter = m.group("b1") or m.group("c1") or m.group("b2") or m.group("c2") or ""
+    if letter.startswith("\\"):
+        letter = {"i": "i", "j": "j"}.get(letter[1:], _LETTERS.get(letter[1:], letter[1:]))
+    return unicodedata.normalize("NFC", letter + _ACCENTS[m.group("a1") or m.group("a2")])
 
 
 class NodeIndex:
@@ -739,7 +783,7 @@ class NodeIndex:
             Each with where it matched and, for a match in a statement's or a proof's text, the words around it (`snippet`); matches on the name first, then the best; with no text, in their works' order.
         """
         numbers = [w for w in text.split() if _NUMBER.fullmatch(w)]
-        terms = _TOKEN.findall(plain(" ".join(w for w in text.split() if w not in numbers)))
+        terms = _TOKEN.findall(plain(_detex(" ".join(w for w in text.split() if w not in numbers))[0]))
         where: list[str] = ["n.kind IN ('statement', 'proof')" if proofs else "n.kind = 'statement'"]
         args: list[Any] = []
         if work:
@@ -850,18 +894,21 @@ def snippet(body: str, terms: list[str], before: int = 60, after: int = 60) -> S
     A match is the whole word it starts, and inside a formula the whole formula, or in one longer than `LONG` the line of it that holds the word (cut to `LONG` around the word when longer still), with "…" on both sides and no words around it. The words around a match run about `before` and `after` characters and are cut at a space outside mathematics, whitespace made single spaces.
     """
     text = blank_comments(body)
-    folded, owner = _folded(_searchable(text))
+    read, starts, ends = _detex(_searchable(text))
+    folded, owner = _folded(read)
     best: tuple[int, int] | None = None
     for i, term in enumerate(terms):
-        key, _ = _folded(term)
-        end = "" if i == len(terms) - 1 else r"(?![^\W_])"
-        m = re.search(r"(?<![^\W_])" + re.escape(key) + end, folded)
-        if m and (best is None or owner[m.start()] < best[0]):
-            best = (owner[m.start()], owner[m.end() - 1] + 1)
+        key, _ = _folded(_detex(term)[0])
+        # the last term may start a longer word, which the match then runs to the end of
+        rest = r"[^\W_]*" if i == len(terms) - 1 else r"(?![^\W_])"
+        m = re.search(r"(?<![^\W_])" + re.escape(key) + rest, folded)
+        if m and (best is None or starts[owner[m.start()]] < best[0]):
+            best = (starts[owner[m.start()]], ends[owner[m.end() - 1]])
     if best is None:
         return None
     start, stop = best
-    while stop < len(text) and text[stop].isalnum():
+    # the word as written runs on over the marks a decomposed accent puts after its letter
+    while stop < len(text) and (text[stop].isalnum() or unicodedata.combining(text[stop])):
         stop += 1
     maths = _maths(text)
     for lo, hi in maths:
