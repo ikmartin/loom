@@ -88,18 +88,29 @@ class LibraryWeb:
         self.root = root
         self._read: dict[str, tuple[str, Node] | None] = {}
 
+    @cached_property
+    def _names(self) -> frozenset[str]:
+        """The names of the files in the nodes folder, listed once for this web's life: a file is read only where its name is exactly there, so an id in another case on a file system blind to case reads as absent."""
+        import os
+
+        from loom.library.store import folder
+
+        try:
+            return frozenset(os.listdir(folder(self.root)))
+        except OSError:
+            return frozenset()
+
     def file(self, name: str) -> tuple[str, Node] | None:
         """A statement's or a proof's file, by its id: its hash and the node it holds; None for any other node, one absent, or one that does not read."""
         from loom.library.node import NodeUnreadable, node_hash, read_node
-        from loom.library.store import exists, folder
+        from loom.library.store import folder
 
         if name not in self._read:
             found = None
-            if is_node(name, "statement", "proof"):
+            if is_node(name, "statement", "proof") and f"{name}.node" in self._names:
                 try:
                     data = (folder(self.root) / f"{name}.node").read_bytes()
-                    if exists(self.root, name):
-                        found = (node_hash(data), read_node(data, f"{name}.node"))
+                    found = (node_hash(data), read_node(data, f"{name}.node"))
                 except (OSError, NodeUnreadable):
                     found = None
             self._read[name] = found

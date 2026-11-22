@@ -51,7 +51,8 @@ def test_a_node_is_named_by_the_hash_of_its_whole_file_and_only_statements_and_p
     lemma = web.subject(Here("node", "tq-00K3"))
     assert lemma == Subject("node", "tq-00K3", node_hash(_file(root, "tq-00K3").read_bytes()))
     assert web.subject(Here("node", "tq-00K3-proof00")) is not None
-    for other in ("tq-00A1-ref", "tq-00A1-macros", "tq-9999", "not an id"):
+    # an id in another case is another node, though a file system blind to case would open this file for it
+    for other in ("tq-00A1-ref", "tq-00A1-macros", "tq-9999", "not an id", "TQ-00K3"):
         assert web.subject(Here("node", other)) is None, other
     assert web.subject(Here("block", "tq-00K3")) is None
 
