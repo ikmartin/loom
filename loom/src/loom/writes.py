@@ -878,7 +878,7 @@ def _log_ok(root: Path, history: Path, name: Any) -> bool:
 def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
     """Why recovery may not act on the journal's `begin` line `entry`, in words; '' when it may.
 
-    A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), and the act must name a file, or carry a look: the one act the door journals that writes no file is one whose only write is the person's look and its records, as a Keep of in-place changes.
+    A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), any look one recovery may write (`_look_untrusted`), and the act must name a file, or carry a look: the one act the door journals that writes no file is one whose only write is the person's look and its records, as a Keep of in-place changes.
     """
     files = entry.get("files")
     if not isinstance(files, dict) or (not files and not isinstance(entry.get("look"), dict)):
@@ -907,7 +907,76 @@ def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
             line = None
         if not isinstance(line, dict):
             return "a record is not one record"
+    return _look_untrusted(root, history, entry)
+
+
+def _look_untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
+    """Why recovery may not write the look the checked `begin` line `entry` carries (`_relook`), in words; '' when it may, or when it carries none.
+
+    The look must be the quilt's reviewer's, from a person's act. Each `looked` path is a file in the quilt the look watches (`looks.watching`) that a `keep` line of the act names, so nothing goes into the look without its record; its entry is a text the history's store holds, or None for a file not there. Each `spans` or `tick` path is a file the act writes, at places that are numbers. Call after the files and records are checked.
+    """
+    if "look" not in entry or entry["look"] is None:
+        return ""
+    look = entry["look"]
+    if not isinstance(look, dict):
+        return "its look is not a look"
+    from loom.history.acts import KEEP
+    from loom.history.ledger import LEDGER
+    from loom.looks import watching
+    from loom.records.snapshots import read_raw
+    from loom.scan.quilt import load_quilt, reviewer_identity
+
+    who = look.get("who")
+    if not isinstance(who, str) or not who or who != reviewer_identity(root)[0]:
+        return "its look is not the reviewer's"
+    if entry.get("by") == "agent":
+        return "it was an agent's act, which writes no look"
+    looked, spans, tick = look.get("looked"), look.get("spans"), look.get("tick")
+    if looked is None and spans is None and tick is None:
+        return "its look names nothing to write"
+    files = entry.get("files") or {}
+    if looked is not None:
+        if not isinstance(looked, dict):
+            return "its look's files are not a list of files"
+        ledger = _log_name(root, history / LEDGER)
+        named = {
+            line.get("path")
+            for line in (json.loads(r["line"]) for r in entry.get("records") or [] if r["log"] == ledger)
+            if line.get("action") == KEEP and line.get("who") == who
+        }
+        watched = watching(load_quilt(root).config)
+        for rel, h in looked.items():
+            if not _in_quilt(root, rel):
+                return f"its look names {rel!r}, which is not a file in the quilt"
+            if not watched(rel):
+                return f"its look names {rel}, in a place agents are denied, which your look leaves alone"
+            if rel not in named:
+                return f"its look takes in {rel}, which no keep line of the act names"
+            if h is None:
+                if os.path.lexists(root / rel):
+                    return f"its look drops {rel}, which is there"
+            elif read_raw(root, h, history) is None:
+                return f"its look gives {rel} a text the history does not hold"
+    if spans is not None:
+        if not isinstance(spans, dict):
+            return "its look's places are not a list of files"
+        for rel, places in spans.items():
+            if rel not in files:
+                return f"its look places words in {rel!r}, a file the act does not write"
+            if not isinstance(places, list) or not all(
+                isinstance(s, list) and len(s) == 2 and all(_count(x) for x in s) and s[0] <= s[1] for s in places
+            ):
+                return f"its look's places in {rel} are not places"
+    if tick is not None:
+        path = tick.get("path") if isinstance(tick, dict) else None
+        if not isinstance(path, str) or path not in files or not _count(tick.get("line")):
+            return "its look's tick is not a line of a file the act writes"
     return ""
+
+
+def _count(x: Any) -> bool:
+    """Whether `x` is a whole number from 0, as a journal's places and lines are; a bool is not one."""
+    return isinstance(x, int) and not isinstance(x, bool) and x >= 0
 
 
 def unsettled(root: Path, history: Path) -> list[dict[str, Any]]:

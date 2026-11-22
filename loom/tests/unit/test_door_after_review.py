@@ -822,3 +822,129 @@ def test_an_act_with_a_look_and_no_file_cut_short_at_any_step_is_finished_or_put
         assert listed(q) is not kept_line(q), (k, listed(q), kept_line(q))
         assert writes.recover(q, hist) == [], k
         shutil.rmtree(q)
+
+
+# ---- R2-21: a journal line's look is checked as its files are -------------------------------------------------
+
+#: The act a forged line names, as the review's did.
+FORGED = "keep:f0f0f0f0f0f0f0f0"
+
+
+def _forge(root: Path, look: dict, keeps: tuple[str, ...] = (), by: str = "person") -> None:
+    """Append a `begin` line that names no file and carries `look`, with a `keep` line of `who`'s for each path of `keeps`: what a hand, an agent's shell or a copied quilt could leave in the journal."""
+    from loom import writes
+    from loom.history.acts import KEEP, ledger_line
+    from loom.paths import JOURNAL
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(root).history_dir
+    records = []
+    for path in keeps:
+        log, line = ledger_line(
+            hist, KEEP, {"who": look.get("who"), "path": path, "changes": ["c-00000000"]}, look.get("who")
+        )
+        records.append({"log": writes._log_name(root, log), "line": line})
+    line = {"event": "begin", "act": FORGED, "kind": "keep", "actor": "Tester", "by": by, "when": "2026-11-22T00:00:00Z", "files": {}, "edits": [], "records": records, "look": look}  # fmt: skip
+    with (root / JOURNAL).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+#: Each forged look, the `keep` lines its line carries, and the words recovery leaves it with.
+FORGERIES = {
+    "an agent's waiting change taken in with no keep line": (lambda h: {"looked": {"drafting/main.tex": h}}, (), "no keep line of the act names"),
+    "a path outside the quilt": (lambda h: {"looked": {"../outside.txt": h}}, ("../outside.txt",), "not a file in the quilt"),
+    "a hash the store does not hold": (lambda h: {"looked": {"drafting/main.tex": "sha256:" + "0" * 64}}, ("drafting/main.tex",), "a text the history does not hold"),
+    "a hash that is not a hash": (lambda h: {"looked": {"drafting/main.tex": "not a hash"}}, ("drafting/main.tex",), "a text the history does not hold"),
+    "a file it drops that is there": (lambda h: {"looked": {"drafting/main.tex": None}}, ("drafting/main.tex",), "drops drafting/main.tex, which is there"),
+    "a file agents are denied": (lambda h: {"looked": {"config.toml": h}}, ("config.toml",), "in a place agents are denied"),
+    "places in a file the act does not write": (lambda h: {"spans": {"drafting/main.tex": [[0, 10**6]]}}, (), "a file the act does not write"),
+    "a tick in a file the act does not write": (lambda h: {"tick": {"path": "drafting/main.tex", "line": 0}}, (), "tick is not a line of a file the act writes"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("which", [*FORGERIES, "another reviewer's look", "an agent's act"])
+def test_a_journal_line_whose_look_recovery_may_not_write_is_left_and_said_and_takes_nothing_in(
+    tmp_path: Path, which: str
+) -> None:
+    """A `begin` line that names no file and carries a look is checked as a line's files are: recovery writes it only when it is the reviewer's, from a person's act, each path it takes in a watched file in the quilt that a keep line of the act names, and each text one the store holds. Otherwise the line is left and said, the look stays as it was, and the list with it: the review's forged lines took an agent's waiting change in unseen, put `../outside.txt` into Review, and listed the whole of `main.tex` for a Discard that emptied it (R2-21)."""
+    from loom import writes
+    from loom.looks import look_path, take
+    from loom.records.snapshots import write_raw
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_adopt import DOC, TEXT, made
+
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    (tmp_path / "outside.txt").write_text("a file of the person's outside the quilt\n")
+    take(load_quilt(root), "Tester")
+    doc = root / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    hist = load_quilt(root).history_dir
+    stored = write_raw(root, doc.read_text(), hist)
+    if which == "another reviewer's look":
+        _forge(root, {"who": "Somebody Else", "looked": {DOC: stored}}, (DOC,))
+        why = "its look is not the reviewer's"
+    elif which == "an agent's act":
+        _forge(root, {"who": "Tester", "looked": {DOC: stored}}, (DOC,), by="agent")
+        why = "an agent's act, which writes no look"
+    else:
+        make, keeps, why = FORGERIES[which]
+        _forge(root, {"who": "Tester", **make(stored)}, keeps)
+
+    def listed() -> list[tuple[str, str]]:
+        return sorted((c["path"], c["id"]) for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"])
+
+    look = look_path(root, "Tester").read_bytes()
+    rows = _rows(root)
+    said = writes.recover(root, hist)
+    assert all(not path.startswith("..") for path, _ in listed())
+    assert _rows(root) == rows and any(path == DOC for path, _ in rows)
+    assert look_path(root, "Tester").read_bytes() == look
+    assert len(said) == 1 and said[0].startswith(f"left {FORGED}: ") and why in said[0], said
+    assert said[0].endswith("recovery changed nothing"), said
+    assert len(writes.left(root, hist)) == 1
+
+
+def test_a_line_whose_look_passes_every_check_takes_in_only_what_its_keep_lines_name(tmp_path: Path) -> None:
+    """The check leaves an honest act's line alone: a look of the reviewer's, on a watched file, with a stored text and the keep line naming it, is written as the act's follow-up would have written it, and the change it takes in is named in the history by that keep line."""
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.looks import read_look, take
+    from loom.records.snapshots import write_raw
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_adopt import DOC, TEXT, made
+
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    take(load_quilt(root), "Tester")
+    doc = root / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    hist = load_quilt(root).history_dir
+    stored = write_raw(root, doc.read_text(), hist)
+    _forge(root, {"who": "Tester", "looked": {DOC: stored}}, (DOC,))
+    assert writes.recover(root, hist) == [f"finished {FORGED}"]
+    assert read_look(root, "Tester").files[DOC] == stored  # type: ignore[union-attr]
+    assert [e.data.get("path") for e in load_history(hist).entries if e.action == "keep"] == [DOC]
+    assert not any(path == DOC for path, _ in _rows(root))
+
+
+def test_the_journal_is_denied_to_agents_by_the_rule_that_denies_them_the_records_and_the_look(tmp_path: Path) -> None:
+    """What keeps an agent from writing a journal line is the rule that keeps it from the records and the look: all sit in `.loom/`, which `agents.denied_by` denies an agent, and the permission file loom writes for Claude Code refuses its file tools each of their folders. That file refuses no shell command but `rm`, so an agent's shell is refused none of them, and another app is only told."""
+    from loom.agents import claude_denies, denied_by
+    from loom.paths import EDIT_LOG, JOURNAL, JOURNAL_INDEX, LOCAL, LOOKED
+    from loom.scan.quilt import load_quilt
+
+    q = demo(tmp_path)
+    config = load_quilt(q).config
+    ledger = f"{config.history}/ledger.jsonl"
+    look = f"{LOOKED}/tester.json"
+    assert {denied_by(config, rel) for rel in (JOURNAL, JOURNAL_INDEX, look, EDIT_LOG, ledger)} == {".loom/"}
+    for folder in (LOCAL, LOOKED, os.path.dirname(EDIT_LOG), config.history):
+        assert f"/{folder}/**" in claude_denies(config), folder
+    deny = json.loads((q / ".claude/settings.json").read_text())["permissions"]["deny"]
+    assert {f"Edit(/{LOCAL}/**)", f"Edit(/{LOOKED}/**)"} <= set(deny)
+    assert [r for r in deny if r.startswith("Bash(") and not r.startswith("Bash(loom ")] == ["Bash(rm *)"]
+
