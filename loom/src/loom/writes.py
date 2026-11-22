@@ -1309,7 +1309,7 @@ def _follow_look(
             was, now = _text_of(before), _text_of(after)
             if was is _NOT_TEXT or now is _NOT_TEXT or is_latex_aux(rel) or not watched(rel):
                 continue
-            held = look.files.get(rel)
+            held = look.files.get(rel) or None  # a file absent at the look (`looks.ABSENT`) is held as none
             if held is None:
                 if was is None and now is not None:
                     shown = shown or Shown.of(quilt)

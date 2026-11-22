@@ -389,6 +389,7 @@ def look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, 
 
 def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, str | None]] | None:
     from loom.files import is_latex_aux
+    from loom.looks import held as looks_held
     from loom.looks import read_look, watched_texts, watching
     from loom.records.snapshots import read_raw
     from loom.scan.hashing import sha256
@@ -409,7 +410,7 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     now: dict[str, str | None] = {}
     # a look taken before LaTeX's auxiliary files were left out of it may still hold them
     for rel in sorted(set(current) | {f for f in look.files if not is_latex_aux(f) and watched(f)}):
-        held = look.files.get(rel)
+        held = looks_held(look, rel)
         text = current.get(rel)
         if held == (sha256(text) if text is not None else None):
             continue
@@ -1340,7 +1341,7 @@ def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: l
     look = read_look(quilt.root, who)
     if look is None or not watching(quilt.config)(path):
         return True  # no look yet, or a place agents are denied, where nothing is listed
-    held = look.files.get(path)
+    held = look.files.get(path) or None
     if held is None:
         return False
     if held == sha256(was):

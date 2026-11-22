@@ -20,6 +20,9 @@ from loom.paths import LOOKED
 if TYPE_CHECKING:
     from loom.scan.quilt import Quilt, QuiltConfig
 
+#: What a look holds of a file that was not there at the look and whose place has since been closed to agents (`_align`): an agent's new file waiting there, listed again as new once the place is opened, never taken in unseen. Read as no entry (`held`).
+ABSENT = ""
+
 #: The ledger's line for a change discarded, a plain line beside the steps; a keep writes `history.acts.KEEP`, and taking a look writes nothing.
 UNDO = "undo"
 #: Lines of context around a change, as `unified_diff` prints them.
@@ -115,7 +118,7 @@ def read_look(root: Path, who: str) -> Look | None:
 def _align(root: Path, look: Look) -> Look:
     """`look` brought to the `[agents] deny` list in force, written where that moved anything.
 
-    A file opened to agents since the look's own list goes in as it stands, so the person's edits there before it was opened are never listed; one closed to them keeps what the look held, so a change waiting there is listed again if it is opened. A look that names no list is taken as brought to the one in force. A config loom cannot read leaves the look as it is.
+    A file opened to agents since the look's own list goes in as it stands, so the person's edits there before it was opened are never listed; one closed to them keeps what the look held, so a change waiting there is listed again if it is opened, and one the look did not hold, made since it, is kept as `ABSENT`, so it is listed as new then rather than taken in unseen. A look that names no list is taken as brought to the one in force. A config loom cannot read leaves the look as it is.
     """
     from loom.records.snapshots import write_raw
     from loom.scan.quilt import load_quilt
@@ -133,6 +136,9 @@ def _align(root: Path, look: Look) -> Look:
     for rel, text in open_texts(quilt).items():
         if now(rel) and not was(rel) and rel not in look.files:
             look.files[rel] = write_raw(root, text, quilt.history_dir)
+        elif was(rel) and not now(rel) and rel not in look.files:
+            # made since the look while agents could write there: listed as new if the place is opened again
+            look.files[rel] = ABSENT
     look.deny = deny
     _write(root, look)
     return look
@@ -165,6 +171,11 @@ def open_texts(quilt: Quilt) -> dict[str, str]:
         except (OSError, UnicodeDecodeError):
             continue
     return out
+
+
+def held(look: Look, rel: str) -> str | None:
+    """The hash `look` holds of `rel`'s text, None where it holds none or holds the file as absent at the look (`ABSENT`)."""
+    return look.files.get(rel) or None
 
 
 def watched_texts(quilt: Quilt) -> dict[str, str]:
@@ -215,7 +226,7 @@ def changes(quilt: Quilt, who: str) -> list[Change]:
     watched = watching(quilt.config)
     out: list[Change] = []
     for rel in sorted(set(now) | {f for f in look.files if not is_latex_aux(f) and watched(f)}):
-        before_hash = look.files.get(rel)
+        before_hash = held(look, rel)
         text = now.get(rel)
         after_hash = sha256(text) if text is not None else None
         if before_hash == after_hash:

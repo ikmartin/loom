@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers import json_of, ok, refused, run
-from tests.unit._quilts import demo, opened
+from tests.unit._quilts import demo, denying, opened
 
 
 @pytest.fixture
@@ -489,3 +489,34 @@ def test_the_demo_as_made_lists_none_of_the_person_s_saves_and_lists_an_agent_s_
     assert [c for c in changes if c["kind"] == "edit"] == []
     agent = [c for c in changes if c["kind"] == "suggested" and c["author"] == "Referee Agent"]
     assert sorted(c["key"] for c in agent) == ["dm-0006", "dm-0007"]
+
+
+@pytest.mark.parametrize("how", ["in Settings", "by hand"])
+def test_an_agent_s_new_file_waiting_in_a_place_closed_and_opened_again_is_listed_again(person: Path, how: str) -> None:
+    """A place closed to agents keeps what the look held of it, and holds a file made there since the look as absent at it, so when the place is opened again an agent's change, removal and new file are each listed as before; nothing an agent made is taken in without having been listed (R2-5)."""
+    import re
+
+    (person / "notes/gone.md").write_text("to be removed\n", encoding="utf-8")
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt
+
+    take(load_quilt(person), "Tester")
+    (person / "notes/a.md").write_text("# A\n\nfirst, and an agent's word\n", encoding="utf-8")
+    (person / "notes/gone.md").unlink()
+    (person / "notes/new.md").write_text("an agent's new note\n", encoding="utf-8")
+    waiting = ["notes/a.md", "notes/gone.md", "notes/new.md"]
+    assert edits(person) == waiting
+
+    def set_deny(*entries: str) -> None:
+        if how == "in Settings":
+            denying(person, *entries)
+        else:
+            cfg = person / "config.toml"
+            said = ", ".join(f'"{e}"' for e in entries)
+            cfg.write_text(re.sub(r"(?m)^deny = \[.*\]$", f"deny = [{said}]", cfg.read_text()), encoding="utf-8")
+
+    set_deny("notes/")
+    assert edits(person) == []
+    ok("changes", "--keep-all", cwd=person)  # keeping all while it is closed takes nothing of it in
+    set_deny()
+    assert edits(person) == waiting
