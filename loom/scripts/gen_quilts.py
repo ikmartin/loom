@@ -123,6 +123,14 @@ class Gen:
         with self._as_author():
             return take_in(scan(load_quilt(self.root)), target, items, ("person", self.author))
 
+    def deny(self, paths: list[str]) -> None:
+        """Deny agents the person's files `paths`, as `loom init --from` denies the paper it brings in (`agents.deny_documents`), the agent layer's permission files written in the same act."""
+        from loom.agents import deny_documents
+        from loom.scan.quilt import load_quilt
+
+        with self._as_author():
+            deny_documents(load_quilt(self.root), paths)
+
     def look(self) -> None:
         """Take the author's look at every open file, as `loom serve` takes a first one (`looks.take`): unlike Keep all, it keeps no suggested edit, so those the story files stay waiting."""
         from loom.looks import take
@@ -595,6 +603,8 @@ def build_demo(dest: Path) -> None:
     g = Gen(dest, "The loom demo")
     g.at("2026-09-16T00:00:00Z")
     g.run("ai", "init")
+    # the paper is the person's, as in a quilt made from one (`loom init --from`): an agent proposes a change to it by suggestion, and the person's own saves there are never listed
+    g.deny([p.relative_to(dest).as_posix() for p in sorted((dest / "drafting").rglob("*")) if p.is_file()])
     g.run(
         "annotate",
         "dm-0003/proof",

@@ -11,13 +11,13 @@ import pytest
 
 from loom.ai.layout import MODES
 from tests.helpers import exits, flat, json_of, ok, refused
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, opened
 
 FIXED = {"LOOM_FIXED_TIME": "2026-09-16T14:02:00Z"}
 
 
 def bare(tmp_path: Path, *flags: str) -> Path:
-    """The demo without its AI layer, annotations or sessions, then `loom ai init FLAGS`: the layer these tests read is the one they made, and the sessions they count are their own."""
+    """The demo without its AI layer, annotations, sessions or deny list, then `loom ai init FLAGS`: the layer these tests read is the one they made, and the sessions they count are their own."""
     from loom.ai.clients import PROJECT_FILES
     from loom.ai.layout import ROOT_FILES
 
@@ -31,6 +31,7 @@ def bare(tmp_path: Path, *flags: str) -> Path:
         q / ".loom/records/annotations", ignore_errors=True
     )  # the log lives at the quilt root, not under .loom/agents/instructions/
     shutil.rmtree(q / ".loom" / "agents" / "sessions", ignore_errors=True)
+    opened(q)  # a fresh quilt's layer: the demo's deny on its paper is not one
     ok("ai", "init", *flags, cwd=q)
     return q
 

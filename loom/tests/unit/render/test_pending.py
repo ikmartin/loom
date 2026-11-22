@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from tests.helpers import edit, ok, run
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, opened
 
 LEMMA = "drafting/nodes/dm-0002.tex"
 WHO = "Tester"
@@ -21,7 +21,7 @@ def q(tmp_path: Path) -> Path:
     from loom.scan.quilt import load_quilt, save_author
 
     save_author(WHO)
-    root = demo(tmp_path)
+    root = opened(demo(tmp_path))  # the paper open to agents, so an edit in it is listed
     take(load_quilt(root), WHO)  # the first look, the demo's suggested edit left open
     return root
 
@@ -166,7 +166,7 @@ def test_a_change_with_no_leaf_has_a_place_and_one_inside_a_proof_a_block_no_lar
     from loom.scan.quilt import save_author
 
     save_author(WHO)
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))
     (q / "drafting/exercises.tex").write_text(EXERCISES)
     edit(q / "drafting/main.tex", "\\end{document}", "\\input{exercises}\n\\end{document}")
     ok("changes", "--keep-all", cwd=q)

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.unit._quilts import opened
 from tests.unit.render._serve import get
 from tests.unit.render.write_api._cases import (
     WHO,
@@ -66,6 +67,7 @@ def _change_keep(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
 
     s, q, _sid = on_demo(serve, tmp_path)
     save_author(WHO)
+    opened(q)  # the paper open to agents, so an edit in it is listed
     # before a first look, keeping all takes one, then keeps what waits: the demo's suggested edit
     assert succeeds(s, "change-keep", {"all": True})["result"].startswith("took your first look; kept 1 change")
     lemma = q / "drafting" / "nodes" / "dm-0002.tex"
@@ -91,6 +93,7 @@ def _change_discard(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
 
     s, q, _sid = on_demo(serve, tmp_path)
     save_author(WHO)
+    opened(q)  # the paper open to agents, so an edit in it is listed
     succeeds(s, "change-keep", {"all": True})
     lemma = q / "drafting" / "nodes" / "dm-0002.tex"
     lemma.write_text(lemma.read_text().replace("Every orbit", "Each orbit"))

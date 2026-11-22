@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers import json_of, ok, refused, run
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, opened
 
 
 @pytest.fixture
@@ -16,7 +16,7 @@ def q(tmp_path: Path) -> Path:
     from loom.scan.quilt import save_author
 
     save_author("Tester")
-    root = demo(tmp_path)
+    root = opened(demo(tmp_path))  # the paper open to agents, so the look watches it
     (root / "notes").mkdir()
     (root / "notes" / "a.md").write_text("# A\n\nfirst\n", encoding="utf-8")
     (root / "notes" / "fig.png").write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00")
@@ -460,3 +460,32 @@ def test_a_write_the_viewer_asks_for_is_the_person_s_whatever_shell_started_the_
     assert edits(person) == []
     lines = [json.loads(x) for x in (person / ".loom/local/writes.jsonl").read_text().splitlines()]
     assert [e["by"] for e in lines if e["event"] == "begin" and e["kind"] == "restore"] == ["person"]
+
+
+def test_the_demo_as_made_lists_none_of_the_person_s_saves_and_lists_an_agent_s_suggestions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The demo denies its paper to agents as a quilt made from a paper does: after the first look, the person's eight saves in it give no row, and an agent's two edits, made as suggestions since the paper is not its to edit, are listed under its name."""
+    from loom.agents import denied_by
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt, save_author
+
+    save_author("Tester")
+    q = demo(tmp_path)
+    assert load_quilt(q).config.agents_deny == ["/drafting/"]
+    assert denied_by(load_quilt(q).config, "drafting/nodes/dm-0006.tex") == "/drafting/"
+    assert "Edit(/drafting/**)" in json.loads((q / ".claude/settings.json").read_text())["permissions"]["deny"]
+    take(load_quilt(q), "Tester")
+    for rel, old, new in PERSON_SAVES:
+        _edit(q, rel, old, new)
+    monkeypatch.setenv("AI_AGENT", "1")
+    for key, quote, new in (
+        ("dm-0006", "is invariant under", "is preserved by"),
+        ("dm-0007", "has finitely many fixed points", "has only finitely many fixed points"),
+    ):
+        ok("suggest", key, "--quote", quote, "--with", new, "--as", "Referee Agent", cwd=q)
+    monkeypatch.delenv("AI_AGENT")
+    changes = json_of("changes", "--json", cwd=q)["changes"]
+    assert [c for c in changes if c["kind"] == "edit"] == []
+    agent = [c for c in changes if c["kind"] == "suggested" and c["author"] == "Referee Agent"]
+    assert sorted(c["key"] for c in agent) == ["dm-0006", "dm-0007"]
