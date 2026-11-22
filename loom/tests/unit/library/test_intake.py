@@ -767,3 +767,49 @@ def test_an_undone_add_s_id_is_never_given_to_the_next_work(tmp_path: Path) -> N
     assert second["state"] == "added" and second["ref"] != first["ref"]
     made = [a["ref"] for a in log.replay(root).lines if a["event"] == "made"]
     assert len(made) == len(set(made)) == 2
+
+
+def _taker(root: str, who: int, go: float) -> None:
+    """One writer of `test_two_takes_at_once_keep_every_work_under_an_id_of_its_own`: fifteen pasted entries taken at `go`, with a pause after each item outside the locks, as a slow item or a look-up gives another writer its turn."""
+    import contextlib
+    import time
+
+    from loom.library import intake
+
+    real = intake.library_lock
+
+    @contextlib.contextmanager
+    def turn(r: Path) -> Any:
+        with real(r):
+            yield
+        time.sleep(0.15)
+
+    intake.library_lock = turn  # type: ignore[assignment]
+    while time.time() < go:
+        time.sleep(0.005)
+    items = [
+        Item(text=f"@article{{P{who}K{i:02d}, title={{Paper {i} of taker {who}}}, year=2001}}\n") for i in range(15)
+    ]
+    take(Path(root), items, by=f"A. Author {who}")
+
+
+def test_two_takes_at_once_keep_every_work_under_an_id_of_its_own(tmp_path: Path) -> None:
+    """The third look's M-26: two writers each drew stems from what they saw once, under the library's lock alone, and the later write of a stem replaced the earlier work, while the log said both were made."""
+    import multiprocessing
+    import time
+
+    from loom.library.references import entries
+
+    root = quilt(tmp_path)
+    spawn = multiprocessing.get_context("spawn")
+    go = time.time() + 3
+    writers = [spawn.Process(target=_taker, args=(str(root), who, go)) for who in (1, 2)]
+    for w in writers:
+        w.start()
+    for w in writers:
+        w.join(timeout=120)
+        assert w.exitcode == 0
+    held = {k: ref for k, (ref, _e) in entries(root).items() if k.startswith("P")}
+    assert len(held) == 30 and len(set(held.values())) == 30, sorted(held)
+    made = [a["ref"] for a in log.replay(root).lines if a["event"] == "made"]
+    assert len(made) == len(set(made)) == 30

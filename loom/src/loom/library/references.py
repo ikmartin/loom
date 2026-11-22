@@ -125,7 +125,7 @@ def make(
     Raises
     ------
     store.NodeRefused
-        When the entry is not one entry standing alone, or its key is another reference's, ignoring case; nothing is written.
+        When the entry is not one entry standing alone, its key is another reference's, ignoring case, or a node of its id is there already; nothing is written.
 
     See Also
     --------
@@ -137,7 +137,8 @@ def make(
         if digest and not documents.held(root, digest, which):
             raise FileNotFoundError(f"the store holds no {which} {digest}")
     node = Node(id=f"{minter.stem()}-ref", taxon="reference", body=entry.strip() + "\n", pdf=pdf, tex=tex)
-    write_node(root, node)
+    # written only where no node is: a stem another writer gave meanwhile is refused here, never written over
+    write_node(root, node, new=True)
     found = read_entry(node.body)
     log.record(
         root, "made", node.id, by=by, kind=kind, how=how, found_by=found_by, looked_up=looked_up, source=source,
