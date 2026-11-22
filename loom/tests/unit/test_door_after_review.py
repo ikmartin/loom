@@ -948,3 +948,19 @@ def test_the_journal_is_denied_to_agents_by_the_rule_that_denies_them_the_record
     assert {f"Edit(/{LOCAL}/**)", f"Edit(/{LOOKED}/**)"} <= set(deny)
     assert [r for r in deny if r.startswith("Bash(") and not r.startswith("Bash(loom ")] == ["Bash(rm *)"]
 
+
+def test_a_keep_that_kept_nothing_because_every_change_was_refused_exits_as_a_refusal(tmp_path: Path) -> None:
+    """Every change a Keep names refused is a refusal, and the command exits 1 as one does, so a script reading the exit status never takes it for success; one kept beside one refused is a success that leaves work undone: exit 0, not ok."""
+    from loom.scan.quilt import save_author
+    from tests.helpers import json_of
+    from tests.unit.records.test_edits import LEMMA, filed, suggest
+
+    save_author("Tom")
+    q = demo(tmp_path)
+    old = filed(q, "dm-0002", "More.", "\\end{lemma}", "after")
+    before = (q / LEMMA).read_text()
+    r = refused("changes", "--keep", old, cwd=q, code=1, match="kept nothing")
+    assert f"{old} not kept" in r.output and (q / LEMMA).read_text() == before
+    good = suggest(q, "--quote", "one or two points", "--with", "at most two points")
+    data = json_of("changes", "--keep", old, "--keep", good, "--json", cwd=q)
+    assert data["ok"] is False and data["exit"] == 0 and data["done"] == [good]
