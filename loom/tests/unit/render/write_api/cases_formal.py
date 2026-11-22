@@ -43,3 +43,41 @@ def _formal_attest(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert succeeds(s, "formal-attest", body)["result"] == "attested"
     attested = replay(root).about("label", "sy-0202", of="attested")
     assert [a.get("lean") for a in attested] == [record.id] and attested[0].by.name == "The synthetic quilt"
+
+
+#: A result of the synthetic quilt's talk with no label, which loom never gives it.
+UNLABELLED = "drafting/talk.tex#lemma:1"
+
+
+@case("formal-plan")
+def _formal_plan(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    s, _root = synthetic(serve, tmp_path, watch=False)
+    refuses(s, "formal-plan", {}, 400, "bad-field", "targets")
+    refuses(s, "formal-plan", {"targets": ["sy-9999"]}, 404, "no-such-result", "sy-9999")
+    # the theorem's proof uses a lemma, whose statement uses a definition: one to prove and one to state
+    found = succeeds(s, "formal-plan", {"targets": ["sy-0003"]})
+    assert [t["key"] for t in found["targets"]] == ["sy-0003"] and found["targets"][0]["doc"] == "drafting/main.tex"
+    assert [r["result"] for r in found["state"]] == ["sy-0001"]
+    assert [(r["result"], r["assume"]) for r in found["prove"]] == [("sy-0002", False)]
+    assert found["stops"] == [] and found["before"] == [] and found["assume"] == []
+    # assumed for now, the lemma is followed by its statement alone, which still uses the definition
+    assumed = succeeds(s, "formal-plan", {"targets": ["sy-0003"], "assume": ["sy-0002"]})
+    assert [(r["result"], r["assume"]) for r in assumed["prove"]] == [("sy-0002", True)]
+    assert [r["result"] for r in succeeds(s, "formal-plan", {"targets": [UNLABELLED]})["stops"]] == [UNLABELLED]
+
+
+@case("formal-ask")
+def _formal_ask(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom.evidence.asks import replay
+
+    s, root = synthetic(serve, tmp_path, watch=False)
+    body = {"targets": ["sy-0003"]}
+    refuses(s, "formal-ask", {**body, "author": "Referee (Agent)"}, 403, "author-only", "this is the person's")
+    refuses(s, "formal-ask", {"targets": ["sy-0003", UNLABELLED]}, 409, "needs-label", "needs a label first")
+    assert replay(root).asks == {}, "a refused request asks nothing"
+    answer = succeeds(s, "formal-ask", body)
+    [task] = answer["tasks"]
+    made = replay(root).asks[task]
+    assert made.what == "formalize" and made.to == "agent" and made.on == {"label": "sy-0003"}
+    assert [x["label"] for x in made.get("state")] == ["sy-0001"]
+    assert [x["label"] for x in made.get("prove")] == ["sy-0002"] and made.get("assume") == []

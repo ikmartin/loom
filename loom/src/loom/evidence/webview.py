@@ -230,6 +230,22 @@ class Drafts:
         return self._words[key]
 
 
+def node_row(node: str, found: Status, held: Any) -> dict[str, Any]:
+    """A library node as a list sends it (`ROW`): its id, its name as its source prints it, its title, its taxon's word, its work, `short` null until the node store's references give it, and how it stands, `paper` its reading of its paper."""
+    from loom.evidence.review import node_name
+
+    return {
+        "result": node,
+        "name": node_name(held) if held is not None else node,
+        "title": held.title if held is not None else None,
+        "taxon": str(held.taxon).lower() if held is not None else "",
+        "source": {"ref": held.source if held is not None else None, "short": None},
+        "paper": found.reading,
+        "reading": found.reading,
+        "lean": brief(found),
+    }
+
+
 def drafts(result: ScanResult, manifest: dict[str, Any], root: Any) -> Drafts:
     """The drafts' results for one read of the quilt at `root`."""
     from loom.evidence.log import replay
