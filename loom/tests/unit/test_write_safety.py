@@ -18,7 +18,7 @@ import pytest
 import loom
 
 QUILTS = Path(loom.__file__).resolve().parents[2] / "tests" / "quilts"
-AGENT = "Agent Smith"
+AGENT = "Smith Agent"
 WORDS = "orbit group action finite widget lemma bound measure compact dense closed map kernel image quotient series limit converges uniformly hence suppose every exists integral norm space basis linear operator".split()
 
 

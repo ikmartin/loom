@@ -17,7 +17,7 @@ from loom.identity import is_agent
     "as_name",
     required=True,
     metavar="NAME",
-    help="The agent this server serves, with Agent or AI in the name; every write is recorded under it.",
+    help="The agent this server serves, a name ending in Agent; every write is recorded under it.",
 )
 @quilt_option
 def mcp_command(as_name: str, quilt_path: str | None) -> None:
@@ -27,7 +27,7 @@ def mcp_command(as_name: str, quilt_path: str | None) -> None:
     """
     if not is_agent(as_name):
         raise EnvError(
-            f"{as_name} does not say it is an agent; give a name with Agent or AI in it, such as --as 'Claude Agent'"
+            f"{as_name} does not say it is an agent; give a name ending in Agent, such as --as 'Claude Code Agent'"
         )
     root = open_quilt(quilt_path).root
     _refuse_another_quilt(root, quilt_path)

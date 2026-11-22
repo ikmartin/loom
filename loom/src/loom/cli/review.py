@@ -1115,7 +1115,7 @@ def _rects(box: str) -> list[list[float]]:
     "author",
     default=None,
     metavar="NAME",
-    help="Who is writing; an agent names itself, with Agent or AI in the name.",
+    help="Who is writing; an agent's name ends in Agent.",
 )
 @click.option("--reply", default=None, metavar="ID", help="Answer annotation ID; the message is the reply.")
 @click.option("--resolve", default=None, metavar="ID", help="Mark annotation ID resolved, with the message as why.")

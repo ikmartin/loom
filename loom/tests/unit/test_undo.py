@@ -628,7 +628,7 @@ def test_a_kept_edit_is_opened_again_only_by_the_undo_of_its_keep(q: Path) -> No
 
 def test_an_agent_cannot_undo_a_keep(q: Path) -> None:
     call(q, "change-keep", {"changes": [FIXED]})
-    assert call(q, "change-undo", {"changes": [FIXED], "author": "Agent Smith"}) == {"error": "author-only"}
+    assert call(q, "change-undo", {"changes": [FIXED], "author": "Smith Agent"}) == {"error": "author-only"}
     assert status(q, FIXED) == "kept"
 
 

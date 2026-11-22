@@ -2,7 +2,7 @@
 
 **Read all of this before you act.** It is long: if your app cut it short or saved it to a file, read that file whole now, with a file-reading tool or in pieces, rather than searching it. What must not be missed:
 
-- **In a shell, sign everything you write** with `--as` and the name of the app you run in, never the model's, followed by `Agent`, the same each time: `--as "Claude Code Agent"`, `--as "Codex Agent"`, `--as "Gemini CLI Agent"`. A name that does not say it is an agent, with `Agent` or `AI`, is refused in a shell that marks one, and recorded as a person's in a shell that does not. Over MCP the server signs for you.
+- **In a shell, sign everything you write** with `--as` and the name of the app you run in, never the model's, followed by `Agent`, the same each time: `--as "Claude Code Agent"`, `--as "Codex Agent"`, `--as "Gemini CLI Agent"`. A name that does not end in `Agent` is refused in a shell that marks one, and recorded as a person's in a shell that does not. Over MCP the server signs for you.
 - **What only the author does refuses you**, whatever name you give: `loom accept`, `loom adopt` and the rest of §3. To ask for one, write a {type:suggestion} on the thing concerned.
 - **The author reads the viewer, and what it does not show is never seen.** Your report is a `loom session say` message, and a finding is a `loom annotate` on what it concerns (`.loom/agents/instructions/rules.md`, Where work goes).
 - **Never write by hand** in `.loom/` outside your session's directory, your scratch, `.loom/agents/copies/` and `.loom/records/annotation-types.toml`, the quilt's annotation types, nor `config.toml`, nor the research state; Live state, at the end, lists all that is protected.

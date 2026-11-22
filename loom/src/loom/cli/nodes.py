@@ -88,7 +88,7 @@ def _declared(result: ScanResult) -> str:
     "declared",
     default=None,
     metavar="NAME",
-    help="Who writes the node; an agent names itself, including Agent or AI.",
+    help="Who writes the node; an agent's name ends in Agent.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option

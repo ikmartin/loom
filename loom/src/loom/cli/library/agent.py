@@ -53,7 +53,7 @@ WRAPPER = re.compile(
     "as_name",
     default=None,
     metavar="NAME",
-    help="Who proposes it; an agent names itself, with Agent or AI in the name.",
+    help="Who proposes it; an agent's name ends in Agent.",
 )
 @click.option(
     "--session", "run_dir", default=None, envvar="LOOM_SESSION", metavar="SESSION", help="The session proposing this."
