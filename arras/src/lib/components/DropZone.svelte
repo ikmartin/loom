@@ -1,14 +1,23 @@
 <script lang="ts">
-	// The window's drop target (1b, 4d): files dragged over any view cover it with one sheet saying they go to the library, and, only while papers wait for their file, that one of them is attached to its paper. A drop anywhere hands the files to the library's intake (`$lib/library/intake`); a drop on a work's row, in the Library's list or among Review's papers to fetch, names that work. The view never changes. The sheet lets the pointer through, so a part of the page that takes a drop for itself (it calls preventDefault) still gets it. Nothing is drawn where the publisher takes no files.
-	import { onMount } from 'svelte';
+	// The window's drop target (1b, 4d): files dragged over any view cover it with one sheet saying they go to the library, and, only while papers wait for their file, that one of them is attached to its paper. A drop anywhere hands the files to the library's intake (`$lib/library/intake`); a drop on a work's row, in the Library's list or among Review's papers to fetch, names that work. The view never changes. The sheet lets the pointer through, so a part of the page that takes a drop for itself (it calls preventDefault) still gets it. Nothing is drawn where the publisher takes no files. Being the intake's on every view, it also asks in the column each question the intake waits on (`askWaiting`).
+	import { onMount, untrack } from 'svelte';
 	import { call } from '$lib/library/api';
-	import { addFiles } from '$lib/library/intake';
+	import { addFiles, askWaiting } from '$lib/library/intake';
+	import { store } from '$lib/manifest/client.svelte';
+	import { message } from '$lib/shell/message.svelte';
 	import { onFixture } from '$lib/library/source';
 	import { can } from '$lib/write';
 	import { library as words } from '$lib/words/library';
 
 	let served = false;
 	let over = $state(false);
+
+	// a question the intake waits on is asked in the column whenever it says nothing else: one a take answered, or one the manifest still lists after a reload
+	$effect(() => {
+		const arriving = store.manifest?.arriving;
+		void message.said;
+		untrack(() => askWaiting(arriving));
+	});
 	let waiting = $state(0);
 	let timer: ReturnType<typeof setTimeout> | null = null;
 	const carriesFiles = (e: DragEvent) => !!e.dataTransfer && Array.from(e.dataTransfer.types).includes('Files');

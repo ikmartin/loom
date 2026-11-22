@@ -657,6 +657,8 @@ export interface Manifest {
   annotations: Record<string, Annotation>;
   /** The annotations placed on no block, each by id with the key it was written on, why, and the document it is listed in and opened from; each stays in `annotations`, detached, with `target.key` '', and is counted on no key (specs/manifest.md §9). */
   unplaced?: { id: string; key: string; why: string; document: string }[];
+  /** The library's drops that wait on the person, as the intake's rows: each a `question` or a file `received` and not yet taken; empty or absent when none does (manifest.md §1). */
+  arriving?: import('$lib/library/api').TakeRow[];
   /** Every suggested edit, by id (specs/manifest.md §9.2). */
   suggested_edits?: Record<string, SuggestedEdit>;
   /** The quilt's annotation types, in its file's order (specs/manifest.md §1). */

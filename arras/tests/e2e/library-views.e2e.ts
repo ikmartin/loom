@@ -230,6 +230,41 @@ test('several files chosen at once are said together, and one undo takes every w
 	await expect(page.getByTestId('work-row')).toHaveCount(300);
 });
 
+test("a file stating an arXiv number a work states is asked about in the column, each answer settles it, and one closed unanswered is not asked again here", async ({ page }) => {
+	await open(page);
+	const msg = page.getByTestId('column-message');
+	const choose = async (name: string) => {
+		await page.getByTestId('add-work').click();
+		await page.getByTestId('choose-files-input').setInputFiles([{ name, mimeType: 'application/pdf', buffer: PAPER }]);
+	};
+	// yes: the file is filed under the work, and no row is added
+	await choose('2000.01000v2.pdf');
+	await expect(msg).toContainText('2000.01000v2.pdf states arXiv 2000.01000, as Arden 2024 in your library does. Is it that work?');
+	const answers = msg.getByTestId('column-message-choice');
+	await expect(answers).toHaveText(['yes', 'no, a work of its own']);
+	for (const a of await answers.all()) expect((await a.boundingBox())!.height).toBeGreaterThanOrEqual(28);
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+	await answers.filter({ hasText: 'yes' }).click();
+	await expect(msg).toContainText('Filed 2000.01000v2.pdf under Arden 2024.');
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+	// no: a work of its own
+	await choose('2000.01000v3.pdf');
+	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
+	await expect(page.getByTestId('work-row')).toHaveCount(301);
+	// closed unanswered: not asked again on this page, and nothing written
+	await choose('2000.01000v4.pdf');
+	await expect(msg).toContainText('Is it that work?');
+	await page.getByTestId('column-message-dismiss').click();
+	await expect(msg).toHaveCount(0);
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('2209.01234v2');
+	await page.getByTestId('paste-identifier').press('Enter');
+	await expect(msg).toContainText('Added');
+	await page.getByTestId('column-message-dismiss').click();
+	await expect(msg).toHaveCount(0);
+	await expect(page.getByTestId('work-row')).toHaveCount(302);
+});
+
 test('on a quilt that has not said whether loom may use the network, a work added by an identifier asks in its row to be looked up this once', async ({ page }) => {
 	await page.setViewportSize({ width: 1440, height: 900 });
 	await page.goto('/library?fixture=round6&network=unasked');

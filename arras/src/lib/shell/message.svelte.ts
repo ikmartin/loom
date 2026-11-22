@@ -13,6 +13,10 @@ export interface Said {
 	text: string;
 	/** Takes the act back; absent where it cannot be. */
 	undo?: () => Undone | Promise<Undone>;
+	/** The answers to a question the message asks, each a button; a message that asks one stays until it is answered or closed. */
+	choices?: { label: string; act: () => unknown }[];
+	/** Run when the person closes the message without answering it. */
+	ondismiss?: () => void;
 }
 
 class ColumnMessage {
@@ -23,12 +27,19 @@ class ColumnMessage {
 	#held = 0;
 
 	/** Says `text` in the column's foot, with `undo` offered when given. A message posted while none shows starts with nothing holding it, since its box is new under the pointer and the keyboard; one that replaces a message on screen keeps the holds on that box. */
-	post(text: string, undo?: Said['undo']): void {
+	post(text: string, undo?: Said['undo'], ask?: Pick<Said, 'choices' | 'ondismiss'>): void {
 		this.#stop();
 		if (!this.said) this.#held = 0;
 		this.undoing = false;
-		this.said = { text, undo };
+		this.said = { text, undo, ...ask };
 		this.#start();
+	}
+
+	/** The person closed the message: what it asked is put off, and it goes. */
+	dismiss(): void {
+		const put = this.said?.ondismiss;
+		this.clear();
+		put?.();
 	}
 
 	/** Takes the message down, and with its box every hold on it: a box taken from under the pointer or the keyboard is told of no leaving. */
@@ -75,7 +86,7 @@ class ColumnMessage {
 	}
 
 	#start(): void {
-		if (this.#held) return;
+		if (this.#held || this.said?.choices?.length) return;
 		this.#timer = setTimeout(() => this.clear(), MESSAGE_FOR);
 	}
 

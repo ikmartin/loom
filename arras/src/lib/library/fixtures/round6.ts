@@ -220,6 +220,8 @@ export interface Fixture {
 	network: 'asked' | 'off' | 'unasked';
 	/** The work each taken row added, by the row's id, which `library-undo` takes back out. */
 	taken: Record<string, string>;
+	/** The intake's questions waiting on the person, by id: the file's name and the works it may be. */
+	questions: Record<string, { name: string; candidates: string[] }>;
 }
 
 export function round6(): Fixture {
@@ -231,7 +233,7 @@ export function round6(): Fixture {
 	const review = review6(REF);
 	// a transcribed result's row is beside its work's stored paper, as a digested one's is
 	for (const r of review.rows) if (r.kind === 'check' && 'nodes' in r && r.pdf === null) r.pdf = works.find((w) => w.ref === r.ref)?.holds.pdf ?? null;
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], notes: notes6(REF), network: 'asked', taken: {} };
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], notes: notes6(REF), network: 'asked', taken: {}, questions: {} };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];

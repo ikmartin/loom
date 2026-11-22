@@ -120,20 +120,44 @@ export const library = {
 		drop: 'or drop files anywhere in loom',
 		/** The column's message after a work was added: its title, its short name, and how it was known. */
 		added: (title: string, short: string, how: string, tex: boolean) => `Added ${title}${short && short !== title ? `, ${short}` : ''}${how ? `, found by its ${how}` : ''}${tex ? ', with its TeX source' : ''}.`,
+		/** The column's message when a file was filed under a work the library had: dropped on its row, or the person's answer that it is that work. */
+		filed: (name: string, short: string) => `Filed ${name} under ${short}.`,
 		/** What a work was known by, in the message. */
 		foundBy: { arxiv: 'arXiv number', doi: 'DOI', isbn: 'ISBN', entry: 'entry', row: 'row', none: '' } as Record<string, string>,
 		/** The column's message when loom already holds the dropped file's work. */
 		here: (name: string, short: string) => `${name} is ${short}, already in your library.`,
 		/** The column's message when a drop could not be added. */
-		cannot: (name: string, why: string) => `${name} was not added: ${why}`,
+		cannot: (name: string, why: string) => `${name} was not added: ${why.replace(/\.$/, '')}.`,
+		/** Why a file or a pasted line was not added, by the intake's code for it; loom's own words for it are never drawn. */
+		cannotWhy: {
+			'not-recognised': 'it names no work loom can find',
+			'no-service': 'loom does not look up ISBNs or MathSciNet numbers',
+			missing: 'nothing was found under its identifier',
+			unreachable: 'the service that looks papers up could not be reached',
+			'key-taken': 'another work in the library has its key',
+			'has-document': 'the work holds a document of that kind already',
+			'not-a-source': 'it is not a TeX source loom can unpack',
+			'bad-name': 'its name holds a character no file name can',
+			refused: 'loom could not keep its entry'
+		} as Record<string, string>,
+		/** Why, where the intake's code has no sentence here. */
+		cannotWhyAny: 'loom could not add it',
 		/** The column's message after a drop of several: how many were added, then each that was not, joined by a semicolon. */
 		many: (added: number, others: string[]) => [added ? `Added ${added} ${added === 1 ? 'work' : 'works'}` : '', ...others].filter(Boolean).join('; ') + '.',
 		/** A file of such a drop that loom already held. */
 		hereShort: (name: string, short: string) => `${name} is ${short}, already in your library`,
 		/** A file of such a drop that was not added. */
 		cannotShort: (name: string, why: string) => `${name} was not added: ${why.replace(/\.$/, '')}`,
-		/** A file of a drop that loom has a question about, answered in its row. */
-		question: (name: string) => `${name} waits for your answer in its row`
+		/** A file of a drop that loom has a question about, which the column asks next. */
+		question: (name: string) => `${name} waits for your answer`,
+		/** The intake's question, asked in the column: the file, the identifier it states, and the works in the library that state it too. */
+		asks: (name: string, stated: string, works: string[]) => (works.length === 1 ? `${name} states ${stated}, as ${works[0]} in your library does. Is it that work?` : `${name} states ${stated}, as ${works.length} works in your library do. Is it one of them?`),
+		/** The question where the file states nothing a work states: it was dropped on that work's row. */
+		asksOn: (name: string, short: string) => `Is ${name} ${short}, the work you dropped it on?`,
+		/** The answers: that it is the one work asked about, that it is a work of its own beside one or several. */
+		isIt: 'yes',
+		notIt: 'no, a work of its own',
+		noneOfThem: 'none of them: a work of its own'
 	},
 	drop: {
 		/** The cover over any view while a file is dragged over the window. */

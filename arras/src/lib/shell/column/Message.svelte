@@ -24,8 +24,9 @@
 	<div class="msg" bind:this={box} data-testid="column-message" onpointerenter={() => message.hold()} onpointerleave={() => message.release()} onfocusin={() => message.hold()} onfocusout={() => message.release()} role="group" aria-label={frame.message.label}>
 		<span class="t">{message.said.text}</span>
 		<span class="u">
+			{#each message.said.choices ?? [] as c (c.label)}<button type="button" class="undo choice" data-testid="column-message-choice" onclick={(e) => then(e, c.act)}>{c.label}</button>{/each}
 			{#if message.said.undo}<button type="button" class="undo" disabled={message.undoing} data-testid="column-message-undo" onclick={(e) => then(e, () => message.undo(frame.message.undoFailed))}>{frame.message.undo}</button>{/if}
-			<button type="button" class="ib" title={frame.message.dismiss} aria-label={frame.message.dismiss} data-testid="column-message-dismiss" onclick={(e) => then(e, () => message.clear())}><Icon name="close" size={16} /></button>
+			<button type="button" class="ib" title={frame.message.dismiss} aria-label={frame.message.dismiss} data-testid="column-message-dismiss" onclick={(e) => then(e, () => message.dismiss())}><Icon name="close" size={16} /></button>
 		</span>
 	</div>
 {/if}
@@ -50,6 +51,7 @@
 	}
 	.u {
 		display: flex;
+		flex-wrap: wrap;
 		gap: 10px;
 		align-items: center;
 		justify-content: flex-end;
@@ -65,6 +67,9 @@
 	}
 	.undo:hover {
 		text-decoration: underline;
+	}
+	.choice {
+		min-height: 28px;
 	}
 	.undo:disabled {
 		color: var(--ink-faint);

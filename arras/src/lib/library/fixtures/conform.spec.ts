@@ -163,7 +163,6 @@ describe('every generated sample passes through the client as a served answer wo
 const NOT_MODELLED: Record<string, string> = {
 	'library-entry.key-taken': 'the fixture keeps no entries whose keys could collide',
 	'library-undo.waits-again': 'the fixture files no document under a work, so no filing is undone',
-	'library-answer.same': "loom asks the question again where the person names a candidate (the node store's finding); the fixture holds no questions"
 };
 
 /** The fixture a sample is asked of: on a quilt that has not said whether loom may use the network, or has it off, where the sample's refusal needs one. */
@@ -204,6 +203,15 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 			return { ...r, ref: held };
 		case 'library-look-up':
 			return { ...r, ref: unlooked };
+		case 'library-answer': {
+			// a question made first, by a file named by an arXiv number a work states; answered with no work, with its candidate, or with a work it is not
+			const got = await f.receive(new File([new Uint8Array(8)], '2000.01000v2.pdf'));
+			const took = got.ok ? await f.call<{ gen: number; rows: { question?: string; candidates?: { ref: string }[] }[] }>('library-take', { items: [{ incoming: got.value.incoming }] }) : null;
+			const row = took?.ok ? took.value.rows[0] : {};
+			const candidate = row.candidates?.[0]?.ref ?? '';
+			const other = f.data.works.find((w) => w.ref !== candidate)!.ref;
+			return { ...r, question: row.question ?? '', same: s.name.endsWith('.same') ? candidate : r.same === null ? null : other };
+		}
 		case 'library-places': {
 			// a work with a mark to digest on its pages, which is an annotation placed; one holding no PDF for the refusal
 			if (s.answer.status) return { ref: f.data.works.find((w) => !w.holds.pdf)!.ref };

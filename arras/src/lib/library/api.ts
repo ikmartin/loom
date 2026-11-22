@@ -232,5 +232,6 @@ export interface TakeRow {
 	code?: string;
 	question?: string;
 	document?: { name: string; kind: string; identifiers: string[] };
-	candidates?: { ref: string; short: string; title: string; authors: string[]; year: string; how: string }[];
+	/** The works it may be; `how` the identifier the file states that the work states too, null for the work it was dropped on where that states none of them. */
+	candidates?: { ref: string; short: string; title: string; authors: string[]; year: string; how: string | null }[];
 }

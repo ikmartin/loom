@@ -204,11 +204,22 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			return ok({});
 		},
 		// a question no drop here asks; an answer of a work of its own adds it, as the intake does
+		// the person's answer: the file filed under the work they named, or a work of its own
 		'library-answer': (b) => {
-			if (b.same) return no('not-a-candidate', '');
-			const added = addWork(f, String(b.question), b.online !== true);
+			const q = f.questions[String(b.question)];
+			if (!q) return no('no-such-question');
+			if (b.same && !q.candidates.includes(String(b.same))) return no('not-a-candidate');
+			delete f.questions[String(b.question)];
+			if (b.same) {
+				const w = f.works.find((x) => x.ref === b.same)!;
+				if (!w.holds.pdf) w.holds = { ...w.holds, pdf: `sha256:${'0'.repeat(56)}${f.gen.toString(16).padStart(8, '0')}` };
+				f.gen++;
+				changed();
+				return ok({ row: { id: String(b.question), item: 0, name: q.name, state: 'added', act: `x-${f.gen}`, ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, found_by: 'entry', tex: w.holds.tex, unconfirmed: false, identifier: w.link ? `arxiv:${w.link.split('/').pop()}` : null, under: true } });
+			}
+			const added = addWork(f, q.name, b.online !== true);
 			changed();
-			return ok({ row: { id: String(b.question), item: 0, name: added.title, state: 'added', act: `x-${f.gen}`, ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: 'none', tex: false, unconfirmed: false, identifier: null, under: false } });
+			return ok({ row: { id: String(b.question), item: 0, name: q.name, state: 'added', act: `x-${f.gen}`, ref: added.ref, short: added.short, title: added.title, authors: added.authors, year: added.year, found_by: 'none', tex: false, unconfirmed: false, identifier: null, under: false } });
 		},
 		// a work's PDF taken off it waits again as a drop
 		'library-unfile': (b) => {
@@ -233,6 +244,15 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			if (f.network === 'unasked' && !offline) return no('network-unasked', '');
 			const rows = ((b.items as { incoming?: string; text?: string; for?: string }[]) ?? []).map((it, item) => {
 				const name = it.incoming ? it.incoming.replace(/^f-\d+-/, '') : (it.text ?? '');
+				// a file named by an arXiv number a work in the library states asks whether it is that work, as the intake asks of an identifier a file states
+				const stated = it.incoming ? /^(\d{4}\.\d{4,5})(v\d+)?/.exec(name) : null;
+				const same = stated ? f.works.filter((w) => w.link?.endsWith(`/${stated[1]}`)) : [];
+				if (stated && same.length) {
+					const question = `q-${f.gen}-${item}`;
+					f.questions[question] = { name, candidates: same.map((w) => w.ref) };
+					const how = `arxiv:${stated[1]}`;
+					return { id: `d-${f.gen}-${item}`, item, name, state: 'question', question, document: { name, kind: 'pdf', identifiers: [`arxiv:${stated[1]}${stated[2] ?? ''}`] }, candidates: same.map((w) => ({ ref: w.ref, short: w.short, title: w.title, authors: w.authors, year: w.year, how })) };
+				}
 				const arxiv = /^\d{4}\.\d{4,5}/.test(name);
 				const added = addWork(f, name, offline);
 				const id = `d-${f.gen}-${item}`;
