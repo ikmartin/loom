@@ -500,3 +500,82 @@ def test_an_import_put_back_leaves_no_empty_folder_it_made(tmp_path: Path, monke
     said = writes.recover(q, load_quilt(q).history_dir)
     assert said and said[0].startswith("undid import:")
     assert not (q / "main").exists() and (q / "notes").is_dir()
+
+
+# ---- R2-6: the person's acts that put their own words into the look, cut short at any step ----------------------
+
+
+def _rows(root: Path) -> list[tuple[str, str]]:
+    """The in-place changes Your Changes lists, by path and new words."""
+    from loom.pending import in_place
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+
+    return sorted((p.path or "", p.new) for p in in_place(scan(load_quilt(root)), "Tester"))
+
+
+@pytest.mark.parametrize("which", ["keep", "undo of a keep", "discard", "tick"])
+def test_an_act_that_puts_its_words_into_the_look_cut_short_at_any_step_lists_as_before_or_after(
+    tmp_path: Path, which: str
+) -> None:
+    """Keep, its undo, Discard and a tick, each killed at every step it takes holding the door, with an agent's new note waiting: after recovery Your Changes lists what it listed before the act or what the act leaves, never the act's own words as the person's edit (R2-6)."""
+    import shutil
+
+    from loom import tasks, writes
+    from loom.looks import take
+    from loom.pending import unkeep
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.helpers import run
+    from tests.unit.test_adopt import TEXT, made
+    from tests.unit.test_write_safety import Died
+
+    base = tmp_path / "base"
+    base.mkdir()
+    made(base, TEXT)
+    (base / "notes").mkdir()
+    (base / "notes/tasks.md").write_text("# Tasks\n\n- [ ] first\n- [ ] second\n", encoding="utf-8")
+    take(load_quilt(base), "Tester")
+    ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=base, env={"AI_AGENT": "1"})  # fmt: skip
+    (base / "notes/agent.md").write_text("an agent's note\n", encoding="utf-8")  # waits throughout
+    listed = json.loads(run("changes", "--json", cwd=base).stdout)["changes"]
+    (edit,) = [c["id"] for c in listed if c["kind"] == "suggested"]
+    if which == "undo of a keep":
+        ok("changes", "--keep", edit, cwd=base)
+    if which == "discard":
+        doc = base / "drafting/main.tex"
+        doc.write_text(doc.read_text().replace("Original introduction.", "Original introduction, as an agent put it."))
+        listed = json.loads(run("changes", "--json", cwd=base).stdout)["changes"]
+    task = tasks.items((base / "notes/tasks.md").read_text())[0].id  # the box of "first"
+    changed = [c["id"] for c in listed if c["kind"] == "edit" and c["path"] == "drafting/main.tex"]
+
+    def act(root: Path) -> None:
+        if which == "keep":
+            run("changes", "--keep", edit, cwd=root)
+        elif which == "undo of a keep":
+            unkeep(scan(load_quilt(root)), "Tester", [edit], ("human", "Tester"))
+        elif which == "discard":
+            run("changes", "--discard", *changed, cwd=root)
+        else:
+            tasks.tick(load_quilt(root), "Tester", "notes/tasks.md", task, True)
+
+    before = _rows(base)
+    whole = tmp_path / "whole"
+    shutil.copytree(base, whole)
+    with pytest.MonkeyPatch.context() as mp:
+        count = dying_at_step(mp, whole, 0)
+        act(whole)
+    after = _rows(whole)
+    assert count[0] > 5 and ("notes/agent.md", "an agent's note") in after, (count, after)
+    for k in range(1, count[0] + 1):
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q)
+        with pytest.MonkeyPatch.context() as mp:
+            dying_at_step(mp, q, k)
+            try:
+                act(q)
+            except Died:
+                pass
+        writes.recover(q, load_quilt(q).history_dir)
+        assert _rows(q) in (before, after), (which, k, _rows(q))
+        shutil.rmtree(q)

@@ -1338,19 +1338,39 @@ def _follow_look(
 
 
 def _relook(root: Path, act_id: str, entry: dict[str, Any]) -> list[str]:
-    """For an act recovery finished, what its follow-up would have done to the person's look (`pending.relook`): words loom wrote are the person's, not their edit. Returns what to say when that could not be done."""
+    """For an act recovery finished, what its follow-up would have done to the person's look: a Keep's or an undo's words (`pending.relook`), or a tick's line (`_retick`); words loom wrote are the person's, not their edit. Returns what to say when that could not be done."""
     look = entry.get("look")
     if not look:
         return []
     try:
         from loom.pending import relook
 
-        relook(root, look)
+        if isinstance(look, dict) and isinstance(look.get("tick"), dict):
+            _retick(root, entry, look)
+        else:
+            relook(root, look)
     except Exception as exc:  # noqa: BLE001 -- the act is finished; its look is a convenience, said when it fails
         return [
             f"finished {act_id}, but its words did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
         ]
     return []
+
+
+def _retick(root: Path, entry: dict[str, Any], look: dict[str, Any]) -> None:
+    """For a tick recovery finished, its line into the person's look, as its follow-up puts it (`looks.take_line`), from the texts its journal line names; only the quilt's own reviewer's look."""
+    from loom.looks import take_line
+    from loom.scan.quilt import load_quilt, reviewer_identity
+
+    who, tick = look.get("who"), look.get("tick") or {}
+    path, line = tick.get("path"), tick.get("line")
+    ab = (entry.get("files") or {}).get(path)
+    if not isinstance(who, str) or not who or who != reviewer_identity(root)[0] or not ab or not isinstance(line, int):
+        return
+    history = history_of(root)
+    before, after = (_fetch(root, history, d) if d else None for d in ab)
+    if before is None or after is None:
+        return
+    take_line(load_quilt(root), who, str(path), before.decode("utf-8"), after.decode("utf-8"), line)
 
 
 #: Seconds after which a temporary file in the history's `texts/` is one a crash left, not one a store in another process is writing: `store` writes one and renames it within a moment.
@@ -1519,7 +1539,7 @@ class Act:
         return [r["line"] for r in self.records if r["log"] == name]
 
     def then(self, fn: Callable[[], None]) -> None:
-        """A step after `done` and still under the lock (a rescan, the look, carrying annotations); recovery never replays it."""
+        """A step once the files are written, before `done` and under the lock (a rescan, the look, carrying annotations); recovery never replays it, and redoes only what the act's `look` records (`_relook`)."""
         self.follow.append(fn)
 
     # the commit
@@ -1598,9 +1618,16 @@ class Act:
                 begin["by"] == "agent",
                 {rel: (self.before.get(rel), changed[rel]) for rel in changed},
             )
+        # the act's own follow-up too (Keep's and the undo's words into the look, a tick's line, a rescan, annotations carried), so a crash in it leaves the act for recovery to finish, which puts its words into the look again (`_relook`); a failure in it is raised once `done` is written, since the act's files are
+        failed: Exception | None = None
+        try:
+            self._follow()
+        except Exception as exc:
+            failed = exc
         self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
         _save_index(self.root, self.journal)
-        self._follow()
+        if failed is not None:
+            raise failed
 
     def _follow(self) -> None:
         for fn in self.follow:
@@ -1639,15 +1666,13 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
         return
     from loom.locks import holding
 
-    # a thread holding the lock already settled, and said so, as it took it
+    # a thread holding the lock already settled, and said so, as it took it; and an act opened in another's follow-up must not settle that act, begun and not yet done
     already = holding(root / WRITES_LOCK)
     with locked(root / WRITES_LOCK):
         j = read_journal(root)
-        if j.begun:
-            said = _settle(root, history, j)
+        if j.begun and not already:
+            _say(_settle(root, history, j))
             _save_index(root, j)
-            if not already:
-                _say(said)
         a = Act(root, history, kind, actor, j)
         yield a
         a._commit()
