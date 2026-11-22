@@ -1,6 +1,6 @@
 """What a TeX source holds, read once for each source and kept by the source's hash (`docs/specs/library-views.md` §3.2, "The survey"): its sections, its results with their proofs, every label it defines, and its bibliography's files.
 
-Made in two steps, when something asks for it and never by a build or the list of works. `read` parses the source with the scanner's own parsers and names each result from its counters as `library.counters` emulates them, which a work's outline shows while the survey is `reading`; nothing writes an emulated number into a node. `complete` compiles a copy of the source with a mark inside each heading, result and proof, and takes every number and page from what TeX wrote, so a result is numbered as its source prints it whether or not it has a label. Only files inside the source's folder are read, the stored source is never changed, and a number or a page is taken only when it is shaped like one, so nothing else a compile can write (a file of the person's that a source read in) reaches a node.
+Made in two steps, when something asks for it and never by a build or the list of works. `read` parses the source with the scanner's own parsers and names each result from its counters as `library.counters` emulates them, which a work's outline shows while the survey is `reading`; nothing writes an emulated number into a node. `complete` compiles a copy of the source with a mark inside each heading, result and proof, with no command started for it (`tex.runner.FOREIGN`), and takes every number and page from what TeX wrote, so a result is numbered as its source prints it whether or not it has a label; the survey is judged by its `.aux`, not by TeX's exit. Only files inside the source's folder are read, the stored source is never changed, and a number or a page is taken only when it is shaped like one, so nothing else a compile can write (a file of the person's that a source read in) reaches a node.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
 QUEUE = 4 * TIMEOUT
 #: A printed number or page as a source prints one; anything else TeX wrote in its place is not taken.
-SHAPED = re.compile(r"[A-Za-z0-9][A-Za-z0-9.\-]{0,15}")
+SHAPED = re.compile(r"[A-Za-z0-9(][A-Za-z0-9.\-()]{0,15}")
 #: The labels the compile's marks write, never one a source's own: `s`, `i` or `p` and the place of the heading, result or proof.
 MARK = "loom-survey-"
 #: What a marked copy's preamble gains: the mark, a `\label` that also writes the PDF's own count of the page it falls on.
@@ -44,6 +44,8 @@ MARKER = r"""\makeatletter
 \makeatother
 """
 _SHEET = re.compile(r"\\loomSurveySheet\{([^{}]*)\}\{(\d+)\}")
+#: A number that is another label's, as a restated result prints its first statement's (`\renewcommand{\thethm}{\ref{thm:main}}`).
+_REFERS = re.compile(r"\\ref\s*\*?\s*\{([^{}]*)\}")
 #: The files of a source the scanner reads.
 TEXT = (".tex", ".sty", ".cls", ".ltx", ".def", ".clo")
 #: The taxa loom writes where a source's name for a result is one of them (`docs/specs/nodes.md` §5); any other is `other`.
@@ -171,7 +173,7 @@ class Label:
 
 @dataclass
 class Survey:
-    """What one source holds. `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, and the compile's own)."""
+    """What one source holds. `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, and the compile's own); `unseen` names what a compile left unnumbered, and `errors` counts the errors TeX reported in a compile that still wrote every mark."""
 
     tex: str
     main: str
@@ -184,6 +186,8 @@ class Survey:
     labels: dict[str, Label] = field(default_factory=dict)
     bibliography: list[str] = field(default_factory=list)
     bbl: str | None = None
+    unseen: list[str] = field(default_factory=list)
+    errors: int = 0
 
     def to_json(self) -> dict[str, Any]:
         """The survey as its kept file holds it."""
@@ -512,40 +516,60 @@ def marked(src: Path, s: Survey, dest: Path) -> Path:
     return root
 
 
-def numbered(s: Survey, auxes: list[str]) -> Survey:
-    """A copy of `s` with each number and page TeX wrote into `auxes`, the `.aux` files of its marked copy's compile.
+def _printed(number: str, found: dict[str, AuxNumber]) -> str | None:
+    """The number TeX printed: `number` when shaped as one, or the number of the label it is a `\\ref` of, followed once."""
+    if (m := _REFERS.fullmatch(number.strip())) is not None:
+        got = found.get(re.sub(r"\s+", " ", m.group(1)).strip())
+        return shaped(got.number) if got is not None else None
+    return shaped(number)
 
-    A result its source declares unnumbered keeps none, and so does one whose mark TeX never reached; a number or page not shaped as one is not taken.
+
+def numbered(s: Survey, auxes: list[str]) -> Survey:
+    """A copy of `s` numbered and paged from `auxes`, the `.aux` files of its marked copy's compile, judged by them and not by TeX's exit.
+
+    `ready` when every mark loom added is there, and each mark of a result or heading its source numbers holds a number shaped as one; else `failed`, `incomplete`, with `unseen` naming each item (`i…`), heading (`s…`) and proof (`p…`) that fell short, and no number taken from the compile at all. A result its source declares unnumbered keeps none; a label of the source's own takes its number only when it is shaped as one.
     """
-    out = Survey.from_json(s.to_json())
     found: dict[str, AuxNumber] = {}
     sheets: dict[str, int] = {}
     for text in auxes:
         found.update(parse_aux(text))
         sheets.update({m.group(1): int(m.group(2)) for m in _SHEET.finditer(text)})
+    marks: list[tuple[str, bool]] = [(f"s{k}", sec.number is not None) for k, sec in enumerate(s.sections)]
+    for k, item in enumerate(s.items):
+        marks.append((f"i{k}", item.numbered))
+        marks += [(f"p{k}-{j}", False) for j in range(len(item.proofs))]
+    unseen = [
+        name
+        for name, counts in marks
+        if (got := found.get(MARK + name)) is None or (counts and _printed(got.number, found) is None)
+    ]
+    out = Survey.from_json(s.to_json())
+    if unseen:
+        out.state, out.why, out.unseen = "failed", "incomplete", unseen
+        return out
 
     def at(mark: str) -> tuple[str | None, int | None, int | None]:
-        got = found.get(mark)
-        if got is None:
-            return None, None, sheets.get(mark) or None
-        return shaped(got.number), got.page, sheets.get(mark) or None
+        got = found[MARK + mark]
+        return _printed(got.number, found), got.page, sheets.get(MARK + mark) or None
 
     for k, sec in enumerate(out.sections):
-        number, sec.page, sec.sheet = at(f"{MARK}s{k}")
+        number, sec.page, sec.sheet = at(f"s{k}")
         sec.number = number if sec.number is not None else None
     for k, item in enumerate(out.items):
-        number, item.page, item.sheet = at(f"{MARK}i{k}")
+        number, item.page, item.sheet = at(f"i{k}")
         item.number = number if item.numbered else None
         for j, proof in enumerate(item.proofs):
-            _n, proof.page, proof.sheet = at(f"{MARK}p{k}-{j}")
+            _n, proof.page, proof.sheet = at(f"p{k}-{j}")
     unnumbered = {i.item for i in out.items if not i.numbered}
     for name, label in out.labels.items():
         got = found.get(name)
         label.number = (
-            shaped(got.number) if got is not None and not (label.result and label.owner in unnumbered) else None
+            _printed(got.number, found)
+            if got is not None and not (label.result and label.owner in unnumbered)
+            else None
         )
         label.page = got.page if got is not None else None
-    out.state, out.why = "ready", None
+    out.state, out.why, out.unseen = "ready", None, []
     return out
 
 
@@ -562,20 +586,22 @@ def compile_marks(src: Path, s: Survey) -> Survey:
     Returns
     -------
     Survey
-        `ready`; or `failed` with why when TeX wrote no `.aux`: `no-tex` without latexmk, `timeout` past `TIMEOUT`, `stopped`, else `compile`.
+        As `numbered` judges what TeX wrote, with `errors` the count of errors TeX reported, so a source whose figure is missing still reads `ready` when every mark is there; or `failed` when TeX wrote no `.aux`: `no-tex` without latexmk, `timeout` past `TIMEOUT`, `stopped`, else `compile`.
     """
     if s.state == "failed":
         return s
     with tempfile.TemporaryDirectory(prefix="loom-survey-") as tmp:
         root = marked(src, s, Path(tmp) / "src")
-        res = compile_tex(root, s.main, Path(tmp) / "out", s.engine, halt_on_error=False, timeout=TIMEOUT)
+        res = compile_tex(root, s.main, Path(tmp) / "out", s.engine, halt_on_error=False, timeout=TIMEOUT, foreign=True)
         auxes = [p.read_text(encoding="utf-8", errors="replace") for p in sorted((Path(tmp) / "out").rglob("*.aux"))]
     if res.aux is None or not auxes:
         out = Survey.from_json(s.to_json())
         out.state = "failed"
         out.why = {127: "no-tex", 124: "timeout"}.get(res.returncode, "stopped" if res.stopped else "compile")
         return out
-    return numbered(s, auxes)
+    done = numbered(s, auxes)
+    done.errors = len(res.errors)
+    return done
 
 
 def complete(root: Path, tex: str, src: Path, main: str) -> Survey:

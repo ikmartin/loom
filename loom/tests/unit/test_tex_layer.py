@@ -36,6 +36,17 @@ def test_a_tex_run_writes_only_below_its_directory_and_runs_only_safe_commands_w
     assert "openin_any" not in tex_env()
 
 
+def test_a_source_nobody_at_loom_wrote_starts_no_command_whatever_the_shell_says(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A work's source in the library is compiled with shell escape off, not restricted: a person's own build keeps `LIMITS`."""
+    from loom.tex.runner import tex_env
+
+    monkeypatch.setenv("shell_escape", "t")
+    monkeypatch.setenv("openout_any", "a")
+    env = tex_env(foreign=True)
+    assert (env["openout_any"], env["shell_escape"]) == ("p", "f")
+    assert tex_env()["shell_escape"] == "p"
+
+
 def test_aux_read_plain_and_hyperref() -> None:
     text = "\\relax\n\\newlabel{lem:a}{{1.1}{1}}\n\\newlabel{lem:a@cref}{{[lemma][1][1]1.1}{[1][1][]1}}\n\\newlabel{thm:b}{{2.1}{12}{Main theorem}{theorem.2.1}{}}\n\\newlabel{eq:c}{{3}{4}}\n\\newlabel{sec:s}{{2}{12}{Results}{section.2}{}}\n"
     n = parse_aux(text)

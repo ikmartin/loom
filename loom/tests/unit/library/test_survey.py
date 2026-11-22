@@ -223,36 +223,84 @@ def test_a_marked_copy_marks_each_heading_result_and_proof_and_the_source_is_not
     assert _bytes(src) == before
 
 
-def test_a_number_or_page_is_taken_only_when_it_is_shaped_as_one(tmp_path: Path) -> None:
+#: An .aux for the fixture in which every mark loom adds is there: its five headings, six results and two proofs.
+WHOLE = [
+    r"\newlabel{loom-survey-s0}{{1}{1}}",
+    r"\newlabel{loom-survey-s1}{{2}{1}}",
+    r"\newlabel{loom-survey-s2}{{2}{1}}",
+    r"\newlabel{loom-survey-s3}{{7}{2}}",
+    r"\newlabel{loom-survey-s4}{{A}{2}}",
+    r"\newlabel{loom-survey-i0}{{1.1}{1}}",
+    r"\newlabel{loom-survey-i1}{{1.2}{1}}",
+    r"\newlabel{loom-survey-p1-0}{{1}{1}}",
+    r"\newlabel{loom-survey-i2}{{2.1}{1}}",
+    r"\newlabel{loom-survey-p2-0}{{2.1}{1}}",
+    r"\newlabel{loom-survey-i3}{{2.1}{1}}",
+    r"\newlabel{loom-survey-i4}{{7.1}{2}}",
+    r"\newlabel{loom-survey-i5}{{A.1}{2}}",
+    r"\loomSurveySheet{loom-survey-i0}{1}",
+    r"\loomSurveySheet{loom-survey-i4}{2}",
+    r"\loomSurveySheet{loom-survey-i5}{0}",
+    r"\newlabel{eq:bound}{{1}{1}}",
+    r"\newlabel{it:first}{{(i)}{1}}",
+    r"\newlabel{claim:star}{{2.1}{1}}",
+    r"\newlabel{fig:one}{{a-very-long-number-indeed}{2}}",
+    r"\newlabel{eq:outside}{{\input{/etc/hosts}}{2}}",
+]
+
+
+def test_an_aux_holding_every_mark_numbers_each_heading_result_and_proof(tmp_path: Path) -> None:
     s = survey.read(_source(tmp_path), "main.tex", TEX)
-    aux = "\n".join(
-        [
-            r"\newlabel{loom-survey-i0}{{1.1}{2}}",
-            r"\newlabel{loom-survey-i1}{{\input{/etc/hosts}}{2}}",
-            r"\newlabel{loom-survey-i2}{{root:x:0:0:root:/root}{3}}",
-            r"\newlabel{loom-survey-i3}{{1.3}{3}}",
-            r"\newlabel{loom-survey-i4}{{7.1}{4}}",
-            r"\newlabel{loom-survey-s0}{{1}{2}}",
-            r"\newlabel{eq:bound}{{1}{2}}",
-            r"\newlabel{claim:star}{{1.3}{3}}",
-            r"\newlabel{fig:one}{{a-very-long-number-indeed}{4}}",
-            r"\loomSurveySheet{loom-survey-i0}{2}",
-            r"\loomSurveySheet{loom-survey-i4}{0}",
-        ]
-    )
-    done = survey.numbered(s, [aux])
-    assert done.state == "ready" and s.state == "reading"
+    done = survey.numbered(s, ["\n".join(WHOLE)])
+    assert (done.state, done.why, done.unseen) == ("ready", None, []) and s.state == "reading"
     assert [(i.number, i.page, i.sheet) for i in done.items] == [
-        ("1.1", 2, 2),
-        (None, 2, None),
-        (None, 3, None),
-        (None, 3, None),
-        ("7.1", 4, None),
-        (None, None, None),
+        ("1.1", 1, 1),
+        ("1.2", 1, None),
+        ("2.1", 1, None),
+        (None, 1, None),
+        ("7.1", 2, 2),
+        ("A.1", 2, None),
     ]
-    assert (done.sections[0].number, done.sections[1].number) == ("1", None)
-    assert done.labels["eq:bound"].number == "1" and done.labels["claim:star"].number is None
-    assert done.labels["fig:one"].number is None and done.labels["fig:one"].page == 4
+    assert [x.number for x in done.sections] == ["1", "2", None, "7", "A"]
+    labels = {k: (v.number, v.page) for k, v in done.labels.items() if k in ("eq:bound", "it:first", "claim:star")}
+    assert labels == {"eq:bound": ("1", 1), "it:first": ("(i)", 1), "claim:star": (None, 1)}
+    assert done.labels["fig:one"].number is None and done.labels["fig:one"].page == 2
+    assert done.labels["eq:outside"].number is None
+
+
+@pytest.mark.parametrize(
+    ("line", "instead", "unseen"),
+    [
+        (r"\newlabel{loom-survey-i1}{{1.2}{1}}", r"\newlabel{loom-survey-i1}{{\input{/etc/hosts}}{1}}", ["i1"]),
+        (r"\newlabel{loom-survey-i4}{{7.1}{2}}", r"\newlabel{loom-survey-i4}{{root:x:0:0:root:/root}{2}}", ["i4"]),
+        (r"\newlabel{loom-survey-s1}{{2}{1}}", r"\newlabel{loom-survey-s1}{{}{1}}", ["s1"]),
+        (r"\newlabel{loom-survey-p1-0}{{1}{1}}", None, ["p1-0"]),
+    ],
+)
+def test_a_mark_missing_or_numbered_with_what_is_no_number_fails_the_survey_whole(
+    tmp_path: Path, line: str, instead: str | None, unseen: list[str]
+) -> None:
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    lines = [x for x in WHOLE if x != line] + ([instead] if instead else [])
+    assert len(lines) == len(WHOLE) - (0 if instead else 1)
+    done = survey.numbered(s, ["\n".join(lines)])
+    assert (done.state, done.why, done.unseen) == ("failed", "incomplete", unseen)
+    assert [i.number for i in done.items] == [i.number for i in s.items]
+    assert all(i.page is None for i in done.items)
+
+
+def test_a_source_s_compile_starts_no_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    asked: dict[str, object] = {}
+
+    def compile_tex(*args: object, **kwargs: object) -> object:
+        asked.update(kwargs)
+        raise RuntimeError("stop here")
+
+    monkeypatch.setattr(survey, "compile_tex", compile_tex)
+    src = _source(tmp_path)
+    with pytest.raises(RuntimeError):
+        survey.compile_marks(src, survey.read(src, "main.tex", TEX))
+    assert asked["foreign"] is True
 
 
 def test_a_quilt_compiles_one_source_at_a_time_and_keeps_what_it_made(
@@ -265,7 +313,7 @@ def test_a_quilt_compiles_one_source_at_a_time_and_keeps_what_it_made(
         start = time.monotonic()
         time.sleep(0.3)
         spans.append((start, time.monotonic()))
-        return survey.numbered(s, [])
+        return survey.numbered(s, ["\n".join(WHOLE)])
 
     monkeypatch.setattr(survey, "compile_marks", slow)
     other = "sha256:" + "cd" * 32
@@ -312,3 +360,39 @@ def test_a_source_that_does_not_compile_fails_and_numbers_nothing_it_did_not_see
     done = survey.complete(tmp_path / "quilt", TEX, src, "main.tex")
     assert (done.state, done.why) == ("failed", "compile")
     assert all(i.page is None for i in done.items)
+
+
+@pytest.mark.tex
+def test_a_source_whose_figure_is_missing_still_reads_ready_with_its_errors_counted(tmp_path: Path) -> None:
+    src = _source(tmp_path)
+    text = MAIN.replace("\\begin{document}", "\\usepackage{graphicx}\n\\begin{document}", 1)
+    text = text.replace("\\begin{figure}", "\\begin{figure}\\includegraphics{loom-no-such-figure}", 1)
+    (src / "main.tex").write_text(text, encoding="utf-8")
+    done = survey.complete(tmp_path / "quilt", TEX, src, "main.tex")
+    assert (done.state, done.unseen) == ("ready", []) and done.errors >= 1
+    assert [i.number for i in done.items] == ["1.1", "1.2", "2.1", None, "7.1", "A.1"]
+
+
+@pytest.mark.tex
+def test_a_foreign_compile_has_shell_escape_off_and_a_person_s_build_keeps_it_restricted(tmp_path: Path) -> None:
+    from loom.tex.runner import compile_tex
+
+    (tmp_path / "a.tex").write_text(
+        "\\documentclass{article}\\begin{document}\\typeout{loom-escape=\\the\\pdfshellescape}x\\end{document}\n",
+        encoding="utf-8",
+    )
+    for foreign, status in ((True, "0"), (False, "2")):
+        res = compile_tex(tmp_path, "a.tex", tmp_path / f"out-{foreign}", foreign=foreign)
+        assert res.log is not None and f"loom-escape={status}" in res.log.read_text(encoding="utf-8", errors="replace")
+
+
+def test_a_restated_result_is_numbered_as_the_label_it_refers_to_and_nothing_else_is_followed(tmp_path: Path) -> None:
+    """A paper that restates its main theorem prints the first statement's number through `\\ref`, which the .aux holds as the reference."""
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    restated = [x for x in WHOLE if "loom-survey-i4}" not in x] + [
+        r"\newlabel{loom-survey-i4}{{\ref {def:widget}}{2}}",
+        r"\newlabel{def:widget}{{1.1}{1}}",
+    ]
+    assert [i.number for i in survey.numbered(s, ["\n".join(restated)]).items][4] == "1.1"
+    nowhere = [x for x in WHOLE if "loom-survey-i4}" not in x] + [r"\newlabel{loom-survey-i4}{{\ref{loom-nowhere}}{2}}"]
+    assert survey.numbered(s, ["\n".join(nowhere)]).unseen == ["i4"]

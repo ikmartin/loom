@@ -29,10 +29,17 @@ ENGINE_FLAGS = {
 
 #: What kpathsea holds every TeX program loom starts to, whatever the distribution's configuration, the person's own or their shell says: it writes only in or below the directory it runs in, and runs no command but the few TeX Live lists as safe, which is how pdflatex converts an EPS figure. Nothing limits what a document reads: `openin_any` has no effect from TeX Live 2026 on, and before that refused the documents loom keeps under `.loom/`, so it is not set.
 LIMITS = {"openout_any": "p", "shell_escape": "p"}
+#: What a source nobody at loom wrote is compiled under: as `LIMITS`, and no command at all is started for it, a figure TeX would convert among them.
+FOREIGN = {**LIMITS, "shell_escape": "f"}
 
 
-def tex_env() -> dict[str, str]:
+def tex_env(*, foreign: bool = False) -> dict[str, str]:
     """The environment of a TeX program loom starts: latexmk, make4ht, and whatever they run in turn.
+
+    Parameters
+    ----------
+    foreign : bool, default False
+        For a source nobody at loom wrote, a work's in the library: `FOREIGN` in place of `LIMITS`.
 
     Returns
     -------
@@ -41,7 +48,8 @@ def tex_env() -> dict[str, str]:
     """
     from loom.machine import unpacked
 
-    return {**os.environ, **private.tex_vars(), **tex_date(), **LIMITS, "PAR_GLOBAL_TMPDIR": str(unpacked())}
+    limits = FOREIGN if foreign else LIMITS
+    return {**os.environ, **private.tex_vars(), **tex_date(), **limits, "PAR_GLOBAL_TMPDIR": str(unpacked())}
 
 
 #: A line of the context TeX prints after every error it reports: the line it stopped at (`l.12 …`), or what it was reading instead (`<*> main.tex`, `<argument> …`).
@@ -271,6 +279,8 @@ def compile_tex(
     halt_on_error: bool = True,
     timeout: int = 600,
     started: Callable[[subprocess.Popen[str]], None] | None = None,
+    *,
+    foreign: bool = False,
 ) -> CompileResult:
     """Compile `tex_rel` (relative to `root`) with latexmk into `outdir`, fetching what it lacks into loom's TeX; return a result even when latexmk is missing.
 
@@ -290,6 +300,8 @@ def compile_tex(
         Seconds for each run.
     started : callable, optional
         Handed latexmk's process as it starts, for a caller that may end it with `stop_run`.
+    foreign : bool, default False
+        A source nobody at loom wrote: compiled under `FOREIGN` (`tex_env`).
 
     Returns
     -------
@@ -299,14 +311,14 @@ def compile_tex(
     rounds = missing.Round()
     if fetching:
         rounds.fetch(missing.preflight(root, tex_rel))
-    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started)
+    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, foreign=foreign)
     for _ in range(missing.ROUNDS):
         if res.ok or not fetching or res.returncode == 124 or res.stopped:
             break
         log = res.log.read_text(encoding="utf-8", errors="replace") if res.log is not None else ""
         if not rounds.fetch(missing.from_log(log, res.stdout)):
             break
-        res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started)
+        res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, foreign=foreign)
     res.fetched, res.needed, res.note = rounds.fetched, rounds.needed, rounds.note
     return res
 
@@ -319,6 +331,8 @@ def _compile_once(
     halt_on_error: bool,
     timeout: int,
     started: Callable[[subprocess.Popen[str]], None] | None,
+    *,
+    foreign: bool = False,
 ) -> CompileResult:
     """One latexmk run of `tex_rel` into `outdir`.
 
@@ -351,7 +365,7 @@ def _compile_once(
             stderr=subprocess.PIPE,
             text=True,
             errors="replace",
-            env=tex_env(),
+            env=tex_env(foreign=foreign),
             start_new_session=True,
         )
         if started is not None:
