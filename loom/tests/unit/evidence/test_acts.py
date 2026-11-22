@@ -290,3 +290,28 @@ def test_a_proposal_whose_bytes_are_another_nodes_file_is_refused_when_taken(roo
     forged = write(root, "proposed", AGENT, on=on, bytes=_file(root, "tq-00K3").read_text(encoding="utf-8"), why="")
     refusal = _refused(root, "refused", acts.take, forged.id, PERSON)
     assert "tq-00A4" in str(refusal) and refusal.diagnostics
+
+
+def test_attesting_again_what_is_attested_on_the_same_text_and_closure_writes_nothing(root: Path) -> None:
+    for node in ("tq-00K3", "tq-00A4"):
+        acts.check(root, node, _hash(root, node), PERSON)
+    on = LibraryWeb(root).subject(Here("node", "tq-00K3"))
+    assert on is not None
+    record = _lean(root, on, {"node": "tq-00K3"})
+    first = _attest(root, LibraryWeb(root), Here("node", "tq-00K3"), record.id)
+    before = _state(root)
+    assert _attest(root, LibraryWeb(root), Here("node", "tq-00K3"), record.id).id == first.id
+    assert _state(root) == before
+
+
+def test_attesting_again_after_a_word_over_another_closure_writes_the_word_status_reads(root: Path) -> None:
+    for node in ("tq-00K3", "tq-00A4"):
+        acts.check(root, node, _hash(root, node), PERSON)
+    on = LibraryWeb(root).subject(Here("node", "tq-00K3"))
+    assert on is not None
+    record = _lean(root, on, {"node": "tq-00K3"})
+    first = _attest(root, LibraryWeb(root), Here("node", "tq-00K3"), record.id)
+    # a later word on the same statements over a closure that missed its member, written by hand
+    write(root, "attested", PERSON, on=on, lean=record.id, statements=first.get("statements"), closure=[], rulings=[])
+    again = _attest(root, LibraryWeb(root), Here("node", "tq-00K3"), record.id)
+    assert again.id != first.id and again.get("closure") == first.get("closure")

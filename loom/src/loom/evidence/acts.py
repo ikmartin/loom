@@ -361,7 +361,7 @@ def attest(
     Returns
     -------
     Record
-        The `attested` record on the result's text now.
+        The `attested` record on the result's text now; the one already there, and nothing written, where the person gave the same word on the same text, statements and closure before.
 
     Raises
     ------
@@ -406,4 +406,21 @@ def attest(
             if not any(r.on is not None and r.on.hash == digest for r in evidence.about("macro", name, of="attested")):
                 _write(root, "attested", by, on=Subject("macro", name, digest))
         members = [{kind: name, "hash": digest} for (kind, name), digest in sorted(closure.items())]
-        return _write(root, "attested", by, on=subject, lean=latest.id, statements=statements_of(latest), closure=members, rulings=[])  # fmt: skip
+        statements = statements_of(latest)
+        # the same word given again is the one already given: the latest of these statements on this text, which status reads, over the same closure
+        given = [a for a in evidence.about(*subject.key, of="attested") if a.by.kind == "person" and a.on == subject and dict(a.get("statements", {})) == statements]  # fmt: skip
+        if given and _members(given[-1]) == _members_of(members):
+            return given[-1]
+        return _write(root, "attested", by, on=subject, lean=latest.id, statements=statements, closure=members, rulings=[])  # fmt: skip
+
+
+def _members_of(raw: list[dict[str, Any]]) -> set[tuple[tuple[str, str], str]]:
+    out = set()
+    for m in raw:
+        s = Subject.from_dict(m, ("node", "label"))
+        out.add((s.key, s.hash))
+    return out
+
+
+def _members(record: Record) -> set[tuple[tuple[str, str], str]]:
+    return _members_of(list(record.get("closure", [])))
