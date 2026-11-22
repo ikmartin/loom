@@ -1138,6 +1138,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now, kept=True)}")
             continue
         _prune(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
+        _unfollow(root, history, e)
         _remove_folders(root, [str(d) for d in e.get("folders") or [] if _in_quilt(root, d)])
         j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
         said.append(f"undid {act_id}")
@@ -1289,6 +1290,11 @@ def _follow_look(
     """
     if kind in OWN_LOOK or agent:
         return
+    _look_follows(root, history, files)
+
+
+def _look_follows(root: Path, history: Path, files: dict[str, tuple[bytes | None, bytes | None]]) -> None:
+    """`_follow_look`'s work, whatever the act: each file's change from the first bytes to the second into the reviewer's look, merged by lines where another change waits, nothing taken in where the two meet. Recovery runs it from an act's after to its before when it puts a person's act back (`_settle`)."""
     try:
         from loom.files import Shown, is_latex_aux
         from loom.looks import _write as write_look
@@ -1354,6 +1360,46 @@ def _relook(root: Path, act_id: str, entry: dict[str, Any]) -> list[str]:
             f"finished {act_id}, but its words did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
         ]
     return []
+
+
+def _unfollow(root: Path, history: Path, entry: dict[str, Any]) -> None:
+    """For a person's act recovery put back: what it put into the look comes out again (`_look_follows`, from its after to its before), and each suggested edit whose `kept` record landed with it is opened again, with the annotation its Keep resolved, as the undo of a Keep does (`pending.unkeep`); the logs are append-only, so the record is answered, never taken out. An agent's act changed no look and kept nothing."""
+    from loom.identity import agents_act
+    from loom.paths import EDIT_LOG
+    from loom.records.edits import find, reopened_event, unanswered_event
+    from loom.records.log import log_path
+
+    agent = entry["by"] == "agent" if entry.get("by") in ("agent", "person") else agents_act(entry.get("actor"))
+    if agent:
+        return
+    files = {
+        rel: (_fetch(root, history, ab[1]) if ab[1] else None, _fetch(root, history, ab[0]) if ab[0] else None)
+        for rel, ab in (entry.get("files") or {}).items()
+    }
+    _look_follows(root, history, files)
+    kept = []
+    for rec in entry.get("records") or []:
+        try:
+            line = json.loads(rec["line"]) if rec.get("log") == EDIT_LOG else {}
+        except (TypeError, ValueError):
+            continue
+        if line.get("event") == "kept":
+            kept.append((str(rec["line"]), str(line.get("id"))))
+    p = root / EDIT_LOG
+    landed = set(p.read_text(encoding="utf-8").splitlines()) if kept and p.is_file() else set()
+    writer = ("human", str(entry.get("actor") or ""))
+    for line, eid in kept:
+        edit = find(root, eid) if line in landed else None
+        if edit is None or edit.status != "kept":
+            continue
+        _append_record(
+            root, EDIT_LOG, json.dumps(reopened_event(edit, writer, "recovered"), ensure_ascii=False, sort_keys=True)
+        )
+        answered = unanswered_event(root, edit, writer)
+        if answered is not None:
+            _append_record(
+                root, _log_name(root, log_path(root)), json.dumps(answered, ensure_ascii=False, sort_keys=True)
+            )
 
 
 def _retick(root: Path, entry: dict[str, Any], look: dict[str, Any]) -> None:

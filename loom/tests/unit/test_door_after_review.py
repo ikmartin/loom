@@ -579,3 +579,44 @@ def test_an_act_that_puts_its_words_into_the_look_cut_short_at_any_step_lists_as
         writes.recover(q, load_quilt(q).history_dir)
         assert _rows(q) in (before, after), (which, k, _rows(q))
         shutil.rmtree(q)
+
+
+def test_a_keep_recovery_puts_back_opens_its_edit_again_and_takes_its_words_out_of_the_look(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A Keep cut short after its records, its file then written back to its before bytes by the person's editor: recovery puts the act back, and the suggestion it kept is open again, with the look as before it, so the list is as before the Keep (the fourth look's remark on a put-back Keep's record)."""
+    from loom import writes
+    from loom.looks import take
+    from loom.records.edits import find
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_adopt import TEXT, made
+    from tests.unit.test_write_safety import Died
+
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    take(load_quilt(root), "Tester")
+    ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=root, env={"AI_AGENT": "1"})  # fmt: skip
+    (edit,) = [c["id"] for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"]]
+    rows = _rows(root)
+    doc = root / "drafting/main.tex"
+    was = doc.read_bytes()
+    real = writes._append_journal
+
+    def die(at: Path, entry: dict, *, full: bool = False) -> tuple[int, int]:
+        if entry.get("event") == "done" and str(entry.get("act", "")).startswith("keep:"):
+            raise Died
+        return real(at, entry, full=full)
+
+    monkeypatch.setattr(writes, "_append_journal", die)
+    with pytest.raises(Died):
+        run("changes", "--keep", edit, cwd=root)
+    monkeypatch.undo()
+    assert doc.read_bytes() != was and find(root, edit).status == "kept"  # type: ignore[union-attr]
+    doc.write_bytes(was)  # the person's editor writes the file back before recovery runs
+    said = writes.recover(root, load_quilt(root).history_dir)
+    assert said and said[0].startswith("undid keep:"), said
+    assert find(root, edit).status == "open"  # type: ignore[union-attr]
+    assert [c["id"] for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"]] == [edit]
+    assert _rows(root) == rows
