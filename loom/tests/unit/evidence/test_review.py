@@ -412,3 +412,46 @@ def test_a_text_never_attested_beside_an_attested_one_is_not_an_attested_result_
         _lean(root, label, DOC)
         _attest(root, label, DOC)
     assert _rows(_gather(root), "attested-changed") == []
+
+
+def test_a_row_to_attest_opens_on_the_lean_its_notation_and_what_it_uses_that_was_attested(root: Path) -> None:
+    _lean(root, "def:cycle")
+    _attest(root, "def:cycle")
+    _lean(root, "lem:balanced")
+    gathered = _gather(root)
+    [row] = [r for r in gathered.of("attest") if r.fields["result"] == _key(root, "lem:balanced")]
+    body = review.body_of(row, {})
+    lean = replay(root).about("label", "lem:balanced", of="lean")[-1]
+    assert body["observation"] == lean.id and body["parts"] is None and body["difference"] is None
+    assert body["notation"] == [{"part": "Zcyc", "from": "preamble", "attested": True}]
+    assert [u["result"] for u in body["uses_attested"]] == [_key(root, "def:cycle")]
+    assert body["supporting"] == [] and "body" not in row.to_dict()
+
+
+def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(root: Path) -> None:
+    from loom.evidence import acts
+    from loom.evidence.web import LibraryWeb
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    on = LibraryWeb(root).subject(Here("node", "tq-00K3"))
+    assert on is not None
+    declaration = {"name": "Smith.lem32", "kind": "theorem", "role": "states", "names": {"node": "tq-00K3"}, "statement": "sha256:" + "5" * 64, "axioms": [], "sorry": False}  # fmt: skip
+    lean = write(root, "lean", LOOM, on=on, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64}, files={"lean/A.lean": "sha256:" + hashlib.sha256((root / "lean" / "A.lean").read_bytes()).hexdigest()}, declarations=[declaration], assumed=[], uses=[], replay={"tool": "leanchecker", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+    listed = lambda: [r for r in _gather(root).of("attest") if r.fields["result"] == "tq-00K3"]  # noqa: E731
+    assert listed() == []
+    acts.check(root, "tq-00K3", on.hash, PERSON)
+    assert listed() == [], "what it uses is not compared yet"
+    definition = LibraryWeb(root).subject(Here("node", "tq-00A4"))
+    assert definition is not None
+    acts.check(root, "tq-00A4", definition.hash, PERSON)
+    [row] = listed()
+    said = row.to_dict()
+    assert said["what"] == "statement only" and said["paper"] == "matches" and said["docs"] == []
+    assert said["name"] == "lemma 3.2" and said["source"] == {"ref": "tq-00A1-ref", "short": None}
+    body = review.body_of(row, {})
+    assert body["observation"] == lean.id and body["statement"]["body"].startswith("Let $W$ be a widget")
+    assert body["notation"] is None, "its work's macros are not read yet"
