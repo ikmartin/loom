@@ -154,6 +154,10 @@ STORE_BOXES = f"{LIBRARY_CACHE}/boxes"
 RESOLVED = f"{LIBRARY_CACHE}/resolve"
 #: What the library's nodes and the tag log are asked by: made when first asked for, brought up to date at each asking, and made again at will (`library.index`).
 NODE_INDEX = f"{LIBRARY_CACHE}/nodes.sqlite3"
+#: What a stored TeX source holds, read once for each source and kept by its hash (`library.survey`).
+LIBRARY_SURVEYS = f"{LIBRARY_CACHE}/survey"
+#: Held while a source's survey compiles, so a quilt compiles one source at a time.
+SURVEY_LOCK = f"{LOCAL}/library-survey.lock"
 #: What marks on a PDF are found by: word boxes of a PDF outside the store, by its hash, and where each mark was found again.
 MARKS = f"{CACHE}/marks"
 MARK_BOXES = f"{MARKS}/boxes"
