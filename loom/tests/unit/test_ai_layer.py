@@ -833,3 +833,22 @@ def test_how_far_a_deny_holds_names_an_app_refused_only_where_its_file_holds_the
     assert deny_sentence([], []) == (
         "In the places agents are denied, any app is only asked not to edit, and a change it makes there anyway is not listed in Your Changes."
     )
+
+
+def test_a_settings_save_of_the_deny_list_holds_claude_code_to_nothing_until_its_file_is_updated(
+    tmp_path: Path,
+) -> None:
+    """A Settings save writes the list into `config.toml` and no permission file: Claude Code's waits for Settings' Update Claude Code (`agents-update`), so until then it is stale and the sentence calls Claude Code only asked, as `agents.md` says."""
+    from loom.agents import how_far_deny_holds
+    from loom.ai.layout import permissions_stale
+    from loom.render.api import handle
+    from loom.scan.quilt import load_quilt
+
+    q = bare(tmp_path)
+    assert "Claude Code is refused an edit" in how_far_deny_holds(q)
+    handle(q, "settings-save", {"changes": {"agents.deny": ["/notes/"]}})
+    assert permissions_stale(q, load_quilt(q).config)
+    assert "Claude Code is refused" not in how_far_deny_holds(q)
+    handle(q, "agents-update", {})
+    assert not permissions_stale(q, load_quilt(q).config)
+    assert "Claude Code is refused an edit" in how_far_deny_holds(q)
