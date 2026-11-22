@@ -12,8 +12,9 @@ import pytest
 
 from loom.library import log
 from loom.library.gather import gather
+from loom.library.generation import generation
 from loom.library.intake import Item, take
-from loom.library.works import generation, works
+from loom.library.works import works
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 

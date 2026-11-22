@@ -174,8 +174,10 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     """Each sample by its file's name, less `.json`: the endpoint, the request and loom's answer."""
     _isolated(tmp / "home")
     _offline()
+    from loom.cli._quilt import open_scan
+    from loom.library.generation import generation
     from loom.render.api import ApiError, handle
-    from loom.render.endpoints.library import receive_stream
+    from loom.render.endpoints.library import WRITES, answered, receive_stream
 
     root, unasked = _quilts(tmp)
     out: dict[str, dict[str, Any]] = {}
@@ -186,9 +188,11 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
         return answer
 
     def call(name: str | None, endpoint: str, request: dict[str, Any], *, on: Path = root) -> dict[str, Any]:
-        """One JSON endpoint as the publisher serves it, kept as `name` unless None; a refusal answers its body with its status."""
+        """One JSON endpoint as the publisher serves it, a write answered with the library's generation it left, kept as `name` unless None; a refusal answers its body with its status."""
         try:
             answer = handle(on, endpoint, request)
+            if endpoint in WRITES:
+                answer = answered(endpoint, answer, generation(open_scan(str(on))))
         except ApiError as exc:
             answer = {"status": exc.status, **exc.answer()}
         return keep(name, endpoint, request, answer) if name else answer
@@ -197,7 +201,9 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
         """`library-receive` as the server calls it: the bytes streamed, the name from the query, the length from `Content-Length`."""
         request = {"name": file, "size": len(data)}
         try:
-            answer = receive_stream(on, file, io.BytesIO(data), len(data))
+            answer = answered(
+                "library-receive", receive_stream(on, file, io.BytesIO(data), len(data)), generation(open_scan(str(on)))
+            )
         except ApiError as exc:
             answer = {"status": exc.status, **exc.answer()}
         return keep(name, "library-receive", request, answer) if name else answer

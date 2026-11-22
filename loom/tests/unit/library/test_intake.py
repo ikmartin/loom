@@ -15,6 +15,7 @@ import pytest
 from loom.library import documents, log
 from loom.library.acts import delete
 from loom.library.checks import check
+from loom.library.generation import generation
 from loom.library.intake import (
     IntakeRefused,
     Item,
@@ -29,7 +30,6 @@ from loom.library.intake import (
 )
 from loom.library.node import Node
 from loom.library.store import NodeRefused, read, write_node
-from loom.library.works import generation
 from loom.paths import INCOMING, LIBRARY_DOCUMENTS
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan

@@ -6,20 +6,15 @@ Made when it is asked for and never before. A text anchor's rectangles are its q
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loom.clock import now
 from loom.library import ids
 from loom.library.entries import read_entry, short
+from loom.library.generation import generation
 from loom.library.store import read
-from loom.paths import ANNOTATION_LOG
 
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
-
-#: The generation each work's places were last answered at in this process, by quilt and reference: what they were made from, and the number.
-_GENERATIONS: dict[tuple[Path, str], tuple[tuple[Any, ...], int]] = {}
 
 
 class PlacesRefused(Exception):
@@ -54,7 +49,7 @@ def places(result: ScanResult, ref: str, pages: list[int] | None = None) -> Plac
     Returns
     -------
     Places
-        `places` is `[{"annotation", "page", "rects"}]`, by page then by when each was written, `rects` one `[x0, y0, x1, y1]` a line in points from the page's top left; an annotation that stands nowhere (detached, or its words not found on its page) has no entry. `gen` goes forward whenever the annotation log or the work's PDF changes, and never back.
+        `places` is `[{"annotation", "page", "rects"}]`, by page then by when each was written, `rects` one `[x0, y0, x1, y1]` a line in points from the page's top left; an annotation that stands nowhere (detached, or its words not found on its page) has no entry. `gen` is the library's one generation (`library.generation`), which goes forward whenever anything the library's reads answer from changes, and never back.
 
     Raises
     ------
@@ -72,7 +67,7 @@ def places(result: ScanResult, ref: str, pages: list[int] | None = None) -> Plac
         entry = read_entry(node.body)
         named = short(entry.fields, entry.key) if entry is not None else ref
         raise PlacesRefused("no-document", f"{named} holds no PDF, so nothing on it has a place")
-    gen = generation(root, ref, node.pdf)
+    gen = generation(result)
     asked = set(pages) if pages else None
     out: list[dict[str, Any]] = []
     for ra in sorted(Records(root).resolved(result), key=lambda r: r.annotation.created):
@@ -87,19 +82,3 @@ def places(result: ScanResult, ref: str, pages: list[int] | None = None) -> Plac
             out.append({"annotation": a.id, "page": page, "rects": rects})
     out.sort(key=lambda p: p["page"])
     return Places(node.pdf, gen, out)
-
-
-def generation(root: Path, ref: str, pdf: str) -> int:
-    """The number a work's places are answered at: the time in milliseconds this process first saw its PDF and the annotation log as they stand, one more than the last when that would not be later, so it never goes back; LOOM_FIXED_TIME's under it."""
-    try:
-        st = (root / ANNOTATION_LOG).stat()
-        log = (st.st_size, st.st_mtime_ns, st.st_ino)
-    except OSError:
-        log = (0, 0, 0)
-    seen = (pdf, log)
-    kept = _GENERATIONS.get((root, ref))
-    if kept is not None and kept[0] == seen:
-        return kept[1]
-    gen = max(int(now().timestamp() * 1000), kept[1] + 1 if kept else 0)
-    _GENERATIONS[(root, ref)] = (seen, gen)
-    return gen

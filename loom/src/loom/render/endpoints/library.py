@@ -111,14 +111,15 @@ def _allowance(body: dict[str, Any]) -> bool | None:
 
 def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`library-works` (library-views.md §3.1): every work as a row, a read that gathers and writes nothing; `doc` adds the labels that document's compile cites each work by; `since`, the generation last answered, is answered `unchanged` while it stands."""
-    from loom.library.works import generation, works
+    from loom.library.generation import generation
+    from loom.library.works import works
 
     doc = _str(body, "doc")
     since = body.get("since")
     if since is not None and (not isinstance(since, int) or isinstance(since, bool)):
         raise ApiError("bad-field", "since is the gen of an earlier answer, a number")
     result = _scan(root)
-    gen = generation(result, doc=doc)
+    gen = generation(result)
     if since == gen:
         return {"ok": True, "result": "unchanged", "gen": gen, "unchanged": True}
     rows = works(result, doc=doc)
@@ -126,7 +127,7 @@ def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 
 
 def _library_places(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`library-places` (library-views.md §3.3): where each annotation on a work's stored PDF stands on its pages, for the reader to draw; `pages` limits it to those; `since` is answered `unchanged` while the work's PDF and the annotation log stand."""
+    """`library-places` (library-views.md §3.3): where each annotation on a work's stored PDF stands on its pages, for the reader to draw; `pages` limits it to those; `since` is answered `unchanged` while the library's generation stands."""
     from loom.library.places import PlacesRefused, places
 
     ref = _str(body, "ref", required=True) or ""
@@ -339,3 +340,12 @@ NO_REBUILD: tuple[str, ...] = (*READS, "library-receive", "library-upgrade")
 RECORD_WRITES: tuple[str, ...] = ()
 #: The ones that take the library's lock themselves, once every lookup has answered, and so run outside the publication's lock: a slow service holds up no rebuild and no other write.
 OWN_LOCK: tuple[str, ...] = ("library-take", "library-answer", "library-look-up")
+#: The writes, each answered with the library's generation as it left it (`answered`).
+WRITES: tuple[str, ...] = tuple(name for name in HANDLERS if name not in READS)
+
+
+def answered(endpoint: str, answer: dict[str, Any], gen: int | None) -> dict[str, Any]:
+    """A library write's answer as the publisher sends it: with `gen`, the library's generation the write left (`library.generation`), which the stream's `library` event carries too, so the viewer reads what it shows again (`library-views.md` §2, "Freshness"); any other answer as it is."""
+    if endpoint in WRITES and gen is not None:
+        return {**answer, "gen": gen}
+    return answer
