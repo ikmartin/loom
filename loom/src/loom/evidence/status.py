@@ -64,8 +64,8 @@ class Status:
         What its proof is verified relative to: each result its Lean rests on as an axiom, `("node", id)` or `("label", label)` (`relative_to`).
     causes : tuple of Cause
         Why the person's attestation no longer holds, for `changed`.
-    unattested_notation : tuple of str
-        Commands it is typeset with that no person has attested in this definition.
+    unattested_notation : tuple of str, or None
+        Commands it is typeset with that no person has attested in this definition; None where the web cannot say which commands those are, as for a library node before its work's macros are read, which keeps it from reading formalized.
     accepted : str or None
         A draft's result the person accepted: `fresh` or `changed`; None where they never did.
     waiting_on : tuple of Waiting
@@ -82,7 +82,7 @@ class Status:
     role: str | None = None
     relative_to: tuple[tuple[str, str], ...] = ()
     causes: tuple[Cause, ...] = ()
-    unattested_notation: tuple[str, ...] = ()
+    unattested_notation: tuple[str, ...] | None = ()
     accepted: str | None = None
     waiting_on: tuple[Waiting, ...] = ()
     lean_record: str | None = field(default=None, compare=False)
@@ -213,11 +213,14 @@ def causes_of(
     return out
 
 
-def notation_of(evidence: Evidence, web: Web, here: Here) -> tuple[list[Cause], list[str]]:
-    """Each command the result is typeset with: the ones a person attested in an earlier definition only (changed), and the ones never attested."""
+def notation_of(evidence: Evidence, web: Web, here: Here) -> tuple[list[Cause], list[str] | None]:
+    """Each command the result is typeset with: the ones a person attested in an earlier definition only (changed), and the ones never attested; None for the second where the web cannot say which commands it is typeset with."""
     changed: list[Cause] = []
     never: list[str] = []
-    for name, digest in sorted(web.notation(here).items()):
+    rows = web.notation(here)
+    if rows is None:
+        return changed, None
+    for name, digest in sorted(rows.items()):
         said = [r for r in evidence.about("macro", name, of="attested") if r.on is not None]
         if any(r.on.hash == digest for r in said if r.on):
             continue
@@ -226,6 +229,10 @@ def notation_of(evidence: Evidence, web: Web, here: Here) -> tuple[list[Cause], 
         else:
             never.append(name)
     return changed, never
+
+
+def _rows(never: list[str] | None) -> tuple[str, ...] | None:
+    return None if never is None else tuple(never)
 
 
 def _role(record: Record, subject: Subject) -> str | None:
@@ -312,7 +319,7 @@ def _assumption(
     own = status(evidence, web, there, lean_now=lean_now, _seen=seen | {name})
     record = evidence.by_id(own.lean_record) if own.lean_record else None
     elaborated = record is not None and bool(record.get("ok")) and (record.get("replay") or {}).get("exit") == 0
-    attested = own.attestation is not None and not own.causes and not own.unattested_notation
+    attested = own.attestation is not None and not own.causes and own.unattested_notation == ()
     if not (attested and elaborated and own.lean in ("failed", "waiting", "formalized")):
         return "unattested"
     cited = getattr(web, "cited", None)
@@ -416,7 +423,7 @@ def status(
         attestation = fitting[-1]
         changed, never = notation_of(evidence, web, here)
         causes = causes_of(attestation, web, here, now) + changed
-        found = replace(found, attestation=attestation.id, unattested_notation=tuple(never))
+        found = replace(found, attestation=attestation.id, unattested_notation=_rows(never))
         if causes:
             return replace(found, lean="changed", causes=tuple(causes))
         if current is None:
@@ -427,7 +434,7 @@ def status(
         found = replace(found, waiting_on=waiting)
         if not proves(current, subject):
             return replace(found, lean="failed")
-        if never:
+        if never is None or never:
             return replace(found, lean="unattested")
         return replace(found, lean="waiting" if waiting else "formalized")
     # an attestation of a text that no block bearing the label still has: this block's earlier text, which moved; one another block still has is that block's, never this one's
@@ -441,14 +448,14 @@ def status(
             changed, never = notation_of(evidence, web, here)
             causes = causes_of(earlier, web, here, now) + changed
             return replace(
-                found, lean="changed", attestation=earlier.id, causes=tuple(causes), unattested_notation=tuple(never)
+                found, lean="changed", attestation=earlier.id, causes=tuple(causes), unattested_notation=_rows(never)
             )
     if current is None:
         return replace(found, lean="rerun")
     never = notation_of(evidence, web, here)[1]
     uses = itself + [k[1] for k in now if k[0] == "node"]
     waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here)
-    found = replace(found, unattested_notation=tuple(never), waiting_on=waiting)
+    found = replace(found, unattested_notation=_rows(never), waiting_on=waiting)
     if not proves(current, subject):
         return replace(found, lean="failed")
     return replace(found, lean="unattested")

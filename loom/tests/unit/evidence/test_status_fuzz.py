@@ -1,6 +1,6 @@
 """Random histories of records over small webs whose uses, citations and notation follow from their texts, checked against what `formalized` and `matches` must mean and against the order of the log's lines.
 
-The generator is the reviewer's second fuzzer's: Lean records that fail, fail the replay, carry a `sorry`, state another result, rest on a supporting axiom, on a result of the person's stated as an axiom, or on a library node stated as one and listed or not in `assumed`; citations with and without a locator; notation per document. `earned` is written apart from `status`, from the rulings.
+The generator is the reviewer's second fuzzer's: Lean records that fail, fail the replay, carry a `sorry`, state another result, rest on a supporting axiom, on a result of the person's stated as an axiom, or on a library node stated as one and listed or not in `assumed`; citations with and without a locator; notation per document. Its library nodes are files in a node store, which status reads through `LibraryWeb`; `FakeWeb`, the model, hashes the same bytes itself. `earned` is written apart from `status`, from the rulings, and holds a library node's notation unknown until its work's macros are read, so nothing typeset with one earns `formalized`.
 """
 
 from __future__ import annotations
@@ -8,8 +8,10 @@ from __future__ import annotations
 import hashlib
 import json
 import random
+import shutil
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -17,7 +19,8 @@ import pytest
 from loom.evidence.log import Evidence, Record, parse
 from loom.evidence.status import Status, status
 from loom.evidence.subjects import Subject
-from loom.evidence.web import Here
+from loom.evidence.web import Here, Joined, LibraryWeb
+from loom.library.store import folder
 
 PERSON = {"kind": "person", "name": "A. Author"}
 LOOM = {"kind": "loom"}
@@ -83,8 +86,22 @@ class World:
         return ["Cal14 Theorem 2"] if r.random() < 0.08 else (["Cal14"] if r.random() < 0.05 else [])
 
     def node_uses(self, n: Node) -> list[str]:
+        """What a node's text uses; a stub has no text, so it uses nothing."""
         r = self.rng("nu", n.id, n.text)
-        return [x for x in self.node_ids if x != n.id and r.random() < 0.3]
+        return [] if n.stub else [x for x in self.node_ids if x != n.id and r.random() < 0.3]
+
+    def node_file(self, n: Node) -> bytes:
+        """The node's file as the store holds it: its header, with what it uses, and its text, none for a stub."""
+        uses = self.node_uses(n)
+        head = ["schema = 1", f'id = "{n.id}"', 'taxon = "lemma"', 'source = "tq-00R1-ref"']
+        if uses:
+            head.append("uses = [" + ", ".join(f'"{u}"' for u in uses) + "]")
+        body = "" if n.stub else f"Lemma, in its text {n.text}.\n"
+        return ("+++\n" + "\n".join(head) + "\n+++\n" + body).encode()
+
+
+def file_hash(data: bytes) -> str:
+    return "sha256:" + hashlib.sha256(data).hexdigest()
 
 
 class FakeWeb:
@@ -99,7 +116,7 @@ class FakeWeb:
     def subject(self, here: Here) -> Subject | None:
         if here.kind == "node":
             n = self.w.nodes.get(here.name)
-            return Subject("node", n.id, h(n.text)) if n else None
+            return Subject("node", n.id, file_hash(self.w.node_file(n))) if n else None
         b = self._block(here)
         return Subject("label", b.label, h(b.text)) if b and b.label else None
 
@@ -112,14 +129,14 @@ class FakeWeb:
         kind, name = key
         if kind == "node":
             n = self.w.nodes.get(name)
-            return h(n.text) if n else None
+            return file_hash(self.w.node_file(n)) if n else None
         hashes = {h(b.text) for b in self._holders(name, near)}
         return hashes.pop() if len(hashes) == 1 else None
 
     def texts(self, key: tuple[str, str]) -> set[str]:
         if key[0] == "node":
             n = self.w.nodes.get(key[1])
-            return {h(n.text)} if n else set()
+            return {file_hash(self.w.node_file(n))} if n else set()
         return {h(b.text) for b in self.w.blocks.values() if b.label == key[1]}
 
     def holder(self, key: tuple[str, str], near: Here) -> Here | None:
@@ -161,7 +178,10 @@ class FakeWeb:
         b = self._block(here)
         return [b, *(x for x in (self._block(s) for s in self._walk(here)) if x is not None)] if b else []
 
-    def notation(self, here: Here) -> dict[str, str]:
+    def notation(self, here: Here) -> dict[str, str] | None:
+        """A block's commands, by document; unknown for a node and for a block whose closure holds one, since a node's work's macros are not read yet."""
+        if here.kind == "node" or any(step.kind == "node" for step in self._walk(here)):
+            return None
         b = self._block(here)
         if b is None:
             return {}
@@ -212,7 +232,7 @@ def lean_line(rng: random.Random, w: World, web: FakeWeb, here: Here, subject: S
         axioms.append("ax_" + node)
         decls.append(_axiom("ax_" + node, {"node": node}))
         if rng.random() < 0.7:
-            assumed.append(Subject("node", node, h(w.nodes[node].text)).to_dict())
+            assumed.append(Subject("node", node, file_hash(w.node_file(w.nodes[node]))).to_dict())
     for name, statement in rng.choice(STATEMENTS).items():
         sorry = "sorryAx" in axioms and rng.random() < 0.7
         kind = rng.choice(["theorem"] * 7 + ["def"])
@@ -242,6 +262,10 @@ class History:
     world: World
     lines: list[dict[str, Any]]
     standing: dict[str, bool]
+
+    def standing_now(self, record: Record) -> bool:
+        """Whether a `lean` record's Lean is unchanged since loom ran it, as this history drew it."""
+        return self.standing.get(record.id, True)
 
     def add(self, line: dict[str, Any]) -> None:
         n = len(self.lines) + 1
@@ -303,7 +327,7 @@ def history(seed: int) -> History:
             if closure and rng.random() < 0.1:
                 closure = closure[:-1]  # an attestation that missed a member
             out.add({"kind": "attested", "by": PERSON, "on": subject.to_dict(), "lean": "ev-2026-11-21-00000", "statements": shown, "closure": closure, "rulings": []})  # fmt: skip
-            for name, digest in web.notation(here).items():
+            for name, digest in (web.notation(here) or {}).items():
                 if rng.random() < 0.9:
                     out.add({"kind": "attested", "by": PERSON, "on": {"macro": name, "hash": digest}})
         elif subject.kind == "node":
@@ -408,7 +432,10 @@ def earned(
             now.setdefault(Subject.from_dict(u).key, web.resolve(Subject.from_dict(u).key, here))
     if any(held.get(k) != v for k, v in now.items()) or any(web.resolve(k, here) != v for k, v in held.items()):
         out.append("the attestation does not cover the closure as it reads now")
-    for name, digest in web.notation(here).items():
+    notation = web.notation(here)
+    if notation is None:
+        out.append("its notation is unknown: a library node's, or one under it")
+    for name, digest in (notation or {}).items():
         if not any(r.on is not None and r.on.hash == digest for r in ev.about("macro", name, of="attested")):
             out.append("a notation row not attested in its definition now")
     if not proof:
@@ -440,26 +467,37 @@ def said(s: Status) -> tuple[object, ...]:
 CHUNKS = [range(0, 200), range(200, 400), range(400, 600), range(600, 800)]
 
 
+def stored(w: World, root: Path) -> Joined:
+    """The world's nodes as files of a node store under `root`, and the web status reads: the model's drafts beside the store's library."""
+    nodes = folder(root)
+    shutil.rmtree(nodes, ignore_errors=True)
+    nodes.mkdir(parents=True)
+    for n in w.nodes.values():
+        (nodes / f"{n.id}.node").write_bytes(w.node_file(n))
+    return Joined(FakeWeb(w), LibraryWeb(root))
+
+
 def statuses(
-    seeds: range, lines: Callable[[History, random.Random], list[dict[str, Any]]] | None = None
+    seeds: range, where: Path, lines: Callable[[History, random.Random], list[dict[str, Any]]] | None = None
 ) -> Iterator[tuple[str, Evidence, FakeWeb, Here, Callable[[Record], bool], Status, Status | None]]:
-    """For each history and each result in it: where, the evidence, the web, `lean_now`, its status, and with `lines` its status over those lines instead."""
+    """For each history and each result in it: where, the evidence, the model's web, `lean_now`, its status read over the node store at `where`, and with `lines` its status over those lines instead."""
     for seed in seeds:
         made = history(seed)
-        web = FakeWeb(made.world)
+        model = FakeWeb(made.world)
+        web = stored(made.world, where)
         ev = evidence_of(made.lines)
-        lean_now: Callable[[Record], bool] = lambda rec, made=made: made.standing.get(rec.id, True)  # noqa: E731
+        lean_now: Callable[[Record], bool] = made.standing_now
         other = evidence_of(lines(made, random.Random(seed * 7 + 1))) if lines else None
         for here in [Here("block", b) for b in made.world.blocks] + [Here("node", n) for n in made.world.nodes]:
             s = status(ev, web, here, lean_now=lean_now)
             if s.subject is not None:
                 again = status(other, web, here, lean_now=lean_now) if other is not None else None
-                yield f"seed {seed} at {here.name}", ev, web, here, lean_now, s, again
+                yield f"seed {seed} at {here.name}", ev, model, here, lean_now, s, again
 
 
 @pytest.mark.parametrize("seeds", CHUNKS, ids=str)
-def test_formalized_and_matches_are_earned(seeds: range) -> None:
-    for where, ev, web, here, lean_now, s, _ in statuses(seeds):
+def test_formalized_and_matches_are_earned(seeds: range, tmp_path: Path) -> None:
+    for where, ev, web, here, lean_now, s, _ in statuses(seeds, tmp_path):
         if s.lean == "formalized":
             assert earned(ev, web, here, lean_now) == [], where
         if s.reading == "matches":
@@ -467,9 +505,9 @@ def test_formalized_and_matches_are_earned(seeds: range) -> None:
 
 
 @pytest.mark.parametrize("seeds", CHUNKS, ids=str)
-def test_the_order_of_lines_of_different_seconds_moves_no_status(seeds: range) -> None:
+def test_the_order_of_lines_of_different_seconds_moves_no_status(seeds: range, tmp_path: Path) -> None:
     """Each thing's records are ordered by when they were written, not by where a merge put them; every line here has its own second."""
-    for where, *_, s, again in statuses(seeds, lambda made, rng: rng.sample(made.lines, len(made.lines))):
+    for where, *_, s, again in statuses(seeds, tmp_path, lambda made, rng: rng.sample(made.lines, len(made.lines))):
         assert again is not None and said(again) == said(s), where
 
 
@@ -481,6 +519,6 @@ def _repeat(made: History, rng: random.Random) -> list[dict[str, Any]]:
 
 
 @pytest.mark.parametrize("seeds", CHUNKS, ids=str)
-def test_a_line_repeated_anywhere_moves_no_status(seeds: range) -> None:
-    for where, *_, s, again in statuses(seeds, _repeat):
+def test_a_line_repeated_anywhere_moves_no_status(seeds: range, tmp_path: Path) -> None:
+    for where, *_, s, again in statuses(seeds, tmp_path, _repeat):
         assert again is not None and said(again) == said(s), where

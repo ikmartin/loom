@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from loom.clock import stamp
 from loom.evidence.log import AT, Evidence, Read, Record, append_line, grown, stopped
 from loom.evidence.status import statements_of
-from loom.evidence.subjects import HASH, NODE, REFERENCE, Subject, Who, label_problem
+from loom.evidence.subjects import HASH, Subject, Who, is_node, is_work, label_problem
 from loom.evidence.web import Here, Web
 from loom.locks import locked
 from loom.paths import ASK_LOG
@@ -225,7 +225,7 @@ def place_problem(on: Any) -> str | None:
     if not isinstance(on, dict) or not on:
         return "on is an object naming a place"
     if set(on) == {"node"}:
-        return None if isinstance(on["node"], str) and NODE.fullmatch(on["node"]) else "on's node is not a node's id"
+        return None if is_node(on["node"]) else "on's node is not a node's id"
     if set(on) == {"label"}:
         return label_problem(on["label"])
     if set(on) == {"block"}:
@@ -238,7 +238,7 @@ def place_problem(on: Any) -> str | None:
             return "on's block has key, hash and context"
         return None
     if set(on) in ({"ref"}, {"ref", "page"}):
-        if not isinstance(on["ref"], str) or not REFERENCE.fullmatch(on["ref"]):
+        if not is_work(on["ref"]):
             return "on's ref is not a reference's id"
         page = on.get("page", 1)
         return (
@@ -252,7 +252,7 @@ def place_problem(on: Any) -> str | None:
 
 
 def _node_list(value: Any, what: str) -> None:
-    if not isinstance(value, list) or not value or not all(isinstance(v, str) and NODE.fullmatch(v) for v in value):
+    if not isinstance(value, list) or not value or not all(is_node(v) for v in value):
         raise ValueError(f"{what} is a non-empty list of node ids")
 
 
@@ -287,7 +287,7 @@ def _what_fields(raw: dict[str, Any]) -> None:
             raise ValueError("marks is a list of the marks' ids")
     elif what == "digest":
         _keys(raw, base | {"ref", "scope"}, frozenset({"nodes", "marks"}))
-        if not isinstance(raw["ref"], str) or not REFERENCE.fullmatch(raw["ref"]):
+        if not is_work(raw["ref"]):
             raise ValueError("ref is not a reference's id")
         if raw["scope"] not in SCOPES:
             raise ValueError(f"scope is one of {', '.join(SCOPES)}")
@@ -314,7 +314,7 @@ def _what_fields(raw: dict[str, Any]) -> None:
         _keys(raw, base | {"cites"})
         if set(raw["on"]) != {"block"}:
             raise ValueError("a which-result is on the citing block")
-        if not isinstance(raw["cites"], str) or not REFERENCE.fullmatch(raw["cites"]):
+        if not is_work(raw["cites"]):
             raise ValueError("cites is not a reference's id")
     elif what == "correct":
         _keys(raw, base | {"text"})
@@ -340,7 +340,7 @@ def _what_fields(raw: dict[str, Any]) -> None:
             raise ValueError("two choices are the same")
     elif what == "paper":
         _keys(raw, base | {"ref", "link", "want"})
-        if not isinstance(raw["ref"], str) or not REFERENCE.fullmatch(raw["ref"]):
+        if not is_work(raw["ref"]):
             raise ValueError("ref is not a reference's id")
         _link(raw["link"])
         if raw["want"] not in ("pdf", "tex"):
@@ -426,7 +426,7 @@ def apply(ask: Ask, raw: dict[str, Any]) -> None:
                 if not isinstance(raw["made"], list) or not all(isinstance(m, str) and m for m in raw["made"]):
                     raise ValueError("made is a list of what it produced")
                 for m in raw["made"]:
-                    if not (NODE.fullmatch(m) or re.fullmatch(EDIT, m)):
+                    if not (is_node(m) or re.fullmatch(EDIT, m)):
                         raise ValueError(f"{m!r} is neither a node's id nor a suggested edit's")
         elif event == "answered":
             _keys(raw, {"task", "words"}, frozenset({"choice"}))
@@ -724,7 +724,7 @@ def open_asks(root: Path, *, closed: bool = False, web: Web | None = None) -> li
     closed : bool, default False
         Include the asks that are closed or withdrawn.
     web : Web, optional
-        The texts now; default one that knows no node, which keeps open every ask a node would close.
+        The texts now; default the library's alone (`LibraryWeb`), which knows no draft.
 
     Returns
     -------
@@ -732,7 +732,7 @@ def open_asks(root: Path, *, closed: bool = False, web: Web | None = None) -> li
     """
     from loom.evidence.log import replay as replay_evidence
     from loom.evidence.status import files_unchanged
-    from loom.evidence.web import Blank
+    from loom.evidence.web import LibraryWeb
     from loom.records.edits import replay as replay_edits
 
     evidence = replay_evidence(root)
@@ -740,7 +740,7 @@ def open_asks(root: Path, *, closed: bool = False, web: Web | None = None) -> li
     edits = replay_edits(root)[0]
     now = files_unchanged(root)
     out = [
-        standing(a, evidence, web or Blank(), sessions=sessions, edits=edits, lean_now=now)
+        standing(a, evidence, web or LibraryWeb(root), sessions=sessions, edits=edits, lean_now=now)
         for a in replay(root).asks.values()
     ]
     return [s for s in out if closed or s.open]
@@ -772,9 +772,9 @@ def place_of(quilt: Any, text: str) -> tuple[dict[str, Any], list[str]]:
         block = {"key": node.key, "hash": block_hash(result, node.key), "context": context_of(result, node)}
         return {"block": block}, sorted(node.reached_by)
     ref, _, page = name.partition(":")
-    if REFERENCE.fullmatch(ref) and (not page or page.isdigit()):
+    if is_work(ref) and (not page or page.isdigit()):
         return ({"ref": ref, "page": int(page)} if page else {"ref": ref}), []
-    if NODE.fullmatch(name):
+    if is_node(name):
         return {"node": name}, []
     if name in result.masters:
         return {"document": name}, [name]

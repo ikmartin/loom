@@ -589,11 +589,11 @@ def _one_comment(
 
 def _located(node: str, purpose: str | None) -> str:
     """The stub a mark to digest locates, by its node's id: given only with the purpose `to-digest`, where the person who found the result on the page says which it is."""
-    from loom.evidence.subjects import NODE
+    from loom.evidence.subjects import is_node
 
     if purpose != "to-digest":
         raise EnvError("only a mark to digest names the stub it locates; give the purpose to-digest")
-    if not NODE.fullmatch(node):
+    if not is_node(node):
         raise EnvError(f"{node!r} is not a node's id")
     return node
 

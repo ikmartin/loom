@@ -1,6 +1,6 @@
 """The texts as they stand now, as status asks them: a subject's hash, what a statement uses, which notation it is typeset with, and how a person accepted it.
 
-A `Here` is what a status is asked of: a node of the library by its id, or a block of a draft by its key. A `Web` answers for it. `DraftWeb` answers for the drafts from a scan; the library's own (`LibraryWeb`, over the node store) and the joint one that follows a draft's citations into the library come with the store, and until then a node is gone to the drafts' web.
+A `Here` is what a status is asked of: a node of the library by its id, or a block of a draft by its key. A `Web` answers for it. `DraftWeb` answers for the drafts from a scan, `LibraryWeb` for the library from the node store's files, and `Joined` for both, a block by the first and a node by the second.
 """
 
 from __future__ import annotations
@@ -10,13 +10,15 @@ import json
 import re
 from dataclasses import dataclass
 from functools import cached_property
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
-from loom.evidence.subjects import Subject
+from loom.evidence.subjects import Subject, is_node
 from loom.paths import LOOM
 from loom.scan.macros import LOOM_MACROS
 
 if TYPE_CHECKING:
+    from loom.library.node import Node
     from loom.scan.model import Macro
     from loom.scan.nodes import NodeRec
     from loom.scan.scan import ScanResult
@@ -54,8 +56,8 @@ class Web(Protocol):
     def closure(self, here: Here) -> dict[tuple[str, str], str]:
         """Every subject the statement at `here` uses, and what those use in turn, with its hash now."""
 
-    def notation(self, here: Here) -> dict[str, str]:
-        """Each command a person defined that the statement at `here` or its closure is typeset with, by the hash of its definition."""
+    def notation(self, here: Here) -> dict[str, str] | None:
+        """Each command a person defined that the statement at `here` or its closure is typeset with, by the hash of its definition; None when this web cannot say, as for a library node before its work's macros are read."""
 
     def acceptance(self, here: Here) -> str | None:
         """`fresh` or `changed` for a draft's result the person accepted, from the ledger; None otherwise."""
@@ -76,26 +78,71 @@ class Web(Protocol):
         """Every hash what `key` names has now, in any document: a label's, each block bearing it; a node's, its one text."""
 
 
-class Blank:
-    """A web that knows no text: every question is answered with nothing, so nothing reads as done and an ask a node would close stays open."""
+class LibraryWeb:
+    """The library's texts now, read from the node store's files: a statement's or a proof's text by its id and the hash of its whole file, what its statement uses, and whether it is a stub.
+
+    It reads each file once and keeps what it read for its life, so one is made for each read; a quilt with no library answers nothing. A node's notation is its work's macros node's to say (the node store's phase 2), unknown until then: `notation` answers None, and nothing typeset with it reads formalized.
+    """
+
+    def __init__(self, root: Path) -> None:
+        self.root = root
+        self._read: dict[str, tuple[str, Node] | None] = {}
+
+    def _node(self, name: str) -> tuple[str, Node] | None:
+        """A statement's or a proof's file, by its id: its hash and the node it holds; None for any other node, one absent, or one that does not read."""
+        from loom.library.node import NodeUnreadable, node_hash, read_node
+        from loom.library.store import exists, folder
+
+        if name not in self._read:
+            found = None
+            if is_node(name, "statement", "proof"):
+                try:
+                    data = (folder(self.root) / f"{name}.node").read_bytes()
+                    if exists(self.root, name):
+                        found = (node_hash(data), read_node(data, f"{name}.node"))
+                except (OSError, NodeUnreadable):
+                    found = None
+            self._read[name] = found
+        return self._read[name]
 
     def subject(self, here: Here) -> Subject | None:
-        return None
+        got = self._node(here.name) if here.kind == "node" else None
+        return Subject("node", here.name, got[0]) if got else None
 
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
-        return None
+        got = self._node(key[1]) if key[0] == "node" else None
+        return got[0] if got else None
+
+    def _uses(self, name: str) -> list[str]:
+        """The statements a node's text says it uses, stubs included, in the order its header gives them."""
+        got = self._node(name)
+        return [u for u in got[1].uses if is_node(u, "statement")] if got else []
 
     def closure(self, here: Here) -> dict[tuple[str, str], str]:
-        return {}
+        out: dict[tuple[str, str], str] = {}
+        if here.kind != "node":
+            return out
+        seen, todo = {here.name}, self._uses(here.name)
+        while todo:
+            name = todo.pop(0)
+            if name in seen:
+                continue
+            seen.add(name)
+            got = self._node(name)
+            if got is not None:
+                out[("node", name)] = got[0]
+                todo.extend(self._uses(name))
+        return out
 
-    def notation(self, here: Here) -> dict[str, str]:
-        return {}
+    def notation(self, here: Here) -> dict[str, str] | None:
+        return None if self._node(here.name) and here.kind == "node" else {}
 
     def acceptance(self, here: Here) -> str | None:
         return None
 
     def stub(self, here: Here) -> bool | None:
-        return None
+        got = self._node(here.name) if here.kind == "node" else None
+        return got[1].empty if got else None
 
     def holds(self, ref: str, want: str) -> bool | None:
         return None
@@ -107,13 +154,14 @@ class Blank:
         return None
 
     def texts(self, key: tuple[str, str]) -> set[str]:
-        return set()
+        got = self._node(key[1]) if key[0] == "node" else None
+        return {got[0]} if got else set()
 
 
 class Joined:
     """The drafts' web and the library's as one: a block is the drafts', a node the library's.
 
-    What a draft's citation of a library result reaches is the drafts' web's to say once citations resolve to nodes; until then a draft's closure holds labels alone.
+    What a draft's citation of a library result reaches is the drafts' web's to say once citations resolve to nodes; until then a draft's closure holds labels alone. A draft's result whose closure holds a node is typeset with that node's notation too, so where the library cannot say it, neither can this.
     """
 
     def __init__(self, draft: Web, library: Web) -> None:
@@ -131,8 +179,19 @@ class Joined:
     def closure(self, here: Here) -> dict[tuple[str, str], str]:
         return self._for(here).closure(here)
 
-    def notation(self, here: Here) -> dict[str, str]:
-        return self._for(here).notation(here)
+    def notation(self, here: Here) -> dict[str, str] | None:
+        own = self._for(here).notation(here)
+        if own is None or here.kind == "node":
+            return own
+        # a library node a draft's result rests on is typeset with its work's macros, which are part of what is attested
+        rows = dict(own)
+        for key in self.draft.closure(here):
+            if key[0] == "node":
+                theirs = self.library.notation(Here("node", key[1]))
+                if theirs is None:
+                    return None
+                rows.update(theirs)
+        return rows
 
     def acceptance(self, here: Here) -> str | None:
         return self._for(here).acceptance(here)

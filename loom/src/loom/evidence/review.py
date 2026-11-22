@@ -1,6 +1,6 @@
 """Review's lists: each kind a rule over the evidence, the asks, the scan and the manifest, saying what puts a row in and what takes it out (`docs/specs/evidence.md` §6).
 
-Computed when they are read, never stored; a read under the same scan and the same files as the last answers from what it computed (`memo.kept`, over `files_read`). A row is what one decision is about; it carries the ids it is addressed by and the fields its words are drawn from, never words of loom's own. `cited` and `check` are a library's, and are empty until the node store gives a web of nodes.
+Computed when they are read, never stored; a read under the same scan and the same files as the last answers from what it computed (`memo.kept`, over `files_read`). A row is what one decision is about; it carries the ids it is addressed by and the fields its words are drawn from, never words of loom's own. `cited` and `check` are the library's, and are empty: a row of either names its work, whose reference the node store does not give yet.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from loom.evidence.asks import Standing, open_asks
 from loom.evidence.log import Evidence, Record
 from loom.evidence.status import Status, brief, gate, status
-from loom.evidence.web import DraftWeb, Here, Web
+from loom.evidence.web import DraftWeb, Here, Joined, LibraryWeb, Web
 
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
@@ -238,7 +238,7 @@ class _Result:
     status: Status
 
 
-def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], bool]) -> list[_Result]:
+def _results(evidence: Evidence, drafts: DraftWeb, web: Web, lean_now: Callable[[Record], bool]) -> list[_Result]:
     """Each draft's result some Lean record or attestation speaks of, one for each distinct text of a label; a result nothing formal names has status `none` and no row, so it is not computed."""
     named = {
         r.on.name
@@ -248,7 +248,7 @@ def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], boo
     out: list[_Result] = []
     for label in sorted(named):
         by_text: dict[str, list[Any]] = {}
-        for node in web.bearing.get(label, []):
+        for node in drafts.bearing.get(label, []):
             here = Here("block", node.key)
             subject = web.subject(here)
             if subject is not None and subject.name == label:
@@ -393,7 +393,7 @@ def gather(
     reviewer : str, optional
         Whose look and acceptances; default the manifest's reviewer.
     web : Web, optional
-        The texts now; default the drafts' alone, under which `cited` and `check` are empty.
+        The texts now; default the drafts' and the library's (`Joined`).
 
     Returns
     -------
@@ -410,11 +410,11 @@ def gather(
 
     reviewer = reviewer or manifest.get("reviewer", {}).get("name") or None
     drafts = DraftWeb(result, reviewer=reviewer)
-    web = web or drafts
+    web = web or Joined(drafts, LibraryWeb(root))
     evidence = replay(root)
     lean_now = files_unchanged(root)
     asks = open_asks(root, web=web)
-    results = _results(evidence, drafts, lean_now)
+    results = _results(evidence, drafts, web, lean_now)
     gathered = Gathered()
     gathered.rows = {
         "questions": _questions(asks, asks_log.replay(root).asks),
