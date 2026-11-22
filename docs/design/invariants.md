@@ -415,11 +415,13 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Why.** The text layer drops sub- and superscripts and keeps one `X` for a stack and its space. In the study three wrong renderings passed every text check, one moving a hypothesis from the space to the stack, and the author, editing against page text, twice deleted the paper's own words.
 
-**Guard.** `arras/tests/e2e/library.e2e.ts::a proposal shows the page itself, and names the words of the rendering the page does not have`
+**Guard.** `arras/tests/e2e/review-views.e2e.ts::a transcription is judged against the page itself: the paper's page at the result's place, washed there, beside loom's copy, with the copy's words the page lacks named, and the page's text layer never shown`
 
 **Record.** DR-179, DR-201
 
 **2026-11-21.** The viewer's review of proposals is gone with today's library (plan 0.32, the library's phase 2), and so is the guard named above. The rule is the Library view's check of a node against its paper (`docs/specs/library-views.md`, `check`), built in its own change, and has no guard until then.
+
+**2026-11-21.** The Library view's check holds it, on round six's fixture until the digest serves it (phase 3): the paper's page drawn at the result's place, beside loom's copy, with the words of the copy the page lacks named from the place's `lacks` (`library-views.md` §3.3). The guard above is its test. The rule is unchanged.
 
 ### A mark never splits a formula
 

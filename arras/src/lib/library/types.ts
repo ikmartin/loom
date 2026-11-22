@@ -138,6 +138,8 @@ export interface NodePlace {
 	rects: Rect[];
 	paper: Paper;
 	lean?: LeanStatus | null;
+	/** The words of loom's copy the page does not have where it stands, found as its place is: what the check names beside the page; [] where every word is there. */
+	lacks?: string[];
 }
 
 export type Place = AnnotationPlace | NodePlace;

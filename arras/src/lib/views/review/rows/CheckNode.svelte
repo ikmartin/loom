@@ -1,10 +1,10 @@
 <script lang="ts">
-	// One digested result open under its work: how its text was made and so how to compare it, its name, its text rendered or plain, "Does loom's copy match the paper?" with the person's yes and no; beside it the paper cropped at the result's place.
+	// One digested result open under its work: how its text was made and so how to compare it, its name, its text rendered or plain, "Does loom's copy match the paper?" with the person's yes and no; beside it the paper itself, cropped at the result's place and washed there, and under it the words of loom's copy the page does not have, so a transcription is judged against the page and never against its text layer.
 	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
-	import type { NodeAnswer, PlacesAnswer } from '$lib/library/types';
+	import type { NodeAnswer, NodePlace, PlacesAnswer } from '$lib/library/types';
 	import NodeBody from '$lib/node/NodeBody.svelte';
 	import { THEOREMS } from '$lib/node/taxa';
 	import { message } from '$lib/shell/message.svelte';
@@ -25,7 +25,7 @@
 	});
 
 	const n = $derived(read.value);
-	const place = $derived(at.value?.places.find((p) => 'node' in p && p.node === node) ?? null);
+	const place = $derived(at.value?.places.find((p): p is NodePlace => 'node' in p && p.node === node) ?? null);
 	const how = $derived.by(() => {
 		const d = n?.digested;
 		if (!d) return '';
@@ -68,6 +68,7 @@
 		<div>
 			{#if pdf && place}
 				<Crop {pdf} {place} caption={words.check.page(n.work.short, place.page)} />
+				{#if place.lacks?.length}<p class="note" data-testid="check-lacks">{words.check.lacks(place.lacks)}</p>{/if}
 			{:else if at.value}
 				<p class="note">{words.check.noPlace}</p>
 			{/if}

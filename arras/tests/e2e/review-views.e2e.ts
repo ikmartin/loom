@@ -99,6 +99,32 @@ test("a work's results to check open the first a draft rests on beside its page,
 	await expect(count(page, 'review-kind-check')).toHaveText('4');
 });
 
+test("a transcription is judged against the page itself: the paper's page at the result's place, washed there, beside loom's copy, with the copy's words the page lacks named, and the page's text layer never shown", async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-check').click();
+	const arden = page.getByTestId('review-row').filter({ hasText: 'Arden 2025 · Theorem 5.1' });
+	await arden.getByRole('button', { expanded: false }).first().click();
+	await expect(arden).toContainText('so read it closely');
+	// the page itself, drawn, with the place washed as a found passage is
+	const crop = arden.getByTestId('review-crop');
+	await expect(crop.locator('canvas')).toBeVisible();
+	await expect(crop.locator('.mark.on')).toHaveCount(1);
+	// beside loom's copy, not under it
+	const copy = (await arden.locator('.stmt').boundingBox())!;
+	const paper = (await crop.boundingBox())!;
+	expect(paper.x).toBeGreaterThanOrEqual(copy.x + copy.width - 1);
+	expect(paper.y).toBeLessThan(copy.y + copy.height);
+	// the words of the copy the page does not have are named
+	await expect(arden.getByTestId('check-lacks')).toHaveText("Loom's copy has words the page does not: “sums”, “adjacent”.");
+	// the text layer is there to select from and never shown as text
+	for (const span of (await crop.locator('.text span').all()).slice(0, 5)) expect(await span.evaluate((s) => getComputedStyle(s).color)).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+	// a result whose every word is on the page names none
+	const smith = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · ' });
+	await smith.getByRole('button', { expanded: false }).first().click();
+	await expect(smith.getByTestId('review-sub').first().getByTestId('review-crop')).toBeVisible();
+	await expect(smith.getByTestId('check-lacks')).toHaveCount(0);
+});
+
 test("an agent's correction to a compared result shows what it changes, and is taken or declined", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-check').click();

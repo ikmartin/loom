@@ -174,6 +174,8 @@ export const review = {
 		page: (short: string, page: number) => `${short}, page ${page}`,
 		/** In place of the crop where the place is on a page the paper's PDF does not have. */
 		noPage: "This page is not in the paper's PDF.",
+		/** Under the crop: the words of loom's copy that the page does not have where the result stands. */
+		lacks: (words: string[]) => `Loom's copy has words the page does not: ${words.map((w) => `“${w}”`).join(', ')}.`,
 		/** In place of the crop where loom knows no place on the paper for the result. */
 		noPlace: 'Loom does not know where this stands on the paper yet.',
 		/** In place of a result's text that could not be read. */
