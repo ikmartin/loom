@@ -1,6 +1,6 @@
-"""The acts on a library node's text and the records they write (`docs/specs/evidence.md` §3.1 to §3.3): how a node was made, a person's match of it with its paper, an agent's correction and the person's taking or declining it, and a person's own correction.
+"""The acts that write the evidence log's records (`docs/specs/evidence.md` §3): how a node was made, a person's match of it with its paper, an agent's correction and the person's taking or declining it, a person's own correction, and a person's attestation of a Lean statement.
 
-This module is the one writer of these records, for this lane and the node store's alike: digesting and filling a stub write their `digested` through `digested`, and an agent's correction goes through `propose`, which alone decides whether it is written at once or waits. Each act holds the library's lock and then the evidence log's, the one order every writer of both takes, and decides under them from the node's file now; a node it writes goes through the store's checks (`store.write_node`), and a refusal leaves the store and the log as they were.
+This module is the one writer of these records, for this lane and the node store's alike: digesting and filling a stub write their `digested` through `digested`, and an agent's correction goes through `propose`, which alone decides whether it is written at once or waits. Each act holds the library's lock and then the evidence log's, the one order every writer of both takes, and decides under them from the texts now; a node it writes goes through the store's checks (`store.write_node`), and a refusal leaves the store and the log as they were.
 """
 
 from __future__ import annotations
@@ -13,16 +13,19 @@ from typing import TYPE_CHECKING, Any
 
 from loom.evidence.log import EvidenceRefused, Record, log_path, replay, write
 from loom.evidence.subjects import Subject, Who
-from loom.evidence.web import LibraryWeb
+from loom.evidence.web import Here, LibraryWeb
 from loom.locks import locked
 from loom.paths import LIBRARY_LOCK
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from loom.evidence.web import Web
     from loom.library.node import Node
 
 
 class ActRefused(ValueError):
-    """An act loom will not record, and why: `code` is the write API's (`author-only`, `agent-only`, `no-such-node`, `changed`, `stub`, `no-document`, `no-such-proposal`, `closed`, `refused`), `diagnostics` the store's checks' where a node would not be written."""
+    """An act loom will not record, and why: `code` is the write API's (`author-only`, `agent-only`, `no-such-node`, `no-such-result`, `changed`, `stub`, `no-document`, `no-such-proposal`, `closed`, `no-lean`, `unchecked`, `refused`), `diagnostics` the store's checks' where a node would not be written."""
 
     def __init__(self, code: str, message: str, diagnostics: list[Any] | None = None) -> None:
         super().__init__(message)
@@ -326,3 +329,74 @@ def correct(root: Path, node: str, shown: str, body: str, by: Who) -> Record:
         written = _store(root, new)
         _write(root, "digested", by, on=Subject("node", node, written), how="written", **{"from": source})
         return _matched(root, new, written, by)
+
+
+def attest(
+    root: Path, web: Web, here: Here, observation: str, by: Who, *, lean_now: Callable[[Record], bool]
+) -> Record:
+    """The person's word that the Lean statement of the result at `here` says what the result says: the statements of the Lean record `observation`, the closure as it reads now, and each row of its notation not yet attested in its definition now.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    web : Web
+        The texts now, the drafts' and the library's (`Joined`).
+    here : Here
+        A draft's block or a node.
+    observation : str
+        The `lean` record whose statements the person read: the latest standing one on the result's text now.
+    by : Who
+        A person.
+    lean_now : callable
+        Whether a `lean` record's Lean is unchanged since loom ran it (`status.files_unchanged`).
+
+    Returns
+    -------
+    Record
+        The `attested` record on the result's text now.
+
+    Raises
+    ------
+    ActRefused
+        `author-only`; `no-such-result` for no result with a lasting name at `here`; `no-lean` when no standing Lean record states it or Lean did not accept the statement; `changed` when `observation` is not the latest standing one on its text now, or a member of its closure resolves to nothing; `unchecked` naming each library node under it, or itself, not read and compared with its paper on its text now, and each citation nothing answers for.
+    """
+    from loom.evidence.status import closure_now, statements_of, states
+
+    _only(by, "person")
+    with _held(root):
+        subject = web.subject(here)
+        if subject is None:
+            raise ActRefused(
+                "no-such-result", f"{here.name} is no result with a lasting name; a draft's result needs a label"
+            )
+        evidence = replay(root)
+        standing = [
+            r
+            for r in evidence.about(*subject.key, of="lean")
+            if r.on is not None and r.on.hash == subject.hash and states(r, subject) and lean_now(r)
+        ]
+        if not standing:
+            raise ActRefused("no-lean", "no Lean that loom ran states this text now")
+        latest = standing[-1]
+        if latest.id != observation:
+            raise ActRefused("changed", "Lean has stated this result again since; read the latest statement")
+        if not latest.get("ok") or (latest.get("replay") or {}).get("exit") != 0:
+            raise ActRefused("no-lean", "Lean did not accept this statement")
+        closure = closure_now(web, here, standing)
+        gone = sorted(name for (_kind, name), digest in closure.items() if digest is None)
+        if gone:
+            raise ActRefused("changed", f"what it uses no longer reads as one text: {', '.join(gone)}")
+        nodes = ([subject.name] if subject.kind == "node" else []) + [n for k, n in closure if k == "node"]
+        compared = {r.on.hash for n in nodes for r in evidence.about("node", n, of="compared") if r.on is not None}
+        short = [n for n in nodes if web.stub(Here("node", n)) is not False or web.resolve(("node", n), here) not in compared]  # fmt: skip
+        cites = list(web.cited(here))
+        if short or cites:
+            said = [*(f"{n} is not read and compared with its paper" for n in short), *(f"its citation {c} names no node yet" for c in cites)]  # fmt: skip
+            raise ActRefused("unchecked", "; ".join(said))
+        rows = web.notation(here) or {}
+        for name, digest in sorted(rows.items()):
+            if not any(r.on is not None and r.on.hash == digest for r in evidence.about("macro", name, of="attested")):
+                _write(root, "attested", by, on=Subject("macro", name, digest))
+        members = [{kind: name, "hash": digest} for (kind, name), digest in sorted(closure.items())]
+        return _write(root, "attested", by, on=subject, lean=latest.id, statements=statements_of(latest), closure=members, rulings=[])  # fmt: skip

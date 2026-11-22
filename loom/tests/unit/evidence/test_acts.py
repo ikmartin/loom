@@ -3,16 +3,18 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from loom.evidence import acts
 from loom.evidence.acts import ActRefused
-from loom.evidence.log import EvidenceRefused, log_path, replay, write
+from loom.evidence.log import EvidenceRefused, Record, log_path, replay, write
 from loom.evidence.status import status
-from loom.evidence.subjects import Who
+from loom.evidence.subjects import Subject, Who
 from loom.evidence.web import Here, LibraryWeb
 from loom.library.store import folder
+from tests.unit.evidence._nothing import Nothing
 from tests.unit.library._store import quilt
 
 PERSON = Who("person", "A. Author")
@@ -193,3 +195,79 @@ def test_how_a_node_was_made_is_recorded_on_its_text_now_by_the_hand_that_made_i
     _refused(root, "refused", acts.digested, "tq-00K3", AGENT, "extracted", source)
     _refused(root, "stub", acts.digested, "tq-00B7", LOOM, "extracted", source)
     _refused(root, "no-such-node", acts.digested, "tq-9999", LOOM, "extracted", source)
+
+
+# ---- attesting a Lean statement ---------------------------------------------------------------------------------------
+
+
+def _lean(root: Path, on: Subject, names: dict[str, str], *, ok: bool = True) -> Record:
+    declaration = {"name": "lem", "kind": "theorem", "role": "states", "names": names, "statement": "sha256:" + "5" * 64, "axioms": [], "sorry": False}  # fmt: skip
+    return write(root, "lean", LOOM, on=on, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64}, files={"lean/A.lean": "sha256:" + "8" * 64}, declarations=[declaration], assumed=[], uses=[], replay={"tool": "leanchecker", "exit": 0, "output": ""}, ok=ok)  # fmt: skip
+
+
+def _attest(root: Path, web: Any, here: Here, observation: str, by: Who = PERSON) -> Record:
+    return acts.attest(root, web, here, observation, by, lean_now=lambda r: True)
+
+
+def test_attesting_a_library_result_waits_for_it_and_all_it_uses_to_be_read_and_compared(root: Path) -> None:
+    web, here = LibraryWeb(root), Here("node", "tq-00K3")
+    on = web.subject(here)
+    assert on is not None
+    record = _lean(root, on, {"node": "tq-00K3"})
+    refusal = _refused(root, "unchecked", _attest, web, here, record.id)
+    assert "tq-00K3" in str(refusal) and "tq-00A4" in str(refusal)
+    for node in ("tq-00K3", "tq-00A4"):
+        acts.check(root, node, _hash(root, node), PERSON)
+    _refused(root, "author-only", _attest, LibraryWeb(root), here, record.id, AGENT)
+    attested = _attest(root, LibraryWeb(root), here, record.id)
+    assert attested.get("closure") == [{"node": "tq-00A4", "hash": _hash(root, "tq-00A4")}]
+    assert attested.get("statements") == {"lem": "sha256:" + "5" * 64} and attested.get("lean") == record.id
+    # its work's macros are not read yet, so its notation is unknown and it does not read formalized
+    assert _status(root, "tq-00K3").lean == "unattested"
+
+
+def test_attesting_is_of_the_latest_lean_lean_accepted_on_the_text_now(root: Path) -> None:
+    web, here = LibraryWeb(root), Here("node", "tq-00A4")
+    on = web.subject(here)
+    assert on is not None
+    acts.check(root, "tq-00A4", on.hash, PERSON)
+    _refused(root, "no-lean", _attest, web, here, "ev-2026-11-21-zzzzzz")
+    failed = _lean(root, on, {"node": "tq-00A4"}, ok=False)
+    _refused(root, "no-lean", _attest, web, here, failed.id)
+    accepted = _lean(root, on, {"node": "tq-00A4"})
+    _refused(root, "changed", _attest, web, here, failed.id)
+    _refused(root, "no-such-result", _attest, web, Here("node", "tq-9999"), accepted.id)
+    _file(root, "tq-00A4").write_bytes(_corrected(root, "tq-00A4", "compact", "closed"))
+    _refused(root, "no-lean", _attest, LibraryWeb(root), here, accepted.id)
+
+
+class _Draft(Nothing):
+    """One draft result, `lem:a`, typeset with one command of the person's and citing what `cites` says."""
+
+    def __init__(self, cites: list[str]) -> None:
+        self.cites = cites
+
+    def subject(self, here: Here) -> Subject | None:
+        return Subject("label", "lem:a", "sha256:" + "a" * 64) if here.kind == "block" else None
+
+    def notation(self, here: Here) -> dict[str, str] | None:
+        return {"Zcyc": "sha256:" + "c" * 64}
+
+    def cited(self, here: Here) -> list[str]:
+        return self.cites
+
+
+def test_attesting_a_drafts_result_attests_the_notation_it_was_shown_and_waits_for_its_citations(root: Path) -> None:
+    here = Here("block", "k1")
+    on = _Draft([]).subject(here)
+    assert on is not None
+    record = _lean(root, on, {"label": "lem:a"})
+    refusal = _refused(root, "unchecked", _attest, _Draft(["Cal14 Theorem 2"]), here, record.id)
+    assert "Cal14 Theorem 2" in str(refusal)
+    attested = _attest(root, _Draft([]), here, record.id)
+    macros = replay(root).about("macro", "Zcyc", of="attested")
+    assert [m.on.hash for m in macros if m.on is not None] == ["sha256:" + "c" * 64]
+    assert attested.on == on and attested.get("closure") == []
+    # a row attested in its definition now is not attested again
+    _attest(root, _Draft([]), here, record.id)
+    assert len(replay(root).about("macro", "Zcyc", of="attested")) == 1

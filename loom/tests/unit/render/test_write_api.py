@@ -15,6 +15,7 @@ from tests.unit.render.write_api import (  # noqa: F401  (each fills CASES as it
     cases_annotations,
     cases_changes,
     cases_files,
+    cases_formal,
     cases_library,
     cases_review,
     cases_sync,
