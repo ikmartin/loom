@@ -1,6 +1,6 @@
-"""The Web's reads over the drafts: their results listed by document or by status, a search in their statements, a result's neighbourhood and its graph (`docs/design/library.md`, "The views"; `docs/specs/evidence.md` §8).
+"""The Web's reads over the drafts and the library: their results listed by document, by work or by status, a search in their statements, a result's neighbourhood and its graph (`docs/design/library.md`, "The views"; `docs/specs/evidence.md` §8).
 
-A result is a theorem-like block of a document of the person's, named by its key as the manifest names it, drawn from the manifest's numbers and fragments and the scan's edges, its `lean` from the evidence (§5). What it uses is status's own walk (`web.rests_on`), so the Web and status never disagree about what rests on what. The library's nodes join these lists with the node store; until then a scope that asks for them finds none, and nothing here guesses them.
+A draft's result is a theorem-like block of a document of the person's, named by its key as the manifest names it, drawn from the manifest's numbers and fragments and the scan's edges; what it uses is status's own walk (`web.rests_on`), so the Web and status never disagree about what rests on what. A library result is a statement node, stubs included, read from the node store's files (`LibraryWeb`), named by its id; what it uses is its header's, and what its proofs use their files'. How each stands is status's (§5), over the two webs together. A draft's citation does not reach the library until citations resolve to nodes, so nothing here joins a draft's result to a library result.
 """
 
 from __future__ import annotations
@@ -13,9 +13,13 @@ from typing import TYPE_CHECKING, Any
 
 from loom.evidence.log import Evidence, Record
 from loom.evidence.status import Status, brief, states, status
-from loom.evidence.web import DraftWeb, Here, rests_on
+from loom.evidence.subjects import is_node
+from loom.evidence.web import DraftWeb, Here, Joined, LibraryWeb, Web, rests_on
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from loom.library.node import Node
     from loom.scan.nodes import NodeRec
     from loom.scan.scan import ScanResult
 
@@ -47,7 +51,7 @@ class ScopeError(ValueError):
 
 @dataclass
 class Drafts:
-    """The drafts' results as the Web reads them, from one scan, the published manifest and the evidence.
+    """The drafts' results and the library's as the Web reads them, from one scan, the published manifest, the evidence and the node store's files under `root`.
 
     Every question is memoised on the instance, which the endpoints keep while its scan and every file it read are unchanged (`memo.kept`), so nothing it hands out may be changed by a caller.
     """
@@ -56,6 +60,7 @@ class Drafts:
     manifest: dict[str, Any]
     evidence: Evidence
     lean_now: Callable[[Record], bool]
+    root: Path | None = None
     _status: dict[str, str] = field(default_factory=dict, repr=False)
     _standing: dict[str, Status] = field(default_factory=dict, repr=False)
     _rests: dict[str, list[str]] = field(default_factory=dict, repr=False)
@@ -66,6 +71,49 @@ class Drafts:
     @cached_property
     def web(self) -> DraftWeb:
         return DraftWeb(self.result)
+
+    @cached_property
+    def library(self) -> LibraryWeb | None:
+        """The library's web, None for a read with no quilt behind it."""
+        return LibraryWeb(self.root) if self.root is not None else None
+
+    @cached_property
+    def joined(self) -> Web:
+        """The two webs together, which status reads every result over."""
+        return Joined(self.web, self.library) if self.library is not None else self.web
+
+    @cached_property
+    def nodes(self) -> dict[str, Node]:
+        """Every statement of the library that reads, stubs included, by id, in the order of their works and then of their ids."""
+        from loom.library.store import node_ids
+
+        if self.library is None or self.root is None:
+            return {}
+        found = [(i, self.library.file(i)) for i in node_ids(self.root) if is_node(i, "statement")]
+        held = {i: got[1] for i, got in found if got is not None}
+        return dict(sorted(held.items(), key=lambda kv: (kv[1].source or "", kv[0])))
+
+    @cached_property
+    def _proofs(self) -> dict[str, list[Node]]:
+        """Each library statement's proofs that read, by its id, in the order of their ids."""
+        from loom.library.store import node_ids
+
+        out: dict[str, list[Node]] = {}
+        if self.library is None or self.root is None:
+            return out
+        for i in node_ids(self.root):
+            got = self.library.file(i) if is_node(i, "proof") else None
+            if got is not None and got[1].parent is not None:
+                out.setdefault(got[1].parent, []).append(got[1])
+        return out
+
+    def is_library(self, key: str) -> bool:
+        """Whether `key` is a library result's id; a draft's key is asked first, since it has the shape of one."""
+        return key not in self._keys and key in self.nodes
+
+    def known(self, key: str) -> bool:
+        """Whether `key` is a result the Web reads, a draft's or the library's."""
+        return key in self._keys or key in self.nodes
 
     @cached_property
     def documents(self) -> list[str]:
@@ -94,16 +142,59 @@ class Drafts:
 
     @cached_property
     def position(self) -> dict[str, int]:
-        """Each result's place in document order."""
-        return {n.key: i for i, n in enumerate(self.results)}
+        """Each result's place: the drafts' in document order, then the library's in the order of their works."""
+        drafts = {n.key: i for i, n in enumerate(self.results)}
+        return {**drafts, **{k: len(drafts) + i for i, k in enumerate(self.nodes)}}
 
     def node(self, key: str) -> NodeRec | None:
         """A result of the drafts by its key; None for anything else."""
         return self._keys.get(key)
 
     def homes(self, key: str) -> list[str]:
-        """The person's documents that read a result, in path order: the groups it is listed in."""
-        return self._homes[key]
+        """The person's documents that read a result, in path order: the groups it is listed in; none for a library result, which is listed under its work."""
+        return self._homes.get(key, [])
+
+    @cached_property
+    def works(self) -> list[str]:
+        """Every work of the library, by its reference's id."""
+        from loom.library.store import node_ids
+
+        return [i for i in node_ids(self.root) if is_node(i, "reference")] if self.root is not None else []
+
+    @cached_property
+    def undigested(self) -> int:
+        """The works of which no result is read: no statement with a text names it as its source."""
+        read = {n.source for n in self.nodes.values() if not n.empty}
+        return sum(1 for w in self.works if w not in read)
+
+    def statement(self, key: str) -> dict[str, Any]:
+        """A result's statement as a card draws it: a draft's fragment, or a library result's body with what each id and anchor it points at draws as (`points`), `macros` null until its work's macros are read."""
+        if not self.is_library(key):
+            return {"fragment": self.manifest.get("nodes", {}).get(key, {}).get("fragment")}
+        return {"body": self.nodes[key].body, "macros": None, "points": self.points(key)}
+
+    def points(self, key: str) -> dict[str, dict[str, Any]]:
+        """What each id and anchor a library result's body points at draws as: a result its name, its number and its reading of its paper; an anchor the number its source prints."""
+        from loom.evidence.review import node_name
+        from loom.library.body import pointers
+        from loom.library.ids import anchor_owner
+
+        out: dict[str, dict[str, Any]] = {}
+        for pointer in pointers(self.nodes[key].body):
+            target = pointer.target
+            if target in out:
+                continue
+            owner = anchor_owner(target)
+            if target in self.nodes:
+                held = self.nodes[target]
+                out[target] = {"name": node_name(held), "number": held.number, "paper": self.standing(target).reading}
+            elif owner is not None and owner in self.nodes:
+                out[target] = {"number": dict(self.nodes[owner].anchors).get(target)}
+        return out
+
+    def proof_count(self, key: str) -> int:
+        """How many proofs a result has."""
+        return len(self._proofs.get(key, [])) if self.is_library(key) else len(self._keys[key].proofs)
 
     @cached_property
     def _formal(self) -> set[str]:
@@ -113,13 +204,16 @@ class Drafts:
         }
 
     def standing(self, key: str) -> Status:
-        """How a result stands (§5.2), computed only where a record speaks of its label; `Status(None)`, `lean` `none`, elsewhere."""
+        """How a result stands (§5.2): a draft's computed only where a record speaks of its label, `Status(None)`, `lean` `none`, elsewhere; a library result's always, since its reading of its paper is read from its file."""
         if key not in self._standing:
+            if self.is_library(key):
+                self._standing[key] = status(self.evidence, self.joined, Here("node", key), lean_now=self.lean_now)
+                return self._standing[key]
             node = self._keys[key]
             named = set(node.labels) & self._formal
             here = Here("block", key)
             self._standing[key] = (
-                status(self.evidence, self.web, here, lean_now=self.lean_now) if named else Status(None)
+                status(self.evidence, self.joined, here, lean_now=self.lean_now) if named else Status(None)
             )
         return self._standing[key]
 
@@ -132,8 +226,10 @@ class Drafts:
     def row(self, key: str, doc: str | None = None) -> dict[str, Any]:
         """A result as a list sends it (`ROW`): its key, its name and title, its taxon's word, its document, `paper` null for a draft's, and how it stands, `reading` and `lean` (`status.brief`).
 
-        Its document is `doc` where that reads it, else the first of its `homes`; its number is the one the build published for that document.
+        Its document is `doc` where that reads it, else the first of its `homes`; its number is the one the build published for that document. A library result's row is `node_row`'s.
         """
+        if self.is_library(key):
+            return node_row(key, self.standing(key), self.nodes[key])
         node = self._keys[key]
         published = self.manifest.get("nodes", {}).get(key, {})
         taxon = str(published.get("taxon") or node.taxon or "")
@@ -154,7 +250,7 @@ class Drafts:
         }
 
     def scope(self, scope: str, doc: str | None) -> list[str]:
-        """The keys a scope holds: one draft's results, those with every result they use by statement or proof, every draft's, or the library's (none before the node store)."""
+        """The keys a scope holds: one draft's results, those with every result they use by statement or proof, every draft's and the library's, or the library's statements alone."""
         if scope not in SCOPES:
             raise ScopeError(f"scope is one of {', '.join(SCOPES)}")
         if scope in ("draft", "deps") and not doc:
@@ -165,9 +261,9 @@ class Drafts:
 
     def _scope(self, scope: str, doc: str | None) -> list[str]:
         if scope == "library":
-            return []
+            return list(self.nodes)
         if scope == "all":
-            return [n.key for n in self.results]
+            return [n.key for n in self.results] + list(self.nodes)
         own = [n.key for n in self.results if doc in n.reached_by]
         if scope == "draft":
             return own
@@ -187,7 +283,15 @@ class Drafts:
         return self._rests[key]
 
     def uses(self, key: str) -> tuple[list[str], list[tuple[str, int]]]:
-        """What a result's statement uses, and what each of its proofs uses as `(key, proof's number among them)`."""
+        """What a result's statement uses, and what each of its proofs uses as `(key, proof's number among them)`: a library result's by its header and its proofs' files, kept to the library's statements."""
+        if key not in self._uses and self.is_library(key):
+            statement = [u for u in self.nodes[key].uses if u in self.nodes]
+            library_proofs: list[tuple[str, int]] = []
+            for n, held in enumerate(self._proofs.get(key, [])):
+                for t in held.uses:
+                    if t in self.nodes and t != key and t not in [p for p, _ in library_proofs]:
+                        library_proofs.append((t, n))
+            self._uses[key] = (statement, library_proofs)
         if key not in self._uses:
             proofs: list[tuple[str, int]] = []
             for n, proof in enumerate(self._keys[key].proofs):
@@ -207,18 +311,21 @@ class Drafts:
     def used_by(self) -> dict[str, list[tuple[str, bool]]]:
         """Each result, with the results that use it and whether by a proof."""
         out: dict[str, list[tuple[str, bool]]] = {}
-        for n in self.results:
-            statement, proofs = self.uses(n.key)
+        for key in [n.key for n in self.results] + list(self.nodes):
+            statement, proofs = self.uses(key)
             for t in statement:
-                out.setdefault(t, []).append((n.key, False))
+                out.setdefault(t, []).append((key, False))
             for t, _ in proofs:
-                if not any(k == n.key for k, _p in out.get(t, [])):
-                    out.setdefault(t, []).append((n.key, True))
+                if not any(k == key for k, _p in out.get(t, [])):
+                    out.setdefault(t, []).append((key, True))
         return out
 
     def text(self, key: str) -> str:
-        """A result's statement as written, comments blanked: what its words and an excerpt are made from."""
+        """A result's statement as written, comments blanked, or a library result's body: what its words and an excerpt are made from."""
         from loom.scan.owntext import own_text
+
+        if self.is_library(key):
+            return self.nodes[key].body
         from loom.scan.source import blank_comments
 
         return blank_comments(own_text(self.result, self._keys[key]))
@@ -247,11 +354,11 @@ def node_row(node: str, found: Status, held: Any) -> dict[str, Any]:
 
 
 def drafts(result: ScanResult, manifest: dict[str, Any], root: Any) -> Drafts:
-    """The drafts' results for one read of the quilt at `root`."""
+    """The drafts' results and the library's for one read of the quilt at `root`."""
     from loom.evidence.log import replay
     from loom.evidence.status import files_unchanged
 
-    return Drafts(result, manifest, replay(root), files_unchanged(root))
+    return Drafts(result, manifest, replay(root), files_unchanged(root), root)
 
 
 def _status_order(d: Drafts, key: str) -> int:
@@ -281,7 +388,7 @@ def listing(
     Returns
     -------
     dict
-        `{count, sections, undigested}` by document; `{count, rows, more}` by status. `count` is the results the scope holds, each once, though a result two documents read is in the group of each.
+        `{count, sections, undigested}` by document, `undigested` the works of which no result is read; `{count, rows, more}` by status. `count` is the results the scope holds, each once, though a result two documents read is in the group of each.
     """
     keys = d.scope(scope, doc)
     if sort == "status":
@@ -299,11 +406,12 @@ def listing(
         if scope == "deps":
             groups = _groups(d, _grouped(d, scope, doc), opened, open_all=True)
             sections.append({"head": "uses", "doc": doc, "groups": groups})
-        return {"count": len(keys), "sections": sections, "undigested": 0}
-    sections = [{"head": "drafts", "groups": _groups(d, keys, opened, open_all=False)}]
-    if scope == "all":
-        sections.append({"head": "library", "groups": []})
-    return {"count": len(keys), "sections": sections, "undigested": 0}
+        return {"count": len(keys), "sections": sections, "undigested": d.undigested}
+    mine = [k for k in keys if not d.is_library(k)]
+    library = [k for k in keys if d.is_library(k)]
+    sections = [] if scope == "library" else [{"head": "drafts", "groups": _groups(d, mine, opened, open_all=False)}]
+    sections.append({"head": "library", "groups": _works(d, library, opened)})
+    return {"count": len(keys), "sections": sections, "undigested": d.undigested}
 
 
 def _grouped(d: Drafts, scope: str, doc: str | None) -> list[str]:
@@ -335,6 +443,20 @@ def _groups(d: Drafts, keys: list[str], opened: list[str], *, open_all: bool) ->
     return out
 
 
+def _works(d: Drafts, keys: list[str], opened: list[str]) -> list[dict[str, Any]]:
+    """The library's keys in a group for each work, folded unless opened: `short` and `title` null until the node store's references give them."""
+    by_work: dict[str, list[str]] = {}
+    for k in keys:
+        by_work.setdefault(d.nodes[k].source or "", []).append(k)
+    out = []
+    for work in sorted(by_work):
+        group: dict[str, Any] = {"group": work, "short": None, "title": None, "n": len(by_work[work])}
+        if work in opened:
+            group["rows"] = [d.row(k) for k in by_work[work]]
+        out.append(group)
+    return out
+
+
 def group(d: Drafts, scope: str, doc: str | None, home: str) -> dict[str, Any]:
     """`web-group`: one document's group within a scope, as `web-list` counts it, for a group opened after the list was sent.
 
@@ -347,14 +469,18 @@ def group(d: Drafts, scope: str, doc: str | None, home: str) -> dict[str, Any]:
     doc : str, optional
         The draft `draft` and `deps` are of.
     home : str
-        The document whose group is opened.
+        The document, or the library's work, whose group is opened.
 
     Returns
     -------
     dict
-        `{group, n, rows}`: every result of the scope's groups (`_grouped`) that `home` reads, each row naming `home`.
+        `{group, n, rows}`: every result of the scope's groups (`_grouped`) that `home` reads, each row naming `home`, or that is of the work `home`.
     """
-    keys = [k for k in _grouped(d, scope, doc) if home in d.homes(k)]
+    grouped = _grouped(d, scope, doc)
+    if home in d.works or any(d.is_library(k) and d.nodes[k].source == home for k in grouped):
+        mine = [k for k in grouped if d.is_library(k) and d.nodes[k].source == home]
+        return {"group": home, "n": len(mine), "rows": [d.row(k) for k in mine]}
+    keys = [k for k in grouped if home in d.homes(k)]
     return {"group": home, "n": len(keys), "rows": [d.row(k, home) for k in keys]}
 
 
@@ -431,20 +557,22 @@ def search(d: Drafts, scope: str, doc: str | None, q: str, *, limit: int = 50) -
 
 def focus(d: Drafts, scope: str, doc: str | None, key: str, *, more: bool = False) -> dict[str, Any]:
     """`web-focus`: a result, its statement's fragment, what it is verified relative to, what its statement and its proofs use, and what uses it, each list held to the scope with what lies outside counted."""
-    node = d.node(key)
-    if node is None:
+    if not d.known(key):
         raise KeyError(key)
     inside = set(d.scope(scope, doc))
     statement, proofs = d.uses(key)
-    many = len(node.proofs) > 1
+    many = d.proof_count(key) > 1
     users = d.used_by.get(key, [])
     users_in = [u for u, _p in users if u in inside]
-    lean = d.lean(key)
+    standing = d.standing(key)
     answer: dict[str, Any] = {
         "row": d.row(key, doc),
-        "statement": {"fragment": d.manifest.get("nodes", {}).get(key, {}).get("fragment")},
-        "relative_to": [] if lean == "formalized" else None,
-        "rests_on": [],
+        "statement": d.statement(key),
+        "relative_to": _relative_to(d, key, standing) if standing.lean == "formalized" else None,
+        # what a result of the person's not formalized uses directly in the library that is not read or not compared
+        "rests_on": []
+        if d.is_library(key) or standing.lean == "formalized"
+        else [d.row(k) for k in d.uses_all(key) if d.is_library(k) and d.standing(k).reading != "matches"],
         "more": _more(d, key, doc) if more else None,
         "uses": {
             "statement": [d.row(k, doc) for k in statement if k in inside],
@@ -463,18 +591,42 @@ def focus(d: Drafts, scope: str, doc: str | None, key: str, *, more: bool = Fals
     return answer
 
 
+def _relative_to(d: Drafts, key: str, standing: Status) -> list[dict[str, Any]]:
+    """What a formalized result is verified relative to, as rows: each result its Lean rests on as an axiom, a library result by its id and one of the person's by the block bearing its label as this result reads it."""
+    out = []
+    for kind, name in standing.relative_to:
+        if kind == "node" and d.is_library(name):
+            out.append(d.row(name))
+        elif kind == "label":
+            there = d.web.holder((kind, name), Here("block", key)) if not d.is_library(key) else None
+            if there is not None and d.known(there.name):
+                out.append(d.row(there.name))
+    return out
+
+
 def _more(d: Drafts, key: str, doc: str | None) -> dict[str, Any]:
     """The fold of a result's card: its proofs with what each uses, the Lean declarations that state it, and the record of what was done to it.
 
     Only records on this block's own text (its subject's hash) count, as in status: the declarations are the current `lean` record's (the last standing one on this text that states it), the acts those on this text.
     """
-    node = d.node(key)
-    assert node is not None
-    proofs = [
-        {"where": d.result.nodes[proof].file, "uses": [d.row(t, doc) for t in d.rests(proof) if t != key]}
-        for proof in node.proofs
-    ]
-    subject = d.web.subject(Here("block", key))
+    if d.is_library(key):
+        held = d.nodes[key]
+        proofs = [
+            {
+                "where": {"ref": proof.source or held.source, "short": None, "pages": proof.pages},
+                "uses": [d.row(t) for t in proof.uses if t in d.nodes and t != key],
+            }
+            for proof in d._proofs.get(key, [])
+        ]
+        subject = d.joined.subject(Here("node", key))
+    else:
+        node = d.node(key)
+        assert node is not None
+        proofs = [
+            {"where": d.result.nodes[proof].file, "uses": [d.row(t, doc) for t in d.rests(proof) if t != key]}
+            for proof in node.proofs
+        ]
+        subject = d.web.subject(Here("block", key))
     if subject is None:
         return {"proofs": proofs, "lean": [], "record": []}
     names = {subject.kind: subject.name}
@@ -496,7 +648,7 @@ def _more(d: Drafts, key: str, doc: str | None) -> dict[str, Any]:
 
 def graph(d: Drafts, scope: str, doc: str | None, key: str) -> dict[str, Any]:
     """`web-graph`: four columns, two steps back, what it uses, the result, what uses it; a column of more than `COLUMN` draws one fewer and counts the rest; the edges only among what is drawn."""
-    if d.node(key) is None:
+    if not d.known(key):
         raise KeyError(key)
     inside = set(d.scope(scope, doc))
     uses = [k for k in d.uses_all(key) if k in inside]
