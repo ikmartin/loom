@@ -760,3 +760,65 @@ def test_two_acts_on_one_file_listed_before_each_other_leave_it_as_a_person_coul
     if left:
         discard(scan(load_quilt(q)), who, [p.id for p in left], writer)
     assert node.read_text(encoding="utf-8") in outcomes
+
+
+@pytest.mark.parametrize("which", ["a keep of one in-place change", "the viewer's accept"])
+def test_an_act_with_a_look_and_no_file_cut_short_at_any_step_is_finished_or_put_back(
+    tmp_path: Path, which: str
+) -> None:
+    """A Keep of in-place changes alone, and the viewer's Accept that keeps them, write no file, only the look and their keep lines; killed at every step they take holding the door, recovery finishes or puts back each, never leaves it, so the list is as before or after, the change is listed exactly when no keep line names it, and nothing is left to settle (R2-19)."""
+    import shutil
+
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.looks import take
+    from loom.pending import keep_accepted
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.helpers import run
+    from tests.unit.test_adopt import DOC, TEXT, made
+    from tests.unit.test_write_safety import Died
+
+    base = tmp_path / "base"
+    base.mkdir()
+    made(base, TEXT)
+    take(load_quilt(base), "Tester")
+    doc = base / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    (change,) = [
+        c["id"] for c in json.loads(run("changes", "--json", cwd=base).stdout)["changes"] if c["kind"] == "edit"
+    ]
+
+    def act(root: Path) -> None:
+        if which == "the viewer's accept":
+            keep_accepted(scan(load_quilt(root)), "Tester", ["zk-0001"])
+        else:
+            run("changes", "--keep", change, cwd=root)
+
+    def kept_line(root: Path) -> bool:
+        return any(e.action == "keep" and e.data.get("path") == DOC for e in load_history(load_quilt(root).history_dir).entries)  # fmt: skip
+
+    def listed(root: Path) -> bool:
+        return any(path == DOC for path, _ in _rows(root))
+
+    whole = tmp_path / "whole"
+    shutil.copytree(base, whole)
+    with pytest.MonkeyPatch.context() as mp:
+        count = dying_at_step(mp, whole, 0)
+        act(whole)
+    assert listed(base) and not listed(whole) and kept_line(whole) and count[0] > 5, count
+    for k in range(1, count[0] + 1):
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q)
+        with pytest.MonkeyPatch.context() as mp:
+            dying_at_step(mp, q, k)
+            try:
+                act(q)
+            except Died:
+                pass
+        hist = load_quilt(q).history_dir
+        writes.recover(q, hist)
+        assert writes.left(q, hist) == [], (k, writes.left(q, hist))
+        assert listed(q) is not kept_line(q), (k, listed(q), kept_line(q))
+        assert writes.recover(q, hist) == [], k
+        shutil.rmtree(q)

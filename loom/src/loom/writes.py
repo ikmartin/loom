@@ -878,10 +878,10 @@ def _log_ok(root: Path, history: Path, name: Any) -> bool:
 def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
     """Why recovery may not act on the journal's `begin` line `entry`, in words; '' when it may.
 
-    A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), and the act must name a file at all, since the door journals no act that writes none.
+    A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), and the act must name a file, or carry a look: the one act the door journals that writes no file is one whose only write is the person's look and its records, as a Keep of in-place changes.
     """
     files = entry.get("files")
-    if not isinstance(files, dict) or not files:
+    if not isinstance(files, dict) or (not files and not isinstance(entry.get("look"), dict)):
         return "it names no file"
     for rel, ab in files.items():
         if not _in_quilt(root, rel):
