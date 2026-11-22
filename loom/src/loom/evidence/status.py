@@ -32,7 +32,7 @@ class Cause:
 
 @dataclass(frozen=True)
 class Waiting:
-    """What keeps a result from reading formalized, and why: a node `stub` (not read) or `unchecked` (not compared with its paper on its text now); a node or a result of the person's assumed in Lean, `unattested` (its own Lean statement not attested); or a node, a result or a citation (`("cite", "KEY LOCATOR")`, or `"KEY"` with none) `unknown`, which nothing can say of yet."""
+    """What keeps a result from reading formalized, and why: a node `stub` (not read) or `unchecked` (not compared with its paper on its text now); a node or a result of the person's assumed in Lean, or whose Lean its Lean uses and does not state, `unattested` (its own Lean statement not attested, or not over everything its own Lean rests on); or a node, a result or a citation (`("cite", "KEY LOCATOR")`, or `"KEY"` with none) `unknown`, which nothing can say of yet."""
 
     key: tuple[str, str]
     why: str
@@ -255,10 +255,11 @@ def gate(
     seen: frozenset[str] = frozenset(),
     cites: Iterable[str] = (),
     near: Here | None = None,
+    rests: Iterable[tuple[str, str]] = (),
 ) -> tuple[Waiting, ...]:
     """What keeps a result from reading formalized (`docs/specs/evidence.md` §5.2).
 
-    `uses` are nodes that must be read and compared with their paper on their text now: those its closure holds, as it reads now and as attested, and a node asked of itself. `assumed` are what its Lean rests on as axioms (`relative_to`), a library node or a result of the person's, each held to one standard (`_assumption`). `cites` are citations no node answers for yet. What nothing can say of waits, so nothing resting on the library reads formalized before the library can answer for it.
+    `uses` are nodes that must be read and compared with their paper on their text now: those its closure holds, as it reads now and as attested, and a node asked of itself. `assumed` are what its Lean rests on as axioms (`relative_to`), and `rests` the results whose Lean its Lean uses and does not state itself (`rested`), a library node or a result of the person's, each held to one standard (`_assumption`). `cites` are citations no node answers for yet. What nothing can say of waits, so nothing resting on the library reads formalized before the library can answer for it.
     """
     out: list[Waiting] = [Waiting(("cite", c), "unknown") for c in dict.fromkeys(cites)]
     for node in uses:
@@ -268,13 +269,29 @@ def gate(
         why = _read_and_compared(evidence, web, node)
         if why:
             out.append(Waiting(key, why))
-    for key in assumed:
+    for key in [*assumed, *rests]:
         if any(w.key == key for w in out):
             continue
         why = _assumption(evidence, web, key, near, lean_now, seen)
         if why:
             out.append(Waiting(key, why))
     return tuple(out)
+
+
+def rested(record: Record | None, subject: Subject) -> list[tuple[str, str]]:
+    """The results whose Lean a `lean` record's declarations use and that the record does not state itself, from its `uses`: each must have its own Lean attested, since the attested statement is written in terms of theirs.
+
+    A record does not say which of its uses its statements make and which only its proofs, so every one is asked for until a record can say.
+    """
+    if record is None:
+        return []
+    stated = {(k, v) for d in record.get("declarations", []) if d.get("role") == "states" for k, v in (d.get("names") or {}).items()}  # fmt: skip
+    out: list[tuple[str, str]] = []
+    for raw in record.get("uses", []):
+        key = Subject.from_dict(raw, ("node", "label")).key
+        if key != subject.key and key not in stated and key not in out:
+            out.append(key)
+    return out
 
 
 def _read_and_compared(evidence: Evidence, web: Web, node: str) -> str | None:
@@ -298,35 +315,58 @@ def _assumption(
     lean_now: Callable[[Record], bool],
     seen: frozenset[str],
 ) -> str | None:
-    """Why a statement another's Lean assumes does not count yet, None when it does; one standard for a library node stated as an axiom and a result of the person's assumed for now.
+    """Why a statement another's Lean assumes, or whose Lean another's Lean rests on, does not count yet, None when it does: the word for the result itself, summed from what it still needs (`assumption_needs`).
 
-    It counts once its own statement is attested on its text now (its status holds a person's attestation, nothing changed and its notation attested) over Lean that elaborated (`ok`, the replay passed), whether or not that Lean proves it, since its proof is what is assumed; a node is read and compared itself; and every library node its statement uses is read and compared and every citation answered, what only its proof uses not needed. `unknown` where nothing can say of it, a node's `stub` or `unchecked`, else `unattested`; an assumption that comes round to a result already asked of never counts.
+    `unknown` where nothing can say of it, a node's `stub` or `unchecked`, else `unattested`.
+    """
+    leaves = assumption_needs(evidence, web, key, near, lean_now, seen)
+    if not leaves:
+        return None
+    own = [w for w in leaves if w.key == key]
+    return own[0].why if own else "unattested"
+
+
+def assumption_needs(
+    evidence: Evidence,
+    web: Web,
+    key: tuple[str, str],
+    near: Here | None,
+    lean_now: Callable[[Record], bool],
+    seen: frozenset[str],
+) -> list[Waiting]:
+    """What a statement another's Lean assumes or rests on still needs before it counts, each thing by itself: [] when it counts.
+
+    One standard for a library node stated as an axiom, a result of the person's assumed for now, and a result whose Lean another's Lean uses: its own statement attested on its text now (its status holds a person's attestation, nothing changed and its notation attested) over Lean that elaborated (`ok`, the replay passed), whether or not that Lean proves it, since its proof is what is assumed (the result itself, `unattested`, where not); a node read and compared itself (the node, `stub` or `unchecked`); every library node its statement uses read and compared and every citation answered (each such node or citation), what only its proof uses not needed; and the same of each result its own Lean rests on, all the way down. `unknown` where nothing can say of it; one that comes round to a result already asked of never counts.
     """
     kind, name = key
     if kind == "node":
         there: Here | None = Here("node", name)
         why = _read_and_compared(evidence, web, name)
         if why:
-            return why
+            return [Waiting(key, why)]
     else:
         holder = getattr(web, "holder", None)
         there = holder(key, near) if holder is not None and near is not None else None
         if there is None:
-            return "unknown"
+            return [Waiting(key, "unknown")]
     assert there is not None
     if name in seen:
-        return "unattested"
+        return [Waiting(key, "unattested")]
     own = status(evidence, web, there, lean_now=lean_now, _seen=seen | {name})
     record = evidence.by_id(own.lean_record) if own.lean_record else None
     elaborated = record is not None and bool(record.get("ok")) and (record.get("replay") or {}).get("exit") == 0
     attested = own.attestation is not None and not own.causes and own.unattested_notation == ()
     if not (attested and elaborated and own.lean in ("failed", "waiting", "formalized")):
-        return "unattested"
+        return [Waiting(key, "unattested")]
+    out: list[Waiting] = []
+    # and so on through what its own Lean rests on
+    if own.subject is not None:
+        for k in rested(record, own.subject):
+            out += [w for w in assumption_needs(evidence, web, k, there, lean_now, seen | {name}) if w not in out]
     cited = getattr(web, "cited", None)
     statement_uses = [k[1] for k in web.closure(there) if k[0] == "node"]
-    if gate(evidence, web, statement_uses, [], lean_now, cites=list(cited(there)) if cited is not None else []):
-        return "unattested"
-    return None
+    out += [w for w in gate(evidence, web, statement_uses, [], lean_now, cites=list(cited(there)) if cited is not None else []) if w not in out]  # fmt: skip
+    return out
 
 
 def brief(found: Status) -> dict[str, Any]:
@@ -430,7 +470,7 @@ def status(
             return replace(found, lean="rerun")
         attested_nodes = [m["node"] for m in attestation.get("closure", []) if "node" in m]
         uses = itself + [k[1] for k in now if k[0] == "node"] + attested_nodes
-        waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here)
+        waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here, rested(current, subject))  # fmt: skip
         found = replace(found, waiting_on=waiting)
         if not proves(current, subject):
             return replace(found, lean="failed")
@@ -454,7 +494,7 @@ def status(
         return replace(found, lean="rerun")
     never = notation_of(evidence, web, here)[1]
     uses = itself + [k[1] for k in now if k[0] == "node"]
-    waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here)
+    waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here, rested(current, subject))  # fmt: skip
     found = replace(found, unattested_notation=_rows(never), waiting_on=waiting)
     if not proves(current, subject):
         return replace(found, lean="failed")

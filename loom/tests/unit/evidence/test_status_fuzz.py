@@ -1,6 +1,6 @@
 """Random histories of records over small webs whose uses, citations and notation follow from their texts, checked against what `formalized` and `matches` must mean and against the order of the log's lines.
 
-The generator is the reviewer's second fuzzer's: Lean records that fail, fail the replay, carry a `sorry`, state another result, rest on a supporting axiom, on a result of the person's stated as an axiom, or on a library node stated as one and listed or not in `assumed`; citations with and without a locator; notation per document. Its library nodes are files in a node store, which status reads through `LibraryWeb`; `FakeWeb`, the model, hashes the same bytes itself. `earned` is written apart from `status`, from the rulings, and holds a library node's notation unknown until its work's macros are read, so nothing typeset with one earns `formalized`.
+The generator is the reviewer's second fuzzer's: Lean records that fail, fail the replay, carry a `sorry`, state another result, rest on a supporting axiom, on a result of the person's stated as an axiom, or on a library node stated as one and listed or not in `assumed`; citations with and without a locator; notation per document. Its library nodes are files in a node store, which status reads through `LibraryWeb`; `FakeWeb`, the model, hashes the same bytes itself. `earned` is written apart from `status`, from the rulings: it holds a library node's notation unknown until its work's macros are read, so nothing typeset with one earns `formalized`, and asks of every result whose Lean a result's Lean uses and does not state that its own Lean count as an assumed statement's does, all the way down.
 """
 
 from __future__ import annotations
@@ -422,6 +422,17 @@ def earned(
             elif proof:
                 out.append("an axiom nothing accounts for")
     statements = {d["name"]: d["statement"] for d in decls.values() if d["role"] == "states"}
+    # what its Lean uses and does not state itself: each one's own Lean attested, all the way down (E-34)
+    stated = {(k, v) for d in decls.values() if d["role"] == "states" for k, v in d["names"].items()}
+    rests = [key for key in dict.fromkeys(Subject.from_dict(u).key for u in lean.get("uses")) if key not in stated and key != s.key]  # fmt: skip
+    for kind, name in rests:
+        there = Here("node", name) if kind == "node" else web.holder((kind, name), here)
+        if name in seen | {s.name}:
+            out.append("a Lean it rests on comes round")
+        elif there is None or (kind == "node" and not _compared_now(ev, web, name)):
+            out.append("a Lean it rests on nothing settles")
+        elif earned(ev, web, there, lean_now, seen | {s.name}, proof=False):
+            out.append("a Lean it rests on whose own statement does not count")
     attested = [a for a in _later(ev, s, "attested") if a.on is not None and a.on.hash == s.hash and dict(a.get("statements")) == statements]  # fmt: skip
     if not attested:
         return [*out, "no attestation on the text now of the Lean's statements"]
