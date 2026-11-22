@@ -440,16 +440,41 @@ def _codex_rules(config: QuiltConfig, shell: bool) -> str:
     return codex_rules()
 
 
-#: Each permission file loom writes, by quilt-relative path: what writes it, and whether it carries the `[agents] deny` list, so that the app reading it refuses an agent's own edit there. Claude Code's settings render the list as `Edit` denies; Codex's rules are command prefixes, which govern only the shell.
-PERMISSION_WRITERS: dict[str, tuple[Callable[[QuiltConfig, bool], str], bool]] = {
-    CLAUDE_SETTINGS: (_claude_settings, True),
-    CODEX_RULES: (_codex_rules, False),
+def _claude_holds(root: Path, config: QuiltConfig) -> bool:
+    """Whether Claude Code's settings in the quilt at `root` refuse an edit in every place `config`'s list names, as they stand now: a file loom writes into (`settings_left`), whose `deny` holds each of loom's `Edit` rules for the list."""
+    from loom.agents import claude_denies
+
+    if settings_left(root, config):
+        return False
+    try:
+        data = json.loads((read_plain(root, CLAUDE_SETTINGS) or "").removeprefix("\ufeff"))
+        deny = set(data["permissions"]["deny"])
+    except (ValueError, KeyError, TypeError):
+        return False
+    return {f"Edit({d})" for d in claude_denies(config)} <= deny
+
+
+#: Each permission file loom writes, by quilt-relative path: what writes it, and, for one that carries the `[agents] deny` list so that the app reading it refuses an agent's own edit there, what says whether the file on disk holds the list now; None for one that cannot. Claude Code's settings render the list as `Edit` denies; Codex's rules are command prefixes, which govern only the shell.
+PERMISSION_WRITERS: dict[str, tuple[Callable[[QuiltConfig, bool], str], Callable[[Path, QuiltConfig], bool] | None]] = {
+    CLAUDE_SETTINGS: (_claude_settings, _claude_holds),
+    CODEX_RULES: (_codex_rules, None),
 }
 
 
 def holds_deny(client: Client) -> bool:
-    """Whether `client`'s app refuses an agent's own edit in a place `[agents] deny` names, by the permission file loom writes for it (`PERMISSION_WRITERS`); an app with none is only told the list."""
-    return client.permissions is not None and PERMISSION_WRITERS.get(client.permissions, (_codex_rules, False))[1]
+    """Whether the permission file loom writes for `client`'s app can carry the `[agents] deny` list (`PERMISSION_WRITERS`); an app with none is only told the list."""
+    return (
+        client.permissions is not None
+        and PERMISSION_WRITERS.get(client.permissions, (_codex_rules, None))[1] is not None
+    )
+
+
+def holds_deny_now(root: Path, config: QuiltConfig, client: Client) -> bool:
+    """Whether `client`'s app is refused an edit in the places `config`'s list names by its permission file as it stands in the quilt at `root`: one loom writes that carries the list and holds it now, so a list changed by hand since the file was written, or a file loom leaves alone, holds the app to nothing."""
+    if not holds_deny(client) or client.permissions is None:
+        return False
+    check = PERMISSION_WRITERS[client.permissions][1]
+    return check is not None and check(root, config)
 
 
 def vendor_files(
