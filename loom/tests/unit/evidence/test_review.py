@@ -315,6 +315,28 @@ def test_an_agents_suggested_edit_is_a_proposed_edit(root: Path) -> None:
     assert row["type"] == "suggested" and row["key"] == key and row["by"] == "Probe Agent"
 
 
+def test_the_proposed_edits_are_the_changes_a_publication_lists_and_differ_only_until_the_next(root: Path) -> None:
+    """Your Changes lists the publication's `changes`; the column's count for `edits` is the same rows, from the same scan and reviewer, and runs ahead of it only between a write and the publication that follows."""
+    from loom.looks import take
+    from loom.render.build import build
+    from loom.scan.quilt import save_author
+
+    save_author("A. Author")
+    track_edits(root)
+    take(load_quilt(root), "A. Author")
+    _edit(root, "on a tree vanishes", "on a forest vanishes")
+    ok("suggest", _key(root, "def:connected"), "--with", "Every quiver", "--quote", "A quiver", "--as", "Probe Agent", cwd=root)  # fmt: skip
+    report = build(load_quilt(root))
+    listed = [c["id"] for c in report.manifest["changes"]]
+    assert len(listed) == 2
+    assert [r["change"] for r in _rows(review.gather(root, report.result, report.manifest), "edits")] == listed
+    # a write the publisher has not published yet: the read scans the files now, the page still has the last publication
+    _edit(root, "is the kernel", "is the cokernel")
+    assert len(_rows(_gather(root, report.manifest), "edits")) == len(listed) + 1
+    report = build(load_quilt(root))
+    assert [r["change"] for r in _rows(review.gather(root, report.result, report.manifest), "edits")] == [c["id"] for c in report.manifest["changes"]]  # fmt: skip
+
+
 def test_a_rows_kind_is_its_kind_and_no_field_of_its_own_overwrites_it(root: Path) -> None:
     key = _key(root, "lem:balanced")
     ok("suggest", key, "--with", "Every balanced weighting", "--quote", "Every", "--as", "Probe Agent", cwd=root)
