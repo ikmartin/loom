@@ -339,11 +339,14 @@ def assumption_needs(
     One standard for a library node stated as an axiom, a result of the person's assumed for now, and a result whose Lean another's Lean uses: its own statement attested on its text now (its status holds a person's attestation, nothing changed and its notation attested) over Lean that elaborated (`ok`, the replay passed), whether or not that Lean proves it, since its proof is what is assumed (the result itself, `unattested`, where not); a node read and compared itself (the node, `stub` or `unchecked`); every library node its statement uses read and compared and every citation answered (each such node or citation), what only its proof uses not needed; and the same of each result its own Lean rests on, all the way down. `unknown` where nothing can say of it; one that comes round to a result already asked of never counts.
     """
     kind, name = key
+    out: list[Waiting] = []
     if kind == "node":
         there: Here | None = Here("node", name)
         why = _read_and_compared(evidence, web, name)
-        if why:
+        if why == "unknown":
             return [Waiting(key, why)]
+        if why:
+            out.append(Waiting(key, why))
     else:
         holder = getattr(web, "holder", None)
         there = holder(key, near) if holder is not None and near is not None else None
@@ -351,21 +354,73 @@ def assumption_needs(
             return [Waiting(key, "unknown")]
     assert there is not None
     if name in seen:
-        return [Waiting(key, "unattested")]
+        return [*out, Waiting(key, "unattested")]
     own = status(evidence, web, there, lean_now=lean_now, _seen=seen | {name})
     record = evidence.by_id(own.lean_record) if own.lean_record else None
     elaborated = record is not None and bool(record.get("ok")) and (record.get("replay") or {}).get("exit") == 0
     attested = own.attestation is not None and not own.causes and own.unattested_notation == ()
     if not (attested and elaborated and own.lean in ("failed", "waiting", "formalized")):
-        return [Waiting(key, "unattested")]
-    out: list[Waiting] = []
-    # and so on through what its own Lean rests on
+        out.append(Waiting(key, "unattested"))
+    # and so on through what its own Lean rests on, whether or not that Lean is attested yet
     if own.subject is not None:
         for k in rested(record, own.subject):
             out += [w for w in assumption_needs(evidence, web, k, there, lean_now, seen | {name}) if w not in out]
     cited = getattr(web, "cited", None)
     statement_uses = [k[1] for k in web.closure(there) if k[0] == "node"]
     out += [w for w in gate(evidence, web, statement_uses, [], lean_now, cites=list(cited(there)) if cited is not None else []) if w not in out]  # fmt: skip
+    return out
+
+
+def needs(
+    evidence: Evidence,
+    web: Web,
+    uses: Iterable[str],
+    assumed: Iterable[tuple[str, str]],
+    lean_now: Callable[[Record], bool],
+    seen: frozenset[str] = frozenset(),
+    cites: Iterable[str] = (),
+    near: Here | None = None,
+    rests: Iterable[tuple[str, str]] = (),
+) -> list[Waiting]:
+    """What the gate asks, thing by thing, of what is given as `gate` takes it: each citation, each node not read or compared, and for each statement assumed or rested on, what it still needs (`assumption_needs`); [] exactly when `gate` answers nothing.
+
+    Parameters
+    ----------
+    evidence : Evidence
+        The replayed evidence log.
+    web : Web
+        The texts now.
+    uses : iterable of str
+        Library nodes that must be read and compared with their paper on their text now.
+    assumed : iterable of (str, str)
+        What a Lean rests on as axioms.
+    lean_now : callable
+        Whether a `lean` record's Lean is unchanged since loom ran it.
+    seen : frozenset of str, default empty
+        The results already asked of, which never count again.
+    cites : iterable of str, default ()
+        Citations no node answers for yet.
+    near : Here, optional
+        Where a label is read from.
+    rests : iterable of (str, str), default ()
+        The results whose Lean a Lean uses and does not state itself.
+
+    Returns
+    -------
+    list of Waiting
+        Each thing by itself, in the order the gate asks: citations, nodes, then what each statement needs.
+
+    See Also
+    --------
+    gate : the same, one word for each thing given.
+    """
+    out: list[Waiting] = [Waiting(("cite", c), "unknown") for c in dict.fromkeys(cites)]
+    for node in uses:
+        why = _read_and_compared(evidence, web, node)
+        if why and Waiting(("node", node), why) not in out:
+            out.append(Waiting(("node", node), why))
+    for key in [*assumed, *rests]:
+        out += [w for w in assumption_needs(evidence, web, key, near, lean_now, seen) if w not in out]
     return out
 
 

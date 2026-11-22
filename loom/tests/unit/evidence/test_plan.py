@@ -40,10 +40,9 @@ def test_a_target_to_prove_reaches_all_it_uses_and_the_library_as_state_prove_an
     assert found.assume == [("lib-stub", "not-read"), ("lib-ok", None), ("lib-used", None)]
 
 
-def test_only_a_missing_label_stops_a_request_and_what_is_unread_or_unchecked_stands_before() -> None:
+def test_only_a_missing_label_stops_a_request() -> None:
     found = plan(["thm"], [], item, uses)
     assert found.stops == ["lem:c"]
-    assert found.before == {"not-read": ["lib-stub"], "not-checked": ["lib-def"], "attest": ["lib-ok"], "attested-changed": []}  # fmt: skip
 
 
 def test_a_result_assumed_for_now_or_stated_is_followed_by_its_statement_alone() -> None:
@@ -53,15 +52,66 @@ def test_a_result_assumed_for_now_or_stated_is_followed_by_its_statement_alone()
     assert assumed_target.prove == [] and assumed_target.state == ["def:a", "lib-def"]
 
 
-def test_what_is_formalized_or_waits_for_the_persons_word_is_listed_and_not_followed() -> None:
+def test_what_has_its_lean_already_is_listed_and_not_followed() -> None:
     WEB["top"] = (True, True, False, "none", None, ["done", "waits", "moved"], [])
     try:
         found = plan(["top"], [], item, uses)
     finally:
         del WEB["top"]
-    assert found.formalized == ["done"] and found.before["attest"] == ["waits"]
-    assert found.before["attested-changed"] == ["moved"] and found.prove == []
+    assert found.formalized == ["done"] and found.lean == ["done", "waits", "moved"] and found.prove == []
 
 
 def test_a_target_without_a_label_stops_the_request() -> None:
     assert plan(["lem:c"], [], item, uses).stops == ["lem:c"]
+
+
+def test_what_stands_before_is_each_targets_own_once_in_the_panels_order() -> None:
+    from loom.evidence.plan import Need
+
+    def before(target: str, found: object) -> list[Need]:
+        return [Need("lib-ok", "attest", "after"), Need(target, "attest", "after"), Need("lib-stub", "not-read", "now"), Need("Cal14 Theorem 2", "cite", "now")]  # fmt: skip
+
+    found = plan(["thm", "lem:b"], [], item, uses, before)
+    assert [(n.key, n.why, n.when) for n in found.before] == [
+        ("lib-stub", "not-read", "now"),
+        ("Cal14 Theorem 2", "cite", "now"),
+        ("lib-ok", "attest", "after"),
+        ("thm", "attest", "after"),
+        ("lem:b", "attest", "after"),
+    ]
+
+
+def test_each_thing_the_gate_asks_is_named_with_when_the_person_can_do_it() -> None:
+    from loom.evidence.plan import Need, needed
+    from loom.evidence.status import Waiting
+
+    on = Subject("node", "tq-0000", "sha256:" + "0" * 64)
+    own = {
+        "fresh": (Status(on, lean="unattested", lean_record="ev-1"), True),
+        "moved": (Status(on, lean="changed", lean_record="ev-1", attestation="ev-2"), True),
+        "text-moved": (Status(on, lean="changed", lean_record="ev-1", attestation="ev-2"), False),
+        "none-yet": (Status(on), False),
+        "unknown-notation": (
+            Status(on, lean="unattested", lean_record="ev-1", attestation="ev-2", unattested_notation=None),
+            True,
+        ),  # fmt: skip
+        "row-unattested": (
+            Status(on, lean="unattested", lean_record="ev-1", attestation="ev-2", unattested_notation=("Zcyc",)),
+            True,
+        ),  # fmt: skip
+        "holds": (Status(on, lean="waiting", lean_record="ev-1", attestation="ev-2"), True),
+    }
+    leaves = [Waiting(("cite", "Cal14"), "unknown"), Waiting(("node", "stub"), "stub"), Waiting(("node", "old"), "unchecked")]  # fmt: skip
+    leaves += [Waiting(("node", k), "unattested") for k in own] + [Waiting(("node", "gone"), "unattested")]
+    found = needed(leaves, lambda key: (key[1], *own[key[1]]) if key[1] in own else None)
+    assert found == [
+        Need("Cal14", "cite", "now"),
+        Need("stub", "not-read", "now"),
+        Need("old", "not-checked", "now"),
+        Need("fresh", "attest", "now"),
+        Need("moved", "attested-changed", "now"),
+        Need("text-moved", "attest", "after"),
+        Need("none-yet", "attest", "after"),
+        Need("unknown-notation", "attest", "after"),
+        Need("row-unattested", "attest", "now"),
+    ]

@@ -99,6 +99,46 @@ class _Planner:
         # a library result is assumed, never proved: what its proofs use is not followed
         return ([u for u in held[1].uses if self.library.file(u) is not None] if held else []), []
 
+    def key_of(self, key: str) -> tuple[str, str] | None:
+        """A result's lasting name as records name it: a node's id, or a draft's label; None for a draft's result with none."""
+        from loom.evidence.web import Here
+
+        if self.drafts.is_library(key):
+            return ("node", key)
+        found = self.drafts.web.subject(Here("block", key))
+        return found.key if found is not None else None
+
+    def elaborated(self, found: Any) -> bool:
+        """Whether a result's current Lean record is on its text now, still stands and elaborated: accepted, and the kernel's replay passed."""
+        from loom.evidence.plan import elaborated
+
+        return elaborated(self.drafts.evidence, found, self.drafts.lean_now)
+
+    def before(self, target: str, found: Any) -> list[Any]:
+        """What stands before `target` reads formalized, from the gate's own needs of the Lean the request will make (`plan.asked`, `status.needs`, `plan.needed`), the target's own Lean first."""
+        from loom.evidence.plan import asked, needed, target_need
+        from loom.evidence.status import needs
+        from loom.evidence.web import Here
+
+        here = Here("block", target)
+        nodes, assumed, rests = asked(found, target, self.drafts.is_library, self.key_of)
+        nodes += [n for kind, n in self.web.closure(here) if kind == "node" and n not in nodes]
+        subject = self.web.subject(here)
+        seen = frozenset({subject.name}) if subject is not None else frozenset()
+        leaves = needs(self.drafts.evidence, self.web, nodes, assumed, self.drafts.lean_now, seen, list(self.web.cited(here)), here, rests)  # fmt: skip
+
+        def own(key: tuple[str, str]) -> tuple[str, Any, bool] | None:
+            if key[0] == "node":
+                return (key[1], self._node(key[1]), self.elaborated(self._node(key[1]))) if self.drafts.is_library(key[1]) else None  # fmt: skip
+            there = self.drafts.web.holder(key, here)
+            if there is None or self.drafts.node(there.name) is None:
+                return None
+            standing = self.drafts.standing(there.name)
+            return there.name, standing, self.elaborated(standing)
+
+        mine = target_need(target, self.drafts.standing(target), self.elaborated(self.drafts.standing(target)))
+        return ([mine] if mine is not None else []) + needed(leaves, own)
+
     def row(self, key: str) -> dict[str, Any]:
         from loom.evidence.webview import node_row
 
@@ -135,11 +175,14 @@ def _planned(root: Path, body: dict[str, Any]) -> tuple[_Planner, list[str], lis
 
 def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`formal-plan`: what asking an agent to formalize the targets comes to, and what stops it or stands before it reads formalized."""
-    from loom.evidence.plan import WHY, plan
+    from loom.evidence.plan import plan
 
     planner, targets, assume = _planned(root, body)
-    found = plan(targets, assume, planner.item, planner.uses)
+    found = plan(targets, assume, planner.item, planner.uses, planner.before)
     row = planner.row
+    groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
+    for need in found.before:
+        groups.setdefault((need.why, need.when), []).append({"cite": need.key} if need.why == "cite" else row(need.key))
     return {
         "ok": True,
         "targets": [planner.target(k) for k in found.targets],
@@ -148,7 +191,7 @@ def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "assume": [{**row(k), "why": why} for k, why in found.assume],
         "formalized": [row(k) for k in found.formalized],
         "stops": [row(k) for k in found.stops],
-        "before": [{"why": w, "results": [row(k) for k in found.before[w]]} for w in WHY if found.before[w]],
+        "before": [{"why": why, "when": when, "results": results} for (why, when), results in groups.items()],
     }
 
 

@@ -420,16 +420,18 @@ What Docs draws of the library is the picker, a work beside a draft with a citat
  "targets": [{"key": "rl-0034", "name": "Theorem 3.4", "title": "Bounded balanced weightings", "doc": "drafting/main.tex", "statement": {"fragment": "fragments/nodes/rl-0034.html"}}],
  "state": [ROW], "prove": [ROW], "assume": [ROW], "formalized": [ROW],
  "stops": [ROW],
- "before": [{"why": "not-read", "results": [ROW]}, {"why": "not-checked", "results": [ROW]},
-            {"why": "attest", "results": [ROW]}, {"why": "attested-changed", "results": [ROW]}]}
+ "before": [{"why": "not-read", "when": "now", "results": [ROW]}, {"why": "not-checked", "when": "now", "results": [ROW]},
+            {"why": "cite", "when": "now", "results": [{"cite": "Oka22"}]}, {"why": "attest", "when": "now", "results": [ROW]},
+            {"why": "attested-changed", "when": "now", "results": [ROW]}, {"why": "attest", "when": "after", "results": [ROW]}]}
 ```
 
-A `ROW` in `assume` gains `"why": "not-read"|"not-checked"|null`, and one in `prove` `"assume": true|false`. `stops` is `Stops the request`, and `before` is `Before it reads formalized`, each group named by why it is there; an empty one is not drawn. The plan, by the rules round six draws, as ruled:
+A `ROW` in `assume` gains `"why": "not-read"|"not-checked"|null`, and one in `prove` `"assume": true|false`. `stops` is `Stops the request`, and `before` is `Before it reads formalized`, each group named by why it is there and by when the person can do it, `now` or `after` the agent's work; an empty one is not drawn. The plan, by the rules round six draws, as ruled:
 
 1. Each target is to be proved, unless the person chose to assume it for now.
 2. From a result to be proved, every result it uses is reached, by its statement and by its proof; from one assumed or a definition to be stated, only what its statement uses.
-3. A result reached that is formalized is in `formalized` and is not followed. One of the person's that Lean accepted and that waits for attestation is in `before` as `attest`, one that changed since it was attested as `attested-changed`, and neither is followed. A definition or a convention not formalized, the person's or the library's, is in `state`. Another of the person's is in `prove`. Another of the library's is in `assume`. A library result, in `state` or `assume`, is also in `before` when it is a stub (`not-read`) or not compared (`not-checked`), and as `attest` or `attested-changed` while its own Lean statement waits for the person's word, since each keeps the targets from reading formalized (`evidence.md` §7).
+3. A result reached that is formalized, or one of the person's that Lean accepted and that waits for attestation or changed since it was attested, has its Lean already and is not followed. A definition or a convention not formalized, the person's or the library's, is in `state`. Another of the person's is in `prove`. Another of the library's is in `assume`.
 4. A target, or a result in `state` or `prove`, with no label is in `stops`. It is the only thing that stops the request.
+5. `before` is what the gate will ask (`evidence.md` §5.2, §7) of the Lean the request makes, everything that does not hold now, each once: a library result not read (`not-read`) or not compared (`not-checked`); a citation in what the targets' statements use that names no result (`cite`), all three the person's to do `now`; a Lean statement to attest, `now` where Lean has accepted it on its text now (`attest`, or `attested-changed` where it was attested before something it uses changed), `after` where the agent will write it: the target's own, a library result's to assume or to state, and one of the person's assumed for now, that has none yet. It is derived from the gate's own function, so it names nothing the gate does not ask and leaves out nothing it does.
 
 The sentence's counts are the lists' lengths, and the sentence is the viewer's. A statement one click away is `library-node` with `brief` for the library's, the fragment for the person's. From: scan (the person's results, their labels and uses), index (the library's uses), evidence and lean. Cost: a walk over the targets' closure, 50 ms at thousands, under 20 KB.
 
