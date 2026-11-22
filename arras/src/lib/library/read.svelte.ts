@@ -1,5 +1,6 @@
 // One read a view keeps on screen: its latest answer, its error, and asking again. Asked again for the same question, it sends the generation it holds as `since`, so a publisher whose library has not changed answers `unchanged` and the answer on screen stays; asked for another question, the old answer goes at once, and an answer to a question no longer asked is dropped.
 
+import { untrack } from 'svelte';
 import type { Answer, ApiError } from './api';
 import type { Gen } from './types';
 
@@ -11,9 +12,10 @@ export class Read<T extends Gen> {
 	#key: string | null = null;
 	#asked = 0;
 
-	/** Asks `run` for the question named `key`, passing the generation held when it is the same question. */
+	/** Asks `run` for the question named `key`, passing the generation held when it is the same question. What it holds is read untracked, so an effect that loads is not run again by the answer it loaded. */
 	async load(key: string, run: (since?: number) => Promise<Answer<T>>): Promise<void> {
 		const same = key === this.#key;
+		const held = untrack(() => this.value?.gen);
 		if (!same) {
 			this.#key = key;
 			this.value = null;
@@ -21,7 +23,7 @@ export class Read<T extends Gen> {
 		}
 		const asked = ++this.#asked;
 		this.busy = true;
-		const answer = await run(same ? this.value?.gen : undefined);
+		const answer = await run(same ? held : undefined);
 		if (asked !== this.#asked) return;
 		this.busy = false;
 		if (!answer.ok) {

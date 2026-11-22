@@ -7,6 +7,7 @@ import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { discardChanges, keepChanges, type ChangeAnswer } from '$lib/review/history.svelte';
 import { library as libraryWords } from '$lib/words/library';
+import { library as generation } from './gen.svelte';
 import type { FormalMarks, FormalPlan, NotesAnswer, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
 
 export interface ApiError {
@@ -123,7 +124,10 @@ export const fragment = async (path: string): Promise<string | null> => {
 };
 export const call = async <T extends Gen>(name: string, body: Record<string, unknown>): Promise<Answer<T>> => {
 	await chosen;
-	return source.call<T>(name, body);
+	const answer = await source.call<T>(name, body);
+	// the library's generation, which every library read and write answers with: a write's change is on screen at once, and the stream's event for the same generation then changes nothing. Review's and the Web's reads count their own, so only the library's are heard
+	if (answer.ok && name.startsWith('library-') && typeof answer.value.gen === 'number') generation.heard(answer.value.gen);
+	return answer;
 };
 
 // ---- the reads, each taking the generation held for the same question ----
