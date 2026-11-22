@@ -520,3 +520,17 @@ def test_an_agent_s_new_file_waiting_in_a_place_closed_and_opened_again_is_liste
     ok("changes", "--keep-all", cwd=person)  # keeping all while it is closed takes nothing of it in
     set_deny()
     assert edits(person) == waiting
+
+
+def test_an_act_signed_as_an_agent_s_is_refused_a_denied_place_in_a_shell_with_no_marker(tmp_path: Path) -> None:
+    """Whose act it is decides the refusal as it decides the look (`identity.agents_act`): `loom new` signed as an agent's is refused the paper agents are denied though no marker says an agent runs the shell, whether it names the file or not; the person's own is not (R2-11)."""
+    from loom.scan.quilt import save_author
+
+    save_author("Tester")
+    q = denying(demo(tmp_path), "/drafting/")
+    nodes = sorted(p.name for p in (q / "drafting/nodes").glob("*.tex"))
+    refused("new", "lemma", "An agent's lemma", "--as", "Codex Agent", cwd=q, code=2, match="deny names /drafting/")
+    refused("new", "theorem", "An agent's theorem", "--to", "drafting/agent.tex", "--as", "Codex Agent", cwd=q, code=2, match="/drafting/")  # fmt: skip
+    assert sorted(p.name for p in (q / "drafting/nodes").glob("*.tex")) == nodes
+    assert not (q / "drafting/agent.tex").exists()
+    ok("new", "lemma", "The person's lemma", cwd=q)

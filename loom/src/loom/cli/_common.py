@@ -136,12 +136,28 @@ def destination(
     return target
 
 
-def refuse_protected(quilt: Any, target: Path, advice: str = "write it elsewhere, or leave it to the author") -> None:
-    """Refuse an agent a file the quilt protects from agents, whichever command writes it and whatever client runs the agent (K5); `advice` says where it may write instead.
+#: The parameter names a command's `--as` takes.
+_AS = ("declared", "as_name", "author", "who")
 
-    Claude Code's permission file refuses the agent's own edits; this refuses the same paths when a loom command is the writer, which is the only refusal an agent in any other client meets. A person is never refused here.
+
+def declared_name() -> str | None:
+    """The name the running command was given with `--as`, whatever its parameter is called; None outside a command, or where none was given."""
+    ctx = click.get_current_context(silent=True)
+    for key in _AS:
+        said = ctx.params.get(key) if ctx is not None else None
+        if isinstance(said, str) and said.strip():
+            return said.strip()
+    return None
+
+
+def refuse_protected(quilt: Any, target: Path, advice: str = "write it elsewhere, or leave it to the author") -> None:
+    """Refuse an agent's act a file the quilt protects from agents, whichever command writes it and whatever client runs the agent (K5); `advice` says where it may write instead.
+
+    Whose act it is goes as for the look (`identity.agents_act`): a command signed `--as` a name that says it is an agent's is refused here in any shell, and one run in a shell an agent runs whatever it is signed. Claude Code's permission file refuses the agent's own edits; this refuses the same paths when a loom command is the writer, which is the only refusal an agent in any other client meets. A person is never refused here.
     """
-    if not agent_marker():
+    from loom.identity import agents_act
+
+    if not agents_act(declared_name()):
         return
     root = Path(quilt.root).resolve()
     resolved = target.resolve()
