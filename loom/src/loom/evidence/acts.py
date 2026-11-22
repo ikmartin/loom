@@ -251,16 +251,19 @@ def take(root: Path, proposal: str, by: Who) -> Record:
     Raises
     ------
     ActRefused
-        `author-only`; `no-such-proposal`; `closed` when declined; `changed` when the node is no longer the text it corrects; `refused` when its file fails the library's checks now; `no-document`.
+        `author-only`; `no-such-proposal`; `closed` when declined; `changed` when the node is no longer the text it corrects; `refused` when its bytes do not read as that node's file, or the file fails the library's checks now; `no-document`.
     """
-    from loom.library.node import read_node
+    from loom.library.node import NodeUnreadable, read_node
 
     _only(by, "person")
     with _held(root):
         found = _proposal(root, proposal)
         assert found.on is not None
         _shown(root, found.on.name, found.on.hash)
-        new = read_node(str(found.get("bytes")).encode("utf-8"), f"{found.on.name}.node")
+        try:
+            new = read_node(str(found.get("bytes")).encode("utf-8"), f"{found.on.name}.node")
+        except NodeUnreadable as exc:
+            raise ActRefused("refused", f"the proposal is not a file of {found.on.name}", list(exc.problems)) from None
         if document_of(root, new) is None:
             raise ActRefused("no-document", f"{new.id}'s work holds no document to compare it with")
         written = _store(root, new)

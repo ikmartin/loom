@@ -281,3 +281,12 @@ def test_attesting_a_drafts_result_attests_the_notation_it_was_shown_and_waits_f
     # a row attested in its definition now is not attested again
     _attest(root, _Draft([]), here, record.id)
     assert len(replay(root).about("macro", "Zcyc", of="attested")) == 1
+
+
+def test_a_proposal_whose_bytes_are_another_nodes_file_is_refused_when_taken(root: Path) -> None:
+    """A proposal written into the log by hand, not by `propose`, with another node's file as its bytes."""
+    acts.check(root, "tq-00A4", _hash(root, "tq-00A4"), PERSON)
+    on = LibraryWeb(root).subject(Here("node", "tq-00A4"))
+    forged = write(root, "proposed", AGENT, on=on, bytes=_file(root, "tq-00K3").read_text(encoding="utf-8"), why="")
+    refusal = _refused(root, "refused", acts.take, forged.id, PERSON)
+    assert "tq-00A4" in str(refusal) and refusal.diagnostics
