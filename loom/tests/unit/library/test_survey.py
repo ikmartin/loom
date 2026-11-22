@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import shutil
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,7 @@ By \eqref{eq:bound}.
 Unnumbered.
 \end{claim}
 \setcounter{section}{6}
+\clearpage
 \section{Later}
 \begin{figure}\caption{A picture}\label{fig:one}\end{figure}
 \begin{equation}\label{eq:outside} y = 2 \end{equation}
@@ -197,3 +200,115 @@ def test_a_kept_survey_of_another_version_is_read_again(tmp_path: Path) -> None:
     survey.keep(root, old)
     assert survey.kept(root, TEX) is None
     assert len(survey.survey(root, TEX, src, "main.tex").items) == 6
+
+
+def _bytes(src: Path) -> dict[str, bytes]:
+    return {p.relative_to(src).as_posix(): p.read_bytes() for p in sorted(src.rglob("*")) if p.is_file()}
+
+
+def test_a_marked_copy_marks_each_heading_result_and_proof_and_the_source_is_not_written(tmp_path: Path) -> None:
+    src = _source(tmp_path)
+    before = _bytes(src)
+    s = survey.read(src, "main.tex", TEX)
+    root = survey.marked(src, s, tmp_path / "copy")
+    main = (root / "main.tex").read_text(encoding="utf-8")
+    assert main.index(survey.MARKER) < main.index("\\begin{document}")
+    assert "\\section{Introduction}\\loomSurveyMark{loom-survey-s0}\\label{sec:intro}" in main
+    assert "\\begin{lemma}\\loomSurveyMark{loom-survey-i1}\n" in main
+    assert "\\begin{proof}\\loomSurveyMark{loom-survey-p1-0}\\label{pf:bound}" in main
+    assert "\\begin{defn}[Widget]\\loomSurveyMark{loom-survey-i0}\\label{def:widget}" in main
+    part2 = (root / "part2.tex").read_text(encoding="utf-8")
+    assert "\\begin{theorem}[Main]\\loomSurveyMark{loom-survey-i2}" in part2
+    assert "\\begin{proof}\\loomSurveyMark{loom-survey-p2-0}" in part2
+    assert _bytes(src) == before
+
+
+def test_a_number_or_page_is_taken_only_when_it_is_shaped_as_one(tmp_path: Path) -> None:
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    aux = "\n".join(
+        [
+            r"\newlabel{loom-survey-i0}{{1.1}{2}}",
+            r"\newlabel{loom-survey-i1}{{\input{/etc/hosts}}{2}}",
+            r"\newlabel{loom-survey-i2}{{root:x:0:0:root:/root}{3}}",
+            r"\newlabel{loom-survey-i3}{{1.3}{3}}",
+            r"\newlabel{loom-survey-i4}{{7.1}{4}}",
+            r"\newlabel{loom-survey-s0}{{1}{2}}",
+            r"\newlabel{eq:bound}{{1}{2}}",
+            r"\newlabel{claim:star}{{1.3}{3}}",
+            r"\newlabel{fig:one}{{a-very-long-number-indeed}{4}}",
+            r"\loomSurveySheet{loom-survey-i0}{2}",
+            r"\loomSurveySheet{loom-survey-i4}{0}",
+        ]
+    )
+    done = survey.numbered(s, [aux])
+    assert done.state == "ready" and s.state == "reading"
+    assert [(i.number, i.page, i.sheet) for i in done.items] == [
+        ("1.1", 2, 2),
+        (None, 2, None),
+        (None, 3, None),
+        (None, 3, None),
+        ("7.1", 4, None),
+        (None, None, None),
+    ]
+    assert (done.sections[0].number, done.sections[1].number) == ("1", None)
+    assert done.labels["eq:bound"].number == "1" and done.labels["claim:star"].number is None
+    assert done.labels["fig:one"].number is None and done.labels["fig:one"].page == 4
+
+
+def test_a_quilt_compiles_one_source_at_a_time_and_keeps_what_it_made(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root, src = tmp_path / "quilt", _source(tmp_path)
+    spans: list[tuple[float, float]] = []
+
+    def slow(_src: Path, s: survey.Survey) -> survey.Survey:
+        start = time.monotonic()
+        time.sleep(0.3)
+        spans.append((start, time.monotonic()))
+        return survey.numbered(s, [])
+
+    monkeypatch.setattr(survey, "compile_marks", slow)
+    other = "sha256:" + "cd" * 32
+    threads = [threading.Thread(target=survey.complete, args=(root, t, src, "main.tex")) for t in (TEX, other)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    (a0, a1), (b0, b1) = sorted(spans)
+    assert a1 <= b0
+    assert survey.complete(root, TEX, src, "main.tex").state == "ready" and len(spans) == 2
+
+
+@pytest.mark.tex
+def test_a_compile_numbers_every_result_as_its_source_prints_it_and_leaves_the_source_alone(tmp_path: Path) -> None:
+    src = _source(tmp_path)
+    before = _bytes(src)
+    done = survey.complete(tmp_path / "quilt", TEX, src, "main.tex")
+    assert (done.state, done.why) == ("ready", None)
+    assert [(i.item, i.number) for i in done.items] == [
+        ("def:widget", "1.1"),
+        ("i2", "1.2"),
+        ("thm:main", "2.1"),
+        ("claim:star", None),
+        ("not:hom", "7.1"),
+        ("thm:app", "A.1"),
+    ]
+    assert [x.number for x in done.sections] == ["1", "2", None, "7", "A"]
+    assert [i.page for i in done.items] == [1, 1, 1, 1, 2, 2] and [i.sheet for i in done.items] == [1, 1, 1, 1, 2, 2]
+    assert {k: done.labels[k].number for k in ("eq:bound", "it:first", "fig:one", "eq:outside", "sec:proofs")} == {
+        "eq:bound": "1",
+        "it:first": "1",
+        "fig:one": "1",
+        "eq:outside": "2",
+        "sec:proofs": "A",
+    }
+    assert _bytes(src) == before and survey.kept(tmp_path / "quilt", TEX) == done
+
+
+@pytest.mark.tex
+def test_a_source_that_does_not_compile_fails_and_numbers_nothing_it_did_not_see_printed(tmp_path: Path) -> None:
+    src = _source(tmp_path)
+    (src / "main.tex").write_text(MAIN.replace("{amsart}", "{loom-no-such-class}"), encoding="utf-8")
+    done = survey.complete(tmp_path / "quilt", TEX, src, "main.tex")
+    assert (done.state, done.why) == ("failed", "compile")
+    assert all(i.page is None for i in done.items)
