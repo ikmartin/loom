@@ -5,6 +5,7 @@
 	import { canonUrl, keyUrl, masterUrl, threadUrl } from '$lib/nav';
 	import { landmarkName } from '$lib/workspace/history';
 	import { frame } from '$lib/words/frame';
+	import { upgrade } from '$lib/shell/upgrade.svelte';
 
 	let el: HTMLElement | undefined = $state();
 
@@ -45,4 +46,5 @@
 	});
 </script>
 
-<ninja-keys bind:this={el} placeholder="Search ids, titles, aliases, tags… (⌘K)"></ninja-keys>
+<!-- drawn once the publisher has said the quilt is in this loom's layout and there is a manifest to search: the frame drawn before a quilt an earlier loom made is known is taken away before ninja-keys' header gives its field the keyboard, a frame after it is first drawn -->
+{#if upgrade.judged && store.manifest}<ninja-keys bind:this={el} placeholder="Search ids, titles, aliases, tags… (⌘K)"></ninja-keys>{/if}

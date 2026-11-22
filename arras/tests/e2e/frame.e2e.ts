@@ -159,9 +159,16 @@ test("a quilt an earlier loom made: the frame's head, one sentence and one butto
 	await page.route('**/_api/library-upgrade', (route) => new Promise<void>((done) => answers.push(() => route.fulfill(next()).then(done))));
 	let next: () => { status: number; json: unknown } = () => ({ status: 409, json: { error: { code: 'format-unknown', message: "this quilt's .loom/format says 7, and this loom reads format 2" } } });
 	await page.setViewportSize({ width: 1440, height: 900 });
+	// nothing the frame drew before it knew throws once it is taken away
+	const thrown: string[] = [];
+	page.on('pageerror', (e) => thrown.push(e.message));
+	await page.goto('/library');
+	await expect(page.getByTestId('format-old')).toBeVisible();
 	await page.goto('/');
 	const old = page.getByTestId('format-old');
 	await expect(old).toBeVisible();
+	await page.waitForTimeout(300);
+	expect(thrown).toEqual([]);
 	await expect(page.getByTestId('format-old-said')).toHaveText('This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.');
 	// only the head: no view names, no files, no foot
 	await expect(page.getByTestId('quilt-name')).toHaveText('loom');
