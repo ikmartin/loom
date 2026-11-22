@@ -271,3 +271,15 @@ def test_the_agents_commands_are_agents_and_their_tools_read_or_write(tmp_path: 
         "tasks withdraw": "write",
     }.items():
         assert command in AGENT_COMMANDS and ACTS[command] == act, command
+
+
+def test_an_ask_refused_is_said_before_anything_is_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom.evidence.asks import refusal
+
+    monkeypatch.setenv("LOOM_FIXED_TIME", "2026-11-21T10:00:00Z")
+    person = Who("person", "A. Author")
+    assert (
+        refusal(person, "read", "agent", {"node": "tq-00B7"}, origin=["drafting/main.tex"], nodes=["tq-00B7"]) is None
+    )
+    assert refusal(person, "read", "agent", {"node": "tq-00B7"}, origin=["drafting/main.tex"], nodes=["not a node"])
+    assert not (tmp_path / ".loom").exists()

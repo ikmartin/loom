@@ -506,8 +506,21 @@ def ask(root: Path, by: Who, what: str, to: str, on: Mapping[str, Any], **fields
         When it is not of its shape; nothing was written.
     """
     at = stamp()
+    line = _asked(by, what, to, on, at, dict(fields))
+    # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
+    problem = _problem(line)
+    if problem:
+        raise AskRefused(problem)
+    with locked(log_path(root)):
+        line["id"] = draw(f"t-{at[:10]}-", set(replay(root).asks))
+        made = parse_ask(line)
+        _append(root, line)
+    return made
+
+
+def _asked(by: Who, what: str, to: str, on: Mapping[str, Any], at: str, fields: dict[str, Any]) -> dict[str, Any]:
     origin = list(fields.pop("origin", []))
-    line: dict[str, Any] = {
+    return {
         "event": "asked",
         "at": at,
         "by": by.to_dict(),
@@ -518,17 +531,20 @@ def ask(root: Path, by: Who, what: str, to: str, on: Mapping[str, Any], **fields
         "words": fields.pop("words", ""),
         **fields,
     }
-    # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
-    trial = f"t-{at[:10]}-0"
+
+
+def _problem(line: dict[str, Any]) -> str | None:
+    trial = f"t-{str(line['at'])[:10]}-0"
     try:
         parse_ask({**line, "id": trial})
     except ValueError as exc:
-        raise AskRefused(str(exc).removeprefix(f"{trial}: ")) from None
-    with locked(log_path(root)):
-        line["id"] = draw(f"t-{at[:10]}-", set(replay(root).asks))
-        made = parse_ask(line)
-        _append(root, line)
-    return made
+        return str(exc).removeprefix(f"{trial}: ")
+    return None
+
+
+def refusal(by: Who, what: str, to: str, on: Mapping[str, Any], **fields: Any) -> str | None:
+    """Why `ask` would refuse this ask, None where it would record it; nothing is written, so a caller asking several at once can check them all first."""
+    return _problem(_asked(by, what, to, on, stamp(), dict(fields)))
 
 
 def say(root: Path, by: Who, event: str, task: str, **fields: Any) -> Ask:

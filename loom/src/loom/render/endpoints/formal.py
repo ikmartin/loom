@@ -198,6 +198,7 @@ def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
 def _formal_ask(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`formal-ask`: one task for an agent for each target, its plan in it; refused `needs-label` while a target, or a result to state or prove, has no label, which loom never writes."""
     from loom.evidence.asks import AskRefused, ask
+    from loom.evidence.asks import refusal as ask_refusal
     from loom.evidence.plan import plan
     from loom.evidence.web import Here
 
@@ -215,25 +216,27 @@ def _formal_ask(root: Path, body: dict[str, Any]) -> dict[str, Any]:
             raise ApiError("needs-label", f"{key} needs a label first; add it in your source", status=409)
         return found.to_dict()
 
-    tasks = []
+    # every target's ask is made and checked before any is written, so a refusal leaves none written
+    asks: list[tuple[dict[str, Any], dict[str, Any]]] = []
     for key, p in plans.items():
         target = subject(key)
+        fields = {
+            "origin": planner.drafts.homes(key),
+            "target": target,
+            "state": [subject(k) for k in p.state],
+            "prove": [subject(k) for k, chosen in p.prove if not chosen],
+            "assume": [subject(k) for k, chosen in p.prove if chosen] + [subject(k) for k, _why in p.assume],
+        }
+        problem = ask_refusal(who, "formalize", "agent", {"label": target["label"]}, **fields)
+        if problem:
+            raise ApiError("refused", problem, status=400)
+        asks.append(({"label": target["label"]}, fields))
+    tasks = []
+    for on, fields in asks:
         try:
-            made = ask(
-                root,
-                who,
-                "formalize",
-                "agent",
-                {"label": target["label"]},
-                origin=planner.drafts.homes(key),
-                target=target,
-                state=[subject(k) for k in p.state],
-                prove=[subject(k) for k, chosen in p.prove if not chosen],
-                assume=[subject(k) for k, chosen in p.prove if chosen] + [subject(k) for k, _why in p.assume],
-            )
+            tasks.append(ask(root, who, "formalize", "agent", on, **fields).id)
         except AskRefused as exc:
             raise ApiError("refused", str(exc), status=400) from exc
-        tasks.append(made.id)
     return {"ok": True, "tasks": tasks, "result": f"asked for {len(tasks)}" + _as(body, who)}
 
 
