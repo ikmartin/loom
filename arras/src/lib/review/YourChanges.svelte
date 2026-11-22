@@ -1,20 +1,19 @@
 <script lang="ts">
-	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar.
+	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar. On a served quilt Review draws it in two parts (`part`): Waiting to be accepted under Accepted results that changed, Changes to keep with the agents' copies under Proposed edits, each narrowed to the draft the column chooses (`views/review/yours.ts`).
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
-	import { isAgentDocument } from '$lib/manifest/documents';
 	import { can, write } from '$lib/write';
 	import { displayNode } from '$lib/nodes/display';
 	import { anchorId, readUrl, reviewReadUrl } from '$lib/nav';
 	import { causeLabel } from '$lib/review/evidence';
-	import { documentsWithBlocks, notesOf } from '$lib/review/queue';
+	import { notesOf } from '$lib/review/queue';
 	import { acceptanceOf, todoOf, waitingIn, type BlockRow } from '$lib/review/yourChanges';
 	import { acted } from '$lib/review/acted.svelte';
-	import { allSays, byDocument, ready } from '$lib/review/changes';
+	import { allSays, ready } from '$lib/review/changes';
 	import { discardChanges, history, keepChanges, nextUndo, undo, type ChangeAnswer } from '$lib/review/history.svelte';
 	import { itemLabel, dotVars } from '$lib/fragments/gutter';
 	import { reviewRowBadge, shortDate } from '$lib/badges';
@@ -26,6 +25,17 @@
 	import Empty from '$lib/review/Empty.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
 	import Said from '$lib/review/Said.svelte';
+	import Copies from '$lib/views/review/Copies.svelte';
+	import { rv } from '$lib/views/review/state.svelte';
+	import { blockDocuments, changeGroups, type Part } from '$lib/views/review/yours';
+	import { review as reviewWords } from '$lib/words/review';
+
+	let { part }: { part?: Part } = $props();
+	// which sections are drawn: both on the page of its own, one under its kind in Review
+	const accepts = $derived(part !== 'changes');
+	const keeps = $derived(part !== 'accept');
+	// the draft Review's column narrows to, which either part follows
+	const draft = $derived(part ? rv.doc : null);
 
 	type Answer = { accepted?: string[]; refused?: { key: string; why: string }[] };
 
@@ -33,20 +43,19 @@
 	const OPEN = 12;
 
 	const m = $derived(store.manifest!);
-	const people = $derived(m.masters.filter((x) => !x.closed && !x.context_only && !isAgentDocument(x)));
-	// every pending change, by document, those just kept or discarded gone at once
-	const groups = $derived(byDocument(m).map((g) => ({ ...g, changes: g.changes.filter((c) => !(c.id in acted.map)) })).filter((g) => g.changes.length));
+	// every pending change, by document, those just kept or discarded gone at once; in a draft, those in its text
+	const groups = $derived(changeGroups(m, acted.map, draft));
 	const changeCount = $derived(groups.reduce((n, g) => n + g.changes.length, 0));
-	const todo = $derived(todoOf(m));
+	const todo = $derived(todoOf(m).filter((t) => !draft || t.path === draft));
 	const todoCount = $derived(todo.reduce((n, g) => n + g.annotations.length, 0));
 	// To do: the open annotations from others, beside the changes of the document they are in, and in a group of their own where it has none
 	let todoOn = $state(false);
 	const todoAlone = $derived(todo.filter((t) => !groups.some((g) => g.path === t.path)));
 
 	// the documents with blocks to accept, one at a time: asked for by name, else the first with something waiting, else the default
-	const mine = $derived(documentsWithBlocks(m, people));
+	const mine = $derived(blockDocuments(m));
 	const waiting = (path: string) => waitingIn(acceptanceOf(m, path));
-	const doc = $derived(mine.find((x) => x.path === page.url.searchParams.get('document')) ?? mine.find((x) => waiting(x.path) > 0) ?? mine.find((x) => x.default) ?? mine[0]);
+	const doc = $derived(draft ? mine.find((x) => x.path === draft) : mine.find((x) => x.path === page.url.searchParams.get('document')) ?? mine.find((x) => waiting(x.path) > 0) ?? mine.find((x) => x.default) ?? mine[0]);
 	const file = $derived(doc ? doc.path.split('/').pop()! : '');
 	const y = $derived(doc ? acceptanceOf(m, doc.path) : null);
 	const lists = $derived(y ? [...y.changed, ...y.taken.flatMap((t) => t.rows)] : []);
@@ -72,7 +81,7 @@
 
 	const name = (key: string) => displayNode(m, key, doc?.path).name;
 	const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
-	const part = (n: number, words: string) => (n ? `${n} ${words}` : '');
+	const some = (n: number, words: string) => (n ? `${n} ${words}` : '');
 
 	/** Why a block changed since it was accepted: its first cause, and how many more. */
 	function why(key: string): string {
@@ -208,33 +217,35 @@
 	</details>
 {/snippet}
 
-<main class="page review-page" use:barShown data-testid="your-changes">
-	<ReviewHeading title="Your Changes">{#snippet aside()}<HelpDot label="what the Your Changes page shows" topic="review" />{/snippet}</ReviewHeading>
+{#snippet choice()}
+	{#if mine.length > 1 && !draft}<select aria-label="Document" data-testid="review-document" value={doc!.path} onchange={(e) => goto(`?document=${encodeURIComponent(e.currentTarget.value)}`)}>{#each mine as d (d.path)}<option value={d.path}>{d.path.split('/').pop()}{waiting(d.path) ? ` · ${waiting(d.path)}` : ''}</option>{/each}</select>{:else}<strong>{file}</strong>{/if}
+{/snippet}
+
+{#snippet bar()}
 	<ActionBar said={said?.at === '*' ? said.text : ''} refused={said?.refused} testid="review-bar">
 		{#snippet lead()}
-			<span class="muted" data-testid="review-summary">{[part(changedCount, 'changed since you accepted'), part(takenCount, 'taken in'), part(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || 'Nothing waits'}</span>
+			{#if part === 'accept'}{#if y && doc}{@render choice()}{/if}{:else if !part}<span class="muted" data-testid="review-summary">{[some(changedCount, 'changed since you accepted'), some(takenCount, 'taken in'), some(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || 'Nothing waits'}</span>{/if}
 		{/snippet}
 		{#snippet actions()}
 			<!-- a keep or a discard, here or in a document, is undone as the document's toolbar undoes it -->
-			{#if nextUndo().startsWith('discard') || nextUndo().startsWith('keep')}<button type="button" class="btn small quiet" disabled={history.busy} data-testid="review-undo" onclick={() => void back()}>Undo {nextUndo()}</button>{/if}
-			<button type="button" class="btn small" class:on={todoOn} aria-pressed={todoOn} title="To do: the open annotations from others, beside the changes" data-testid="your-todo" onclick={() => (todoOn = !todoOn)}>To do <span class="badge">{changeCount + todoCount}</span></button>
-			{#if acts && picked.size}
+			{#if keeps && (nextUndo().startsWith('discard') || nextUndo().startsWith('keep'))}<button type="button" class="btn small quiet" disabled={history.busy} data-testid="review-undo" onclick={() => void back()}>Undo {nextUndo()}</button>{/if}
+			{#if keeps}<button type="button" class="btn small" class:on={todoOn} aria-pressed={todoOn} title="To do: the open annotations from others, beside the changes" data-testid="your-todo" onclick={() => (todoOn = !todoOn)}>To do <span class="badge">{changeCount + todoCount}</span></button>{/if}
+			{#if accepts && acts && picked.size}
 				<span data-testid="review-picked">{picked.size} selected</span>
 				<button class="btn primary" disabled={!!busy} onclick={() => void accept([...picked], '*')} data-testid="review-accept-picked">{busy === '*' ? 'Accepting…' : `Accept ${picked.size}`}</button>
 				<button class="btn quiet" onclick={() => (picked = new Set())} data-testid="review-clear">Clear</button>
 			{/if}
 		{/snippet}
 	</ActionBar>
-	<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: {tracked ? `suggestions not yet kept or discarded, and every edit made in your files since your look${since ? ` of ${since}` : ''}` : 'suggestions not yet kept or discarded'}. <b>Keep</b> one to take it into your text, or <b>Discard</b> it {tracked ? 'to put your words back or drop the suggestion' : 'to drop it'}; neither says whether the mathematics is right.</p>
+{/snippet}
 
-	<h2 class="part">Waiting to be accepted</h2>
+{#snippet accepting()}
 	{#if !reviewer}<p class="muted" data-testid="review-no-reviewer">Choose your reviewer name in Settings to accept.</p>
 	{:else if !served}<p class="muted" data-testid="review-read-only">This copy of the quilt only reads; accepting needs the quilt served for writing.</p>{/if}
 	{#if !mine.length}<NoDrafts what="blocks to review" />
+	{:else if draft && !doc}<Empty text={reviewWords.yours.none(draft)} testid="review-empty" />
 	{:else if y && doc}
-		<p class="pick">
-			{#if mine.length > 1}<select aria-label="Document" data-testid="review-document" value={doc.path} onchange={(e) => goto(`?document=${encodeURIComponent(e.currentTarget.value)}`)}>{#each mine as d (d.path)}<option value={d.path}>{d.path.split('/').pop()}{waiting(d.path) ? ` · ${waiting(d.path)}` : ''}</option>{/each}</select>{:else}<strong>{file}</strong>{/if}
-		</p>
+		{#if !part}<p class="pick">{@render choice()}</p>{/if}
 		{#if !lists.length && !y.never.length}<Empty text={`Every block of ${file} is accepted.`} testid="review-empty" />{/if}
 		{#if y.changed.length}{@render group('changed', 'Changed', y.changed, y.changed.length <= OPEN)}{/if}
 		{#each y.taken as t (t.label)}{@render group('taken', t.label, t.rows, true)}{/each}
@@ -256,8 +267,9 @@
 			</details>
 		{/if}
 	{/if}
+{/snippet}
 
-	<h2 class="part">Changes to keep</h2>
+{#snippet keeping()}
 	<section class="changes" data-testid="your-change-list">
 		{#each groups as g (g.path)}
 			{@const says = allSays(g.changes.filter(ready))}
@@ -281,6 +293,7 @@
 		{:else}
 			<Empty text="No changes wait in your text." testid="changes-empty" />
 		{/each}
+		{#if part}<Copies doc={draft} />{/if}
 		{#if todoOn}
 			{#each todoAlone as t (t.path)}
 				<section class="cgroup" data-testid="todo-group" data-path={t.path}>
@@ -291,7 +304,26 @@
 			{#if !todoCount}<p class="muted" data-testid="todo-none">No open annotations from others.</p>{/if}
 		{/if}
 	</section>
-</main>
+{/snippet}
+
+{#if part}
+	<section class="yours" data-testid="your-changes" data-part={part}>
+		{@render bar()}
+		{#if part === 'accept'}{@render accepting()}{:else}{@render keeping()}{/if}
+	</section>
+{:else}
+	<main class="page review-page" use:barShown data-testid="your-changes">
+		<ReviewHeading title="Your Changes">{#snippet aside()}<HelpDot label="what the Your Changes page shows" topic="review" />{/snippet}</ReviewHeading>
+		{@render bar()}
+		<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: {tracked ? `suggestions not yet kept or discarded, and every edit made in your files since your look${since ? ` of ${since}` : ''}` : 'suggestions not yet kept or discarded'}. <b>Keep</b> one to take it into your text, or <b>Discard</b> it {tracked ? 'to put your words back or drop the suggestion' : 'to drop it'}; neither says whether the mathematics is right.</p>
+
+		<h2 class="part">Waiting to be accepted</h2>
+		{@render accepting()}
+
+		<h2 class="part">Changes to keep</h2>
+		{@render keeping()}
+	</main>
+{/if}
 
 <style>
 	.lead {

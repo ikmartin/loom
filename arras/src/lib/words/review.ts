@@ -325,6 +325,16 @@ export const review = {
 		/** The column's message after accepting. */
 		accepted: 'Accepted.'
 	},
+	yours: {
+		/** Under Proposed edits, the tag on an agent's copy waiting to be taken in. */
+		copy: "an agent's copy",
+		/** Beside a copy's name: the draft it would change. */
+		into: (doc: string) => `into ${file(doc)}`,
+		/** A copy's button: opens it to be taken in and applied. */
+		openCopy: 'Review the copy',
+		/** Under Accepted results that changed, narrowed to a draft with no blocks to accept. */
+		none: (doc: string) => `Nothing of ${file(doc)} waits to be accepted.`
+	},
 	statement: {
 		/** In place of a statement whose rendering could not be read. */
 		missing: 'This text could not be read.'
