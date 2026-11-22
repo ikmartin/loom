@@ -789,3 +789,29 @@ def test_an_old_instruction_line_is_replaced_where_it_stands(tmp_path: Path) -> 
         (tmp_path / "CLAUDE.md").write_text(f"{old}\n", encoding="utf-8")
         ensure_root_line(tmp_path)
         assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8") == f"{MCP_LINE}\n"
+
+
+def test_how_far_a_deny_holds_names_each_app_on_the_side_its_permission_file_puts_it(tmp_path: Path) -> None:
+    """The sentence Settings and Review show is made from the permission writers' own table (`layout.PERMISSION_WRITERS`), so an app that gains a file refusing an edit in a denied place moves to the side that cannot edit; and the table says of each file what the file it writes does."""
+    from loom.agents import deny_sentence, how_far_deny_holds
+    from loom.ai.clients import PROJECT, chosen
+    from loom.ai.layout import PERMISSION_WRITERS, holds_deny
+    from loom.scan.quilt import QuiltConfig
+
+    config = QuiltConfig(agents_deny=["/kept-from-agents/"])
+    for rel, (write, holds) in PERMISSION_WRITERS.items():
+        assert ("kept-from-agents" in write(config, False)) is holds, rel
+    q = bare(tmp_path)
+    keys = chosen(q, None)
+    said = how_far_deny_holds(q)
+    held, _, told = said.partition(";")
+    assert "is refused an edit" in held and "put to you rather than refused" in held, said
+    assert "only asked not to edit" in told and "not listed in Your Changes" in told, said
+    for c in PROJECT:
+        if c.key in keys:
+            assert c.label in (held if holds_deny(c) else told), (c.label, said)
+    assert deny_sentence(["A"], []).startswith("In the places agents are denied, A is refused an edit, though")
+    assert deny_sentence([], ["B"]).startswith(
+        "In the places agents are denied, B is only asked not to edit, and a change it makes"
+    )
+    assert deny_sentence([], []) == ""

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Where agents may not write, a draft until Save; what is always protected; whether their edits in place wait in Your Changes; and the apps that start loom here. A saved list the permission file Claude Code reads has not caught up with is said at the top, with the act that rewrites it.
+	// Where agents may not write, a draft until Save, with how far that holds for the apps set up here (which cannot edit there, which are only asked); what is always protected; whether their edits in place wait in Your Changes; and the apps that start loom here. A saved list the permission file Claude Code reads has not caught up with is said at the top, with the act that rewrites it.
 	import { store } from '$lib/manifest/client.svelte';
 	import type { QuiltSettings } from '$lib/manifest/types';
 	import { write } from '$lib/write';
@@ -59,6 +59,7 @@
 		{:else if !deny.length}
 			<p class="aside">Nothing beyond what is always protected.</p>
 		{/if}
+		{#if agents.holds}<p class="aside" data-testid="agents-holds">{agents.holds}</p>{/if}
 	</Row>
 	<Row id="agents.protected" stack>
 		<Chips test="agents-protected" fixed items={agents.protected} />

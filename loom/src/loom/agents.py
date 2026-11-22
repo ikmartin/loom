@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from loom.paths import (
@@ -178,6 +178,40 @@ def places_to_deny(config: QuiltConfig, paths: Iterable[str]) -> list[str]:
         # anchored at the quilt's top and every glob character escaped, so the entry names that place and no other
         added.append(f"/{_literal(rel)}" if parent == "." else f"/{_literal(parent)}/")
     return added
+
+
+def how_far_deny_holds(root: Path) -> str:
+    """One sentence, in the person's words, of how far the places agents are denied hold for the apps the quilt at `root` is set up for (`ai.clients.chosen`): which cannot edit there, since loom writes them a permission file that refuses it (`ai.layout.holds_deny`), and which are only asked not to, a change of theirs there going unlisted, since the look leaves the person's own places alone (`looks.watching`). '' where the quilt has no agent layer."""
+    from loom.ai.clients import PROJECT, chosen
+    from loom.ai.layout import holds_deny
+
+    if not (root / AI).is_dir():
+        return ""
+    keys = chosen(root, None)
+    apps = [c for c in PROJECT if c.key in keys]
+    return deny_sentence([c.label for c in apps if holds_deny(c)], [c.label for c in apps if not holds_deny(c)])
+
+
+def deny_sentence(held: list[str], told: list[str]) -> str:
+    """`how_far_deny_holds`'s sentence for the apps `held` to the deny by a file and those only `told` it, by name; '' for none.
+
+    A held app's file refuses its own edits there and no shell command but `rm` and loom's author verbs, so a command that writes there is put to the person, which the sentence says.
+    """
+
+    def names(labels: list[str]) -> str:
+        return labels[0] if len(labels) == 1 else f"{', '.join(labels[:-1])} and {labels[-1]}"
+
+    one = len(told) == 1
+    parts = []
+    if held:
+        parts.append(
+            f"{names(held)} {'is' if len(held) == 1 else 'are'} refused an edit, though a shell command that writes there is put to you rather than refused"
+        )
+    if told:
+        parts.append(
+            f"{names(told)} {'is' if one else 'are'} only asked not to edit, and a change {'it' if one else 'one of them'} makes there anyway is not listed in Your Changes"
+        )
+    return f"In the places agents are denied, {'; '.join(parts)}." if parts else ""
 
 
 def _literal(path: str) -> str:

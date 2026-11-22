@@ -9,13 +9,17 @@ import hashlib
 import json
 import os
 import stat
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
+
+if TYPE_CHECKING:
+    from loom.ai.clients import Client
 
 #: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/agents/instructions/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
 MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "ingest"]
@@ -428,6 +432,26 @@ def codex_rules() -> str:
     return "\n".join(head + body) + "\n"
 
 
+def _claude_settings(config: QuiltConfig, shell: bool) -> str:
+    return permissions_json(config, shell=shell)
+
+
+def _codex_rules(config: QuiltConfig, shell: bool) -> str:
+    return codex_rules()
+
+
+#: Each permission file loom writes, by quilt-relative path: what writes it, and whether it carries the `[agents] deny` list, so that the app reading it refuses an agent's own edit there. Claude Code's settings render the list as `Edit` denies; Codex's rules are command prefixes, which govern only the shell.
+PERMISSION_WRITERS: dict[str, tuple[Callable[[QuiltConfig, bool], str], bool]] = {
+    CLAUDE_SETTINGS: (_claude_settings, True),
+    CODEX_RULES: (_codex_rules, False),
+}
+
+
+def holds_deny(client: Client) -> bool:
+    """Whether `client`'s app refuses an agent's own edit in a place `[agents] deny` names, by the permission file loom writes for it (`PERMISSION_WRITERS`); an app with none is only told the list."""
+    return client.permissions is not None and PERMISSION_WRITERS.get(client.permissions, (_codex_rules, False))[1]
+
+
 def vendor_files(
     config: QuiltConfig,
     *,
@@ -442,8 +466,7 @@ def vendor_files(
     from loom.ai.clients import PROJECT
 
     wanted = {c.permissions for c in PROJECT if c.permissions and (apps is None or c.key in apps)}
-    made = {CLAUDE_SETTINGS: lambda: permissions_json(config, shell=shell), CODEX_RULES: codex_rules}
-    out = {rel: make() for rel, make in made.items() if rel in wanted}
+    out = {rel: write(config, shell) for rel, (write, _) in PERMISSION_WRITERS.items() if rel in wanted}
     if root is not None and CLAUDE_SETTINGS in out:
         merged = settings_for(root, out[CLAUDE_SETTINGS]).text
         if merged is None:
