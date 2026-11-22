@@ -189,12 +189,22 @@ def test_a_persons_correction_is_refused_when_changed_a_stub_or_failing_the_chec
 
 def test_how_a_node_was_made_is_recorded_on_its_text_now_by_the_hand_that_made_it(root: Path) -> None:
     source = {"ref": "tq-00A1-ref", "tex": "sha256:9e02f7d4b1a865c3097e4f2ab8d6c1e5730f9a24b6d8c0e1f3a57b92d4c6e801"}
-    record = acts.digested(root, "tq-00K3", LOOM, "extracted", source)
-    assert record.on is not None and record.on.hash == _hash(root, "tq-00K3")
+    written = _hash(root, "tq-00K3")
+    record = acts.digested(root, "tq-00K3", written, LOOM, "extracted", source)
+    assert record.on is not None and record.on.hash == written
     assert _status(root, "tq-00K3").how == "extracted"
-    _refused(root, "refused", acts.digested, "tq-00K3", AGENT, "extracted", source)
-    _refused(root, "stub", acts.digested, "tq-00B7", LOOM, "extracted", source)
-    _refused(root, "no-such-node", acts.digested, "tq-9999", LOOM, "extracted", source)
+    _refused(root, "refused", acts.digested, "tq-00K3", written, AGENT, "extracted", source)
+    _refused(root, "stub", acts.digested, "tq-00B7", _hash(root, "tq-00B7"), LOOM, "extracted", source)
+    _refused(root, "no-such-node", acts.digested, "tq-9999", written, LOOM, "extracted", source)
+
+
+def test_how_a_node_was_made_names_the_text_its_writer_wrote_never_one_another_hand_wrote_since(root: Path) -> None:
+    source = {"ref": "tq-00A1-ref", "tex": "sha256:9e02f7d4b1a865c3097e4f2ab8d6c1e5730f9a24b6d8c0e1f3a57b92d4c6e801"}
+    written = _hash(root, "tq-00A4")
+    # an agent's correction lands between loom's write and its record
+    acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "compact", "closed"), AGENT, "page 4")
+    _refused(root, "changed", acts.digested, "tq-00A4", written, LOOM, "extracted", source)
+    assert _status(root, "tq-00A4").how == "corrected"
 
 
 # ---- attesting a Lean statement ---------------------------------------------------------------------------------------

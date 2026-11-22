@@ -102,8 +102,8 @@ def _matched(root: Path, found: Node, digest: str, by: Who) -> Record:
     return _write(root, "compared", by, on=Subject("node", found.id, digest), **{"with": document})
 
 
-def digested(root: Path, node: str, by: Who, how: str, source: dict[str, Any] | None) -> Record:
-    """Record how a node's text now was made, after its file is written.
+def digested(root: Path, node: str, written: str, by: Who, how: str, source: dict[str, Any] | None) -> Record:
+    """Record how a node's text was made, by the hand that wrote it, on the text it wrote.
 
     Parameters
     ----------
@@ -111,6 +111,8 @@ def digested(root: Path, node: str, by: Who, how: str, source: dict[str, Any] | 
         The quilt.
     node : str
         A statement's or a proof's id.
+    written : str
+        The hash of the file the caller wrote (`store.write_node`'s answer): the record names that text, and only while the file on disk is still it.
     by : Who
         Loom for `extracted`, an agent for `transcribed`, `read` and `corrected`, a person for `written`.
     how : str
@@ -121,15 +123,17 @@ def digested(root: Path, node: str, by: Who, how: str, source: dict[str, Any] | 
     Returns
     -------
     Record
-        The `digested` record on the node's text now.
+        The `digested` record on the text `written`.
 
     Raises
     ------
     ActRefused
-        `no-such-node`; `stub` for a node with no text; `refused` for a record not of its shape or from the wrong hand.
+        `no-such-node`; `changed` when the file on disk is no longer the text `written`, another hand having written it since; `stub` for a node with no text; `refused` for a record not of its shape or from the wrong hand.
     """
     with _held(root):
         digest, found = _text(root, node)
+        if digest != written:
+            raise ActRefused("changed", f"{node} is no longer the text that was written; another hand wrote it since")
         if found.empty:
             raise ActRefused("stub", f"{node} has no text yet: a stub is made by no one")
         return _write(root, "digested", by, on=Subject("node", node, digest), how=how, **{"from": source})
