@@ -212,6 +212,11 @@ test.describe('the toolbar', () => {
 			tops.push((await page.getByTestId(row[0]).boundingBox())!.y);
 		}
 		expect(tops[1], `${url}: the annotation row beneath the row that reads`).toBeGreaterThan(tops[0]);
+		// every tool of the annotation row a target of 28 px at the least
+		for (const id of ROW) {
+			const box = (await page.getByTestId(id).boundingBox())!;
+			expect(Math.min(box.width, box.height), `${url}: ${id} is ${box.width} by ${box.height}`).toBeGreaterThanOrEqual(28);
+		}
 		// drawn in the theme: dark words on light, light on dark, in the bar and in the menus it opens
 		const words = await lightness(page.getByTestId('open-comments'), 'color');
 		expect(scheme === 'light' ? words < 0.5 : words > 0.5, `${url}: the bar's words in the ${scheme} theme`).toBe(true);
