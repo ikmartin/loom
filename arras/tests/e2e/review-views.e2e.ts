@@ -10,20 +10,25 @@ async function open(page: Page): Promise<void> {
 }
 
 const count = (page: Page, testid: string) => page.getByTestId(testid).locator('.n');
+// round six's own rows and groups, apart from those of today's Your Changes, which Accepted results that changed and Proposed edits draw
+const rows = (page: Page) => page.locator('[data-testid="review-row"][data-kind]');
 
-test('Everything lists 29 rows by who is waiting, and the column counts each kind alphabetically, the agents apart', async ({ page }) => {
+test('Everything lists what waits by who is waiting, and the column counts each kind alphabetically, the agents apart, two of them as Your Changes lists them', async ({ page }) => {
 	await open(page);
-	await expect(count(page, 'review-kind-all')).toHaveText('29');
+	await expect(count(page, 'review-kind-all')).toHaveText('28');
 	const kinds = await page.getByTestId('review-column').locator('[data-testid^="review-kind-"]').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-testid')!.slice(12) + ' ' + b.querySelector('.n')?.textContent));
-	expect(kinds).toEqual(['all 29', 'accepted-changed 6', 'questions 2', 'attested-changed 2', 'cited 4', 'check 5', 'attest 2', 'fetch 3', 'edits 5', 'agents 6']);
-	const groups = await page.getByTestId('review-group').evaluateAll((gs) => gs.map((g) => g.getAttribute('data-kind')));
+	// Accepted results that changed and Proposed edits count what their sections of the manifest's Your Changes list as waiting, not the fixture's rows
+	expect(kinds).toEqual(['all 28', 'accepted-changed 5', 'questions 2', 'attested-changed 2', 'cited 4', 'check 5', 'attest 2', 'fetch 3', 'edits 5', 'agents 6']);
+	const groups = await page.locator('[data-testid="review-group"][data-kind]').evaluateAll((gs) => gs.map((g) => g.getAttribute('data-kind')));
 	expect(groups).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'attested-changed', 'edits', 'agents']);
-	await expect(page.getByTestId('review-row')).toHaveCount(29);
+	await expect(rows(page)).toHaveCount(18);
+	await expect(page.locator('[data-testid="your-changes"][data-part="accept"]')).toHaveCount(1);
+	await expect(page.locator('[data-testid="your-changes"][data-part="changes"]')).toHaveCount(1);
 	// the agents' group starts folded
 	await expect(page.getByTestId('review-task')).toHaveCount(0);
 	await page.getByTestId('review-group').filter({ hasText: 'Waiting for an agent' }).getByRole('button').click();
 	await expect(page.getByTestId('review-task')).toHaveCount(6);
-	await expect(page.getByTestId('review-draft')).toHaveText(['main.tex20', 'bounds.tex9']);
+	await expect(page.getByTestId('review-draft')).toHaveText(['main.tex22', 'bounds.tex5']);
 });
 
 test('the column shows a kind alone, and a draft narrows the list and the counts', async ({ page }) => {
@@ -34,11 +39,11 @@ test('the column shows a kind alone, and a draft narrows the list and the counts
 	await expect(page.getByTestId('review-row').first()).toContainText('bounds.tex rests on one');
 	await page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).click();
 	await expect(page.getByTestId('review-row')).toHaveCount(1);
-	await expect(count(page, 'review-kind-all')).toHaveText('9');
+	await expect(count(page, 'review-kind-all')).toHaveText('5');
 	// the kinds are counted for every draft only, so under a draft they show none
 	await expect(count(page, 'review-kind-check')).toHaveText('');
 	await page.getByTestId('review-kind-all').click();
-	await expect(count(page, 'review-kind-all')).toHaveText('29');
+	await expect(count(page, 'review-kind-all')).toHaveText('28');
 	await expect(page).toHaveURL(/\/review/);
 });
 
@@ -58,7 +63,8 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await expect(count(page, 'review-kind-questions')).toHaveText('0');
 });
 
-test('a proposed edit opens to its change and is kept; one made in place that broke the compile says why', async ({ page }) => {
+// The row form for Proposed edits waits until it holds Your Changes' acts; until then the kind draws Your Changes' section.
+test.fixme('a proposed edit opens to its change and is kept; one made in place that broke the compile says why', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
 	const broke = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Lemma 2' });
@@ -243,24 +249,35 @@ test('an attested definition that changed is asked about in three steps, and eac
 	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
 });
 
-test('see it lays the document over Review, read only, at the result, and closes back to the list', async ({ page }) => {
+test('see it lays the document over Review, read only, at the place, and closes back to the list', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-cited').click();
+	const cite = rows(page).filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result' });
+	await cite.getByRole('button', { expanded: false }).click();
+	await cite.getByTestId('see-it').click();
+	const over = page.getByTestId('review-over');
+	await expect(over).toContainText('main.tex');
+	await expect(over).toContainText('at the proof of Theorem 3.4 · read only here; edit it in Docs');
+	await expect(over.locator('.fragment').first()).toBeVisible();
+	await expect(page).toHaveURL(/\/review/);
+	await over.getByRole('button', { name: 'Close the document' }).click();
+	await expect(over).toHaveCount(0);
+	await expect(cite.getByTestId('see-it')).toBeVisible();
+});
+
+// The row form for Proposed edits waits until it holds Your Changes' acts, and with it a proposed edit's see it.
+test.fixme("a proposed edit's see it lands at the result, and one in a draft the quilt does not hold offers none", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
 	const bounds = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Theorem 1' });
 	await bounds.getByRole('button', { expanded: false }).click();
-	// a draft the quilt does not hold offers nothing to see
 	await expect(bounds.getByTestId('see-it')).toHaveCount(0);
 	const main = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
 	await main.getByRole('button', { expanded: false }).click();
 	await main.getByTestId('see-it').click();
 	const over = page.getByTestId('review-over');
-	await expect(over).toContainText('main.tex');
 	await expect(over).toContainText('at proof of Theorem 3.1 · read only here; edit it in Docs');
-	await expect(over.locator('.fragment').first()).toBeVisible();
-	await expect(page).toHaveURL(/\/review/);
-	await over.getByRole('button', { name: 'Close the document' }).click();
-	await expect(over).toHaveCount(0);
-	await expect(main.getByTestId('see-it')).toBeVisible();
+	await expect(over.locator('#sy-0002-proof')).toBeInViewport();
 });
 
 test("a collaborator's pull is chosen under the kinds and drawn as today's review of it", async ({ page }) => {
@@ -272,7 +289,7 @@ test("a collaborator's pull is chosen under the kinds and drawn as today's revie
 	await expect(page.getByText('New prose', { exact: true })).toBeVisible();
 	await expect(page.getByTestId('contribution-bar')).toContainText('A pull is taken whole.');
 	await page.getByTestId('review-kind-all').click();
-	await expect(page.getByTestId('review-row')).toHaveCount(29);
+	await expect(rows(page)).toHaveCount(18);
 });
 
 test('the tasks waiting for an agent say what was asked, who works on one, and delete withdraws one', async ({ page }) => {
@@ -343,7 +360,7 @@ test("the review's round: locate washes the words found at reading size, a page 
 	await expect(prop).not.toContainText('as you wrote it');
 });
 
-test("the review's round: a task deleted comes back on undo, results are named in the paper's order, the column fits, the pull has its card, and see it lands at the result", async ({ page }) => {
+test("the review's round: a task deleted comes back on undo, results are named in the paper's order, the column fits, and the pull has its card", async ({ page }) => {
 	await serve(page, (m) => {
 		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [], changes: [] };
 	});
@@ -368,11 +385,29 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	await page.getByTestId('column-message-undo').click();
 	await expect(tasks).toHaveCount(6);
 	expect(await tasks.allInnerTexts()).toEqual(before);
+});
+
+test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-accepted-changed').click();
+	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
+	await expect(accept.locator('[data-testid="review-group"][data-group="changed"]')).toBeVisible();
+	// the blocks never accepted are folded beneath, and count nothing
+	await expect(accept.locator('[data-testid="review-group"][data-group="never"]')).not.toHaveAttribute('open', '');
+	await expect(rows(page)).toHaveCount(0);
+	await page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).click();
+	await expect(accept).toContainText('Nothing of bounds.tex waits to be accepted.');
 	await page.getByTestId('review-kind-edits').click();
-	const first = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
-	await first.getByRole('button', { expanded: false }).click();
-	await first.getByTestId('see-it').click();
-	const over = page.getByTestId('review-over');
-	const at = over.locator('#sy-0002-proof');
-	await expect(at).toBeInViewport();
+	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
+	await expect(changes.getByTestId('change-card')).toHaveCount(0);
+	await page.getByTestId('review-draft').filter({ hasText: 'main.tex' }).click();
+	// the changes in main.tex's text, and the agent's copy into it: four cards, as the column counts
+	await expect(changes.getByTestId('change-card')).toHaveCount(3);
+	await expect(changes.getByTestId('change-group')).toHaveCount(1);
+	await expect(changes.getByTestId('proposed-card')).toHaveCount(1);
+	await expect(changes.getByTestId('proposed-open')).toHaveAttribute('href', /\/review\/proposed\?copy=/);
+	// widened again, the change in no document's text is listed too
+	await page.getByTestId('review-kind-all').click();
+	await expect(changes.getByTestId('change-card')).toHaveCount(4);
+	await expect(count(page, 'review-kind-edits')).toHaveText('5');
 });

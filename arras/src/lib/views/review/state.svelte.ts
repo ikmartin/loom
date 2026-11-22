@@ -8,6 +8,9 @@ import type { ReviewCounts, ReviewKind, ReviewList } from '$lib/library/types';
 /** The kinds as the column lists them: alphabetically by their names. */
 export const COLUMN_ORDER: ReviewKind[] = ['accepted-changed', 'questions', 'attested-changed', 'cited', 'check', 'attest', 'fetch', 'edits'];
 
+/** The groups' order under Everything, by who waits, as `review-list` answers them; the two kinds today's Your Changes draws take their places in it. */
+export const RANK: (ReviewKind | 'agents')[] = ['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'attested-changed', 'edits', 'agents'];
+
 class ReviewState {
 	/** What the list shows: everything, one kind, the tasks waiting for an agent, or a collaborator's pull. */
 	kind = $state<ReviewKind | 'all' | 'agents' | 'incoming'>('all');
@@ -28,6 +31,8 @@ class ReviewState {
 
 	counts = new Read<ReviewCounts>();
 	list = new Read<ReviewList>();
+	/** Loom's own rows of the two kinds today's Your Changes draws, whole, by which a draft's count is made what is drawn. */
+	theirs = { 'accepted-changed': new Read<ReviewList>(), edits: new Read<ReviewList>() };
 
 	#asked = false;
 

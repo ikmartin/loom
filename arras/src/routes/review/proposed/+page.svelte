@@ -23,6 +23,8 @@
 	import { documentOf, writerOf } from '$lib/review/suggestions';
 	import { keyName, linkName } from '$lib/workspace/names';
 	import { can } from '$lib/write';
+	import { rv } from '$lib/views/review/state.svelte';
+	import { review as reviewWords } from '$lib/words/review';
 
 	const here = route('/review/proposed');
 	/** How many of a card's changes it names before saying how many more. */
@@ -84,7 +86,8 @@
 
 <main class="page" use:barShown class:review-page={!opened} data-testid="proposed">
 	<ReviewHeading title="Proposed Changes" />
-	{#if opened}<p class="back"><a href={here} data-testid="proposed-back">‹ Everything proposed</a></p>{/if}
+	<!-- where Review's reads are served, a copy is opened from Proposed edits, and goes back there -->
+	{#if opened}<p class="back">{#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="proposed-back">{reviewWords.yours.back}</a>{:else}<a href={here} data-testid="proposed-back">‹ Everything proposed</a>{/if}</p>{/if}
 	{#if adoption}
 		{@const copy = adoption.copy}
 		{#key copy}<ContributionReview contribution={adoption} onanswer={(a) => (answer = a && { ...a, from: copy })} />{/key}
