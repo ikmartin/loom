@@ -1594,10 +1594,11 @@ class Act:
         from loom.clock import stamp
 
         changed = {rel: data for rel, data in self.after.items() if data != self.before.get(rel)}
-        if not changed:
+        if not changed and not self.look:
             _append_records(self.root, self.records)
             self._follow()
             return
+        # an act with a look to write and no file, as a Keep of in-place changes, is journalled all the same, so recovery finishes it, records and look together
         files: dict[str, list[str | None]] = {}
         for rel, data in changed.items():
             keep = self.root / LOCAL if this_machine(rel) else self.history

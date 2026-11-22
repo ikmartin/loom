@@ -620,3 +620,54 @@ def test_a_keep_recovery_puts_back_opens_its_edit_again_and_takes_its_words_out_
     assert find(root, edit).status == "open"  # type: ignore[union-attr]
     assert [c["id"] for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"]] == [edit]
     assert _rows(root) == rows
+
+
+def test_keep_all_cut_short_at_any_step_keeps_an_in_place_change_with_its_keep_line_or_not_at_all(
+    tmp_path: Path,
+) -> None:
+    """Keep-all, killed at every step it takes holding the door with an agent's new note and a suggestion waiting: the note's change goes into the look in the act's follow-up and its keep line with the act, so after recovery the list is as before or after, and the note is listed exactly when no keep line names it (R2-18)."""
+    import shutil
+
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_adopt import TEXT, made
+    from tests.unit.test_write_safety import Died
+
+    base = tmp_path / "base"
+    base.mkdir()
+    made(base, TEXT)
+    take(load_quilt(base), "Tester")
+    ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=base, env={"AI_AGENT": "1"})  # fmt: skip
+    (base / "notes").mkdir()
+    (base / "notes/agent.md").write_text("an agent's note\n", encoding="utf-8")
+    note = ("notes/agent.md", "an agent's note")
+
+    def kept_line(root: Path) -> bool:
+        hist = load_quilt(root).history_dir
+        return any(e.action == "keep" and e.data.get("path") == note[0] for e in load_history(hist).entries)
+
+    before = _rows(base)
+    whole = tmp_path / "whole"
+    shutil.copytree(base, whole)
+    with pytest.MonkeyPatch.context() as mp:
+        count = dying_at_step(mp, whole, 0)
+        run("changes", "--keep-all", cwd=whole)
+    after = _rows(whole)
+    assert note in before and note not in after and kept_line(whole) and count[0] > 5, (before, after, count)
+    for k in range(1, count[0] + 1):
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q)
+        with pytest.MonkeyPatch.context() as mp:
+            dying_at_step(mp, q, k)
+            try:
+                run("changes", "--keep-all", cwd=q)
+            except Died:
+                pass
+        writes.recover(q, load_quilt(q).history_dir)
+        rows = _rows(q)
+        assert rows in (before, after), (k, rows)
+        assert (note in rows) is not kept_line(q), (k, rows, kept_line(q))
+        shutil.rmtree(q)
