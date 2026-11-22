@@ -493,7 +493,7 @@ def test_the_demo_as_made_lists_none_of_the_person_s_saves_and_lists_an_agent_s_
 
 @pytest.mark.parametrize("how", ["in Settings", "by hand"])
 def test_an_agent_s_new_file_waiting_in_a_place_closed_and_opened_again_is_listed_again(person: Path, how: str) -> None:
-    """A place closed to agents keeps what the look held of it, and holds a file made there since the look as absent at it, so when the place is opened again an agent's change, removal and new file are each listed as before; nothing an agent made is taken in without having been listed (R2-5)."""
+    """A place closed to agents keeps what the look held of it, and holds a file made there since the look as absent at it, so when the place is opened again an agent's change, removal and new file are each listed as before; nothing an agent made is taken in without having been listed (R2-5), and the new file is discarded as one the look did not hold (R2-12)."""
     import re
 
     (person / "notes/gone.md").write_text("to be removed\n", encoding="utf-8")
@@ -520,6 +520,9 @@ def test_an_agent_s_new_file_waiting_in_a_place_closed_and_opened_again_is_liste
     ok("changes", "--keep-all", cwd=person)  # keeping all while it is closed takes nothing of it in
     set_deny()
     assert edits(person) == waiting
+    # the new file, held as absent at the look, is discarded as a file the look did not hold: it goes, and so does its row
+    ok("changes", "--discard", "notes/new.md", cwd=person)
+    assert not (person / "notes/new.md").exists() and edits(person) == ["notes/a.md", "notes/gone.md"]
 
 
 def test_an_act_signed_as_an_agent_s_is_refused_a_denied_place_in_a_shell_with_no_marker(tmp_path: Path) -> None:

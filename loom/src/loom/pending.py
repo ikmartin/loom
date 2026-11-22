@@ -1442,7 +1442,9 @@ def discard(
                         who,
                         path,
                         then.get(path, ""),
-                        path in looked,
+                        bool(
+                            looked.get(path)
+                        ),  # a file the look holds as absent at it (`looks.ABSENT`) is one it did not hold
                         [p.id for p in edits if p.path == path],
                         why,
                         writer,
