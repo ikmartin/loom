@@ -671,3 +671,92 @@ def test_keep_all_cut_short_at_any_step_keeps_an_in_place_change_with_its_keep_l
         assert rows in (before, after), (k, rows)
         assert (note in rows) is not kept_line(q), (k, rows, kept_line(q))
         shutil.rmtree(q)
+
+
+# ---- R2-20: two acts on one file's in-place changes, each listed before the other ran --------------------------
+
+#: The agent's two in-place changes in one file: an early one that lengthens the statement, and a later one in its proof.
+EARLY = ("Let $(X,\\sigma)$ be a widget.", "Let $(X,\\sigma)$ be a finite widget, with its involution given.")
+LATE = ("\\incomplete{Not yet attempted.", "\\incomplete{Not attempted yet.")
+
+
+@pytest.mark.parametrize("pair", ["keep, keep", "accept, accept", "keep all, keep", "discard, keep"])
+@pytest.mark.parametrize("first", ["early", "late"])
+def test_two_acts_on_one_file_listed_before_each_other_leave_it_as_a_person_could_have_chosen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pair: str, first: str
+) -> None:
+    """Two acts on in-place changes of one file at once, as two quick clicks make them: the second lists its changes, then waits at the door while the first runs. Each cuts its changes again under the door, so neither splices at a stale offset: no change is listed after them that no one made, and once what is left is discarded the file is byte for byte one a person could have chosen (R2-20)."""
+    import threading
+
+    from loom import writes
+    from loom.locks import locked
+    from loom.looks import take
+    from loom.paths import WRITES_LOCK
+    from loom.pending import PendingRefused, discard, in_place, keep, keep_accepted
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.unit._quilts import demo, opened
+
+    q = opened(demo(tmp_path))
+    take(load_quilt(q), "Tester")
+    node = q / "drafting/nodes/dm-0006.tex"
+    base = node.read_text(encoding="utf-8")
+    node.write_text(base.replace(*EARLY).replace(*LATE), encoding="utf-8")
+    outcomes = {base, base.replace(*EARLY), base.replace(*LATE), base.replace(*EARLY).replace(*LATE)}
+    who, writer = "Tester", ("human", "Tester")
+
+    def listed() -> list:  # type: ignore[type-arg]
+        return sorted(
+            (p for p in in_place(scan(load_quilt(q)), who) if p.path == "drafting/nodes/dm-0006.tex"),
+            key=lambda p: p.at,
+        )
+
+    rows = listed()
+    assert len(rows) == 2, rows
+    ids = {"early": rows[0].id, "late": rows[1].id}
+    second = "late" if first == "early" else "early"
+
+    def run_act(which: str) -> None:
+        r = scan(load_quilt(q))
+        if pair == "accept, accept":
+            keep_accepted(r, who, ["dm-0006" if which == "early" else "dm-0006/proof"])
+        elif pair == "discard, keep" and which == first:
+            discard(r, who, [ids[which]], writer)
+        elif pair == "keep all, keep" and which == first:
+            keep(r, who, list(ids.values()), writer)
+        else:
+            keep(r, who, [ids[which]], writer)
+
+    real = writes.act
+    at_door = threading.Event()
+
+    def act(*a, **k):  # type: ignore[no-untyped-def]
+        if threading.current_thread() is not threading.main_thread():
+            at_door.set()
+        return real(*a, **k)
+
+    monkeypatch.setattr(writes, "act", act)
+    failed: list[BaseException] = []
+
+    def later() -> None:
+        try:
+            run_act(second)
+        except PendingRefused:
+            pass  # refused, which is no damage
+        except BaseException as exc:  # noqa: BLE001
+            failed.append(exc)
+
+    thread = threading.Thread(target=later)
+    with locked(q / WRITES_LOCK):
+        thread.start()
+        assert at_door.wait(30), "the second act never reached the door"
+        run_act(first)
+    thread.join(60)
+    assert not failed, failed
+    monkeypatch.setattr(writes, "act", real)
+    words = {(p.old, p.new) for p in rows}
+    left = listed()
+    assert {(p.old, p.new) for p in left} <= words, [(p.old, p.new) for p in left]
+    if left:
+        discard(scan(load_quilt(q)), who, [p.id for p in left], writer)
+    assert node.read_text(encoding="utf-8") in outcomes
