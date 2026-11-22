@@ -107,7 +107,7 @@ The node's `% !LOOM author:` line is whoever writes it: `--as`, else the configu
 | `--dry-run` | Say which id and file would be written, and write nothing. |
 | `--to` `FILE` | The node file to write, instead of nodes/<id>.tex beside the default document. |
 | `--session` `SESSION` | Log this call to the session. |
-| `--as` `NAME` | Who writes the node; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who writes the node; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -249,7 +249,7 @@ An annotation carries its author, its time and the version of the text it was wr
 | `--style` | How it is drawn on words, over its type's. |
 | `--weight` | An underline's or a strike's thickness, in whole pixels. |
 | `--opacity` | Its opacity, in percent. |
-| `--as` `NAME` | Who is writing; an agent names itself, with Agent or AI in the name. |
+| `--as` `NAME` | Who is writing; an agent's name ends in Agent. |
 | `--reply` `ID` | Answer annotation ID; the message is the reply. |
 | `--resolve` `ID` | Mark annotation ID resolved, with the message as why. |
 | `--edit` `ID` | Restate an annotation: a new body, --type, a look, or where a drawn one stands; never its anchor. |
@@ -277,7 +277,7 @@ The person keeps or discards it with `loom changes`: keeping writes it into the 
 | `--after` | Put the new text right after the quoted words, or at the end of the body. |
 | `--answers` `ID` | The annotation it answers; keeping the edit resolves it. |
 | `--comment` `TEXT` | What to say beside it, in Markdown. |
-| `--as` `NAME` | Who suggests it; an agent names itself, with Agent or AI in the name. |
+| `--as` `NAME` | Who suggests it; an agent's name ends in Agent. |
 | `--withdraw` `EDIT` | Withdraw suggested edit EDIT, one of yours still open, instead. |
 | `--why` | With --withdraw, why. |
 | `--dry-run` | Say what would be filed, and write nothing. |
@@ -307,16 +307,16 @@ Record that you accept KEYS as mathematically correct, each against the document
 
 `loom changes [OPTIONS] [ID]`
 
-List what waits on you, by document: each open suggested edit and, where the quilt tracks edits (`[review] track_edits`), each in-place edit to an open file since your last look, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
+List what waits on you, by document: each open suggested edit and each in-place edit since your last look to an open file agents may edit, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
 
-The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds each one's text as you last saw it, and `loom serve` takes your first when it starts. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
+The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds the text of each one agents may edit as you last saw it, and `loom serve` takes your first when it starts. A place agents are denied is yours, and an edit there is never listed, whoever made it. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
 
 | option | description |
 |---|---|
 | `--document` `DOC` | Only the changes in the files DOC is made of. |
 | `--keep` `ID|PATH` | Keep the change ID, or every change in PATH; may repeat. |
 | `--discard` `ID|PATH` | Discard the change ID, or every change in PATH; may repeat. |
-| `--keep-all` | Keep every change; where the quilt tracks edits and you have no look yet, take it. |
+| `--keep-all` | Keep every change; with no look of yours yet, take it first. |
 | `--discard-all` | Discard every change. |
 | `--why` | With a discard, why, which the agent that suggested an edit reads. |
 | `--by` `NAME` | NAME's suggested edits, in every state. |
@@ -659,7 +659,7 @@ The only write an agent makes to the library's results. SOURCE-TEXT must appear 
 | `--number` | The paper's numbers when it states several results together: '3.2, 3.3'. |
 | `--level` | 1 is a main result. |
 | `--supersedes` `ID` | Re-propose something discarded, recording the chain. |
-| `--as` `NAME` | Who proposes it; an agent names itself, with Agent or AI in the name. |
+| `--as` `NAME` | Who proposes it; an agent's name ends in Agent. |
 | `--session` `SESSION` | The session proposing this. |
 | `--dry-run` | Check the quotation and say what would be proposed, storing nothing. |
 | `--json` | Print the stored record as JSON. |
@@ -693,7 +693,7 @@ Assert a typed relation between two results, FROM and TO, with a reason; with --
 | `--kind` | How FROM relates to TO; required unless --undo. |
 | `--why` | One or two sentences: what you read six months later, or why a relation is removed. |
 | `--undo` `LINK_ID` | Remove this relation instead; an agent removes only an agent's. |
-| `--as` `NAME` | Who asserts it; an agent names itself, with Agent or AI in the name. |
+| `--as` `NAME` | Who asserts it; an agent's name ends in Agent. |
 | `--dry-run` | Check everything and say what would change, writing nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -798,7 +798,7 @@ A copy step records what each of its nodes began from, and who drafted it: `--as
 | option | description |
 |---|---|
 | `--ai` `NAME` | The agent document to write, .loom/agents/copies/NAME.tex. |
-| `--as` `NAME` | Who drafts it; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who drafts it; an agent's name ends in Agent. |
 | `--section` `ID` | Copy only this section or subsection and its descendants. |
 | `--dry-run` | Say what would be written, and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -838,7 +838,7 @@ End a session's current round. With no WHICH, the active one, which then stops b
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -855,7 +855,7 @@ A plain delete is a tombstone: the session stops being shown. Annotations belong
 |---|---|
 | `--purge` | Really erase it: its directory, transcript and index entry. This cannot be undone. |
 | `--why` | Why it was deleted; kept on the tombstone. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--yes`, `-y` | Skip the question --purge asks. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -882,7 +882,7 @@ Open a session and make it the active one.
 | option | description |
 |---|---|
 | `--name` `TITLE` | What to call it; default untitled. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--no-use` | Create it without making it the active session. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -897,7 +897,7 @@ Change a session's title. Nothing moves: the id is the address and does not chan
 | option | description |
 |---|---|
 | `--name` `TITLE` | The new title. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -913,7 +913,7 @@ The transcript is what the author reads afterwards. A person's message carries t
 | option | description |
 |---|---|
 | `--session` | The session to speak in. |
-| `--as` | Who is speaking. An agent names itself, including Agent or AI. |
+| `--as` | Who is speaking. An agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -926,7 +926,7 @@ Make WHICH the active session, resuming it when it was closed. WHICH is an id, a
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -954,7 +954,7 @@ People's annotations and replies, whole, with the words they are on; what they r
 
 | option | description |
 |---|---|
-| `--as` | Who is looking. An agent names itself, including Agent or AI. |
+| `--as` | Who is looking. An agent's name ends in Agent. |
 | `--session` `SESSION` | Look as this session, one conversation's: its own marker, whose first look starts where your name's stands. An id, a title, or a unique id suffix. |
 | `--dry-run` | Report, and leave your marker where it was. |
 | `--json` | Print the report as one JSON object. |
@@ -971,7 +971,7 @@ A page is a reading the person edits directly and an agent writes here, never by
 | option | description |
 |---|---|
 | `--base` `HASH` | The page's hash as you read it; required once the page exists. |
-| `--as` | Who is writing. An agent names itself, including Agent or AI. |
+| `--as` | Who is writing. An agent's name ends in Agent. |
 | `--session` | Log this call to the session. |
 | `--dry-run` | Check everything and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -1123,7 +1123,7 @@ One tool per agent command, named for it (`loom status` is `loom_status`), its o
 
 | option | description |
 |---|---|
-| `--as` `NAME` | The agent this server serves, with Agent or AI in the name; every write is recorded under it. |
+| `--as` `NAME` | The agent this server serves, a name ending in Agent; every write is recorded under it. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Publish

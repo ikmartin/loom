@@ -673,7 +673,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "0b3b36557b55f914913036ca2c1586fdc9b75f9578ae718c7f41dc46b36342da",
+   "hash": "f5fd6f82c93f4994b93af0f94484d3c21e0126933ddfb5eacd3db74b09b84f76",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -688,7 +688,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "c69c1af8385d0dce1a50de944071698303d4e3512625fd2037987f11344b40b2",
+   "hash": "1e86a1df6008b8fe21efb22567677492f6bc8f55d978e8450e4c35edc9d3eb92",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -703,7 +703,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "274e10047ada04e89793d80cb63038a5553495f0beeab49fc6ecadbcf28256a8",
+   "hash": "6327f7304d041c6a224da38588e00c0b2f1ebf27a5a0cbc462001274917124ec",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -838,6 +838,10 @@
   }
  ],
  "changes_since": {
+  "holds": "",
+  "unwatched": [
+   "config.toml"
+  ],
   "when": "2026-09-16T11:30:00Z",
   "who": "The synthetic quilt"
  },
@@ -875,6 +879,7 @@
    ],
    "command": "loom ai init",
    "deny": [],
+   "holds": "",
    "layer": false,
    "protected": [
     ".loom/ (but .loom/agents/sessions/, .loom/agents/copies/, .loom/agents/scratch/, .loom/records/annotation-types.toml)",
@@ -893,8 +898,7 @@
    "library.online",
    "library.contact",
    "lint.disable",
-   "agents.deny",
-   "review.track_edits"
+   "agents.deny"
   ],
   "library": {
    "contact": "",
@@ -987,9 +991,6 @@
    "quilt.history",
    "quilt.research_state"
   ],
-  "review": {
-   "track_edits": true
-  },
   "sync": {
    "command": "loom sync init DIR",
    "paired": false
@@ -2536,7 +2537,7 @@
    "path": "README.md"
   },
   {
-   "bytes": 174,
+   "bytes": 145,
    "denied": {
     "always": true,
     "by": "config.toml"

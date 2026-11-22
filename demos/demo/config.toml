@@ -9,3 +9,6 @@ online = false
 
 [lint]
 disable = []
+
+[agents]
+deny = ["/drafting/"]
