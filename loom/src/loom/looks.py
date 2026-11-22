@@ -31,13 +31,14 @@ CONTEXT = 3
 
 @dataclass
 class Look:
-    """One person's look: who, when, each watched file's text by its hash, whose look it was carried over from (`read_look`), '' for one taken under this name, and the `[agents] deny` list it was last brought to, None for a look that does not say."""
+    """One person's look: who, when, each watched file's text by its hash, whose look it was carried over from (`read_look`), '' for one taken under this name, the `[agents] deny` list it was last brought to, None for a look that does not say, and `closed`, the hash of the text each file in a place closed to agents held as it closed, by which a file renamed there meanwhile is found (`_align`)."""
 
     who: str
     when: str
     files: dict[str, str] = field(default_factory=dict)
     carried: str = ""
     deny: list[str] | None = None
+    closed: dict[str, str] = field(default_factory=dict)
 
     def to_json(self) -> dict[str, Any]:
         out: dict[str, Any] = {"who": self.who, "when": self.when, "files": dict(sorted(self.files.items()))}
@@ -45,6 +46,8 @@ class Look:
             out["carried"] = self.carried
         if self.deny is not None:
             out["deny"] = list(self.deny)
+        if self.closed:
+            out["closed"] = dict(sorted(self.closed.items()))
         return out
 
 
@@ -70,12 +73,14 @@ def _load(path: Path) -> Look | None:
         data = json.loads(path.read_text(encoding="utf-8"))
         files = {str(k): str(v) for k, v in data.get("files", {}).items()}
         deny = data.get("deny")
+        closed = {str(k): str(v) for k, v in (data.get("closed") or {}).items()}
         return Look(
             str(data["who"]),
             str(data["when"]),
             files,
             str(data.get("carried", "")),
             [str(x) for x in deny] if isinstance(deny, list) else None,
+            closed,
         )
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
@@ -110,7 +115,7 @@ def read_look(root: Path, who: str) -> Look | None:
     if not others:
         return None
     newest = max(others, key=lambda x: x.when)
-    carried = Look(who, newest.when, dict(newest.files), newest.who, newest.deny)
+    carried = Look(who, newest.when, dict(newest.files), newest.who, newest.deny, dict(newest.closed))
     _write(root, carried)
     return _align(root, carried)
 
@@ -118,9 +123,10 @@ def read_look(root: Path, who: str) -> Look | None:
 def _align(root: Path, look: Look) -> Look:
     """`look` brought to the `[agents] deny` list in force, written where that moved anything.
 
-    A file opened to agents since the look's own list goes in as it stands, so the person's edits there before it was opened are never listed; one closed to them keeps what the look held, so a change waiting there is listed again if it is opened, and one the look did not hold, made since it, is kept as `ABSENT`, so it is listed as new then rather than taken in unseen. A look that names no list is taken as brought to the one in force. A config loom cannot read leaves the look as it is.
+    A file opened to agents since the look's own list goes in as it stands, so the person's edits there before it was opened are never listed; one closed to them keeps what the look held, so a change waiting there is listed again if it is opened, and one the look did not hold, made since it, is kept as `ABSENT`, so it is listed as new then rather than taken in unseen. Each file of a place that closes also leaves the hash of its text as it closed (`closed`), so a file renamed while the place is closed is found by its text when it opens: its entry moves to the new path, an agent's new file is listed as new there and an agent's waiting change is listed there, never taken in as the file stands. A look that names no list is taken as brought to the one in force. A config loom cannot read leaves the look as it is.
     """
     from loom.records.snapshots import write_raw
+    from loom.scan.hashing import sha256
     from loom.scan.quilt import load_quilt
 
     try:
@@ -133,12 +139,23 @@ def _align(root: Path, look: Look) -> Look:
         return look
     was = watching(dataclasses.replace(quilt.config, agents_deny=look.deny))
     now = watching(quilt.config)
-    for rel, text in open_texts(quilt).items():
+    texts = open_texts(quilt)
+    for rel, text in texts.items():
+        if was(rel) and not now(rel):
+            if rel not in look.files:
+                # made since the look while agents could write there: listed as new if the place is opened again
+                look.files[rel] = ABSENT
+            look.closed[rel] = sha256(text)
+    # a file of a closed place that is gone since it closed, by the text it held then: one renamed meanwhile is found by it
+    moved = {h: rel for rel, h in look.closed.items() if rel not in texts and rel in look.files}
+    for rel, text in texts.items():
         if now(rel) and not was(rel) and rel not in look.files:
-            look.files[rel] = write_raw(root, text, quilt.history_dir)
-        elif was(rel) and not now(rel) and rel not in look.files:
-            # made since the look while agents could write there: listed as new if the place is opened again
-            look.files[rel] = ABSENT
+            old = moved.pop(sha256(text), None)
+            if old is not None:
+                look.files[rel] = look.files.pop(old)
+            else:
+                look.files[rel] = write_raw(root, text, quilt.history_dir)
+    look.closed = {rel: h for rel, h in look.closed.items() if not now(rel) and rel in look.files}
     look.deny = deny
     _write(root, look)
     return look
@@ -185,16 +202,18 @@ def watched_texts(quilt: Quilt) -> dict[str, str]:
 
 
 def take(quilt: Quilt, who: str) -> Look:
-    """A new look by `who` at every watched file now, each text stored; what an earlier look held of a file agents are denied now is kept as it was (`_align`)."""
+    """A new look by `who` at every watched file now, each text stored; what an earlier look held of a file agents are denied now is kept as it was, with the text it held as its place closed (`_align`)."""
     from loom.records.snapshots import write_raw
 
     hist = quilt.history_dir
     files = {rel: write_raw(quilt.root, text, hist) for rel, text in watched_texts(quilt).items()}
     old = _load(look_path(quilt.root, who))
+    closed: dict[str, str] = {}
     if old is not None:
         watched = watching(quilt.config)
         files |= {rel: h for rel, h in old.files.items() if not watched(rel)}
-    look = Look(who, stamp(), files, deny=list(quilt.config.agents_deny))
+        closed = {rel: h for rel, h in old.closed.items() if rel in files and not watched(rel)}
+    look = Look(who, stamp(), files, deny=list(quilt.config.agents_deny), closed=closed)
     _write(quilt.root, look)
     return look
 

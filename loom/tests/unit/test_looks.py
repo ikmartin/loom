@@ -537,3 +537,32 @@ def test_an_act_signed_as_an_agent_s_is_refused_a_denied_place_in_a_shell_with_n
     assert sorted(p.name for p in (q / "drafting/nodes").glob("*.tex")) == nodes
     assert not (q / "drafting/agent.tex").exists()
     ok("new", "lemma", "The person's lemma", cwd=q)
+
+
+@pytest.mark.parametrize("how", ["in Settings", "by hand"])
+def test_a_file_renamed_while_its_place_is_closed_is_found_by_its_text_when_it_opens(person: Path, how: str) -> None:
+    """A place closed to agents keeps the text each of its files held as it closed, so a file renamed meanwhile is found by it when the place opens: an agent's new file is listed as new at its new path, and an agent's change waiting in a file the look held is listed there, never taken in as the file stands (R2-14)."""
+    import re
+
+    (person / "notes/a.md").write_text("# A\n\nfirst, and an agent's word\n", encoding="utf-8")
+    (person / "notes/new.md").write_text("an agent's new note\n", encoding="utf-8")
+    assert edits(person) == ["notes/a.md", "notes/new.md"]
+
+    def set_deny(*entries: str) -> None:
+        if how == "in Settings":
+            denying(person, *entries)
+        else:
+            cfg = person / "config.toml"
+            said = ", ".join(f'"{e}"' for e in entries)
+            cfg.write_text(re.sub(r"(?m)^deny = \[.*\]$", f"deny = [{said}]", cfg.read_text()), encoding="utf-8")
+
+    set_deny("notes/")
+    assert edits(person) == []  # read as the server reads it at once, so the place is seen closed before the renames
+    (person / "notes/a.md").rename(person / "notes/b.md")
+    (person / "notes/new.md").rename(person / "notes/moved.md")
+    set_deny()
+    rows = {c["path"]: c for c in json_of("changes", "--json", cwd=person)["changes"] if c["kind"] == "edit"}
+    assert sorted(rows) == ["notes/b.md", "notes/moved.md"], sorted(rows)
+    # a change against the text the look held, not the whole file as new
+    assert rows["notes/b.md"]["old"].strip() == "first" and "an agent's word" in rows["notes/b.md"]["new"]
+    assert rows["notes/moved.md"]["new"].strip() == "an agent's new note"
