@@ -3,6 +3,7 @@
 	import Mark from '$lib/marks/Mark.svelte';
 	import { leanMark, paperMark } from '$lib/marks/marks';
 	import * as api from '$lib/library/api';
+	import { said } from '$lib/library/said';
 	import type { OutlineItem, WorkAnswer } from '$lib/library/types';
 	import { pdfOutline, sectionOf, type OutlineEntry } from '$lib/pdf/outline';
 	import { message } from '$lib/shell/message.svelte';
@@ -44,7 +45,7 @@
 		const chosen = [...lib.ticks];
 		lib.stopChoosing();
 		const done = await api.digest([ref], 'chosen', chosen);
-		if (!done.ok) return message.post(done.error.message);
+		if (!done.ok) return message.post(said(done.error));
 		message.post(done.value.job ? words.digest.reading : words.digest.made(done.value.made));
 	}
 

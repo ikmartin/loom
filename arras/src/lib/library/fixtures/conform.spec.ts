@@ -150,7 +150,8 @@ describe('every generated sample passes through the client as a served answer wo
 			expect(sent).toHaveLength(1);
 			expect(sent[0].url.replace(/\?.*$/, '')).toBe(`/_api/${s.endpoint}`);
 			expect(sent[0].body).toEqual(s.request);
-			if (s.answer.status) expect(got).toEqual({ ok: false, error: s.answer.error });
+			// a refusal keeps loom's code and HTTP status, which tell loom's own failures from the transport's
+			if (s.answer.status) expect(got).toEqual({ ok: false, error: { ...s.answer.error, status: s.answer.status } });
 			else expect(got).toEqual({ ok: true, value: s.answer });
 		});
 	}

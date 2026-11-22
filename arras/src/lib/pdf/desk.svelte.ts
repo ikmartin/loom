@@ -11,6 +11,8 @@ import { hand, handPayload, lookOf, passes, type Annotating } from '$lib/review/
 import { annotate, edit } from '$lib/review/history.svelte';
 import { say } from '$lib/review/toasts.svelte';
 import { ui } from '$lib/ui.svelte';
+import { said } from '$lib/library/said';
+import { frame } from '$lib/words/frame';
 import { document_, pdfjs, sourceOf } from './document';
 import { boundOfStrokes, copyColor, markOf, mergeLines, ON_WORDS, type MarkKind, type PageMark } from './marks';
 import { annotatedCopy, notTheSamePaper, readAnnotations, type Incoming, type Outgoing, type Replaced } from './portable';
@@ -36,6 +38,12 @@ export interface Surface {
 }
 
 const INK_PAUSE = 900;
+
+/** A refused write on the pages in the viewer's words (`said`); one refused while loom knows no name to write it under says where to give it one. */
+function refusal(e?: { code: string; message: string }): string {
+	if (e?.code === 'refused' && !store.manifest?.reviewer?.name) return frame.errors.noName;
+	return said(e ?? { code: 'failed', message: '' });
+}
 
 export class MarkDesk {
 	/** The mark whose popup is open, which can be moved. */
@@ -138,7 +146,7 @@ export class MarkDesk {
 		const res = await annotate({ ...this.body(kind, page, place), ...(extra.quote ? { quote: extra.quote } : {}), ...(extra.message ? { message: extra.message } : {}) });
 		if (!res.ok) {
 			this.#pending = this.#pending.filter((p) => p.id !== fresh);
-			say({ title: 'Not written', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not written', lines: [refusal(res.error)] });
 			return '';
 		}
 		const id = (res.result ?? '').split(/\s+/)[0];
@@ -219,7 +227,7 @@ export class MarkDesk {
 			if (res.ok) return;
 			const { [e.id]: _, ...rest } = this.#changed;
 			this.#changed = rest;
-			say({ title: 'Not moved', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not moved', lines: [refusal(res.error)] });
 		});
 	}
 
@@ -288,7 +296,7 @@ export class MarkDesk {
 		}
 		const res = (await write('annotations-take', { target: this.#surface().on, items })) as WriteResult & { taken?: number; already?: number; skipped?: number };
 		if (!res.ok) {
-			say({ title: 'Not taken in', lines: [res.error?.message ?? 'the publisher refused it'] });
+			say({ title: 'Not taken in', lines: [refusal(res.error)] });
 			return;
 		}
 		void store.refresh();

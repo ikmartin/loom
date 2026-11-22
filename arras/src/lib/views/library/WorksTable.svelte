@@ -42,12 +42,12 @@
 		message.post(words.works.deleted(w.short), () => api.restore(done.value.undo));
 	}
 
-	// a quilt that has not said whether loom may use the network refuses a plain look-up; the row then asks again whether to look it up this once
+	// a quilt that has not said whether loom may use the network, or keeps it offline, refuses a plain look-up; the row then asks whether to look it up this once
 	async function lookUp(w: Work, once = false): Promise<void> {
 		asking.delete(w.ref);
 		const done = await api.lookUp(w.ref, once);
 		if (done.ok) return;
-		if (done.error.code === 'network-unasked') asking.add(w.ref);
+		if (done.error.code === 'network-unasked' || done.error.code === 'offline') asking.add(w.ref);
 		else message.post(said(done.error));
 	}
 </script>

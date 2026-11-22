@@ -3,8 +3,11 @@
 /** How long a message stays before it goes by itself, once nothing holds it. */
 export const MESSAGE_FOR = 7000;
 
-/** What an undo may answer: nothing, or the publisher's answer, whose `ok: false` is said to the person. */
-export type Undone = void | { ok: boolean; error?: { message: string } };
+import { said } from '$lib/library/said';
+import { frame } from '$lib/words/frame';
+
+/** What an undo may answer: nothing, or the publisher's answer, whose `ok: false` is said to the person in the viewer's words (`said`). */
+export type Undone = void | { ok: boolean; error?: { code?: string; message: string; status?: number } };
 
 export interface Said {
 	text: string;
@@ -63,9 +66,9 @@ class ColumnMessage {
 		let why: string | null = null;
 		try {
 			const answer = await undo();
-			if (answer && answer.ok === false) why = answer.error?.message ?? '';
-		} catch (err) {
-			why = (err as Error)?.message ?? '';
+			if (answer && answer.ok === false) why = said({ code: answer.error?.code ?? 'failed', message: '', status: answer.error?.status });
+		} catch {
+			why = frame.errors.failed;
 		}
 		if (why === null) this.clear();
 		else this.post(failed(why));

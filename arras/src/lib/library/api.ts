@@ -11,7 +11,10 @@ import type { FormalMarks, FormalPlan, NotesAnswer, DigestDone, DigestScope, Dig
 
 export interface ApiError {
 	code: string;
+	/** Loom's own words, for the command line: never drawn (`said`). */
 	message: string;
+	/** The HTTP status of loom's refusal; absent where nothing answered. */
+	status?: number;
 }
 
 export type Answer<T> = { ok: true; value: T } | { ok: false; error: ApiError };
@@ -56,7 +59,7 @@ export const server: Source = {
 			const payload = (await res.json().catch(() => null)) as (T & { error?: ApiError }) | null;
 			if (!payload || payload.error?.code === 'unknown-endpoint') return { ok: false, error: { code: 'not-served', message: '' } };
 			if (res.ok && !payload.error) return { ok: true, value: payload };
-			return { ok: false, error: payload.error ?? { code: 'failed', message: '' } };
+			return { ok: false, error: { ...(payload.error ?? { code: 'failed', message: '' }), status: res.status } };
 		} catch (err) {
 			return { ok: false, error: { code: 'unreachable', message: (err as Error).message } };
 		}
@@ -78,7 +81,7 @@ export const server: Source = {
 			}
 			const payload = (await res.json().catch(() => ({}))) as { incoming: string; name: string; size: number; error?: ApiError };
 			if (res.ok && !payload.error) return { ok: true as const, value: payload };
-			return { ok: false as const, error: payload.error ?? { code: 'failed', message: '' } };
+			return { ok: false as const, error: { ...(payload.error ?? { code: 'failed', message: '' }), status: res.status } };
 		} catch (err) {
 			return { ok: false as const, error: { code: 'unreachable', message: (err as Error).message } };
 		}

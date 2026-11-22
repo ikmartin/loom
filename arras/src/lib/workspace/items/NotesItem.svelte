@@ -1,6 +1,7 @@
 <script lang="ts">
 	// The notes tab (8b, 8b work): every note of the quilt, 760 pixels wide whatever its order. By work, the notes that lost their place first, each with `place it again` and `delete`, then a group for each document and each work with its latest notes and how many more; by date, the newest twenty and how many older. A note draws its colour, the words it is on, its text, who wrote it and when, and its tags; a placed note opens at its place in Docs.
 	import * as api from '$lib/library/api';
+	import { said } from '$lib/library/said';
 	import { library as gen } from '$lib/library/gen.svelte';
 	import { Read } from '$lib/library/read.svelte';
 	import type { Note, NotesAnswer, NotesGroup } from '$lib/library/types';
@@ -47,7 +48,7 @@
 	}
 	async function remove(n: Note): Promise<void> {
 		const done = await api.deleteNote(n.annotation);
-		message.post(done.ok ? words.notes.deleted : done.error.message);
+		message.post(done.ok ? words.notes.deleted : said(done.error));
 	}
 </script>
 
