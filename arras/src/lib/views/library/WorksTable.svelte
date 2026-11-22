@@ -120,7 +120,8 @@
 								<!-- svelte-ignore a11y_no_static_element_interactions -->
 								<div class="menu more" onclick={(e) => e.stopPropagation()}>
 									<button type="button" class="mi" disabled={!w.link} onclick={() => { menus.open = null; if (w.link) window.open(w.link, '_blank', 'noopener'); }}>{words.works.openSource}</button>
-									<button type="button" class="mi" onclick={() => { menus.open = null; lib.openWork(w.ref); }}>{words.works.editEntry}</button>
+									<!-- where the work's read gives the entry to start from, and loom takes a new one -->
+									{#if served.has('library-work') && served.has('library-entry')}<button type="button" class="mi" data-testid="row-edit-entry" onclick={() => { menus.open = null; lib.editingEntry = w.ref; lib.openWork(w.ref); }}>{words.works.editEntry}</button>{/if}
 									<hr />
 									<button type="button" class="mi" data-testid="row-delete" onclick={() => void remove(w)}>{words.works.delete}</button>
 								</div>

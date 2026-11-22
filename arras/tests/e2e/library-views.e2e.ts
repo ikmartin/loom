@@ -230,6 +230,25 @@ test('several files chosen at once are said together, and one undo takes every w
 	await expect(page.getByTestId('work-row')).toHaveCount(300);
 });
 
+test("edit its entry… opens the work's entry as a field, a refusal says why in the viewer's words, and a saved entry is the work's", async ({ page }) => {
+	await open(page);
+	const smith = row(page, 'Widgets and their bounds');
+	await smith.hover();
+	await smith.getByTestId('row-more').click();
+	await page.getByTestId('row-edit-entry').click();
+	const field = page.getByTestId('entry-field');
+	await expect(field).toBeFocused();
+	await expect(field).toHaveValue(/^@article\{Smi24,/);
+	await field.fill('not an entry');
+	await page.getByTestId('entry-save').click();
+	await expect(page.getByTestId('entry-refused')).toHaveText('That is not a BibTeX entry loom can keep for this work.');
+	await field.fill('@article{Smi24,\n  author = {Smith},\n  title  = {Widgets, bounded},\n  year   = {2024},\n}');
+	await page.getByTestId('entry-save').click();
+	await expect(page.getByTestId('column-message')).toContainText('Saved the entry of Smith 2024.');
+	await expect(page.getByTestId('entry-field')).toHaveCount(0);
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets, bounded');
+});
+
 test("a file stating an arXiv number a work states is asked about in the column, each answer settles it, and one closed unanswered is not asked again here", async ({ page }) => {
 	await open(page);
 	const msg = page.getByTestId('column-message');

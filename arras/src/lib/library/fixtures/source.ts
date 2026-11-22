@@ -232,9 +232,15 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			changed();
 			return ok({ incoming, act: `x-${f.gen}`, row: { id: incoming, item: 0, name: `${w.short}.pdf`, state: 'received' } });
 		},
+		// one BibTeX entry, kept as the work's in place of the one it had; its title, where it states one, is the work's
 		'library-entry': (b) => {
 			const w = f.works.find((x) => x.ref === b.ref);
 			if (!w) return no('no-such-ref', '');
+			const text = String(b.bibtex ?? '');
+			if (!/^\s*@\w+\s*\{\s*[^,\s]+\s*,[\s\S]*\}\s*$/.test(text)) return no('bad-entry');
+			f.entries[w.ref] = text.trim();
+			const title = /\btitle\s*=\s*\{([^}]*)\}/i.exec(text)?.[1].trim();
+			if (title) w.title = title;
 			f.gen++;
 			changed();
 			return ok({ ref: w.ref });

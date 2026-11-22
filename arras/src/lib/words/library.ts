@@ -27,6 +27,13 @@ export const library = {
 		holds: { both: 'PDF and TeX', pdf: 'PDF', tex: 'TeX', none: 'no document' },
 		/** The fold under a work's head that shows its BibTeX entry. */
 		entry: 'entry',
+		/** The entry's field, its accessible name, and its controls. */
+		entryField: 'BibTeX entry',
+		editEntry: 'edit',
+		saveEntry: 'save',
+		cancelEntry: 'cancel',
+		/** The column's message once an entry is saved. */
+		entrySaved: (short: string) => `Saved the entry of ${short}.`,
 		/** The label over a work's outline when it comes from its TeX source. */
 		contents: 'Contents',
 		/** The label over a work's outline when it comes from the PDF's own outline. */

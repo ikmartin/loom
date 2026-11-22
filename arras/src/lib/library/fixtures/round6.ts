@@ -222,6 +222,8 @@ export interface Fixture {
 	taken: Record<string, string>;
 	/** The intake's questions waiting on the person, by id: the file's name and the works it may be. */
 	questions: Record<string, { name: string; candidates: string[] }>;
+	/** The entries the person wrote, by reference, which stand in place of the one the fixture makes. */
+	entries: Record<string, string>;
 }
 
 export function round6(): Fixture {
@@ -233,7 +235,7 @@ export function round6(): Fixture {
 	const review = review6(REF);
 	// a transcribed result's row is beside its work's stored paper, as a digested one's is
 	for (const r of review.rows) if (r.kind === 'check' && 'nodes' in r && r.pdf === null) r.pdf = works.find((w) => w.ref === r.ref)?.holds.pdf ?? null;
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], notes: notes6(REF), network: 'asked', taken: {}, questions: {} };
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], notes: notes6(REF), network: 'asked', taken: {}, questions: {}, entries: {} };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];
@@ -279,7 +281,7 @@ export function workAnswer(f: Fixture, ref: string): WorkAnswer | null {
 		authors: row.authors,
 		year: row.year,
 		holds: { pdf: row.holds.pdf, pages: row.holds.pdf ? (PAGES_OF[row.holds.pdf] ?? 24) : null, tex: row.holds.tex },
-		entry,
+		entry: f.entries[ref] ?? entry,
 		link: row.link,
 		outline: outlineOf(f, ref),
 		marks: f.marks[ref] ?? [],

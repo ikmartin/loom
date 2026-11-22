@@ -130,6 +130,8 @@ class LibraryState {
 	beside = $state<Record<string, Beside | null>>({});
 	/** The work whose outline is being chosen in, and what is ticked there. */
 	choosing = $state<string | null>(null);
+	/** The work whose entry is open as a field to edit, by reference; one at a time. */
+	editingEntry = $state<string | null>(null);
 	ticks = new SvelteSet<string>();
 	#overlay = $state(remembered(OVERLAY) === 'on');
 	plain = $state(false);
