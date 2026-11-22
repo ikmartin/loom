@@ -339,3 +339,38 @@ def test_two_restores_of_one_undo_at_once_give_one_restore_and_one_no_such_undo(
         t.join()
     assert sorted(said) == sorted([ref, "no-such-undo"])
     assert [a["event"] for a in log.replay(root).of(ref)].count("restored") == 1
+
+
+def test_a_deleted_work_s_ids_are_never_given_again_and_its_one_undo_still_brings_it_back(tmp_path: Path) -> None:
+    """The second look's M-19: once a delete took the work's node files and its notes, nothing minting counted named its id, so the next work was given it, and the delete's undo was then refused `changed`."""
+    import json
+
+    from loom.records.log import log_path
+
+    root = quilt(tmp_path)
+    [first] = take(
+        root, [Item(text="@article{First1, author={One, A.}, title={The first paper}, year={2001}}\n")], by="A. Author"
+    )
+    ref = first.to_json()["ref"]
+    note = {
+        "event": "created",
+        "id": "a-2026-11-20-ffffff",
+        "target": ref,
+        "body": "My note.",
+        "when": "2026-11-20T00:00:00Z",
+        "author": "A. Author",
+        "kind": "human",
+    }
+    log_path(root).parent.mkdir(parents=True, exist_ok=True)
+    with log_path(root).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(note) + "\n")
+    before = kept(root)
+    undo = delete(root, ref, **ME)
+    [second] = take(
+        root, [Item(text="@article{Second2, author={Two, B.}, title={Another paper}, year={2002}}\n")], by="A. Author"
+    )
+    assert second.to_json()["state"] == "added" and second.to_json()["ref"] != ref
+    assert restore(root, undo, **ME) == ref
+    assert {k: v for k, v in kept(root).items() if k in before} == before, "the work and its note are back as they were"
+    made = [a["ref"] for a in log.replay(root).lines if a["event"] == "made"]
+    assert len(made) == len(set(made)), "the library's log names no two works by one id"
