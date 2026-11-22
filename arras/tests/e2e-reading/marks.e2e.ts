@@ -140,6 +140,62 @@ test("a highlight on a cited work's page needs no session, is drawn at once in t
 	expect(await page.getByTestId(`mark-band-${mark.id}`).evaluate((g) => getComputedStyle(g).getPropertyValue('--band-strength').trim())).toBe('0.6');
 });
 
+test('a highlight on a word a page says twice stands on the occurrence selected, after a reload as at once', async ({ page, served }) => {
+	const ref = workOf(served.root, 'Bellamy19')!.ref;
+	const before = marksOf(served, ref).map((a) => a.id);
+	await openPaper(page, `/library/${ref}?page=1`, 1);
+	// a word of six letters or more that two lines of the page hold, and where each stands
+	const found = await page.locator('[data-testid="pdf-page-1"] .text').evaluate((layer) => {
+		const spans = [...layer.querySelectorAll('span')].filter((s) => s.childNodes.length === 1 && s.firstChild!.nodeType === Node.TEXT_NODE);
+		const seen = new Map<string, number>();
+		for (let i = 0; i < spans.length; i++)
+			for (const w of new Set(spans[i].textContent!.match(/[A-Za-z]{6,}/g) ?? [])) {
+				const j = seen.get(w);
+				if (j !== undefined && Math.abs(spans[j].getBoundingClientRect().top - spans[i].getBoundingClientRect().top) > 20) return { word: w, first: j, second: i };
+				if (j === undefined) seen.set(w, i);
+			}
+		return null;
+	});
+	expect(found, 'page 1 says some word on two lines').not.toBeNull();
+	const { word, first, second } = found!;
+	await page.getByTestId('tool-annotate').click();
+	// the second occurrence alone selected, as a person's drag selects it
+	await page.locator('[data-testid="pdf-page-1"] .text').evaluate(
+		(layer, at) => {
+			const spans = [...layer.querySelectorAll('span')].filter((s) => s.childNodes.length === 1 && s.firstChild!.nodeType === Node.TEXT_NODE);
+			const node = spans[at.second].firstChild!;
+			const from = node.textContent!.indexOf(at.word);
+			const range = document.createRange();
+			range.setStart(node, from);
+			range.setEnd(node, from + at.word.length);
+			const sel = window.getSelection()!;
+			sel.removeAllRanges();
+			sel.addRange(range);
+			spans[at.second].dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+		},
+		{ word, second }
+	);
+	await expect.poll(() => marksOf(served, ref).filter((a) => !before.includes(a.id)).length).toBe(1);
+	const id = marksOf(served, ref).find((a) => !before.includes(a.id))!.id;
+	/** The middle, top to bottom, of the line that holds the `n`th occurrence's span. */
+	const middle = (n: number) =>
+		page.locator('[data-testid="pdf-page-1"] .text').evaluate((layer, i) => {
+			const spans = [...layer.querySelectorAll('span')].filter((s) => s.childNodes.length === 1 && s.firstChild!.nodeType === Node.TEXT_NODE);
+			const r = spans[i].getBoundingClientRect();
+			return r.top + r.height / 2;
+		}, n);
+	const stands = async () => {
+		const at = (await page.getByTestId(`page-mark-${id}`).boundingBox())!;
+		const y = at.y + at.height / 2;
+		return Math.abs(y - (await middle(second))) < Math.abs(y - (await middle(first)));
+	};
+	await expect.poll(stands, 'drawn on the line selected').toBe(true);
+	await page.reload();
+	await expect.poll(() => page.locator('[data-testid="pdf-page-1"] .text span').count()).toBeGreaterThan(10);
+	await expect(page.getByTestId(`page-mark-${id}`)).toHaveCount(1);
+	await expect.poll(stands, 'after a reload, still on the line selected').toBe(true);
+});
+
 test("one reader: a work's notes are drawn alike in the Library's tab and in its pane in Docs, and one made on words in either is recorded on the work, counted in the other and drawn there", async ({ page, served }) => {
 	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	const before = marksOf(served, ref).map((a) => a.id);
