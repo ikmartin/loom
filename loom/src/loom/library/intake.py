@@ -38,7 +38,7 @@ from loom.library.entries import (
 from loom.library.node import SUFFIX, Node, NodeUnreadable, read_node
 from loom.library.references import Minter, attach, make
 from loom.library.store import NodeRefused, folder, remove_node
-from loom.paths import INCOMING, LIBRARY_LOCK
+from loom.paths import ID_LOCK, INCOMING, LIBRARY_LOCK
 from loom.records.ids import draw
 
 if TYPE_CHECKING:
@@ -326,10 +326,10 @@ def _remove_drop(d: Path) -> None:
 
 @contextmanager
 def library_lock(root: Path) -> Iterator[None]:
-    """Hold the lock every writer of the library holds, across processes; reentrant within a thread."""
+    """Hold the locks the intake writes under, across processes and reentrant within a thread: the id lock, since a work it makes draws a stem as every command that draws an id does, then the library's, the order gathering and the carry-over take them in."""
     from loom.locks import locked
 
-    with locked(root / LIBRARY_LOCK):
+    with locked(root / ID_LOCK), locked(root / LIBRARY_LOCK):
         yield
 
 
@@ -480,7 +480,8 @@ def take(
     rows: list[Row] = []
     for n, item in enumerate(items):
         with library_lock(root) if write else nullcontext():
-            t.lib = Library.read(root)
+            # what is seen is read again under the locks for each item, since another writer may have drawn stems between two items
+            t.lib, t.minter = Library.read(root), None
             if item.text:
                 rows.extend(_take_text(t, n, item.text))
             else:

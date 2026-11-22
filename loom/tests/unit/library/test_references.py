@@ -141,3 +141,13 @@ def test_a_preamble_s_at_begin_document_and_conditionals_are_taken_as_check_10_r
     node = macros_node("tq-00A1-ref", items)
     assert node is not None
     assert check_file(node.file_name, node_bytes(node))[1] == []
+
+
+def test_a_made_reference_never_replaces_a_node_of_its_id(tmp_path: Path) -> None:
+    """The third look's M-26: a stem another writer gave meanwhile is refused loudly, and the work there stays as it was."""
+    first = make(tmp_path, "@article{First1, title={The first}}\n", Minter("tq", []), how="paste", **ME)
+    before = (tmp_path / ".loom/library/nodes" / f"{first.id}.node").read_bytes()
+    with pytest.raises(NodeRefused):
+        make(tmp_path, "@article{Second2, title={The second}}\n", Minter("tq", []), how="paste", **ME)
+    assert (tmp_path / ".loom/library/nodes" / f"{first.id}.node").read_bytes() == before
+    assert [a["key"] for a in log.replay(tmp_path).lines if a["event"] == "made"] == ["First1"], "nothing recorded"
