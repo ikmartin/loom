@@ -228,7 +228,10 @@ export function round6(): Fixture {
 	const okaforRef = REF.okafor;
 	const results: Record<string, Res[]> = { [smithRef]: SMITH.map((r) => ({ ...r })), [REF.arden24]: ARDEN.map((r) => ({ ...r })) };
 	const marks: Record<string, DigestMark[]> = { [okaforRef]: [{ mark: 'a-2026-11-20-okf6', page: 6, words: 'Lemma 2.4. Let ⪯ be a median order…' }] };
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review: review6(REF), checked: [], notes: notes6(REF), network: 'asked', taken: {} };
+	const review = review6(REF);
+	// a transcribed result's row is beside its work's stored paper, as a digested one's is
+	for (const r of review.rows) if (r.kind === 'check' && 'nodes' in r && r.pdf === null) r.pdf = works.find((w) => w.ref === r.ref)?.holds.pdf ?? null;
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], notes: notes6(REF), network: 'asked', taken: {} };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];
@@ -351,6 +354,12 @@ function transcribedAnswer(f: Fixture, node: string): NodeAnswer | null {
 		macros: null,
 		points: {}
 	};
+}
+
+/** The work a node is of: a digested result's, or one an agent transcribed; '' for none. */
+export function workOfNode(f: Fixture, node: string): string {
+	const digested = Object.keys(f.results).find((r) => f.results[r].some((x) => x.node === node));
+	return digested ?? (TRANSCRIBED[node] ? REF[TRANSCRIBED[node].ref] : '') ?? '';
 }
 
 /** Where each node of a work stands on the pages asked for, placed down the fixture PDF's pages a band each, and each mark to digest as the annotation it is (`library-places`, §3.3): a node's entry is what the digest will add. */

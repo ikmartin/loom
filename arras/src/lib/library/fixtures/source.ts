@@ -2,7 +2,7 @@
 
 import type { Answer, Source } from '../api';
 import type { Gen } from '../types';
-import { addWork, check, checkRows, digest, fixturePdfUrl, lookUp, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, type Fixture } from './round6';
+import { addWork, check, checkRows, digest, fixturePdfUrl, lookUp, nodeAnswer, placesOf, REF, round6, scopesOf, workAnswer, workOfNode, type Fixture } from './round6';
 import { notesAnswer } from './notes6';
 import { formalMarks, formalPlan, growWeb, webFocus, webFragment, webGraph, webGroup, webList, webSearch } from './web6';
 import { ask, attest, body, close, counts, fragmentOf, list, markStub, taskOf, unwithdraw, withdraw } from './review6';
@@ -33,7 +33,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 		},
 		'library-digest-scopes': (b) => (b.all ? ok({ used: 14 }) : ok(scopesOf(f, b.ref as string))),
 		'library-places': (b) => {
-			const ref = (b.ref as string) ?? Object.keys(f.results).find((r) => f.results[r].some((x) => x.node === b.node)) ?? '';
+			const ref = (b.ref as string) ?? workOfNode(f, b.node as string);
 			const work = f.works.find((w) => w.ref === ref);
 			if (!work) return no('no-such-ref');
 			if (!work.holds.pdf) return no('no-document');
