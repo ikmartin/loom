@@ -435,6 +435,8 @@ def _one_comment(
     look: dict[str, Any] | None = None,
     strokes: list[list[float]] | None = None,
     mark: str | None = None,
+    purpose: str | None = None,
+    node: str | None = None,
     dry_run: bool = False,
 ) -> str:
     """Append one review event to the log and describe it; the only writer of review records.
@@ -452,6 +454,8 @@ def _one_comment(
 
         refuse_bad_links(result, root, message)
 
+    if (purpose is not None or node is not None) and (reply or resolve):
+        raise EnvError("a purpose is given a new annotation, not a reply or a resolution")
     if reply or resolve:
         refuse_lost(
             "reply" if reply else "resolve",
@@ -481,6 +485,8 @@ def _one_comment(
         if found is None:
             raise NotFoundError("annotation", f"no annotation {reply}")
         _, parent = found
+        if parent.purpose is not None:
+            raise EnvError(f"{reply} is a mark to digest, a request rather than a note, and takes no reply")
         # on the block the note it answers is on now, which its key may no longer name; on none, as the note is
         placed = _placed(result, parent)
         ann_id = _append_new(
@@ -517,6 +523,10 @@ def _one_comment(
 
     pdf_path = project_pdf(result, target)
     work = None if pdf_path else _work_target(result, target)
+    if purpose is not None:
+        styled["purpose"] = _purpose(purpose, akind, work is not None and page is not None)
+    if node is not None:
+        styled["node"] = _located(node, purpose)
     if pdf_path is not None or (work is not None and (mark or strokes)):
         return _on_pdf_page(
             result, base, records, date, target, message, quote, styled, page, rects, strokes, mark, dry_run=dry_run
@@ -564,6 +574,33 @@ def _one_comment(
         dry_run,
     )
     return f"{ann_id}  {key}  {type_id or 'untyped'}  ({aid})"
+
+
+def _located(node: str, purpose: str | None) -> str:
+    """The stub a mark to digest locates, by its node's id: given only with the purpose `to-digest`, where the person who found the result on the page says which it is."""
+    from loom.evidence.subjects import NODE
+
+    if purpose != "to-digest":
+        raise EnvError("only a mark to digest names the stub it locates; give the purpose to-digest")
+    if not NODE.fullmatch(node):
+        raise EnvError(f"{node!r} is not a node's id")
+    return node
+
+
+def _purpose(purpose: str, akind: str, on_a_works_page: bool) -> str:
+    """A new annotation's purpose (`records.annotations.PURPOSES`), refused unless loom knows it, the person gives it, and it is on a page of a cited work.
+
+    A mark to digest is the person's request that a result on that page be read, which an agent takes up as a task; an agent asks for nothing by marking.
+    """
+    from loom.records.annotations import PURPOSES
+
+    if purpose not in PURPOSES:
+        raise EnvError(f"{purpose!r} is not a purpose of an annotation; loom knows {', '.join(PURPOSES)}")
+    if akind == "agent":
+        raise EnvError("a mark to digest is the person's request; an agent asks with `loom ask`")
+    if not on_a_works_page:
+        raise EnvError("a mark to digest is on a page of a cited work: give the work and its page")
+    return purpose
 
 
 def _placed(result: ScanResult, ann: Any) -> str | None:
@@ -1345,6 +1382,8 @@ def status_payload(result: ScanResult, records: Records) -> dict[str, Any]:
     unplaced: list[dict[str, Any]] = []
     for res in records.resolved(result):
         a = res.annotation
+        if a.purpose is not None:
+            continue  # a mark to digest is a request, listed with the asks, not a note
         if a.anchor is not None or res.work:
             reading.append(
                 {

@@ -44,6 +44,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+# A run's temporary folder is kept only where a test failed, and only the last run's: each holds copies of the example quilts, and several lanes at once had filled the disk with the three runs pytest keeps by default.
+tmp_path_retention_policy = "failed"
+tmp_path_retention_count = 1
 markers = [
   "tex: needs a real TeX distribution (TeX tier)",
   "poppler: needs the real pdftotext for page text and word boxes; TeX stays the shim",

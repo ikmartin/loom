@@ -271,6 +271,65 @@
  {
   "annotations": {
    "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom ask",
+  "description": "Ask the person a question in TEXT, or with --paper for a paper you could not fetch.\n\nA question waits in Review with its choices and a field for the person's own words; once they answer, `loom tasks` shows the answer until your next `loom since`, which reports it. A paper waits in Review with its link, for the person to fetch and add; the request closes once the work holds the document.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "choice": {
+     "description": "One choice the person may pick; up to six. They may always answer in their own words.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "for": {
+     "description": "A draft it is asked for, so the person can see it with that draft's; default the documents that read the place.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "link": {
+     "description": "With --paper: the http or https page you could not fetch it from, which the person opens.",
+     "type": "string"
+    },
+    "on": {
+     "description": "What it is about: a result's label or id, a key, a work's id with :PAGE, or a document's path.",
+     "type": "string"
+    },
+    "paper": {
+     "description": "Ask for a paper you could not fetch, by its reference's id; give --link.",
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    },
+    "want": {
+     "default": "pdf",
+     "description": "With --paper: which document of the work.",
+     "enum": [
+      "pdf",
+      "tex"
+     ],
+     "type": "string"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_ask"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
    "idempotent_hint": true,
    "open_world_hint": false,
    "read_only_hint": false
@@ -555,6 +614,33 @@
    "type": "object"
   },
   "name": "loom_draft"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom evidence",
+  "description": "What is known of a result: its status, and every record about it. NAME is a draft's label or a node's id.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "name": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "name"
+   ],
+   "type": "object"
+  },
+  "name": "loom_evidence"
  },
  {
   "annotations": {
@@ -1395,7 +1481,7 @@
    "read_only_hint": false
   },
   "command": "loom since",
-  "description": "Report what people did since you last looked, and move your marker past it.\n\nPeople's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.",
+  "description": "Report what people did since you last looked, and move your marker past it.\n\nPeople's annotations and replies, whole, with the words they are on; what they resolved, deleted or reopened, and what they kept or discarded of your suggested edits; what they accepted, and every accepted key gone stale, with why; their edits to the research state, as a diff; what they said in a session's transcript; their answers to the questions you asked with `loom ask`; the boxes they set in the viewer, each as it last stood; and each other file the viewer shows that was added, changed or removed, by its path: not a .tex file, what a compile writes beside one, or the research state. Loom cannot tell who changed a file, so your own edits are listed too. Your first look reports what happened since the active session was last opened, and no files, having seen none. The marker is yours alone, one per name and one per session you look as, and kept on this machine only; a session's first look starts where your name's marker stands, and each look moves both. Over MCP the server looks as your conversation's session.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -1607,6 +1693,150 @@
    "type": "object"
   },
   "name": "loom_suggest"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": true,
+   "open_world_hint": false,
+   "read_only_hint": true
+  },
+  "command": "loom tasks",
+  "description": "List what waits for an agent: what a person asked of agents, the questions and papers agents asked of the person, and each answer the person gave that the agent that asked has not seen since its last `loom since`.\n\nNothing is assigned or ranked: take what you can do (`loom tasks take ID`), and say what you produced (`loom tasks done ID --made ID`). An ask closes by what it produces, a stub read or Lean run on its result, whoever produced it.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "all": {
+     "description": "Include asks that are closed or withdrawn.",
+     "type": "boolean"
+    },
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    }
+   },
+   "type": "object"
+  },
+  "name": "loom_tasks"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom tasks answer",
+  "description": "Answer TASK, a question the person asked of an agent, in TEXT.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "task": {
+     "type": "string"
+    },
+    "text": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "task",
+    "text"
+   ],
+   "type": "object"
+  },
+  "name": "loom_tasks_answer"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom tasks done",
+  "description": "Say what you produced for TASK. The task closes when what it asked for exists, which loom checks, not when you say so.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "made": {
+     "description": "What you produced: a node's id, a suggested edit's id. Repeat for each.",
+     "items": {
+      "type": "string"
+     },
+     "type": "array"
+    },
+    "task": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "task"
+   ],
+   "type": "object"
+  },
+  "name": "loom_tasks_done"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom tasks take",
+  "description": "Say that your session is working on TASK, so the person sees it taken; refused while a live session of another works on it. Over MCP your session is your conversation's; in a shell, the active one.",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "task": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "task"
+   ],
+   "type": "object"
+  },
+  "name": "loom_tasks_take"
+ },
+ {
+  "annotations": {
+   "destructive_hint": false,
+   "idempotent_hint": false,
+   "open_world_hint": false,
+   "read_only_hint": false
+  },
+  "command": "loom tasks withdraw",
+  "description": "Withdraw TASK, a question or a paper you asked of the person and no longer need: one you asked, under your name, and in your session where it was asked in one (over MCP your conversation's; in a shell, the active one).",
+  "inputSchema": {
+   "additionalProperties": false,
+   "properties": {
+    "json": {
+     "description": "Print the report as one JSON object.",
+     "type": "boolean"
+    },
+    "task": {
+     "type": "string"
+    }
+   },
+   "required": [
+    "task"
+   ],
+   "type": "object"
+  },
+  "name": "loom_tasks_withdraw"
  },
  {
   "annotations": {

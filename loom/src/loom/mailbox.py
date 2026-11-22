@@ -441,7 +441,12 @@ def pending(root: Path, session: Any, who: str) -> list[dict[str, Any]]:
         a
         for record in records
         for a in record.annotations
-        if a.id not in sent and a.created >= since and a.author_kind == "person" and a.author_id == who
+        if a.id not in sent
+        and a.created >= since
+        and a.author_kind == "person"
+        and a.author_id == who
+        # a mark to digest is a request, which an agent meets as a task (`loom tasks`), not as a note
+        and a.purpose is None
     ]
     # one on a PDF page carries a crop of the page and where it stands now, which want the quilt scanned
     result = None

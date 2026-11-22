@@ -1,0 +1,29 @@
+{
+ "answer": {
+  "agents": 1,
+  "drafts": [
+   {
+    "doc": "drafting/main.tex",
+    "n": 12
+   },
+   {
+    "doc": "drafting/talk.tex",
+    "n": 3
+   }
+  ],
+  "everything": 14,
+  "kinds": {
+   "accepted-changed": 5,
+   "attest": 1,
+   "attested-changed": 1,
+   "check": 0,
+   "cited": 0,
+   "edits": 5,
+   "fetch": 1,
+   "questions": 1
+  },
+  "ok": true
+ },
+ "endpoint": "review-counts",
+ "request": {}
+}

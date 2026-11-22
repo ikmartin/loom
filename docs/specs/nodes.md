@@ -163,7 +163,7 @@ The target of `uses` and of `mentions` is any node but a macros node. A use or a
 
 **Read from Lean by loom**, and written by nobody: a declaration `states` a node or part of one; a declaration `supports` a node; a node is `assumed`, stated as an axiom with no proof; one declaration `depends` on another.
 
-The formats of the records, and of what loom reads from Lean, are not specified on this page.
+The records of evidence and what loom reads from Lean are specified in `evidence.md`; the records of `same`, `generalises` and `contradict` are not specified yet.
 
 ## 10. What a file does not hold
 

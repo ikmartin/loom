@@ -13,7 +13,6 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 | path | holds | owner |
 |---|---|---|
 | `.loom/library/suggested.jsonl` | the works an agent suggested | the library |
-| `.loom/records/formal/`, with `evidence.jsonl` and `attest.toml` | formal evidence, and the person's attestations | formalization |
 
 Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the list of recent quilts, the switch that turns formalization on for this machine) are their owner's alone.
 
@@ -32,7 +31,7 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | `sync-fetch` | fetches what changed there | Overleaf |
 | `changed-seen` | marks what changed as seen, one row or all | Review |
 
-Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `sync-` to Overleaf; `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch.
+Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `sync-` to Overleaf; `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch; `web-` to the Web, whose reads are built (`write-api.md`).
 
 ## Refusals, and what a write answers
 

@@ -1,0 +1,36 @@
+{
+ "answer": {
+  "body": {},
+  "ok": true,
+  "row": {
+   "by": "Probe Agent",
+   "choices": [
+    "the maps",
+    "the involutions"
+   ],
+   "docs": [
+    "drafting/main.tex"
+   ],
+   "kind": "questions",
+   "on": {
+    "label": "sy-0007"
+   },
+   "question": "t-2026-09-16-zrp6q0",
+   "quote": null,
+   "row": "questions:t-2026-09-16-zrp6q0",
+   "text": "The lemma's composite: of the two maps or of their involutions?",
+   "under": {
+    "on": {
+     "node": "sy-00B7"
+    },
+    "ref": null,
+    "task": "t-2026-09-16-vh9bks",
+    "what": "read"
+   }
+  }
+ },
+ "endpoint": "review-row",
+ "request": {
+  "row": "questions:t-2026-09-16-zrp6q0"
+ }
+}

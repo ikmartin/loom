@@ -67,6 +67,8 @@ const TITLES: Record<string, string> = {
 	'detached-annotation': 'Annotations lost their place',
 	'previous-key-match': 'An acceptance matches a renamed proof',
 	'foreign-annotations': 'An unreadable line in the annotation log',
+	'foreign-evidence': 'An unreadable line in the evidence log',
+	'foreign-asks': 'An unreadable line in the log of asks',
 	'superseded-file': 'A document a conversion replaced',
 	'history-missing': 'Part of the history is gone',
 	'history-edited': 'The history was edited by hand',

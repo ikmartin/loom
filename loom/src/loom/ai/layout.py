@@ -31,6 +31,8 @@ AGENT_COMMANDS = frozenset(
         "ai annotations", "ai drafts", "ai refresh", "ai orient", "ai mode",
         # the agent opens and names the session it works in, and writes its transcript; closing, resuming and deleting a session stay the author's, because they are decisions about the work rather than part of it
         "session new", "session rename", "session list", "session say",
+        # what is asked of agents and what they ask of the person, and what is known of a result; comparing, attesting and answering an agent are the person's
+        "tasks", "tasks take", "tasks done", "tasks answer", "tasks withdraw", "ask", "evidence",
         # the MCP server an agent's app starts, often from a shell that already marks an agent
         "mcp",
     }
@@ -41,6 +43,7 @@ ACTS: dict[str, str] = {
         (
             "deps", "doctor", "downstream", "here", "history", "history show", "history verify", "link", "lint", "search",
             "source", "status", "changes", "ai annotations", "ai drafts", "ai mode", "ai orient", "session list",
+            "tasks", "evidence",
         ),
         "read",
     ),
@@ -48,7 +51,8 @@ ACTS: dict[str, str] = {
     **dict.fromkeys(
         (
             "annotate", "suggest", "draft", "new", "since", "ai refresh", "session new", "session rename", "session say",
-            "mcp",
+            "mcp", "ask", "tasks take", "tasks done",
+            "tasks answer", "tasks withdraw",
         ),
         "write",
     ),

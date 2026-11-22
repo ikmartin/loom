@@ -88,6 +88,7 @@ Loom is still how anything durable is recorded. A fault you find while answering
   - `loom ai orient`
   - `loom ai refresh`
   - `loom annotate`
+  - `loom ask`
   - `loom build`
   - `loom changes`
   - `loom check`
@@ -96,6 +97,7 @@ Loom is still how anything durable is recorded. A fault you find while answering
   - `loom doctor`
   - `loom downstream`
   - `loom draft`
+  - `loom evidence`
   - `loom here`
   - `loom history`
   - `loom history show`
@@ -125,6 +127,11 @@ Loom is still how anything durable is recorded. A fault you find while answering
   - `loom source`
   - `loom status`
   - `loom suggest`
+  - `loom tasks`
+  - `loom tasks answer`
+  - `loom tasks done`
+  - `loom tasks take`
+  - `loom tasks withdraw`
   - `loom write`
 
   `loom new` without `--print` writes a node file; give it `--print`. `loom --help` and `--help` on any of these say what it takes.

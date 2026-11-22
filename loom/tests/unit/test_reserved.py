@@ -46,7 +46,7 @@ def test_every_reserved_path_is_named_once_and_kept_from_agents() -> None:
         assert rel in named, f"{path} is reserved and loom.paths does not name it"
         assert not any(rel == place or rel.startswith(place + "/") for place in AGENT_PLACES), path
         assert denied_by(QuiltConfig(), rel if "." in Path(rel).name else f"{rel}/any") is not None, path
-    for inside in (paths.FORMAL_EVIDENCE, paths.FORMAL_ATTESTED, paths.SUGGESTED_WORKS):
+    for inside in (paths.SUGGESTED_WORKS,):
         assert denied_by(QuiltConfig(), inside) is not None, inside
 
 

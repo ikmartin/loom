@@ -73,6 +73,9 @@ LOOM: dict[str, Code] = {
     "loom:main-not-found": Code("warning", MODEL),
     "loom:main-unset": Code("info", MODEL),
     "loom:foreign-annotations": Code("warning", INTERNAL),
+    # a line of the evidence log, or of the asks log, that is not one of its records, skipped as `loom:foreign-annotations` skips one of the annotation log
+    "loom:foreign-evidence": Code("warning", INTERNAL),
+    "loom:foreign-asks": Code("warning", INTERNAL),
     "loom:repeated-id": Code("warning", INTERNAL),
     "loom:annotation-types": Code("warning", INTERNAL),
     # a document's last compile, read from its log: TeX's word, which no setting silences
