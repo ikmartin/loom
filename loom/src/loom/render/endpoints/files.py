@@ -112,7 +112,6 @@ def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
     result = _scan(root)
     shown = Shown.of(quilt)
     own = {m for m in result.masters if result.document_role(m) == "person"}
-    tracked = quilt.config.track_edits
     try:
         save(quilt, changes, masters=own, shown=lambda rel: (root / rel).is_file() and shown.is_shown(rel))
     except ConfigRefused as exc:
@@ -121,15 +120,7 @@ def _settings(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
     except OSError as exc:
         raise ApiError("settings-refused", str(exc), status=409) from exc
-    said = f"saved {', '.join(changes)} to config.toml"
-    who = reviewer_identity(root)[0]
-    if changes.get("review.track_edits") is True and not tracked and who:
-        from loom.looks import take
-
-        # tracking starts now, not from a look taken long ago
-        take(load_quilt(root), who)
-        said += "; took your look, so edits from now on wait in Your Changes"
-    return {"ok": True, "result": said}
+    return {"ok": True, "result": f"saved {', '.join(changes)} to config.toml"}
 
 
 def _reviewer_settings(root: Path, body: dict[str, Any]) -> dict[str, Any]:

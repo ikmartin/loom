@@ -1,4 +1,4 @@
-"""One list of what waits on the person: the open suggested edits and, where the quilt tracks edits (`[review] track_edits`), the in-place edits to the open files since their look, cut by words; and the two verbs on each, keep and discard.
+"""One list of what waits on the person: the open suggested edits and the in-place edits to the open files since their look, cut by words; and the two verbs on each, keep and discard.
 
 An in-place change is a run of words that differs between the person's look (`looks.py`) and the file now: words the diff finds apart by fewer than `NEAR` words are one change, never across a blank line, and a file new or gone since the look is one change. Its id is `c-` and eight hex digits of a hash of its path, its old and new text and the 32 characters of the look before it, so it stands while it does, whatever changes elsewhere. A suggested edit is its record's (`records/edits.py`), placed in its key's text now; several on one key combine (`edits.compose`).
 
@@ -371,11 +371,9 @@ _TEXTS: dict[tuple[str, str], tuple[Any, int, Any]] = {}
 
 
 def look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, str | None]] | None:
-    """`who`'s look as texts, `(look, now)` by path, for the files that changed since it; None before a first look, and when the quilt does not track edits (`[review] track_edits`). A file the scan read is its text in the scan, not on disk now. Read once for each scan and each state of the look."""
+    """`who`'s look as texts, `(look, now)` by path, for the files that changed since it; None before a first look. A file the scan read is its text in the scan, not on disk now. Read once for each scan and each state of the look."""
     from loom.looks import look_path
 
-    if not result.quilt.config.track_edits:
-        return None
     try:
         stamp = look_path(result.quilt.root, who).stat().st_mtime_ns if who else 0
     except OSError:
@@ -391,7 +389,8 @@ def look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, 
 
 def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str, str | None]] | None:
     from loom.files import is_latex_aux
-    from loom.looks import open_texts, read_look
+    from loom.looks import held as looks_held
+    from loom.looks import read_look, watched_texts, watching
     from loom.records.snapshots import read_raw
     from loom.scan.hashing import sha256
 
@@ -399,7 +398,9 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     look = read_look(quilt.root, who) if who else None
     if look is None:
         return None
-    current = open_texts(quilt)
+    # only the places agents may edit: one they are denied is the person's own, and a change there is never listed
+    current = watched_texts(quilt)
+    watched = watching(quilt.config)
     # a file the scan read is as the scan read it: one saved since is the next build's, so a change is never cut from one reading of a file and drawn against another
     for rel, src in result.files.items():
         text = current.get(rel)
@@ -408,8 +409,8 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
     then: dict[str, str] = {}
     now: dict[str, str | None] = {}
     # a look taken before LaTeX's auxiliary files were left out of it may still hold them
-    for rel in sorted(set(current) | {f for f in look.files if not is_latex_aux(f)}):
-        held = look.files.get(rel)
+    for rel in sorted(set(current) | {f for f in look.files if not is_latex_aux(f) and watched(f)}):
+        held = looks_held(look, rel)
         text = current.get(rel)
         if held == (sha256(text) if text is not None else None):
             continue
@@ -419,7 +420,7 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
 
 
 def in_place(result: ScanResult, who: str | None = None) -> list[Pending]:
-    """The in-place changes since `who`'s look (the reviewer's by default), by path and place; empty before a first look, and when the quilt does not track edits."""
+    """The in-place changes since `who`'s look (the reviewer's by default), by path and place; empty before a first look."""
     from loom.history.acts import documents_reaching
 
     who = reviewer(result) if who is None else who
@@ -1333,16 +1334,14 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
 def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:
     """Give `who`'s look of `path` the undo's own change, with no listing of the person's changes: where the look held the file as it was before the undo, it holds the file now; else each stretch the undo wrote over is carried to its place in the look (`writes.carry`) and the same words put there. False when a stretch's place in the look is not established, for `absorb` to do it by listing."""
     from loom import writes
-    from loom.looks import _write, read_look
+    from loom.looks import _write, read_look, watching
     from loom.records.snapshots import read_raw, write_raw
     from loom.scan.hashing import sha256
 
-    if not quilt.config.track_edits:
-        return True
     look = read_look(quilt.root, who)
-    if look is None:
-        return True
-    held = look.files.get(path)
+    if look is None or not watching(quilt.config)(path):
+        return True  # no look yet, or a place agents are denied, where nothing is listed
+    held = look.files.get(path) or None
     if held is None:
         return False
     if held == sha256(was):
@@ -1443,7 +1442,9 @@ def discard(
                         who,
                         path,
                         then.get(path, ""),
-                        path in looked,
+                        bool(
+                            looked.get(path)
+                        ),  # a file the look holds as absent at it (`looks.ABSENT`) is one it did not hold
                         [p.id for p in edits if p.path == path],
                         why,
                         writer,

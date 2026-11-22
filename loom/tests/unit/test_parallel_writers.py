@@ -22,7 +22,7 @@ from loom.locks import locked
 from loom.paths import ANNOTATION_LOG
 from loom.sessions import INDEX, set_active
 from tests.helpers import ok
-from tests.unit._quilts import demo, new_session
+from tests.unit._quilts import demo, new_session, opened
 
 AGENT = "X Agent"
 N = 6
@@ -91,7 +91,7 @@ def events(path: Path) -> list[dict[str, object]]:
 
 def test_parallel_new_each_make_a_file_of_their_own_or_refuse_cleanly(tmp_path: Path) -> None:
     """Measured before the lock: two calls both reported success in ten trials of twelve, and one file existed."""
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
     nodes = q / "drafting" / "nodes"
     before = {p.name for p in nodes.glob("*.tex")}
     results = racing(q, (["new", "definition", f"Race {i}", "--as", AGENT, "--json"] for i in range(N)))
@@ -117,7 +117,7 @@ def test_a_new_node_never_overwrites_a_file_that_arrived_after_the_scan(
     """The last line of defence, for a filesystem with no locks or a person saving at that moment: the file is created exclusively."""
     from tests.helpers import refused
 
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
     arrived = q / "drafting" / "nodes" / "dm-0012.tex"
     real = Path.exists
 
@@ -221,7 +221,7 @@ def test_parallel_drafts_of_one_scope_leave_one_copy_and_clean_refusals(tmp_path
 
 def test_parallel_new_and_fork_draw_from_one_counter(tmp_path: Path) -> None:
     """A fork writes a node file named by its new id, as `new` does, so the two take the same lock."""
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
     calls = [["new", "definition", f"Race {i}", "--as", AGENT, "--json"] for i in range(2)]
     calls += [["fork", key, "--in", "drafting/main.tex", "--json"] for key in ("dm-0001", "dm-0002")]
     results = racing(q, calls)

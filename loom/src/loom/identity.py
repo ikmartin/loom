@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from pathlib import Path
 
 from loom.errors import EnvError
 
 #: Environment variables an agent's shell carries. `AI_AGENT` is the generic one; the rest name a particular tool.
-#: Loom reads them only to refuse what an agent may not do (the author's verbs, a protected path, a write signed with a name that does not say it is an agent's), never to change what any other command does.
+#: Loom reads them to refuse what an agent may not do (the author's verbs, a protected path, a write signed with a name that does not say it is an agent's), and to tell whose act a command run in that shell is (`agents_act`), never to change what any other command does.
 AGENT_MARKERS = ("AI_AGENT", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CODEX_SANDBOX", "CURSOR_AGENT", "GEMINI_CLI")
 
 
@@ -29,6 +32,29 @@ AGENT_NAMES = {
 }
 
 
+#: Set while a thread serves the viewer's request (`at_the_viewer`): a write over HTTP is a person at a browser, whatever shell started the server.
+_AT_VIEWER: ContextVar[bool] = ContextVar("loom_at_the_viewer", default=False)
+
+
+@contextmanager
+def at_the_viewer() -> Iterator[None]:
+    """Mark what this thread does as a request from the viewer, a person at a browser, for `agents_act`: the server's own shell, an agent's terminal perhaps, says nothing about who asked."""
+    token = _AT_VIEWER.set(True)
+    try:
+        yield
+    finally:
+        _AT_VIEWER.reset(token)
+
+
+def agents_act(actor: str | None) -> bool:
+    """Whether an act was an agent's: one made under a name that says so; never one the viewer asked for (`at_the_viewer`); else one made in a shell an agent runs (`agent_marker`), since a command there names the author by default (`history.ledger.actor_for`)."""
+    if actor and is_agent(actor):
+        return True
+    if _AT_VIEWER.get():
+        return False
+    return agent_marker() is not None
+
+
 def agent_name() -> str | None:
     """What the agent running this shell is called, or None when a person is."""
     import os
@@ -40,22 +66,22 @@ def name_yourself() -> str:
     """How a refusal tells the agent running this shell to sign: the name its app goes by where a marker says, else an example."""
     named = agent_name()
     example = named if named and named != AGENT_NAMES["AI_AGENT"] else "Referee Agent"
-    return f'Name yourself with --as, including Agent or AI in the name, so the record says what wrote it: --as "{example}".'
+    return f'Name yourself with --as, a name ending in Agent, so the record says what wrote it: --as "{example}".'
 
 
-#: What makes a declared name an agent's. An agent is instructed to include one when it names itself, so that a record
-#: says what wrote it without loom having to guess from the environment it happened to run in.
-AGENT_WORDS = ("agent", "ai", "bot", "assistant")
+#: The last word of every name loom gives an agent (`AGENT_NAMES`, `ai.clients.Client.agent`), and so of the name an agent signs with.
+AGENT_WORD = "agent"
 
 
 def is_agent(name: str) -> bool:
-    """Whether a declared identity is an agent's, by the word it was asked to include in its own name.
+    """Whether a declared identity is an agent's: one formed as loom forms the names it gives the agents it sets up (`AGENT_NAMES`, `ai.clients.Client.agent`), its last word `Agent`, however punctuated, `Referee (Agent)` as the showcase writes it included.
 
-    The words are matched however they are punctuated, because the form loom's own documents ask for is `Referee (Agent)` and the showcase writes exactly that. Splitting on whitespace and hyphens made `(agent)` a different word from `agent`, so the name the orientation teaches was read as a person's: the session picker showed a parked agent as `⟨person⟩`, and `refuse_under_agent` let that name run `loom accept` and `loom library verify`. Found by the reading study, 2026-09-21.
+    A word elsewhere in a name says nothing of whose it is: `Ai Tanaka` is a person, and so is `Claude (AI)`.
     """
     import re
 
-    return any(w in re.findall(r"[a-z0-9]+", name.lower()) for w in AGENT_WORDS)
+    words = re.findall(r"[a-z0-9]+", name.lower())
+    return bool(words) and words[-1] == AGENT_WORD
 
 
 def writer(root: Path, declared: str | None) -> tuple[str, str]:
@@ -66,7 +92,7 @@ def writer(root: Path, declared: str | None) -> tuple[str, str]:
     root : Path
         The quilt.
     declared : str, optional
-        What `--as` said. An agent names itself, with `Agent` or `AI` in the name.
+        What `--as` said. An agent's name ends in `Agent`.
 
     Returns
     -------

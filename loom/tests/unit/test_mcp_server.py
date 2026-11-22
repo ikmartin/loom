@@ -13,7 +13,7 @@ import pytest
 
 from loom.ai.layout import MODES
 from tests.helpers import refused
-from tests.unit._quilts import demo, showcase
+from tests.unit._quilts import demo, opened, showcase
 
 AGENT = "Test Agent"
 
@@ -237,7 +237,7 @@ def test_two_servers_on_one_quilt_never_lose_a_node(tmp_path: Path) -> None:
     from mcp import Client
     from mcp.client.stdio import StdioServerParameters
 
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))  # agents may write new nodes beside the paper
     nodes = q / "drafting" / "nodes"
     before = {p.name for p in nodes.glob("*.tex")}
     calls = 6

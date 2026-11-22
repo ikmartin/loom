@@ -162,7 +162,11 @@ class Jobs:
             with self._lock:
                 job.begin()
             try:
-                report = self._run(job, self._told(job))
+                from loom.identity import at_the_viewer
+
+                # a run the viewer started is the person's, whichever shell started the server
+                with at_the_viewer():
+                    report = self._run(job, self._told(job))
             except Exception as exc:  # noqa: BLE001
                 # a run that fails is the person's to read, not a dead worker: the next job still runs
                 with self._lock:

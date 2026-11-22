@@ -496,8 +496,8 @@ def test_compile_with_an_edit_substitutes_its_text(tmp_path: Path) -> None:
     assert "at most two points" in region and "one or two points" not in region
 
 
-def test_keep_all_keeps_the_suggested_edits_where_edits_in_place_are_not_tracked(tmp_path: Path) -> None:
-    """With no look and no tracking, Keep all has no look to take first: it keeps what waits."""
+def test_keep_all_with_no_look_takes_the_first_and_keeps_the_suggested_edits(tmp_path: Path) -> None:
+    """With no look nothing in place waits: Keep all takes the first look, then keeps the suggestions that do."""
     from loom.render.api import handle
     from loom.scan.quilt import save_author
 
@@ -505,7 +505,9 @@ def test_keep_all_keeps_the_suggested_edits_where_edits_in_place_are_not_tracked
     q = demo(tmp_path)
     a = suggest(q, "--quote", "one or two points", "--with", "at most two points")
     said = handle(q, "change-keep", {"all": True, "author": "Tom"})
-    assert a in said["done"] and "first look" not in said["result"]
+    assert a in said["done"] and said["result"].startswith(
+        "took your first look; kept 2 changes"
+    )  # the demo's own as well
     assert "at most two points" in (q / LEMMA).read_text()
 
 

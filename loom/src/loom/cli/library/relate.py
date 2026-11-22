@@ -33,7 +33,7 @@ from loom.refs.links import KINDS
     "who",
     default=None,
     metavar="NAME",
-    help="Who asserts it; an agent names itself, with Agent or AI in the name.",
+    help="Who asserts it; an agent's name ends in Agent.",
 )
 @click.option("--dry-run", is_flag=True, help="Check everything and say what would change, writing nothing.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")

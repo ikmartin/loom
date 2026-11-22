@@ -538,3 +538,86 @@ def test_a_page_saved_after_its_base_was_checked_is_never_written_over(
         write_page(scan(q), page, "The agent's whole page.\n", actor="Some Agent", session=None, seen=seen)
     assert refused.value.code == "changed" and "has changed since you read it" in str(refused.value)
     assert "The person's own line." in (q.root / page.path).read_text(encoding="utf-8")
+
+
+# ---- the person's look follows their act (P-1) ------------------------------------------------------------------
+
+
+def looked_by_the_person(q, monkeypatch: pytest.MonkeyPatch) -> str:  # type: ignore[no-untyped-def]
+    from loom.looks import take
+    from loom.scan.quilt import reviewer_identity, save_author
+
+    if not reviewer_identity(q.root)[0]:
+        save_author("Tester")
+    who = reviewer_identity(q.root)[0]
+    take(q, who)
+    return who
+
+
+def test_an_adoption_the_person_takes_in_is_not_listed_back_to_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.pending import in_place
+
+    q, token = ready(tmp_path)
+    who = looked_by_the_person(q, monkeypatch)
+    incorporate(scan(q), COPY, token)
+    assert [p.path for p in in_place(scan(q), who)] == []
+
+
+def test_a_pull_the_person_takes_in_is_not_listed_back_and_cannot_be_discarded_behind_its_record(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    compiled: list[str],  # noqa: F811
+) -> None:
+    from loom.pending import in_place
+
+    q, state = pulled(tmp_path)
+    who = looked_by_the_person(q, monkeypatch)
+    sync.incorporate(q, state)
+    assert [p.path for p in in_place(scan(q), who)] == []
+
+
+@pytest.mark.parametrize(
+    "when", ["as its look follows", "as its look follows, recovered in an agent's shell", "before done", "after done"]
+)
+def test_an_adoption_cut_short_at_its_end_leaves_no_row_of_its_own_words(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, when: str
+) -> None:
+    """An adoption's words go into the person's look before its `done` is written. A crash before the look follows, or before `done`, is finished by recovery, which follows the look as the act's line says whose it was, whatever shell recovery runs in; one after `done` finds it followed. The agent's edit waiting in the same file stays listed, and the adoption's own words never come back as a row (R2-3, R2-2)."""
+    from loom.looks import take
+    from loom.pending import in_place
+
+    q = made(tmp_path, TEXT)
+    edit_copy(q, "First statement.", "Proposal.")
+    take(q, "Tester")
+    doc = q.root / DOC
+    # far enough from the adoption's line that the two are cut as two changes
+    doc.write_text(doc.read_text().replace("\\end{document}", "An agent's closing word.\n\\end{document}"))
+    token = prepare(scan(q), COPY)["token"]
+    real = writes._append_journal
+
+    def die_at_done(root: Path, entry: dict, *, full: bool = False) -> tuple[int, int]:
+        if entry.get("event") == "done" and str(entry.get("act", "")).startswith("adopt:"):
+            if when == "after done":
+                real(root, entry, full=full)
+            raise Died
+        return real(root, entry, full=full)
+
+    def die_at_look(*_a: object, **_k: object) -> None:
+        raise Died
+
+    if when.startswith("as its look follows"):
+        monkeypatch.setattr(writes, "_follow_look", die_at_look)
+    else:
+        monkeypatch.setattr(writes, "_append_journal", die_at_done)
+    with pytest.raises(Died):
+        incorporate(scan(q), COPY, token)
+    monkeypatch.undo()
+    if "agent's shell" in when:
+        monkeypatch.setenv("CLAUDECODE", "1")
+    recovered(q)
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    rows = in_place(scan(q), "Tester")
+    assert [r.new.strip() for r in rows] == ["An agent's closing word."], [r.new for r in rows]
+    assert "Proposal." in doc.read_text() and not any("Proposal" in r.new for r in rows)

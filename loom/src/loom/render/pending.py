@@ -496,9 +496,17 @@ def attach_pending(
     from loom.records.store import render_markdown
 
     who = reviewer(result)
-    look = read_look(result.quilt.root, who) if who and result.quilt.config.track_edits else None
+    look = read_look(result.quilt.root, who) if who else None
     if look is not None:
-        manifest["changes_since"] = {"who": look.who, "when": look.when}
+        from loom.agents import how_far_deny_holds
+        from loom.looks import unwatched
+
+        manifest["changes_since"] = (
+            {"who": look.who, "when": look.when}
+            | ({"carried": look.carried} if look.carried else {})
+            # what the look leaves to the person, which Review names so an empty list is not read as nothing changed, and how far that holds
+            | {"unwatched": unwatched(result.quilt.config), "holds": how_far_deny_holds(result.quilt.root)}
+        )
     changes = (in_place(result, who) if who else []) + suggested(result)
     texts = look_texts(result, who) if who else None
     then = texts[0] if texts else {}

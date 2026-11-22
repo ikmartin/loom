@@ -1,6 +1,6 @@
 // The Chat's transcript against a stubbed network: the build's pages under `build/transcripts/`, and a publisher's `/_api/events` that says what landed since a sequence number.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Transcript, type ChatEvent } from './transcript.svelte';
+import { Transcript, isAgent, type ChatEvent } from './transcript.svelte';
 
 const ev = (seq: number): ChatEvent => ({ seq, kind: 'message', who: 'Ann', when: '2026-09-24T10:00:00Z', body: `m${seq}` });
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
@@ -91,5 +91,12 @@ describe('the latest sequence number', () => {
 		expect(await new Transcript('s-1').latest()).toBeNull();
 		network({}, () => ({ events: [] }));
 		expect(await new Transcript('s-1').latest()).toBeNull();
+	});
+});
+
+describe('isAgent', () => {
+	it('reads a name as an agent\'s only by its last word, Agent, as loom does', () => {
+		for (const name of ['Claude Code Agent', 'Referee (Agent)', 'Referee [Agent]', 'referee-agent', 'agent']) expect(isAgent(name), name).toBe(true);
+		for (const name of ['Ai Tanaka', 'Agent Smith', 'Claude (AI)', 'bot', 'Assistant', 'A. Author', '']) expect(isAgent(name), name).toBe(false);
 	});
 });

@@ -9,13 +9,17 @@ import hashlib
 import json
 import os
 import stat
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
+
+if TYPE_CHECKING:
+    from loom.ai.clients import Client
 
 #: The modes loom ships, in the order the index lists them, read through `modes` alone. Each file's `When it fits:` line is the index's entry for it, the one copy; a file in a quilt's `.loom/agents/instructions/modes/` whose name is not here is not a mode, so one loom no longer ships is inert.
 MODES = ["quick", "question", "audit", "referee", "review", "simplify", "flow", "draft", "ingest"]
@@ -428,6 +432,51 @@ def codex_rules() -> str:
     return "\n".join(head + body) + "\n"
 
 
+def _claude_settings(config: QuiltConfig, shell: bool) -> str:
+    return permissions_json(config, shell=shell)
+
+
+def _codex_rules(config: QuiltConfig, shell: bool) -> str:
+    return codex_rules()
+
+
+def _claude_holds(root: Path, config: QuiltConfig) -> bool:
+    """Whether Claude Code's settings in the quilt at `root` refuse an edit in every place `config`'s list names, as they stand now: a file loom writes into (`settings_left`), whose `deny` holds each of loom's `Edit` rules for the list."""
+    from loom.agents import claude_denies
+
+    if settings_left(root, config):
+        return False
+    try:
+        data = json.loads((read_plain(root, CLAUDE_SETTINGS) or "").removeprefix("\ufeff"))
+        deny = set(data["permissions"]["deny"])
+    except (ValueError, KeyError, TypeError):
+        return False
+    return {f"Edit({d})" for d in claude_denies(config)} <= deny
+
+
+#: Each permission file loom writes, by quilt-relative path: what writes it, and, for one that carries the `[agents] deny` list so that the app reading it refuses an agent's own edit there, what says whether the file on disk holds the list now; None for one that cannot. Claude Code's settings render the list as `Edit` denies; Codex's rules are command prefixes, which govern only the shell.
+PERMISSION_WRITERS: dict[str, tuple[Callable[[QuiltConfig, bool], str], Callable[[Path, QuiltConfig], bool] | None]] = {
+    CLAUDE_SETTINGS: (_claude_settings, _claude_holds),
+    CODEX_RULES: (_codex_rules, None),
+}
+
+
+def holds_deny(client: Client) -> bool:
+    """Whether the permission file loom writes for `client`'s app can carry the `[agents] deny` list (`PERMISSION_WRITERS`); an app with none is only told the list."""
+    return (
+        client.permissions is not None
+        and PERMISSION_WRITERS.get(client.permissions, (_codex_rules, None))[1] is not None
+    )
+
+
+def holds_deny_now(root: Path, config: QuiltConfig, client: Client) -> bool:
+    """Whether `client`'s app is refused an edit in the places `config`'s list names by its permission file as it stands in the quilt at `root`: one loom writes that carries the list and holds it now, so a list changed by hand since the file was written, or a file loom leaves alone, holds the app to nothing."""
+    if not holds_deny(client) or client.permissions is None:
+        return False
+    check = PERMISSION_WRITERS[client.permissions][1]
+    return check is not None and check(root, config)
+
+
 def vendor_files(
     config: QuiltConfig,
     *,
@@ -442,8 +491,7 @@ def vendor_files(
     from loom.ai.clients import PROJECT
 
     wanted = {c.permissions for c in PROJECT if c.permissions and (apps is None or c.key in apps)}
-    made = {CLAUDE_SETTINGS: lambda: permissions_json(config, shell=shell), CODEX_RULES: codex_rules}
-    out = {rel: make() for rel, make in made.items() if rel in wanted}
+    out = {rel: write(config, shell) for rel, (write, _) in PERMISSION_WRITERS.items() if rel in wanted}
     if root is not None and CLAUDE_SETTINGS in out:
         merged = settings_for(root, out[CLAUDE_SETTINGS]).text
         if merged is None:

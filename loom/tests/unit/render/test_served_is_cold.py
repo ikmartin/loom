@@ -143,6 +143,8 @@ def test_a_server_after_saves_notes_an_acceptance_and_a_compile_publishes_what_a
             lambda: run("accept", "zk-0001", "--as", "Tester", "--force", "--yes", cwd=root),
             lambda: edit(root / DOC, "First statement holds", "The first statement holds"),
             lambda: edit(root / DOC, "Second statement uses", "The second lemma uses"),
+            # the person keeps every edit in place, so the text as kept is the file's and the note's words changed in it
+            lambda: post(api + "change-keep", {"all": True, "author": "Tester"}),
         ]
         for step in steps:
             step()

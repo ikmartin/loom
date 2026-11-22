@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from tests.helpers import json_of, ok, refused
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, opened
 
 
 def test_new_allocates_and_print(tmp_path: Path) -> None:
@@ -42,7 +42,7 @@ def test_a_labelling_run_carries_its_patch_in_json_and_says_how_to_apply_it(tmp_
 
 def test_new_names_its_writer_and_says_where_to_place_the_node(tmp_path: Path) -> None:
     """The re-grade: under an agent marker `new` wrote the author's name into the node, and said nothing of the node being reached by no document or of the line that would place it."""
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
     r = ok("new", "lemma", "Placed", "--as", "Referee Agent", cwd=q)
     assert "% !LOOM author: Referee Agent" in (q / "drafting" / "nodes" / "dm-0012.tex").read_text()
     assert "no document reaches it yet" in r.stdout

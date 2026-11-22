@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from tests.helpers import json_of, ok
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, denying
 
 
 @pytest.fixture
@@ -181,13 +181,7 @@ def test_the_manifest_lists_the_shown_files_and_the_front_door(q: Path) -> None:
 def test_a_file_no_agent_may_write_says_what_keeps_agents_out(q: Path) -> None:
     """`denied` from the one predicate loom's commands ask, so the viewer never matches the deny list: the list's entry as written, or a protection that holds whatever it says; null on a file agents may write, so a viewer never reads silence as permission."""
     put(q, "notes/a.md", "# A\n")
-    cfg = q / "config.toml"
-    text = cfg.read_text()
-    cfg.write_text(
-        text.replace("[agents]\n", '[agents]\ndeny = ["drafting/"]\n', 1)
-        if "[agents]\n" in text
-        else text + '\n[agents]\ndeny = ["drafting/"]\n'
-    )
+    denying(q, "drafting/")
     ok("build", cwd=q)
     by = {f["path"]: f for f in json.loads((q / ".loom/cache/site/manifest.json").read_text())["files"]}
     assert by["drafting/main.tex"]["denied"] == {"by": "drafting/", "always": False}

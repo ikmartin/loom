@@ -477,6 +477,8 @@ Two differences are known and allowed: the blank space two runs of TeX over one 
 
 **2026-11-12.** Edits in place wait in Your Changes only where the quilt tracks them, `[review] track_edits`, off by default (plan 0.31): the person was asked to keep edits they had just made themselves. Where a quilt does not track them there is no in-place change to discard; the rule holds where it does, and its guards run with tracking on.
 
+**2026-11-21.** The look is always kept and `[review] track_edits` is gone (plan 0.32): an edit in place waits in Your Changes in every quilt, and its guards run as every quilt now does.
+
 **2026-11-12.** Undo became Discard, per change cut by words rather than per hunk, and covers suggested edits too (plan 0.30, decision 11); what it writes and what it keeps first are unchanged.
 
 ### A note's fading is computed, never stored

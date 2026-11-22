@@ -86,7 +86,7 @@ def _history(result: ScanResult) -> History:
     "declared",
     default=None,
     metavar="NAME",
-    help="Who drafts it; an agent names itself, including Agent or AI.",
+    help="Who drafts it; an agent's name ends in Agent.",
 )
 @click.option("--section", metavar="ID", help="Copy only this section or subsection and its descendants.")
 @click.option("--dry-run", is_flag=True, help="Say what would be written, and write nothing.")

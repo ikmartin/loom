@@ -1116,6 +1116,16 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
             said.append(f"finished {act_id}")
             said += _relook(root, act_id, e)
+            if not e.get("look"):
+                from loom.identity import agents_act
+
+                texts = {
+                    rel: tuple(_fetch(root, history, d) if d else None for d in ab)
+                    for rel, ab in (e.get("files") or {}).items()
+                }
+                # whose act it was is the line's, never the shell recovery runs in
+                agent = e["by"] == "agent" if e.get("by") in ("agent", "person") else agents_act(e.get("actor"))
+                _follow_look(root, history, str(e.get("kind")), agent, texts)  # type: ignore[arg-type]
             continue
         failed = [
             rel
@@ -1229,20 +1239,138 @@ def _where(holds: dict[str, tuple[bool, bool]], *, kept: bool = False) -> str:
     return "; ".join(parts) + ("; the texts before and after are kept in the history" if kept else "")
 
 
+#: The acts that put their words into the person's look themselves (`pending`, `tasks`): `_follow_look` leaves them alone.
+OWN_LOOK = frozenset({"keep", "undo", "discard", "tick"})
+
+#: A file's bytes that are not an open text file's (`looks.open_texts`): not UTF-8, a NUL early on, or past the limit.
+_NOT_TEXT: Any = object()
+
+
+def _text_of(data: bytes | None) -> Any:
+    """`data` as an open text file's text (`looks.open_texts`), None for a file that is not there, `_NOT_TEXT` for one that is no text."""
+    from loom.files import TEXT_LIMIT
+
+    if data is None:
+        return None
+    if len(data) > TEXT_LIMIT or b"\x00" in data[:8192]:
+        return _NOT_TEXT
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        return _NOT_TEXT
+
+
+def merge_lines(base: str, ours: str, theirs: str) -> str | None:
+    """`ours` with `theirs`'s change from `base` made in it, line by line; None where the two changed lines that meet or touch, which only a person can merge."""
+    lines = _LINE.findall(base)
+
+    def hunks(other: str) -> list[tuple[int, int, list[str]]]:
+        them = _LINE.findall(other)
+        ops = difflib.SequenceMatcher(None, lines, them, autojunk=False).get_opcodes()
+        return [(i1, i2, them[j1:j2]) for tag, i1, i2, j1, j2 in ops if tag != "equal"]
+
+    mine, other = hunks(ours), hunks(theirs)
+    if any(a[0] <= b[1] and b[0] <= a[1] for a in mine for b in other):
+        return None
+    out: list[str] = []
+    at = 0
+    for i1, i2, new in sorted(mine + other, key=lambda h: (h[0], h[1])):
+        out += lines[at:i1] + new
+        at = i2
+    return "".join(out + lines[at:])
+
+
+def _follow_look(
+    root: Path, history: Path, kind: str, agent: bool, files: dict[str, tuple[bytes | None, bytes | None]]
+) -> None:
+    """After an act the person made through loom, give the reviewer's look what it wrote, so the person's own act is never listed back to them as a change to keep (Keep, the undo, Discard and a tick do this themselves, `OWN_LOOK`).
+
+    A file the look held as it was before the act now holds what the act wrote; one with another change waiting in it gets the act's change merged in by lines, and keeps its look where the two meet (`merge_lines`), so nothing waiting is taken in unseen; a file the act made goes in when it is an open text file. A file the look does not watch (`looks.watching`), one agents are denied, is left: nothing there is listed. An agent's act (`agent`, as the act's journal line records it) changes no look: the person has not seen it. Nothing before a first look. The act has happened whatever this does, so a failure here leaves the look as it was.
+    """
+    if kind in OWN_LOOK or agent:
+        return
+    try:
+        from loom.files import Shown, is_latex_aux
+        from loom.looks import _write as write_look
+        from loom.looks import read_look, watching
+        from loom.records.snapshots import read_raw, write_raw
+        from loom.scan.hashing import sha256
+        from loom.scan.quilt import load_quilt, reviewer_identity
+
+        who = reviewer_identity(root)[0]
+        look = read_look(root, who) if who else None
+        if look is None:
+            return
+        quilt = load_quilt(root)
+        watched = watching(quilt.config)
+        shown: Any = None
+        moved = False
+        for rel, (before, after) in files.items():
+            was, now = _text_of(before), _text_of(after)
+            if was is _NOT_TEXT or now is _NOT_TEXT or is_latex_aux(rel) or not watched(rel):
+                continue
+            held = look.files.get(rel) or None  # a file absent at the look (`looks.ABSENT`) is held as none
+            if held is None:
+                if was is None and now is not None:
+                    shown = shown or Shown.of(quilt)
+                    if shown.is_shown(rel):
+                        look.files[rel] = write_raw(root, now, history)
+                        moved = True
+                continue
+            if now is not None and held == sha256(now):
+                continue
+            if was is not None and held == sha256(was):
+                new = now
+            else:
+                seen = read_raw(root, held, history)
+                new = merge_lines(was, seen, now) if seen is not None and was is not None and now is not None else None
+                if new is None:
+                    continue
+            if new is None:
+                look.files.pop(rel, None)
+            else:
+                look.files[rel] = write_raw(root, new, history)
+            moved = True
+        if moved:
+            write_look(root, look)
+    except Exception:  # noqa: BLE001 -- the act's files are written; its look is a convenience, and recovery would only do the same again
+        return
+
+
 def _relook(root: Path, act_id: str, entry: dict[str, Any]) -> list[str]:
-    """For an act recovery finished, what its follow-up would have done to the person's look (`pending.relook`): words loom wrote are the person's, not their edit. Returns what to say when that could not be done."""
+    """For an act recovery finished, what its follow-up would have done to the person's look: a Keep's or an undo's words (`pending.relook`), or a tick's line (`_retick`); words loom wrote are the person's, not their edit. Returns what to say when that could not be done."""
     look = entry.get("look")
     if not look:
         return []
     try:
         from loom.pending import relook
 
-        relook(root, look)
+        if isinstance(look, dict) and isinstance(look.get("tick"), dict):
+            _retick(root, entry, look)
+        else:
+            relook(root, look)
     except Exception as exc:  # noqa: BLE001 -- the act is finished; its look is a convenience, said when it fails
         return [
             f"finished {act_id}, but its words did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
         ]
     return []
+
+
+def _retick(root: Path, entry: dict[str, Any], look: dict[str, Any]) -> None:
+    """For a tick recovery finished, its line into the person's look, as its follow-up puts it (`looks.take_line`), from the texts its journal line names; only the quilt's own reviewer's look."""
+    from loom.looks import take_line
+    from loom.scan.quilt import load_quilt, reviewer_identity
+
+    who, tick = look.get("who"), look.get("tick") or {}
+    path, line = tick.get("path"), tick.get("line")
+    ab = (entry.get("files") or {}).get(path)
+    if not isinstance(who, str) or not who or who != reviewer_identity(root)[0] or not ab or not isinstance(line, int):
+        return
+    history = history_of(root)
+    before, after = (_fetch(root, history, d) if d else None for d in ab)
+    if before is None or after is None:
+        return
+    take_line(load_quilt(root), who, str(path), before.decode("utf-8"), after.decode("utf-8"), line)
 
 
 #: Seconds after which a temporary file in the history's `texts/` is one a crash left, not one a store in another process is writing: `store` writes one and renames it within a moment.
@@ -1411,7 +1539,7 @@ class Act:
         return [r["line"] for r in self.records if r["log"] == name]
 
     def then(self, fn: Callable[[], None]) -> None:
-        """A step after `done` and still under the lock (a rescan, the look, carrying annotations); recovery never replays it."""
+        """A step once the files are written, before `done` and under the lock (a rescan, the look, carrying annotations); recovery never replays it, and redoes only what the act's `look` records (`_relook`)."""
         self.follow.append(fn)
 
     # the commit
@@ -1452,6 +1580,10 @@ class Act:
             begin["undid"] = self.undone
         if self.look:
             begin["look"] = self.look
+        from loom.identity import agents_act
+
+        # whose act this is, as it is asked for: recovery reads it here, never from the shell it runs in
+        begin["by"] = "agent" if agents_act(self.actor) else "person"
         self.journal.append(self.root, begin, full=True)
         done: list[str] = []
         guarded = [r for r in self.records if "at" in r]
@@ -1477,9 +1609,25 @@ class Act:
             raise
         # every file holds its after bytes: the act has happened, and a failure from here on is recovery's to finish
         _append_records(self.root, [r for r in self.records if "at" not in r])
+        if not self.look:
+            # before `done`, so a crash in between leaves the act for recovery to finish, which follows the look again
+            _follow_look(
+                self.root,
+                self.history,
+                self.kind,
+                begin["by"] == "agent",
+                {rel: (self.before.get(rel), changed[rel]) for rel in changed},
+            )
+        # the act's own follow-up too (Keep's and the undo's words into the look, a tick's line, a rescan, annotations carried), so a crash in it leaves the act for recovery to finish, which puts its words into the look again (`_relook`); a failure in it is raised once `done` is written, since the act's files are
+        failed: Exception | None = None
+        try:
+            self._follow()
+        except Exception as exc:
+            failed = exc
         self.journal.append(self.root, {"event": "done", "act": self.id, "when": stamp()})
         _save_index(self.root, self.journal)
-        self._follow()
+        if failed is not None:
+            raise failed
 
     def _follow(self) -> None:
         for fn in self.follow:
@@ -1516,10 +1664,14 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
         # an act opened inside one that stages loom's records joins it: one transaction, which the outer act commits
         yield outer
         return
+    from loom.locks import holding
+
+    # a thread holding the lock already settled, and said so, as it took it; and an act opened in another's follow-up must not settle that act, begun and not yet done
+    already = holding(root / WRITES_LOCK)
     with locked(root / WRITES_LOCK):
         j = read_journal(root)
-        if j.begun:
-            _settle(root, history, j)
+        if j.begun and not already:
+            _say(_settle(root, history, j))
             _save_index(root, j)
         a = Act(root, history, kind, actor, j)
         yield a
@@ -1630,12 +1782,20 @@ def settle_for_history(history: Path) -> list[str]:
     if root is None or holding(root / WRITES_LOCK) or holding(history / LEDGER):
         return []
     said = recover(root, history)
+    _say(said)
+    return said
+
+
+def _say(said: list[str]) -> None:
+    """Print what settling did on stderr, a line each, as `cli._quilt.drawing_ids` does.
+
+    From an act and a writer of the history, which settle what a crash left without being asked, so the person hears of it from whatever command ran.
+    """
     if said:
         import click
 
         for line in said:
             click.echo(f"loom: {line}", err=True)
-    return said
 
 
 def history_of(root: Path) -> Path:

@@ -88,7 +88,7 @@ def _declared(result: ScanResult) -> str:
     "declared",
     default=None,
     metavar="NAME",
-    help="Who writes the node; an agent names itself, including Agent or AI.",
+    help="Who writes the node; an agent's name ends in Agent.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
@@ -134,7 +134,15 @@ def new(
     )
     if path.exists():
         raise EnvError(f"{path} already exists")
-    refuse_protected(result.quilt, path)
+    if to:
+        refuse_protected(result.quilt, path)
+    else:
+        # beside the default document, which the quilt may protect: say where an agent's new result goes instead
+        refuse_protected(
+            result.quilt,
+            path,
+            "a new result of yours goes in a file you may write, named with --to FILE, or in your own copy of the document (loom draft DOC --ai NAME)",
+        )
     rel = path.relative_to(result.quilt.root.resolve() if to else result.quilt.root).as_posix()
     name = result.taxa[env].name if env in result.taxa else env
     if not dry_run:

@@ -13,8 +13,9 @@ def _author(root: Path, body: dict[str, Any]) -> tuple[str, tuple[str, str]]:
     from loom.cli.review import _annotator
     from loom.errors import ContentError, EnvError
     from loom.identity import is_agent
+    from loom.scan.quilt import reviewer_identity
 
-    who = reviewer_identity_of(root)
+    who = reviewer_identity(root)[0]
     if is_agent(_str(body, "author") or who):
         raise ApiError(
             "author-only", "An agent suggests and annotates; only the author keeps or discards a change", status=403
@@ -37,11 +38,13 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
     result = open_scan(str(root))
     given = body.get("changes")
+    first = []
     if body.get("all") is True:
         document = _str(body, "document")
-        if endpoint == "change-keep" and result.quilt.config.track_edits and who and read_look(root, who) is None:
+        if endpoint == "change-keep" and who and read_look(root, who) is None:
+            # with no look nothing in place waits, so what Keep all keeps after taking it is the suggestions
             keep_all(result.quilt, who)
-            return {"ok": True, "result": "took your first look", "done": [], "refused": []}
+            first = ["took your first look"]
         ids = [c.id for c in pending(result, who) if document is None or document in c.documents]
     elif isinstance(given, list) and given and all(isinstance(i, str) for i in given):
         ids = list(given)
@@ -58,10 +61,10 @@ def _change(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     except (PendingRefused, WriteRefused) as exc:
         raise ApiError(exc.code, exc.message, status=exc.status) from exc
     verb = "kept" if endpoint == "change-keep" else "discarded"
-    parts = [f"{verb} {len(done)} change{'s' if len(done) != 1 else ''}"]
+    parts = [f"{verb} {len(done)} change{'s' if len(done) != 1 else ''}"] if ids or not first else []
     if refused:
         parts.append(f"{len(refused)} could not be")
-    said = "; ".join([*parts, *versions])
+    said = "; ".join([*first, *parts, *versions])
     return {"ok": True, "result": said, "done": done, "refused": refused}
 
 
@@ -91,13 +94,6 @@ def _undo(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     if refused:
         parts.append(f"{len(refused)} could not be")
     return {"ok": True, "result": "; ".join([*parts, *versions]), "done": done, "refused": refused}
-
-
-def reviewer_identity_of(root: Path) -> str:
-    """The reviewer name Review resolves, whose look the changes are since; '' when there is none."""
-    from loom.scan.quilt import reviewer_identity
-
-    return reviewer_identity(root)[0] or ""
 
 
 def _reopen(root: Path, ids: list[str], writer: tuple[str, str]) -> dict[str, Any]:

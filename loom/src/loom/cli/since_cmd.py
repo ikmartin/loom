@@ -12,7 +12,7 @@ from loom.identity import writer
 
 
 @click.command(name="since")
-@click.option("--as", "declared", default=None, help="Who is looking. An agent names itself, including Agent or AI.")
+@click.option("--as", "declared", default=None, help="Who is looking. An agent's name ends in Agent.")
 @click.option(
     "--session",
     "session",
