@@ -88,7 +88,7 @@ class LibraryWeb:
         self.root = root
         self._read: dict[str, tuple[str, Node] | None] = {}
 
-    def _node(self, name: str) -> tuple[str, Node] | None:
+    def file(self, name: str) -> tuple[str, Node] | None:
         """A statement's or a proof's file, by its id: its hash and the node it holds; None for any other node, one absent, or one that does not read."""
         from loom.library.node import NodeUnreadable, node_hash, read_node
         from loom.library.store import exists, folder
@@ -106,16 +106,16 @@ class LibraryWeb:
         return self._read[name]
 
     def subject(self, here: Here) -> Subject | None:
-        got = self._node(here.name) if here.kind == "node" else None
+        got = self.file(here.name) if here.kind == "node" else None
         return Subject("node", here.name, got[0]) if got else None
 
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
-        got = self._node(key[1]) if key[0] == "node" else None
+        got = self.file(key[1]) if key[0] == "node" else None
         return got[0] if got else None
 
     def _uses(self, name: str) -> list[str]:
         """The statements a node's text says it uses, stubs included, in the order its header gives them."""
-        got = self._node(name)
+        got = self.file(name)
         return [u for u in got[1].uses if is_node(u, "statement")] if got else []
 
     def closure(self, here: Here) -> dict[tuple[str, str], str]:
@@ -128,20 +128,20 @@ class LibraryWeb:
             if name in seen:
                 continue
             seen.add(name)
-            got = self._node(name)
+            got = self.file(name)
             if got is not None:
                 out[("node", name)] = got[0]
                 todo.extend(self._uses(name))
         return out
 
     def notation(self, here: Here) -> dict[str, str] | None:
-        return None if self._node(here.name) and here.kind == "node" else {}
+        return None if self.file(here.name) and here.kind == "node" else {}
 
     def acceptance(self, here: Here) -> str | None:
         return None
 
     def stub(self, here: Here) -> bool | None:
-        got = self._node(here.name) if here.kind == "node" else None
+        got = self.file(here.name) if here.kind == "node" else None
         return got[1].empty if got else None
 
     def holds(self, ref: str, want: str) -> bool | None:
@@ -154,7 +154,7 @@ class LibraryWeb:
         return None
 
     def texts(self, key: tuple[str, str]) -> set[str]:
-        got = self._node(key[1]) if key[0] == "node" else None
+        got = self.file(key[1]) if key[0] == "node" else None
         return {got[0]} if got else set()
 
 
