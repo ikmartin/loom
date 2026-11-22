@@ -5,8 +5,10 @@ One function, called by everything that turns a selection or a drawn rectangle i
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from loom.anchors import Anchor
 from loom.records.selectors import CONTEXT, Selector
@@ -47,23 +49,23 @@ def anchor_on_page(
     page : int
         The page, from 1.
     text : str, optional
-        What was selected. Matched against the word boxes with a tolerance for hyphenation and ligatures, and then located in the page text for offsets.
+        What was selected. Matched against the word boxes with a tolerance for hyphenation and ligatures, and then located in the page text for offsets. Where the words occur more than once on the page, the occurrence `rects` covers is the one recorded, the first when no `rects` are given.
     rects : list of [x0, y0, x1, y1], optional
-        What was drawn, in points with the origin at the top left, when there was no text worth selecting.
+        The lines a selection covers, as the viewer sends them, or what was drawn when there was no text worth selecting; in points with the origin at the top left.
     span : (start, end), optional
         Offsets into the page's text, as a `span=` locator carries them; the text between them is what is mapped, so a link written by offsets lights the same place a selection would.
 
     Returns
     -------
     Placed
-        Basis `text` when the selection located in the page text, with `start`/`end` and derived quads; basis `box` otherwise, carrying the rectangles as the record and whatever words they cover as the triple's `exact`. Recording never fails: a selection found on the boxes but not in the page text is a box, and a rectangle is a box.
+        Basis `text` when the selection located in the page text, with `start`/`end` and derived quads, both of the occurrence chosen, and the triple's `prefix` and `suffix` the words around that occurrence; basis `box` otherwise, carrying the rectangles as the record and whatever words they cover as the triple's `exact`. Recording never fails: a selection found on the boxes but not in the page text is a box, a selection whose rectangles cover none of its words' occurrences, or two alike, is the box it covers, and a rectangle is a box.
 
     Notes
     -----
     The caller has already checked the PDF is readable (`refs.pages.mapped`); this raises nothing of its own beyond what `token_boxes` raises for a missing poppler.
     """
     from loom.refs.pages import page_box, read_map, read_page, token_boxes
-    from loom.refs.search import locate_offsets, locate_span
+    from loom.refs.search import every_offset, every_span
 
     m = read_map(home)
     xml = token_boxes(pdf, page, home)
@@ -73,10 +75,14 @@ def anchor_on_page(
         text = page_text[a:b].strip() or None
     anchor = Anchor(kind="pdf", sha256=m.sha256 if m else "", page=page)
     rects = [[float(v) for v in r] for r in rects or []]
-    hit = locate_span(xml, text, page) if text else None
+    hits = every_span(xml, text, page) if text else []
+    k = _chosen(hits, rects)
+    hit = hits[k] if k is not None else None
     found = hit is not None or bool(rects)
-    if hit is not None:
-        offsets = locate_offsets(page_text, text or "")
+    if hit is not None and k is not None:
+        # the k-th occurrence in the page's text is the k-th on its boxes, when the two readings find as many
+        every = every_offset(page_text, text or "")
+        offsets = every[k] if len(every) == len(hits) else None
         anchor.quads = [list(q) for q in hit.lines]
         if offsets:
             a, b = offsets
@@ -95,6 +101,22 @@ def anchor_on_page(
             selector, gap = Selector(text, selector.prefix, selector.suffix), None
         return Placed(anchor, selector, found, page_box(xml), anchor.basis, gap)
     return Placed(anchor, selector, found, page_box(xml), anchor.basis)
+
+
+def _chosen(hits: list[Any], rects: list[list[float]]) -> int | None:
+    """Which occurrence of a selection's words is the one selected: the only one, the one its rectangles cover most, or the first when it came with none; None when its rectangles cover none, or two alike."""
+    if len(hits) <= 1 or not rects:
+        return 0 if hits else None
+    covered = [sum(_overlap(line, r) for line in hit.lines for r in rects) for hit in hits]
+    best = max(covered)
+    if best <= 0 or covered.count(best) > 1:
+        return None
+    return covered.index(best)
+
+
+def _overlap(a: Sequence[float], b: Sequence[float]) -> float:
+    """The area two rectangles `[x0, y0, x1, y1]` share."""
+    return max(0.0, min(a[2], b[2]) - max(a[0], b[0])) * max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
 
 
 def _around(home: Path, pdf: Path, page: int, rects: list[list[float]]) -> tuple[Selector, list[float] | None]:

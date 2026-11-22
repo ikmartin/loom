@@ -401,7 +401,7 @@ class Refound:
 def refind(words: DocumentWords, a: Any) -> Refound | None:
     """Find a mark again on a changed PDF by the words it recorded around it, anywhere in the document; None when they are not there.
 
-    `prefix`, `exact` and `suffix` are placed as one run (`tex.align.place_run`) nearest the mark's own page and height. A mark on words stands on its words found again, one rectangle per line; any other stands at its gap from its pin word, its strokes moved with it, and one that records no gap is not placed: an older drawing stays detached. An older mark on words, which recorded its words alone, is found by them.
+    `prefix`, `exact` and `suffix` are placed as one run (`tex.align.place_run`) nearest the mark's own page and height; a run that stands whole in two places is not placed, since nothing then says which the mark was on. A mark on words stands on its words found again, one rectangle per line; any other stands at its gap from its pin word, its strokes moved with it, and one that records no gap is not placed: an older drawing stays detached. An older mark on words, which recorded its words alone, is found by them.
     """
     from loom.refs.search import _by_line
     from loom.tex.align import place_run, rendered_words, run_positions
@@ -425,6 +425,8 @@ def refind(words: DocumentWords, a: Any) -> Refound | None:
     if found is None:
         return None
     first, last, whole = found
+    if whole and sum(1 for i in words.at.get(needle[0], ()) if list(words.texts[i : i + len(needle)]) == needle) > 1:
+        return None
     at = list(range(first, first + len(needle))) if whole else run_positions(words.texts, needle, first, last)
     ws = words.words
     if not drawn:
@@ -498,7 +500,7 @@ def refound(result: Any, pdf: Path, a: Any, artifact: str) -> Refound | None:
 
 
 #: Read with the inputs of every `refound` kept, so a change to how marks are found again is not answered from the cache.
-REFIND = 1
+REFIND = 2
 
 
 #: Where the chromatic colours stand on the wheel, in degrees, as the viewer's `nearestColor` places them.

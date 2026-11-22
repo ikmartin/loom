@@ -15,6 +15,7 @@ import pytest
 from loom.library import documents, log
 from loom.library.acts import delete
 from loom.library.checks import check
+from loom.library.generation import generation
 from loom.library.intake import (
     IntakeRefused,
     Item,
@@ -29,7 +30,6 @@ from loom.library.intake import (
 )
 from loom.library.node import Node
 from loom.library.store import NodeRefused, read, write_node
-from loom.library.works import generation
 from loom.paths import INCOMING, LIBRARY_DOCUMENTS
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
@@ -755,3 +755,15 @@ def test_a_write_s_result_names_the_work_as_a_person_reads_it(tmp_path: Path) ->
     ]
     assert said == ["rewrote the entry of Smith 2024", "deleted Smith 2024"], said
     assert not any(ref in s for s in said)
+
+
+def test_an_undone_add_s_id_is_never_given_to_the_next_work(tmp_path: Path) -> None:
+    """The second look's M-19, by the intake: an add taken back leaves its id in the library's log alone, and that is still an id given."""
+    root = quilt(tmp_path)
+    [first] = rows(root, Item(text="@article{First1, title={The first paper}}\n"))
+    undo(root, first["id"], act=first["act"], **ME)
+    assert read(root, first["ref"]) is None
+    [second] = rows(root, Item(text="@article{Second2, title={Another paper}}\n"))
+    assert second["state"] == "added" and second["ref"] != first["ref"]
+    made = [a["ref"] for a in log.replay(root).lines if a["event"] == "made"]
+    assert len(made) == len(set(made)) == 2

@@ -8,13 +8,13 @@ import re
 import subprocess
 from pathlib import Path
 
-from loom.paths import ANNOTATION_LOG, LEDGER, LIBRARY_NODES, TAG_LOG
+from loom.paths import ANNOTATION_LOG, INCOMING, LEDGER, LIBRARY_LOG, LIBRARY_NODES, LIBRARY_UNDO, TAG_LOG
 from loom.scan.labels import LOOMLOCAL
 from loom.scan.scan import ScanResult
 
 
 def visible_locals(result: ScanResult, prefix: str) -> set[str]:
-    """Every local part under `prefix` that anything can point at: ids in source, the acceptance ledger's keys, the history ledger's keys and every file name under its steps (an id the history has recorded is never allocated again), annotation targets, the library's nodes and the tags on them, references anywhere (dangling included), and git history. A command that writes the id it draws from these holds the id lock from before its scan (`cli._quilt.draws_ids`); one that mints a library node's stem draws from these too, since the library and the author's sources share the prefix."""
+    """Every local part under `prefix` that anything can point at: ids in source, the acceptance ledger's keys, the history ledger's keys and every file name under its steps (an id the history has recorded is never allocated again), annotation targets, the library's nodes and the tags on them, every work the library's log says was made, what a delete keeps for its undo and what waits in the intake (so a work deleted or taken back keeps its id for its undo), references anywhere (dangling included), and git history. A command that writes the id it draws from these holds the id lock from before its scan (`cli._quilt.draws_ids`); one that mints a library node's stem draws from these too, since the library and the author's sources share the prefix."""
     pat = re.compile(r"\b" + re.escape(prefix) + r"-([0-9A-Z]{4})\b")
     found: set[str] = set()
     for src in result.files.values():
@@ -29,13 +29,27 @@ def visible_locals(result: ScanResult, prefix: str) -> set[str]:
         for step in history.iterdir():
             if step.is_dir() and step.name != "texts":
                 found.update(pat.findall(" ".join(p.name for p in step.iterdir())))
-    for log in (root / ANNOTATION_LOG, root / TAG_LOG):
+    for log in (root / ANNOTATION_LOG, root / TAG_LOG, root / LIBRARY_LOG):
         if log.is_file():
             found.update(pat.findall(log.read_text(encoding="utf-8", errors="replace")))
+    for held in (root / LIBRARY_UNDO, root / INCOMING):
+        found.update(pat.findall(_held(held)))
     with contextlib.suppress(FileNotFoundError, NotADirectoryError):
         found.update(pat.findall(" ".join(os.listdir(root / LIBRARY_NODES))))
     found.update(pat.findall(git_mentions(root, rf"{git_escape(prefix)}-[0-9A-Z]{{4}}")))
     return {x for x in found if LOOMLOCAL.match(x)}
+
+
+def _held(folder: Path) -> str:
+    """The names of every file under `folder` and the text of its `.json` files, one a line: what a kept undo or a waiting drop names, its documents unread."""
+    out: list[str] = []
+    for here, _dirs, files in os.walk(folder):
+        for name in files:
+            out.append(name)
+            if name.endswith(".json"):
+                with contextlib.suppress(OSError):
+                    out.append(Path(here, name).read_text(encoding="utf-8", errors="replace"))
+    return "\n".join(out)
 
 
 def git_mentions(root: Path, pattern: str) -> str:

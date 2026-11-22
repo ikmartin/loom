@@ -370,3 +370,103 @@ def test_a_note_on_a_works_page_is_found_again_on_a_changed_copy_of_the_work(tmp
     row = published(q, box["id"])
     assert (row["target"]["page"], row["refound"], row["detached"]) == (2, True, False)
     assert row["rects"][0] == pytest.approx([82, 85, 157, 97], abs=0.5)
+
+
+#: A page that says one phrase twice, each time after different words, as mathematics does ("then … holds for every").
+TWICE = [
+    "Let X be compact; then the bound holds for every point.",
+    "A line between the two of them, and nothing to mark.",
+    "If Y is closed, then the bound holds for every point.",
+]
+PHRASE = "then the bound holds for every"
+
+
+def _band(line: int) -> tuple[float, float]:
+    """A band inside a line of `lines_pdf`, as `pdftotext -bbox-layout` places its words (about 8.6 above its baseline to 2.5 below), touching no other line."""
+    from tests.unit._pdfs import TOP
+
+    return TOP + line * STEP - 9, TOP + line * STEP + 3
+
+
+def _given(q: Path, tmp_path: Path, pages: list[list[str]], name: str) -> str:
+    """Give the showcase's Bellamy19 a PDF of `pages`, as a person filing another copy does; its reference."""
+    from loom.cli._quilt import open_scan
+    from loom.library import documents
+    from loom.library.references import attach
+    from loom.library.store import read
+    from loom.refs.pages import mapped
+
+    ref = open_scan(str(q)).refs["Bellamy19"]
+    pdf = lines_pdf(tmp_path / name, pages)
+    attach(q, ref, "pdf", documents.put_pdf(q, pdf), by="Tester", kind="person")
+    assert mapped(q, read(q, ref).pdf) is not None  # type: ignore[union-attr]
+    return ref
+
+
+def _selected(q: Path, ref: str, message: str, top: float, bottom: float) -> dict[str, Any]:
+    """A selection of `PHRASE` on page 1 over the line between `top` and `bottom`, written as the viewer writes one (its words and the rectangles of the lines it covers, through the write API's `annotate`); the event written."""
+    from loom.render.endpoints.annotations import _review
+
+    body = {
+        "target": ref,
+        "page": 1,
+        "quote": PHRASE,
+        "rects": [[70, top, 400, bottom]],
+        "message": message,
+        "author": "A. Author",
+    }
+    _review(q, "annotate", body)
+    return log(q)[-1]
+
+
+def _where(q: Path, ref: str, ann: str) -> list[list[float]] | None:
+    """Where `library-places` draws a note, as the reader draws it."""
+    from loom.cli._quilt import open_scan
+    from loom.library.places import places
+
+    got = {p["annotation"]: p["rects"] for p in places(open_scan(str(q)), ref).places}
+    return got.get(ann)
+
+
+@pytest.mark.poppler
+def test_a_selection_of_a_phrase_s_second_occurrence_is_recorded_and_drawn_on_it(tmp_path: Path) -> None:
+    """The second look's M-20: the viewer sends a selection's words and the lines it covers, and the note was recorded on, and drawn at, the phrase's first occurrence."""
+    from loom.library.store import read
+    from loom.refs.pages import mapped, read_page
+
+    q = showcase(tmp_path)
+    ref = _given(q, tmp_path, [TWICE], "twice.pdf")
+    top, bottom = _band(2)
+    second = _selected(q, ref, "On the second.", top, bottom)
+    text = read_page(mapped(q, read(q, ref).pdf), 1) or ""  # type: ignore[arg-type,union-attr]
+    starts = [i for i in range(len(text)) if text.startswith(PHRASE, i)]
+    assert len(starts) == 2
+    anchor = second["anchor"]
+    assert (anchor["basis"], anchor["start"], anchor["exact"]) == ("text", starts[1], PHRASE)
+    assert anchor["prefix"].endswith("If Y is closed, "), "the words around the occurrence chosen"
+    drawn = _where(q, ref, second["id"])
+    assert drawn and all(top <= r[1] <= bottom for r in drawn), drawn
+    first = annotated(q, "Bellamy19", "Quoted alone.", "--page", "1", "--quote", PHRASE)
+    assert first["anchor"]["start"] == starts[0], "a quote with nothing to tell its occurrences apart takes the first"
+    a, b = _band(0)
+    assert all(a <= r[1] <= b for r in _where(q, ref, first["id"]) or [[0, -1]])
+    a, b = _band(1)
+    neither = _selected(q, ref, "Between.", a, b)
+    assert neither["anchor"]["basis"] == "box", "a selection whose lines cover no occurrence is the box it covers"
+
+
+@pytest.mark.poppler
+def test_a_note_on_a_phrase_said_twice_alike_in_a_changed_copy_is_not_placed(tmp_path: Path) -> None:
+    """Found again by its words and the words around them; where a changed copy holds that whole run twice, nothing says which the note was on, so it is listed as not placed, never drawn on a guess."""
+    q = showcase(tmp_path)
+    ref = _given(q, tmp_path, [TWICE], "twice.pdf")
+    top, bottom = _band(2)
+    note = _selected(q, ref, "On the second.", top, bottom)
+    _given(q, tmp_path, [["A line more at the top.", *TWICE]], "moved.pdf")
+    assert published(q, note["id"])["detached"] is False
+    a, b = _band(3)
+    drawn = _where(q, ref, note["id"])
+    assert drawn and all(a <= r[1] <= b for r in drawn), "found again on its own occurrence, a line down"
+    _given(q, tmp_path, [[*TWICE, *TWICE[1:]]], "repeated.pdf")
+    assert published(q, note["id"])["detached"] is True
+    assert _where(q, ref, note["id"]) is None

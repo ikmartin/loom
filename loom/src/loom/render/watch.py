@@ -1,6 +1,6 @@
 """Poll file mtimes, the tree every second and loom's own records five times a second, and rebuild when something the build depends on changed, the skeleton of the site generator's watcher with the roots parameterised.
 
-Watched: every .tex, .sty, .cls, .bib under the quilt root outside what loom derives, the agents' scratch, the store and tools' directories (a Lake project's `.lake` among them), config.toml, loom's records under `.loom/` (the ledger and snapshots, the annotation log, the reference notes, the agents' files, session files other than the inbox), every file the viewer shows, and the `.gitignore` files that decide which those are. Build-written observation caches are excluded to avoid an extra rebuild. The callback runs in the watcher thread; a blanket except keeps the thread alive and reports.
+Watched: every .tex, .sty, .cls, .bib under the quilt root outside what loom derives, the agents' scratch, the store and tools' directories (a Lake project's `.lake` among them), config.toml, loom's records under `.loom/` (the ledger and snapshots, the annotation log, the reference notes, the agents' files, session files other than the inbox), the library's node files, every file the viewer shows, and the `.gitignore` files that decide which those are. Build-written observation caches are excluded to avoid an extra rebuild. The callback runs in the watcher thread; a blanket except keeps the thread alive and reports.
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ SKIP = {".git", "node_modules", ".svelte-kit", ".lake"}
 PRUNED = (CACHE, SCRATCH, LIBRARY_DOCUMENTS)
 #: The directories under `.loom/` watched for their sources alone, as any of the quilt's directories is; everything else there is a record.
 SOURCES_ONLY = (f"{RETIRED}/", f"{COPIES}/")
-SUFFIXES = {".tex", ".sty", ".cls", ".bib", ".toml", ".json", ".jsonl", ".md", ".log"}
+SUFFIXES = {".tex", ".sty", ".cls", ".bib", ".toml", ".json", ".jsonl", ".md", ".log", ".node"}
 #: What a change to records alone touches; see `scan_unread`.
 RECORDS = (f"{ANNOTATIONS}/", f"{EDITS}/", f"{SESSIONS}/")
 RECORD_FILES = (REVIEW_DECISIONS, REVIEW_ORIGINS)

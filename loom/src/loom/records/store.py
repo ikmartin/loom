@@ -22,7 +22,7 @@ from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
 from loom.records.locate import block_hash, follow
-from loom.records.selectors import Selector, resolve_selector
+from loom.records.selectors import CONTEXT, Selector, _common_prefix_len, _common_suffix_len, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used
 from loom.scan.hashing import hash_text, mathematical_hash, normalize
@@ -654,7 +654,6 @@ class Records:
         """
         from loom.library.store import read
         from loom.refs.pages import mapped, read_map, read_page
-        from loom.refs.search import locate_offsets
 
         assert a.anchor is not None
         ref = self._work(result, a, works)
@@ -673,16 +672,22 @@ class Records:
             )
         exact = a.selector.exact if a.selector else ""
         page = read_page(home, a.anchor.page)
-        span = locate_offsets(page, exact) if page and exact else None
-        if span is not None or recorded or m is None or not exact:
+        if recorded or m is None or not exact:
+            span = _occurrence(page, a) if page and exact else None
             return ResolvedAnnotation(a, rec, span, span is None, recorded, ref, page=a.anchor.page)
-        # the work's PDF changed: its words are looked for on every page's text, its own first
-        for n in range(1, m.pages + 1):
-            text = read_page(home, n) if n != a.anchor.page else None
-            span = locate_offsets(text, exact) if text else None
-            if span is not None:
-                return ResolvedAnnotation(a, rec, span, False, recorded, ref, page=n, refound=True)
-        return ResolvedAnnotation(a, rec, None, True, recorded, ref, page=a.anchor.page)
+        # the work's PDF changed: its words are looked for on its own page's text, then on every other page's, and stand where they and the words around them are found once
+        here = _scored(page, a) if page else []
+        if here:
+            span = _best(here)
+            return ResolvedAnnotation(a, rec, span, span is None, recorded, ref, page=a.anchor.page)
+        there = [
+            (n, s) for n in range(1, m.pages + 1) if n != a.anchor.page for s in _scored(read_page(home, n) or "", a)
+        ]
+        found = _best([((n, span), score) for n, (span, score) in there])
+        if found is None:
+            return ResolvedAnnotation(a, rec, None, True, recorded, ref, page=a.anchor.page)
+        n, span = found
+        return ResolvedAnnotation(a, rec, span, False, recorded, ref, page=n, refound=True)
 
     @staticmethod
     def _on_kept(
@@ -1337,3 +1342,37 @@ def _render_markdown(
     # a column's alignment arrives as an inline style, which the dialect does not carry: the viewer sets a table's look
     out = re.sub(r' style="text-align:(?:left|right|center)"', "", out)
     return _restore_math(out, spans)
+
+
+def _scored(text: str, a: Annotation) -> list[tuple[tuple[int, int], int]]:
+    """Each occurrence of a page note's words in `text`, as offsets, with how far the words around it match the note's `prefix` and `suffix`, compared as the words are (`refs.search.every_offset`)."""
+    from loom.refs.search import _loose, every_offset
+
+    sel = a.selector
+    if sel is None or not sel.exact:
+        return []
+    before, after = _loose(sel.prefix), _loose(sel.suffix)
+    out: list[tuple[tuple[int, int], int]] = []
+    for lo, hi in every_offset(text, sel.exact):
+        here, there = _loose(text[max(0, lo - 2 * CONTEXT) : lo]), _loose(text[hi : hi + 2 * CONTEXT])
+        out.append(((lo, hi), _common_suffix_len(here, before) + _common_prefix_len(there, after)))
+    return out
+
+
+def _best(scored: list[tuple[Any, int]]) -> Any:
+    """The one candidate whose words around it match best; None when there is none, or two match alike, which nothing tells apart."""
+    if not scored:
+        return None
+    best = max(score for _c, score in scored)
+    winners = [c for c, score in scored if score == best]
+    return winners[0] if len(winners) == 1 else None
+
+
+def _occurrence(text: str, a: Annotation) -> tuple[int, int] | None:
+    """Which occurrence of a page note's words it stands on, on the copy it was written on: the one at its recorded offsets, else the only one, else the one the words around it single out; None when nothing does."""
+    scored = _scored(text, a)
+    if a.anchor is not None:
+        hit = next((span for span, _s in scored if span[0] == a.anchor.start), None)
+        if hit is not None:
+            return hit
+    return scored[0][0] if len(scored) == 1 else _best(scored)

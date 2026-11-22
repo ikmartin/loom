@@ -213,26 +213,38 @@ def locate_span(bbox_xml: str, needle: str, page: int) -> Span | None:
     loom.refs.pages.token_boxes : produces the output, one page at a time and on demand.
     loom.refs.search.find_in_page : the strict comparison, which is what a claim is checked against.
     """
+    spans = every_span(bbox_xml, needle, page)
+    return spans[0] if spans else None
+
+
+def every_span(bbox_xml: str, needle: str, page: int) -> list[Span]:
+    """Each place `needle` stands on a page, in the order the page's words are read, none overlapping the one before: `locate_span`'s answer for every occurrence, so a caller can tell a phrase's second occurrence from its first."""
     words = _words(bbox_xml)
-    if not words:
-        return None
-    text, owner = _flat(words)
     want = _loose(needle)
-    if not want:
-        return None
+    if not words or not want:
+        return []
+    text, owner = _flat(words)
+    out: list[Span] = []
     at = text.find(want)
-    if at < 0:
-        return None
-    hit = sorted(set(owner[at : at + len(want)]))
-    if not hit:
-        return None
-    boxes = [words[i] for i in hit]
-    return Span(
-        page=page,
-        quad=(min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes)),
-        words=len(boxes),
-        lines=_by_line(boxes),
-    )
+    while at >= 0:
+        hit = sorted(set(owner[at : at + len(want)]))
+        if hit:
+            boxes = [words[i] for i in hit]
+            out.append(
+                Span(
+                    page=page,
+                    quad=(
+                        min(b[0] for b in boxes),
+                        min(b[1] for b in boxes),
+                        max(b[2] for b in boxes),
+                        max(b[3] for b in boxes),
+                    ),
+                    words=len(boxes),
+                    lines=_by_line(boxes),
+                )
+            )
+        at = text.find(want, at + len(want))
+    return out
 
 
 #: Dropped from both sides when looking for a quotation's geometry: spaces, and the hyphens a line break leaves behind.
@@ -287,6 +299,12 @@ def locate_offsets(page_text: str, needle: str) -> tuple[int, int] | None:
 
     The counterpart of `locate_span`, and deliberately the same tolerance: the reader's selection came from a third extraction again -- the viewer's own text layer -- so spacing around mathematics and a hyphen left by a line break must not decide whether an anchor can be recorded. Offsets index the raw page text, not a normalised copy of it, so an anchor's offsets name the words a reader sees.
     """
+    every = every_offset(page_text, needle)
+    return every[0] if every else None
+
+
+def every_offset(page_text: str, needle: str) -> list[tuple[int, int]]:
+    """Each place `needle` sits in a page's text, as `locate_offsets` gives the first, none overlapping the one before."""
     keep: list[int] = []
     flat: list[str] = []
     for i, ch in enumerate(page_text):
@@ -296,9 +314,11 @@ def locate_offsets(page_text: str, needle: str) -> tuple[int, int] | None:
             keep.extend([i] * len(piece))
     text = "".join(flat)
     want = _loose(needle)
+    out: list[tuple[int, int]] = []
     if not want:
-        return None
+        return out
     at = text.find(want)
-    if at < 0:
-        return None
-    return keep[at], keep[at + len(want) - 1] + 1
+    while at >= 0:
+        out.append((keep[at], keep[at + len(want) - 1] + 1))
+        at = text.find(want, at + len(want))
+    return out

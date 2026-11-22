@@ -5,14 +5,12 @@ A read and nothing more: it gathers nothing and writes nothing (gathering runs a
 
 from __future__ import annotations
 
-import hashlib
 import json
 import time
 from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loom.clock import now
 from loom.library import log
 from loom.library.body import pointers
 from loom.library.entries import identifiers, link, read_entry, short, surnames, title, year
@@ -26,8 +24,6 @@ if TYPE_CHECKING:
 _CITED: tuple[ScanResult | None, dict[str, list[str]]] = (None, {})
 #: The library's log as last read, by its file's size, time and inode.
 _REPLAYED: dict[Path, tuple[tuple[int, int, int], log.Acts]] = {}
-#: Each list's generation as this process last gave it, with what it was given for: by quilt and document.
-_GENERATIONS: dict[tuple[Path, str | None], tuple[tuple[Any, ...], int]] = {}
 
 
 def cited_in(result: ScanResult) -> dict[str, list[str]]:
@@ -65,41 +61,13 @@ def _replayed(root: Path) -> log.Acts:
     return kept[1]
 
 
-def _labels(root: Path, doc: str | None) -> dict[str, str]:
+def cite_labels(root: Path, doc: str | None) -> dict[str, str]:
+    """The label `doc`'s last compile cites each work by, by entry key case folded; none without `doc` or a compile."""
     if not doc:
         return {}
     from loom.tex.aux import read_cite_labels
 
     return {k.casefold(): v for k, v in read_cite_labels(root, doc).items()}
-
-
-def generation(result: ScanResult, *, doc: str | None = None) -> int:
-    """The library's generation as the works list reads it: a number that goes forward whenever anything a row is made from changes.
-
-    Parameters
-    ----------
-    result : ScanResult
-        The quilt's scan, whose citations make `used_in`.
-    doc : str, optional
-        A document whose cite labels the list carries.
-
-    Returns
-    -------
-    int
-        The time, in milliseconds, at which this process first saw the library as it now stands: its nodes and tags (the index's generation), the library's log, the documents' citations and, given `doc`, its cite labels. A number given again while none of these has changed, so `since` answers `unchanged`, and never a smaller one, a restarted publisher's included. The time is the clock's, LOOM_FIXED_TIME's under it, so a fixture's first answer is that time and each change after it one more.
-    """
-    root = result.quilt.root
-    with NodeIndex.open(root) as index:
-        nodes = index.generation()
-    citations = hashlib.blake2b(json.dumps(cited_in(result), sort_keys=True).encode(), digest_size=16).digest()
-    labels = json.dumps(_labels(root, doc), sort_keys=True) if doc else ""
-    seen = (nodes, _stamp(root / LIBRARY_LOG), citations, labels)
-    kept = _GENERATIONS.get((root, doc))
-    if kept is not None and kept[0] == seen:
-        return kept[1]
-    gen = max(int(now().timestamp() * 1000), kept[1] + 1 if kept else 0)
-    _GENERATIONS[(root, doc)] = (seen, gen)
-    return gen
 
 
 @lru_cache(maxsize=4096)
@@ -138,11 +106,11 @@ def works(result: ScanResult, *, doc: str | None = None) -> list[dict[str, Any]]
 
     See Also
     --------
-    generation : the number the list is answered with, which `since` is compared against.
+    loom.library.generation.generation : the number the list is answered with, which `since` is compared against.
     """
     root = result.quilt.root
     citing = cited_in(result)
-    labels = _labels(root, doc)
+    labels = cite_labels(root, doc)
     acts = _replayed(root)
     rows: list[dict[str, Any]] = []
     with NodeIndex.open(root) as index:

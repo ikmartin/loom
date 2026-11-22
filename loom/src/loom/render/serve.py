@@ -100,7 +100,7 @@ def addressed_here(request: SimpleHTTPRequestHandler) -> bool:
 
 
 class Publications:
-    """Every publication the server makes, counted, how its compiles stand and who is connected, so `/_api/stream` can say that any of them changed."""
+    """Every publication the server makes, counted, how its compiles stand, who is connected and where the library's generation stands, so `/_api/stream` can say that any of them changed."""
 
     def __init__(self) -> None:
         self._cond = threading.Condition()
@@ -109,6 +109,8 @@ class Publications:
         self.compile_state = b"{}"
         self.connected = 0
         self.connected_state = b"[]"
+        self.library = 0
+        self.library_state = b""
         self._closed = False
 
     def published(self) -> None:
@@ -130,17 +132,26 @@ class Publications:
             self.connected_state = state
             self._cond.notify_all()
 
+    def library_at(self, gen: int) -> None:
+        """The library's generation as it now stands (`library.generation`); counted only when it moved."""
+        state = json.dumps({"gen": gen}).encode()
+        with self._cond:
+            if state != self.library_state:
+                self.library += 1
+                self.library_state = state
+                self._cond.notify_all()
+
     def close(self) -> None:
         """End every stream: the server is stopping."""
         with self._cond:
             self._closed = True
             self._cond.notify_all()
 
-    def counts(self) -> tuple[int, int, int]:
-        return (self.count, self.compiles, self.connected)
+    def counts(self) -> tuple[int, int, int, int]:
+        return (self.count, self.compiles, self.connected, self.library)
 
-    def wait(self, seen: tuple[int, int, int], timeout: float) -> tuple[int, int, int] | None:
-        """The publication, compile and connection counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
+    def wait(self, seen: tuple[int, int, int, int], timeout: float) -> tuple[int, int, int, int] | None:
+        """The publication, compile, connection and library counts once any is past `seen`, or as they stand after `timeout`; None once closed."""
         with self._cond:
             self._cond.wait_for(lambda: self._closed or self.counts() != seen, timeout)
             return None if self._closed else self.counts()
@@ -580,6 +591,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
     older: int | None = None
     #: What the publisher does once `library-upgrade` has answered: `ServeSession.bring_forward`; None outside a server.
     brought_forward: Callable[[], None] | None = None
+    #: The library's generation as it stands, said on the stream when it moved: `ServeSession.library_moved`; None outside a server.
+    library_gen: Callable[[], int | None] | None = None
 
     def log_message(self, format: str, *args: object) -> None:  # noqa: A002
         if os.environ.get("LOOM_SERVE_LOG"):
@@ -697,6 +710,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         """The write API (specs/write-api.md). Localhost only, like everything else this server does."""
         from loom.render.api import NO_REBUILD, OWN_LOCK, RECORD_WRITES, UPGRADE, ApiError, handle
+        from loom.render.endpoints.library import WRITES, answered
 
         path = self.path.split("?", 1)[0]
         if not path.startswith("/_api/") or self.quilt_root is None:
@@ -752,6 +766,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                 # the quilt is in this loom's layout now, so the server stops waiting before it answers, and the viewer's next request is served
                 if endpoint == UPGRADE and self.brought_forward is not None:
                     self.brought_forward()
+            if endpoint in WRITES and self.library_gen is not None:
+                answer = answered(endpoint, answer, self.library_gen())
             self._json(HTTPStatus.OK, answer)
         except ApiError as exc:
             self._json(exc.status, exc.answer())
@@ -767,7 +783,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         from urllib.parse import parse_qs, urlsplit
 
         from loom.render.endpoints.base import ApiError
-        from loom.render.endpoints.library import receive_stream
+        from loom.render.endpoints.library import answered, receive_stream
 
         assert self.quilt_root is not None
         refused = from_elsewhere(self) or (
@@ -797,7 +813,9 @@ class LoomHandler(SimpleHTTPRequestHandler):
         length = int(told)
         name = (parse_qs(urlsplit(self.path).query).get("name") or [""])[0]
         try:
-            self._json(HTTPStatus.OK, receive_stream(self.quilt_root, name, self.rfile, length))
+            answer = receive_stream(self.quilt_root, name, self.rfile, length)
+            gen = self.library_gen() if self.library_gen is not None else None
+            self._json(HTTPStatus.OK, answered("library-receive", answer, gen))
         except ApiError as exc:
             self.close_connection = True
             self._json(exc.status, exc.answer())
@@ -970,7 +988,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
         self._json(HTTPStatus.OK, reading_place(self.quilt_root))
 
     def _stream(self) -> None:
-        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, and `connected`, carrying the agent servers alive, each on opening and each time it changes.
+        """`GET /_api/stream`: a server-sent event, `manifest`, carrying nothing, each time a new manifest is published; `compiles`, carrying how every compile stands, and `connected`, carrying the agent servers alive, each on opening and each time it changes; and `library`, carrying `{"gen": N}`, each time the library's generation moves (`library-views.md` §2, "Freshness").
 
         The viewer fetches the manifest as it would on a poll and learns nothing of what changed. Held open on its own thread; a comment every `HEARTBEAT` seconds keeps an idle one alive, and the server's stop ends it.
         """
@@ -999,6 +1017,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     self.wfile.write(b"event: compiles\ndata: " + pubs.compile_state + b"\n\n")
                 if now[2] != seen[2]:
                     self.wfile.write(b"event: connected\ndata: " + pubs.connected_state + b"\n\n")
+                if now[3] != seen[3]:
+                    self.wfile.write(b"event: library\ndata: " + pubs.library_state + b"\n\n")
                 seen = now
                 self.wfile.flush()
         except OSError:
@@ -1227,6 +1247,7 @@ class ServeSession:
             if self.watcher is not None:
                 self.watcher.rebaseline(seen)
             self.publications.published()
+            self.library_moved(report.result)
         if changed is not None:
             from loom.cli.report import counted
 
@@ -1400,6 +1421,7 @@ class ServeSession:
                 "publications": self.publications,
                 "older": self.older,
                 "brought_forward": self.bring_forward,
+                "library_gen": self.library_moved,
             },
         )
         from loom.render.api import offer_scan
@@ -1464,6 +1486,23 @@ class ServeSession:
             self.watcher.start()
             self.presence = Watch(self.quilt.root, self.publications.told_connected)
             self.presence.start()
+
+    def library_moved(self, result: Any = None) -> int | None:
+        """The library's generation as it now stands (`library.generation`), from `result` or the last publication's scan, told to the stream, which says it only when it moved; None for a server with no scan yet, or a quilt still waiting to be brought forward."""
+        if self.older is not None:
+            return None
+        scanned = result if result is not None else (self.last_report.result if self.last_report is not None else None)
+        if scanned is None:
+            return None
+        from loom.library.generation import generation
+
+        try:
+            gen = generation(scanned)
+        except OSError as exc:
+            print(f"loom serve: the library's generation could not be read: {exc}", file=sys.stderr)
+            return None
+        self.publications.library_at(gen)
+        return gen
 
     def bring_forward(self) -> None:
         """Stop waiting, once `library-upgrade` has put the quilt in this loom's layout, and start as a server does.

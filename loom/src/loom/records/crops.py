@@ -83,7 +83,7 @@ def rects_of(result: Any, ra: Any) -> list[list[float]] | None:
     list of [x0, y0, x1, y1] or None
         Its own place, a box anchor's, or a text anchor's words found on its page; None when it stands nowhere.
     """
-    from loom.records.marks import lines_of, pdf_of
+    from loom.records.marks import pdf_of
     from loom.refs.pages import pages_home
 
     a, anchor = ra.annotation, ra.annotation.anchor
@@ -95,7 +95,29 @@ def rects_of(result: Any, ra: Any) -> list[list[float]] | None:
     if not page or pdf is None or not pdf.is_file():
         return None
     # a stored PDF's word boxes are kept beside its page text, so asking again reads no PDF
-    return lines_of(pdf, page, a.selector.exact, pages_home(result.quilt.root, pdf.stem) if ra.work else None)
+    return _recorded(pdf, page, a.selector.exact, ra.span, pages_home(result.quilt.root, pdf.stem) if ra.work else None)
+
+
+def _recorded(
+    pdf: Path, page: int, exact: str, span: tuple[int, int] | None, home: Path | None
+) -> list[list[float]] | None:
+    """The lines of the occurrence of `exact` a note stands on, never another: the only one on the page, or the one at `span`, where resolving it found it in the page's text; None when the words occur more than once and nothing says which.
+
+    `span` indexes the text of the page as the PDF is now, which a stored PDF keeps beside its word boxes (`home`).
+    """
+    from loom.refs.pages import MapRefused, read_page, token_boxes
+    from loom.refs.search import every_offset, every_span
+
+    try:
+        spans = every_span(token_boxes(pdf, page, home), exact, page)
+    except MapRefused:
+        return None
+    k: int | None = 0 if len(spans) == 1 else None
+    if len(spans) > 1 and home is not None and span is not None:
+        starts = [lo for lo, _hi in every_offset(read_page(home, page) or "", exact)]
+        if len(starts) == len(spans) and span[0] in starts:
+            k = starts.index(span[0])
+    return [[float(v) for v in q] for q in spans[k].lines] if k is not None else None
 
 
 def crop_region(result: Any, pdf: Path, page: int, rects: list[list[float]]) -> Path | None:
