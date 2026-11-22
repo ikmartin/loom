@@ -1,6 +1,6 @@
-"""What a TeX source holds, read once for each source and kept by the source's hash (`docs/specs/library-views.md` §3.2, "The survey"): its sections, its results with their proofs, every label it defines, and its bibliography's files.
+"""What a TeX source holds, read once for each source and kept by the source's hash and the work's stored PDF's (`docs/specs/library-views.md` §3.2, "The survey"): its sections, its results with their proofs, every label it defines, and its bibliography's files.
 
-Made in two steps, when something asks for it and never by a build or the list of works. `read` parses the source with the scanner's own parsers and names each result from its counters as `library.counters` emulates them, which a work's outline shows while the survey is `reading`; nothing writes an emulated number into a node. `complete` compiles a copy of the source with a mark inside each heading, result and proof, with no command started for it (`tex.runner.FOREIGN`), and takes every number and page from what TeX wrote, so a result is numbered as its source prints it whether or not it has a label; the survey is judged by its `.aux`, not by TeX's exit. Only files inside the source's folder are read, the stored source is never changed, and a number or a page is taken only when it is shaped like one, so nothing else a compile can write (a file of the person's that a source read in) reaches a node.
+Made in two steps, when something asks for it and never by a build or the list of works. `read` parses the source with the scanner's own parsers and reads each heading's and result's number from its counters as `library.counters` emulates them (`emulated`), which a work's outline shows. `complete` compiles a copy of the source with a mark inside each heading, result and proof, with no command started for it (`tex.runner.FOREIGN`). Nothing that compile says is kept on its own word, since a source nobody at loom wrote can read any file the person can into what it prints: its numbers and pages are hints to look with (`confirm`). A printed number is kept only where it is loom's own reading or the stored PDF shows it heading the statement's words, and a page only from the stored PDF's own text; what nothing confirms is left out, and named. Only files inside the source's folder are read, and the stored source is never changed.
 """
 
 from __future__ import annotations
@@ -28,13 +28,14 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 1
+VERSION = 2
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
 QUEUE = 4 * TIMEOUT
-#: A printed number or page as a source prints one; anything else TeX wrote in its place is not taken.
-SHAPED = re.compile(r"[A-Za-z0-9(][A-Za-z0-9.\-()]{0,15}")
+#: A printed number as a counter renders one: arabic numerals with at most a letter after, roman numerals, or a single letter, joined by dots or hyphens, perhaps in parentheses, sixteen characters at most; anything else TeX wrote in its place is no number.
+_PART = r"(?:\d{1,6}[a-z]?|[ivxlcdm]{1,8}|[IVXLCDM]{1,8}|[A-Za-z])"
+SHAPED = re.compile(rf"(?=.{{1,16}}$)\(?{_PART}(?:[.\-]{_PART})*\)?")
 #: The labels the compile's marks write, never one a source's own: `s`, `i` or `p` and the place of the heading, result or proof.
 MARK = "loom-survey-"
 #: What a marked copy's preamble gains: the mark, a `\label` that also writes the PDF's own count of the page it falls on.
@@ -104,38 +105,39 @@ _BIBLIOGRAPHY = re.compile(r"\\(?:bibliography|addbibresource)\s*(?:\[[^\]]*\]\s
 
 @dataclass
 class Section:
-    """A heading of the source: `section` its id in the survey (`s1`, `s2`, … in source order), `command` the sectioning command."""
+    """A heading of the source: `section` its id in the survey (`s1`, `s2`, … in source order), `command` the sectioning command, `emulated` loom's own reading of its number, and `number` and `page` only as confirmed (`confirm`)."""
 
     section: str
     command: str
-    number: str | None
+    emulated: str | None
     title: str
     level: int
     label: str | None = None
     file: str = ""
     heading_end: int = 0
+    opening: str | None = None
+    number: str | None = None
     page: int | None = None
-    sheet: int | None = None
 
 
 @dataclass
 class Proof:
-    """A proof the source attaches to a result: where it stands in its file, and once compiled its page."""
+    """A proof the source attaches to a result: where it stands in its file, and its page in the work's stored PDF once found there."""
 
     file: str
     start: int
     end: int
     body_start: int
     body_end: int
+    opening: str | None = None
     page: int | None = None
-    sheet: int | None = None
 
 
 @dataclass
 class Item:
     """A result of the source, digested or not (`library-views.md` §3.2's `item`).
 
-    `item` is its own label, else `i` and its place among the source's results. `name` is the word the source prints for it ("Lemma") and `taxon` the node's (`nodes.md` §5). `number` is emulated while the survey is `reading` and what the source printed once it is `ready`. Offsets are in `file`, the source's own text.
+    `item` is its own label, else `i` and its place among the source's results. `name` is the word the source prints for it ("Lemma") and `taxon` the node's (`nodes.md` §5). `emulated` is loom's own reading of its number, from the source's counters; `number` is the number it prints, only once confirmed, and `page` its page in the work's stored PDF, only once found there (`confirm`). Offsets are in `file`, the source's own text.
     """
 
     item: str
@@ -143,7 +145,7 @@ class Item:
     taxon: str
     name: str
     numbered: bool
-    number: str | None
+    emulated: str | None
     title: str | None
     label: str | None
     labels: list[str]
@@ -153,14 +155,15 @@ class Item:
     end: int
     body_start: int
     body_end: int
+    opening: str | None = None
+    number: str | None = None
     page: int | None = None
-    sheet: int | None = None
     proofs: list[Proof] = field(default_factory=list)
 
 
 @dataclass
 class Label:
-    """Every `\\label` of the source: whose text holds it (`owner`, an item; `proof`, which of its proofs), whether it is that item's own, and `kind`, the counter it numbers as (`section`, `equation`, `enumi`, `figure`, a result's own, or `other`)."""
+    """Every `\\label` of the source: whose text holds it (`owner`, an item; `proof`, which of its proofs), whether it is that item's own, `kind`, the counter it numbers as (`section`, `equation`, `enumi`, `figure`, a result's own, or `other`), and its number and page only as confirmed (`confirm`)."""
 
     kind: str
     owner: str | None = None
@@ -168,15 +171,18 @@ class Label:
     result: bool = False
     number: str | None = None
     page: int | None = None
-    sheet: int | None = None
 
 
 @dataclass
 class Survey:
-    """What one source holds. `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, and the compile's own); `unseen` names what a compile left unnumbered, and `errors` counts the errors TeX reported in a compile that still wrote every mark."""
+    """What one source holds, confirmed against the work's stored PDF `pdf` where there is one.
+
+    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one.
+    """
 
     tex: str
     main: str
+    pdf: str | None = None
     version: int = VERSION
     state: str = "reading"
     why: str | None = None
@@ -187,7 +193,7 @@ class Survey:
     bibliography: list[str] = field(default_factory=list)
     bbl: str | None = None
     unseen: list[str] = field(default_factory=list)
-    errors: int = 0
+    unconfirmed: list[str] = field(default_factory=list)
 
     def to_json(self) -> dict[str, Any]:
         """The survey as its kept file holds it."""
@@ -303,12 +309,13 @@ def _walk(
                 Section(
                     section=sid,
                     command=u.name,
-                    number=numbering.heading(u.name, u.starred),
+                    emulated=numbering.heading(u.name, u.starred),
                     title=u.title,
                     level=u.level,
                     label=u.labels[0] if u.labels else None,
                     file=u.file,
                     heading_end=u.heading_end,
+                    opening=_opening(u.title, least=6),
                 )
             )
             places.append((u.exp_start, u.exp_end, sid))
@@ -327,7 +334,7 @@ def _walk(
                 taxon=taxon_of(taxon),
                 name=taxon.name,
                 numbered=taxon.numbered,
-                number=numbering.theorem(taxon),
+                emulated=numbering.theorem(taxon),
                 title=env.optarg.strip() if env.optarg and env.optarg.strip() else None,
                 label=own,
                 labels=labels,
@@ -337,6 +344,7 @@ def _walk(
                 end=env.end,
                 body_start=env.body_start,
                 body_end=env.body_end,
+                opening=_opening(files[rel].clean[env.body_start : env.body_end]),
             )
             out.items.append(item)
             statements[(rel, env.start)] = item
@@ -346,7 +354,8 @@ def _walk(
             owner = statements.get((rel, att.statement.start)) if att.statement is not None else None
             if owner is not None:
                 p = att.proof
-                owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end))
+                opening = _opening(files[rel].clean[p.body_start : p.body_end])
+                owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
 
 
 def _innermost(roots: list[Env], at: int) -> list[Env]:
@@ -431,15 +440,16 @@ def _bibliography(out: Survey, src: Path, main: str, files: dict[str, SourceFile
     out.bbl = bbl if (src / bbl).is_file() else None
 
 
-def path_of(root: Path, tex: str) -> Path:
-    """Where the survey of the source `tex` is kept."""
-    return root / LIBRARY_SURVEYS / f"{tex.removeprefix('sha256:')}.json"
+def path_of(root: Path, tex: str, pdf: str | None = None) -> Path:
+    """Where the survey of the source `tex`, confirmed against the stored PDF `pdf` or none, is kept."""
+    name = tex.removeprefix("sha256:") + ("-" + pdf.removeprefix("sha256:") if pdf else "")
+    return root / LIBRARY_SURVEYS / f"{name}.json"
 
 
-def kept(root: Path, tex: str) -> Survey | None:
-    """The survey kept for the source `tex`, or None when there is none of this version."""
+def kept(root: Path, tex: str, pdf: str | None = None) -> Survey | None:
+    """The survey kept for the source `tex` and the stored PDF `pdf`, or None when there is none of this version."""
     try:
-        data = json.loads(path_of(root, tex).read_text(encoding="utf-8"))
+        data = json.loads(path_of(root, tex, pdf).read_text(encoding="utf-8"))
         return Survey.from_json(data) if data.get("version") == VERSION else None
     except (OSError, ValueError, TypeError):
         return None
@@ -447,14 +457,14 @@ def kept(root: Path, tex: str) -> Survey | None:
 
 def keep(root: Path, survey: Survey) -> None:
     """Write a survey to its file whole: a reader sees the last one or this one, never part of it."""
-    path = path_of(root, survey.tex)
+    path = path_of(root, survey.tex, survey.pdf)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(survey.to_json(), ensure_ascii=False, sort_keys=True), encoding="utf-8")
     os.replace(tmp, path)
 
 
-def survey(root: Path, tex: str, src: Path, main: str) -> Survey:
+def survey(root: Path, tex: str, src: Path, main: str, pdf: str | None = None) -> Survey:
     """A source's survey: the one kept for it, else read now and kept.
 
     Parameters
@@ -467,22 +477,25 @@ def survey(root: Path, tex: str, src: Path, main: str) -> Survey:
         The source's folder, unpacked.
     main : str
         Its main file, relative to `src`.
+    pdf : str, optional
+        The hash of the work's stored PDF, which its numbers and pages are confirmed against.
 
     Returns
     -------
     Survey
         As kept, or `reading` when read now (see `read`).
     """
-    found = kept(root, tex)
+    found = kept(root, tex, pdf)
     if found is not None:
         return found
     out = read(src, main, tex)
+    out.pdf = pdf
     keep(root, out)
     return out
 
 
 def shaped(value: str | None) -> str | None:
-    """`value` when it is shaped as a printed number or page, else None."""
+    """`value` when it is shaped as a counter renders a number (`SHAPED`), else None: a word of the person's read in by a source is not."""
     if value is None:
         return None
     value = value.strip()
@@ -516,65 +529,155 @@ def marked(src: Path, s: Survey, dest: Path) -> Path:
     return root
 
 
-def _printed(number: str, found: dict[str, AuxNumber]) -> str | None:
-    """The number TeX printed: `number` when shaped as one, or the number of the label it is a `\\ref` of, followed once."""
+def _hint(number: str, found: dict[str, AuxNumber]) -> str | None:
+    """What the compile says a mark or label printed, shaped as a number, or the number of the label it is a `\\ref` of, followed once; a hint to look with, never kept on its own word."""
     if (m := _REFERS.fullmatch(number.strip())) is not None:
         got = found.get(re.sub(r"\s+", " ", m.group(1)).strip())
         return shaped(got.number) if got is not None else None
     return shaped(number)
 
 
-def numbered(s: Survey, auxes: list[str]) -> Survey:
-    """A copy of `s` numbered and paged from `auxes`, the `.aux` files of its marked copy's compile, judged by them and not by TeX's exit.
+def _opening(text: str, *, least: int = 12) -> str | None:
+    """The words a statement, a proof or a heading opens with, before its first formula or environment, as `refs.search` compares page text; None when there are fewer than `least` letters to find it by."""
+    from loom.refs.search import _loose
 
-    `ready` when every mark loom added is there, and each mark of a result or heading its source numbers holds a number shaped as one; else `failed`, `incomplete`, with `unseen` naming each item (`i…`), heading (`s…`) and proof (`p…`) that fell short, and no number taken from the compile at all. A result its source declares unnumbered keeps none; a label of the source's own takes its number only when it is shaped as one.
+    text = re.sub(r"\\label\s*\{[^{}]*\}", " ", text)
+    head = re.split(r"\$|\\\[|\\\(|\\begin\s*\{", text, maxsplit=1)[0]
+    head = re.sub(r"\\[A-Za-z@]+\*?|[{}~]", " ", head)
+    words = _loose(" ".join(head.split()[:10]))
+    return words if len(words) >= least else None
+
+
+class Pages:
+    """A stored PDF's text, a page at a time, compared as `refs.search` compares quotations: what a compile's word is checked against, since the compile cannot have written it."""
+
+    def __init__(self, texts: list[str]) -> None:
+        from loom.refs.search import _loose
+
+        self.texts = [_loose(t) for t in texts]
+
+    @classmethod
+    def of(cls, pdf: Path | None) -> Pages | None:
+        """The text of every page of `pdf`, read by poppler's `pdftotext` at once; None without a PDF or poppler, or a PDF it cannot read."""
+        import shutil
+        import subprocess
+
+        exe = shutil.which("pdftotext")
+        if pdf is None or exe is None or not pdf.is_file():
+            return None
+        try:
+            done = subprocess.run([exe, "-enc", "UTF-8", str(pdf), "-"], capture_output=True, timeout=120, check=False)
+        except (OSError, subprocess.TimeoutExpired):
+            return None
+        if done.returncode != 0:
+            return None
+        return cls(done.stdout.decode("utf-8", errors="replace").split("\f"))
+
+    def find(self, words: str, near: int | None) -> list[tuple[int, int]]:
+        """Each place `words` stand, as (page from 1, offset in its compared text), those on the page `near` and its neighbours first, then the rest by page."""
+        out = [(k + 1, m.start()) for k, t in enumerate(self.texts) for m in re.finditer(re.escape(words), t)]
+        return sorted(out, key=lambda at: (abs(at[0] - near) if near else 0, at[0], at[1]))
+
+    def headed(self, page: int, at: int, name: str, number: str) -> bool:
+        """Whether the words at `at` on `page` are headed by `name` and `number` ("Lemma 2.2.", "Lemma 2.2 (Title).", "2.2 Lemma."), as the PDF prints them."""
+        from loom.refs.search import _loose
+
+        before = self.texts[page - 1][max(0, at - 160) : at]
+        word, num = re.escape(_loose(name)), re.escape(_loose(number))
+        title = r"(?:\(.{0,120}?\))?[.:]?"
+        return re.search(rf"(?:{word}{num}|{num}\.?{word}){title}$", before, re.IGNORECASE) is not None
+
+    def shows(self, page: int, text: str) -> bool:
+        """Whether `page` shows `text`, compared as quotations are."""
+        from loom.refs.search import _loose
+
+        return 0 < page <= len(self.texts) and _loose(text) in self.texts[page - 1]
+
+
+def _confirmed(
+    emulated: str | None, hint: str | None, name: str, opening: str | None, near: int | None, pages: Pages | None
+) -> tuple[str | None, int | None]:
+    """A printed number and a page for one heading or result, each only where something the compile could not have written confirms it.
+
+    The number is the compile's `hint` where the stored PDF shows it heading the opening words found there, or loom's own reading (`emulated`) where it shows that, or where the compile's hint is that very reading. The page is where the PDF shows the opening words, the page nearest the compile's `near` among several; nothing of the compile's is kept for itself.
+    """
+    if pages is not None and opening is not None:
+        found = pages.find(opening, near)
+        for page, at in found:
+            for number in dict.fromkeys(n for n in (hint, emulated) if n):
+                if pages.headed(page, at, name, number):
+                    return number, page
+        if found:
+            # the page nearest where the compile says it stands, when one page is nearest; several pages and no word from the compile is no page
+            on = {p for p, _a in found}
+            nearest = {p for p in on if near and abs(p - near) == abs(found[0][0] - near)}
+            where = found[0][0] if len(on) == 1 or len(nearest) == 1 else None
+            return (emulated if emulated is not None and hint == emulated else None), where
+    return (emulated if emulated is not None and hint == emulated else None), None
+
+
+def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
+    """A copy of `s` judged by `auxes`, the `.aux` files of its marked copy's compile, its numbers and pages kept only as confirmed.
+
+    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. A heading's or result's number is kept where it is loom's own reading of the source's counters, or where the work's stored PDF (`pages`) shows it heading the statement's opening words; a page only from the stored PDF; a label's number where it is its result's or its heading's, or, for a display or an item inside a result, where the PDF shows it in parentheses on that result's page. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. The survey is `ready` when every mark loom added is there, else `failed`, `incomplete`, with `unseen` naming what fell short by its id in the survey.
     """
     found: dict[str, AuxNumber] = {}
     sheets: dict[str, int] = {}
     for text in auxes:
         found.update(parse_aux(text))
         sheets.update({m.group(1): int(m.group(2)) for m in _SHEET.finditer(text)})
-    marks: list[tuple[str, bool]] = [(f"s{k}", sec.number is not None) for k, sec in enumerate(s.sections)]
+    marks: list[tuple[str, str]] = [(f"s{k}", sec.section) for k, sec in enumerate(s.sections)]
     for k, item in enumerate(s.items):
-        marks.append((f"i{k}", item.numbered))
-        marks += [(f"p{k}-{j}", False) for j in range(len(item.proofs))]
-    unseen = [
-        name
-        for name, counts in marks
-        if (got := found.get(MARK + name)) is None or (counts and _printed(got.number, found) is None)
-    ]
+        marks.append((f"i{k}", item.item))
+        marks += [(f"p{k}-{j}", f"{item.item}:proof{j}") for j in range(len(item.proofs))]
     out = Survey.from_json(s.to_json())
-    if unseen:
-        out.state, out.why, out.unseen = "failed", "incomplete", unseen
+    out.unseen = [name for mark, name in marks if MARK + mark not in found]
+    if out.unseen:
+        out.state, out.why = "failed", "incomplete"
         return out
 
-    def at(mark: str) -> tuple[str | None, int | None, int | None]:
-        got = found[MARK + mark]
-        return _printed(got.number, found), got.page, sheets.get(MARK + mark) or None
+    def hint(mark: str) -> tuple[str | None, int | None]:
+        return _hint(found[MARK + mark].number, found), sheets.get(MARK + mark) or None
 
+    unconfirmed: list[str] = []
     for k, sec in enumerate(out.sections):
-        number, sec.page, sec.sheet = at(f"s{k}")
-        sec.number = number if sec.number is not None else None
+        said, near = hint(f"s{k}")
+        sec.number, sec.page = _confirmed(sec.emulated, said, "", sec.opening, near, pages)
+        if sec.emulated is not None and sec.number is None:
+            unconfirmed.append(sec.section)
     for k, item in enumerate(out.items):
-        number, item.page, item.sheet = at(f"i{k}")
+        said, near = hint(f"i{k}")
+        emulated = item.emulated if item.numbered else None
+        number, item.page = _confirmed(emulated, said, item.name, item.opening, near, pages)
         item.number = number if item.numbered else None
+        if item.numbered and item.number is None:
+            unconfirmed.append(item.item)
         for j, proof in enumerate(item.proofs):
-            _n, proof.page, proof.sheet = at(f"p{k}-{j}")
-    unnumbered = {i.item for i in out.items if not i.numbered}
+            _n, proof_near = hint(f"p{k}-{j}")
+            _no, proof.page = _confirmed(None, None, "", proof.opening, proof_near, pages)
+    by_item = {i.item: i for i in out.items}
+    by_label = {sec.label: sec for sec in out.sections if sec.label}
     for name, label in out.labels.items():
-        got = found.get(name)
-        label.number = (
-            _printed(got.number, found)
-            if got is not None and not (label.result and label.owner in unnumbered)
-            else None
-        )
-        label.page = got.page if got is not None else None
-    out.state, out.why, out.unseen = "ready", None, []
+        owner = by_item.get(label.owner) if label.owner else None
+        if label.result and owner is not None:
+            label.number, label.page = owner.number, owner.page
+        elif name in by_label:
+            label.number, label.page = by_label[name].number, by_label[name].page
+        elif owner is not None:
+            page = owner.page if label.proof is None else owner.proofs[label.proof].page
+            got = found.get(name)
+            said = _hint(got.number, found) if got is not None else None
+            shown = said is not None and page is not None and pages is not None and pages.shows(page, f"({said})")
+            label.number, label.page = (said if shown else None), page
+        else:
+            label.number, label.page = None, None
+    out.unconfirmed = unconfirmed
+    out.state, out.why = "ready", None
     return out
 
 
-def compile_marks(src: Path, s: Survey) -> Survey:
-    """Compile a marked copy of the source in a scratch folder, removed after, and number `s` from what it wrote.
+def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
+    """Compile a marked copy of the source in a scratch folder, removed after, and keep of what it wrote only what is confirmed (`confirm`).
 
     Parameters
     ----------
@@ -582,11 +685,13 @@ def compile_marks(src: Path, s: Survey) -> Survey:
         The source's folder, unpacked.
     s : Survey
         Its survey as `read` made it.
+    pdf : Path, optional
+        The work's stored PDF, the one `s.pdf` names, which its numbers and pages are confirmed against; without one a number is kept only as loom's own reading, and no page.
 
     Returns
     -------
     Survey
-        As `numbered` judges what TeX wrote, with `errors` the count of errors TeX reported, so a source whose figure is missing still reads `ready` when every mark is there; or `failed` when TeX wrote no `.aux`: `no-tex` without latexmk, `timeout` past `TIMEOUT`, `stopped`, else `compile`.
+        As `confirm` judges what TeX wrote, so a source whose figure is missing still reads `ready` when every mark is there; or `failed` when TeX wrote no `.aux`: `no-tex` without latexmk, `timeout` past `TIMEOUT`, `stopped`, else `compile`.
     """
     if s.state == "failed":
         return s
@@ -599,12 +704,12 @@ def compile_marks(src: Path, s: Survey) -> Survey:
         out.state = "failed"
         out.why = {127: "no-tex", 124: "timeout"}.get(res.returncode, "stopped" if res.stopped else "compile")
         return out
-    done = numbered(s, auxes)
-    done.errors = len(res.errors)
-    return done
+    return confirm(s, auxes, Pages.of(pdf))
 
 
-def complete(root: Path, tex: str, src: Path, main: str) -> Survey:
+def complete(
+    root: Path, tex: str, src: Path, main: str, pdf: str | None = None, pdf_path: Path | None = None
+) -> Survey:
     """A source's survey once compiled: the kept one when it is `ready` or `failed`, else compiled now and kept.
 
     One compile at a time in a quilt: each holds `SURVEY_LOCK`, decides again under it, and waits up to `QUEUE` seconds for another to end.
@@ -619,6 +724,10 @@ def complete(root: Path, tex: str, src: Path, main: str) -> Survey:
         The source's folder, unpacked.
     main : str
         Its main file, relative to `src`.
+    pdf : str, optional
+        The hash of the work's stored PDF, which the survey is kept by and confirmed against.
+    pdf_path : Path, optional
+        That PDF on the disk.
 
     Returns
     -------
@@ -626,9 +735,9 @@ def complete(root: Path, tex: str, src: Path, main: str) -> Survey:
         `ready` or `failed` (see `compile_marks`).
     """
     with locks.locked(root / SURVEY_LOCK, wait=QUEUE):
-        s = survey(root, tex, src, main)
+        s = survey(root, tex, src, main, pdf)
         if s.state != "reading":
             return s
-        done = compile_marks(src, s)
+        done = compile_marks(src, s, pdf_path if pdf else None)
         keep(root, done)
         return done
