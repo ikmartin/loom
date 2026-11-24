@@ -84,8 +84,9 @@ def serve(port: int | None, open_browser: bool, no_compile: bool, viewer: str | 
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _term)
-    session.start()
     try:
+        # inside: a stop that comes during the first build, as the home's can, is a clean stop too
+        session.start()
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

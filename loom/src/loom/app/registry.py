@@ -69,8 +69,9 @@ def _locked() -> AbstractContextManager[None]:
 
 
 def free(port: int) -> bool:
-    """Whether nothing listens on `port` at 127.0.0.1, by binding it for a moment."""
+    """Whether nothing listens on `port` at 127.0.0.1, by binding it for a moment as a server binds it: past the closed connections a stopped server leaves waiting."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("127.0.0.1", port))
         except OSError:
