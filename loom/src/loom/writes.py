@@ -1954,6 +1954,16 @@ class Act:
             _append_records(self.root, self.records)
             self._follow()
             return
+        if self.kind != "pull":
+            from loom.overleaf import mirrored
+
+            # the real file each change reaches, judged under the lock as the act is about to write it: a folder that mirrors Overleaf is written by an update alone
+            for rel in changed:
+                if mirrored(self.root, rel):
+                    raise WriteRefused(
+                        "mirrored",
+                        f"{rel} mirrors Overleaf, and only an update from Overleaf writes it; make the change in Overleaf",
+                    )
         # an act with a look to write and no file, as a Keep of in-place changes, is journalled all the same, so recovery finishes it, records and look together
         files: dict[str, list[str | None]] = {}
         for rel, data in changed.items():

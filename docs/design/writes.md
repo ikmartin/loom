@@ -173,6 +173,7 @@ Writes from the viewer are to answer before the rebuild that publishes them (not
 | `exists` | a file the act would make is there already (`put`'s `new`, a move's target) |
 | `gone` | a file the act would move is not there any more |
 | `not-writable` | the file is read-only, or its folder lets no file be made beside it |
+| `mirrored` | the real file a change reaches, links resolved, lies in the folder that mirrors an Overleaf project, compared by the file system's identity (`loom.overleaf.mirrored`); only an update from Overleaf, an act of kind `pull`, writes there. Judged at the commit, under the lock, before anything is journalled |
 
 The write API answers each with status 409 (`docs/specs/write-api.md`). The undo of a Keep refuses one edit at a time, in its answer's `refused`, besides these: `not-kept`, `not-written` and `changed-since` ("Undo of a Keep").
 

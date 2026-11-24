@@ -14,7 +14,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 from urllib.parse import urlsplit
 
-from loom.paths import OVERLEAF_CLONE, OVERLEAF_HERE
+from loom.paths import OVERLEAF_CLONE, OVERLEAF_HERE, SOURCE_SYNC
 from loom.scan.quilt import Quilt
 from loom.sync import SyncError, SyncState, tree_files
 
@@ -195,6 +195,32 @@ def paired(root: Path) -> SyncState | None:
     except SyncError:
         return None
     return state if state.folder else None
+
+
+def mirrored(root: Path, rel: str) -> bool:
+    """Whether the real file `rel` reaches lies in the folder a mirror keeps its project in, which only an update writes.
+
+    Judged as recovery judges a place (`writes._place`, `writes._loom_named`): the path's links resolved to the real file, and each folder it lies in compared with the mirrored folder by the file system's identity, never by spelling, so a link into the folder, or the folder named in another case where case is ignored, is the folder.
+    """
+    try:
+        folder = json.loads((root / SOURCE_SYNC).read_text(encoding="utf-8")).get("folder")
+        own = os.stat(root / folder) if isinstance(folder, str) and folder else None
+    except (OSError, ValueError, AttributeError):
+        return False
+    if own is None:
+        return False
+    top = Path(os.path.realpath(root))
+    real = Path(os.path.realpath(root / rel))
+    for place in (real, *real.parents):
+        try:
+            it = os.stat(place)
+        except OSError:
+            continue
+        if (it.st_dev, it.st_ino) == (own.st_dev, own.st_ino):
+            return True
+        if place == top:
+            break
+    return False
 
 
 def _clone(root: Path, git_address: str) -> Path:

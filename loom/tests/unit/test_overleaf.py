@@ -593,3 +593,92 @@ def test_an_update_through_overleaf_s_password_keeps_the_token_out_of_the_quilt(
     git(clone, "push", "-q", "origin", "main", who=CLEO)
     assert overleaf.update(load_quilt(q.root))["files"] == 1
     assert not [p for p in q.root.rglob("*") if p.is_file() and TOKEN.encode() in p.read_bytes()]
+
+
+# ---- a mirrored document to the rest of loom -------------------------------------------------------------------------
+
+
+def suggested(root: Path) -> str:
+    """A suggested edit on the second lemma, `not planar` to `never planar`; its id."""
+    from loom.scan.quilt import save_author
+
+    save_author("Pat")  # the person who keeps it; the test's home is its own
+    said = json_of(
+        "suggest",
+        "drafting/main.tex#lemma:2",
+        "--quote",
+        "not planar",
+        "--with",
+        "never planar",
+        "--as",
+        "Claude Agent",
+        "--json",
+        cwd=root,
+    )
+    return str(said["edit"])
+
+
+def test_keep_on_a_mirrored_document_is_refused_and_writes_nothing(tmp_path: Path) -> None:
+    from tests.helpers import refused
+
+    root, _ = two_lemmas(tmp_path)
+    edit_id = suggested(root)
+    before = (root / "drafting/main.tex").read_bytes()
+    refused("changes", "--keep", edit_id, cwd=root, code=1, match="mirrors Overleaf")
+    assert (root / "drafting/main.tex").read_bytes() == before
+
+
+def test_done_in_overleaf_keeps_the_edit_once_an_update_brings_its_text_and_writes_nothing_more(tmp_path: Path) -> None:
+    root, bare = two_lemmas(tmp_path)
+    edit_id = suggested(root)
+    mine = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+    mirror.edit(mine, "took the suggestion", {"main.tex": TWO.replace("not planar", "never planar")}, who=mirror.PERSON)
+    overleaf.update(load_quilt(root))
+    after = (root / "drafting/main.tex").read_bytes()
+    written = acts(root)
+    ok("changes", "--keep", edit_id, cwd=root)
+    assert (root / "drafting/main.tex").read_bytes() == after
+    assert acts(root) == written, "a Keep whose text Overleaf has already writes no file"
+    assert [c["id"] for c in json_of("changes", "--json", cwd=root)["changes"]] == []
+
+
+def test_no_act_but_an_update_moves_a_file_in_or_out_of_the_mirrored_folder(tmp_path: Path) -> None:
+    from tests.helpers import refused
+
+    root, _ = two_lemmas(tmp_path)
+    (root / "notes.tex").write_text("\\documentclass{article}\n\\begin{document}\nMine.\n\\end{document}\n")
+    for old, new in (
+        ("drafting/main.tex", "elsewhere.tex"),
+        ("notes.tex", "drafting/notes.tex"),
+        ("notes.tex", "Drafting/notes.tex"),
+    ):
+        refused("mv", old, new, cwd=root, code=1, match="mirrors Overleaf")
+    assert (root / "drafting/main.tex").is_file() and (root / "notes.tex").is_file()
+
+
+def test_a_link_into_the_mirrored_folder_or_another_spelling_of_it_is_the_folder(tmp_path: Path) -> None:
+    """The door judges the real file a path reaches: a link from an open place into the folder, and the folder named in another case where the file system ignores case, are refused as the folder is."""
+    from loom import writes
+    from loom.overleaf import mirrored
+
+    root, _ = two_lemmas(tmp_path)
+    (root / "notes").mkdir()
+    (root / "notes/paper").symlink_to(root / "drafting", target_is_directory=True)
+    (root / "notes/main.tex").symlink_to(root / "drafting/main.tex")
+    spelled = ["Drafting/main.tex"] if (root / "DRAFTING").exists() else []
+    for rel in ["notes/paper/main.tex", "notes/main.tex", "notes/paper/new.tex", *spelled]:
+        assert mirrored(root, rel), rel
+        with pytest.raises(writes.WriteRefused) as refused, writes.act(root, load_quilt(root).history_dir, "keep") as w:
+            w.replace(rel, b"written past the mirror\n")
+        assert refused.value.code == "mirrored", rel
+    assert (root / "drafting/main.tex").read_text() == TWO and not (root / "drafting/new.tex").exists()
+    assert not mirrored(root, "notes/elsewhere.tex") and not mirrored(root, "drafting-notes/main.tex")
+
+
+def test_an_update_writes_the_mirrored_folder_and_nothing_else_is_judged_mirrored(tmp_path: Path) -> None:
+    from loom import writes
+
+    root, _ = two_lemmas(tmp_path)
+    with writes.act(root, load_quilt(root).history_dir, "keep") as w:
+        w.replace("notes.tex", b"mine\n")
+    assert (root / "notes.tex").read_text() == "mine\n"
