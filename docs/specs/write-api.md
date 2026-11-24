@@ -100,6 +100,19 @@ The write API is the HTTP form of the publisher's local commands, so that a brow
 
 **[decided]** A change is kept or discarded where it is drawn, in its document or in Review, never resolved. Its id is what both endpoints take: `c-` and eight hex digits for an in-place edit, its content's hash, which stands while the change does, and a suggested edit's own id. Every write loom makes on the person's word goes into their look too, so a suggested edit kept is not listed back as an in-place edit of its words; a suggested edit whose key already reads as it taken is kept without writing. An agent withdraws its own open edit with `loom suggest --withdraw ID`; keeping and discarding are the author's.
 
+### The Overleaf mirror
+
+A quilt may mirror one Overleaf project, read over git and never written back (`loom/src/loom/overleaf.py`). These are the person's acts, refused to a declared agent (`author-only`, 403). They wait on Overleaf, so the publisher runs them outside the publication's lock. A failure to reach Overleaf is 409 with its code: `no-git`, `no-token` (no token kept for Overleaf on this machine), `token-refused` (Overleaf refused it; a refused token is forgotten), `no-git-access` (the project's owner has no git access, or the link is not the project's), `offline`, `failed`.
+
+| method | path | body | effect |
+|---|---|---|---|
+| `POST` | `/_api/overleaf-pair` | `{link, folder?, main?, me?: string[], author?}` | with `link` alone, reaches the project (its clone made in `.loom/local/overleaf/`) and answers `{choose: {folder, mains, main, authors: [{name, email}], me}}`: a proposed new folder, the main file candidates and the one loom would take (`""` when the person must choose), who the project's history names, and the addresses this machine knows the person by; with `folder`, `main` and `me`, copies the project into that new folder as one act, denies it to agents, sets `[quilt] main` when the quilt has none, keeps `me` on this machine, and answers `{paired: {folder, main}}`. Refused: `sharing-link` and `not-a-project` (409) for a link that is not the project's own; `paired`, `folder-exists`, `bad-folder`, `no-main` (409) |
+| `POST` | `/_api/overleaf-token` | `{token, link?}` | gives the git token to the credential helper (the macOS Keychain) for Overleaf's host, on standard input and nowhere else, and answers `{stored: true}`; the viewer then repeats what asked for it. `link` is needed only before pairing. Refused: `bad-token` (400) for anything but one line of printable characters |
+| `POST` | `/_api/overleaf-update` | `{author?}` | fetches and takes what Overleaf holds into the mirrored folder as one act, each file written whole with Overleaf's bytes and a version of each document it reaches stamped first; answers `{state: "up-to-date"}` or `{state: "updated", files, by, own, overwritten}`: how many files were written, the names of the others whose changes Review lists, how many changed blocks were left out as touched only by the person's own commits, and the files that held a change made here and were written over. Refused: `not-paired` (409) |
+| `POST` | `/_api/overleaf-unpair` | `{author?}` | ends the pairing: the record, the clone and this machine's part go, the folder stays; answers `{paired: false}`. Refused: `not-paired` (409) |
+
+Every other write to a file in the mirrored folder is refused by the door as `mirrored` (409), Keep among them, unless the edit's text is there already, in which case Keep records it kept and writes nothing.
+
 ### Local source sync and pending review
 
 | method | path | body | effect |

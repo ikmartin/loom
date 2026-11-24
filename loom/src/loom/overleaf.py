@@ -5,13 +5,16 @@ Loom reaches Overleaf over git only (`https://git.overleaf.com/<id>`), and only 
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
 import shutil
 import subprocess
+import threading
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, ParamSpec, TypeVar
 from urllib.parse import urlsplit
 
 from loom.paths import OVERLEAF_CLONE, OVERLEAF_HERE, SOURCE_SYNC
@@ -24,6 +27,23 @@ GIT_HOST = "git.overleaf.com"
 HELPER = "osxkeychain"
 #: How long a call that reaches Overleaf may take before it is called unreachable, in seconds; a clone of a large project is the longest.
 TIMEOUT = 300.0
+#: Held by every step that makes, fetches into or removes loom's clone, so the fetch a server makes as it starts never races a pairing or its end.
+_CLONE_LOCK = threading.RLock()
+
+_P = ParamSpec("_P")
+_R = TypeVar("_R")
+
+
+def _holding_clone(fn: Callable[_P, _R]) -> Callable[_P, _R]:
+    """`fn` run holding `_CLONE_LOCK`."""
+
+    @functools.wraps(fn)
+    def held(*args: _P.args, **kwargs: _P.kwargs) -> _R:
+        with _CLONE_LOCK:
+            return fn(*args, **kwargs)
+
+    return held
+
 
 #: A project id as Overleaf writes it in a project's address: 24 hex digits, or digits for an old project.
 _ID = r"(?P<id>[0-9a-f]{24}|[0-9]+)"
@@ -288,6 +308,7 @@ def propose_folder(root: Path) -> str:
     return "overleaf-project"
 
 
+@_holding_clone
 def prepare(quilt: Quilt, git_address: str) -> dict[str, Any]:
     """Reach the project and say what pairing asks of the person, writing nothing of theirs: the clone is made or fetched.
 
@@ -328,6 +349,7 @@ def prepare(quilt: Quilt, git_address: str) -> dict[str, Any]:
     }
 
 
+@_holding_clone
 def pair(
     quilt: Quilt, git_address: str, folder: str, main: str, me: list[str], actor: str | None = None
 ) -> dict[str, Any]:
@@ -410,6 +432,7 @@ def pair(
 # ---- fetching and updating -------------------------------------------------------------------------------------------
 
 
+@_holding_clone
 def fetch(quilt: Quilt) -> SyncState:
     """Fetch what Overleaf holds into loom's clone and record it as waiting, writing nothing of the person's; what could not be done is kept as this machine's `problem` (`here`), and cleared once a fetch succeeds.
 
@@ -473,4 +496,39 @@ def update(quilt: Quilt, actor: str | None = None) -> dict[str, Any]:
         "by": said["by"],
         "own": said["own"],
         "overwritten": said["overwritten"],
+    }
+
+
+@_holding_clone
+def unpair(quilt: Quilt) -> None:
+    """End the pairing: the record, loom's clone and this machine's part go; the folder stays, its files now the person's to edit like any other, and denied to agents until the person says otherwise in Settings."""
+    root = quilt.root
+    if paired(root) is None:
+        raise MirrorError("not-paired", "This quilt mirrors no Overleaf project.")
+    (root / SOURCE_SYNC).unlink()
+    shutil.rmtree(root / OVERLEAF_CLONE, ignore_errors=True)
+    (root / OVERLEAF_HERE).unlink(missing_ok=True)
+
+
+def published(root: Path) -> dict[str, Any]:
+    """The manifest's `overleaf`: whether the quilt mirrors a project and how it stands, in fields the viewer draws in its own words; no revision, token or address of anyone's.
+
+    Returns
+    -------
+    dict
+        `{"paired": false}`, or `paired`, `folder`, `main` (the main document's quilt path), `link` (the project's page in Overleaf), `waiting` (Overleaf holds text not yet taken in, as the last fetch saw), `last` (the last update: `when`, `files`, `by`, `own`; null before one) and `problem` (what the last reach of Overleaf could not do, by its code; null when it went well).
+    """
+    state = paired(root)
+    if state is None:
+        return {"paired": False}
+    project = state.url.rstrip("/").rsplit("/", 1)[-1]
+    last = state.last_pull
+    return {
+        "paired": True,
+        "folder": state.folder,
+        "main": state.master,
+        "link": f"https://www.overleaf.com/project/{project}" if state.url.startswith(f"https://{GIT_HOST}/") else "",
+        "waiting": bool(state.incoming) and state.incoming != state.integrated,
+        "last": {k: last.get(k) for k in ("when", "files", "by", "own")} if last.get("when") else None,
+        "problem": here(root)["problem"],
     }

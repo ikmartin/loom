@@ -1421,10 +1421,28 @@ class ServeSession:
             print(f"loom serve: {said}", file=sys.stderr)
         self.first_look()
         self.first_build()
+        self.fetch_overleaf()
         assert self.watcher is not None
         self.watcher.start()
         self.presence = Watch(self.quilt.root, self.publications.told_connected)
         self.presence.start()
+
+    def fetch_overleaf(self) -> None:
+        """Fetch from Overleaf once, in the background, when the quilt mirrors a project, and publish what it found: the viewer then says when Overleaf has changes, or why it could not be reached. Nothing of the person's is written; only the Update control takes the text in (`loom.overleaf`)."""
+        from loom.overleaf import fetch, paired
+        from loom.sync import SyncError
+
+        if paired(self.quilt.root) is None:
+            return
+
+        def run() -> None:
+            try:
+                fetch(self.quilt)
+            except SyncError:
+                pass  # kept as this machine's problem, which the manifest shows
+            self.rebuild(records=True)
+
+        threading.Thread(target=run, name="loom-overleaf-fetch", daemon=True).start()
 
     def first_look(self) -> None:
         """Take the reviewer's first look at the open files when they have none, so an agent's first edits show in Review's Your Changes; nothing without a reviewer name."""

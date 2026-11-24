@@ -1,4 +1,4 @@
-"""Text that arrives from elsewhere: an agent's copy compared, chosen from and taken into the person's document."""
+"""Text that arrives from elsewhere: an Overleaf project paired, its token given and its text taken in by update, and an agent's copy compared, chosen from and taken into the person's document."""
 
 from __future__ import annotations
 
@@ -14,6 +14,42 @@ def _accept_keys(body: dict[str, Any]) -> list[str]:
     if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
         raise ApiError("bad-field", "accept must be a list of mathematical block keys")
     return keys
+
+
+def _overleaf(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The `overleaf-*` endpoints: pair the quilt with a project from a pasted link, give the git token once, update from Overleaf, and end the pairing; the person's acts, refused to a declared agent. A failure to reach Overleaf answers 409 with its code (`overleaf.MirrorError`), and the token goes from the request to the credential helper and nowhere else."""
+    from loom import overleaf
+    from loom.identity import is_agent
+    from loom.scan.quilt import load_quilt, reviewer_identity
+
+    if is_agent(_str(body, "author") or ""):
+        raise ApiError("author-only", "Pairing with Overleaf and updating from it are the author's", status=403)
+    quilt = load_quilt(root)
+    reviewer = reviewer_identity(root)[0] or None
+    try:
+        if endpoint == "overleaf-update":
+            return {"ok": True, "result": overleaf.update(quilt, reviewer)}
+        if endpoint == "overleaf-unpair":
+            overleaf.unpair(quilt)
+            return {"ok": True, "result": {"paired": False}}
+        state = overleaf.paired(root)
+        link = _str(body, "link", required=endpoint == "overleaf-pair" or state is None) or ""
+        address = overleaf.address(link) if link else state.url if state is not None else ""
+        if endpoint == "overleaf-token":
+            overleaf.store_token(address, _str(body, "token", required=True) or "")
+            return {"ok": True, "result": {"stored": True}}
+        folder, main, me = body.get("folder"), body.get("main"), body.get("me")
+        if folder is None or main is None or me is None:
+            return {"ok": True, "result": {"choose": overleaf.prepare(quilt, address)}}
+        if not isinstance(folder, str) or not isinstance(main, str):
+            raise ApiError("bad-field", "folder and main must be strings")
+        if not isinstance(me, list) or not all(isinstance(m, str) for m in me):
+            raise ApiError("bad-field", "me must be a list of addresses")
+        return {"ok": True, "result": {"paired": overleaf.pair(quilt, address, folder, main, me, reviewer)}}
+    except overleaf.LinkRefused as exc:
+        raise ApiError(exc.code, str(exc), status=409) from exc
+    except overleaf.MirrorError as exc:
+        raise ApiError(exc.code, str(exc), status=400 if exc.code == "bad-token" else 409) from exc
 
 
 def _adopt(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -135,6 +171,10 @@ def _adopt(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
 
 HANDLERS: dict[str, Handler] = {
+    "overleaf-pair": _overleaf,
+    "overleaf-token": _overleaf,
+    "overleaf-update": _overleaf,
+    "overleaf-unpair": _overleaf,
     "adopt-close": _adopt,
     "adopt-reopen": _adopt,
     "adopt-refresh": _adopt,
@@ -146,6 +186,8 @@ HANDLERS: dict[str, Handler] = {
 #: Of these, the ones that answer and change nothing the manifest shows.
 READS: tuple[str, ...] = ("adopt-preview", "adopt-paper")
 #: The ones the publisher does not rebuild after: the reads, and the decision, which publishes the queue's metadata itself without rendering documents.
-NO_REBUILD: tuple[str, ...] = (*READS, "adopt-decision")
+NO_REBUILD: tuple[str, ...] = (*READS, "adopt-decision", "overleaf-token")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ("adopt-decision",)
+#: The ones that wait on Overleaf over the network and take the door's lock only to write, so the publisher runs them outside the publication's lock.
+OWN_LOCK: tuple[str, ...] = ("overleaf-pair", "overleaf-token", "overleaf-update")

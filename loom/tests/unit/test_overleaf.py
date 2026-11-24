@@ -682,3 +682,46 @@ def test_an_update_writes_the_mirrored_folder_and_nothing_else_is_judged_mirrore
     with writes.act(root, load_quilt(root).history_dir, "keep") as w:
         w.replace("notes.tex", b"mine\n")
     assert (root / "notes.tex").read_text() == "mine\n"
+
+
+# ---- the token goes nowhere but the helper ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", ["no-token", "token-refused", "no-git-access", "offline", "accepted"])
+def test_the_token_passes_through_loom_to_the_helper_and_nowhere_else(
+    server: Server, tmp_path: Path, capfd: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch, path: str
+) -> None:
+    from loom.render.api import ApiError, handle
+    from loom.render.build import build
+
+    q = new_quilt(tmp_path)
+    link = f"https://www.overleaf.com/project/{ID}"
+    url = server.url(ID)
+    if path == "offline":
+        with serving(tmp_path) as gone:
+            url = gone.url(ID)
+    monkeypatch.setattr(overleaf, "address", lambda _given: url)
+    wrong = "olp_NotTheToken42"
+    answers: list[Any] = []
+
+    def ask(endpoint: str, body: dict[str, Any]) -> None:
+        try:
+            answers.append(handle(q.root, endpoint, body))
+        except ApiError as exc:
+            answers.append(exc.answer())
+
+    if path != "no-token":
+        ask("overleaf-token", {"link": link, "token": wrong if path == "token-refused" else TOKEN})
+    server.access = path != "no-git-access"
+    ask("overleaf-pair", {"link": link})
+    if path == "accepted":
+        ask("overleaf-pair", {"link": link, "folder": "paper", "main": "main.tex", "me": []})
+        ask("overleaf-update", {})
+    else:
+        assert answers[-1]["error"]["code"] == path, answers
+    manifest = build(load_quilt(q.root)).manifest
+    said = capfd.readouterr()
+    for secret in (TOKEN, wrong):
+        assert secret not in json.dumps(answers) + json.dumps(manifest) + said.out + said.err
+        for place in (q.root, tmp_path / "home"):
+            assert not [p for p in place.rglob("*") if p.is_file() and secret.encode() in p.read_bytes()], place

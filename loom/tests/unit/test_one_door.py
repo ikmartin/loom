@@ -93,6 +93,7 @@ FUNCTIONS = {
     "sync.py:SyncState.write": "the sync record, outside an act that stages it",
     "overleaf.py:_clone": "loom's own clone of an Overleaf project, in `.loom/local/`",
     "overleaf.py:_keep_here": "this machine's part of the mirror, in `.loom/local/`",
+    "overleaf.py:unpair": "the mirror's record, loom's clone and this machine's part, all under `.loom/`",
     "reshape/canon.py:plan_draft": "a temporary stage",
     "reshape/importer.py:_mirror_quilt": "a temporary stage",
     "scan/quilt.py:save_author": "the machine's own config",

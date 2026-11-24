@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from loom.clock import stamp
 from loom.paths import SOURCE_SYNC, document_dir, under
 from loom.reshape.importer import closure_of
 from loom.scan.quilt import Quilt
@@ -300,7 +301,7 @@ def tree_files(cwd: Path, commit: str) -> dict[str, bytes]:
 
 
 def _reaching(root: Path, documents: list[str], paths: set[str]) -> list[str]:
-    """The documents among `documents` whose source closure includes one of `paths`: the ones a publish or a pull stamps."""
+    """The documents among `documents` whose source closure includes one of `paths`: the ones an update stamps."""
     out = []
     for document in documents:
         base = document_dir(document)
@@ -417,6 +418,7 @@ def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None, me: li
     state.last_pull = {
         "commit": state.incoming,
         "observed": state.observed,
+        "when": stamp(),
         "files": len(after),
         "by": by,
         "own": own,
