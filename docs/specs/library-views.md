@@ -321,7 +321,7 @@ Write: `review-task-delete` with `{"task"}`, which withdraws it (`library.md`: a
 
 ### 4.4 See it in a document (4 see it)
 
-**Drawn.** `see it in main.tex` lays the document over Review, read only, at the result ("read only here; edit it in Docs"), until its close button. **Reads.** The document's rendering as Docs reads it today, from the manifest and its fragments, scrolled to the row's `key`; nothing new.
+**Drawn.** `see it in main.tex` lays the document over Review, read only, at the result ("read only here; edit it in Docs"), until its close button. It lands with the result at its top once the document is drawn, and keeps it there while what is drawn above settles (a draft not compiled, drawn as its source, or mathematics being set), until the reader scrolls. **Reads.** The document's rendering as Docs reads it today, from the manifest and its fragments, scrolled to the row's `key`; nothing new.
 
 **Open 38.** `See change`, on a block changed since it was accepted, still opens the draft in Docs, whose panel draws why the block waits and the change. Over Review it would need that panel's middle: the choice among the block's causes (`keys[KEY].acceptance.causes`, each said by `causeLabel`) and, for the cause chosen, its `comparison` (the block as accepted beside it as it is, two fragments the build already publishes) or its `diff`; Accept and the way back stay out, since the row holds Accept and see-it closes to the row. The cost is the viewer's alone: no new read and nothing of loom's, one fragment or diff fetched per cause looked at, as Docs fetches it, and the panel's middle made a component both draw from. Proposal: see-it takes a cause and draws it in a strip over the document. Left for the author's look at round six's 4 see it.
 

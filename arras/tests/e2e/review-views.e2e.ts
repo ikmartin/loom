@@ -424,6 +424,25 @@ test('in Review a block, its note, Read, a change card\'s place and a To do item
 	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
+test('see it keeps the block in view while the document above it settles, as a draft drawn as its source does, until the reader scrolls', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-edits').click();
+	await page.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]').getByTestId('change-where').getByTestId('change-see').click();
+	const doc = page.getByTestId('review-over-doc');
+	const at = doc.locator('#sy-0004');
+	const offset = () => at.evaluate((e) => Math.round(e.getBoundingClientRect().top - e.closest('[data-testid="review-over-doc"]')!.getBoundingClientRect().top));
+	await expect.poll(offset).toBe(0);
+	// what is drawn above the block grows after it mounted, as source blocks and mathematics settle: the block stays where it landed, the browser's own scroll anchoring off so the pane's landing is what is tested
+	await doc.evaluate((d) => ((d as HTMLElement).style.overflowAnchor = 'none'));
+	await doc.evaluate((d) => d.querySelector('.fragment')!.prepend(Object.assign(document.createElement('div'), { style: 'height: 1500px' })));
+	await expect.poll(offset).toBe(0);
+	// once the reader scrolls by their own hand, it is theirs
+	await doc.hover();
+	await page.mouse.wheel(0, -300);
+	await doc.evaluate((d) => d.querySelector('.fragment')!.prepend(Object.assign(document.createElement('div'), { style: 'height: 800px' })));
+	await expect.poll(offset).toBeGreaterThan(700);
+});
+
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
