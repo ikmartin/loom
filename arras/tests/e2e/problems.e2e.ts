@@ -82,6 +82,18 @@ const goneWithNotes = {
 /** A document gone that only acceptance rows name: loom's model, an agent's. */
 const goneRowsOnly = { ...goneWithNotes, class: 'model', message: 'drafting/older.tex is gone and the history does not say where it went; 2 acceptance rows name it', keys: ['sy-0002', 'sy-0003'], fixes: [{ label: 'record where it went, NEW being its path now', command: 'loom mv drafting/older.tex NEW' }] };
 
+test("where Review's reads are served, an agent's copy's problems point to Proposed edits, which the link opens in Review", async ({ page }) => {
+	await serve(page, (m) => void m.diagnostics.push(copyFailed as never));
+	await page.goto('/review/problems?fixture=round6');
+	const copy = page.getByTestId('problems-copy');
+	await expect(copy).toContainText('take the copy back in Proposed edits.');
+	await expect(copy).not.toContainText('Proposed Changes');
+	await copy.locator('summary').first().click();
+	await copy.getByTestId('problems-copy-link').click();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await expect(page.getByTestId('review-kind-edits')).toHaveAttribute('aria-current', 'true');
+});
+
 test('a document gone with annotations on it is one row saying how many, and one with none is not shown', async ({ page }) => {
 	await serve(page, (m) => void m.diagnostics.push(goneWithNotes as never, goneRowsOnly as never));
 	await page.goto('/review/problems');

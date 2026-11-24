@@ -1,4 +1,4 @@
-// Round six's fixture and the client against what loom sends, in both directions, so neither can wander from the backend: every generated sample of Review's, the Web's and the Library's reads and writes (`docs/specs/fixture/views/`, made by `scripts/regen views` from `evidence.md` §6 to §8 and by `scripts/regen views-library` from `write-api.md` §2 and §6) passes through the client as a served answer would, the client sending exactly the sample's request; and every answer the fixture gives the same read or write has the sample's fields and types.
+// Round six's fixture and the client against what loom sends, in both directions, so neither can wander from the backend: every generated sample of Review's, the Web's and the Library's reads and writes (`docs/specs/fixture/views/`, made by `scripts/regen views` from `evidence.md` §6 to §8 and by `scripts/regen views-library` from `write-api.md` §2 and §6) passes through the client as a served answer would, the client sending exactly the sample's request; and every answer the fixture gives the same read or write has the sample's fields and types. A field one side fills and the other's answers leave null or empty is checked by nothing, so each is named, with the sample or the fixture's answer that would check it (`AWAITING_SAMPLES`, `NOT_ANSWERED`).
 import { readdirSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { forgetCapabilities } from '$lib/write';
@@ -40,7 +40,23 @@ const AGENT_ROW = ['row', 'kind', 'docs', 'task', 'what', 'on', 'working', 'aske
 
 const kindOf = (v: unknown) => (v === null ? 'null' : Array.isArray(v) ? 'array' : typeof v);
 
-/** Where `got` differs from `want` in fields and types: an object's keys (less the transport's), each value's type, null standing for any type, and an array's items each against the sample's item of the same `kind`, else its first. */
+/** What tells a list's items apart: a row's kind, a section's head, an intake row's state; a node's place, which the digest adds to the places, is tagged apart and so meets none of loom's yet. */
+const tag = (x: unknown): string | undefined => (x as { kind?: string })?.kind ?? (x as { head?: string })?.head ?? (x as { state?: string })?.state ?? (x && typeof x === 'object' && 'node' in x && 'rects' in x ? "a node's place" : undefined);
+
+/** The sample's items an item is compared with, merged into one: each field the first value of theirs that is not null, an array's items gathered from all, so a field one item leaves null is checked against another that fills it. */
+function merged(items: unknown[]): unknown {
+	if (!items.every((x) => x && typeof x === 'object' && !Array.isArray(x))) return items[0];
+	const out: Record<string, unknown> = {};
+	for (const x of items as Record<string, unknown>[])
+		for (const [k, v] of Object.entries(x)) {
+			if (Array.isArray(v) && Array.isArray(out[k])) out[k] = [...(out[k] as unknown[]), ...v];
+			else if (v !== null && v !== undefined && (out[k] === null || out[k] === undefined)) out[k] = v;
+			else if (!(k in out)) out[k] = v;
+		}
+	return out;
+}
+
+/** Where `got` differs from `want` in fields and types: an object's keys (less the transport's), each value's type, null standing for any type, and an array's items each against the sample's items of the same `kind`, merged (`merged`). */
 function differences(got: unknown, want: unknown, at = ''): string[] {
 	if (want === null || got === null) return [];
 	if (kindOf(got) !== kindOf(want)) return [`${at || '.'}: ${kindOf(got)} where loom sends ${kindOf(want)}`];
@@ -48,11 +64,11 @@ function differences(got: unknown, want: unknown, at = ''): string[] {
 		const items = want as unknown[];
 		if (!items.length) return [];
 		return got.flatMap((g, i) => {
-			// an item tagged by its kind, a section by its head or an intake's row by its state, against the sample's item of the same; an untagged one against the sample's item with the same fields where there is one (a folded group sends no rows), else its first; a node's place, which the digest adds to the places, is tagged apart and so meets none of loom's yet
-			const tag = (x: unknown) => (x as { kind?: string })?.kind ?? (x as { head?: string })?.head ?? (x as { state?: string })?.state ?? (x && typeof x === 'object' && 'node' in x && 'rects' in x ? "a node's place" : undefined);
+			// an item tagged (`tag`) against the sample's items of the same tag; an untagged one against the sample's items with the same fields where there are some (a folded group sends no rows), else all of them
 			const keys = (x: unknown) => (x && typeof x === 'object' ? Object.keys(x).sort().join() : '');
-			const match = tag(g) === undefined ? (items.find((w) => keys(w) === keys(g)) ?? items[0]) : items.find((w) => tag(w) === tag(g));
-			return match === undefined ? [] : differences(g, match, `${at}[${i}]`);
+			const same = items.filter((w) => keys(w) === keys(g));
+			const pool = tag(g) === undefined ? (same.length ? same : items) : items.filter((w) => tag(w) === tag(g));
+			return pool.length ? differences(g, merged(pool), `${at}[${i}]`) : [];
 		});
 	}
 	if (typeof got !== 'object') return [];
@@ -84,12 +100,43 @@ function agentRow(g: Record<string, unknown>, w: Record<string, unknown>, at: st
 	return out;
 }
 
+/** The fields a value fills, each by its path with an array's items as `[]`, or `[kind]` by their tag (`.works[].lookup.identifier`, `.groups[].rows[cited].stubs`): not null, a list not empty, and a variant (`VARIANT`) as itself, since its fields are compared by none. */
+function filled(v: unknown, at = '', out = new Set<string>()): Set<string> {
+	if (Array.isArray(v))
+		for (const x of v) {
+			const t = tag(x);
+			if (t !== undefined) out.add(`${at}[${t}]`);
+			filled(x, `${at}[${t ?? ''}]`, out);
+		}
+	else if (v && typeof v === 'object')
+		for (const [k, x] of Object.entries(v)) {
+			if (TRANSPORT.has(k) || x === null || x === undefined || (Array.isArray(x) && !x.length)) continue;
+			out.add(`${at}.${k}`);
+			if (!VARIANT.has(k)) filled(x, `${at}.${k}`, out);
+		}
+	return out;
+}
+
+/** The fields the fixture fills that loom's samples send only as null, so the check above cannot see their shape: the outermost of each, where loom fills what holds it. */
+function unchecked(fixture: Set<string>, loom: Set<string>): string[] {
+	const parent = (p: string) => (/\[[^\]]+\]$/.test(p) ? p.replace(/\[[^\]]+\]$/, '') : p.replace(/\.[^.[\]]+$/, '')).replace(/\[\]$/, '');
+	return [...fixture].filter((p) => !loom.has(p) && (parent(p) === '' || loom.has(parent(p)))).sort();
+}
+
 describe('the shape check itself', () => {
 	it('finds a missing field, a field loom does not send, and a type that differs; null is any type', () => {
 		expect(differences({ a: 1, b: 'x' }, { a: 1, c: 2 })).toEqual(['.c: missing', '.b: not sent by loom']);
 		expect(differences({ a: '1' }, { a: 1 })).toEqual(['.a: string where loom sends number']);
 		expect(differences({ a: null, b: [{ kind: 'x', n: 1 }] }, { a: 'y', b: [{ kind: 'x', n: 2 }] })).toEqual([]);
 		expect(differences({ b: [{ kind: 'x', n: '1' }] }, { b: [{ kind: 'x', n: 2 }] })).toEqual(['.b[0].n: string where loom sends number']);
+	});
+	it("checks a list's item against every sample item like it, so a field the first leaves null is checked where another fills it", () => {
+		const loom = { works: [{ ref: 'a', lookup: null }, { ref: 'b', lookup: { state: 'unconfirmed', identifier: 'arxiv:1' } }] };
+		expect(differences({ works: [{ ref: 'c', lookup: { state: 'unconfirmed', id: 'arxiv:1' } }] }, loom)).toEqual(['.works[0].lookup.identifier: missing', '.works[0].lookup.id: not sent by loom']);
+	});
+	it('names a field the fixture fills that every sample of loom leaves null', () => {
+		const loom = filled({ works: [{ ref: 'a', digested: null, lookup: { state: 'x' }, used_in: [] }] });
+		expect(unchecked(filled({ works: [{ ref: 'b', digested: { statements: 1 }, lookup: { state: 'y' }, used_in: ['main.tex'] }] }), loom)).toEqual(['.works[].digested', '.works[].used_in']);
 	});
 });
 
@@ -196,7 +243,17 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 		case 'web-graph':
 			return { ...r, result: 'thm:count' };
 		case 'library-works':
+			// a work found by an identifier and not looked up, so the list holds one whose `lookup` is filled, as loom's does
+			await f.call('library-take', { items: [{ text: '2209.01234v2' }], online: false });
 			return r.doc ? { ...r, doc: 'drafting/main.tex' } : r.since !== undefined ? { since: f.data.gen } : r;
+		case 'library-take': {
+			// a question made as the answer's is, by a file named by an arXiv number a work states
+			if (!s.name.endsWith('.question')) return r;
+			const got = await f.receive(new File([new Uint8Array(8)], '2000.01000v2.pdf'));
+			return { items: [{ incoming: got.ok ? got.value.incoming : '' }] };
+		}
+		case 'web-search':
+			return { ...r, q: 'polynomial' };
 		case 'library-delete':
 		case 'library-unfile':
 		case 'library-entry':
@@ -233,7 +290,47 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 	}
 }
 
+/** The fields the fixture fills that no sample of loom's fills yet, so their shape is unchecked, each with the sample that would check it; those samples are loom's generators' (`scripts/regen views`, `views-library`). A field the fixture fills that is not listed fails the check below, and so does a listed one a sample now fills. */
+const AWAITING_SAMPLES: Record<string, string> = {
+	'library-answer .row.authors': 'a work of its own naming its authors',
+	'library-works .works[].cited_as': 'a work a compiled document cites',
+	'library-works .works[].digested': 'a digested work',
+	'library-works .works[].version': 'a version of a work',
+	'review-list .groups[agents].rows[agents].marks': 'an ask to digest marked places',
+	'review-list .groups[agents].rows[agents].ref': 'an ask to digest a work',
+	'review-list .groups[agents].rows[agents].scope': 'an ask to digest a work',
+	'review-list .groups[agents].rows[agents].text': 'an ask in the person\'s words',
+	'review-list .groups[agents].rows[agents].working': 'an ask an agent is working on',
+	'review-list .groups[attest].rows[attest].paper': 'a library node to attest',
+	'review-list .groups[attest].rows[attest].reading': 'a result to attest that the person has read',
+	'review-list .groups[attested-changed].rows[attested-changed].resting': 'a changed definition that results rest on',
+	'review-list .groups[check]': 'digested results to check',
+	'review-list .groups[cited]': 'cited results to digest',
+	'review-list .groups[edits].rows[edits].broke': 'an edit made in place that broke its compile',
+	'review-list .groups[questions].rows[questions].under.ref': 'a question asked while digesting a work',
+	'review-row .row.under.ref': 'a question asked while digesting a work',
+	'web-focus .more.proofs': 'a result in focus with a proof',
+	'web-focus .rests_on': 'a result in focus that rests on another',
+	'web-focus .uses.proof': 'a result in focus whose proof uses another',
+	'web-focus .uses.statement': 'a result in focus whose statement uses another',
+	'web-graph .columns.back': 'a graph with results behind the focus',
+	'web-graph .columns.uses': 'a graph whose focus uses another result',
+	'web-list .sections[library].groups': "the library's results in the Web, which the node store adds"
+};
+
+/** The fields loom's samples fill that no answer of the fixture fills, so loom's shape there is checked against nothing, each with why. A field loom fills and the fixture leaves that is not listed fails the check below, and so does a listed one the fixture now fills. */
+const NOT_ANSWERED: Record<string, string> = {
+	'library-take .rows[cannot]': "the fixture's intake refuses nothing it is given",
+	'library-take .rows[here]': "the fixture's intake never meets a file it holds",
+	'web-focus .used_by.rows': "the fixture's result in focus, Theorem 3.4, is used by none",
+	'web-graph .columns.used_by': "the fixture's result in focus, Theorem 3.4, is used by none"
+};
+
 describe("round six's fixture answers with loom's fields and types", () => {
+	/** By endpoint, the fields loom's samples fill and the fields the fixture's answers fill. */
+	const loomFills = new Map<string, Set<string>>();
+	const fixtureFills = new Map<string, Set<string>>();
+	for (const s of samples) if (!s.answer.status && !NOT_MODELLED[s.name]) filled(s.answer, '', loomFills.get(s.endpoint) ?? loomFills.set(s.endpoint, new Set()).get(s.endpoint));
 	for (const s of samples) {
 		if (NOT_MODELLED[s.name]) {
 			it.skip(`${s.name}: ${NOT_MODELLED[s.name]}`, () => {});
@@ -254,6 +351,15 @@ describe("round six's fixture answers with loom's fields and types", () => {
 			}
 			expect(got.ok, JSON.stringify(got)).toBe(true);
 			expect(differences(got.ok ? got.value : null, s.answer)).toEqual([]);
+			if (got.ok) filled(got.value, '', fixtureFills.get(s.endpoint) ?? fixtureFills.set(s.endpoint, new Set()).get(s.endpoint));
 		});
 	}
+	it('fills no field that every sample of loom leaves null, but those that wait on samples', () => {
+		const blind = [...fixtureFills].flatMap(([endpoint, got]) => unchecked(got, loomFills.get(endpoint) ?? new Set()).map((p) => `${endpoint} ${p}`));
+		expect(blind).toEqual(Object.keys(AWAITING_SAMPLES).sort());
+	});
+	it("leaves null no field loom's samples fill, but those it does not model", () => {
+		const blind = [...loomFills].flatMap(([endpoint, sent]) => unchecked(sent, fixtureFills.get(endpoint) ?? new Set()).map((p) => `${endpoint} ${p}`));
+		expect(blind).toEqual(Object.keys(NOT_ANSWERED).sort());
+	});
 });

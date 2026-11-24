@@ -199,6 +199,12 @@ export type Layer = 'all' | 'annotations' | 'changes';
 export type ChangesView = 'markup' | 'final';
 
 /** One open item's annotating: what the toolbar, the side list and the fragment share. */
+/** A PDF's notes on words drawn on no page, by why (`Annotating.nowhere`). */
+export interface Nowhere {
+	unread: string[];
+	unfound: string[];
+}
+
 export class Annotating {
 	tool = $state<Tool>(null);
 	/** The top-level annotations and the pending changes read here, by id, in reading order: those with a mark in the order their first marks stand, then those on the whole document and the changes drawn nowhere. The fragment sets it as it wires. */
@@ -207,6 +213,8 @@ export class Annotating {
 	apart = $state<string[]>([]);
 	/** A note on no block a link asked for: its popup opens beside its card once the list shows it. */
 	reveal = $state<string | null>(null);
+	/** A PDF's notes anchored by their words that its reader draws on no page though the manifest does not call them detached, by why (`MarkDesk.nowhere`): `unread` while where they stand could not be learned, `unfound` where loom found their words on no page. The reader sets it. */
+	nowhere = $state.raw<Nowhere>({ unread: [], unfound: [] });
 	/** The annotation or change whose popup is open, or null. */
 	open = $state<string | null>(null);
 	/** What the list and the stepper go through. */

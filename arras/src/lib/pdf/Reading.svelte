@@ -91,7 +91,13 @@
 	});
 	const stands = $derived(new Map((stood.value?.places ?? []).filter((p): p is AnnotationPlace => 'annotation' in p).map((p) => [p.annotation, p])));
 	const standsOf = (id: string) => stands.get(id) ?? (stoodFor === store.manifest?.annotations ? null : undefined);
-	const desk = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url, name: `${ref}.pdf`, notes: held.notes, hidden: hide, stands: finds ? standsOf : undefined }));
+	const desk = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url, name: `${ref}.pdf`, notes: held.notes, hidden: hide, stands: finds ? standsOf : undefined, unread: !finds || (!!stood.error && stoodFor === store.manifest?.annotations) }));
+	// the list beside the paper says which notes on words are drawn on no page, and why
+	$effect(() => {
+		const notes = held.notes;
+		const now = desk.nowhere;
+		if (JSON.stringify(notes.nowhere) !== JSON.stringify(now)) notes.nowhere = now;
+	});
 	// the toolbar's PDF menu acts through it
 	$effect(() => {
 		const state = held;

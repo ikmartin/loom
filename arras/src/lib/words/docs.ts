@@ -104,6 +104,24 @@ export const docs = {
 		attestWhere: 'In Review, under Lean statements to attest.',
 		attestedChanged: (names: string, many: boolean) => `${names} changed after you attested ${many ? 'their' : 'its'} Lean statement.`,
 		attestedChangedWhere: 'In Review, under Attested results that changed.',
+		/** A Lean statement the agent will write, which then waits for the person's word. */
+		attestAfter: (names: string, many: boolean) => `${names} will wait for you to attest ${many ? 'their' : 'its'} Lean statement once it is written.`,
+		/** A Lean that comes round, through what it rests on, to a result already asked of. */
+		cycle: (names: string, many: boolean) => `The Lean of ${names} ${many ? 'come' : 'comes'} round, through what ${many ? 'they rest' : 'it rests'} on, to a result already asked of; only Lean written another way settles it.`,
+		/** The line under what only the agent's work makes possible. */
+		afterWhere: "After the agent's work.",
+		/** Citations in what the targets use that name no result. */
+		cite: (keys: string[]) => (keys.length === 1 ? `The citation of ${keys[0]} names no result of its work.` : `The citations of ${keys.slice(0, -1).join(', ')} and ${keys[keys.length - 1]} name no result of their works.`),
+		/** The line under what nothing done now settles. */
+		waitingWhere: 'Nothing you do now settles this; loom does not yet tell which result a citation means.',
+		/** A label two blocks bear near the target, and the blocks. */
+		ambiguous: (label: string, names: string) => `The label ${label} is on ${names}, so a Lean statement could not tell which is meant.`,
+		ambiguousWhere: (doc: string) => `Give one of them another label in ${doc.split('/').pop() ?? doc}.`,
+		/** A label, a library result or a result that nothing answers to. */
+		missingLabel: (label: string) => `No block bears the label ${label}.`,
+		missingNode: 'A library result it uses is no longer in the library.',
+		missing: (name: string) => `${name} reads as no one text.`,
+		missingWhere: (doc: string) => `Put it right in ${doc.split('/').pop() ?? doc}, or in the library.`,
 		/** Under the part before it reads formalized. */
 		beforeNote: (name: string | null) => (name ? `None of these stops the request; ${name} reads formalized only once all of them are done.` : 'None of these stops the request; they read formalized only once all of them are done.'),
 		/** A library result of another work, after its name. */

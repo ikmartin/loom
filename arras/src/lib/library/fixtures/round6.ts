@@ -439,11 +439,13 @@ export function check(f: Fixture, node: string): boolean {
 	return false;
 }
 
-/** A work the fixture's intake adds: named by an arXiv number it is round six's Gadget towers, found by that number with its TeX source; any other is a work titled by its file's name. */
+/** A work the fixture's intake adds: named by an arXiv number it is round six's Gadget towers, found by that number with its TeX source; without the network, a work stating that number, titled by its file's name as the intake titles one; any other is a work titled by its file's name. */
 export function addWork(f: Fixture, name: string, offline = false): Work {
 	const arxiv = /^\d{4}\.\d{4,5}/.test(name);
+	const number = /^\d{4}\.\d{4,5}(v\d+)?/.exec(name)?.[0] ?? name;
+	const file = number !== name;
 	const w: Work = arxiv && offline
-		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: '', title: `arXiv ${name}`, authors: [], year: '', holds: { pdf: null, tex: false }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: { state: 'unconfirmed', identifier: `arxiv:${name}` }, cited_as: null }
+		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: file ? name : '', title: file ? name : `arXiv ${name}`, authors: [], year: '', holds: { pdf: file ? hashOf(name + f.gen) : null, tex: false }, digested: null, used_in: [], link: `https://arxiv.org/abs/${number}`, version: null, lookup: { state: 'unconfirmed', identifier: `arxiv:${number}` }, cited_as: null }
 		: arxiv
 		? { ref: `tq-${b36(900 + f.gen)}-ref`, short: 'Halberd and Ravel 2021', title: 'Gadget towers', authors: ['Halberd', 'Ravel'], year: '2021', holds: { pdf: hashOf('halberd' + f.gen), tex: true }, digested: null, used_in: [], link: `https://arxiv.org/abs/${name}`, version: null, lookup: null, cited_as: null }
 		: { ref: `tq-${b36(900 + f.gen)}-ref`, short: name, title: name, authors: [], year: '', holds: { pdf: hashOf(name + f.gen), tex: false }, digested: null, used_in: [], link: null, version: null, lookup: null, cited_as: null };

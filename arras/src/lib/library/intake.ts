@@ -35,6 +35,14 @@ function tell(rows: api.TakeRow[], refused: string[]): void {
 const waiting = new Map<string, api.TakeRow>();
 const putOff = new Set<string>();
 
+type Candidate = NonNullable<api.TakeRow['candidates']>[number];
+
+/** A work the question names, as its button says it: its short name, which an unconfirmed work's row shows beside its identifier, and its title as well where another work asked about has the same short name. */
+export function candidate(c: Candidate, all: readonly Candidate[]): string {
+	const name = c.short || c.title || (c.how ? words.works.identifier(c.how) : '');
+	return c.title && c.title !== name && all.some((o) => o !== c && (o.short || o.title) === name) ? words.add.candidate(name, c.title) : name;
+}
+
 /** Asks a drop's question in the column: each work it may be, and a work of its own. */
 function ask(r: api.TakeRow): void {
 	const id = r.question!;
@@ -47,7 +55,7 @@ function ask(r: api.TakeRow): void {
 					{ label: words.add.isIt, act: () => settle(r, works[0].ref) },
 					{ label: words.add.notIt, act: () => settle(r, null) }
 				]
-			: [...works.map((c) => ({ label: c.short, act: () => settle(r, c.ref) })), { label: words.add.noneOfThem, act: () => settle(r, null) }];
+			: [...works.map((c) => ({ label: candidate(c, works), act: () => settle(r, c.ref) })), { label: words.add.noneOfThem, act: () => settle(r, null) }];
 	message.post(text, undefined, { choices, ondismiss: () => putOff.add(id) });
 }
 

@@ -63,21 +63,17 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await expect(count(page, 'review-kind-questions')).toHaveText('0');
 });
 
-// The row form for Proposed edits waits until it holds Your Changes' acts; until then the kind draws Your Changes' section.
-test.fixme('a proposed edit opens to its change and is kept; one made in place that broke the compile says why', async ({ page }) => {
+test('under Proposed edits each change is a card with its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const broke = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Lemma 2' });
-	await expect(broke).toContainText('bounds.tex has not compiled since this edit (line 14)');
-	await broke.getByRole('button', { expanded: false }).click();
-	await expect(broke.getByTestId('review-statement').locator('span.change[data-side="new"]').first()).toHaveText('Suppose');
-	await expect(broke).toContainText('This edit was made in place. bounds.tex has not compiled since: the command it adds is not defined (line 14).');
-	await expect(broke.getByRole('button', { name: 'undo the edit' })).toBeVisible();
-	const first = page.getByTestId('review-row').first();
-	await first.getByRole('button', { expanded: false }).click();
-	await first.getByRole('button', { name: 'keep' }).click();
-	await expect(page.getByTestId('column-message')).toContainText('Kept.');
-	await expect(page.getByTestId('review-row')).toHaveCount(4);
+	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
+	const edit = changes.locator('[data-testid="change-card"][data-change="c-0f621ccf"]');
+	await expect(edit).toContainText('since your look');
+	await expect(edit.getByTestId('change-words').locator('.del, .ins').first()).toBeVisible();
+	for (const card of await changes.getByTestId('change-card').all()) {
+		await expect(card.getByTestId('card-keep')).toBeVisible();
+		await expect(card.getByTestId('card-discard')).toBeVisible();
+	}
 });
 
 test("a work's results to check open the first a draft rests on beside its page, and the yes takes it away", async ({ page }) => {
@@ -249,7 +245,7 @@ test('an attested definition that changed is asked about in three steps, and eac
 	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
 });
 
-test('see it lays the document over Review, read only, at the place, and closes back to the list', async ({ page }) => {
+test('see it lays the document over Review, read only, lands at the place, and closes back to the list', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-cited').click();
 	const cite = rows(page).filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result' });
@@ -259,25 +255,26 @@ test('see it lays the document over Review, read only, at the place, and closes 
 	await expect(over).toContainText('main.tex');
 	await expect(over).toContainText('at the proof of Theorem 3.4 · read only here; edit it in Docs');
 	await expect(over.locator('.fragment').first()).toBeVisible();
+	await expect(over.locator('#sy-0002-proof')).toBeInViewport();
 	await expect(page).toHaveURL(/\/review/);
 	await over.getByRole('button', { name: 'Close the document' }).click();
 	await expect(over).toHaveCount(0);
 	await expect(cite.getByTestId('see-it')).toBeVisible();
 });
 
-// The row form for Proposed edits waits until it holds Your Changes' acts, and with it a proposed edit's see it.
-test.fixme("a proposed edit's see it lands at the result, and one in a draft the quilt does not hold offers none", async ({ page }) => {
+test("a proposed edit's place lays its draft over Review and lands at the result, and a change in no draft's text names no place", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const bounds = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Theorem 1' });
-	await bounds.getByRole('button', { expanded: false }).click();
-	await expect(bounds.getByTestId('see-it')).toHaveCount(0);
-	const main = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
-	await main.getByRole('button', { expanded: false }).click();
-	await main.getByTestId('see-it').click();
+	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
+	await expect(changes.locator('[data-testid="change-card"][data-change="c-5a59b9ba"]').getByTestId('change-see')).toHaveCount(0);
+	const suggested = changes.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]');
+	const place = suggested.getByTestId('change-where').getByTestId('change-see');
+	const name = (await place.innerText()).trim();
+	await place.click();
 	const over = page.getByTestId('review-over');
-	await expect(over).toContainText('at proof of Theorem 3.1 · read only here; edit it in Docs');
-	await expect(over.locator('#sy-0002-proof')).toBeInViewport();
+	await expect(over).toContainText(`at ${name} · read only here; edit it in Docs`);
+	await expect(over.locator('#sy-0004')).toBeInViewport();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
 test("a collaborator's pull is chosen under the kinds and drawn as today's review of it", async ({ page }) => {
@@ -385,6 +382,46 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	await page.getByTestId('column-message-undo').click();
 	await expect(tasks).toHaveCount(6);
 	expect(await tasks.allInnerTexts()).toEqual(before);
+});
+
+test('a link to one block\'s row lands with the row in view below the held bar, at the top of the list as further down', async ({ page }) => {
+	await open(page);
+	const ids = await page.locator('[data-testid="your-changes"] [data-testid="review-row"]').evaluateAll((rows) => rows.map((r) => r.id));
+	expect(ids.length).toBeGreaterThan(3);
+	for (const id of [ids[0], ids[1], ids[ids.length - 1]]) {
+		await page.goto(`/review?fixture=round6#${id}`);
+		const row = page.locator(`#${id}`);
+		await expect(row).toBeInViewport();
+		const bar = page.getByTestId('review-bar').first();
+		await expect.poll(async () => (await row.boundingBox())!.y - ((await bar.boundingBox())!.y + (await bar.boundingBox())!.height)).toBeGreaterThanOrEqual(0);
+	}
+});
+
+test('in Review a block, its note, Read, a change card\'s place and a To do item lay their draft over Review; only See change opens Docs', async ({ page }) => {
+	await open(page);
+	const leaving = async (part: string) => {
+		const section = page.locator(`[data-testid="your-changes"][data-part="${part}"]`);
+		await section.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
+		return section.locator('a[href]').evaluateAll((as) => as.filter((a) => !a.getAttribute('href')!.startsWith('/review') && a.textContent!.trim() !== 'See change').map((a) => `${a.textContent!.trim()} ${a.getAttribute('href')}`));
+	};
+	await page.getByTestId('review-kind-accepted-changed').click();
+	expect(await leaving('accept')).toEqual([]);
+	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
+	const first = accept.locator('[data-group="never"] [data-testid="review-row"]').first();
+	const name = (await first.locator('.name').innerText()).trim();
+	await first.locator('.name').click();
+	const over = page.getByTestId('review-over');
+	await expect(over).toContainText(`at ${name}`);
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await over.getByRole('button', { name: 'close' }).click();
+	await expect(over).toHaveCount(0);
+	await page.getByTestId('review-kind-edits').click();
+	await page.getByTestId('your-todo').click();
+	expect(await leaving('changes')).toEqual([]);
+	const place = page.locator('[data-testid="your-changes"][data-part="changes"]').getByTestId('change-see').first();
+	await place.click();
+	await expect(over).toBeVisible();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {

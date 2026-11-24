@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A work's toolbar: on the bar the PDF's (`PdfBar`): annotating as a document is annotated, the PDF's drawing tools, **PDF ▾**, and the page and the zoom, typed into as a desktop viewer's are; under *view*, `show settled annotations`, which the page's marks honour, then `open the PDF`. They act on the PDF its pane draws (`Reading`, through the item's desk); with none drawn they stay drawn and greyed rather than gone (DR-254-ikmartin): a greyed control still says what it would act on.
+	// A work's toolbar: on the bar the PDF's (`PdfBar`): annotating as a document is annotated, the PDF's drawing tools, **PDF ▾**, and the page and the zoom, typed into as a desktop viewer's are; under *view*, `show settled annotations`, which the page's marks honour, then `open the PDF`. They act on the PDF its pane draws (`Reading`, through the item's desk); with none drawn they stay drawn and greyed rather than gone (DR-254-ikmartin): a greyed control still says what it would act on. A work the library no longer holds has nothing they could act on, so its pane keeps *view* and the pane's own line alone, as a kind with no controls does.
 	import { store } from '$lib/manifest/client.svelte';
 	import PdfBar from '$lib/pdf/PdfBar.svelte';
 	import { hand, hintFor } from '$lib/review/annotating.svelte';
@@ -10,6 +10,7 @@
 	import ToolbarItem from '../ToolbarItem.svelte';
 	import { workState } from '../state.svelte';
 	import { library } from '$lib/words/library';
+	import { lib } from '$lib/views/library/state.svelte';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
@@ -19,6 +20,8 @@
 	const url = $derived(held.desk?.surface().url ?? '');
 	const readable = $derived(!!url);
 	const pdfOff = $derived(readable ? undefined : library.work.noPdf);
+	/** Whether the works list, read, holds this work no longer. */
+	const gone = $derived(!!lib.works.value && !lib.works.value.works.some((w) => w.ref === item.id));
 
 	// the tools write, so a corpus served without a write API does not offer them
 	let writes = $state(false);
@@ -30,6 +33,9 @@
 {#snippet reading()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="read" {writes} disabled={!readable} />{/snippet}
 {#snippet writing()}<PdfBar view={held.pdf} notes={held.notes} desk={held.desk} of={name} part="write" {writes} disabled={!readable} />{/snippet}
 
+{#if gone}
+	<ItemToolbar {name} />
+{:else}
 <ItemToolbar {name} bar={reading} tools={writes ? writing : undefined} on={ui.showSettled} hint={writes && readable ? hintFor(m, held.notes, hand.value) : ''}>
 	{#snippet view()}
 		<ToolbarItem
@@ -42,3 +48,4 @@
 		<ToolbarItem label="open the PDF" name="open the PDF of {name}" href={url || undefined} off={pdfOff} testid="open-pdf" />
 	{/snippet}
 </ItemToolbar>
+{/if}
