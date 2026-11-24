@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from loom.scan.source import blank_comments, discover_files, read_source
+from loom.scan.source import blank_comments, discover_files, lake_project, lake_root, read_source
 
 
 def test_blank_comments_preserves_offsets() -> None:
@@ -60,6 +60,67 @@ def test_a_skipped_directory_is_never_listed(tmp_path: Path, monkeypatch: pytest
     assert discover_files(tmp_path) == ["drafting/main.tex"]
     assert "lean" in listed
     assert not [d for d in listed if ".lake" in d.split("/") or d.startswith(".loom")], listed
+
+
+def _files(root: Path, *rels: str) -> None:
+    for rel in rels:
+        p = root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x", encoding="utf-8")
+
+
+@pytest.mark.parametrize("lakefile", ["lakefile.toml", "lakefile.lean"])
+def test_a_lake_project_is_pruned_from_the_scan_whole(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, lakefile: str
+) -> None:
+    """The skills' linters need the paper inside the Lake project, and a copy there scanned as source made five keys conflicted and three loose (LTRIAL-5): a folder holding a lakefile is pruned as the scan walks, never listed, and no `.tex` under it is read."""
+    import os
+
+    from loom.scan import source
+
+    _files(tmp_path, "drafting/main.tex", f"lean/{lakefile}", "lean/source/nodes/a.tex", "lean/Proof/Basic.lean")
+    listed: list[str] = []
+    walk = os.walk
+
+    def recorded(top: Path):  # type: ignore[no-untyped-def]
+        for here, dirs, files in walk(top):
+            listed.append(Path(here).relative_to(tmp_path).as_posix())
+            yield here, dirs, files
+
+    monkeypatch.setattr(source.os, "walk", recorded)
+    assert discover_files(tmp_path) == ["drafting/main.tex"]
+    assert not [d for d in listed if d == "lean" or d.startswith("lean/")], listed
+
+
+def test_a_lean_toolchain_alone_makes_no_lake_project_and_the_quilt_s_root_is_never_one(tmp_path: Path) -> None:
+    """Only a lakefile makes a Lake project's root; and a lakefile at the quilt's own root prunes nothing, since the quilt is not the agents' own."""
+    _files(
+        tmp_path,
+        "lakefile.toml",
+        "main.tex",
+        "lean/lean-toolchain",
+        "lean/a.tex",
+        "proof/lakefile.lean",
+        "proof/sub/lakefile.toml",
+    )
+    assert discover_files(tmp_path) == ["lean/a.tex", "main.tex"]
+    assert not lake_root(tmp_path / "lean") and lake_root(tmp_path / "proof")
+    assert lake_project(tmp_path, "main.tex") is None and lake_project(tmp_path, "lean/a.tex") is None
+    assert lake_project(tmp_path, "proof/sub/Basic.lean") == "proof"
+
+
+def test_the_scan_names_a_lake_project_as_what_keeps_it_out_and_reads_no_text_given_there(tmp_path: Path) -> None:
+    """`unread_dir`, which a command asks before it makes or moves a document, names the Lake project's root, as the scan prunes it; and a text a caller lays over the quilt there is not read either."""
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan, unread_dir
+
+    (tmp_path / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
+    _files(tmp_path, "main.tex", "lean/lakefile.toml")
+    quilt = load_quilt(tmp_path)
+    assert unread_dir(quilt, "lean/source/nodes/a.tex") == "lean"
+    assert unread_dir(quilt, "drafting/a.tex") is None
+    result = scan(quilt, overlay={"lean/source/b.tex": "\\begin{lemma}x\\end{lemma}\n", "c.tex": "y\n"})
+    assert sorted(result.files) == ["c.tex", "main.tex"]
 
 
 def test_non_utf8_source_decoded(tmp_path: Path) -> None:

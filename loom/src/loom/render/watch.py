@@ -1,6 +1,6 @@
 """Poll file mtimes, the tree every second and loom's own records five times a second, and rebuild when something the build depends on changed, the skeleton of the site generator's watcher with the roots parameterised.
 
-Watched: every .tex, .sty, .cls, .bib under the quilt root outside what loom derives, the agents' scratch, the store and tools' directories (a Lake project's `.lake` among them), config.toml, loom's records under `.loom/` (the ledger and snapshots, the annotation log, the reference notes, the agents' files, session files other than the inbox), the library's node files, every file the viewer shows, and the `.gitignore` files that decide which those are. Build-written observation caches are excluded to avoid an extra rebuild. The callback runs in the watcher thread; a blanket except keeps the thread alive and reports.
+Watched: every .tex, .sty, .cls, .bib under the quilt root outside what loom derives, the agents' scratch, the store, tools' directories (a Lake project's `.lake` among them) and Lake projects, config.toml, loom's records under `.loom/` (the ledger and snapshots, the annotation log, the reference notes, the agents' files, session files other than the inbox), the library's node files, every file the viewer shows (a Lake project's shown files among them), and the `.gitignore` files that decide which those are. Build-written observation caches are excluded to avoid an extra rebuild. The callback runs in the watcher thread; a blanket except keeps the thread alive and reports.
 """
 
 from __future__ import annotations
@@ -58,13 +58,14 @@ SCANNED = (".tex", ".sty", ".cls", ".bib")
 
 
 def _files(root: Path) -> Iterator[Path]:
-    """Every file under `root` outside the directories `SKIP` names, `PRUNED` and the sync directory, which are pruned rather than walked, since the tree is polled every second."""
+    """Every file under `root` outside the directories `SKIP` names, `PRUNED`, the sync directory and a Lake project's root (`lake_root`), which the scan reads none of and which are pruned rather than walked, since the tree is polled every second."""
+    from loom.scan.source import lake_root
     from loom.sync import skipped_directory
 
     synced = skipped_directory(root)
     pruned = {root / d for d in PRUNED} | ({root / synced} if synced else set())
     for here, dirs, names in os.walk(root):
-        dirs[:] = [d for d in dirs if d not in SKIP and Path(here) / d not in pruned]
+        dirs[:] = [d for d in dirs if d not in SKIP and Path(here) / d not in pruned and not lake_root(Path(here) / d)]
         for name in names:
             yield Path(here) / name
 
