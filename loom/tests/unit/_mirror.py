@@ -1,4 +1,4 @@
-"""A quilt mirroring a stand-in for an Overleaf project: a local bare repository on `main`, a colleague's clone that edits and pushes, and the quilt paired with it in `drafting/`."""
+"""A quilt mirroring a stand-in for an Overleaf project: a local bare repository on `main` at `overleaf.BASE/<id>`, which the test suite's isolation points at the test's own folder, a colleague's clone that edits and pushes, and the quilt paired with it in `drafting/`."""
 
 from __future__ import annotations
 
@@ -6,12 +6,15 @@ import os
 import subprocess
 from pathlib import Path
 
+import loom.overleaf as overleaf_module
 from loom.overleaf import pair
 from loom.scan.quilt import load_quilt
 
 CONFIG = '[quilt]\nname = "test"\nmain = "drafting/main.tex"\nprefix = "zk"\nengine = "pdflatex"\n'
 PREAMBLE = "\\documentclass{article}\n\\usepackage{loom}\n\\newtheorem{lemma}{Lemma}\n"
 SOURCE = PREAMBLE + "\\begin{document}\n\\begin{lemma}\\label{zk-0001}A\\end{lemma}\n\\end{document}\n"
+#: The stand-in project's id, as Overleaf writes one.
+PROJECT = "5f1e0c2a9b3d4e6f7a8b9c0d"
 #: The person, as the project's history names them.
 PERSON = ("Pat Person", "pat@example.org")
 #: A colleague who edits the project in Overleaf.
@@ -44,11 +47,12 @@ def quilt_at(tmp_path: Path, files: dict[str, str] | None = None) -> Path:
     return root
 
 
-def overleaf(tmp_path: Path, files: dict[str, str] | None = None) -> Path:
-    """A bare repository on `main` standing in for an Overleaf project, its first commit the person's."""
-    bare = tmp_path / "overleaf.git"
+def overleaf(tmp_path: Path, files: dict[str, str] | None = None, project: str = PROJECT) -> Path:
+    """A bare repository on `main` standing in for the Overleaf project `project`, where loom's address for it leads (`overleaf.BASE`), its first commit the person's."""
+    bare = Path(overleaf_module.BASE) / project
+    bare.parent.mkdir(parents=True, exist_ok=True)
     run(tmp_path, "init", "-q", "--bare", "-b", "main", str(bare))
-    seed = tmp_path / "seed"
+    seed = tmp_path / f"seed-{project}"
     run(tmp_path, "init", "-q", "-b", "main", str(seed))
     for rel, text in (files or {"main.tex": SOURCE, "loom.sty": "% local support\n"}).items():
         (seed / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +87,7 @@ def paired(tmp_path: Path, files: dict[str, str] | None = None) -> tuple[Path, P
     """A quilt mirroring a new project in `drafting/`, its main `drafting/main.tex`, the person known by their address; with the project's bare repository."""
     root = quilt_at(tmp_path)
     bare = overleaf(tmp_path, files)
-    pair(load_quilt(root), str(bare), "drafting", "main.tex", [PERSON[1]])
+    pair(load_quilt(root), PROJECT, "drafting", "main.tex", [PERSON[1]])
     return root, bare
 
 

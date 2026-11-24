@@ -1432,8 +1432,11 @@ class ServeSession:
         from loom.overleaf import fetch, paired
         from loom.sync import SyncError
 
-        if paired(self.quilt.root) is None:
-            return
+        try:
+            if paired(self.quilt.root) is None:
+                return
+        except SyncError:
+            return  # a record loom cannot use, which the manifest says
 
         def run() -> None:
             try:

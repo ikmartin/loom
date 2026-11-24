@@ -648,6 +648,7 @@ def test_a_pull_cut_short_on_a_dot_named_file_is_left_with_true_words_and_settle
     for k in range(12):
         q = tmp_path / f"cut-{k}"
         shutil.copytree(root, q, symlinks=True)
+        fetch(load_quilt(q))  # a copy's clone is not one this machine made for it, so it is made again
         restore = dying_before_the_rename(monkeypatch, after=k)
         try:
             sync.incorporate(load_quilt(q), SyncState.read(q), [])

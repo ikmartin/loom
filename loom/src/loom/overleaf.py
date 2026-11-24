@@ -1,32 +1,52 @@
 """The Overleaf mirror: a folder of the quilt that holds one Overleaf project's files as Overleaf holds them, read over git and never written back.
 
-Loom reaches Overleaf over git only (`https://git.overleaf.com/<id>`), and only to read: it clones, fetches and takes Overleaf's bytes into the folder when the person presses Update. Nothing in loom pushes.
+Loom reaches Overleaf over git only, at an address it builds from the project's id (`git_address`), and only to read: it fetches into a clone of its own and takes Overleaf's bytes into the folder when the person presses Update. Nothing in loom pushes. What travels with the quilt (the record, `sync.SyncState`) is checked at every read, and the clone is used only where this machine made it (`_clone`).
 """
 
 from __future__ import annotations
 
 import functools
+import hashlib
 import json
 import os
 import re
 import shutil
+import stat
 import subprocess
+import tempfile
 import threading
 from collections.abc import Callable
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 from urllib.parse import urlsplit
 
-from loom.paths import OVERLEAF_CLONE, OVERLEAF_HERE, SOURCE_SYNC
+from loom.paths import LOCAL, LOOM, OVERLEAF_CLONE, OVERLEAF_HERE, SOURCE_SYNC
 from loom.scan.quilt import Quilt
-from loom.sync import SyncError, SyncState, tree_files
+from loom.sync import (
+    PROJECT_ID,
+    MirrorError,
+    SyncError,
+    SyncState,
+    checked_folder,
+    plain_folder,
+    revision,
+    tree_files,
+)
 
-#: Overleaf's git host; every address the mirror reaches is on it.
+__all__ = ["LinkRefused", "MirrorError", "SyncError"]
+
+#: Overleaf's git host.
 GIT_HOST = "git.overleaf.com"
-#: The credential helper every mirror git call names, after clearing any the person's own git config names: the macOS Keychain's, which Apple's and Homebrew's git ship. The test suite replaces it with a file in each test's temporary folder.
+#: Where the projects' git addresses are, with no slash at its end: `git_address` puts a project's id after it. The test suite stands a local folder or server in.
+BASE = f"https://{GIT_HOST}"
+#: The transports the mirror's git may use; the test suite adds the local ones its stand-ins need.
+PROTOCOLS: tuple[str, ...] = ("https",)
+#: The credential helper every mirror git call names, after clearing any other: the macOS Keychain's, which Apple's and Homebrew's git ship. The test suite replaces it with a file in each test's temporary folder.
 HELPER = "osxkeychain"
 #: How long a call that reaches Overleaf may take before it is called unreachable, in seconds; a clone of a large project is the longest.
 TIMEOUT = 300.0
+#: The folder of the machine's own place (`machine.data_dir`) where this machine marks each clone it made, so that a clone a quilt brought with it is never used.
+MARKS = "overleaf"
 #: Held by every step that makes, fetches into or removes loom's clone, so the fetch a server makes as it starts never races a pairing or its end.
 _CLONE_LOCK = threading.RLock()
 
@@ -45,7 +65,8 @@ def _holding_clone(fn: Callable[_P, _R]) -> Callable[_P, _R]:
     return held
 
 
-#: A project id as Overleaf writes it in a project's address: 24 hex digits, or digits for an old project.
+# ---- the link --------------------------------------------------------------------------------------------------------
+
 _ID = r"(?P<id>[0-9a-f]{24}|[0-9]+)"
 #: A project's own address in the browser, or its git address, each with anything after the id.
 _PROJECT = re.compile(rf"^(?:https?://)?(?:www\.)?overleaf\.com/project/{_ID}(?:[/?#].*)?$", re.I)
@@ -55,15 +76,15 @@ _SHARING = re.compile(r"^(?:https?://)?(?:www\.)?overleaf\.com/(?:read/[A-Za-z0-
 
 
 class LinkRefused(ValueError):
-    """A pasted link no git address can be made from; `code` is the write API's."""
+    """A pasted link no project can be read from; `code` is the write API's."""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
         self.code = code
 
 
-def address(link: str) -> str:
-    """The git address of the Overleaf project a pasted link names.
+def project_of(link: str) -> str:
+    """The id of the Overleaf project a pasted link names.
 
     Parameters
     ----------
@@ -73,7 +94,7 @@ def address(link: str) -> str:
     Returns
     -------
     str
-        `https://git.overleaf.com/<id>`.
+        The project's id, in lower case.
 
     Raises
     ------
@@ -95,19 +116,22 @@ def address(link: str) -> str:
             "not-a-project",
             "That is not the address of an Overleaf project. Open the project in Overleaf and paste the address from your browser, or the one under Menu, Git.",
         )
-    return f"https://{GIT_HOST}/{found.group('id').lower()}"
+    return found.group("id").lower()
+
+
+def git_address(project: str) -> str:
+    """The git address of the project `project` names, built from `BASE` and the id alone; MirrorError `bad-record` for anything but an id."""
+    if not isinstance(project, str) or not PROJECT_ID.fullmatch(project):
+        raise MirrorError("bad-record", "That is not the id of an Overleaf project.")
+    return f"{BASE}/{project}"
+
+
+def address(link: str) -> str:
+    """The git address of the project a pasted link names (`project_of`, `git_address`)."""
+    return git_address(project_of(link))
 
 
 # ---- git, as the mirror runs it -------------------------------------------------------------------------------------
-
-
-class MirrorError(SyncError):
-    """Overleaf could not be read, and why, in the person's words; `code` is the write API's: `no-git`, `no-token`, `token-refused`, `no-git-access`, `offline`, `bad-token`, `failed`."""
-
-    def __init__(self, code: str, message: str) -> None:
-        super().__init__(message)
-        self.code = code
-
 
 #: What each failure says to the person, by code.
 SAID = {
@@ -138,19 +162,42 @@ def _failure(stderr: str) -> MirrorError:
     return MirrorError(code, SAID[code])
 
 
-def run(cwd: Path | None, *args: str, input: bytes | None = None) -> bytes:
-    """Run git for the mirror, as the person's own git config never decides: the credential helper cleared and set to `HELPER`, and no prompt, so a missing or refused token fails at once instead of waiting on a terminal no one sees.
+def run(clone: Path | None, *args: str, input: bytes | None = None) -> bytes:
+    """Run git for the mirror: in loom's clone `clone` (`--git-dir`), or in none.
 
-    Raises MirrorError with the failure's code (`_failure`); `no-git` where git cannot be run, `offline` past `TIMEOUT`.
+    Nothing the person's or a repository's configuration says chooses a program, a helper or an address: the person's and the system's git config are not read, no `GIT_` variable of the environment reaches git, hooks are off, the credential helper is cleared and set to `HELPER`, git never prompts, and only `PROTOCOLS` may carry a fetch. Raises MirrorError with the failure's code (`_failure`); `no-git` where git cannot be run, `offline` past `TIMEOUT`.
     """
     from loom import gitprog
 
     if not gitprog.usable():
         raise MirrorError("no-git", SAID["no-git"])
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "", "SSH_ASKPASS": "", "GCM_INTERACTIVE": "never"}
-    command = ["git", "-c", "credential.helper=", "-c", f"credential.helper={HELPER}", "-c", "core.askPass=", *args]
+    neutral = tempfile.gettempdir()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env.update(
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_CEILING_DIRECTORIES=os.path.dirname(neutral),
+        GIT_TERMINAL_PROMPT="0",
+        GIT_ASKPASS="",
+        SSH_ASKPASS="",
+        GCM_INTERACTIVE="never",
+    )
+    settings = [
+        f"core.hooksPath={os.devnull}",
+        "core.fsmonitor=false",
+        "core.askPass=",
+        "credential.helper=",
+        f"credential.helper={HELPER}",
+        "protocol.allow=never",
+        *(f"protocol.{p}.allow=always" for p in PROTOCOLS),
+    ]
+    command = ["git", *(a for s in settings for a in ("-c", s))]
+    if clone is not None:
+        command.append(f"--git-dir={clone}")
     try:
-        done = subprocess.run(command, cwd=cwd, env=env, input=input, capture_output=True, check=False, timeout=TIMEOUT)
+        done = subprocess.run(
+            [*command, *args], cwd=neutral, env=env, input=input, capture_output=True, check=False, timeout=TIMEOUT
+        )
     except subprocess.TimeoutExpired as exc:
         raise MirrorError("offline", SAID["offline"]) from exc
     except FileNotFoundError as exc:
@@ -182,15 +229,22 @@ def store_token(git_address: str, token: str) -> None:
 
 
 def here(root: Path) -> dict[str, Any]:
-    """This machine's part of the mirror: `me`, the addresses the person goes by on Overleaf, and `problem`, the code of what the last reach of Overleaf could not do, or None. Kept in `.loom/local/`, never in the record that travels with the quilt, so that co-authors sharing a quilt each say who they are and no address is in a file a person commits."""
+    """This machine's part of the mirror, kept in `.loom/local/`, never in the record that travels with the quilt, so that co-authors sharing a quilt each say who they are and no address is in a file a person commits: `me`, the addresses the person goes by on Overleaf; `asked`, those of the history's authors they were shown when they said; `ask`, whether to ask again; and `problem`, the code of what the last reach of Overleaf could not do, or None."""
     try:
         data = json.loads((root / OVERLEAF_HERE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         data = {}
-    me = data.get("me") if isinstance(data, dict) else None
-    problem = data.get("problem") if isinstance(data, dict) else None
+    data = data if isinstance(data, dict) else {}
+
+    def addresses(key: str) -> list[str]:
+        held = data.get(key)
+        return [m for m in held if isinstance(m, str)] if isinstance(held, list) else []
+
+    problem = data.get("problem")
     return {
-        "me": [m for m in me if isinstance(m, str)] if isinstance(me, list) else [],
+        "me": addresses("me"),
+        "asked": addresses("asked"),
+        "ask": data.get("ask") is True,
         "problem": problem if isinstance(problem, str) else None,
     }
 
@@ -205,29 +259,141 @@ def _keep_here(root: Path, **changes: Any) -> None:
     temporary.replace(path)
 
 
+def _ask_again(root: Path, clone: Path, rev: str) -> None:
+    """Ask again who the person is when the machine knows them by no address and the history names someone they were not shown: a quilt that came without its `.loom/local/`, or "none yet" before their first change."""
+    held = here(root)
+    named = {a["email"].lower() for a in authors(clone, rev)}
+    _keep_here(root, ask=not held["me"] and bool(named - {a.lower() for a in held["asked"]}))
+
+
+# ---- loom's clone ----------------------------------------------------------------------------------------------------
+
+
+def _mark_of(clone: Path) -> Path:
+    """Where this machine marks the clone at `clone`, outside the quilt: keyed by where the clone really lies."""
+    from loom.machine import data_dir
+
+    key = hashlib.sha256(os.path.realpath(clone).encode("utf-8")).hexdigest()[:24]
+    return data_dir() / MARKS / f"{key}.json"
+
+
+def _identity(clone: Path, project: str) -> dict[str, Any] | None:
+    """What a mark of the clone at `clone` for `project` holds: where it lies, the project, and the folder's identity on the file system, so a folder copied or put in its place is not it; None where no folder is there."""
+    try:
+        it = os.stat(clone, follow_symlinks=False)
+    except OSError:
+        return None
+    if not stat.S_ISDIR(it.st_mode):
+        return None
+    return {"clone": os.path.realpath(clone), "project": project, "dev": it.st_dev, "ino": it.st_ino}
+
+
+def _marked(clone: Path, project: str) -> bool:
+    """Whether this machine made the clone at `clone` for `project`."""
+    try:
+        held = json.loads(_mark_of(clone).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    mine = _identity(clone, project)
+    return mine is not None and held == mine
+
+
+def _remove(path: Path) -> None:
+    """Take `path` away, a folder whole, never following a link to anything outside it."""
+    if path.is_symlink() or path.is_file():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+
+
+def _clone(root: Path, project: str) -> Path:
+    """Loom's clone of `project`, without a work tree, in `.loom/local/overleaf/`, fetched from the address loom builds (`git_address`), with Overleaf's tip at `refs/loom/tip`.
+
+    Used only where this machine made it for this quilt and this project (`_marked`): any other folder found there, a clone a quilt brought with it among them, is removed and made again, so nothing in it (a hook, a setting, an address) is ever read. Refused (`bad-record`) where `.loom/local/` does not lie in the quilt's own `.loom/`.
+    """
+    local = Path(os.path.realpath(root / LOCAL))
+    if local.parent != Path(os.path.realpath(root / LOOM)):
+        raise MirrorError(
+            "bad-record",
+            "This quilt's .loom/local/ lies outside the quilt, so loom makes no copy of the project there.",
+        )
+    clone = root / OVERLEAF_CLONE
+    if not _marked(clone, project):
+        fresh = clone.with_name(clone.name + ".new")
+        _remove(fresh)
+        _remove(clone)
+        _mark_of(clone).unlink(missing_ok=True)
+        fresh.parent.mkdir(parents=True, exist_ok=True)
+        run(None, "init", "--quiet", "--bare", "--template=", "--", str(fresh))
+        fresh.rename(clone)
+        mark = _mark_of(clone)
+        mark.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        mark.write_text(json.dumps(_identity(clone, project), sort_keys=True) + "\n", encoding="utf-8")
+    run(
+        clone,
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        "--no-write-fetch-head",
+        "--",
+        git_address(project),
+        "+HEAD:refs/loom/tip",
+    )
+    return clone
+
+
+def _tip(clone: Path) -> str:
+    """The project's tip as the clone last fetched it."""
+    return revision(clone, "refs/loom/tip")
+
+
+def main_files(clone: Path, rev: str) -> list[str]:
+    """The project's main file candidates at `rev`: each `.tex` at its top that declares a document class and begins a document; Overleaf's own choice of main file is not in git."""
+    from loom.sync import MAIN_FILE
+
+    out = []
+    listed = run(clone, "ls-tree", "--name-only", "-z", "--end-of-options", rev).decode("utf-8", errors="replace")
+    for name in sorted(n for n in listed.split("\0") if n):
+        if MAIN_FILE.fullmatch(name):
+            text = run(clone, "show", f"{rev}:{name}").decode("utf-8", errors="replace")
+            if "\\documentclass" in text and "\\begin{document}" in text:
+                out.append(name)
+    return out
+
+
+def authors(clone: Path, rev: str) -> list[dict[str, str]]:
+    """Who the project's history names, latest first, once each by address: `{name, email}`."""
+    seen: dict[str, dict[str, str]] = {}
+    said = run(clone, "log", "--format=%aN%x00%aE", "--end-of-options", rev).decode("utf-8", errors="replace")
+    for line in said.splitlines():
+        name, _, email = line.partition("\0")
+        if email and email.lower() not in seen:
+            seen[email.lower()] = {"name": name, "email": email}
+    return list(seen.values())
+
+
 # ---- pairing ---------------------------------------------------------------------------------------------------------
 
 
 def paired(root: Path) -> SyncState | None:
-    """The quilt's mirror record, or None when the quilt mirrors no Overleaf project."""
+    """The quilt's mirror record, checked (`SyncState.read`), or None when the quilt mirrors no project; MirrorError `bad-record` for a record loom cannot use."""
     try:
-        state = SyncState.read(root)
-    except SyncError:
-        return None
-    return state if state.folder else None
+        return SyncState.read(root)
+    except MirrorError as exc:
+        if exc.code == "not-paired":
+            return None
+        raise
 
 
 def mirrored(root: Path, rel: str) -> bool:
     """Whether the real file `rel` reaches lies in the folder a mirror keeps its project in, which only an update writes.
 
-    Judged as recovery judges a place (`writes._place`, `writes._loom_named`): the path's links resolved to the real file, and each folder it lies in compared with the mirrored folder by the file system's identity, never by spelling, so a link into the folder, or the folder named in another case where case is ignored, is the folder.
+    Judged as recovery judges a place (`writes._place`, `writes._loom_named`): the path's links resolved to the real file, and each folder it lies in compared with the mirrored folder by the file system's identity, never by spelling, so a link into the folder, or the folder named in another case where case is ignored, is the folder. A record loom cannot use mirrors nothing.
     """
     try:
-        folder = json.loads((root / SOURCE_SYNC).read_text(encoding="utf-8")).get("folder")
-        own = os.stat(root / folder) if isinstance(folder, str) and folder else None
-    except (OSError, ValueError, AttributeError):
-        return False
-    if own is None:
+        state = SyncState.read(root)
+        own = os.stat(root / state.folder)
+    except (SyncError, OSError):
         return False
     top = Path(os.path.realpath(root))
     real = Path(os.path.realpath(root / rel))
@@ -243,63 +409,6 @@ def mirrored(root: Path, rel: str) -> bool:
     return False
 
 
-def _clone(root: Path, git_address: str) -> Path:
-    """Loom's clone of the project at `git_address`, without a checkout, in `.loom/local/overleaf/`: fetched when it is that project's already, else made again beside and put in place, so a clone cut short never stands where a whole one is read."""
-    clone = root / OVERLEAF_CLONE
-    if (clone / ".git").is_dir():
-        try:
-            same = run(clone, "remote", "get-url", "origin").decode().strip() == git_address
-        except MirrorError:
-            same = False
-        if same:
-            run(clone, "fetch", "--quiet", "--no-tags", "origin")
-            return clone
-    fresh = clone.with_name(clone.name + ".new")
-    shutil.rmtree(fresh, ignore_errors=True)
-    fresh.parent.mkdir(parents=True, exist_ok=True)
-    run(None, "clone", "--quiet", "--no-checkout", "--no-tags", git_address, str(fresh))
-    shutil.rmtree(clone, ignore_errors=True)
-    fresh.rename(clone)
-    return clone
-
-
-def _tip(clone: Path) -> tuple[str, str]:
-    """(branch, revision) of the project as the clone last fetched it: the branch Overleaf's HEAD names, `main` today."""
-    branch = run(clone, "symbolic-ref", "--short", "HEAD").decode().strip()
-    return branch, run(clone, "rev-parse", "--verify", f"refs/remotes/origin/{branch}^{{commit}}").decode().strip()
-
-
-def main_files(clone: Path, rev: str) -> list[str]:
-    """The project's main file candidates at `rev`: each `.tex` at its top that declares a document class and begins a document; Overleaf's own choice of main file is not in git."""
-    out = []
-    for name in sorted(n for n in run(clone, "ls-tree", "--name-only", "-z", rev).decode().split("\0") if n):
-        if name.lower().endswith(".tex"):
-            text = run(clone, "show", f"{rev}:{name}").decode("utf-8", errors="replace")
-            if "\\documentclass" in text and "\\begin{document}" in text:
-                out.append(name)
-    return out
-
-
-def authors(clone: Path, rev: str) -> list[dict[str, str]]:
-    """Who the project's history names, latest first, once each by address: `{name, email}`."""
-    seen: dict[str, dict[str, str]] = {}
-    for line in run(clone, "log", "--format=%aN%x00%aE", rev).decode("utf-8", errors="replace").splitlines():
-        name, _, email = line.partition("\0")
-        if email and email.lower() not in seen:
-            seen[email.lower()] = {"name": name, "email": email}
-    return list(seen.values())
-
-
-def _folder_refused(root: Path, folder: str) -> str:
-    """Why `folder` cannot take the project, or '': it must be a new folder of the person's, inside the quilt, under no dot-named folder."""
-    parts = PurePosixPath(folder).parts
-    if not folder or folder.startswith("/") or "\\" in folder or ".." in parts or any(p.startswith(".") for p in parts):
-        return f"{folder or 'That'} is not a folder name loom can use"
-    if (root / folder).exists():
-        return f"{folder} exists already; choose a new folder"
-    return ""
-
-
 def propose_folder(root: Path) -> str:
     """A new folder's name for the project: `paper`, else `overleaf`, else `overleaf-2` and on."""
     for name in ("paper", "overleaf", *(f"overleaf-{n}" for n in range(2, 100))):
@@ -309,15 +418,15 @@ def propose_folder(root: Path) -> str:
 
 
 @_holding_clone
-def prepare(quilt: Quilt, git_address: str) -> dict[str, Any]:
+def prepare(quilt: Quilt, project: str) -> dict[str, Any]:
     """Reach the project and say what pairing asks of the person, writing nothing of theirs: the clone is made or fetched.
 
     Parameters
     ----------
     quilt : Quilt
         The quilt to pair.
-    git_address : str
-        The project's git address (`address`).
+    project : str
+        The project's id (`project_of`).
 
     Returns
     -------
@@ -332,8 +441,8 @@ def prepare(quilt: Quilt, git_address: str) -> dict[str, Any]:
     root = quilt.root
     if paired(root) is not None:
         raise MirrorError("paired", "This quilt mirrors an Overleaf project already.")
-    clone = _clone(root, git_address)
-    _, rev = _tip(clone)
+    clone = _clone(root, project)
+    rev = _tip(clone)
     mains = main_files(clone, rev)
     if not mains:
         raise MirrorError(
@@ -350,17 +459,15 @@ def prepare(quilt: Quilt, git_address: str) -> dict[str, Any]:
 
 
 @_holding_clone
-def pair(
-    quilt: Quilt, git_address: str, folder: str, main: str, me: list[str], actor: str | None = None
-) -> dict[str, Any]:
+def pair(quilt: Quilt, project: str, folder: str, main: str, me: list[str], actor: str | None = None) -> dict[str, Any]:
     """Copy the project into a new folder of the quilt and record the pairing, as one act through the door.
 
     Parameters
     ----------
     quilt : Quilt
         The quilt to pair.
-    git_address : str
-        The project's git address (`address`).
+    project : str
+        The project's id (`project_of`).
     folder : str
         The new folder, quilt-relative; it becomes the project's root, so each path maps one to one.
     main : str
@@ -381,20 +488,29 @@ def pair(
         `paired`, `folder-exists` or `bad-folder`, `no-main` for a main file that does not begin a document, or what reaching Overleaf failed on.
     """
     from loom import writes
+    from loom.config_edit import set_values
     from loom.history.ledger import actor_for
 
     root = quilt.root
     folder = folder.strip().rstrip("/")
-    refused = _folder_refused(root, folder)
-    if refused:
-        raise MirrorError("folder-exists" if (root / folder).exists() and folder else "bad-folder", refused)
-    clone = _clone(root, git_address)
-    branch, rev = _tip(clone)
+    if not plain_folder(folder):
+        raise MirrorError("bad-folder", f"{folder or 'That'} is not a folder name loom can use")
+    if (root / folder).exists() or (root / folder).is_symlink():
+        raise MirrorError("folder-exists", f"{folder} exists already; choose a new folder")
+    try:
+        checked_folder(root, quilt.history_dir, folder)
+    except MirrorError as exc:
+        raise MirrorError("bad-folder", f"{folder} is not a folder name loom can use") from exc
+    if paired(root) is not None:
+        raise MirrorError("paired", "This quilt mirrors an Overleaf project already.")
+    clone = _clone(root, project)
+    rev = _tip(clone)
     if main not in main_files(clone, rev):
         raise MirrorError(
             "no-main", f"{main or 'That'} is not a file at the top of the project that begins a document."
         )
     files = tree_files(clone, rev)
+    shown = [a["email"] for a in authors(clone, rev)]
     local_main = f"{folder}/{main}"
     with (
         writes.act(root, quilt.history_dir, "pull", actor if actor is not None else actor_for(root)) as w,
@@ -410,23 +526,26 @@ def pair(
         changes: dict[str, Any] = {"agents.deny": [*quilt.config.agents_deny, f"{folder}/"]}
         if not quilt.config.main or not (root / quilt.config.main).is_file():
             changes["quilt.main"] = local_main
-        from loom.config_edit import set_values
-
         set_values(quilt, changes)
-        SyncState(
-            directory=OVERLEAF_CLONE,
-            remote="origin",
-            url=git_address,
-            branch=branch,
-            master=local_main,
-            integrated=rev,
-            incoming=rev,
-            published_main=main,
-            documents=[local_main],
-            folder=folder,
-        ).write(root)
-    _keep_here(root, me=sorted({m.strip() for m in me if m.strip()}), problem=None)
+        SyncState(project=project, folder=folder, main=main, integrated=rev, incoming=rev).write(root)
+    _keep_here(root, me=sorted({m.strip() for m in me if m.strip()}), asked=shown, ask=False, problem=None)
     return {"folder": folder, "main": local_main}
+
+
+@_holding_clone
+def who(quilt: Quilt) -> list[dict[str, str]]:
+    """Who the paired project's history names, as the clone last fetched it, to ask the person again which is them; MirrorError `not-paired`, or what reaching Overleaf failed on where this machine has no clone yet."""
+    state = SyncState.read(quilt.root)
+    clone = quilt.root / OVERLEAF_CLONE
+    if not _marked(clone, state.project):
+        clone = _clone(quilt.root, state.project)
+    return authors(clone, _tip(clone))
+
+
+def set_me(quilt: Quilt, me: list[str]) -> None:
+    """Keep the addresses the person goes by on Overleaf, answering the question `who` asks; [] is "none yet", asked again once the history names someone new."""
+    shown = [a["email"] for a in who(quilt)]
+    _keep_here(quilt.root, me=sorted({m.strip() for m in me if m.strip()}), asked=shown, ask=False)
 
 
 # ---- fetching and updating -------------------------------------------------------------------------------------------
@@ -434,30 +553,25 @@ def pair(
 
 @_holding_clone
 def fetch(quilt: Quilt) -> SyncState:
-    """Fetch what Overleaf holds into loom's clone and record it as waiting, writing nothing of the person's; what could not be done is kept as this machine's `problem` (`here`), and cleared once a fetch succeeds.
+    """Fetch what Overleaf holds into loom's clone and record it as waiting, writing nothing of the person's; what could not be done is kept as this machine's `problem` (`here`), and cleared once a fetch succeeds. Says to ask again who the person is where the machine does not know.
 
-    The clone is made again where a copied quilt lacks it. Raises MirrorError `not-paired`, or what reaching Overleaf failed on.
+    The clone is made again where this machine did not make it (`_clone`). Raises MirrorError `not-paired`, `bad-record`, or what reaching Overleaf failed on.
     """
     from loom.clock import stamp
-    from loom.sync import git, revision
+    from loom.sync import git
 
     root = quilt.root
-    state = paired(root)
-    if state is None:
-        raise MirrorError("not-paired", "This quilt mirrors no Overleaf project.")
-    clone = root / OVERLEAF_CLONE
+    state = SyncState.read(root)
     try:
-        if (clone / ".git").is_dir():
-            run(clone, "fetch", "--quiet", "--no-tags", "origin", state.branch)
-        else:
-            _clone(root, state.url)
-        new = revision(clone, f"refs/remotes/origin/{state.branch}")
+        clone = _clone(root, state.project)
+        new = _tip(clone)
     except MirrorError as exc:
         _keep_here(root, problem=exc.code)
         raise
-    # a ref of loom's own keeps the fetched revision whatever later fetches do
-    git(clone, "update-ref", f"refs/loom/incoming/{new}", new)
+    # a ref of loom's own keeps each fetched revision whatever later fetches do
+    git(clone, "update-ref", f"refs/loom/seen/{new}", new)
     _keep_here(root, problem=None)
+    _ask_again(root, clone, new)
     if new != state.incoming:
         state.incoming, state.observed = new, stamp()
         state.write(root)
@@ -477,12 +591,12 @@ def update(quilt: Quilt, actor: str | None = None) -> dict[str, Any]:
     Returns
     -------
     dict
-        `state`: `up-to-date` when Overleaf holds nothing new, else `updated`, with `files`, how many were written, `by`, the names of the others whose changes Review lists, `own`, how many changed blocks are left out of Review because only the person's own commits touched them, and `overwritten`, the files here that held a change made here and were written over.
+        `state`: `up-to-date` when Overleaf holds nothing new, else `updated`, with `files`, how many were written; `by`, the names of the others whose changes Review lists; `own`, how many changed blocks and places are left out of Review because only the person's own commits touched them; `places`, each change outside a block, `{file, place, by}`, `place` one of `sync.PLACES`; `here`, the blocks whose change was one made here and written over; and `overwritten`, the files here that held a change made here and were written over.
 
     Raises
     ------
     MirrorError
-        `not-paired`, or what reaching Overleaf failed on.
+        `not-paired`, `bad-record`, `taken-in`, or what reaching Overleaf failed on.
     """
     from loom import sync
 
@@ -495,40 +609,59 @@ def update(quilt: Quilt, actor: str | None = None) -> dict[str, Any]:
         "files": len(said["paths"]),
         "by": said["by"],
         "own": said["own"],
+        "places": said["places"],
+        "here": said["here"],
         "overwritten": said["overwritten"],
     }
 
 
 @_holding_clone
 def unpair(quilt: Quilt) -> None:
-    """End the pairing: the record, loom's clone and this machine's part go; the folder stays, its files now the person's to edit like any other, and denied to agents until the person says otherwise in Settings."""
+    """End the pairing: the record, loom's clone, its mark and this machine's part go; the folder stays, its files now the person's to edit like any other, and denied to agents until the person says otherwise in Settings."""
     root = quilt.root
-    if paired(root) is None:
+    if not (root / SOURCE_SYNC).is_file():
         raise MirrorError("not-paired", "This quilt mirrors no Overleaf project.")
     (root / SOURCE_SYNC).unlink()
-    shutil.rmtree(root / OVERLEAF_CLONE, ignore_errors=True)
+    clone = root / OVERLEAF_CLONE
+    _mark_of(clone).unlink(missing_ok=True)
+    _remove(clone)
     (root / OVERLEAF_HERE).unlink(missing_ok=True)
 
 
 def published(root: Path) -> dict[str, Any]:
-    """The manifest's `overleaf`: whether the quilt mirrors a project and how it stands, in fields the viewer draws in its own words; no revision, token or address of anyone's.
+    """The manifest's `overleaf`: whether the quilt mirrors a project and how it stands, in fields the viewer draws in its own words; no revision, token or anyone's address.
 
     Returns
     -------
     dict
-        `{"paired": false}`, or `paired`, `folder`, `main` (the main document's quilt path), `link` (the project's page in Overleaf), `waiting` (Overleaf holds text not yet taken in, as the last fetch saw), `last` (the last update: `when`, `files`, `by`, `own`; null before one) and `problem` (what the last reach of Overleaf could not do, by its code; null when it went well).
+        `{"paired": false}`, or `paired`, `folder`, `main` (the main document's quilt path), `link` (the project's page in Overleaf, a link only), `waiting` (Overleaf holds text not yet taken in, as the last fetch saw), `last` (the last update: `when`, `files`, `by`, `own`, `places`, `here`; null before one), `ask_me` (ask the person again which of the history's authors is them) and `problem` (what the last reach of Overleaf could not do, by its code, `bad-record` for a record loom cannot use; null when it went well).
     """
-    state = paired(root)
+    try:
+        state = paired(root)
+    except MirrorError:
+        return {
+            "paired": True,
+            "folder": "",
+            "main": "",
+            "link": "",
+            "waiting": False,
+            "last": None,
+            "ask_me": False,
+            "problem": "bad-record",
+        }
     if state is None:
         return {"paired": False}
-    project = state.url.rstrip("/").rsplit("/", 1)[-1]
     last = state.last_pull
+    held = here(root)
     return {
         "paired": True,
         "folder": state.folder,
         "main": state.master,
-        "link": f"https://www.overleaf.com/project/{project}" if state.url.startswith(f"https://{GIT_HOST}/") else "",
+        "link": f"https://www.overleaf.com/project/{state.project}",
         "waiting": bool(state.incoming) and state.incoming != state.integrated,
-        "last": {k: last.get(k) for k in ("when", "files", "by", "own")} if last.get("when") else None,
-        "problem": here(root)["problem"],
+        "last": {k: last.get(k) for k in ("when", "files", "by", "own", "places", "here")}
+        if last.get("when")
+        else None,
+        "ask_me": held["ask"],
+        "problem": held["problem"],
     }

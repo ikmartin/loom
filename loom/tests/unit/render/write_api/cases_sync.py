@@ -34,14 +34,8 @@ def published(root: Path) -> dict[str, Any]:
     return json.loads((root / MANIFEST).read_text())["overleaf"]  # type: ignore[no-any-return]
 
 
-def local_link(monkeypatch: pytest.MonkeyPatch, bare: Path) -> str:
-    """A link the endpoints read as the project at `bare`: Overleaf's address of a project, with the stand-in in its place."""
-    import loom.overleaf as overleaf
-
-    real = overleaf.address
-    link = "https://www.overleaf.com/project/5f1e0c2a9b3d4e6f7a8b9c0d"
-    monkeypatch.setattr(overleaf, "address", lambda given: str(bare) if given == link else real(given))
-    return link
+#: A link to the stand-in project, whose address leads where the test suite's isolation keeps it (`overleaf.BASE`).
+LINK = "https://www.overleaf.com/project/5f1e0c2a9b3d4e6f7a8b9c0d"
 
 
 @case("overleaf-pair")
@@ -49,7 +43,8 @@ def _overleaf_pair(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     from tests.unit import _mirror as mirror
 
     root = mirror.quilt_at(tmp_path)
-    link = local_link(monkeypatch, mirror.overleaf(tmp_path))
+    mirror.overleaf(tmp_path)
+    link = LINK
     s = serve(root)
     refuses(s, "overleaf-pair", {"link": "https://www.overleaf.com/read/abcdefghijkl"}, 409, "sharing-link", "sharing")
     refuses(s, "overleaf-pair", {"link": link, "author": "Claude Agent"}, 403, "author-only", "author's")
@@ -63,7 +58,7 @@ def _overleaf_pair(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert (root / "drafting/main.tex").read_text() == mirror.SOURCE
     shown = published(root)
     assert (shown["paired"], shown["folder"], shown["waiting"], shown["problem"]) == (True, "drafting", False, None)
-    assert shown["link"] == "", "a stand-in's address names no Overleaf page"
+    assert shown["link"] == LINK
 
 
 @case("overleaf-token")
@@ -74,7 +69,10 @@ def _overleaf_token(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatc
     root = quilt_at(tmp_path)
     (tmp_path / "srv").mkdir()
     with serving(tmp_path / "srv") as server:
-        link = local_link(monkeypatch, Path(server.url("p")))
+        import loom.overleaf as overleaf
+
+        monkeypatch.setattr(overleaf, "BASE", server.url("").rstrip("/"))
+        link = LINK
         s = serve(root)
         refuses(s, "overleaf-token", {"link": link, "token": "two words"}, 400, "bad-token", "not a git token")
         assert succeeds(s, "overleaf-token", {"link": link, "token": TOKEN})["result"] == {"stored": True}
@@ -99,11 +97,44 @@ def _overleaf_update(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPat
         time.sleep(0.05)
     assert published(root)["waiting"] is True and (root / "drafting/main.tex").read_text() == mirror.SOURCE
     said = succeeds(s, "overleaf-update", {})["result"]
-    assert said == {"state": "updated", "files": 1, "by": ["Colleague"], "own": 0, "overwritten": []}
+    assert said == {
+        "state": "updated",
+        "files": 1,
+        "by": ["Colleague"],
+        "own": 0,
+        "places": [],
+        "here": [],
+        "overwritten": [],
+    }
     assert "}B" in (root / "drafting/main.tex").read_text()
     shown = published(root)
     assert shown["waiting"] is False and shown["last"]["by"] == ["Colleague"] and shown["last"]["files"] == 1
     assert succeeds(s, "overleaf-update", {})["result"] == {"state": "up-to-date"}
+
+
+@case("overleaf-me")
+def _overleaf_me(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quilt that came without its `.loom/local/` knows no one on this machine: the server's fetch says to ask, the history's authors are given, and the answer is kept."""
+    import shutil
+    import time
+
+    from tests.unit import _mirror as mirror
+
+    (tmp_path / "plain").mkdir()
+    refuses(serve(demo(tmp_path / "plain")), "overleaf-me", {}, 409, "not-paired", "mirrors no Overleaf project")
+    root, _ = mirror.paired(tmp_path)
+    shutil.rmtree(root / ".loom/local")
+    s = serve(root)
+    for _ in range(100):
+        if published(root).get("ask_me"):
+            break
+        time.sleep(0.05)
+    assert published(root)["ask_me"] is True
+    asked = succeeds(s, "overleaf-me", {})["result"]["authors"]
+    assert asked == [{"name": mirror.PERSON[0], "email": mirror.PERSON[1]}]
+    refuses(s, "overleaf-me", {"me": "pat"}, 400, "bad-field", "list of addresses")
+    assert succeeds(s, "overleaf-me", {"me": [mirror.PERSON[1]]})["result"] == {"me": [mirror.PERSON[1]]}
+    assert published(root)["ask_me"] is False
 
 
 @case("overleaf-unpair")

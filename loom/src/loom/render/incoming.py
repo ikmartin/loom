@@ -13,10 +13,7 @@ from loom.scan.hashing import mathematical_hash
 from loom.scan.macros import parse_macros, to_mathjax
 from loom.scan.scan import ScanResult
 from loom.scan.source import blank_comments
-from loom.sync import (
-    SyncError,
-    source_label,
-)
+from loom.sync import SyncError
 
 
 def _citation(result: ScanResult, dependent: str, target: str) -> str | None:
@@ -186,16 +183,4 @@ def attach_adoptions(
                     "issues": [str(exc)],
                 }
             )
-    # Preserve the existing pull field for clients; contributions adds the common source inventory.
-    pulled = manifest.get("incoming")
-    manifest["contributions"] = (
-        [
-            {
-                "kind": "workspace",
-                "label": f"Incoming from {source_label(pulled['workspace'])}",
-                **pulled,
-            }
-        ]
-        if pulled
-        else []
-    ) + contributions
+    manifest["contributions"] = contributions

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +13,7 @@ import pytest
 
 import loom.overleaf as overleaf
 from loom.history.ledger import load_history
-from loom.overleaf import LinkRefused, MirrorError, address, here, pair, paired, prepare, run, store_token
+from loom.overleaf import LinkRefused, MirrorError, here, pair, paired, prepare, project_of, run, store_token
 from loom.scan.owntext import own_text
 from loom.scan.quilt import Quilt, load_quilt
 from loom.scan.scan import scan
@@ -23,6 +24,7 @@ from tests.unit._mirror import renamed_pair
 from tests.unit._overleaf_server import TOKEN, Server, serving
 
 ID = "5f1e0c2a9b3d4e6f7a8b9c0d"
+ID2 = "5f1e0c2a9b3d4e6f7a8b9c0e"
 MAIN = "\\documentclass{article}\n\\begin{document}\nHello.\n\\end{document}\n"
 PAT = ("Pat Person", "pat@example.org")
 CLEO = ("Cleo Coauthor", "cleo@example.org")
@@ -39,6 +41,7 @@ def git(cwd: Path, *args: str, who: tuple[str, str] = PAT) -> str:
 def project(bare: Path, files: dict[str, str], who: tuple[str, str] = PAT) -> Path:
     """A bare repository on `main` standing in for an Overleaf project, its first commit holding `files`."""
     seed = bare.parent / f"{bare.name}.seed"
+    bare.parent.mkdir(parents=True, exist_ok=True)
     git(bare.parent, "init", "-q", "--bare", "-b", "main", str(bare))
     git(bare.parent, "init", "-q", "-b", "main", str(seed))
     for rel, text in files.items():
@@ -56,11 +59,18 @@ def stand_in(tmp_path: Path) -> str:
     return kept.read_text() if kept.exists() else ""
 
 
+def at(pid: str) -> Path:
+    """Where loom's address for the project `pid` leads in the test's stand-in for Overleaf (`overleaf.BASE`)."""
+    return Path(overleaf.BASE) / pid
+
+
 @pytest.fixture
-def server(tmp_path: Path) -> Iterator[Server]:
+def server(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Server]:
+    """The stand-in for Overleaf served over HTTP behind a password, where loom's addresses lead."""
     (tmp_path / "srv").mkdir()
     project(tmp_path / "srv" / ID, {"main.tex": MAIN})
     with serving(tmp_path / "srv") as served:
+        monkeypatch.setattr(overleaf, "BASE", served.url("").rstrip("/"))
         yield served
 
 
@@ -82,12 +92,21 @@ def server(tmp_path: Path) -> Iterator[Server]:
         f"git clone https://git.overleaf.com/{ID} my-paper",
     ],
 )
-def test_a_project_s_own_link_in_any_form_overleaf_gives_names_its_git_address(link: str) -> None:
-    assert address(link) == f"https://git.overleaf.com/{ID}"
+def test_a_project_s_own_link_in_any_form_overleaf_gives_names_the_project(link: str) -> None:
+    assert project_of(link) == ID
 
 
-def test_an_old_project_s_numeric_id_is_its_git_address() -> None:
-    assert address("https://www.overleaf.com/project/1234567") == "https://git.overleaf.com/1234567"
+def test_an_old_project_s_numeric_id_names_it() -> None:
+    assert project_of("https://www.overleaf.com/project/1234567") == "1234567"
+
+
+def test_the_address_is_built_from_the_id_alone_on_overleaf_s_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(overleaf, "BASE", "https://git.overleaf.com")
+    assert overleaf.address(f"https://www.overleaf.com/project/{ID}") == f"https://git.overleaf.com/{ID}"
+    for given in ("--upload-pack=touch x", "../elsewhere", f"{ID}/../x", ""):
+        with pytest.raises(MirrorError) as refused:
+            overleaf.git_address(given)
+        assert refused.value.code == "bad-record"
 
 
 @pytest.mark.parametrize(
@@ -100,7 +119,7 @@ def test_an_old_project_s_numeric_id_is_its_git_address() -> None:
 )
 def test_a_sharing_link_is_refused_because_it_does_not_name_the_project(link: str) -> None:
     with pytest.raises(LinkRefused) as refused:
-        address(link)
+        project_of(link)
     assert refused.value.code == "sharing-link"
 
 
@@ -119,7 +138,7 @@ def test_a_sharing_link_is_refused_because_it_does_not_name_the_project(link: st
 )
 def test_anything_else_is_refused_as_not_a_project(link: str) -> None:
     with pytest.raises(LinkRefused) as refused:
-        address(link)
+        project_of(link)
     assert refused.value.code == "not-a-project"
 
 
@@ -210,10 +229,11 @@ def new_quilt(tmp_path: Path) -> Quilt:
     return load_quilt(root)
 
 
-def overleaf_project(tmp_path: Path, files: dict[str, str] | None = None) -> Path:
-    bare = project(tmp_path / "overleaf.git", files or {"main.tex": PAPER, "sections/intro.tex": INTRO})
+def overleaf_project(tmp_path: Path, files: dict[str, str] | None = None, pid: str = ID) -> Path:
+    """The stand-in project `pid`, where loom's address for it leads; with a figure when `files` is not given."""
+    bare = project(at(pid), files or {"main.tex": PAPER, "sections/intro.tex": INTRO})
     if files is None:
-        seed = tmp_path / "overleaf.git.seed"
+        seed = bare.parent / f"{bare.name}.seed"
         (seed / "figures").mkdir()
         (seed / "figures/plot.pdf").write_bytes(FIGURE)
         git(seed, "add", "-A")
@@ -231,13 +251,14 @@ def mirrored(tmp_path: Path) -> tuple[Quilt, Path]:
     """A new quilt paired with a project in `paper/`, the person known as Pat."""
     q = new_quilt(tmp_path)
     bare = overleaf_project(tmp_path)
-    pair(q, str(bare), "paper", "main.tex", [PAT[1]])
+    pair(q, ID, "paper", "main.tex", [PAT[1]])
     return load_quilt(q.root), bare
 
 
 def test_pairing_says_what_it_asks_and_writes_nothing_of_the_person_s(tmp_path: Path) -> None:
     q = new_quilt(tmp_path)
-    asked = prepare(q, str(overleaf_project(tmp_path)))
+    overleaf_project(tmp_path)
+    asked = prepare(q, ID)
     assert asked == {
         "folder": "paper",
         "mains": ["main.tex"],
@@ -261,12 +282,7 @@ def test_pairing_copies_the_project_into_a_new_folder_as_one_act(tmp_path: Path)
     )
     assert q.config.main == "paper/main.tex" and q.config.agents_deny == ["paper/"]
     state = SyncState.read(root)
-    assert (state.folder, state.url, state.master, state.directory) == (
-        "paper",
-        str(bare),
-        "paper/main.tex",
-        ".loom/local/overleaf",
-    )
+    assert (state.folder, state.project, state.master) == ("paper", ID, "paper/main.tex")
     assert state.integrated == git(bare, "rev-parse", "main")
     assert not (root / ".loom/local/overleaf/main.tex").exists(), "loom's clone has no checkout"
 
@@ -275,14 +291,16 @@ def test_who_the_person_is_on_overleaf_stays_on_this_machine(tmp_path: Path) -> 
     q, _ = mirrored(tmp_path)
     assert here(q.root)["me"] == [PAT[1]]
     assert PAT[1] not in (q.root / ".loom/records/source-sync.json").read_text()
-    assert prepare(new_quilt(tmp_path / "again"), str(overleaf_project(tmp_path / "again")))["me"] == []
+    overleaf_project(tmp_path, pid=ID2)
+    assert prepare(new_quilt(tmp_path / "again"), ID2)["me"] == []
 
 
 def test_a_main_file_a_person_already_named_keeps_its_place(tmp_path: Path) -> None:
     q = new_quilt(tmp_path)
     (q.root / "notes.md").write_text("# Notes\n")
     (q.root / "config.toml").write_text('[quilt]\nname = "test"\nmain = "notes.md"\n')
-    pair(load_quilt(q.root), str(overleaf_project(tmp_path)), "paper", "main.tex", [])
+    overleaf_project(tmp_path)
+    pair(load_quilt(q.root), ID, "paper", "main.tex", [])
     assert load_quilt(q.root).config.main == "notes.md"
 
 
@@ -290,7 +308,7 @@ def test_a_main_file_a_person_already_named_keeps_its_place(tmp_path: Path) -> N
 def test_a_folder_name_loom_cannot_use_is_refused(tmp_path: Path, folder: str) -> None:
     q = new_quilt(tmp_path)
     with pytest.raises(MirrorError) as refused:
-        pair(q, str(overleaf_project(tmp_path)), folder, "main.tex", [])
+        pair(q, ID, folder, "main.tex", [])
     assert refused.value.code == "bad-folder" and paired(q.root) is None
 
 
@@ -298,49 +316,51 @@ def test_a_folder_that_exists_is_refused_and_nothing_is_written(tmp_path: Path) 
     q = new_quilt(tmp_path)
     (q.root / "paper").mkdir()
     (q.root / "paper/mine.tex").write_text("mine\n")
-    bare = overleaf_project(tmp_path)
+    overleaf_project(tmp_path)
     with pytest.raises(MirrorError) as refused:
-        pair(q, str(bare), "paper", "main.tex", [])
+        pair(q, ID, "paper", "main.tex", [])
     assert refused.value.code == "folder-exists"
     assert sorted(p.name for p in (q.root / "paper").iterdir()) == ["mine.tex"] and journal(q.root) == []
-    assert prepare(q, str(bare))["folder"] == "overleaf"
+    assert prepare(q, ID)["folder"] == "overleaf"
 
 
 def test_a_quilt_mirrors_one_project(tmp_path: Path) -> None:
     q, bare = mirrored(tmp_path)
     with pytest.raises(MirrorError) as asked:
-        prepare(q, str(bare))
+        prepare(q, ID)
     with pytest.raises(MirrorError) as paired_again:
-        pair(q, str(bare), "other", "main.tex", [])
+        pair(q, ID, "other", "main.tex", [])
     assert asked.value.code == paired_again.value.code == "paired"
     assert not (q.root / "other").exists()
 
 
 def test_of_several_main_files_main_tex_is_taken_else_the_person_chooses(tmp_path: Path) -> None:
     two = {"main.tex": PAPER, "talk.tex": PAPER, "macros.tex": "\\newcommand{\\R}{\\mathbb{R}}\n"}
-    assert prepare(new_quilt(tmp_path / "a"), str(project(tmp_path / "a.git", two)))["main"] == "main.tex"
+    project(at("a" * 24), two)
+    assert prepare(new_quilt(tmp_path / "a"), "a" * 24)["main"] == "main.tex"
     other = {"paper.tex": PAPER, "talk.tex": PAPER}
-    asked = prepare(new_quilt(tmp_path / "b"), str(project(tmp_path / "b.git", other)))
+    project(at("b" * 24), other)
+    asked = prepare(new_quilt(tmp_path / "b"), "b" * 24)
     assert (asked["mains"], asked["main"]) == (["paper.tex", "talk.tex"], "")
     with pytest.raises(MirrorError) as refused:
-        pair(new_quilt(tmp_path / "c"), str(project(tmp_path / "c.git", other)), "paper", "macros.tex", [])
+        pair(new_quilt(tmp_path / "c"), "b" * 24, "paper", "macros.tex", [])
     assert refused.value.code == "no-main"
 
 
 def test_a_project_with_no_file_that_begins_a_document_is_refused(tmp_path: Path) -> None:
     with pytest.raises(MirrorError) as refused:
-        prepare(new_quilt(tmp_path), str(project(tmp_path / "p.git", {"notes.tex": "Just notes.\n"})))
+        prepare(new_quilt(tmp_path), str(project(at("d" * 24), {"notes.tex": "Just notes.\n"}).name))
     assert refused.value.code == "no-main"
 
 
 def test_pairing_through_overleaf_s_password_keeps_the_token_out_of_the_quilt(server: Server, tmp_path: Path) -> None:
     q = new_quilt(tmp_path)
     with pytest.raises(MirrorError) as refused:
-        prepare(q, server.url(ID))
+        prepare(q, ID)
     assert refused.value.code == "no-token"
     store_token(server.url(ID), TOKEN)
-    asked = prepare(q, server.url(ID))
-    pair(q, server.url(ID), asked["folder"], asked["main"], [])
+    asked = prepare(q, ID)
+    pair(q, ID, asked["folder"], asked["main"], [])
     assert (q.root / "paper/main.tex").read_text() == MAIN
     assert not [p for p in q.root.rglob("*") if p.is_file() and TOKEN.encode() in p.read_bytes()]
 
@@ -370,7 +390,7 @@ def test_a_colleague_s_exact_rename_is_recorded_when_the_pull_is_taken_in(tmp_pa
         {"from": "drafting/main.tex", "to": "drafting/paper.tex", "moved": False, "via": "sync"}
     ]
     assert 'main = "drafting/paper.tex"' in (root / "config.toml").read_text()
-    assert SyncState.read(root).published_main == "paper.tex"
+    assert SyncState.read(root).main == "paper.tex"
     assert json_of("status", "--json", cwd=root)["keys"]["zk-0001"]["acceptance"]["fresh"] is True
     assert "drafting/main.tex -> drafting/paper.tex (renamed in a pull)" in ok("history", cwd=root).stdout
 
@@ -403,7 +423,7 @@ def test_only_an_unambiguous_identical_pair_is_a_rename(tmp_path: Path) -> None:
         (root / name).write_text(body, encoding="utf-8")
     mirror.run(root, "add", ".")
     mirror.run(root, "commit", "-q", "-m", "after")
-    assert exact_renames(root, before, mirror.run(root, "rev-parse", "HEAD")) == [("c.tex", "f.tex")]
+    assert exact_renames(root / ".git", before, mirror.run(root, "rev-parse", "HEAD")) == [("c.tex", "f.tex")]
 
 
 def test_the_quilt_s_own_repository_is_never_touched(tmp_path: Path) -> None:
@@ -413,7 +433,7 @@ def test_the_quilt_s_own_repository_is_never_touched(tmp_path: Path) -> None:
     mirror.run(root, "commit", "-q", "-m", "the quilt")
     head, refs = mirror.run(root, "rev-parse", "HEAD"), mirror.run(root, "for-each-ref")
     bare = mirror.overleaf(tmp_path)
-    pair(load_quilt(root), str(bare), "drafting", "main.tex", [])
+    pair(load_quilt(root), mirror.PROJECT, "drafting", "main.tex", [])
     mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": mirror.SOURCE.replace("}A", "}B")})
     take_pull(root)
     assert (mirror.run(root, "rev-parse", "HEAD"), mirror.run(root, "for-each-ref")) == (head, refs)
@@ -474,7 +494,15 @@ def test_a_colleague_s_edit_arrives_as_overleaf_holds_it_and_is_listed_by_name(t
     edited = TWO.replace("has a leaf", "has at least two leaves")
     mirror.edit(mirror.colleague(tmp_path, bare), "sharper", {"main.tex": edited})
     said = overleaf.update(load_quilt(root))
-    assert said == {"state": "updated", "files": 1, "by": ["Colleague"], "own": 0, "overwritten": []}
+    assert said == {
+        "state": "updated",
+        "files": 1,
+        "by": ["Colleague"],
+        "own": 0,
+        "places": [],
+        "here": [],
+        "overwritten": [],
+    }
     assert (root / "drafting/main.tex").read_text() == edited
     assert list(listed(root).values()) == [["Colleague"]]
     assert acts(root).count("pull") == 2  # the pairing and the update, each one act
@@ -539,7 +567,7 @@ def test_a_block_whose_own_words_did_not_change_is_not_listed_when_what_it_uses_
 def test_with_no_address_of_the_person_s_every_change_is_listed(tmp_path: Path) -> None:
     root = mirror.quilt_at(tmp_path)
     bare = mirror.overleaf(tmp_path, {"main.tex": TWO, "loom.sty": "% local support\n"})
-    pair(load_quilt(root), str(bare), "drafting", "main.tex", [])
+    pair(load_quilt(root), mirror.PROJECT, "drafting", "main.tex", [])
     mine = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
     mirror.edit(mine, "mine", {"main.tex": TWO.replace("has a leaf", "has two leaves")}, who=mirror.PERSON)
     assert overleaf.update(load_quilt(root))["by"] == [mirror.PERSON[0]]
@@ -603,7 +631,7 @@ def test_what_reaching_overleaf_could_not_do_stays_on_this_machine_until_a_fetch
 def test_an_update_through_overleaf_s_password_keeps_the_token_out_of_the_quilt(server: Server, tmp_path: Path) -> None:
     q = new_quilt(tmp_path)
     store_token(server.url(ID), TOKEN)
-    pair(q, server.url(ID), "paper", "main.tex", [])
+    pair(q, ID, "paper", "main.tex", [])
     clone = tmp_path / "cleo"
     git(tmp_path, "clone", "-q", str(server.root / ID), str(clone))
     (clone / "main.tex").write_text(MAIN.replace("Hello.", "Hello, world."))
@@ -714,11 +742,9 @@ def test_the_token_passes_through_loom_to_the_helper_and_nowhere_else(
 
     q = new_quilt(tmp_path)
     link = f"https://www.overleaf.com/project/{ID}"
-    url = server.url(ID)
     if path == "offline":
         with serving(tmp_path) as gone:
-            url = gone.url(ID)
-    monkeypatch.setattr(overleaf, "address", lambda _given: url)
+            monkeypatch.setattr(overleaf, "BASE", gone.url("").rstrip("/"))
     wrong = "olp_NotTheToken42"
     answers: list[Any] = []
 
@@ -743,3 +769,229 @@ def test_the_token_passes_through_loom_to_the_helper_and_nowhere_else(
         assert secret not in json.dumps(answers) + json.dumps(manifest) + said.out + said.err
         for place in (q.root, tmp_path / "home"):
             assert not [p for p in place.rglob("*") if p.is_file() and secret.encode() in p.read_bytes()], place
+
+
+# ---- what the review found ---------------------------------------------------------------------------------------------
+
+
+def edit_record(root: Path, **fields: Any) -> None:
+    """Change the record that travels with the quilt, as a quilt handed over could."""
+    path = root / ".loom/records/source-sync.json"
+    record = json.loads(path.read_text())
+    record.update(fields)
+    path.write_text(json.dumps(record))
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"branch": "--upload-pack=touch {marker}; true"},
+        {"url": "--upload-pack=touch {marker}"},
+        {"project": "--upload-pack=touch {marker}"},
+        {"project": f"{ID}/../elsewhere"},
+        {"main": "--output={marker}"},
+        {"integrated": "--output={marker}"},
+        {"folder": ".claude"},
+        {"folder": "../outside"},
+    ],
+)
+def test_a_record_that_came_with_the_quilt_decides_nothing_loom_did_not_check(
+    tmp_path: Path, fields: dict[str, str]
+) -> None:
+    """O-1: the record's every field is checked as it is read, so no address, branch, option or folder it names reaches git or the door."""
+    root, _ = two_lemmas(tmp_path)
+    marker = tmp_path / "MARKER"
+    (root / ".claude").mkdir()
+    (root / ".claude/settings.json").write_text('{"mine": true}\n')
+    edit_record(root, **{k: v.format(marker=marker) for k, v in fields.items()})
+    with pytest.raises(MirrorError) as refused:
+        overleaf.update(load_quilt(root))
+    assert refused.value.code == "bad-record"
+    assert not marker.exists() and (root / ".claude/settings.json").read_text() == '{"mine": true}\n'
+    assert overleaf.published(root)["problem"] == "bad-record"
+
+
+def test_a_folder_that_really_lies_in_a_dot_named_place_is_never_written(tmp_path: Path) -> None:
+    """O-1: the folder is judged at every use by the door's place rule, on the real folder: one swapped for a link into `.claude` is refused."""
+    root, bare = two_lemmas(tmp_path)
+    (root / ".claude").mkdir()
+    shutil.rmtree(root / "drafting")
+    (root / "drafting").symlink_to(root / ".claude", target_is_directory=True)
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    with pytest.raises(MirrorError) as refused:
+        overleaf.update(load_quilt(root))
+    assert refused.value.code == "bad-record" and not (root / ".claude/main.tex").exists()
+
+
+def plant_hook(clone: Path, marker: Path) -> None:
+    for name in ("reference-transaction", "post-checkout", "pre-auto-gc"):
+        hook = clone / "hooks" / name
+        hook.parent.mkdir(parents=True, exist_ok=True)
+        hook.write_text(f"#!/bin/sh\ntouch {marker}\ncat >/dev/null\n")
+        hook.chmod(0o755)
+
+
+def test_no_hook_runs_in_loom_s_clone_and_a_clone_a_quilt_brought_is_made_again(tmp_path: Path) -> None:
+    """O-1: every mirror git call runs with hooks off, and a clone this machine did not make for this quilt and project is removed and made again, nothing in it read."""
+    root, bare = two_lemmas(tmp_path)
+    marker = tmp_path / "MARKER"
+    plant_hook(root / ".loom/local/overleaf", marker)
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    overleaf.fetch(load_quilt(root))
+    assert not marker.exists()
+    handed = tmp_path / "handed"
+    shutil.copytree(root, handed, symlinks=True)
+    (handed / ".loom/local/overleaf/config").write_text(
+        '[remote "origin"]\n\turl = /elsewhere\n[core]\n\tfsmonitor = touch ' + str(marker) + "\n"
+    )
+    plant_hook(handed / ".loom/local/overleaf", marker)
+    overleaf.update(load_quilt(handed))
+    assert not marker.exists() and not (handed / ".loom/local/overleaf/hooks").exists()
+    assert (handed / "drafting/main.tex").read_text() == TWO.replace("has a leaf", "has leaves")
+
+
+THREE = (
+    mirror.PREAMBLE
+    + "\\newcommand{\\R}{\\mathbb{R}}\n"
+    + "\\begin{document}\n"
+    + "Some words before.\n"
+    + "\\begin{lemma}Alpha one.\nAlpha caveat: only for n > 2.\nAlpha end.\\end{lemma}\n"
+    + "\\begin{lemma}Beta two.\\end{lemma}\n"
+    + "\\begin{lemma}Gamma three.\\end{lemma}\n"
+    + "\\end{document}\n"
+)
+
+
+def three(tmp_path: Path) -> tuple[Path, Path, Path, Path]:
+    """A mirroring quilt of three lemmas, a macro and words between, with a bibliography; the project, and a clone each for the colleague and the person."""
+    root, bare = mirror.paired(tmp_path, {"main.tex": THREE, "loom.sty": "% s\n", "refs.bib": "@book{a, title={A}}\n"})
+    return root, bare, mirror.colleague(tmp_path, bare), mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+
+
+def test_a_colleague_s_removed_line_is_seen_though_the_person_later_edited_the_block(tmp_path: Path) -> None:
+    """O-2: who changed a block is read over every commit that touched its lines, not from the lines that survive."""
+    root, _, cleo, pat = three(tmp_path)
+    cut = THREE.replace("Alpha caveat: only for n > 2.\n", "")
+    mirror.edit(cleo, "cut the caveat", {"main.tex": cut})
+    mirror.edit(pat, "my words", {"main.tex": cut.replace("Alpha one.", "Alpha one, Pat.")}, who=mirror.PERSON)
+    said = overleaf.update(load_quilt(root))
+    assert (said["by"], said["own"]) == (["Colleague"], 0)
+    assert list(listed(root).values()) == [["Colleague"]]
+
+
+def test_a_colleague_s_line_the_person_rewrote_is_still_the_colleague_s_change(tmp_path: Path) -> None:
+    root, _, cleo, pat = three(tmp_path)
+    mirror.edit(cleo, "theirs", {"main.tex": THREE.replace("Beta two.", "Beta two, Cleo.")})
+    mirror.edit(pat, "mine", {"main.tex": THREE.replace("Beta two.", "Beta two, Pat.")}, who=mirror.PERSON)
+    said = overleaf.update(load_quilt(root))
+    assert (said["by"], said["own"]) == (["Colleague"], 0)
+
+
+@pytest.mark.parametrize(
+    "change, place, file",
+    [
+        (lambda t: t.replace("\\begin{lemma}Gamma three.\\end{lemma}\n", ""), "removed", "drafting/main.tex"),
+        (lambda t: t.replace("\\mathbb{R}", "\\mathbb{Q}"), "preamble", "drafting/main.tex"),
+        (lambda t: t.replace("Some words before.", "Some other words before."), "between", "drafting/main.tex"),
+    ],
+)
+def test_a_colleague_s_change_outside_any_block_is_listed_by_its_place_and_name(
+    tmp_path: Path, change: Callable[[str], str], place: str, file: str
+) -> None:
+    """O-3: a result removed, the preamble and the text between results are each a row for the file, named."""
+    root, _, cleo, _ = three(tmp_path)
+    mirror.edit(cleo, "outside", {"main.tex": change(THREE)})
+    said = overleaf.update(load_quilt(root))
+    assert said["places"] == [{"file": file, "place": place, "by": ["Colleague"]}] and said["by"] == ["Colleague"]
+
+
+def test_a_colleague_s_bibliography_is_listed_and_the_person_s_own_preamble_change_is_left_out(tmp_path: Path) -> None:
+    root, _, cleo, pat = three(tmp_path)
+    mirror.edit(cleo, "a reference", {"refs.bib": "@book{a, title={A}}\n@book{b, title={B}}\n"})
+    mirror.edit(pat, "my macro", {"main.tex": THREE.replace("\\mathbb{R}", "\\mathbb{C}")}, who=mirror.PERSON)
+    said = overleaf.update(load_quilt(root))
+    assert said["places"] == [{"file": "drafting/refs.bib", "place": "not-a-document", "by": ["Colleague"]}]
+    assert said["own"] == 1
+
+
+def test_a_change_made_here_and_written_over_is_listed_as_made_here_under_no_name(tmp_path: Path) -> None:
+    """O-9: a block Overleaf did not change whose words here differed is listed as written over, by no one; the colleague's block by name."""
+    root, _, cleo, _ = three(tmp_path)
+    here_text = THREE.replace("Gamma three.", "Gamma three, typed here.")
+    (root / "drafting/main.tex").write_text(here_text)
+    mirror.edit(cleo, "theirs", {"main.tex": THREE.replace("Beta two.", "Beta two, Cleo.")})
+    said = overleaf.update(load_quilt(root))
+    assert said["by"] == ["Colleague"] and len(said["here"]) == 1
+    from loom.review_origins import read
+
+    rows = {k: (r["by"], r["here"]) for k, r in read(root).items()}
+    assert sorted(rows.values()) == [([], True), (["Colleague"], False)]
+
+
+def test_what_an_update_cut_short_had_already_written_still_reaches_review(tmp_path: Path) -> None:
+    """O-4: the blocks an update cut short had written are listed by the next, which reads who changed what from the commits, not from what it writes."""
+    root, _, cleo, _ = three(tmp_path)
+    theirs = THREE.replace("Beta two.", "Beta two, Cleo.")
+    mirror.edit(cleo, "theirs", {"main.tex": theirs})
+    (root / "drafting/main.tex").write_text(theirs)  # as a cut-short update leaves it, the record still before it
+    said = overleaf.update(load_quilt(root))
+    assert said["by"] == ["Colleague"] and list(listed(root).values()) == [["Colleague"]]
+
+
+def test_a_colleague_s_duplicate_label_never_stops_an_update(tmp_path: Path) -> None:
+    """O-5: what a co-author wrote arrives; the two definitions are a problem in the document, and their fix arrives too."""
+    labelled = THREE.replace("\\begin{lemma}Beta two.", "\\begin{lemma}\\label{lem:beta}Beta two.")
+    root, bare = mirror.paired(tmp_path, {"main.tex": labelled, "loom.sty": "% s\n"})
+    cleo = mirror.colleague(tmp_path, bare)
+    twice = labelled.replace(
+        "\\end{document}", "\\begin{lemma}\\label{lem:beta}Beta again.\\end{lemma}\n\\end{document}"
+    )
+    mirror.edit(cleo, "pasted twice", {"main.tex": twice})
+    assert overleaf.update(load_quilt(root))["state"] == "updated"
+    assert (root / "drafting/main.tex").read_text() == twice
+    mirror.edit(cleo, "fixed", {"main.tex": labelled})
+    assert overleaf.update(load_quilt(root))["state"] == "updated"
+    assert (root / "drafting/main.tex").read_text() == labelled
+
+
+def test_every_refusal_an_update_knows_answers_with_its_code(tmp_path: Path) -> None:
+    """O-6: two updates at once, and a PDF saved into the mirrored folder, answer with their codes, not a 500."""
+    import base64
+
+    from loom import sync
+    from loom.render.api import ApiError, handle
+
+    root, bare = two_lemmas(tmp_path)
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    q = load_quilt(root)
+    stale = overleaf.fetch(q)
+    overleaf.update(q)
+    with pytest.raises(MirrorError) as raced:
+        sync.incorporate(q, stale, [])
+    assert raced.value.code == "taken-in"
+    pdf = base64.b64encode(b"%PDF-1.4\n%%EOF\n").decode()
+    with pytest.raises(ApiError) as saved:
+        handle(root, "pdf-save", {"path": "drafting/scan.pdf", "data": pdf})
+    assert (saved.value.code, saved.value.status) == ("mirrored", 409)
+
+
+def test_none_yet_is_asked_again_once_the_history_names_someone_new(tmp_path: Path) -> None:
+    """O-7: a person who said "none yet" is asked again after their first change in Overleaf."""
+    root = mirror.quilt_at(tmp_path)
+    bare = project(at(ID), {"main.tex": TWO, "loom.sty": "% s\n"}, who=mirror.COLLEAGUE)
+    pair(load_quilt(root), ID, "drafting", "main.tex", [])
+    assert here(root)["ask"] is False
+    pat = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+    mirror.edit(pat, "mine", {"main.tex": TWO.replace("has a leaf", "has two leaves")}, who=mirror.PERSON)
+    overleaf.fetch(load_quilt(root))
+    assert here(root)["ask"] is True and overleaf.published(root)["ask_me"] is True
+    overleaf.set_me(load_quilt(root), [mirror.PERSON[1]])
+    assert here(root)["ask"] is False
+
+
+def test_no_word_a_new_quilt_or_the_design_carries_names_loom_sync() -> None:
+    """O-10."""
+    repo = Path(__file__).resolve().parents[3]
+    for rel in ("loom/src/loom/assets/init/readme.md", "docs/design/principles.md", "docs/specs/write-api.md"):
+        text = (repo / rel).read_text(encoding="utf-8")
+        assert "loom sync" not in text and "sync-incorporate" not in text and "sync-preview" not in text, rel
