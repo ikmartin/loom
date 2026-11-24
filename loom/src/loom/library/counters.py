@@ -34,12 +34,12 @@ Piece = tuple[str, str]
 def _styled(style: str, n: int) -> str:
     """`n` as `\\arabic`, `\\roman`, `\\Roman`, `\\alph` or `\\Alph` prints it.
 
-    A letter for 0 or less is A, as an appendix before its first heading reads; a roman 0 is empty, as TeX prints it.
+    A letter outside 1 to 26 and a roman numeral of 0 are empty, as TeX prints them: a theorem after `\\appendix` and before its first section reads `.2`.
     """
     if style == "arabic":
         return str(n)
     if style in ("alph", "Alph"):
-        letter = chr(ord("a") + min(max(n, 1), 26) - 1)
+        letter = chr(ord("a") + n - 1) if 1 <= n <= 26 else ""
         return letter.upper() if style == "Alph" else letter
     out, rest = "", n
     for value, numeral in (

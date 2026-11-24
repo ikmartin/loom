@@ -57,14 +57,19 @@ def document_start(src: SourceFile) -> int | None:
     return m.start() if m else None
 
 
-def _local(root: Path, name: str, exts: tuple[str, ...], base: str = "") -> str | None:
-    """A local style, class or input `name` read against the document's directory `base`, as a quilt-relative path; None for one the distribution supplies, or one that names an absolute path or `..`."""
+def _local(
+    root: Path, name: str, exts: tuple[str, ...], base: str = "", within: dict[str, SourceFile] | None = None
+) -> str | None:
+    """A local style, class or input `name` read against the document's directory `base`, as a quilt-relative path; None for one the distribution supplies, or one that names an absolute path or `..`.
+
+    With `within`, only a path that table holds is local, and the disk is not looked at.
+    """
     name = name.strip()
     if not name or name.startswith("/") or ".." in Path(name).parts:
         return None
     for ext in exts:
         rel = under(base, name if name.endswith(ext) else name + ext)
-        if (root / rel).is_file():
+        if (rel in within) if within is not None else (root / rel).is_file():
             return rel
     return None
 
@@ -88,8 +93,11 @@ def build_closure(
     *,
     foreign: bool = False,
     base: str | None = None,
+    only_files: bool = False,
 ) -> PreambleClosure:
     """Collect the closure, then parse taxa and macros over it in inclusion order.
+
+    `only_files` reads nothing but `files`: a local style or input the table does not hold is the distribution's, and no file is read from disk, so a caller that has vetted every file it read is the only judge of what the closure reads.
 
     `foreign` is for someone else's paper, read by `loom library update`'s extraction: it also takes theorem environments declared in the body and environments defined as wrappers around theorem-like ones. A quilt's own scan does not, deliberately -- an author is asked to declare in the preamble so a node file describes itself -- but a cited paper cannot be asked, and missing either idiom cost three of sixteen real papers their results or their numbering.
     """
@@ -97,7 +105,17 @@ def build_closure(
     seen: set[str] = set()
     doc = document_start(master)
     at = document_dir(master.path) if base is None else base  # local styles resolve where the document compiles (P12)
-    _collect(master, 0, doc if doc is not None else len(master.clean), root, files, closure, seen, at)
+    _collect(
+        master,
+        0,
+        doc if doc is not None else len(master.clean),
+        root,
+        files,
+        closure,
+        seen,
+        at,
+        files if only_files else None,
+    )
     text = closure.clean_text()
     closure.macros = parse_macros(text)
     # loom's macros come from loom.sty, kept beside the document, or from the marked block in its own preamble
@@ -135,6 +153,7 @@ def _collect(
     closure: PreambleClosure,
     seen: set[str],
     base: str,
+    within: dict[str, SourceFile] | None = None,
 ) -> None:
     key = f"{src.path}:{start}"
     if key in seen:
@@ -147,26 +166,26 @@ def _collect(
         if t.value in ("usepackage", "RequirePackage"):
             (_, names), _, _ = read_args(text, pos, "om")
             for pkg in (names or "").split(","):
-                rel = _local(root, pkg, (".sty",), base)
+                rel = _local(root, pkg, (".sty",), base, within)
                 if rel:
                     child = _load(root, rel, files)
-                    _collect(child, 0, len(child.clean), root, files, closure, seen, base)
+                    _collect(child, 0, len(child.clean), root, files, closure, seen, base, within)
         elif t.value in ("documentclass", "LoadClass"):
             (_, name), _, _ = read_args(text, pos, "om")
-            rel = _local(root, name or "", (".cls",), base)
+            rel = _local(root, name or "", (".cls",), base, within)
             if rel:
                 child = _load(root, rel, files)
-                _collect(child, 0, len(child.clean), root, files, closure, seen, base)
+                _collect(child, 0, len(child.clean), root, files, closure, seen, base, within)
         elif t.value in ("input", "include"):
             (name,), _, _ = read_args(text, pos, "m")
             if name is None:
                 continue
-            rel = _local(root, name, ("", ".tex"), base)
+            rel = _local(root, name, ("", ".tex"), base, within)
             if rel:
                 child = _load(root, rel, files)
                 if child.path == src.path:
                     continue
-                _collect(child, 0, len(child.clean), root, files, closure, seen, base)
+                _collect(child, 0, len(child.clean), root, files, closure, seen, base, within)
 
 
 _STYLE = re.compile(r"\\(newtheoremstyle|theoremstyle|newtheorem|declaretheorem)(\*?)(?![A-Za-z@])")

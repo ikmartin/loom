@@ -1,6 +1,6 @@
 """What a TeX source holds, read once for each source and kept by the source's hash and the work's stored PDF's (`docs/specs/library-views.md` §3.2, "The survey"): its sections, its results with their proofs, every label it defines, and its bibliography's files.
 
-Made in two steps, when something asks for it and never by a build or the list of works. `read` parses the source with the scanner's own parsers and reads each heading's and result's number from its counters as `library.counters` emulates them (`emulated`), which a work's outline shows. `complete` compiles a copy of the source with a mark inside each heading, result and proof, with no command started for it (`tex.runner.FOREIGN`). Nothing that compile says is kept on its own word, since a source nobody at loom wrote can read any file the person can into what it prints: its numbers and pages are hints to look with (`confirm`). A printed number is kept only where it is loom's own reading or the stored PDF shows it heading the statement's words, and a page only from the stored PDF's own text; what nothing confirms is left out, and named. Only files inside the source's folder are read, and the stored source is never changed.
+Made in two steps, when something asks for it and never by a build or the list of works. `read` parses the source with the scanner's own parsers and reads each heading's and result's number from its counters as `library.counters` emulates them (`emulated`), which a work's outline shows. `complete` compiles a copy of the source with a mark inside each heading, result and proof, with no command started for it (`tex.runner.FOREIGN`). Nothing that compile says is kept on its own word, since a source nobody at loom wrote can read any file the person can into what it prints: its numbers and pages are hints to look with (`confirm`). Where the work holds a PDF, the stored document governs: a printed number is the one it heads the statement's words with, and a page where it shows them; with no PDF, a number is kept only where it is loom's own reading and the compile agrees, and no page. What nothing confirms is left out, and named. Only regular files inside the source's folder are read, never through a link out of it, and the stored source is never changed.
 """
 
 from __future__ import annotations
@@ -259,13 +259,14 @@ def read(src: Path, main: str, tex: str) -> Survey:
         `reading`, or `failed` with why when the main file is missing or unreadable or begins no document.
     """
     out = Survey(tex=tex, main=main)
-    master_path = src / main
-    if not master_path.is_file() or ".." in Path(main).parts:
+    if ".." in Path(main).parts or not _regular(src, main):
         out.state, out.why = "failed", "no-main"
         return out
     try:
-        found, _outside = closure_of(src, master_path)
-        files = {rel: read_source(src, rel) for rel, p in found.items() if p.suffix.lower() in TEXT}
+        found, _outside = closure_of(src, src / main)
+        files = {
+            rel: read_source(src, rel) for rel, p in found.items() if p.suffix.lower() in TEXT and _regular(src, rel)
+        }
         if main not in files:
             files[main] = read_source(src, main)
     except (OSError, UnicodeError):
@@ -276,7 +277,7 @@ def read(src: Path, main: str, tex: str) -> Survey:
     if doc is None:
         out.state, out.why = "failed", "no-document"
         return out
-    closure = build_closure(master, src, files, parse_directives(master), foreign=True)
+    closure = build_closure(master, src, files, parse_directives(master), foreign=True, only_files=True)
     out.engine = normalise_engine(closure.engine)
     exp = expand_master(master, src, files)
     units = find_sections(exp, files)
@@ -291,6 +292,18 @@ def read(src: Path, main: str, tex: str) -> Survey:
     _label_all(out, units, envs, files, doc)
     _bibliography(out, src, main, files, exp.reached)
     return out
+
+
+def _regular(src: Path, rel: str) -> bool:
+    """Whether `rel` is a regular file inside the folder `src` once every link on its way is followed: the only files a survey reads.
+
+    A link out of the folder, to a file or a folder, is not the source's; nor is a master that is one.
+    """
+    try:
+        target = (src / rel).resolve()
+        return target.is_file() and target.is_relative_to(src.resolve())
+    except (OSError, RuntimeError):
+        return False
 
 
 def _walk(
@@ -507,10 +520,10 @@ def _bibliography(out: Survey, src: Path, main: str, files: dict[str, SourceFile
                 if not name or name.startswith("/") or ".." in Path(name).parts:
                     continue
                 path = (base / (name if name.endswith(".bib") else f"{name}.bib")).as_posix()
-                if (src / path).is_file() and path not in out.bibliography:
+                if _regular(src, path) and path not in out.bibliography:
                     out.bibliography.append(path)
     bbl = Path(main).with_suffix(".bbl").as_posix()
-    out.bbl = bbl if (src / bbl).is_file() else None
+    out.bbl = bbl if _regular(src, bbl) else None
 
 
 def path_of(root: Path, tex: str, pdf: str | None = None) -> Path:
@@ -621,13 +634,30 @@ def _opening(text: str, *, least: int = 12) -> str | None:
     return words if len(words) >= least else None
 
 
+#: A number as a counter prints it, in the stored PDF's text: `SHAPED`'s parts, joined by dots or hyphens.
+_PRINTED = rf"\(?{_PART}(?:[.\-]{_PART})*\)?"
+#: What may stand between a printed number and a statement's words: a title in parentheses, then a full stop or a colon.
+_TITLE = r"(?:\s*\([^()]{0,120}\))?\s*[.:]?\s*$"
+
+
 class Pages:
-    """A stored PDF's text, a page at a time, compared as `refs.search` compares quotations: what a compile's word is checked against, since the compile cannot have written it."""
+    """A stored PDF's text, a page at a time, compared as `refs.search` compares quotations: what a compile's word is checked against, since the compile cannot have written it.
+
+    `texts` are the pages as quotations are compared, spaces and hyphens dropped; `flat` the same pages with their spaces, where a printed number is read, so `12` is never taken for the `2` it ends in; `at` maps each offset of the one into the other.
+    """
 
     def __init__(self, texts: list[str]) -> None:
-        from loom.refs.search import _loose
+        from array import array
 
-        self.texts = [_loose(t) for t in texts]
+        from loom.refs.search import _LOOSE, normalize
+
+        self.flat = [normalize(t) for t in texts]
+        self.texts: list[str] = []
+        self.at: list[array[int]] = []
+        for flat in self.flat:
+            keep = array("I", (k for k, c in enumerate(flat) if c not in _LOOSE))
+            self.texts.append("".join(flat[k] for k in keep))
+            self.at.append(keep)
 
     @classmethod
     def of(cls, pdf: Path | None) -> Pages | None:
@@ -651,14 +681,31 @@ class Pages:
         out = [(k + 1, m.start()) for k, t in enumerate(self.texts) for m in re.finditer(re.escape(words), t)]
         return sorted(out, key=lambda at: (abs(at[0] - near) if near else 0, at[0], at[1]))
 
-    def headed(self, page: int, at: int, name: str, number: str) -> bool:
-        """Whether the words at `at` on `page` are headed by `name` and `number` ("Lemma 2.2.", "Lemma 2.2 (Title).", "2.2 Lemma."), as the PDF prints them."""
-        from loom.refs.search import _loose
+    def heading(self, page: int, at: int, name: str) -> str | None:
+        """The number the PDF heads the words at `at` on `page` with, under `name` ("Lemma 11.2.", "Lemma 11.2 (Title).", "11.2 Lemma.", or a heading's "12 Title"); None where it prints none loom can read.
 
-        before = self.texts[page - 1][max(0, at - 160) : at]
-        word, num = re.escape(_loose(name)), re.escape(_loose(number))
-        title = r"(?:\(.{0,120}?\))?[.:]?"
-        return re.search(rf"(?:{word}{num}|{num}\.?{word}){title}$", before, re.IGNORECASE) is not None
+        A number that continues a longer one, a digit, a letter or a dot before it, is refused. Only a number shaped as a counter prints one is read (`shaped`).
+        """
+        from loom.refs.search import normalize
+
+        flat, offsets = self.flat[page - 1], self.at[page - 1]
+        end = offsets[at] if at < len(offsets) else len(flat)
+        before = flat[max(0, end - 200) : end]
+        word = r"\s*".join(re.escape(w) for w in normalize(name).split())
+        forms = [rf"(?<![\w.\-])(?P<n>{_PRINTED})\.?{_TITLE}"]
+        if word:
+            forms = [
+                rf"(?<!\w){word}\s*(?P<n>{_PRINTED}){_TITLE}",
+                rf"(?<![\w.\-])(?P<n>{_PRINTED})\.?\s*{word}{_TITLE}",
+            ]
+        for form in forms:
+            if (m := re.search(form, before, re.IGNORECASE if word else 0)) is not None:
+                number = m.group("n")
+                # a heading's lone lower-case letter or roman numeral is a word of the text before it more often than a number
+                if not word and re.fullmatch(r"[a-z]+", number):
+                    continue
+                return shaped(number)
+        return None
 
     def shows(self, page: int, text: str) -> bool:
         """Whether `page` shows `text`, compared as quotations are."""
@@ -668,31 +715,43 @@ class Pages:
 
 
 def _confirmed(
-    emulated: str | None, hint: str | None, name: str, opening: str | None, near: int | None, pages: Pages | None
+    emulated: str | None,
+    hint: str | None,
+    name: str,
+    opening: str | None,
+    near: int | None,
+    pages: Pages | None,
+    *,
+    numbered: bool = True,
 ) -> tuple[str | None, int | None]:
-    """A printed number and a page for one heading or result, each only where something the compile could not have written confirms it.
+    """A printed number and a page for one heading, result or proof, each only where something the compile could not have written confirms it.
 
-    The number is the compile's `hint` where the stored PDF shows it heading the opening words found there, or loom's own reading (`emulated`) where it shows that, or where the compile's hint is that very reading. The page is where the PDF shows the opening words, the page nearest the compile's `near` among several; nothing of the compile's is kept for itself.
+    With a stored PDF, the stored document governs: the number is the one it heads the opening words with where it shows them, and none where it heads them with none loom can read or does not show them; loom's own reading never stands alone. Where the words stand at several places, a title that is another's prefix or a contents page, the place headed by loom's reading is the statement's; failing that, the number every place agrees on, and none where they disagree. Without one, the number is loom's own reading (`emulated`) where the compile's `hint` is that very reading. The page is where the PDF shows the opening words, the page nearest the compile's `near` among several; nothing of the compile's is kept for itself.
     """
-    if pages is not None and opening is not None:
-        found = pages.find(opening, near)
-        for page, at in found:
-            for number in dict.fromkeys(n for n in (hint, emulated) if n):
-                if pages.headed(page, at, name, number):
-                    return number, page
-        if found:
-            # the page nearest where the compile says it stands, when one page is nearest; several pages and no word from the compile is no page
-            on = {p for p, _a in found}
-            nearest = {p for p in on if near and abs(p - near) == abs(found[0][0] - near)}
-            where = found[0][0] if len(on) == 1 or len(nearest) == 1 else None
-            return (emulated if emulated is not None and hint == emulated else None), where
-    return (emulated if emulated is not None and hint == emulated else None), None
+    if pages is None:
+        return (emulated if numbered and emulated is not None and hint == emulated else None), None
+    found = pages.find(opening, near) if opening is not None else []
+    printed = [
+        (page, n) for page, at in (found if numbered else []) if (n := pages.heading(page, at, name)) is not None
+    ]
+    # words stand at several places when a title is another's prefix or a contents page repeats it
+    for page, n in printed:
+        if n == emulated:
+            return n, page
+    if printed and len({n for _p, n in printed}) == 1:
+        return printed[0][1], printed[0][0]
+    if not found:
+        return None, None
+    # the page nearest where the compile says it stands, when one page is nearest; several pages and no word from the compile is no page
+    on = {p for p, _a in found}
+    nearest = {p for p in on if near and abs(p - near) == abs(found[0][0] - near)}
+    return None, (found[0][0] if len(on) == 1 or len(nearest) == 1 else None)
 
 
 def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
     """A copy of `s` judged by `auxes`, the `.aux` files of its marked copy's compile, its numbers and pages kept only as confirmed.
 
-    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. A heading's or result's number is kept where it is loom's own reading of the source's counters, or where the work's stored PDF (`pages`) shows it heading the statement's opening words; a page only from the stored PDF; a label's number where it is its result's or its heading's, or, for a display or an item inside a result, where the PDF shows it in parentheses on that result's page. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. The survey is `ready` when every mark loom added is there, else `failed`, `incomplete`, with `unseen` naming what fell short by its id in the survey.
+    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. With the work's stored PDF (`pages`), a heading's or result's number is the one the PDF heads its opening words with, and none where it shows them under no number loom can read or does not show them; without one, a number is kept where it is loom's own reading of the source's counters and the compile says the same. A page comes only from the stored PDF; a label's number is its result's or its heading's, or, for a display or an item inside a result, the compile's where the PDF numbers that result as loom reads it and shows the number in parentheses on its page. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. The survey is `ready` when every mark loom added is there, else `failed`, `incomplete`, with `unseen` naming what fell short by its id in the survey.
     """
     found: dict[str, AuxNumber] = {}
     sheets: dict[str, int] = {}
@@ -715,19 +774,21 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
     unconfirmed: list[str] = []
     for k, sec in enumerate(out.sections):
         said, near = hint(f"s{k}")
-        sec.number, sec.page = _confirmed(sec.emulated, said, "", sec.opening, near, pages)
+        sec.number, sec.page = _confirmed(
+            sec.emulated, said, "", sec.opening, near, pages, numbered=sec.emulated is not None
+        )
         if sec.emulated is not None and sec.number is None:
             unconfirmed.append(sec.section)
     for k, item in enumerate(out.items):
         said, near = hint(f"i{k}")
-        emulated = item.emulated if item.numbered else None
-        number, item.page = _confirmed(emulated, said, item.name, item.opening, near, pages)
-        item.number = number if item.numbered else None
+        item.number, item.page = _confirmed(
+            item.emulated, said, item.name, item.opening, near, pages, numbered=item.numbered
+        )
         if item.numbered and item.number is None:
             unconfirmed.append(item.item)
         for j, proof in enumerate(item.proofs):
             _n, proof_near = hint(f"p{k}-{j}")
-            _no, proof.page = _confirmed(None, None, "", proof.opening, proof_near, pages)
+            _no, proof.page = _confirmed(None, None, "", proof.opening, proof_near, pages, numbered=False)
     by_item = {i.item: i for i in out.items}
     by_label = {sec.label: sec for sec in out.sections if sec.label}
     for name, label in out.labels.items():
@@ -740,7 +801,11 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
             page = owner.page if label.proof is None else owner.proofs[label.proof].page
             got = found.get(name)
             said = _hint(got.number, found) if got is not None else None
-            shown = said is not None and page is not None and pages is not None and pages.shows(page, f"({said})")
+            # only where the PDF numbers the result as the source does, so a display's number is the PDF's too
+            alike = owner.number is not None and owner.number == owner.emulated
+            shown = (
+                said is not None and page is not None and pages is not None and alike and pages.shows(page, f"({said})")
+            )
             label.number, label.page = (said if shown else None), page
         else:
             label.number, label.page = None, None
