@@ -351,18 +351,19 @@ def evidence_command(name: str, as_json: bool, quilt_path: str | None) -> None:
     from loom.evidence.asks import replay as replay_asks
     from loom.evidence.log import replay
     from loom.evidence.status import files_unchanged, status
-    from loom.evidence.subjects import NODE
-    from loom.evidence.web import DraftWeb, Here
+    from loom.evidence.subjects import is_node
+    from loom.evidence.web import DraftWeb, Here, Joined, LibraryWeb
     from loom.scan.quilt import reviewer_identity
     from loom.scan.scan import scan
 
     quilt = open_quilt(quilt_path)
     root = quilt.root
     evidence = replay(root)
-    web = DraftWeb(scan(quilt), reviewer=reviewer_identity(root)[0] or None)
+    drafts = DraftWeb(scan(quilt), reviewer=reviewer_identity(root)[0] or None)
+    web = Joined(drafts, LibraryWeb(root))
     # a draft's id has the shape of a node's, so the drafts are asked first
-    kind = "label" if name in web.bearing or not NODE.fullmatch(name) else "node"
-    heres = [Here("node", name)] if kind == "node" else web.heres(name)
+    kind = "label" if name in drafts.bearing or not is_node(name) else "node"
+    heres = [Here("node", name)] if kind == "node" else drafts.heres(name)
     now = files_unchanged(root)
     found = [(h, status(evidence, web, h, lean_now=now)) for h in heres]
     records = [dict(r.fields) for r in evidence.about(kind, name)]
@@ -396,7 +397,7 @@ def _status_row(here: Any, s: Any) -> dict[str, Any]:
         "role": s.role,
         "relative_to": [{kind: name} for kind, name in s.relative_to],
         "causes": [{"changed": {c.key[0]: c.key[1]}, "then": c.then, "now": c.now} for c in s.causes],
-        "unattested_notation": list(s.unattested_notation),
+        "unattested_notation": None if s.unattested_notation is None else list(s.unattested_notation),
         "accepted": s.accepted,
         "proposal": s.proposal,
         "waiting_on": [{w.key[0]: w.key[1], "why": w.why} for w in s.waiting_on],

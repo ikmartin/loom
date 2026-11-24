@@ -143,6 +143,8 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     call("review-row", "review-row", lambda: {"row": _first_row(listed)})
     changed = next(r["row"] for g in listed["groups"] for r in g["rows"] if g["kind"] == "attested-changed")
     call("review-row.attested-changed", "review-row", {"row": changed})
+    to_attest = next(r["row"] for g in listed["groups"] for r in g["rows"] if g["kind"] == "attest")
+    call("review-row.attest", "review-row", {"row": to_attest})
     task = next(r for g in listed["groups"] for r in g["rows"] if g["kind"] == "agents")
     question = next(r for g in listed["groups"] for r in g["rows"] if g["kind"] == "questions")
     web = call("web-list", "web-list", {"scope": "all", "open": ["drafting/main.tex"]})

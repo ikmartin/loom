@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from loom.clock import stamp
-from loom.evidence.subjects import HASH, REFERENCE, Subject, Who, name_problem
+from loom.evidence.subjects import HASH, Subject, Who, is_node, is_work, name_problem
 from loom.locks import locked
 from loom.paths import EVIDENCE_LOG
 from loom.records.ids import EVIDENCE, draw
@@ -40,9 +40,8 @@ HANDS = {
 }
 #: The keys every record has.
 _COMMON = {"id", "kind", "at", "by"}
-#: A statement's id, and a statement's or a proof's: what a reading of a paper is about.
-_STATEMENT = re.compile(r"[A-Za-z0-9]+-[0-9A-Z]{4}")
-_STATEMENT_OR_PROOF = re.compile(r"[A-Za-z0-9]+-[0-9A-Z]{4}(?:-proof[0-9A-Z]{2})?")
+#: What a reading of a paper is about: a statement or a proof.
+_READ = ("statement", "proof")
 
 
 class EvidenceRefused(ValueError):
@@ -280,10 +279,10 @@ def _keys(raw: dict[str, Any], required: set[str], optional: frozenset[str] = fr
         raise ValueError(f"has {', '.join(sorted(extra))}, which this kind does not")
 
 
-def _node_on(raw: dict[str, Any], pattern: re.Pattern[str] = _STATEMENT_OR_PROOF) -> Subject:
+def _node_on(raw: dict[str, Any], kinds: tuple[str, ...] = _READ) -> Subject:
     on = Subject.from_dict(raw.get("on"), ("node",))
-    if not pattern.fullmatch(on.name):
-        raise ValueError(f"{on.name} is not a statement or a proof")
+    if not is_node(on.name, *kinds):
+        raise ValueError(f"{on.name} is not a {' or a '.join(kinds)}")
     return on
 
 
@@ -307,7 +306,7 @@ def _document(value: Any, what: str, *, pages: bool) -> None:
     allowed = {"ref", *held, *(("pages",) if pages else ())}
     if len(held) != 1 or not set(value) <= allowed or "ref" not in value:
         raise ValueError(f"{what} names a reference and one of its documents, pdf or tex")
-    if not isinstance(value["ref"], str) or not REFERENCE.fullmatch(value["ref"]):
+    if not is_work(value["ref"]):
         raise ValueError(f"{what}'s ref is not a reference's id")
     _hash(value[held[0]], f"{what}'s {held[0]}")
     if "pages" in value:
@@ -427,7 +426,7 @@ def _attested(raw: dict[str, Any], by: Who) -> Subject:
         _keys(raw, {"on"})
         return on
     _keys(raw, {"on", "lean", "statements", "closure", "rulings"})
-    if on.kind == "node" and not _STATEMENT.fullmatch(on.name):
+    if on.kind == "node" and not is_node(on.name, "statement"):
         raise ValueError(f"{on.name} is not a statement")
     if not isinstance(raw["lean"], str) or not ID.fullmatch(raw["lean"]):
         raise ValueError("lean is not a record's id")
@@ -452,13 +451,13 @@ def _sought(raw: dict[str, Any], by: Who) -> Subject:
     _document(raw["from"], "from", pages=False)
     if raw["found"] is not False:
         raise ValueError("found is false: a result found is digested, not sought")
-    return _node_on(raw, _STATEMENT)
+    return _node_on(raw, ("statement",))
 
 
 def _mention(raw: dict[str, Any], by: Who) -> None:
     _keys(raw, {"block", "cites", "undo"})
     _block(raw["block"], "block")
-    if not isinstance(raw["cites"], str) or not REFERENCE.fullmatch(raw["cites"]):
+    if not is_work(raw["cites"]):
         raise ValueError("cites is not a reference's id")
     if not isinstance(raw["undo"], bool):
         raise ValueError("undo is true or false")
