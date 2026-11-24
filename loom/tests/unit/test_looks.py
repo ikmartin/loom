@@ -579,3 +579,26 @@ def test_two_files_with_one_text_renamed_while_their_place_is_closed_are_both_fo
     (person / "notes/two.md").rename(person / "notes/second.md")
     denying(person)
     assert edits(person) == ["notes/first.md", "notes/second.md"]
+
+
+def test_a_lake_project_is_the_agents_own_and_nothing_in_it_is_ever_listed(person: Path) -> None:
+    """A Lake project is the agents' own (`scan.source.lake_root`): its Lean files, its lakefile and manifest, and the paper's files the skills' linters copy into it are never proposed edits and never in a look, while an agent's edit beside it is listed."""
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt
+
+    made = {
+        "lakefile.toml": 'name = "proof"\n',
+        "lake-manifest.json": "{}\n",
+        "Proof/Basic.lean": "theorem t : True := trivial\n",
+        "source/nodes/dm-0006.tex": "\\begin{lemma}a copy\\end{lemma}\n",
+    }
+    for rel, text in made.items():
+        p = person / "lean" / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+    _edit(person, *AGENT_EDITS[0])
+    assert edits(person) == ["drafting/nodes/dm-0006.tex"]
+    (person / "lean" / "Proof" / "Basic.lean").write_text("theorem t : 1 = 1 := rfl\n", encoding="utf-8")
+    assert edits(person) == ["drafting/nodes/dm-0006.tex"]
+    look = take(load_quilt(person), "Tester")
+    assert not [rel for rel in look.files if rel.startswith("lean/")], look.files

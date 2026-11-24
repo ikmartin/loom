@@ -400,7 +400,7 @@ def _look_texts(result: ScanResult, who: str) -> tuple[dict[str, str], dict[str,
         return None
     # only the places agents may edit: one they are denied is the person's own, and a change there is never listed
     current = watched_texts(quilt)
-    watched = watching(quilt.config)
+    watched = watching(quilt.config, quilt.root)
     # a file the scan read is as the scan read it: one saved since is the next build's, so a change is never cut from one reading of a file and drawn against another
     for rel, src in result.files.items():
         text = current.get(rel)
@@ -1359,7 +1359,7 @@ def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: l
     from loom.scan.hashing import sha256
 
     look = read_look(quilt.root, who)
-    if look is None or not watching(quilt.config)(path):
+    if look is None or not watching(quilt.config, quilt.root)(path):
         return True  # no look yet, or a place agents are denied, where nothing is listed
     held = look.files.get(path) or None
     if held is None:
