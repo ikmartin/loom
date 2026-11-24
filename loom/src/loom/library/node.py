@@ -20,8 +20,8 @@ READABLE = frozenset({SCHEMA})
 SUFFIX = ".node"
 FENCE = "+++"
 
-_STR, _IDS, _STRS, _HASH, _TABLE = "a string", "a list of ids", "a list of names", "a hash", "a table of anchors"
-#: The header's keys in the order loom writes them, each with its type, the kinds it is allowed on, and whether it needs a `source` (True), forbids one (False) or neither (None).
+_STR, _IDS, _HASH, _TABLE = "a string", "a list of ids", "a hash", "a table of anchors"
+#: The header's keys in the order loom writes them, each with its type, the kinds it is allowed on, and whether it says where in its `source` the text is (True) or not (None).
 KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "number": (_STR, frozenset({ids.STATEMENT}), None),
     "title": (_STR, frozenset({ids.STATEMENT}), None),
@@ -31,7 +31,6 @@ KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "anchors": (_TABLE, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "uses": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "mentions": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
-    "authors": (_STRS, frozenset({ids.STATEMENT, ids.PROOF}), False),
     "pdf": (_HASH, frozenset({ids.REFERENCE}), None),
     "tex": (_HASH, frozenset({ids.REFERENCE}), None),
 }
@@ -84,7 +83,6 @@ class Node:
     anchors: tuple[tuple[str, str], ...] = ()
     uses: tuple[str, ...] = ()
     mentions: tuple[str, ...] = ()
-    authors: tuple[str, ...] = ()
     pdf: str | None = None
     tex: str | None = None
     schema: int = SCHEMA
@@ -294,14 +292,6 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
             out.append(
                 Problem(
                     5, f"{name} has `{key}` and no `source`; `{key}` says where in its source the text is.", line(key)
-                )
-            )
-        elif kind is not None and needs_source is False and sourced:
-            out.append(
-                Problem(
-                    5,
-                    f"{name} has `{key}` and a `source`; the authors of a node read from a work are the work's.",
-                    line(key),
                 )
             )
         said = _type_problem(typ, value)

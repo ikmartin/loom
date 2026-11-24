@@ -119,7 +119,7 @@ class MemoryView:
 
 
 def node_problems(node: Node, given: dict[str, Wrapper] | None = None) -> list[Problem]:
-    """What a readable node gets wrong about itself: its lists' order (7), what its body points at and defines (8), its entry (9), its macros (10), and what a stub or a pointer needs (11).
+    """What a readable node gets wrong about itself: its lists' order (7), what its body points at and defines (8), its entry (9), its macros (10), and what a statement, a proof, a stub or a pointer needs (11): every statement and proof names the work it was read from.
 
     Parameters
     ----------
@@ -142,23 +142,16 @@ def node_problems(node: Node, given: dict[str, Wrapper] | None = None) -> list[P
         out += _entry(node, name)
     if node.kind == ids.MACROS:
         out += _macros(node, name)
-    if node.empty and node.kind == ids.PROOF:
-        missing = [k for k in ("source", "pages") if not getattr(node, k)]
-        if missing:
-            said = " or ".join(f"`{k}`" for k in missing)
-            out.append(
-                Problem(
-                    11,
-                    f"{name} is a pointer, a proof with no text, and has no {said}: a pointer says where the proof is.",
-                )
-            )
-    if node.empty and node.kind == ids.STATEMENT and not node.source:
+    if node.kind in (ids.STATEMENT, ids.PROOF) and not node.source:
         out.append(
             Problem(
                 11,
-                f"{name} is a stub, a statement with no text, and has no `source`: a stub says which work it stands in.",
+                f"{name} has no `source`: every result in the library names the work it is read from, and a result of"
+                " the person's own or an agent's belongs in a draft.",
             )
         )
+    if node.empty and node.kind == ids.PROOF and not node.pages:
+        out.append(Problem(11, f"{name} is a pointer, a proof with no text, and has no `pages`: it says where the proof is."))
     return out
 
 

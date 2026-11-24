@@ -35,7 +35,9 @@ Everything in the library is a **node**: one file, named by its id, with a small
 
 **Why this format.** The files are written and read by loom, seldom by hand, so the header is typed and validated, and the body is the text exactly, with no quoting. A LaTeX file with its header in comments cannot hold a list. JSON puts the LaTeX on one escaped line, so any change rewrites the whole body in a diff. Forester's own format was considered and its design is what this takes: an opaque address, one node a file, a small header, everything a node, views computed from links. Its body is its own markup, into which LaTeX goes as a picture, where loom needs words a note can be anchored to; it has no kinds of edge, no evidence and no way to keep two authors' addresses apart; and as a dependency it is another toolchain beside TeX.
 
-**Open.** A node with no source, something stated in the quilt and read from no work, is specified only as far as a list of authors. What it is for, and whether a note that became durable is one, belongs with the notes beyond annotations in [`model.md`](model.md#notes).
+Every result in the library is read from a work (the author, 2026-11-24: otherwise "library" is a misnomer). A statement or a proof names its work's reference as its `source`, and the store refuses one that does not, whoever writes it. A fact from a book the person holds only on paper has the book as its work, and reads as having no document until a scan is added; a colleague's unpublished note is a work. A result of the person's own or an agent's belongs in a draft, not the library.
+
+**Open.** A result with a proof and Lean's check but no published source: whether it lives in a draft, where its own Lean and the person's word make it read formalized, or in the library. The author's to decide.
 
 ## A draft is not in the library
 

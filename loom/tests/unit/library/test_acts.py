@@ -131,17 +131,21 @@ def test_a_delete_takes_the_work_its_results_and_notes_and_is_never_refused(tmp_
     stem = ref.removesuffix("-ref")
     write_node(root, Node(id=f"{stem}-macros", taxon="macros", body="\\newcommand{\\x}{y}\n"))
     write_node(root, Node(id="tq-0009", taxon="lemma", source=ref, body="A lemma.\n"))
-    write_node(root, Node(id="tq-0009-proof00", taxon="proof", body="By hand.\n"))
-    write_node(root, Node(id="tq-000A", taxon="remark", body="Uses it.\n", uses=("tq-0009",)))
+    write_node(root, Node(id="tq-0009-proof00", taxon="proof", source=ref, body="By hand.\n"))
+    other = "tq-000B-ref"
+    write_node(root, Node(id=other, taxon="reference", body="@misc{Oth25, title = {Other}}\n"))
+    write_node(root, Node(id="tq-000A", taxon="remark", source=other, body="Uses it.\n", uses=("tq-0009",)))
     before = {p.name: p.read_bytes() for p in (root / ".loom/library/nodes").iterdir()}
     undo = delete(root, ref, **ME)
     left = sorted(p.name for p in (root / ".loom/library/nodes").iterdir())
-    assert left == ["tq-000A.node"], "the cited work goes though a draft cites it, and its results with it"
+    assert left == ["tq-000A.node", f"{other}.node"], (
+        "the cited work goes though a draft cites it, and its results with it"
+    )
     assert [d.code for d in check(root)] == ["loom:node-edge"], "what used its results says so"
     assert log.replay(root).deleted_keys() == {"Smi24"}
     again = gather(scan(load_quilt(root)))
     assert again.made == [] and again.deleted == ["Smi24"], "gathering does not make it again"
-    assert works(scan(load_quilt(root))) == []
+    assert [w["ref"] for w in works(scan(load_quilt(root)))] == [other]
     assert restore(root, undo, **ME) == ref
     assert {p.name: p.read_bytes() for p in (root / ".loom/library/nodes").iterdir()} == before
     assert not (root / LIBRARY_UNDO / undo).exists()
@@ -174,7 +178,7 @@ def held(tmp_path: Path) -> tuple[Path, str]:
     stem = ref.removesuffix("-ref")
     write_node(root, Node(id=f"{stem}-macros", taxon="macros", body="\\newcommand{\\x}{y}\n"))
     write_node(root, Node(id="tq-0009", taxon="lemma", source=ref, body="A lemma.\n"))
-    write_node(root, Node(id="tq-0009-proof00", taxon="proof", body="By hand.\n"))
+    write_node(root, Node(id="tq-0009-proof00", taxon="proof", source=ref, body="By hand.\n"))
     who = {"when": "2026-11-20T00:00:00Z", "author": "A. Author", "kind": "human", "type": "question"}
     events = [
         {"event": "created", "id": "a-2026-11-20-aaaaaa", "target": "tq-0001", "body": "Elsewhere.", **who},
