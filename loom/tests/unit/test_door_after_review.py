@@ -436,8 +436,112 @@ def test_an_act_left_for_a_file_of_an_agent_app_s_is_settled_by_a_later_act_of_i
     writes.put(root, hist, ".mcp.json", cut, kind="agents")
     assert writes.left(root, hist) == []
     (line,) = writes.recover(root, hist)
-    assert line.startswith("settled agents:") and line.endswith("a later act of its kind wrote .mcp.json again")
+    assert line.startswith("settled agents:") and "a later act of its kind wrote .mcp.json again" in line
     assert writes.recover(root, hist) == [] and (root / ".mcp.json").read_bytes() == cut
+
+
+def _left_pull(root: Path, hist: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[bytes, bytes]:
+    """A pull cut short after it wrote `.latexmkrc`, as an update of a mirrored folder holding one is, and left by recovery, which writes no dot-named file. Returns the file's bytes before the pull and as the pull left it, Overleaf's."""
+    from loom import writes
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    before, tip = b"$pdf_mode = 1;\n", b"$pdf_mode = 4;\n"
+    (root / ".latexmkrc").write_bytes(before)
+    restore = dying_before_the_rename(monkeypatch, after=1)
+    with pytest.raises(Died):
+        with writes.act(root, hist, "pull") as w:
+            w.replace(".latexmkrc", tip)
+            w.replace("notes.md", b"# Notes\n")
+    restore()
+    (said,) = writes.recover(root, hist)
+    assert said.startswith("left pull:") and "in a place whose name begins with a dot" in said, said
+    assert (root / ".latexmkrc").read_bytes() == tip
+    return before, tip
+
+
+def test_a_left_pull_on_a_dot_named_file_is_settled_by_the_next_finished_pull_and_by_nothing_else(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The next update finds `.latexmkrc` as Overleaf holds it and stages no change for it, so it says so (`Act.confirm`): its pull, done, settles the left one and writes nothing. An act of another kind that says so, a pull that says so of another file, a pull whose saying so is refused because the file holds something else or was saved before the act was journalled, and a pull cut short and put back settle nothing."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    hist = load_quilt(q).history_dir
+    _, tip = _left_pull(q, hist, monkeypatch)
+
+    def still_left() -> None:
+        assert [kind for kind, *_ in writes.left(q, hist)] == ["a pull"]
+        assert (q / ".latexmkrc").read_bytes() == tip
+
+    with writes.act(q, hist, "restore") as w:
+        w.confirm(".latexmkrc", tip)
+    still_left()
+    with writes.act(q, hist, "pull") as w:
+        w.confirm("drafting/main.tex", (q / "drafting/main.tex").read_bytes())
+    still_left()
+    with (
+        pytest.raises(writes.WriteRefused, match="does not hold what loom would write"),
+        writes.act(q, hist, "pull") as w,
+    ):
+        w.confirm(".latexmkrc", b"$pdf_mode = 5;\n")
+    still_left()
+    with pytest.raises(writes.WriteRefused, match="changed since loom read it"), writes.act(q, hist, "pull") as w:
+        w.confirm(".latexmkrc", tip)
+        (q / ".latexmkrc").write_bytes(b"$pdf_mode = 5;\n")
+    (q / ".latexmkrc").write_bytes(tip)
+    still_left()
+    restore = dying_before_the_rename(monkeypatch)
+    with pytest.raises(Died), writes.act(q, hist, "pull") as w:
+        w.confirm(".latexmkrc", tip)
+        w.replace("notes.md", b"# Notes, pulled\n")
+    restore()
+    assert any(line.startswith("undid pull:") for line in writes.recover(q, hist))
+    still_left()
+
+    with writes.act(q, hist, "pull") as w:
+        assert ".latexmkrc" in w.unsettled_files()
+        w.confirm(".latexmkrc", tip)
+    assert writes.left(q, hist) == []
+    last = begun(q, "pull")[-1]
+    assert last["files"] == {".latexmkrc": [writes.digest(tip)] * 2}
+    (said,) = writes.recover(q, hist)
+    assert said.startswith("settled pull:") and said.endswith(
+        "wrote .latexmkrc again, or found it as it would write it"
+    )
+    assert (q / ".latexmkrc").read_bytes() == tip
+
+
+def test_a_file_an_act_writes_is_never_also_one_it_leaves_as_it_is(q: Path) -> None:
+    """A file is written by an act or left by it as it is, never both, whichever is staged first."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(q).history_dir
+    now = (q / "drafting/main.tex").read_bytes()
+    with pytest.raises(writes.WriteRefused, match="cannot also be left"), writes.act(q, hist, "pull") as w:
+        w.replace("drafting/main.tex", now + b"%\n")
+        w.confirm("drafting/main.tex", now)
+    with pytest.raises(writes.WriteRefused, match="cannot also be written"), writes.act(q, hist, "pull") as w:
+        w.confirm("drafting/main.tex", now)
+        w.replace("drafting/main.tex", now + b"%\n")
+    assert (q / "drafting/main.tex").read_bytes() == now and begun(q, "pull") == []
+
+
+@pytest.mark.parametrize("where", ["notes.md", ".latexmkrc"])
+def test_a_forged_line_that_says_a_file_was_left_as_it_is_has_recovery_write_nothing(q: Path, where: str) -> None:
+    """A `begin` line whose before and after are one digest names a file its act never writes, so recovery writes nothing there, whatever the file holds: a forged line gets no write out of it. It may settle a left act of its kind, which a forged `aborted` line does already, and which writes nothing either."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(q).history_dir
+    there = b"what the person has there\n"
+    (q / where).write_bytes(there)
+    forged = writes.store(hist, b"what a line would have recovery write\n")
+    _begun(q, "pull", {where: [forged, forged]})
+    said = writes.recover(q, hist)
+    assert said == ["finished pull:e0e0e0e0e0e0e0e0"], said
+    assert (q / where).read_bytes() == there and writes.left(q, hist) == []
 
 
 def _case_blind(path: Path) -> bool:
@@ -1432,8 +1536,11 @@ def _cut_short(root: Path, hist: Path, mp: pytest.MonkeyPatch, which: str) -> No
     elif which == "a Keep's look finished":
         _forge(root, {"who": "Tester", "looked": {DOC: write_raw(root, doc.read_text(), hist)}}, (DOC,))
     elif which == "a tick finished":
-        d = writes.store(hist, doc.read_bytes())
-        _begun(root, "tick", {DOC: [d, d]}, {"who": "Tester", "tick": {"path": DOC, "line": 0}})
+        # the tick wrote line 0, so the file holds the line's after and held another first line before it
+        now = doc.read_bytes()
+        before = b"% the line before the tick\n" + now.partition(b"\n")[2]
+        tick = {"who": "Tester", "tick": {"path": DOC, "line": 0}}
+        _begun(root, "tick", {DOC: [writes.store(hist, before), writes.store(hist, now)]}, tick)
     elif which == "an act left for a text the history lacks":
         _begun(root, "mv", {DOC: ["sha256:" + "1" * 64, writes.store(hist, b"not there\n")]})
     elif which == "a Keep put back, its edit opened again":
