@@ -37,6 +37,8 @@
 	const why = $derived(refusal(c));
 	const answers = $derived(c.answers ? m?.annotations[c.answers] : undefined);
 	const who = $derived(whoMade(m, c));
+	/** Whether the change is in its block's own file, which loom keeps under the block's id and a person never named: then the block alone says where it is. */
+	const ownFile = $derived(!!c.key && (c.path.split('/').pop() ?? '').replace(/\.tex$/, '') === (m?.keys?.[c.key]?.node ?? c.key));
 	// a passage, not a few words: shown as TeX made it, since raw LaTeX environments read as nothing but source
 	const made = $derived(!!c.new_html && /\\begin\{|\n\s*\n/.test(c.new));
 
@@ -78,7 +80,7 @@
 	</div>
 	{#if place && m}
 		<div class="where" data-testid="change-where">
-			{#if c.key}{@render goes(keyName(m, c.key), placeUrl(m, c.key), c.key)} · {/if}<code>{c.path}</code>
+			{#if c.key}{@render goes(keyName(m, c.key), placeUrl(m, c.key), c.key)}{/if}{#if !ownFile}{#if c.key} · {/if}<code>{c.path}</code>{/if}
 		</div>
 	{/if}
 	<div class="dx" data-testid="change-words">
