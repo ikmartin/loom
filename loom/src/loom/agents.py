@@ -198,7 +198,7 @@ def how_far_deny_holds(root: Path) -> str:
 def deny_sentence(held: list[str], told: list[str]) -> str:
     """`how_far_deny_holds`'s sentence for the apps `held` to the deny by their file now and those only `told` it, by name, any other app among the told.
 
-    A held app's file refuses its own edits there and no shell command but `rm` and loom's author verbs, so a command that writes there is left to the person's permission, which the sentence says.
+    A held app's file refuses the app's own edits there; what its shell may write is another matter. Claude Code's file refuses a redirect into a denied place and the files of a command it knows, not a script that opens a file itself, and its sandbox, where the person turns it on, holds every command to the denies; so the sentence says only that it depends, naming no setting and no file.
     """
 
     def names(labels: list[str]) -> str:
@@ -209,7 +209,7 @@ def deny_sentence(held: list[str], told: list[str]) -> str:
     parts = []
     if held:
         parts.append(
-            f"{names(held)} {'is' if len(held) == 1 else 'are'} refused an edit, though a shell command that writes there is left to your permission rather than refused"
+            f"{names(held)} {'is' if len(held) == 1 else 'are'} refused an edit, though whether a command {'it runs' if len(held) == 1 else 'one of them runs'} in a shell is held back as well depends on the command and on how you have set {'it' if len(held) == 1 else 'them'} up"
         )
     parts.append(
         f"{names(told)} {'is' if one else 'are'} only asked not to edit, and a change {'it' if one else 'one of them'} makes there anyway is not listed in Your Changes"

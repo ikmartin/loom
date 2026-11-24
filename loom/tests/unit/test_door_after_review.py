@@ -984,7 +984,7 @@ def test_a_line_whose_look_passes_every_check_takes_in_only_what_its_keep_lines_
 
 
 def test_the_journal_is_denied_to_agents_by_the_rule_that_denies_them_the_records_and_the_look(tmp_path: Path) -> None:
-    """What keeps an agent from writing a journal line is the rule that keeps it from the records and the look: all sit in `.loom/`, which `agents.denied_by` denies an agent, and the permission file loom writes for Claude Code refuses its file tools each of their folders. That file refuses no shell command but `rm`, so an agent's shell is refused none of them, and another app is only told."""
+    """What keeps an agent from writing a journal line is the rule that keeps it from the records and the look: all sit in `.loom/`, which `agents.denied_by` denies an agent, and the permission file loom writes for Claude Code refuses its file tools each of their folders. Of the shell's commands that file names only `rm` and loom's own; Claude Code holds a redirect to its `Edit` denies, and every command only in its sandbox, which the person turns on; another app is only told."""
     from loom.agents import claude_denies, denied_by
     from loom.paths import EDIT_LOG, JOURNAL, JOURNAL_INDEX, LOCAL, LOOKED
     from loom.scan.quilt import load_quilt

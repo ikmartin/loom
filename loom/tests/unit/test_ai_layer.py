@@ -811,7 +811,10 @@ def test_how_far_a_deny_holds_names_an_app_refused_only_where_its_file_holds_the
         return (held, told) if told else ("", held)
 
     held, told = sides()
-    assert "is refused an edit" in held and "left to your permission rather than refused" in held, held
+    assert (
+        "is refused an edit" in held
+        and "held back as well depends on the command and on how you have set it up" in held
+    ), held
     assert "any other app are only asked not to edit" in told and "not listed in Your Changes" in told, told
     for c in PROJECT:
         if c.key in keys:
