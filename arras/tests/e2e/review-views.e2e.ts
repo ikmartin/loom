@@ -424,6 +424,35 @@ test('in Review a block, its note, Read, a change card\'s place and a To do item
 	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
+test("Proposed edits says once what it watches and what it leaves to the person, and the accepted results say once that git gave the reviewer's name", async ({ page }) => {
+	let unwatched = ['config.toml', '/drafting/'];
+	await serve(page, (m) => {
+		m.changes_since = { ...m.changes_since, unwatched, holds: 'Claude Code is refused an edit there; any other app is only asked not to.' };
+		m.reviewer = { name: 'Rae Reviewer', source: 'git config user.name' };
+	});
+	await open(page);
+	await page.getByTestId('review-kind-edits').click();
+	const watched = page.getByTestId('review-watched');
+	await expect(watched).toHaveText("Here wait agents' suggestions, and every edit made in the places agents may edit since your look of 2026-09-16 11:30. Your own places are not watched, so an edit there is never listed: config.toml, /drafting/. Claude Code is refused an edit there; any other app is only asked not to.");
+	await page.getByTestId('review-kind-accepted-changed').click();
+	const name = page.getByTestId('review-name-from-git');
+	await expect(name).toHaveText('You review as Rae Reviewer, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.');
+	// closed, it stays closed; on the next visit neither is said again
+	await name.getByRole('button', { name: 'Close this note' }).click();
+	await expect(name).toHaveCount(0);
+	await open(page);
+	await page.getByTestId('review-kind-edits').click();
+	await expect(page.getByTestId('your-changes').first()).toBeVisible();
+	await expect(watched).toHaveCount(0);
+	await page.getByTestId('review-kind-accepted-changed').click();
+	await expect(name).toHaveCount(0);
+	// what it says changing, it is said again
+	unwatched = ['config.toml', '/drafting/', '/notes/'];
+	await open(page);
+	await page.getByTestId('review-kind-edits').click();
+	await expect(watched).toContainText('config.toml, /drafting/, /notes/.');
+});
+
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
