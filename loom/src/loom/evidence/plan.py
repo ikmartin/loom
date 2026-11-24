@@ -10,10 +10,17 @@ from __future__ import annotations
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from loom.evidence.log import Evidence, Record
 from loom.evidence.status import Status, Waiting, own_needs
 from loom.evidence.web import Web
+
+if TYPE_CHECKING:
+    from loom.evidence.acts import Unattestable
+
+#: What the plan reads of a result a Lean statement is asked of (`needed`'s `own`): its key as a row names it, its status, whether its current Lean is on its text now, standing and elaborated, and why `formal-attest` would refuse the person's word on it now (`acts.attest_refusal`, None where it would take it), asked only where it is offered.
+Own = tuple[str, Status, bool, "Callable[[], Unattestable | None]"]
 
 #: The kinds of result that are stated in Lean, never proved: a definition, a notation, a convention, a construction.
 STATED = frozenset({"definition", "notation", "convention", "construction"})
@@ -178,61 +185,87 @@ def asked_of(
 
 def needed(
     leaves: list[Waiting],
-    own: Callable[[tuple[str, str]], tuple[str, Status, bool] | None],
+    own: Callable[[tuple[str, str]], Own | None],
     texts: Callable[[tuple[str, str]], set[str]],
 ) -> list[Need]:
     """Each thing the gate asks (`status.needs`) as the person reads it, with when it can be done: every leaf an entry, and a leaf of a reason this does not say refused (`ValueError`).
 
-    `now`: a node not read or not compared; a label that two texts answer to near the targets (`ambiguous`, by `texts`), or a label or node nothing answers to (`missing`); a Lean statement Lean accepted on its result's text now that waits for the person's word (`attest`, `attested-changed` where they gave it before something it uses changed). `after`: a Lean statement with no Lean on its text now that elaborated, which the agent writes or loom runs again, or whose notation cannot be shown yet; one attested and still asked of, whose Lean comes round to a result already asked of (`cycle`). `waiting`: a citation, until loom resolves citations to results. `own` gives a result's key as a row names it, its status, and whether its current Lean is on its text now, standing and elaborated; None where no row can say of it.
+    `now`, what loom takes now: a node not read or not compared; a label that two texts answer to near the targets (`ambiguous`, by `texts`), or a label or node nothing answers to (`missing`); a Lean statement Lean accepted on its result's text now that waits for the person's word (`attest`, `attested-changed` where they gave it before something it uses changed), offered only where `formal-attest` would take it, else what stands in its way. `after`: a Lean statement with no Lean on its text now that elaborated, which the agent writes or loom runs again, or whose notation cannot be shown yet; one attested and still asked of, whose Lean comes round to a result already asked of (`cycle`). `waiting`: a citation, until loom resolves citations to results. `own` gives what the plan reads of a result (`Own`); None where no row can say of it.
     """
     out: list[Need] = []
     for w in leaves:
         kind, name = w.key
         if kind == "cite":
-            need = Need(name, "cite", "waiting", "cite")
+            found = [Need(name, "cite", "waiting", "cite")]
         elif w.why in ("stub", "unchecked"):
-            need = Need(name, "not-read" if w.why == "stub" else "not-checked", "now")
+            found = [Need(name, "not-read" if w.why == "stub" else "not-checked", "now")]
         elif w.why == "unknown":
-            need = Need(name, "ambiguous" if kind == "label" and texts(w.key) else "missing", "now", kind)
+            found = [_unknown(w.key, texts)]
         elif w.why == "unattested":
-            need = _to_attest(name, kind, own(w.key))
+            found = _to_attest(name, kind, own(w.key), texts)
         else:
             raise ValueError(f"the panel has no entry for the gate's {w.why!r}")
-        if need not in out:
-            out.append(need)
+        out += [n for n in found if n not in out]
     return out
 
 
-def _to_attest(name: str, kind: str, found: tuple[str, Status, bool] | None) -> Need:
+def _unknown(key: tuple[str, str], texts: Callable[[tuple[str, str]], set[str]]) -> Need:
+    """A label or node nothing can say of: `ambiguous` for a label two texts answer to, else `missing`."""
+    return Need(key[1], "ambiguous" if key[0] == "label" and texts(key) else "missing", "now", key[0])
+
+
+def _to_attest(name: str, kind: str, found: Own | None, texts: Callable[[tuple[str, str]], set[str]]) -> list[Need]:
     """What a Lean statement the gate asks to be attested needs, by how its result stands (`needed`).
 
     Attested, holding and elaborated, and still asked of, it is asked only where its Lean comes round to a result already asked of (`status.assumption_needs`), which attesting cannot settle.
     """
     if found is None:
-        return Need(name, "attest", "after", kind)
-    key, standing, elaborated = found
+        return [Need(name, "attest", "after", kind)]
+    key, standing, elaborated, refused = found
     if standing.lean_record is None or not elaborated or standing.lean == "rerun":
-        return Need(key, "attest", "after")
+        return [Need(key, "attest", "after")]
+    wanted = _wanted(key, standing, refused, texts)
+    return wanted if wanted is not None else [Need(key, "cycle", "after")]
+
+
+def _wanted(
+    key: str, standing: Status, refused: Callable[[], Unattestable | None], texts: Callable[[tuple[str, str]], set[str]]
+) -> list[Need] | None:
+    """The person's word a Lean that elaborated waits for: `attested-changed` or `attest` now where `formal-attest` would take it, else what stands in its way; `attest` after where it holds but its notation cannot be shown yet; None where none is wanted."""
     if standing.lean == "changed":
-        return Need(key, "attested-changed", "now")
-    if standing.attestation is not None and not standing.causes and standing.unattested_notation is None:
-        return Need(key, "attest", "after")
-    if standing.attestation is None or standing.unattested_notation:
-        return Need(key, "attest", "now")
-    return Need(key, "cycle", "after")
-
-
-def target_need(key: str, standing: Status, elaborated: bool) -> Need | None:
-    """What a target's own Lean still needs: attested after the agent states it, where it has no Lean that elaborated; attested now where Lean accepted it and it waits; None where it is formalized, or attested and waiting only on what the rest of the list names."""
-    if standing.lean == "formalized":
+        why = "attested-changed"
+    elif standing.attestation is not None and standing.unattested_notation is None:
+        return [Need(key, "attest", "after")]
+    elif standing.attestation is None or standing.unattested_notation:
+        why = "attest"
+    else:
         return None
+    blocked = refused()
+    if blocked is None:
+        return [Need(key, why, "now")]
+    if blocked.code in ("no-lean", "no-such-result"):
+        return [Need(key, "attest", "after")]
+    return [
+        *(_unknown(member, texts) for member in blocked.gone),
+        *(Need(n, "not-read", "now") for n in blocked.unread),
+        *(Need(n, "not-checked", "now") for n in blocked.unchecked),
+        *(Need(c, "cite", "waiting", "cite") for c in blocked.cites),
+    ]
+
+
+def target_need(
+    key: str,
+    standing: Status,
+    elaborated: bool,
+    refused: Callable[[], Unattestable | None],
+    texts: Callable[[tuple[str, str]], set[str]],
+) -> list[Need]:
+    """What a target's own Lean still needs: attested after the agent states it, where it has no Lean that elaborated; the person's word now where `formal-attest` would take it, else what stands in its way (`_wanted`); attested after where its notation cannot be shown yet; nothing where it is formalized, or attested and waiting only on what the rest of the list names."""
+    if standing.lean == "formalized":
+        return []
     if standing.lean_record is None or not elaborated or standing.lean in ("rerun", "failed"):
-        return Need(key, "attest", "after")
-    if standing.lean == "changed":
-        return Need(key, "attested-changed", "now")
-    if standing.attestation is None or standing.unattested_notation:
-        return Need(key, "attest", "now" if standing.unattested_notation is not None else "after")
-    return None
+        return [Need(key, "attest", "after")]
+    return _wanted(key, standing, refused, texts) or []
 
 
 def elaborated(evidence: Evidence, standing: Status, lean_now: Callable[[Record], bool]) -> bool:

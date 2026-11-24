@@ -120,6 +120,33 @@ def _two_texts(s: Any, root: Path) -> None:
     )
     s.rebuild()
     assert [(w, t) for w, t, _ in _before(succeeds(s, "formal-plan", ask))] == [("attest", "after")]
+    _vanished(s, root, ask)
+
+
+def _vanished(s: Any, root: Path, ask: dict[str, Any]) -> None:
+    """The target's Lean resting on the lemma's own, both attested, formalized; the lemma given a second text again: the target reads changed, and the list names the label two texts answer to, never a word `formal-attest` refuses."""
+    from loom.evidence.log import write
+    from loom.evidence.subjects import Who
+    from loom.evidence.webview import drafts
+    from loom.render.endpoints.base import _scan
+
+    web = drafts(_scan(root), {}, root).web
+    lemma, target = web.subject(web.heres("lem:b")[0]), web.subject(web.heres("thm:t")[0])
+    assert lemma is not None and target is not None
+    lean_file = "sha256:" + hashlib.sha256((root / "lean/A.lean").read_bytes()).hexdigest()
+    run = {"project": {"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64}, "files": {"lean/A.lean": lean_file}, "assumed": [], "replay": {"tool": "leanchecker", "exit": 0, "output": ""}, "ok": True}  # fmt: skip
+    b = write(root, "lean", Who("loom"), on=lemma, declarations=[{"name": "b", "kind": "theorem", "role": "states", "names": {"label": "lem:b"}, "statement": "sha256:" + "5" * 64, "axioms": ["propext"], "sorry": False}], uses=[], **run)  # fmt: skip
+    succeeds(s, "formal-attest", {"result": "drafting/main.tex#lemma:1", "observation": b.id})
+    t = write(root, "lean", Who("loom"), on=target, declarations=[{"name": "t", "kind": "theorem", "role": "states", "names": {"label": "thm:t"}, "statement": "sha256:" + "1" * 64, "axioms": ["propext"], "sorry": False}], uses=[{"label": "lem:b", "hash": lemma.hash}], **run)  # fmt: skip
+    succeeds(s, "formal-attest", {"result": BOUNDED, "observation": t.id})
+    assert succeeds(s, "formal-plan", ask)["before"] == []
+    talk = root / "drafting/talk.tex"
+    talk.write_text(talk.read_text(encoding="utf-8").replace("One text of it.\n\\end{lemma}\n\\end{frame}", "Another text of it.\n\\end{lemma}\n\\end{frame}"), encoding="utf-8")  # fmt: skip
+    s.rebuild()
+    standing = drafts(_scan(root), {}, root).standing(BOUNDED)
+    assert standing.lean == "changed" and [(c.key, c.now) for c in standing.causes] == [(("label", "lem:b"), None)]
+    assert _before(succeeds(s, "formal-plan", ask)) == [("ambiguous", "now", ["lem:b"])]
+    refuses(s, "formal-attest", {"result": BOUNDED, "observation": t.id}, 409, "changed", "lem:b")
 
 
 @case("formal-ask")

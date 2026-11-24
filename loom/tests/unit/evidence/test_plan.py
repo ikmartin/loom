@@ -112,7 +112,7 @@ def test_each_thing_the_gate_asks_is_named_with_when_the_person_can_do_it() -> N
     leaves += [Waiting(("label", "lem:two"), "unknown"), Waiting(("label", "lem:none"), "unknown"), Waiting(("node", "tq-0GNE"), "unknown")]  # fmt: skip
     leaves += [Waiting(("node", k), "unattested") for k in own] + [Waiting(("node", "gone"), "unattested")]
     texts = {("label", "lem:two"): {"sha256:" + "1" * 64, "sha256:" + "2" * 64}}
-    found = needed(leaves, lambda key: (key[1], *own[key[1]]) if key[1] in own else None, lambda key: texts.get(key, set()))  # fmt: skip
+    found = needed(leaves, lambda key: (key[1], *own[key[1]], lambda: None) if key[1] in own else None, lambda key: texts.get(key, set()))  # fmt: skip
     assert found == [
         Need("Cal14", "cite", "waiting", "cite"),
         Need("stub", "not-read", "now"),
@@ -131,8 +131,34 @@ def test_each_thing_the_gate_asks_is_named_with_when_the_person_can_do_it() -> N
     ]
 
 
+def test_a_word_is_offered_now_only_where_formal_attest_would_take_it_else_what_stands_in_its_way() -> None:
+    """A changed result over a member gone, or a fresh one over a node not compared or a citation, offers no word now: it names the member, the node and the citation; one with no Lean loom ran, the agent's; a target attested while its notation cannot be shown, its word after."""
+    from loom.evidence.acts import Unattestable
+    from loom.evidence.plan import Need, needed, target_need
+    from loom.evidence.status import Waiting
+
+    on = Subject("node", "tq-0000", "sha256:" + "0" * 64)
+    moved = Status(on, lean="changed", lean_record="ev-1", attestation="ev-2")
+    fresh = Status(on, lean="unattested", lean_record="ev-1")
+    two = {("label", "lem:c"): {"sha256:" + "1" * 64, "sha256:" + "2" * 64}}
+    gone = Unattestable("changed", "", gone=(("label", "lem:c"), ("node", "tq-0GNE")))
+    short = Unattestable("unchecked", "", unread=("tq-0001",), unchecked=("tq-0002",), cites=("Cal14 Theorem 2",))
+    texts = lambda key: two.get(key, set())  # noqa: E731
+    assert target_need("thm:u", moved, True, lambda: gone, texts) == [Need("lem:c", "ambiguous", "now", "label"), Need("tq-0GNE", "missing", "now", "node")]  # fmt: skip
+    assert target_need("thm:u", moved, True, lambda: None, texts) == [Need("thm:u", "attested-changed", "now")]
+    assert target_need("thm:u", fresh, True, lambda: short, texts) == [Need("tq-0001", "not-read", "now"), Need("tq-0002", "not-checked", "now"), Need("Cal14 Theorem 2", "cite", "waiting", "cite")]  # fmt: skip
+    assert target_need("thm:u", fresh, True, lambda: Unattestable("no-lean", ""), texts) == [Need("thm:u", "attest", "after")]  # fmt: skip
+    # E-43: attested, its notation not yet to be shown
+    unknown = Status(on, lean="unattested", lean_record="ev-1", attestation="ev-2", unattested_notation=None)
+    assert target_need("thm:u", unknown, True, lambda: None, texts) == [Need("thm:u", "attest", "after")]
+    # the same for a result the target's Lean rests on
+    leaf = [Waiting(("node", "tq-0003"), "unattested")]
+    assert needed(leaf, lambda key: ("tq-0003", moved, True, lambda: gone), texts) == target_need("x", moved, True, lambda: gone, texts)  # fmt: skip
+
+
 def test_every_reason_the_gate_gives_is_an_entry_and_one_it_does_not_give_is_refused() -> None:
-    """Built from the gate's own reasons (`status.WHYS`), so a new kind of leaf cannot be passed over: each, on a node, a label and a citation, under every standing a result may have, is an entry with a reason and a time the panel knows."""
+    """Built from the gate's own reasons (`status.WHYS`), so a new kind of leaf cannot be passed over: each, on a node, a label and a citation, under every standing a result may have and whether or not `formal-attest` would take a word on it, is an entry with a reason and a time the panel knows."""
+    from loom.evidence.acts import Unattestable
     from loom.evidence.plan import OF, WHEN, WHY, needed
     from loom.evidence.status import WHYS, Waiting
 
@@ -149,17 +175,22 @@ def test_every_reason_the_gate_gives_is_an_entry_and_one_it_does_not_give_is_ref
         (Status(on, lean="waiting", lean_record="ev-1", attestation="ev-2"), True),
         (Status(on, lean="formalized", lean_record="ev-1", attestation="ev-2"), True),
     ]
+    refusals = [None, Unattestable("changed", "", gone=(("node", "g"),)), Unattestable("unchecked", "", unchecked=("u",)), Unattestable("no-lean", "")]  # fmt: skip
     for why in WHYS:
         for kind in ("node", "label", "cite"):
             for standing in standings:
-                for borne in (set(), {"sha256:" + "1" * 64, "sha256:" + "2" * 64}):
-                    leaf = Waiting((kind, "x"), why)
-                    found = needed(
-                        [leaf],
-                        lambda key, st=standing: None if st is None else ("x", *st),  # type: ignore[misc]
-                        lambda key, b=borne: b,  # type: ignore[misc]
-                    )
-                    assert len(found) == 1, (leaf, standing)
-                    assert found[0].why in WHY and found[0].when in WHEN and found[0].of in OF, (leaf, standing)
+                for refused in refusals:
+                    for borne in (set(), {"sha256:" + "1" * 64, "sha256:" + "2" * 64}):
+                        leaf = Waiting((kind, "x"), why)
+                        found = needed(
+                            [leaf],
+                            lambda key, st=standing, r=refused: None if st is None else ("x", *st, lambda: r),  # type: ignore[misc]
+                            lambda key, b=borne: b,  # type: ignore[misc]
+                        )
+                        assert found, (leaf, standing, refused)
+                        for n in found:
+                            assert n.why in WHY and n.when in WHEN and n.of in OF, (leaf, standing, refused)
+                            # a word is offered now only where the act would take it
+                            assert not (n.why in ("attest", "attested-changed") and n.when == "now" and refused), (leaf, standing, refused)  # fmt: skip
     with pytest.raises(ValueError, match="no reason"):
         Waiting(("node", "x"), "unread")

@@ -7,11 +7,11 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loom.evidence.log import EvidenceRefused, Record, log_path, replay, write
+from loom.evidence.log import Evidence, EvidenceRefused, Record, log_path, replay, write
 from loom.evidence.subjects import Subject, Who
 from loom.evidence.web import Here, LibraryWeb
 from loom.locks import locked
@@ -368,39 +368,15 @@ def attest(
     ActRefused
         `author-only`; `no-such-result` for no result with a lasting name at `here`; `no-lean` when no standing Lean record states it or Lean did not accept the statement; `changed` when `observation` is not the latest standing one on its text now, or a member of its closure resolves to nothing; `unchecked` naming each library node under it, or itself, not read and compared with its paper on its text now, and each citation nothing answers for.
     """
-    from loom.evidence.status import closure_now, statements_of, states
+    from loom.evidence.status import statements_of
 
     _only(by, "person")
     with _held(root):
-        subject = web.subject(here)
-        if subject is None:
-            raise ActRefused(
-                "no-such-result", f"{here.name} is no result with a lasting name; a draft's result needs a label"
-            )
         evidence = replay(root)
-        standing = [
-            r
-            for r in evidence.about(*subject.key, of="lean")
-            if r.on is not None and r.on.hash == subject.hash and states(r, subject) and lean_now(r)
-        ]
-        if not standing:
-            raise ActRefused("no-lean", "no Lean that loom ran states this text now")
-        latest = standing[-1]
-        if latest.id != observation:
-            raise ActRefused("changed", "Lean has stated this result again since; read the latest statement")
-        if not latest.get("ok") or (latest.get("replay") or {}).get("exit") != 0:
-            raise ActRefused("no-lean", "Lean did not accept this statement")
-        closure = closure_now(web, here, standing)
-        gone = sorted(name for (_kind, name), digest in closure.items() if digest is None)
-        if gone:
-            raise ActRefused("changed", f"what it uses no longer reads as one text: {', '.join(gone)}")
-        nodes = ([subject.name] if subject.kind == "node" else []) + [n for k, n in closure if k == "node"]
-        compared = {r.on.hash for n in nodes for r in evidence.about("node", n, of="compared") if r.on is not None}
-        short = [n for n in nodes if web.stub(Here("node", n)) is not False or web.resolve(("node", n), here) not in compared]  # fmt: skip
-        cites = list(web.cited(here))
-        if short or cites:
-            said = [*(f"{n} is not read and compared with its paper" for n in short), *(f"its citation {c} names no node yet" for c in cites)]  # fmt: skip
-            raise ActRefused("unchecked", "; ".join(said))
+        found = _attestable(evidence, web, here, lean_now, observation)
+        if isinstance(found, Unattestable):
+            raise ActRefused(found.code, found.message)
+        subject, latest, closure = found
         rows = web.notation(here) or {}
         for name, digest in sorted(rows.items()):
             if not any(r.on is not None and r.on.hash == digest for r in evidence.about("macro", name, of="attested")):
@@ -412,6 +388,80 @@ def attest(
         if given and _members(given[-1]) == _members_of(members):
             return given[-1]
         return _write(root, "attested", by, on=subject, lean=latest.id, statements=statements, closure=members, rulings=[])  # fmt: skip
+
+
+@dataclass(frozen=True)
+class Unattestable:
+    """Why attesting a result would be refused, beyond who asks (`attest_refusal`): the code and message `attest` raises, and what stands in its way, each member of its closure that reads as no one text (`gone`), each node under it, or itself, a stub or not read (`unread`) or not compared on its text now (`unchecked`), and each citation nothing answers for (`cites`)."""
+
+    code: str
+    message: str
+    gone: tuple[tuple[str, str], ...] = ()
+    unread: tuple[str, ...] = ()
+    unchecked: tuple[str, ...] = ()
+    cites: tuple[str, ...] = ()
+
+
+def attest_refusal(evidence: Evidence, web: Web, here: Here, lean_now: Callable[[Record], bool]) -> Unattestable | None:
+    """Why `attest` would refuse the person's word on the result at `here` now, over the latest Lean record standing on its text; None where it would take it.
+
+    Parameters
+    ----------
+    evidence : Evidence
+        The replayed evidence log.
+    web : Web
+        The texts now, as `attest` reads them.
+    here : Here
+        A draft's block or a node.
+    lean_now : callable
+        Whether a `lean` record's Lean is unchanged since loom ran it.
+
+    Returns
+    -------
+    Unattestable or None
+        What `attest` checks, by the same function, so a list that offers an attestation only where this is None offers nothing it refuses.
+    """
+    found = _attestable(evidence, web, here, lean_now)
+    return found if isinstance(found, Unattestable) else None
+
+
+def _attestable(
+    evidence: Evidence, web: Web, here: Here, lean_now: Callable[[Record], bool], observation: str | None = None
+) -> tuple[Subject, Record, dict[tuple[str, str], str | None]] | Unattestable:
+    """The result's subject, its latest standing Lean record and its closure now, where `attest` would take a word on it; else why not.
+
+    `observation`, where given, is the record the person read, which must be the latest.
+    """
+    from loom.evidence.status import closure_now, states
+
+    subject = web.subject(here)
+    if subject is None:
+        return Unattestable("no-such-result", f"{here.name} is no result with a lasting name; a draft's result needs a label")  # fmt: skip
+    standing = [
+        r
+        for r in evidence.about(*subject.key, of="lean")
+        if r.on is not None and r.on.hash == subject.hash and states(r, subject) and lean_now(r)
+    ]
+    if not standing:
+        return Unattestable("no-lean", "no Lean that loom ran states this text now")
+    latest = standing[-1]
+    if observation is not None and latest.id != observation:
+        return Unattestable("changed", "Lean has stated this result again since; read the latest statement")
+    if not latest.get("ok") or (latest.get("replay") or {}).get("exit") != 0:
+        return Unattestable("no-lean", "Lean did not accept this statement")
+    closure = closure_now(web, here, standing)
+    gone = tuple(sorted(key for key, digest in closure.items() if digest is None))
+    if gone:
+        return Unattestable("changed", f"what it uses no longer reads as one text: {', '.join(n for _, n in gone)}", gone=gone)  # fmt: skip
+    nodes = ([subject.name] if subject.kind == "node" else []) + [n for k, n in closure if k == "node"]
+    compared = {r.on.hash for n in nodes for r in evidence.about("node", n, of="compared") if r.on is not None}
+    unread = tuple(n for n in nodes if web.stub(Here("node", n)) is not False)
+    unchecked = tuple(n for n in nodes if n not in unread and web.resolve(("node", n), here) not in compared)
+    cites = tuple(web.cited(here))
+    if unread or unchecked or cites:
+        said = [*(f"{n} is not read and compared with its paper" for n in (*unread, *unchecked)), *(f"its citation {c} names no node yet" for c in cites)]  # fmt: skip
+        return Unattestable("unchecked", "; ".join(said), unread=unread, unchecked=unchecked, cites=cites)
+    return subject, latest, closure
 
 
 def _members_of(raw: list[dict[str, Any]]) -> set[tuple[tuple[str, str], str]]:

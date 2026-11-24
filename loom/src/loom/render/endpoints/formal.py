@@ -116,6 +116,7 @@ class _Planner:
 
     def before(self, target: str, found: Any) -> list[Any]:
         """What stands before `target` reads formalized, from the gate's own needs (`plan.asked_of`) of its Lean, or of the Lean the request will make (`plan.asked`, `status.needs`), each as the person reads it (`plan.needed`), the target's own Lean first."""
+        from loom.evidence.acts import attest_refusal
         from loom.evidence.plan import asked, asked_of, needed, target_need
         from loom.evidence.status import Waiting, needs
         from loom.evidence.web import Here
@@ -132,17 +133,24 @@ class _Planner:
 
         leaves = asked_of(evidence, self.web, self.drafts.standing(target), now, planned)
 
-        def own(key: tuple[str, str]) -> tuple[str, Any, bool] | None:
+        def refusal(at: Here) -> Any:
+            return lambda: attest_refusal(evidence, self.web, at, now)
+
+        def own(key: tuple[str, str]) -> Any:
             if key[0] == "node":
-                return (key[1], self._node(key[1]), self.elaborated(self._node(key[1]))) if self.drafts.is_library(key[1]) else None  # fmt: skip
+                if not self.drafts.is_library(key[1]):
+                    return None
+                found = self._node(key[1])
+                return key[1], found, self.elaborated(found), refusal(Here("node", key[1]))
             there = self.drafts.web.holder(key, here)
             if there is None or self.drafts.node(there.name) is None:
                 return None
             standing = self.drafts.standing(there.name)
-            return there.name, standing, self.elaborated(standing)
+            return there.name, standing, self.elaborated(standing), refusal(there)
 
-        mine = target_need(target, self.drafts.standing(target), self.elaborated(self.drafts.standing(target)))
-        return ([mine] if mine is not None else []) + needed(leaves, own, self.web.texts)
+        standing = self.drafts.standing(target)
+        mine = target_need(target, standing, self.elaborated(standing), refusal(here), self.web.texts)
+        return mine + [n for n in needed(leaves, own, self.web.texts) if n not in mine]
 
     def row(self, key: str) -> dict[str, Any]:
         from loom.evidence.webview import node_row

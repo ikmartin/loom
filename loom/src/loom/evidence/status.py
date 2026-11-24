@@ -97,7 +97,7 @@ class Status:
     #: When loom wrote the current Lean record: since when the result has waited for the person's word.
     lean_since: str | None = field(default=None, compare=False)
     attestation: str | None = field(default=None, compare=False)
-    #: What the gate was asked of its current Lean record, as `gate` takes it after `evidence`, `web` and `lean_now`; () where it has none on its text now (`own_needs`).
+    #: What the gate was asked of its current Lean record, or would be once a `changed` result is attested again, as `gate` takes it after `evidence`, `web` and `lean_now`; () where it has none on its text now (`own_needs`).
     asked: tuple[Any, ...] = field(default=(), compare=False, repr=False)
 
 
@@ -435,7 +435,7 @@ def needs(
 
 
 def own_needs(evidence: Evidence, web: Web, found: Status, lean_now: Callable[[Record], bool]) -> list[Waiting]:
-    """What the gate asks of a result's current Lean record, thing by thing: `needs` of what `status` gave `gate` (`Status.asked`), so [] exactly when `waiting_on` is empty; [] where it has no Lean record on its text now."""
+    """What the gate asks of a result's current Lean record, thing by thing: `needs` of what `status` gave `gate` (`Status.asked`), [] exactly when `waiting_on` is empty, or of what it would give it once a `changed` result is attested again; [] where it has no Lean record on its text now."""
     if not found.asked:
         return []
     uses, assumed, seen, cites, near, rests = found.asked
@@ -537,13 +537,18 @@ def status(
         changed, never = notation_of(evidence, web, here)
         causes = causes_of(attestation, web, here, now) + changed
         found = replace(found, attestation=attestation.id, unattested_notation=_rows(never))
-        if causes:
-            return replace(found, lean="changed", causes=tuple(causes))
-        if current is None:
-            return replace(found, lean="rerun")
         attested_nodes = [m["node"] for m in attestation.get("closure", []) if "node" in m]
         uses = itself + [k[1] for k in now if k[0] == "node"] + attested_nodes
-        asked = (uses, found.relative_to, _seen | {name}, cites, here, rested(current, subject))
+        # what the gate is asked of the current record, kept where it reads changed too, for a list of what stands before (`own_needs`)
+        asked: tuple[Any, ...] = (
+            (uses, found.relative_to, _seen | {name}, cites, here, rested(current, subject))
+            if current is not None
+            else ()
+        )
+        if causes:
+            return replace(found, lean="changed", causes=tuple(causes), asked=asked)
+        if current is None:
+            return replace(found, lean="rerun")
         waiting = gate(evidence, web, asked[0], asked[1], lean_now, *asked[2:])
         found = replace(found, waiting_on=waiting, asked=asked)
         if not proves(current, subject):
@@ -561,8 +566,19 @@ def status(
         if any(statements_of(r) == dict(earlier.get("statements", {})) for r in standing):
             changed, never = notation_of(evidence, web, here)
             causes = causes_of(earlier, web, here, now) + changed
+            uses = itself + [k[1] for k in now if k[0] == "node"]
+            asked = (
+                (uses, found.relative_to, _seen | {name}, cites, here, rested(current, subject))
+                if current is not None
+                else ()
+            )
             return replace(
-                found, lean="changed", attestation=earlier.id, causes=tuple(causes), unattested_notation=_rows(never)
+                found,
+                lean="changed",
+                attestation=earlier.id,
+                causes=tuple(causes),
+                unattested_notation=_rows(never),
+                asked=asked,
             )
     if current is None:
         return replace(found, lean="rerun")

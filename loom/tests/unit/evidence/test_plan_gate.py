@@ -5,16 +5,18 @@ Each library has definitions and lemmas, stubs, nodes compared or not, some with
 
 from __future__ import annotations
 
+import json
 import random
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from loom.evidence.log import Evidence, parse
+from loom.evidence.acts import attest_refusal
+from loom.evidence.log import Evidence, log_path, parse, replay
 from loom.evidence.plan import STATED, Item, Need, asked, asked_of, elaborated, needed, plan, target_need
 from loom.evidence.status import Status, closure_now, needs, statements_of, status
-from loom.evidence.subjects import Subject
+from loom.evidence.subjects import Subject, Who
 from loom.evidence.web import Here, Joined, LibraryWeb
 from loom.library.node import Node, node_bytes
 from loom.library.store import folder
@@ -132,15 +134,18 @@ class World:
         return Joined(Target(lib, getattr(self, "statement", []), self.cites), lib)
 
     def evidence(self) -> Evidence:
-        ev = Evidence()
-        for line in self.lines:
-            ev.add(parse(line))
-        return ev
+        return replay(self.root)
 
     def add(self, line: dict[str, Any]) -> dict[str, Any]:
+        """A record written into the quilt's log as loom's acts write theirs, so an act reads it."""
         n = len(self.lines) + 1
         line = {"id": f"ev-2026-11-21-{n:06d}", "at": f"2026-11-21T{n // 3600:02d}:{n // 60 % 60:02d}:{n % 60:02d}Z", **line}  # fmt: skip
+        parse(line)
         self.lines.append(line)
+        path = log_path(self.root)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(line) + "\n")
         return line
 
     def compare(self, n: str) -> None:
@@ -197,13 +202,19 @@ class World:
 
             leaves = asked_of(ev, web, self.status("T"), now, planned)
 
-            def own(key: tuple[str, str]) -> tuple[str, Status, bool] | None:
-                if key == ("label", LABEL):
-                    return "T", self.status("T"), elaborated(ev, self.status("T"), now)
-                return (key[1], standing[key[1]], elaborated(ev, standing[key[1]], now)) if key[0] == "node" else None
+            def refusal(at: Here) -> Any:
+                return lambda: attest_refusal(ev, web, at, now)
 
-            mine = target_need("T", self.status("T"), elaborated(ev, self.status("T"), now))
-            return ([mine] if mine else []) + needed(leaves, own, web.texts)
+            def own(key: tuple[str, str]) -> Any:
+                if key == ("label", LABEL):
+                    return "T", self.status("T"), elaborated(ev, self.status("T"), now), refusal(T)
+                if key[0] != "node":
+                    return None
+                found = standing[key[1]]
+                return key[1], found, elaborated(ev, found, now), refusal(Here("node", key[1]))
+
+            mine = target_need("T", self.status("T"), elaborated(ev, self.status("T"), now), refusal(T), web.texts)
+            return mine + [n for n in needed(leaves, own, web.texts) if n not in mine]
 
         self.found = plan(["T"], [], item, uses, before)
         return self.found.before
@@ -282,3 +293,91 @@ def test_what_the_plan_names_before_is_what_the_gate_asks_both_ways(seeds: range
             assert without.lean != "formalized" and left, (seed, rounds[last][skip[1]])
     # every kind of thing the random libraries can ask is asked somewhere
     assert {"missing", "not-read", "not-checked", "cite", "attest", "cycle"} <= set(seen), seen
+
+
+#: The person, and the agent that reads a stub, as the acts take them.
+PERSON = Who("person", "A. Author")
+READER = Who("agent", "Reader (Agent)")
+
+
+def _act(world: World, need: Need) -> None:
+    """The act an entry offered `now` names, through the function its endpoint calls: compare a node (`library-check`), attest a Lean (`formal-attest`), have an agent read a stub (its text written and recorded `digested`, as the node store's fill will); a node deleted is put back as the library's undo puts it."""
+    from loom.evidence import acts
+
+    if need.why == "missing":
+        world.write(world.nodes[need.key])
+        return
+    if need.why == "not-read":
+        # an agent reads it: the text written as the node store's fill writes it, and recorded through the one writer of these records
+        world.write(Node(**{**world.nodes[need.key].__dict__, "body": f"Text of {need.key}."}))
+        s = world.web().subject(Here("node", need.key))
+        assert s is not None, need
+        acts.digested(world.root, need.key, s.hash, READER, "read", acts.document_of(world.root, world.nodes[need.key]))
+        return
+    here = T if need.key == "T" else Here("node", need.key)
+    if need.why == "not-checked":
+        s = world.web().subject(here)
+        assert s is not None, need
+        acts.check(world.root, need.key, s.hash, PERSON)
+        return
+    assert need.why in ("attest", "attested-changed"), need
+    observation = world.status(need.key).lean_record
+    assert observation is not None, need
+    acts.attest(world.root, world.web(), here, observation, PERSON, lean_now=lambda r: True)
+
+
+def _as_made(world: World, need: Need, at: Path) -> None:
+    """`need`'s act on a copy of the quilt as the list was made, so each entry is tried on what the person saw, not on what another entry's act has made since."""
+    import copy
+    import shutil
+
+    shutil.copytree(world.root, at)
+    there = copy.copy(world)
+    there.root, there.nodes = at, dict(world.nodes)
+    try:
+        _act(there, need)
+    finally:
+        shutil.rmtree(at)
+
+
+def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]:
+    """The library made from `seed`, worked as the list says: each round, every entry offered `now` tried through its act on the quilt as the list was made, then all done in the panel's order, the agent's `after` work done when nothing is offered now. Each entry whose act loom refused, with why, and how many acts the order of one round alone made refused."""
+    from loom.evidence.acts import ActRefused
+
+    world, refused, ordered = World(root, seed), [], 0
+    for i in range(12):
+        named = world.plan()
+        now = [n for n in named if n.when == "now"]
+        if not now:
+            after = [n for n in named if n.when == "after" and n.why != "cycle"]
+            if not after:
+                break
+            for need in after:
+                world.do(need)
+            continue
+        for j, need in enumerate(now):
+            try:
+                _as_made(world, need, root.parent / f"{root.name}-{i}-{j}")
+            except ActRefused as exc:
+                refused.append((need, f"{exc.code}: {exc}"))
+        if refused:
+            break
+        for need in now:
+            try:
+                _act(world, need)
+            except ActRefused:
+                ordered += 1
+    return world, refused, ordered
+
+
+@pytest.mark.parametrize("seeds", [range(0, 150), range(150, 300)], ids=str)
+def test_every_entry_offered_now_is_an_act_loom_takes(seeds: range, tmp_path: Path) -> None:
+    """With the list empty exactly when the target reads formalized, this makes the list and the acts unable to disagree: what the list offers the person now, loom takes, on the quilt as the list was made."""
+    done = 0
+    for seed in seeds:
+        world, refused, _ = _offered(tmp_path / f"{seed}", seed)
+        assert refused == [], (seed, refused)
+        left, after = world.plan(), world.status("T")
+        assert (left == []) == (after.lean == "formalized"), (seed, left, after.waiting_on)
+        done += after.lean == "formalized"
+    assert done > len(seeds) // 2
