@@ -152,7 +152,7 @@ A class says what kind of problem it is: latex, a problem in a document's LaTeX,
 
 List every key with its computed state, cause if stale, and review facts; it exits 0 whatever it finds, and 2 only on an argument it refuses.
 
-Annotations on cited works are not on keys and appear in no row; `--reading` lists them by work, and `--json` always carries them under `reading`. While `loom serve` runs, a document it last compiled with errors or into no PDF is listed too, and `--json` carries how each of its compiles stands under `compiles`.
+Annotations on works are not on keys and appear in no row; `--reading` lists them by work, and `--json` always carries them under `reading`. While `loom serve` runs, a document it last compiled with errors or into no PDF is listed too, and `--json` carries how each of its compiles stands under `compiles`.
 
 | option | description |
 |---|---|
@@ -160,8 +160,6 @@ Annotations on cited works are not on keys and appear in no row; `--reading` lis
 | `--draft` | Keys never accepted. |
 | `--incomplete` | Keys marked \incomplete. |
 | `--loose` | Keys no live document reaches. |
-| `--unmatched-cites` | Located citations of a digested work that match no digest node. |
-| `--undigested` | Works cited with a locator and not digested. |
 | `--retired` | Keys accepted once and defined by no document now. |
 | `--master` `DOC` | Keys this document reaches. |
 | `--in-order` | With --master: the document's keys in the order it prints them, sections and an agent document's own among them, each with its state. |
@@ -169,8 +167,7 @@ Annotations on cited works are not on keys and appear in no row; `--reading` lis
 | `--type` `TYPE` | Keys carrying an annotation of this type, by id or name. |
 | `--status` | Keys carrying an annotation in this state. |
 | `--detached` | Keys whose annotations no longer find their quoted text. |
-| `--include-digests` | Also list the digest keys nothing in this quilt depends on; they are left out by default. |
-| `--reading` | List the annotations on cited works, by work; they are in no row and count toward nothing otherwise. |
+| `--reading` | List the annotations on works, by work; they are in no row and count toward nothing otherwise. |
 | `--explain` `KEY` | Why KEY is in its state, with the diff of what moved. |
 | `--json` | Print the report as one JSON object. |
 | `--session` | Log this call to the session. |
@@ -198,7 +195,7 @@ With --closure, a key is preceded by exactly the statements it depends on, in de
 
 `loom search [OPTIONS] QUERY`
 
-Find ids by id, alias, title, taxon, tag, or citekey; exact matches first.
+Find ids by id, alias, title, taxon or tag; exact matches first.
 
 A number as a reader sees it -- `Theorem 3.4`, `3.4`, `(3)` -- finds what each drafting document numbers so, the default document's first and marked; `--in DOC` asks one document only.
 
@@ -216,12 +213,12 @@ A number as a reader sees it -- `Theorem 3.4`, `3.4`, `(3)` -- finds what each d
 
 Print a markdown link to THING that the viewer can follow.
 
-THING is a node or any key in it, a document's path, an annotation id, a session id, a cited work's citekey or identifier, or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
+THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
 
 | option | description |
 |---|---|
 | `--at` | A place in THING: a key inside the document or node, a heading's id in a Markdown file or notebook, page=N in a PDF, L and a line number in a text file. |
-| `--page` | A page of a cited work, from 1. |
+| `--page` | A page of a work's PDF, from 1. |
 | `--quote` | Text on that page to find. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -233,14 +230,14 @@ Annotate, accept, keep or undo what changed, see what rests on what, and what is
 
 `loom annotate [OPTIONS] [TARGET] [MESSAGE]`
 
-Write an annotation on TARGET: a key, an equation's qualified key, a master path, a cited work, or a project PDF; a MESSAGE of `-` is read from stdin.
+Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, or a project PDF; a MESSAGE of `-` is read from stdin.
 
-An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. One on a cited work with no --page is on the whole work. One on a page of a PDF -- a cited work by citekey or identifier, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
+An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
 
 | option | description |
 |---|---|
 | `--quote` | Anchor to this exact text: once in a key's own text, or on the page of a cited work given by --page. |
-| `--page` `N` | Page N of a PDF: a cited work (TARGET a citekey or a work identifier) or a project PDF by its path; with --quote, --box or --stroke. |
+| `--page` `N` | Page N of a PDF: a work's (TARGET its reference, or the key its entry has) or a project PDF by its path; with --quote, --box or --stroke. |
 | `--box` `X0,Y0,X1,Y1` | Anchor to a rectangle on the page, in points with the origin at the top left; ';' separates several. With --edit, where a drawn one stands now. |
 | `--stroke` `X,Y,X,Y,…` | A line of ink or an arrow on the page, in points from its top left; repeat for more lines. With --edit, its lines now. |
 | `--mark` | Draw it on the PDF page with this tool: a pin or words on the page in the --box, a box or an oval round it, ink or an arrow along each --stroke. |
@@ -521,29 +518,17 @@ The papers you cite and the results taken from them.
 
 ### `loom library`
 
-`loom library [OPTIONS]`
+`loom library [OPTIONS] COMMAND [ARGS]...`
 
-`loom library [OPTIONS] [WORK | COMMAND [ARGS]...]`
-
-Run alone, `loom library` is a command; its subcommands follow its options.
-
-Report what the quilt's cited works need: from you, from an agent, and in review; `loom library WORK` reports one work.
-
-A WORK is a citekey, its identifier (`doi:…`, `arXiv:…`), a fragment of a citekey or of its author or title, or one of its result ids.
-
-| option | description |
-|---|---|
-| `--json` | Print the report as one JSON object. |
-| `--session` `SESSION` | Log this call to the session. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+The works this quilt holds: take PDFs, `.bib` files and LaTeX sources in.
 
 #### `loom library add`
 
 `loom library add [OPTIONS] FILE...`
 
-Take PDFs and LaTeX sources into the library, each added, already here, a question, or one that cannot be added.
+Take PDFs, `.bib` files and LaTeX sources into the library, each added, already here, a question, or one that cannot be added.
 
-A FILE is a PDF, a `.tex` file, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. A PDF that may be a work the library has (the identifier it states as its own is that work's, its whole title is set over that work's first author, a reference manager's file name says so, or the entry it makes of itself shares the work's identifier, or title and year) is filed nowhere: the question names the work, `--for WORK` files it there and `--new` keeps it as a work of its own. Any other PDF is kept as a work of its own, its entry made from what it shows and keyed as its author, title and year give it. With `--for`, every FILE is that work's on your word, and what a PDF shows to the contrary is reported and recorded. A LaTeX source is filed only with `--for`, and refused when it shows it is another work's unless `--force`. A work that holds a document gets the new one beside it as its version (`KEY-v2`), never over it, however like that document it looks. Only the same bytes given twice are already here. A PDF's page text is read at once.
+A FILE is a PDF, a `.bib`, a `.tex` file, an archive of a source, or a folder: each PDF in a folder is a document, and a folder holding no PDF is one LaTeX source. A document is offered as a work the library has only by an identifier it states (arXiv's stamp or an identifier set apart on a PDF's first page, or an arXiv number in its name), never by its title or byline: such a document is filed nowhere, the question names the work, `--for WORK` files it there and `--new` keeps it as a work of its own. Any other document is a work of its own, its entry looked up by the identifier it states where the network is allowed, else made from what it says of itself. With `--for`, every FILE is filed under that work (a reference, or the key its entry has, the entries the documents' bibliographies hold among them), refused where it states another work's identifier unless `--force`. Only the same bytes given twice are already here. A `.bib` adds each of its entries.
 
 | option | description |
 |---|---|
@@ -555,244 +540,6 @@ A FILE is a PDF, a `.tex` file, or a folder: each PDF in a folder is a document,
 | `--dry-run` | Say what would be added, asked and refused, and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library check`
-
-`loom library check [OPTIONS] [WORK...]`
-
-Check the library for what has gone wrong, each problem with its fix.
-
-Re-reads every verified result's anchor against the page or source it names; never re-judges a verified rendering, which a person judged once, and never re-checks extraction. Then: a stored PDF that does not show plainly it is its work, or shows it is another's, a digest with no results, a section map with far too few sections for its length, and entries or versions holding one document, once per work. Exit 1 when anything is wrong. Works nothing cites whose digests lint finds wrong are listed too, and do not fail it.
-
-| option | description |
-|---|---|
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
-
-#### `loom library discard`
-
-`loom library discard [OPTIONS] ID...`
-
-Discard a proposed result, with a reason.
-
-`loom library propose` refuses a discarded result and returns the reason, so the agent that proposed it learns why in the turn it fails. Nothing is deleted: the log keeps it and `loom library why` reports it.
-
-| option | description |
-|---|---|
-| `--why` | Why it should not stand; whatever proposes it again is shown this. |
-| `--as` `NAME` | Who is deciding, when the user config and git do not say. |
-| `--dry-run` | Check everything and say what would be recorded; write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library drop`
-
-`loom library drop [OPTIONS]`
-
-Remove recorded results: one work's or one session's proposals and extracted results, or every one still proposed.
-
-Dropping costs re-reading, never correctness. What you decided stays: a verified result keeps its record, which is what keeps its text through a later `update --redo`, and a discarded one keeps the reason the next proposer is told. The report says how many it kept.
-
-| option | description |
-|---|---|
-| `--work` `WORK` | Everything recorded for this work. |
-| `--session` `SESSION` | Everything proposed in this session. |
-| `--proposed` | Every result still proposed, in every work. |
-| `--yes` | Do not ask. |
-| `--dry-run` | Say what would be dropped; drop nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library ignore`
-
-`loom library ignore [OPTIONS] WORK`
-
-Stop loom asking for a work's document, or offering a stored document an entry.
-
-A work with no document is declared unreadable -- the Stacks Project is a living work with no fixed version -- so the lint stops asking for a PDF that does not exist. A work whose store holds a document is set aside: once your bibliography no longer names it, the store stops offering it an entry on every scan. WORK may also be a prefix of a stored document's hash, for one no entry names. Both are recorded in loom's own file, never in your .bib, and --undo withdraws whichever stands.
-
-| option | description |
-|---|---|
-| `--why` | Why loom should stop asking for it; with --undo, why that was wrong. |
-| `--undo` | Withdraw what stands, so the work is asked for or offered again. |
-| `--as` `NAME` | Who is deciding, when the user config and git do not say. |
-| `--dry-run` | Check everything and say what would be recorded; write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library import`
-
-`loom library import [OPTIONS] PATH`
-
-Copy a digest from another quilt into .loom/library/, rewriting its citekey and id prefix when --name renames it.
-
-It never overwrites a digest already there.
-
-| option | description |
-|---|---|
-| `--name` `CITEKEY` | File it under this citekey, rewriting its ids. |
-| `--dry-run` | Say what would be written; write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library locate`
-
-`loom library locate [OPTIONS] WORK TEXT`
-
-An agent's tool: print the region of WORK's page PAGE that TEXT occupies, so an anchor need not compute geometry.
-
-Token geometry is thirty times the size of plain page text, so it is produced for the one page asked about and kept there; nothing writes it in bulk. Where `loom serve` is running, an `open:` line follows with a link into the viewer **at the place** -- `?page=4&span=812-871` -- so that following it lights the quotation rather than leaving it to be found by eye.
-
-| option | description |
-|---|---|
-| `--page` | The page the text is on. |
-| `--json` | Print the anchor as JSON. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
-
-#### `loom library propose`
-
-`loom library propose [OPTIONS] WORK`
-
-An agent's tool: propose one result of WORK, its quotation checked against the page or source file it claims to come from.
-
-The only write an agent makes to the library's results. SOURCE-TEXT must appear on PAGE — whitespace, hyphenation across lines and ligatures are normalised, nothing else is — and on failure nothing is stored and the page's text is printed so the quotation can be corrected in the same turn. For a work with a LaTeX source, quote the source with --source-file instead: the mathematics is there, and in a PDF's text layer it is often control bytes. A proposal lands in `.loom/library/CITEKEY.proposed.tex`, which no bundle inputs, and waits there for the author to verify or discard it.
-
-| option | description |
-|---|---|
-| `--local` | The paper's own name for the result: thm-4.1, cor-2.3.1, eq-1, thm-star-2. |
-| `--page` | The page the statement is on, or 353-354 if it runs over. |
-| `--source-file` `FILE` | Quote the work's LaTeX source instead of a page: a file under the directory `loom library read WORK --where src` prints. |
-| `--source-text` | The paper's own words, verbatim; checked against the page or file. `-` reads stdin. |
-| `--statement` | The same result as LaTeX, in the paper's words only; the author verifies it. `-` reads stdin. |
-| `--taxon` | theorem, lemma, definition, equation, …; read off --local when omitted. |
-| `--number` | The paper's numbers when it states several results together: '3.2, 3.3'. |
-| `--level` | 1 is a main result. |
-| `--supersedes` `ID` | Re-propose something discarded, recording the chain. |
-| `--as` `NAME` | Who proposes it; an agent names itself, with Agent or AI in the name. |
-| `--session` `SESSION` | The session proposing this. |
-| `--dry-run` | Check the quotation and say what would be proposed, storing nothing. |
-| `--json` | Print the stored record as JSON. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library read`
-
-`loom library read [OPTIONS] WORK [PAGES]`
-
-Print a cited work's page text for PAGES (`12` or `10-14`), each page with its section, or without PAGES its overview.
-
-The page text is the sanctioned read: a quotation an agent proposes must come from it, because it is the text the anchor is checked against. The overview is a reading of the paper written with `loom write`, printed with the hash `--base` needs; with none, the digest's opening is printed instead, the paper's own first paragraphs, and the agent that reads the work through writes the overview. `--where` prints where loom keeps the work instead; nothing there is meant to be navigated by hand; `loom library add FILE` files a paper of the author's.
-
-| option | description |
-|---|---|
-| `--where` | Print where the work's directory, PDF, source or overview is kept, instead of reading it. |
-| `--json` | Print the pages, the overview or the location as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
-
-#### `loom library relate`
-
-`loom library relate [OPTIONS] FROM TO`
-
-Assert a typed relation between two results, FROM and TO, with a reason; with --undo LINK_ID, remove one.
-
-**Nobody verifies this and it says so.** A relation has no page span to check it against, so a verification step would be theatre; it is an assertion, attributed to whoever made it: `--as`, else you as the quilt's reviewer. Relations are never citable, never enter a closure, and are never written into a digest: they are navigation, not mathematics. `loom library why ID` lists a result's relations.
-
-| option | description |
-|---|---|
-| `--kind` | How FROM relates to TO; required unless --undo. |
-| `--why` | One or two sentences: what you read six months later, or why a relation is removed. |
-| `--undo` `LINK_ID` | Remove this relation instead; an agent removes only an agent's. |
-| `--as` `NAME` | Who asserts it; an agent names itself, with Agent or AI in the name. |
-| `--dry-run` | Check everything and say what would change, writing nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
-
-#### `loom library review`
-
-`loom library review [OPTIONS] [WORK]`
-
-List what waits for you to review: proposed results, one line each with its id.
-
-With WORK, only that work's proposals. Each line ends with the id that `loom library verify` and `loom library discard` take.
-
-| option | description |
-|---|---|
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
-
-#### `loom library search`
-
-`loom library search [OPTIONS] TEXT`
-
-Search the library's results for every word of TEXT, ignoring case, best match first; with --pages, its page text.
-
-A word in a result's locator, its local name or its work's title counts three, one in its statement one; a main result (level 1) and each citation of it in your documents count more. **Every answer says how much of the library it could search**, because a search over a partly digested corpus is a search over silence. Page text is mathematics after a text layer, so a page hit is a pointer and never a quotation: read the page with `loom library read`, and quote from that.
-
-| option | description |
-|---|---|
-| `--pages` | Search the page text of every mapped work, not the results digested from them. |
-| `--work` `WORK` | Search only this work; repeatable. |
-| `--limit` | Show at most this many hits; everything is still searched. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
-
-#### `loom library update`
-
-`loom library update [OPTIONS] [WORK]...`
-
-Make what a machine can about the cited works: gather the bibliography, look up, fetch, extract digests, map pages.
-
-Each step is a no-op where its work is done, so a second run does only what is new. WORK narrows every step to the works it names (a citekey, its identifier, a fragment of one or of an author or title, or a result id); naming works leaves gathering out, since it reads the whole bibliography. Looking up and fetching use the network only under `[library] online = true` or `--online`, and an agent only under the config's: it may not grant itself the network. Offline, every local step still runs. Progress shows on stderr.
-
-| option | description |
-|---|---|
-| `--only` | Run one step: gather (the bibliography, from the documents and the landmarks), resolve, fetch, extract or map. |
-| `--redo` | Do the steps again where they are done: ask the lookups again, re-extract, re-map; verified results are kept. |
-| `--online` | Let this run look identifiers up and fetch documents, without setting [library] online in config.toml. |
-| `--no-candidates` | Fetch only on identifiers an entry declares, never on a lookup's candidate. |
-| `--no-compile` | Extract without compiling each paper; its numbering is emulated, and the digest says so. |
-| `--dry-run` | Say what each step would act on, from what is on disk; no network, nothing written. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library verify`
-
-`loom library verify [OPTIONS] ID...`
-
-Record that a result's transcription is faithful.
-
-A result id promotes a proposal into the digest, or re-verifies one already there: the claim is that this copy is faithful to the paper, never that its mathematics holds, which is `loom accept`. --statement edits the rendering, never the quotation, so the anchor stays re-checkable and both parties are recorded.
-
-| option | description |
-|---|---|
-| `--statement` | Your own rendering, replacing the proposed one; one ID only. |
-| `--local` | The paper's own name for it, correcting the proposal's (cor-3.2.1); one ID only. |
-| `--taxon` | The environment, when --local does not imply it; one ID only. |
-| `--as` `NAME` | Who is deciding, when the user config and git do not say. |
-| `--yes` | Skip the question; you have read both texts. |
-| `--dry-run` | Check everything and say what would be recorded; write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom library why`
-
-`loom library why [OPTIONS] ID`
-
-Show where a result came from, what state it is in and who changed it, then its relations to other results.
-
-Provenance names every party, not just the first: a record that credits an agent with a sentence you wrote cannot be audited. A relation is somebody's reading, asserted and never checked.
-
-| option | description |
-|---|---|
-| `--depth` | Follow its relations this many hops out. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-| `--session` `SESSION` | Log this call to the session. |
 
 ## Agents
 
@@ -975,9 +722,9 @@ People's annotations and replies, whole, with the words they are on; what they r
 
 `loom write [OPTIONS] TARGET TEXT`
 
-Write a page: TARGET `state`, the quilt's research state, or a WORK, that work's overview; `-` reads TEXT from stdin.
+Write a page: TARGET `state`, the quilt's research state; `-` reads TEXT from stdin.
 
-A page is a reading the person edits directly and an agent writes here, never by hand; it says who wrote it, and it is never a source. Once the page exists, --base must be the hash it had when you read it -- `loom ai orient` prints the research state's, `loom library read WORK` an overview's -- so an edit you have not seen is never overwritten: a stale base is refused, with that edit shown. A link that names nothing the viewer shows is refused, as in a message. Every write is recorded in the history, with who made it.
+A page is a reading the person edits directly and an agent writes here, never by hand; it says who wrote it, and it is never a source. Once the page exists, --base must be the hash it had when you read it, which `loom ai orient` prints, so an edit you have not seen is never overwritten: a stale base is refused, with that edit shown. A link that names nothing the viewer shows is refused, as in a message. Every write is recorded in the history, with who made it.
 
 | option | description |
 |---|---|
@@ -1087,11 +834,11 @@ Set up the agent layer and read what an agent works from: its orientation, its d
 
 List annotations: id, target, type, status, author and the quoted text, every one unless --by, --target, --type or --status narrows it; `--json` carries each one whole.
 
-An agent re-reading its own annotations is the common case — a re-check resolves what is met and edits what still stands, and needs the ids to do it — so `--by` its own name lists them, with what the author decided on each result it proposed. The JSON form carries `message` too, so a re-check can tell what it already said without reading the log itself; `loom changes --by` lists the edits it suggested.
+An agent re-reading its own annotations is the common case — a re-check resolves what is met and edits what still stands, and needs the ids to do it — so `--by` its own name lists them. The JSON form carries `message` too, so a re-check can tell what it already said without reading the log itself; `loom changes --by` lists the edits it suggested.
 
 | option | description |
 |---|---|
-| `--by` `NAME` | Only annotations NAME wrote; with it, NAME's proposals too. |
+| `--by` `NAME` | Only annotations NAME wrote. |
 | `--target` `KEY` | Only annotations on KEY. |
 | `--type` `TYPE` | Only annotations of this type, by id or name. |
 | `--status` | Only annotations in this state. |
@@ -1236,7 +983,7 @@ Scan, derive, render, and publish .loom/cache/site/, what the viewer is served. 
 
 A whole build then removes what loom keeps for no purpose any more: from .loom/cache/ what this build does not name and nothing has written in the last hour, an agent's scratch fourteen days after its session last wrote, and a saved preview fourteen days after it was written; a build of --keys removes nothing.
 
-A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a digest, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
+A document is read from the HTML its compile made, and shows as its source until one has. Text no compile makes, a node no document reaches, a landmark, a comparison, is made by TeX as snippets. Rendering is cached per block by its inputs, which include loom's own version and, in a checkout, loom's code; --force renders everything regardless, and makes again every text TeX refused before. Only errors are listed; `loom lint` lists every diagnostic.
 
 | option | description |
 |---|---|
@@ -1254,6 +1001,8 @@ Serve the viewer for this quilt and keep it current: it republishes on every cha
 
 The viewer is at /, and what it reads at /build/. One server runs per quilt. At rest after a build, at most once an hour, it removes what loom keeps for no purpose any more, as a whole loom build does: from .loom/cache/ what its last build does not name and nothing has written in the last hour, expired scratch and old saved previews. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
 
+A quilt an earlier loom made is served waiting: the viewer offers to bring it forward, as loom upgrade does, and nothing is built until it has.
+
 | option | description |
 |---|---|
 | `--port` | Port to listen on; fails if busy. |
@@ -1268,7 +1017,7 @@ The viewer is at /, and what it reads at /build/. One server runs per quilt. At 
 
 Run latexmk from a master's own directory into its compile folder, .loom/cache/tex/<stem>-<hash>/ (default: the default master), or for a key.
 
-Compiling a key builds the document of its closure and runs latexmk on that, so `--with` previews a proposed diff and `--draft` a node that has no id yet: neither writes into the quilt, and a failure names the digests whose packages are missing. `--html` also makes a document's HTML as TeX makes it, which its fragments are cut from: the page, the fragment loom rebuilt from it, and how many of the document's nodes and blocks it places.
+Compiling a key builds the document of its closure and runs latexmk on that, so `--with` previews a proposed diff and `--draft` a node that has no id yet: neither writes into the quilt. `--html` also makes a document's HTML as TeX makes it, which its fragments are cut from: the page, the fragment loom rebuilt from it, and how many of the document's nodes and blocks it places.
 
 | option | description |
 |---|---|
@@ -1384,7 +1133,7 @@ Keep loom's own files current, and documents live.
 
 `loom upgrade [OPTIONS]`
 
-Refresh .loom/.gitignore, write .loom/records/annotation-types.toml where a quilt has none, and, where .loom/agents/instructions/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones.
+Bring a quilt an earlier loom made forward, its library carried into the node store; refresh .loom/.gitignore, write .loom/records/annotation-types.toml where a quilt has none, and, where .loom/agents/instructions/ exists, its orientation.md and README.md, unedited mode files, the permission and MCP client files and their lines in the root .gitignore; report edited ones.
 
 | option | description |
 |---|---|

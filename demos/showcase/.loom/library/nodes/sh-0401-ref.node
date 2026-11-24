@@ -1,0 +1,12 @@
++++
+schema = 1
+id = "sh-0401-ref"
+taxon = "reference"
++++
+@online{Stacks,
+  author = {The Invented Stacks Collective},
+  title = {The Invented Stacks Project},
+  year = {2026},
+  url = {https://example.invalid/stacks},
+  note = {A living work with no fixed version.},
+}

@@ -1,0 +1,12 @@
+{
+ "answer": {
+  "gen": 1789808400014,
+  "ok": true,
+  "result": "deleted Arden 2024",
+  "undo": "u-q2y9cq"
+ },
+ "endpoint": "library-delete",
+ "request": {
+  "ref": "sh-0402-ref"
+ }
+}

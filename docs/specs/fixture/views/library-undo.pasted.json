@@ -1,0 +1,12 @@
+{
+ "answer": {
+  "gen": 1789808400007,
+  "ok": true,
+  "result": "2311.04567 was taken out again"
+ },
+ "endpoint": "library-undo",
+ "request": {
+  "act": "x-zc6vb0",
+  "id": "t-3548c0d6cf799ebf"
+ }
+}

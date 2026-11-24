@@ -1,0 +1,37 @@
+{
+ "answer": {
+  "gen": 1789808400002,
+  "ok": true,
+  "result": "took in 1: 1 added",
+  "rows": [
+   {
+    "act": "x-v7d2da",
+    "authors": [
+     "Cortez"
+    ],
+    "found_by": "entry",
+    "id": "4dec5a3fd00923c6648ca551ead9c89e6bd113466e2728fc59606a4b65dd455b",
+    "identifier": null,
+    "item": 0,
+    "name": "cortez-survey.pdf",
+    "ref": "sh-0404-ref",
+    "short": "Cortez 2007",
+    "state": "added",
+    "tex": false,
+    "title": "Flows on infinite quivers: a survey",
+    "unconfirmed": false,
+    "under": true,
+    "year": "2007"
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "for": "sh-0404-ref",
+    "incoming": "4dec5a3fd00923c6648ca551ead9c89e6bd113466e2728fc59606a4b65dd455b"
+   }
+  ]
+ }
+}

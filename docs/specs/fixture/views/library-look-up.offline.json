@@ -1,0 +1,13 @@
+{
+ "answer": {
+  "error": {
+   "code": "offline",
+   "message": "a look-up needs the network, which this quilt has not allowed: allow it for this one look-up with online true, or save library.online"
+  },
+  "status": 409
+ },
+ "endpoint": "library-look-up",
+ "request": {
+  "ref": "sh-0405-ref"
+ }
+}

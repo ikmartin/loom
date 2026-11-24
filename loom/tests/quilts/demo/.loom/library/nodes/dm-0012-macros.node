@@ -1,0 +1,8 @@
++++
+schema = 1
+id = "dm-0012-macros"
+taxon = "macros"
++++
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1.15in]{geometry}
+\DeclareMathOperator{\Fix}{Fix}
