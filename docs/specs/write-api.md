@@ -231,7 +231,7 @@ The manifest's `arriving`, present only while something waits, lists the waiting
 
 ## 7. The home server
 
-**[decided]** `loom app` serves loom's home page, which opens, creates and lists a person's quilts, on port 8790, or on a free port when that one is held; it records its port, pid and address in `app/serve.json` in loom's folder for the machine. It holds no quilt. It serves the viewer it started with, as a quilt's server does, and none of a quilt's files: `/build/`, `/digests/storage/` and `/_files/` answer 404. Its guards are §3's: a request must name its own host and port, `GET /_api` and every write are refused to a page a browser says came from elsewhere, and every write carries the token and is JSON.
+**[decided]** `loom app` serves loom's home page, which opens, creates and lists a person's quilts, on port 8790, or on a free port when that one is held; it records its port, pid and address in `app/home.json` in loom's folder for the machine. It holds no quilt. It serves the viewer it started with, as a quilt's server does, and none of a quilt's files: `/build/`, `/digests/storage/` and `/_files/` answer 404. Its guards are §3's: a request must name its own host and port, `GET /_api` and every write are refused to a page a browser says came from elsewhere, and every write carries the token and is JSON.
 
 **[decided]** `GET /_api` returns `{"home": true, "token": "...", "capabilities": [...], "viewer": "...", "stale": false}`; `home` is how a viewer knows to draw the home page and not a quilt.
 

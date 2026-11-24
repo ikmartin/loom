@@ -41,7 +41,7 @@ def _path() -> Path:
 
 def address() -> Path:
     """Where the running home records its port, pid and address."""
-    return folder() / "serve.json"
+    return folder() / "home.json"
 
 
 def home_url() -> str:
