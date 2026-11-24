@@ -115,3 +115,22 @@ def test_every_endpoint_of_the_home_has_a_row_in_the_spec() -> None:
     spec = (Path(__file__).resolve().parents[4] / "docs" / "specs" / "write-api.md").read_text(encoding="utf-8")
     section = spec.split("## 7. The home server", 1)[1]
     assert sorted(re.findall(r"^\| `(quilt-[\w-]+)` \|", section, re.M)) == sorted(server.HANDLERS)
+
+
+def test_repair_tex_runs_as_a_job_the_list_follows(home: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom.tex import private
+
+    steps: list[str] = []
+
+    def repair(*, say: object) -> None:
+        assert callable(say)
+        say("fetching TeX")
+        steps.append("ran")
+
+    monkeypatch.setattr(private, "repair", repair)
+    job = call(home, "quilt-repair")[1]["job"]
+    until(lambda: call(home, "quilt-list")[1]["jobs"][0]["state"] == "done", "Repair TeX")  # type: ignore[index]
+    done = call(home, "quilt-list")[1]["jobs"][0]  # type: ignore[index]
+    assert done["job"] == job and done["kind"] == "repair" and done["step"] == "fetching TeX"
+    assert done["tex"] == private.active(year=False).kind
+    assert steps == ["ran"]

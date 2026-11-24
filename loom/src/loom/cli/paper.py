@@ -36,6 +36,10 @@ from loom.sync import copy_ignore
 from loom.tex.identity import IdentityResult, identity_test
 
 
+class Differs(ContentError):
+    """The identity test failed: the drafted document does not typeset as the paper did, and nothing was written."""
+
+
 def identity_said(ident: IdentityResult | None, after: str, before: str) -> str:
     """The identity test's outcome in a clause: `X typesets as Y`, or why it was not compared, or that it differs."""
     if ident is None:
@@ -373,7 +377,7 @@ def run_import(
                 diffs = "\n".join(
                     f"  {i.text}" + (f"  {i.key}" if i.key else "") for i in identity_group(ident)[0].items
                 )
-                raise ContentError(
+                raise Differs(
                     "the drafted document does not typeset as the original, so nothing was written. Pass --no-check to write it anyway.\n"
                     + diffs
                 )

@@ -27,6 +27,8 @@ from loom.render.serve import BUILD_URL, STORE_URL, HeldBundle, LoomHandler, cod
 
 #: The largest JSON body the home reads; its writes are a few fields each.
 MAX_BODY = 1024 * 1024
+#: How many finished and running jobs `quilt-list` keeps.
+KEPT_JOBS = 20
 
 
 def choose_folder(prompt: str) -> Path | None:
@@ -154,6 +156,44 @@ def _check(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     return {"doctor": report, "log": log}
 
 
+def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
+    """`quilt-create`: a new quilt named `name` in `place` (default `~/Quilts`), from the paper in `drop` when one is given, made as a job; or, when the drop holds several files a paper could be typeset from and `main` does not say which, the question."""
+    from loom.app import create
+
+    name, place, drop, main = (body.get(k) for k in ("name", "place", "drop", "main"))
+    if not isinstance(name, str) or not all(v is None or isinstance(v, str) for v in (place, drop, main)):
+        raise ApiError("bad-field", "name, and place, drop and main where given, are strings")
+    where = create.target(name, place)
+    paper = create.paper(drop, main) if drop else None
+    if isinstance(paper, list):
+        return {"question": {"choices": paper}}
+
+    def work(step: Callable[[str], None]) -> dict[str, Any]:
+        done = create.make(where, paper, step, home.supervisor.open)
+        if drop:
+            create.let_go(drop)
+        return done
+
+    return {"job": home.start_job("create", work)}
+
+
+def _receive_json(home: Home, body: dict[str, Any]) -> dict[str, Any]:
+    """`quilt-receive` is answered from the file's bytes (`HomeHandler._take`), never from JSON."""
+    raise ApiError("not-a-stream", "a dropped file is sent as its bytes, application/octet-stream")
+
+
+def _repair(home: Home, body: dict[str, Any]) -> dict[str, Any]:
+    """`quilt-repair`: Repair TeX as a job, installing loom's own TeX or putting back what it lacks; nothing outside loom's folder is touched."""
+    from loom.tex import private
+
+    def work(step: Callable[[str], None]) -> dict[str, Any]:
+        private.repair(say=step)
+        private.activate()
+        return {"tex": private.active(year=False).kind}
+
+    return {"job": home.start_job("repair", work)}
+
+
 #: The home's endpoints, each given the home and the request's body.
 HANDLERS: dict[str, Callable[[Home, dict[str, Any]], dict[str, Any]]] = {
     "quilt-list": _list,
@@ -163,6 +203,9 @@ HANDLERS: dict[str, Callable[[Home, dict[str, Any]], dict[str, Any]]] = {
     "quilt-choose": _choose,
     "quilt-name": _person,
     "quilt-check": _check,
+    "quilt-receive": _receive_json,
+    "quilt-create": _create,
+    "quilt-repair": _repair,
 }
 
 
@@ -201,6 +244,10 @@ class HomeHandler(LoomHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        kind = (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        if path == "/_api/quilt-receive" and kind == "application/octet-stream":
+            self._take()
+            return
         handler = HANDLERS.get(path.removeprefix("/_api/")) if path.startswith("/_api/") else None
         if handler is None:
             self._json(
@@ -233,6 +280,31 @@ class HomeHandler(LoomHandler):
         except Exception as exc:  # noqa: BLE001
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": {"code": "failed", "message": str(exc)}})
 
+    def _take(self) -> None:
+        """`quilt-receive`: one dropped file's bytes, streamed into its drop (`create.receive`); its path and drop in the query, the token in its header, and from this server's own pages only."""
+        from urllib.parse import parse_qs, urlsplit
+
+        from loom.app.create import MAX_DROP, receive
+
+        elsewhere = from_elsewhere(self)
+        if elsewhere or self.headers.get("X-Loom-Token") != self.token:
+            self._json(HTTPStatus.FORBIDDEN, {"error": {"code": "refused", "message": elsewhere or "no valid token"}})
+            return
+        try:
+            length = int(self.headers["Content-Length"])
+        except (KeyError, TypeError, ValueError):
+            self._json(HTTPStatus.LENGTH_REQUIRED, {"error": {"code": "length-required", "message": "no length"}})
+            return
+        query = parse_qs(urlsplit(self.path).query)
+        drop = query["drop"][0] if query.get("drop") else None
+        try:
+            self._json(HTTPStatus.OK, receive(drop, (query.get("path") or [""])[0], self.rfile, length))
+        except ApiError as exc:
+            if 0 < length <= MAX_DROP:
+                while length > 0 and (chunk := self.rfile.read(min(length, 1 << 20))):
+                    length -= len(chunk)  # read to its end, so the browser hears the refusal
+            self._json(exc.status, exc.answer())
+
 
 class Home:
     """The home server.
@@ -256,13 +328,39 @@ class Home:
         self.httpd: ThreadingHTTPServer | None = None
         self.held: HeldBundle | None = None
         self.stopping = threading.Event()
+        self.jobs: dict[str, dict[str, Any]] = {}
 
     def jobs_listing(self) -> list[dict[str, Any]]:
         """The jobs running or done, newest first."""
-        return []
+        return [dict(job) for job in reversed(self.jobs.values())]
+
+    def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]]) -> str:
+        """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`."""
+        key = secrets.token_hex(6)
+        job: dict[str, Any] = {"job": key, "kind": kind, "state": "running", "step": ""}
+        self.jobs[key] = job
+        while len(self.jobs) > KEPT_JOBS:
+            self.jobs.pop(next(iter(self.jobs)))
+
+        def step(said: str) -> None:
+            job["step"] = said
+
+        def go() -> None:
+            try:
+                job.update(work(step), state="done")
+            except ApiError as exc:
+                job.update(state="failed", why=exc.code, said=exc.message)
+            except Exception as exc:  # noqa: BLE001
+                job.update(state="failed", why="failed", said=str(exc) or type(exc).__name__)
+
+        threading.Thread(target=go, name=f"loom-home-{kind}", daemon=True).start()
+        return key
 
     def listen(self) -> None:
         """Bind the port, record the home's address in loom's folder for the machine, and start answering."""
+        from loom.app.create import sweep
+
+        sweep()
         self.held = HeldBundle(self.bundle)
         handler = type(
             "Handler",
