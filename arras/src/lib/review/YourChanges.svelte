@@ -228,7 +228,7 @@
 {#snippet bar()}
 	<ActionBar said={said?.at === '*' ? said.text : ''} refused={said?.refused} testid="review-bar">
 		{#snippet lead()}
-			{#if draft && part === 'accept'}{#if doc}<strong>{file}</strong>{/if}{:else if part !== 'changes'}<span class="muted" data-testid="review-summary">{[some(changedCount, 'changed since you accepted'), some(takenCount, 'taken in'), part ? '' : some(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || 'Nothing waits'}</span>{/if}
+			{#if draft && part === 'accept'}{#if doc}<strong>{file}</strong>{/if}{:else if part !== 'changes'}<span class="muted" data-testid="review-summary">{[some(changedCount, 'changed since you accepted'), some(takenCount, 'taken in'), part ? '' : some(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || (part ? '' : 'Nothing waits')}</span>{/if}
 		{/snippet}
 		{#snippet actions()}
 			<!-- a keep or a discard, here or in a document, is undone as the document's toolbar undoes it -->
