@@ -464,9 +464,9 @@ Every write the views make, in one place. "Built" marks one that exists today. T
 | `library-delete` | `{ref}` | `{gen, undo}` | deletes the work as one act, never refused (§3.1) |
 | `library-restore` | `{undo}` | `{gen, ref}` | puts back what one delete took; `changed` (409) when something has since taken its place |
 | `library-digest` | `{refs, scope, chosen?}` | `{gen, made, tasks, job?}` | §3.2; `no-document` (409) |
-| `library-check` | `{node, hash}` | `{gen}` | the person's record that the transcription with that hash matches its paper; `changed` (409) |
-| `library-correct` | `{node, hash, body}` | `{gen, hash}` | the person's correction of a node, checked at once (Open 17); refused with the checks' diagnostics (400), `changed` (409) |
-| `library-correction-take`, `library-correction-decline` | `{correction}` | `{gen}` | takes or declines a correction an agent proposed (Open 23) |
+| `library-check` | `{node, hash}` | `{gen, result}` | built; the person's record that the transcription with that hash matches its paper; `changed`, `stub`, `no-document` (409) |
+| `library-correct` | `{node, hash, body}` | `{gen, result, hash}` | built; the person's correction of a node, checked at once (Open 17); refused with the checks' diagnostics (400), `changed` (409) |
+| `library-correction-take`, `library-correction-decline` | `{correction}` | `{gen, result}` | built; takes or declines a correction an agent proposed (Open 23); `changed`, `closed` (409) |
 | `library-mention` | `{citation}` | `{gen}` | remembers a citation as a mention (Open 22) |
 | `review-answer` | `{question, choice?, text?}` | `{}` | answers an agent's question, `choice` counted from 0; `evidence.md` §4.2's `answered`, §7; `closed` (409) when answered or withdrawn already |
 | `review-task` | `{kind, on, text?, docs?}` | `{task}` | asks an agent (§4.3, `agents`): `read`, `digest`, `ask`, `correct`, `restate`, `which-result`, `on` holding the place and what the kind needs; an `asked` line of the evidence lane's log (`evidence.md` §4.1, §7), whose `by`, `id`, `at` and `to` loom writes; `bad-field` (400) for a `docs` path not one of the person's drafts |
