@@ -118,7 +118,7 @@ def test_what_a_macros_body_should_not_hold_is_an_item_of_its_own() -> None:
     assert len(items) == 4
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- the commands a body points with, read or refused, and what it does not read ---------------------------------------
 
 
 def test_cleveref_s_varioref_s_and_hyperref_s_commands_are_read() -> None:
@@ -187,3 +187,21 @@ def test_an_entry_s_abbreviations_are_found_months_apart() -> None:
     assert found is not None and found.bare == ("jex", "x")
     clean = entry_of("@article{K1, title = {A = B, # C}, year = {2019}}\n")
     assert clean is not None and clean.bare == ()
+
+
+def test_a_work_s_own_commands_that_point_are_read_from_its_macros() -> None:
+    from loom.library.body import wrapped, wrappers
+
+    given = wrappers(
+        "\\newcommand{\\eq}[1]{(\\ref{#1})}\n\\newcommand\\Lem[1]{Lemma~\\ref{lem:#1}}\n\\newcommand{\\cf}[2][see]{#1 \\cite{#2}}\n"
+        "\\def\\thm#1{Theorem \\ref{#1}}\n\\newcommand{\\R}{\\mathbb{R}}\n\\renewcommand{\\ref}[1]{x}\n"
+    )
+    assert sorted(given) == ["Lem", "R", "cf", "eq", "thm"], "every command it defines; never one loom reads already"
+    assert given["R"].uses == () and given["eq"].uses == (("ref", "#1"),)
+    said = [
+        (p.via, p.command, p.target)
+        for p in wrapped("\\eq{a} \\Lem{b} \\cf{C1,C2} \\cf[cf.]{C3} \\thm{d} \\R % \\eq{e}\n", given)
+    ]
+    assert said == [
+        ("eq", "ref", "a"), ("Lem", "ref", "lem:b"), ("cf", "cite", "C1"), ("cf", "cite", "C2"), ("cf", "cite", "C3"), ("thm", "ref", "d"),
+    ]  # fmt: skip

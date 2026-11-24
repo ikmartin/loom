@@ -58,8 +58,8 @@ test('an agent document against its source: − on the source, + on the copy, am
 	// sy-0202 is gone from the copy: marked on the source, a wedge in the copy where it stood
 	await expect(left.locator('[data-pair="sy-0202"]')).toContainText('removed in aidoc.tex');
 	await expect(right.locator('.compare-gutter .gw.del[data-wedge="sy-0202"]')).toHaveCount(1);
-	// sy-999C is new, and sy-000A moved unchanged
-	await expect(right.locator('[data-pair="sy-999C"]')).toContainText('new');
+	// sy-999F is new, and sy-000A moved unchanged
+	await expect(right.locator('[data-pair="sy-999F"]')).toContainText('new');
 	await expect(right.locator('[data-pair="sy-000A"].compare-moved')).toContainText('moved from');
 	await expect(left.locator('[data-pair="sy-000A"]')).toContainText('moved in aidoc.tex');
 });

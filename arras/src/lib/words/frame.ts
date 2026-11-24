@@ -51,7 +51,7 @@ export const frame = {
 		/** The close button on the column's message. */
 		dismiss: 'Dismiss',
 		/** The column's message when an undo failed, with the publisher's reason. */
-		undoFailed: (why: string) => (why ? `It could not be undone: ${why}` : 'It could not be undone.')
+		undoFailed: (why: string) => (why ? `It could not be undone. ${why}` : 'It could not be undone.')
 	},
 	legend: {
 		/** The quiet link in the column's foot that opens the legend of the marks. */
@@ -80,6 +80,71 @@ export const frame = {
 		assumed: 'assumed in Lean',
 		/** A result's Lean mark, an outlined diamond. */
 		not: 'not formalized'
+	},
+	errors: {
+		/** Where the publisher does not serve what was asked of it yet. */
+		notServed: 'This loom does not serve that yet.',
+		/** Where the publisher could not be reached. */
+		unreachable: 'Loom could not be reached.',
+		/** Where the publisher answered with no reason a person can read, or a refusal this viewer has no sentence for. */
+		failed: 'Loom could not do that.',
+		/** An annotation refused while loom knows no name to write it under. */
+		noName: 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.'
+	},
+	/** What a refusal of loom's says, by its code: never loom's own message, which may name a setting, a field or an id. A code with none here says `errors.failed`. */
+	refused: {
+		'author-only': 'Only a person can do this; loom does not take it from an agent.',
+		'bad-entry': 'That is not a BibTeX entry loom can keep for this work.',
+		changed: 'It has changed since, so loom left it as it is.',
+		closed: 'That has been answered already.',
+		'compile-failed': 'The document did not compile, so nothing was changed.',
+		'cut-short': 'The file arrived cut short. Drop it again.',
+		'format-unknown': 'Loom does not know this kind of file.',
+		'has-results': 'Results have been read from this document, so it stays with its work. Delete the work instead.',
+		'key-taken': 'Another work in the library already has that key.',
+		'network-unasked': 'Loom has not been told whether it may look papers up online.',
+		'no-document': 'This work holds no document.',
+		'no-identifier': 'Its entry gives no DOI, arXiv number or zbMATH number to look it up by.',
+		'no-reviewer': 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.',
+		'no-space': 'There is not enough room on this computer for the file.',
+		'no-such-incoming': 'That file is no longer waiting to be taken in. Drop it again.',
+		'no-such-intake': 'There is nothing of that drop left to undo.',
+		'no-such-question': 'That question has been answered already.',
+		'no-such-ref': 'That work is no longer in the library.',
+		'no-such-result': 'That result is no longer in your drafts.',
+		'no-such-row': 'That no longer waits for you.',
+		'no-such-task': 'That task no longer waits for an agent.',
+		'no-such-undo': 'There is nothing left to undo.',
+		'no-such-work': 'That work is no longer in the library.',
+		'not-a-candidate': 'That is not one of the works it might be.',
+		'not-a-document': 'Loom takes PDFs, TeX sources and .bib files, and this is none of them.',
+		'not-found': 'Those words are not in the paper.',
+		'not-last': 'Something done after it has to be undone first.',
+		'not-new': 'Results have been read from it since, so it stays. Delete the work instead.',
+		'not-readable': 'Loom holds no copy of this paper it can read on this computer.',
+		'not-unresolved': 'That is settled already.',
+		offline: 'This quilt keeps loom offline, so nothing was looked up.',
+		'review-unavailable': 'Review could not be read just now.',
+		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
+		unreachable: 'The service that looks papers up could not be reached. Try again later.'
+	} as Record<string, string>,
+	/** A quilt an earlier loom made, while the publisher waits on it: the one sentence, its button, and what is said while it runs and if it fails. */
+	upgrade: {
+		said: 'This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.',
+		button: 'upgrade the quilt',
+		running: 'Upgrading the quilt and carrying its papers over…',
+		/** Said after an upgrade that could not carry everything; the button then opens the quilt. */
+		problems: (n: number) => `The quilt is upgraded, but ${n === 1 ? 'one thing' : `${n} things`} could not be carried over.`,
+		open: 'open the quilt',
+		/** Why an upgrade did not happen, by the publisher's refusal; the button stays, to try again. */
+		failed: (code: string) =>
+			code === 'author-only'
+				? "Only the quilt's author can upgrade it."
+				: code === 'format-unknown'
+					? 'This quilt was made by a version of loom this one cannot upgrade from.'
+					: code === 'unreachable'
+						? 'Loom could not be reached, so the quilt was not upgraded.'
+						: 'The upgrade did not finish; try it again.'
 	},
 	page: {
 		/** The heading of the page shown when the manifest could not be read. */

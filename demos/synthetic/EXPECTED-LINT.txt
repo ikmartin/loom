@@ -8,10 +8,8 @@ info loom:previous-key-match model
 info loom:retired-ledger-key model
 info loom:retired-ledger-key model
 info loom:see-redundant model
-info loom:undigested-citekey internal
 info loom:unlabelled-node model
 info loom:unlabelled-node model
-info loom:unresolved-work internal
 info loom:uses-missing model
 info loom:uses-missing model
 info loom:uses-missing model
@@ -39,9 +37,6 @@ warning loom:needs-classification model
 warning loom:needs-classification model
 warning loom:needs-classification model
 warning loom:needs-classification model
-warning loom:no-readable-copy internal
 warning loom:taxon-conflict model
 warning loom:unknown-directive model
 warning loom:unknown-directive model
-warning loom:unmatched-postnote internal
-warning loom:unmatched-postnote internal

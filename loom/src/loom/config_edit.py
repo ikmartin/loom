@@ -31,7 +31,6 @@ EDITABLE = (
     "quilt.main",
     "quilt.home",
     "library.online",
-    "library.contact",
     "lint.disable",
     "agents.deny",
     "review.track_edits",
@@ -311,7 +310,7 @@ def check(
     Returns
     -------
     str, bool, list of str, or None
-        The value to write; None removes the key, which an empty `main`, `home` or `contact` does.
+        The value to write; None removes the key, which an empty `main` or `home` does.
     """
     from loom.agents import compile_pattern
     from loom.scan.diagnostics import can_disable
@@ -348,8 +347,6 @@ def check(
         if not isinstance(value, bool):
             raise ValueError("must be true or false")
         return value
-    if key == "library.contact":
-        return _text(value) or None
     if key == "lint.disable":
         codes = _texts(value)
         for code in codes:
@@ -457,7 +454,7 @@ def published(result: ScanResult) -> dict[str, Any]:
             "history": cfg.history,
             "research_state": cfg.research_state,
         },
-        "library": {"online": cfg.online, "contact": cfg.contact},
+        "library": {"online": cfg.online},
         "lint": {"disable": list(cfg.lint_disable), "codes": sorted(c for c in LOOM if can_disable(c))},
         "agents": {
             "deny": list(cfg.agents_deny),

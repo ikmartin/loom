@@ -1,0 +1,15 @@
+{
+ "answer": {
+  "gen": 1789808400000,
+  "incoming": "cfe8c29f7460d429b515b44414e69d565ef9eb84195699d4fd63b82737d318aa",
+  "name": "2209.01234v2.pdf",
+  "ok": true,
+  "result": "received 2209.01234v2.pdf",
+  "size": 344
+ },
+ "endpoint": "library-receive",
+ "request": {
+  "name": "2209.01234v2.pdf",
+  "size": 344
+ }
+}

@@ -16,6 +16,8 @@
 	import { ui } from '$lib/ui.svelte';
 	import { can } from '$lib/write';
 	import { settledIn } from '$lib/annotations';
+	import { leanMarks } from '$lib/views/docs/lean.svelte';
+	import { docs as docsWords } from '$lib/words/docs';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
@@ -67,6 +69,10 @@
 					testid="toggle-settled"
 					onclick={() => (ui.showSettled = !ui.showSettled)}
 				/>
+				<hr />
+			{/if}
+			{#if master && leanMarks.byDoc.get(master.path)?.on}
+				<ToolbarItem label={docsWords.leanMarks.toggle} name={docsWords.leanMarks.toggle} checked={leanMarks.shown} testid="toggle-lean-marks" onclick={() => (leanMarks.shown = !leanMarks.shown)} />
 				<hr />
 			{/if}
 			{@render viewPdf()}

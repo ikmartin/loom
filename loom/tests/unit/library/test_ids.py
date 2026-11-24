@@ -114,3 +114,11 @@ def test_numbers_run_out_loudly() -> None:
         mint_stem("tq", ["tq-ZZZZ"])
     with pytest.raises(ValueError, match="every proof number"):
         mint_proof("tq-00K3", ["tq-00K3-proofZZ"])
+
+
+def test_a_git_pattern_escapes_only_what_an_extended_pattern_reads() -> None:
+    """N-28: `re.escape` writes `\\-`, which POSIX leaves undefined in `git grep -E`; an id's hyphen needs no escape."""
+    from loom.scan.alloc import git_escape
+
+    assert git_escape("tq-00K3") == "tq-00K3"
+    assert git_escape("a.b+c(d)") == "a\\.b\\+c\\(d\\)"

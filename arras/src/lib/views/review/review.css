@@ -1,0 +1,471 @@
+/* Review's look, as round six draws it (`docs/design/mockups/library-round-6/`, screens 4 to 12): the list's groups and rows, a row's body, and its buttons. Everything is under `.rvw`, Review's root. */
+
+.rvw {
+	flex: 1;
+	min-width: 0;
+	height: 100vh;
+	overflow: hidden;
+	display: flex;
+	flex-direction: column;
+	background: var(--paper);
+	font-size: 13px;
+	color: var(--ink);
+}
+.rvw .list {
+	padding: 18px 24px 60px;
+}
+.rvw .rg {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-top: 14px;
+	padding: 2px 0;
+	border-bottom: 1px solid var(--rule);
+	font-size: 11.5px;
+	color: var(--ink-faint);
+}
+.rvw .rg:first-child {
+	margin-top: 0;
+}
+.rvw .rg .n {
+	margin-left: 6px;
+}
+.rvw .rg .act {
+	margin-left: auto;
+}
+.rvw .rg-rule {
+	height: 1px;
+	margin: 22px 0 0;
+	background: var(--rule-strong);
+}
+.rvw .rr {
+	border-bottom: 1px solid var(--rule);
+}
+.rvw .rr-h {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 30px;
+	padding: 0 6px 0 4px;
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	background: none;
+	border: 0;
+}
+.rvw button.rr-h {
+	cursor: pointer;
+}
+.rvw button.rr-h:hover,
+.rvw .rr.open > .rr-h {
+	background: var(--ann-neutral-wash);
+}
+.rvw .slot {
+	flex: none;
+	width: 18px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.rvw .tx {
+	flex: 1;
+	min-width: 0;
+	margin-left: 14px;
+	padding: 5px 0;
+	line-height: 1.4;
+}
+.rvw .who {
+	color: var(--agent);
+}
+.rvw .meta {
+	flex: none;
+	margin-left: 14px;
+	max-width: 45%;
+	font-size: 11.5px;
+	color: var(--ink-faint);
+	text-align: right;
+}
+.rvw .meta.problem {
+	color: var(--state-incomplete);
+}
+.rvw .chev {
+	flex: none;
+	width: 28px;
+	height: 28px;
+	margin-left: 4px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	color: var(--ink-soft);
+}
+.rvw .rr-b {
+	padding: 8px 34px 16px 36px;
+}
+.rvw .fold {
+	width: 28px;
+	height: 28px;
+	margin-left: -6px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: 0;
+	border: 0;
+	border-radius: 6px;
+	background: none;
+	color: var(--ink-soft);
+	cursor: pointer;
+}
+.rvw .fold:hover {
+	background: var(--ann-neutral-wash);
+}
+.rvw .answers {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.rvw .answers + .answers {
+	margin-top: 10px;
+}
+.rvw .btn {
+	font: inherit;
+	font-size: 13px;
+	line-height: 1.3;
+	padding: 4px 11px;
+	border-radius: 7px;
+	border: 1px solid var(--rule);
+	background: var(--sheet);
+	color: var(--ink);
+	cursor: pointer;
+	white-space: nowrap;
+}
+.rvw .btn:hover:not(:disabled) {
+	background: var(--link-wash);
+}
+.rvw .btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+.rvw .field {
+	width: 460px;
+	max-width: 100%;
+	font: inherit;
+	padding: 5px 10px;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	background: var(--sheet);
+	color: var(--ink);
+}
+.rvw .note {
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: var(--ink-faint);
+}
+.rvw .empty {
+	padding: 14px 6px;
+	color: var(--ink-faint);
+}
+.rvw .linkish {
+	font: inherit;
+	font-size: 12px;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--link);
+	cursor: pointer;
+}
+.rvw .hov {
+	visibility: hidden;
+	margin-left: 10px;
+	color: var(--ink-faint);
+}
+.rvw .rr:hover .hov,
+.rvw .hov:focus-visible {
+	visibility: visible;
+}
+.rvw .subtree {
+	margin: -8px 0 0 34px;
+	border-left: 1px solid var(--rule-strong);
+}
+.rvw .sr {
+	border-bottom: 1px solid var(--rule);
+}
+.rvw .sr:last-child {
+	border-bottom: 0;
+}
+.rvw .sr-h {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 28px;
+	padding: 0 6px 0 4px;
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	background: none;
+	border: 0;
+	cursor: pointer;
+}
+.rvw .sr-h:hover {
+	background: var(--ann-neutral-wash);
+}
+.rvw .sr.open > .sr-h {
+	background: var(--link-wash);
+}
+.rvw .sr-h .tl {
+	color: var(--ink-soft);
+}
+.rvw .sr-b {
+	padding: 10px 6px 16px 22px;
+}
+.rvw .cmp {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 24px;
+	align-items: start;
+}
+.rvw .note.how.agent {
+	color: var(--agent);
+}
+.rvw .nh {
+	display: flex;
+	align-items: baseline;
+	gap: 10px;
+	margin-bottom: 10px;
+}
+.rvw .nh .name {
+	flex: 1;
+	font-family: var(--font-text, serif);
+	font-size: 17px;
+}
+.rvw .nh .tl {
+	margin-left: 0.3em;
+	color: var(--ink-faint);
+}
+.rvw .seg {
+	display: inline-flex;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	overflow: hidden;
+	background: var(--sheet);
+}
+.rvw .seg button {
+	font: inherit;
+	border: 0;
+	background: none;
+	padding: 1px 9px;
+	font-size: 11px;
+	color: var(--ink-faint);
+	cursor: pointer;
+}
+.rvw .seg button + button {
+	border-left: 1px solid var(--rule);
+}
+.rvw .seg button.on {
+	background: var(--leaf);
+	color: var(--ink);
+	font-weight: 500;
+}
+.rvw .stmt {
+	margin: 0 0 14px;
+	padding-left: 12px;
+	border-left: 2px solid var(--ink-soft);
+	font-family: var(--font-text, serif);
+	font-size: 15.5px;
+	line-height: 1.55;
+}
+.rvw .ask {
+	margin: 0 0 8px;
+}
+.rvw .rg .btn.act,
+.rvw .rg.head .btn {
+	margin-left: auto;
+	padding: 2px 10px;
+}
+.rvw .rg.head {
+	font-size: 12px;
+}
+.rvw .sr-h.static {
+	cursor: default;
+}
+.rvw .sr-h.static:hover {
+	background: none;
+}
+.rvw .quiet {
+	margin-left: 10px;
+	font-size: 11.5px;
+	color: var(--ink-faint);
+}
+.rvw .acts {
+	display: inline-flex;
+	gap: 14px;
+	margin-left: auto;
+	padding-left: 14px;
+}
+.rvw .crop-cap {
+	margin: 0 0 6px;
+	font-size: 11.5px;
+	color: var(--ink-faint);
+}
+.rvw .citebox {
+	padding-left: 12px;
+	border-left: 2px solid var(--rule-strong);
+}
+.rvw .locate {
+	position: relative;
+}
+.rvw .findbar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 8px;
+	font-size: 12px;
+	color: var(--ink-soft);
+}
+.rvw .findbar .field {
+	width: 150px;
+}
+.rvw .selpop {
+	position: absolute;
+	z-index: 5;
+}
+.rvw .btn.primary {
+	background: var(--ink);
+	color: var(--sheet);
+	border-color: var(--ink);
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+.rvw .note.hint {
+	margin: 6px 0 0;
+}
+.rvw .note.after {
+	margin-top: 8px;
+}
+.rvw code {
+	font-family: var(--font-mono, monospace);
+	font-size: 12px;
+}
+.rvw .crop-cap.gap {
+	margin-top: 16px;
+}
+.rvw table.att {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 14px;
+}
+.rvw .att th {
+	padding: 6px 10px;
+	font-size: 11px;
+	font-weight: 400;
+	text-align: left;
+	color: var(--ink-faint);
+	border-bottom: 1px solid var(--rule);
+}
+.rvw .att th.ag,
+.rvw .att td.ag {
+	color: var(--agent);
+}
+.rvw .att td.ag {
+	color: inherit;
+}
+.rvw .att td {
+	padding: 10px;
+	vertical-align: top;
+	border-bottom: 1px solid var(--rule);
+	font-family: var(--font-text, serif);
+	line-height: 1.5;
+}
+.rvw .att td.k {
+	width: 48px;
+	font-family: inherit;
+	color: var(--ink-soft);
+}
+.rvw .att td.pp {
+	width: 26%;
+}
+.rvw .att td.ll {
+	width: 38%;
+}
+.rvw .att .lbl {
+	display: block;
+	font-family: system-ui, sans-serif;
+	font-size: 11px;
+	color: var(--ink-faint);
+}
+.rvw .foldline {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 8px 4px;
+	font: inherit;
+	color: var(--ink-soft);
+	text-align: left;
+	background: none;
+	border: 0;
+	border-bottom: 1px solid var(--rule);
+	cursor: pointer;
+}
+.rvw .fold-b {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 18px;
+	padding: 8px 26px;
+}
+.rvw .diverge {
+	display: flex;
+	gap: 14px;
+	margin: 14px 0;
+	padding: 10px 14px;
+	border: 1px solid var(--rule);
+	border-left: 3px solid var(--agent);
+	border-radius: 6px;
+	background: var(--sheet);
+}
+.rvw .diverge .w {
+	flex: none;
+	font-size: 11.5px;
+	color: var(--agent);
+}
+.rvw .note.inline {
+	margin: 0 0 0 6px;
+}
+.rvw .step {
+	display: flex;
+	gap: 12px;
+	margin-bottom: 16px;
+}
+.rvw .stepn {
+	flex: none;
+	width: 22px;
+	height: 22px;
+	border-radius: 50%;
+	border: 1px solid var(--rule-strong);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 11.5px;
+	color: var(--ink-soft);
+}
+.rvw .stepb {
+	flex: 1;
+	min-width: 0;
+}
+.rvw .steph {
+	margin: 2px 0 8px;
+	font-weight: 500;
+}
+.rvw {
+	position: relative;
+}
+.rvw .scroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+.rvw .seeit {
+	display: inline-block;
+	margin-top: 10px;
+}

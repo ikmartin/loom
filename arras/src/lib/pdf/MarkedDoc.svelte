@@ -36,7 +36,8 @@
 		onregion,
 		onpage,
 		onlink,
-		onmoved
+		onmoved,
+		overlay
 	}: {
 		desk: MarkDesk;
 		view: PdfView;
@@ -61,6 +62,8 @@
 		onpage?: DocProps['onpage'];
 		onlink?: DocProps['onlink'];
 		onmoved?: DocProps['onmoved'];
+		/** A layer the caller draws over each drawn page: the Library's digest marks. */
+		overlay?: DocProps['overlay'];
 	} = $props();
 
 	let paper = $state<HTMLElement | null>(null);
@@ -68,9 +71,10 @@
 	/** The pin is Comment's, which takes the pointer from the page as a drawing tool does. */
 	const tool = $derived(notes.tool === 'comment' && desk.writes ? 'pin' : view.tool);
 
-	// what the manifest now says lets go of what was on its way
+	// what the manifest and the places now say lets go of what was on its way
 	$effect(() => {
 		void store.manifest;
+		void desk.placed;
 		untrack(() => desk.settle());
 	});
 
@@ -122,7 +126,7 @@
 		return true;
 	}
 
-	/** Open the popup on an annotation just written, once it is drawn. A work's sidecar places its words after the manifest that holds it arrives, so this keeps trying for a few seconds. */
+	/** Open the popup on an annotation just written, once it is drawn, which is once the manifest that holds it arrives, so this keeps trying for a few seconds. */
 	function showWhenDrawn(id: string, tries = 60): void {
 		if (show(id) || tries <= 0) return;
 		setTimeout(() => showWhenDrawn(id, tries - 1), 100);
@@ -269,6 +273,7 @@
 			{onpage}
 			{onlink}
 			{onmoved}
+			{overlay}
 			ondraw={drawn}
 			onpick={(e) => (e.id && paper ? popup?.open(paper, e.id, false) : popup?.close())}
 			onmove={(e) => {

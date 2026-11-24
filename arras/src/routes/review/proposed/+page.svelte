@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › Proposed Changes: everything someone proposes that the person decides in a pass of its own, one card each: a copy, a pull or a work's proposed results, which the card opens here at its own address (`?copy=`, `?pull`, `?work=`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
+	// Review › Proposed Changes: everything someone proposes that the person decides in a pass of its own, one card each: a copy or a pull, which the card opens here at its own address (`?copy=`, `?pull`). A suggested edit is a pending change, kept or discarded in its document and in Your Changes; one on an agent's copy is listed on the copy's card, with what it says and the annotation it answers, and comes in with the copy.
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount } from 'svelte';
@@ -10,21 +10,21 @@
 	import type { SuggestedEdit } from '$lib/manifest/types';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
-	import { placeUrl, workUrl } from '$lib/nav';
+	import { placeUrl } from '$lib/nav';
 	import { noteUrl } from '$lib/review/annotating.svelte';
 	import { route } from '$lib/paths';
 	import ContributionReview from '$lib/review/ContributionReview.svelte';
 	import Empty from '$lib/review/Empty.svelte';
 	import IncomingPull from '$lib/review/IncomingPull.svelte';
-	import ProposalQueue from '$lib/review/ProposalQueue.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
 	import Said from '$lib/review/Said.svelte';
 	import { itemsOf, tally } from '$lib/review/contribution';
-	import { adoptionsOf, cardsOf, copySays, pullLabel, resultsOf } from '$lib/review/proposed';
+	import { adoptionsOf, cardsOf, copySays, pullLabel } from '$lib/review/proposed';
 	import { documentOf, writerOf } from '$lib/review/suggestions';
 	import { keyName, linkName } from '$lib/workspace/names';
-	import { bibText, surnames } from '$lib/works';
 	import { can } from '$lib/write';
+	import { rv } from '$lib/views/review/state.svelte';
+	import { review as reviewWords } from '$lib/words/review';
 
 	const here = route('/review/proposed');
 	/** How many of a card's changes it names before saying how many more. */
@@ -36,8 +36,7 @@
 	// what the address opens; one gone by the time it is asked for, as a copy taken in whole, leaves the list
 	const adoption = $derived(adoptionsOf(m).find((x) => x.copy === asked.get('copy')));
 	const pull = $derived(asked.has('pull') ? m.incoming : undefined);
-	const queue = $derived(asked.has('work') && resultsOf(m).length > 0);
-	const opened = $derived(!!adoption || !!pull || queue);
+	const opened = $derived(!!adoption || !!pull);
 	const showing = $derived(adoption?.copy ?? (pull ? 'pull' : ''));
 
 	let served = $state<Record<string, boolean>>({});
@@ -86,21 +85,20 @@
 {/snippet}
 
 <main class="page" use:barShown class:review-page={!opened} data-testid="proposed">
-	<ReviewHeading title="Proposed Changes" />
-	{#if opened}<p class="back"><a href={here} data-testid="proposed-back">‹ Everything proposed</a></p>{/if}
+	<ReviewHeading title={rv.served ? reviewWords.kinds.edits.name : 'Proposed Changes'} />
+	<!-- where Review's reads are served, a copy is opened from Proposed edits, and goes back there -->
+	{#if opened}<p class="back">{#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="proposed-back">{reviewWords.yours.back}</a>{:else}<a href={here} data-testid="proposed-back">‹ Everything proposed</a>{/if}</p>{/if}
 	{#if adoption}
 		{@const copy = adoption.copy}
 		{#key copy}<ContributionReview contribution={adoption} onanswer={(a) => (answer = a && { ...a, from: copy })} />{/key}
 	{:else if pull}
 		{#key pull.commit}<IncomingPull incoming={pull} label={pullLabel(m)} writable={!!served['sync-incorporate']} onanswer={(a) => (answer = a && { ...a, from: 'pull' })} />{/key}
-	{:else if queue}
-		<ProposalQueue />
 	{:else}
 		{#if answer && answer.from !== showing}<div class="answer"><Said text={answer.text} refused={answer.refused} testid="proposed-answer" /></div>{/if}
 		{#if !cards.length}
 			<Empty text="Nobody has proposed anything." testid="proposed-none" />
 		{:else}
-			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy or a pull is reviewed whole, a work's results one by one. A suggested edit is kept or discarded where it stands, in its document or in Your Changes.</p>
+			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy or a pull is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Review.</p>
 			<ul class="plain cards" data-testid="proposed-cards">
 				{#each cards as c (c.kind + c.id)}
 					<li class="card" data-testid="proposed-card" data-kind={c.kind} data-id={c.id}>
@@ -112,7 +110,7 @@
 							</div>
 							<p class="why">{count(c.pull.changes.length, 'change', 'changes')}, taken whole.</p>
 							{@render chips(c.pull.changes.map((x) => ({ name: x.name ?? x.key, bad: x.conflict })))}
-						{:else if c.kind === 'copy'}
+						{:else}
 							{@const items = itemsOf(m, c.copy)}
 							<div class="line">
 								<span class="tag">an agent's copy</span>
@@ -131,14 +129,6 @@
 									</ul>
 								</details>
 							{/if}
-						{:else}
-							{@const ref = m.references[c.citekey]}
-							<div class="line">
-								<span class="tag">results from a paper</span>
-								<a class="name" href={workUrl(c.citekey)}>{surnames(ref?.bib.author) || c.citekey}, {bibText(ref?.bib.title) || c.citekey}</a>
-								<span class="acts"><a class="btn small primary" href="{here}?work={encodeURIComponent(c.citekey)}#queue" data-testid="proposed-open">Check them</a></span>
-							</div>
-							<p class="why">{count(c.count, 'result an agent proposes', 'results an agent proposes')}, each to compare with the paper.</p>
 						{/if}
 					</li>
 				{/each}

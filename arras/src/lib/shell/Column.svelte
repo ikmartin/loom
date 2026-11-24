@@ -1,18 +1,28 @@
 <script lang="ts">
-	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in; the Docs Library shelf's two links into Review go when Docs' Library button replaces that shelf); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
+	// The left column's frame: the quilt's name, Settings and the fold at its head; the four views' names, **Docs**, **Library**, **Web** and **Review**, each with a hover card, the only controls that change view (beside ⌘K's palette, which is a person naming where to go and says the view each result opens in); beneath them that view's column; and a foot, in every view: the column's message, the legend of the marks, and the agent's row. Folded, it is a strip of the four names with the fold above them and, at its foot, a dot for a message and the agent's.
 	//
-	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, the sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`), the documents listed by name (`DocumentList`) and the Library (`LibraryShelf`, whose dialog is `LibraryAdd`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs. At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
+	// What stands in the frame is drawn by its children in `column/`, each its own to change. Under **Review**, its kinds and drafts (`ReviewColumn`) where the source serves its reads, else today's sections (`ReviewNav`). Under **Docs**, a page's own panel where it registers one (the graph's filters), else the project's files (`FilesShelf`) and the documents listed by name (`DocumentList`), and beneath them, past a line the reader drags up and down, the Outline of the document in the focused pane; the two scroll apart. The Library's and the Web's columns are theirs (`LibraryColumn`, `WebColumn`). At the foot, `Message`, `Legend` and `AgentStatus`. Every word the frame says is in `$lib/words/frame.ts`.
 	import Contents from './Contents.svelte';
 	import HoverCard from './HoverCard.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import AgentStatus from './column/AgentStatus.svelte';
 	import Legend from './column/Legend.svelte';
 	import Message from './column/Message.svelte';
+	import LibraryColumn from './column/library/LibraryColumn.svelte';
 	import DocumentList from './column/DocumentList.svelte';
 	import FilesShelf from './column/FilesShelf.svelte';
-	import LibraryAdd from './column/LibraryAdd.svelte';
-	import LibraryShelf from './column/LibraryShelf.svelte';
 	import ReviewNav from './column/ReviewNav.svelte';
+	import ReviewColumn from './column/review/ReviewColumn.svelte';
+	import WebColumn from './column/web/WebColumn.svelte';
+	import { wb } from '$lib/views/web/state.svelte';
+	import { docsState } from '$lib/views/docs/docs.svelte';
+	import { served } from '$lib/library/served.svelte';
+	import Picker from '$lib/views/docs/Picker.svelte';
+	import FormalizePanel from '$lib/formalize/FormalizePanel.svelte';
+	import { formalize } from '$lib/formalize/state.svelte';
+	import { workspace } from '$lib/workspace/store.svelte';
+	import { rv } from '$lib/views/review/state.svelte';
+	import { lib } from '$lib/views/library/state.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
 	import { documentLabel } from '$lib/workspace/names';
@@ -33,7 +43,12 @@
 	let { label, primary, docsHref, indexes, masters, currentDoc, onDocument, contents, currentSection, children, rail, panel, panelLabel }: ShellProps = $props();
 
 	let readOnly = $state(false);
-	onMount(() => { void can('review-accept').then((yes) => readOnly = !yes); });
+	onMount(() => {
+		void can('review-accept').then((yes) => readOnly = !yes);
+		rv.ask();
+		wb.ask();
+		docsState.ask();
+	});
 	const reviewPerspective = $derived(store.manifest?.reviewer?.name
 		? frame.column.perspective(store.manifest.reviewer.name)
 		: Object.values(store.manifest?.keys ?? {}).some((key) => key.acceptance) ? frame.column.perspectiveUnnamed : '');
@@ -67,8 +82,9 @@
 	// Review's sections, each with what waits for the author there
 	const sections = $derived(store.manifest ? sectionsOf(store.manifest) : []);
 
-	// Each view's name goes to its view: Docs to the reading address, where it was left; Review to its landing; the Library and the Web to their own pages, which keep their place themselves. A corpus that declares no review has no Review; one that says nothing either way keeps it.
-	const hrefOf = (v: Primary): string => (v === 'docs' ? docsHref || route('/') : v === 'review' ? reviewLanding(sections) : route(`/${v}`));
+	// Each view's name goes to its view: Docs to the reading address, where it was left; Review to its list where its reads are served, else to today's landing; the Library and the Web to their own pages, which keep their place themselves. A corpus that declares no review has no Review; one that says nothing either way keeps it.
+	// Docs and the Library go back to where they were left: Docs' reading address, the Library's tab
+	const hrefOf = (v: Primary): string => (v === 'docs' ? docsHref || route('/') : v === 'library' ? lib.address : v === 'review' ? (rv.served ? route('/review') : reviewLanding(sections)) : route(`/${v}`));
 	const shownViews = $derived(VIEWS.filter((v) => v !== 'review' || store.manifest?.publishes?.review !== false));
 
 	// The line between the documents and the outline: where it stands is a preference, drawn at most once a frame while it is dragged and stored at the drop, as the pane divider is.
@@ -201,8 +217,14 @@
 			<!-- Whose review a read-only view shows is said once, under the quilt it belongs to, and never above the document. -->
 			{#if readOnly && reviewPerspective}<p class="review-perspective">{reviewPerspective}</p>{/if}
 			<div class="sections" bind:this={sectionsBox}>
-				{#if primary === 'review'}
+				{#if primary === 'review' && rv.served}
+					<ReviewColumn />
+				{:else if primary === 'review' && rv.served === false}
 					<ReviewNav {sections} />
+				{:else if primary === 'library'}
+					<LibraryColumn />
+				{:else if primary === 'web' && wb.served}
+					<WebColumn />
 				{/if}
 				{#if panel}
 					<p class="rail-label">{panelLabel}</p>
@@ -211,7 +233,12 @@
 					<div class="part docs-part rail-scroll" data-testid="docs-part" style:flex={outline ? `0 0 ${share * 100}%` : '1 1 auto'}>
 						<FilesShelf {masters} {own} {copiesOf} {section} />
 						<DocumentList {own} {unplaced} {closed} {copiesOf} {section} {filename} {onDocument} {currentDoc} />
-						<LibraryShelf />
+						{#if docsState.served}
+							<div class="colbtns">
+								<button type="button" class="colbtn" class:on={docsState.picker} aria-expanded={docsState.picker} data-testid="docs-library" onclick={() => (docsState.picker = !docsState.picker)}>{docs.picker.open}</button>
+								{#if served.has('notes')}<button type="button" class="colbtn" class:on={workspace.current?.kind === 'notes'} data-testid="docs-notes" onclick={() => ((docsState.picker = false), workspace.here({ kind: 'notes', id: 'all' }))}>{docs.notes.open}</button>{/if}
+							</div>
+						{/if}
 					</div>
 					{#if outline}
 						<!-- A separator that takes focus is a widget in ARIA's own terms, with the arrow keys and aria-valuenow this one has. -->
@@ -274,12 +301,39 @@
 	<div class="content">
 		{@render children()}</div>
 	{#if rail}<aside class="right rail-scroll">{@render rail()}</aside>{/if}
+	{#if primary === 'docs' && docsState.picker}<Picker doc={currentDoc ?? null} left={panelBox?.getBoundingClientRect().right ?? 0} />{/if}
+	{#if (primary === 'docs' || primary === 'web') && formalize.targets}<FormalizePanel left={panelBox?.getBoundingClientRect().right ?? 0} />{/if}
 </div>
 
-<LibraryAdd />
 <HoverCard />
 
 <style>
+	.colbtns {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 8px 0 var(--gap-tight);
+	}
+	.colbtn {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		width: 100%;
+		min-height: 30px;
+		padding: 4px 12px;
+		font: inherit;
+		font-size: 13px;
+		color: var(--ink);
+		text-align: left;
+		background: var(--ann-neutral-wash);
+		border: 0;
+		border-radius: 7px;
+		cursor: pointer;
+	}
+	.colbtn:hover,
+	.colbtn.on {
+		background: var(--rule);
+	}
 	.review-perspective { margin: 0 0 var(--gap-tight); font-size: 11.5px; color: var(--ink-soft); overflow-wrap: anywhere; }
 	.shell-c {
 		display: grid;
@@ -342,7 +396,7 @@
 		gap: var(--gap-hair);
 	}
 	/* A label keeps its own height; the documents and the outline take the rest and scroll apart, and a page's own panel takes all of it. */
-	.sections > :global(*:not(.page-panel):not(.part)) {
+	.sections > :global(*:not(.page-panel):not(.part):not(.lv-col):not(.rv-col):not(.wb-col)) {
 		flex: 0 0 auto;
 	}
 	/* folded: the fold, the four names, and at the foot a dot for the message and the session's */

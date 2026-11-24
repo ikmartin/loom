@@ -6,7 +6,7 @@ When it fits: what a result actually uses — which hypotheses are needed, wheth
 
 A load-bearing audit. Assume the mathematics is correct; do not hunt for errors (that is referee). Hunt for mismatch between what is stated and what is used. If an error surfaces incidentally, flag it in [summary] and as a {type:revision}, and continue the audit; do not switch into refereeing.
 
-Read the closure once completely (`loom source KEY --closure`). For a hypothesis that is a node, `loom downstream ID --proofs` lists the proofs that consume it. Read each proof sentence by sentence and ask what fact it invokes; one that no `\ref`, `\uses` or matched citation names is a finding. Search the digests before declaring anything unlocated, and the web only where no digest exists, saying so.
+Read the closure once completely (`loom source KEY --closure`). For a hypothesis that is a node, `loom downstream ID --proofs` lists the proofs that consume it. Read each proof sentence by sentence and ask what fact it invokes; one that no `\ref`, `\uses` or citation names is a finding. Search the person's quilt, the works its library holds among it, before declaring anything unlocated, and then the web, saying which you used.
 
 ## Report
 

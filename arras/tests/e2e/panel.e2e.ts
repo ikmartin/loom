@@ -1,4 +1,4 @@
-// The side panel: the documents and their contents, the Nodes and Library sections, the write target pinned in a footer, and the session list in a picker it opens. Each test is named for the rule it holds.
+// The side panel: the documents and their contents, the Nodes section, the write target pinned in a footer, and the session list in a picker it opens. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane, scrollPane, viewMenu } from '../workspace';
 import { openPicker, pickSession } from '../picker';
@@ -366,9 +366,5 @@ test.describe('sections', () => {
 			// the documents stand there instead, with the contents folded under the open one
 			await expect(page.getByTestId('docs-tree')).toBeVisible();
 		}
-		// the Library fills the panel with its own filters, which is the other half of the same rule
-		await page.goto('/review/library');
-		await expect(page.locator('.panel .rail-label', { hasText: /^Views$/ })).toHaveCount(0);
-		await expect(page.getByTestId('show-proposed')).toBeVisible();
 	});
 });

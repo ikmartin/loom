@@ -269,9 +269,9 @@
 		align-items: center;
 		justify-content: center;
 		gap: 5px;
-		height: 22px;
-		min-width: 24px;
-		padding: 0 5px;
+		height: 28px;
+		min-width: 28px;
+		padding: 0 6px;
 		font: inherit;
 		color: var(--ink-soft);
 		background: none;
@@ -280,7 +280,7 @@
 		cursor: pointer;
 	}
 	.tool.caret {
-		min-width: 18px;
+		min-width: 28px;
 		padding: 0 2px;
 	}
 	.tool:hover:not(:disabled) {

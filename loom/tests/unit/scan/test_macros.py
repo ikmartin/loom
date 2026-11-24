@@ -124,3 +124,15 @@ def test_package_commands_cover_the_fonts_accents_and_integrals_a_renderer_lacks
     assert got["Tilde"].body == r"\tilde" and got["Vec"].body == r"\vec"  # amsmath, through mathtools
     assert got["fint"].body == r"\mathop{\unicode{x2A0F}}\nolimits"
     assert "bm" not in package_macros({"amsmath"}) and "Tilde" in package_macros({"amsmath"})
+
+
+def test_a_parameter_glued_to_a_control_word_stays_separate() -> None:
+    """Behrend-Fantechi's exact-sequence macro is `0\\longrightarrow#1...`, and `E` substituted in gave `\\longrightarrowE`: an undefined command, rendered as an error in every sequence."""
+    from loom.scan.macros import Macro, expand
+
+    assert (
+        expand(Macro("seq", 1, r"0\longrightarrow#1\longrightarrow 0"), ["E"]) == r"0\longrightarrow E\longrightarrow 0"
+    )
+    assert expand(Macro("seq", 1, r"0\longrightarrow#1"), [r"\alpha"]) == r"0\longrightarrow\alpha", (
+        "a backslash ends a control word itself"
+    )

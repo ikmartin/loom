@@ -257,48 +257,18 @@ def test_duplicate_id_and_label_errors(tmp_path: Path) -> None:
     assert {loc.file for loc in dup.locations} == {"drafting/main.tex", "drafting/nodes/dup.tex"}
 
 
-def test_external_node_and_digest_file(tmp_path: Path) -> None:
+def test_a_block_attributed_to_a_cited_result_is_external(tmp_path: Path) -> None:
     r = make_quilt(
         tmp_path,
         {
             "drafting/main.tex": PREAMBLE
             + "\\begin{document}\n\\begin{theorem}[{\\cite[Theorem 2]{K}}]\\label{ab-0001}\nT\n\\end{theorem}\n\\begin{definition}\\cite[Def 1]{K}\n\\label{ab-0002}\nD\n\\end{definition}\n\\end{document}\n",
-            ".loom/library/Man12.tex": "% !LOOM digest: Man12\n% !LOOM extracted-from: arXiv:0805.2065v2\n% !LOOM method: extract\n\\section*{Overview}\n\\section{Preliminaries}\\label{Man12-sec-2}\n\\begin{theorem}[{\\cite[Theorem 4.1, p.~12]{Man12}}]\\label{Man12-thm-4.1}\nStatement.\n\\end{theorem}\n",
-            ".loom/library/bibliography.bib": "@article{Man12, title={Virtual pull-backs}}\n@misc{K, title={K}}\n",
         },
     )
     nodes = r.nodes
     assert (
         nodes["ab-0001"].external and nodes["ab-0002"].external
     )  # attribution, not TeX style, identifies a cited result
-    assert nodes["Man12-thm-4.1"].external and nodes["Man12-thm-4.1"].digest == "Man12"
-    assert nodes["Man12-thm-4.1"].reached_by == []
-    assert "Man12" in r.bib
-
-
-def test_declared_prefix_carries_the_id_grammar(tmp_path: Path) -> None:
-    """A digest declares the prefix its node ids carry, so `\\uses` stays typeable and the ids survive a citekey rename.
-
-    Without the declaration the prefix would be the citekey's slug, and a Zotero key makes that 29 characters. The prefix is what `is_id_shaped` matches on, so declaring one is what makes `Man12-thm-4.1` an id at all rather than a human alias (plan 0.5, DR-109).
-    """
-    long_key = "manolache_VirtualPullbacks2012"
-    r = make_quilt(
-        tmp_path,
-        {
-            "drafting/main.tex": PREAMBLE
-            + "\\begin{document}\n\\begin{lemma}\\label{ab-0001}\n\\uses{Man12-thm-4.1}\nL\n\\end{lemma}\n\\end{document}\n",
-            ".loom/library/paper.tex": f"% !LOOM digest: {long_key}\n% !LOOM prefix: Man12\n"
-            "% !LOOM extracted-from: arXiv:0805.2065v2\n% !LOOM method: extract\n"
-            "\\section*{Overview}\n"
-            f"\\begin{{theorem}}[{{\\cite[Theorem 4.1]{{{long_key}}}}}]\\label{{Man12-thm-4.1}}\nS.\n\\end{{theorem}}\n",
-            ".loom/library/bibliography.bib": f"@article{{{long_key}, title={{Virtual pull-backs}}, doi={{10.1090/S1}}}}\n",
-        },
-    )
-    # the short prefix is an id, not an alias: the node exists under it and carries its digest's citekey
-    assert r.nodes["Man12-thm-4.1"].external and r.nodes["Man12-thm-4.1"].digest == long_key
-    assert not any(k.startswith("manolacheVirtual") for k in r.nodes)
-    # and the edge from the quilt's own lemma resolves to it
-    assert ("ab-0001", "Man12-thm-4.1", "uses") in {(e.src, e.to, e.via) for e in r.edges.edges}
 
 
 def test_two_masters_share_one_set_of_nodes(tmp_path: Path) -> None:

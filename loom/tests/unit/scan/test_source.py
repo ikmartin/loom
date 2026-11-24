@@ -19,24 +19,23 @@ def test_blank_comments_preserves_offsets() -> None:
     [
         pytest.param(".loom/cache/x.tex", id="derived"),
         pytest.param(".loom/records/retired/old.tex", id="a-retired-source"),
-        pytest.param(".loom/library/storage/arxiv/1/src/paper.tex", id="the-store-of-fetched-works"),
+        pytest.param(".loom/library/documents/x.tex", id="the-librarys-documents"),
+        pytest.param(".loom/cache/library/sources/0a/paper.tex", id="a-stored-source-unpacked"),
         pytest.param("lean/.lake/packages/mathlib/docs/notes.tex", id="a-lake-project-s-build-and-packages"),
         pytest.param("notes.txt", id="not-tex"),
     ],
 )
-def test_the_quilts_text_is_every_tex_file_outside_loom_s_directory_but_its_digests(
-    tmp_path: Path, excluded: str
-) -> None:
-    """Nothing under `.loom/` is the quilt's text but the digests, read there on purpose: a fetched e-print in the store is a whole paper carrying its own labels (DR-108)."""
-    for rel in ["drafting/main.tex", "drafting/nodes/a.tex", ".loom/library/Kre99.tex", excluded]:
+def test_the_quilts_text_is_every_tex_file_outside_loom_s_directory(tmp_path: Path, excluded: str) -> None:
+    """Nothing under `.loom/` is the quilt's text but an agent's copy: a work's source the library holds is a whole paper carrying its own labels (DR-108)."""
+    for rel in ["drafting/main.tex", "drafting/nodes/a.tex", excluded]:
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("x", encoding="utf-8")
-    assert discover_files(tmp_path) == [".loom/library/Kre99.tex", "drafting/main.tex", "drafting/nodes/a.tex"]
+    assert discover_files(tmp_path) == ["drafting/main.tex", "drafting/nodes/a.tex"]
 
 
 def test_a_skipped_directory_is_never_listed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A Lake project's `.lake` holds tens of thousands of files (Mathlib's alone), so the scan prunes it as it walks rather than listing the tree and filtering after; the store is pruned from the digests' walk the same way."""
+    """A Lake project's `.lake` holds tens of thousands of files (Mathlib's alone), so the scan prunes it as it walks rather than listing the tree and filtering after; `.loom/` is pruned the same way."""
     import os
 
     from loom.scan import source
@@ -44,7 +43,7 @@ def test_a_skipped_directory_is_never_listed(tmp_path: Path, monkeypatch: pytest
     for rel in [
         "drafting/main.tex",
         "lean/.lake/packages/mathlib/Mathlib/A.olean",
-        ".loom/library/storage/w/src/p.tex",
+        ".loom/cache/library/sources/w/p.tex",
     ]:
         p = tmp_path / rel
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -60,7 +59,7 @@ def test_a_skipped_directory_is_never_listed(tmp_path: Path, monkeypatch: pytest
     monkeypatch.setattr(source.os, "walk", recorded)
     assert discover_files(tmp_path) == ["drafting/main.tex"]
     assert "lean" in listed
-    assert not [d for d in listed if ".lake" in d.split("/") or d.startswith(".loom/library/storage")], listed
+    assert not [d for d in listed if ".lake" in d.split("/") or d.startswith(".loom")], listed
 
 
 def test_non_utf8_source_decoded(tmp_path: Path) -> None:

@@ -1,0 +1,14 @@
+{
+ "answer": {
+  "error": {
+   "code": "not-a-document",
+   "message": "reading-list.txt is no PDF, .bib, TeX file or archive of a TeX source"
+  },
+  "status": 400
+ },
+ "endpoint": "library-receive",
+ "request": {
+  "name": "reading-list.txt",
+  "size": 33
+ }
+}

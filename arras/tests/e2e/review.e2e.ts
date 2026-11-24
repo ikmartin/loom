@@ -173,7 +173,7 @@ test('a pull\'s review accepts only explicitly chosen mathematics while incorpor
 	await expect(checked).not.toBeChecked();
 	await expect(page.getByTestId('contribution-bar')).toContainText('1 marked as checked');
 	await page.getByTestId('apply').click();
-	await expect(page.getByTestId('contribution-bar-said')).toContainText('Took the pull: 1 accepted, 1 wait in Your Changes.');
+	await expect(page.getByTestId('contribution-bar-said')).toContainText('Took the pull: 1 accepted, 1 wait to be accepted.');
 	expect(submitted!.accept).toEqual(['sy-0001']);
 	expect(submitted!.incoming).toBe('b'.repeat(40));
 	expect(submitted!.review_token).toBe('preview');

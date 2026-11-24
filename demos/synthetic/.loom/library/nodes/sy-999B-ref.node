@@ -1,0 +1,12 @@
++++
+schema = 1
+id = "sy-999B-ref"
+taxon = "reference"
++++
+@article{Kre99,
+  author = {Kresch, Andrew},
+  title = {Cycle groups for Artin stacks},
+  journal = {Invent. Math.},
+  year = {1999},
+  eprint = {math/9810166v2},
+}

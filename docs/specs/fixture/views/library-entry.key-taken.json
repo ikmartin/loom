@@ -1,0 +1,14 @@
+{
+ "answer": {
+  "error": {
+   "code": "key-taken",
+   "message": "Arden 2024 has the key Arden24 already; give this entry another key"
+  },
+  "status": 409
+ },
+ "endpoint": "library-entry",
+ "request": {
+  "bibtex": "@article{Arden24,\n  author = {Cortez, Hilario},\n  title = {Flows on infinite quivers: a survey},\n  journal = {Bull. Imag. Soc.},\n  volume = {12},\n  year = {2007},\n  pages = {1--44},\n}\n",
+  "ref": "sh-0404-ref"
+ }
+}

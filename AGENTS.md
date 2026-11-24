@@ -4,7 +4,7 @@ This is one repository holding loom and the documents that govern it: `loom` its
 
 1. **`docs/design/README.md`: start here.** What loom is for, the three people every decision is tested against (the Learner, the Explorer, the Author), how to judge a change, and what is decided but not built. Then `principles.md`, `model.md`, `agents.md` and `invariants.md` beside it as the work needs them. Judge a change against the principles and cite them by name.
 2. `docs/work-queue/README.md`: deferred work, each item with the observable trigger that says when it becomes worth doing. It is not an ordered queue; read the triggers, not the order. If no trigger has fired and nobody has asked for something, there is no work waiting, and you should ask rather than invent some.
-3. `docs/specs/`: the formats — the loom–arras interface, the source contract, digests, diagnostics. A spec wins over the design where a shape is concerned; the design wins on what a thing means.
+3. `docs/specs/`: the formats — the loom–arras interface, the source contract, the library's nodes, diagnostics. A spec wins over the design where a shape is concerned; the design wins on what a thing means.
 4. `docs/contributing.md`: how to build, test, verify and release.
 5. History, which is never normative: `docs/design/decision-records-frozen.md` (the old design book's decision records), `docs/plans/` and `docs/reports/`. Read them for why something was done, not for what to do now.
 6. `docs/ideas/`: explorations nobody has committed to building, also never normative. Its README says how an idea becomes work.

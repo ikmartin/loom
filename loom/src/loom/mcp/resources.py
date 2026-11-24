@@ -1,6 +1,6 @@
 """The MCP resources: what a link names, read at the address `loom link` prints, each by the reading command it stands for.
 
-`quilt:KEY` is `loom source KEY` and `cited:ID?page=N` is `loom library read ID N`; `reading` holds the whole table. A read runs its command, so it carries the command a person reruns, and a client that reads no resources loses nothing, since each is also a tool. The one exception is `quilt:state`, which no command prints alone: it is served as `loom ai orient` prints it. The list is read off a scan, and holds what a person would `@`-mention; the templates reach the rest. Nothing here imports the MCP SDK.
+`quilt:KEY` is `loom source KEY`; `reading` holds the whole table. A read runs its command, so it carries the command a person reruns, and a client that reads no resources loses nothing, since each is also a tool. The one exception is `quilt:state`, which no command prints alone: it is served as `loom ai orient` prints it. The list is read off a scan, and holds what a person would `@`-mention; the templates reach the rest. Nothing here imports the MCP SDK.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class ResourceSpec:
     ----------
     uri : str
     name : str
-        The short name a client lists and searches: the key, path or citekey.
+        The short name a client lists and searches: the key or path.
     title : str
     description : str
     mime : str
@@ -66,20 +66,6 @@ TEMPLATES = (
         "Exactly the statements a key depends on, in dependency order, then the key: `loom source KEY --closure`.",
         TEX,
     ),
-    ResourceSpec(
-        "cited:{+work}",
-        "work",
-        "A cited work's overview",
-        "A cited work, by identifier (doi:…, arXiv:…): its overview, a reading of the paper, or with none the digest's opening, the paper's own words, and the agent that reads the work through writes the overview; `loom library read WORK`.",
-        MARKDOWN,
-    ),
-    ResourceSpec(
-        "cited:{+work}?page={page}",
-        "page",
-        "A page of a cited work",
-        "A cited work's text on one page, the text a quotation is checked against: `loom library read WORK PAGE`.",
-        TEXT,
-    ),
 )
 
 
@@ -109,26 +95,11 @@ def reading(uri: str, quilt: Quilt) -> Reading:
     quilt:LANDMARK         loom history show NAME
     quilt:state            no command: `research_state`, as `loom ai orient` prints it
     quilt:PATH.SUFFIX      refused: a file of the quilt, read as the file itself
-    cited:ID               loom library read ID
-    cited:ID?page=N        loom library read ID N
 
     Only the syntax is read here: a key that names nothing is the command's own refusal.
     """
-    if uri.startswith("cited:"):
-        body, _, query = uri[len("cited:") :].partition("?")
-        work = unquote(body.split("#", 1)[0])
-        if not work:
-            raise NotAResource(f"{uri}: names no work; `loom link CITEKEY` prints a work's address")
-        page = (parse_qs(query.replace("#", "&")).get("page") or [""])[0]
-        if page and not (page.isdigit() and int(page) > 0):
-            raise NotAResource(f"{uri}: page must be a number from 1")
-        if page:
-            return Reading(("library", "read", *_positional(work, page)), TEXT)
-        return Reading(("library", "read", *_positional(work)), MARKDOWN)
     if not uri.startswith("quilt:"):
-        raise NotAResource(
-            f"{uri}: loom's resources are quilt:KEY and cited:SCHEME:VALUE, the addresses `loom link` prints"
-        )
+        raise NotAResource(f"{uri}: loom's resources are quilt:KEY, the addresses `loom link` prints for a key")
     body, _, place = uri[len("quilt:") :].partition("#")
     raw, _, query = body.partition("?")
     key, place = unquote(raw), unquote(place)
@@ -161,12 +132,11 @@ def reading(uri: str, quilt: Quilt) -> Reading:
 
 
 def listed(result: ScanResult) -> list[ResourceSpec]:
-    """What a person would `@`-mention: the research state, each document and landmark, each statement and section of the quilt's own, and each cited work with an identifier.
+    """What a person would `@`-mention: the research state, each document and landmark, and each statement and section of the quilt's own.
 
-    A digest's results and every proof are left out, to keep the list to the quilt's own results; `quilt:{+key}` reads them.
+    Every proof is left out, to keep the list to the quilt's own results; `quilt:{+key}` reads them.
     """
     from loom.pages import read, state_page
-    from loom.refs.identity import primary
 
     quilt = result.quilt
     out: list[ResourceSpec] = []
@@ -206,20 +176,6 @@ def listed(result: ScanResult) -> list[ResourceSpec]:
                 title,
                 f"Its own text, in {n.file}; quilt:{key}?closure adds what it depends on.",
                 TEX,
-            )
-        )
-    for ck, entry in sorted(result.bib.items()):
-        wid = primary(entry)
-        if wid is None:
-            continue
-        said = entry.fields.get("title", "").strip("{} ")
-        out.append(
-            ResourceSpec(
-                f"cited:{wid.scheme}:{wid.value}",
-                ck,
-                f"{ck} · {said}" if said else ck,
-                "Its overview, or with none the digest's opening, and whoever reads it through writes one; ?page=N reads one page of its text.",
-                MARKDOWN,
             )
         )
     return out

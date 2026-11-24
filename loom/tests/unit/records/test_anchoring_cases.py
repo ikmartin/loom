@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from loom import layout
+
 PRE = "\\documentclass{article}\n\\usepackage{amsthm}\n\\newtheorem{lemma}{Lemma}\n\\newtheorem{proposition}{Proposition}\n\\newtheorem{theorem}{Theorem}\n\\newtheorem{remark}{Remark}\n\\begin{document}\n%s\\end{document}\n"
 
 
@@ -36,7 +38,7 @@ def out(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
     root = tmp_path / "q"
     (root / ".loom").mkdir(parents=True)
-    (root / ".loom" / "format").write_text("1\n")
+    (root / ".loom" / "format").write_text(f"{layout.NUMBER}\n")
     (root / "config.toml").write_text('[quilt]\nname = "t"\nmain = "drafting/main.tex"\nprefix = "tq"\n')
     return root
 

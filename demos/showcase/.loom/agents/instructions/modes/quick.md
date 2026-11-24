@@ -4,7 +4,7 @@ When it fits: a question asked in passing whose answer is worth finding again â€
 
 ## What it is for
 
-A short, durable answer. Prioritize brevity, clarity and accuracy, in that order, and check the answer once against the source or a digest before writing it.
+A short, durable answer. Prioritize brevity, clarity and accuracy, in that order, and check the answer once against the source or a work's own text before writing it.
 
 If the answer needs worked examples, edge cases or a stress test, that is `question`. If it turns up a fault, record it as `.loom/agents/instructions/rules.md` says (on an agent document, fix it) and say so.
 

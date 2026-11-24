@@ -1,0 +1,17 @@
+{
+ "answer": {
+  "error": {
+   "code": "network-unasked",
+   "message": "this quilt has not said whether loom may look papers up online: take it again with online false, or ask once and save the answer as library.online"
+  },
+  "status": 409
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "incoming": "cfe8c29f7460d429b515b44414e69d565ef9eb84195699d4fd63b82737d318aa"
+   }
+  ]
+ }
+}

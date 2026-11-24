@@ -1,20 +1,23 @@
 <script lang="ts">
-	// Reading one work (plan 0.13 item 5, item 6): the paper, its results drawn over it where a link lands, and its annotations, annotated and read as a document's are (`MarkedDoc`). Content only -- the split and the discussion are the Library View's, so there is one frame and not one inside another.
+	// Reading one work: its stored PDF, by its hash, at `GET /_api/library/pdf/<hex>`, and its annotations, annotated and read as a document's are (`MarkedDoc`). Content only, so there is one frame and not one inside another; what opens a work gives it the PDF's hash, which the library knows and the manifest does not.
 	//
-	// **Every annotation on the page is drawn** by the desk (`desk.svelte.ts`) in its look, unless the pane hides them all; a settled one only while the settled control is on. One drawn with a tool records its place; one anchored by its words or a box is placed by the work's sidecar.
+	// **Every annotation on the page is drawn** by the desk (`desk.svelte.ts`) in its look, unless the pane hides them all; a settled one only while the settled control is on. One that records where it stands (`rects`, `strokes`) is drawn there; one anchored by its words alone is drawn where the publisher finds them (`library-places`), asked for the whole work as the reader opens and again, with the generation held, whenever the annotations change. Where no publisher finds places, such a note is listed and drawn nowhere.
 	//
 	// **A locator in the URL is drawn transiently** (§3, §6): `span=`, `box=` or `quote=` name a place a message or a link pointed at, lit while the URL carries it and not recorded; `annot=` names an annotation by id and focuses its mark.
 	//
+	// **The one reader**, in a pane of Docs' workspace (`WorkItem`) and in the Library's tab for a work alike, with the same annotations: a view adds its own layers over it, never a second reader (`overlay` on the pages, `more` beside Quote on a selection, `onpage` to follow the page in view).
+	//
 	// **It opens where the reader last was, unless a link sends it elsewhere.** A link's place wins for as long as it is in force, and where it lands is then where the reader is. Once they move by their own hand nothing sends them back to it, and once its page has left the view the link is done with: its place comes off the item and so off the URL, so a reload returns to where they went.
-	import { artifactUrl, dataUrl } from '$lib/paths';
-	import { paperPlace } from './place.svelte';
+	import { pdfUrl, places } from '$lib/library/api';
+	import { Read } from '$lib/library/read.svelte';
+	import { served } from '$lib/library/served.svelte';
 	import { store } from '$lib/manifest/client.svelte';
+	import { untrack } from 'svelte';
+	import { paperPlace } from './place.svelte';
 	import { paneOf } from '$lib/workspace/state.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { workState } from '$lib/workspace/state.svelte';
-	import type { Sidecar } from './sidecar';
-	import type { Reference } from '$lib/manifest/types';
-	import type { WorkLink } from '$lib/worklink';
+	import { locateBody, type WorkLink } from '$lib/worklink';
 	import { write, type WriteResult } from '$lib/write';
 	import { MarkDesk } from './desk.svelte';
 	import MarkedDoc from './MarkedDoc.svelte';
@@ -22,18 +25,32 @@
 	import type { PdfView } from './view.svelte';
 	import QuoteChip from '$lib/review/QuoteChip.svelte';
 	import { here } from '$lib/here.svelte';
+	import { library } from '$lib/words/library';
+	import type { Snippet } from 'svelte';
+	import type { AnnotationPlace, PlacesAnswer, Rect } from '$lib/library/types';
 
 	let {
-		citekey,
 		ref,
+		pdf,
+		identifier = null,
+		short = null,
 		page,
 		seq = 0,
 		locator = null,
 		view,
 		onleft,
+		overlay,
+		onpage,
+		more
 	}: {
-		citekey: string;
-		ref: Reference;
+		/** The work's reference: what an annotation on it targets and `locate` is asked about. */
+		ref: string;
+		/** The stored PDF's hash, `sha256:<hex>` as the library gives it; null for a work holding none. */
+		pdf: string | null;
+		/** The first identifier the work's entry states, `scheme:value`, by which a quote links to it; null for none, and the quote links to the reference. */
+		identifier?: string | null;
+		/** The work's short name ("Smith 2024"), by which a quote names where its words came from; the reference where none is known. */
+		short?: string | null;
 		page: number;
 		/** Changed each time a link sends the reader to a place, so being sent again lands again; 0 where no link names one. */
 		seq?: number;
@@ -43,15 +60,38 @@
 		view: PdfView;
 		/** The reader has moved off the page the link sent them to. */
 		onleft?: () => void;
+		/** A view's layer on each page drawn, given the page and a function placing a rectangle on it. */
+		overlay?: Snippet<[{ page: number; at: (r: Rect) => { left: string; top: string; width: string; height: string } }]>;
+		/** The page in view, each time it changes. */
+		onpage?: (e: { page: number }) => void;
+		/** A view's own actions beside Quote, on the words selected; `hold` keeps the offer while the selection goes (a field of its own taking the keyboard), `done` takes it away. */
+		more?: Snippet<[{ page: number; text: string; rects: number[][]; hold: () => void; done: () => void }]>;
 	} = $props();
 
-	const url = $derived(ref.artifacts?.pdf ? artifactUrl(ref.artifacts.dir) : '');
+	// the library's source gives the address: the publisher's store, or round six's stand-in under the fixture
+	const url = $derived(pdf ? pdfUrl(pdf) : '');
 	// the item's annotating, which the toolbar shares; a work's pages are an item's only inside a pane
-	const held = $derived(workState({ kind: 'work', id: citekey }));
+	const held = $derived(workState({ kind: 'work', id: ref }));
 	// a work's pages in a pane hide every annotation while the pane does
 	const holder = paneOf();
 	const hide = $derived(holder ? workspace.hidesNotes(holder.index) : false);
-	const desk = new MarkDesk(() => ({ on: citekey, owns: (a) => a.target.work === citekey, rectsOf: (a) => spans?.marks?.[a.id], url, name: `${citekey}.pdf`, notes: held.notes, hidden: hide }));
+	// where each annotation on the paper stands, asked for whole and again whenever the annotations change; known for the annotations it was last answered for
+	const finds = $derived(!!pdf && served.has('library-places'));
+	const stood = new Read<PlacesAnswer>();
+	let stoodFor = $state.raw<unknown>(undefined);
+	let asking = 0;
+	$effect(() => {
+		const anns = store.manifest?.annotations;
+		if (!finds) return;
+		const work = ref;
+		const n = ++asking;
+		void untrack(() => stood.load(work, (s) => places({ ref: work }, s))).then(() => {
+			if (n === asking) stoodFor = anns;
+		});
+	});
+	const stands = $derived(new Map((stood.value?.places ?? []).filter((p): p is AnnotationPlace => 'annotation' in p).map((p) => [p.annotation, p])));
+	const standsOf = (id: string) => stands.get(id) ?? (stoodFor === store.manifest?.annotations ? null : undefined);
+	const desk = new MarkDesk(() => ({ on: ref, owns: (a) => a.target.work === ref, url, name: `${ref}.pdf`, notes: held.notes, hidden: hide, stands: finds ? standsOf : undefined }));
 	// the toolbar's PDF menu acts through it
 	$effect(() => {
 		const state = held;
@@ -63,35 +103,18 @@
 
 	$effect(() => {
 		const drop = () => {
-			if (offered && !window.getSelection()?.toString().trim()) offered = null;
+			if (offered && !kept && !window.getSelection()?.toString().trim()) offered = null;
 		};
 		document.addEventListener('selectionchange', drop);
 		return () => document.removeEventListener('selectionchange', drop);
 	});
-	let spans = $state<Sidecar | null>(null);
 	let active = $state('');
+	/** The offer is kept by a view's own action, so the selection going does not take it away. */
+	let kept = $state(false);
 	/** A bare selection, offered Quote: selecting words is not a request to annotate them, which Annotate is for. */
-	let offered = $state<{ page: number; text: string; lines: number[][]; at: { left: number; top: number; width: number; height: number }; range?: Range } | null>(null);
-	/** Where a quote from page `n` came from, as a link an agent can follow: the work by its identifier, else its citekey. */
-	const quoteHref = (n: number): string => (ref.work ? `cited:${ref.work}?page=${n}` : `quilt:${citekey}`);
-
-	// Fetched by the sidecar's own hash rather than derived from the manifest: the manifest is replaced on every poll,
-	// and re-fetching geometry once a second is exactly the re-render this pane must not do. Naming the hash is also
-	// what lets a stale copy be noticed while the publisher rebuilds underneath.
-	$effect(() => {
-		const at = ref.spans;
-		if (!at) return;
-		let dropped = false;
-		fetch(dataUrl(at.path))
-			.then((r) => (r.ok ? (r.json() as Promise<Sidecar>) : null))
-			.then((j) => {
-				if (!dropped) spans = j;
-			})
-			.catch(() => {});
-		return () => {
-			dropped = true;
-		};
-	});
+	let offered = $state<{ page: number; text: string; lines: number[][]; rects: number[][]; at: { left: number; top: number; width: number; height: number }; range?: Range } | null>(null);
+	/** Where a quote from page `n` came from, as a link an agent can follow: the work by its identifier at the page, else its reference, whole, as `loom link` prints it. */
+	const quoteHref = (n: number): string => (identifier ? `cited:${identifier}?page=${n}` : `quilt:${ref}`);
 
 	/** The place the URL points at, mapped by loom into rectangles, while the URL carries it. */
 	let lit = $state<{ page: number; rects: number[][] } | null>(null);
@@ -108,8 +131,7 @@
 		}
 		let dropped = false;
 		// a quote with no page is looked for across the work, and lit on the page loom finds it on
-		const body: Record<string, unknown> = l.span ? { citekey, page: at, span: l.span } : { citekey, ...(l.page ? { page: l.page } : {}), text: l.quote };
-		void write('locate', body).then((res: WriteResult & { page?: number; anchor?: { quads?: number[][] } }) => {
+		void write('locate', locateBody(ref, l, at)!).then((res: WriteResult & { page?: number; anchor?: { quads?: number[][] } }) => {
 			if (dropped) return;
 			lit = res.ok && res.anchor?.quads?.length ? { page: res.page ?? at, rects: res.anchor.quads } : null;
 		});
@@ -124,29 +146,9 @@
 		() => onleft?.()
 	);
 
-	type Drawn = { id: string; page: number; rects: number[][]; transient?: boolean };
-	/** The geometry drawn besides the annotations, by the page it is on: the work's results, where a link lands on one, and the lit locator. */
-	const drawn = $derived.by<Drawn[]>(() => {
-		const out: Drawn[] = Object.entries(spans?.quads ?? {})
-			.map(([id, rects]) => ({ id, page: ref.results?.[id]?.page ?? 0, rects }))
-			.filter((s) => s.page > 0);
-		if (lit) out.push({ id: '_locator', page: lit.page, rects: lit.rects, transient: true });
-		return out;
-	});
-	// `result=` names a result of this work, whose rectangles the sidecar already carries under that same id, so it is focused directly rather than resolved: a link to a cited result works with no publisher answering.
-	const focusOn = $derived(locator?.annot ?? locator?.result ?? (lit ? '_locator' : active));
-
-	// Three states, not two. A work whose LaTeX is in the store but whose PDF is not has a digest worth trusting and no
-	// page to show it against, which is neither "nothing here" nor "we could not get it" — and page-numbered locators
-	// into it are unverified, because the pagination a reader will open is the publisher's and not ours.
-	const absent = $derived(
-		ref.unreadable
-			? `Declared unreadable: ${ref.unreadable.why}`
-			: ref.artifacts?.source
-				? 'The LaTeX of this paper is here but its PDF is not, so there is no page to show. Locators into it are unverified against the document a reader would open.'
-				: 'No copy of this paper on this machine.'
-	);
-
+	/** The geometry drawn besides the annotations: the lit locator. */
+	const drawn = $derived(lit ? [{ id: '_locator', page: lit.page, rects: lit.rects, transient: true }] : []);
+	const focusOn = $derived(locator?.annot ?? (lit ? '_locator' : active));
 </script>
 
 <section class="reading" data-testid="reading">
@@ -157,7 +159,7 @@
 				{view}
 				notes={held.notes}
 				{url}
-				name="{citekey}.pdf"
+				name="{short ?? ref}.pdf"
 				page={place.opening.page}
 				share={place.opening.share}
 				seq={place.opening.seq}
@@ -166,25 +168,29 @@
 				lands={!place.spent}
 				onselect={(e) => {
 					const sel = window.getSelection();
-					offered = { page: e.page, text: e.text, lines: mergeLines(e.rects), at: e.client, range: sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : undefined };
-					here.selection = { item: `work:${citekey}`, page: e.page, text: e.text, rects: e.rects };
+					offered = { page: e.page, text: e.text, lines: mergeLines(e.rects), rects: e.rects, at: e.client, range: sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : undefined };
+					here.selection = { item: `work:${ref}`, page: e.page, text: e.text, rects: e.rects };
 				}}
 				onregion={(e) => {
 					offered = null;
-					here.region = { item: `work:${citekey}`, page: e.page, rects: e.rects };
+					here.region = { item: `work:${ref}`, page: e.page, rects: e.rects };
 				}}
 				onmoved={(e) => {
 					// what was being looked at is left behind with the place, so nothing lands back on it
 					active = '';
 					place.moved(e);
 				}}
+				{onpage}
+				{overlay}
 			/>
 		</div>
 	{:else}
-		<p class="muted" data-testid="reading-absent">{absent}</p>
+		<p class="muted" data-testid="reading-absent">{library.reader.noPdf}</p>
 	{/if}
 	{#if offered}
-		<QuoteChip at={offered.at} range={offered.range} words={offered.text} name="{citekey} p. {offered.page}" href={quoteHref(offered.page)} ondone={() => (offered = null)} />
+		{@const o = offered}
+		<QuoteChip at={o.at} range={o.range} words={o.text} name="{short ?? ref} p. {o.page}" href={quoteHref(o.page)} ondone={() => ((offered = null), (kept = false))} more={more ? extra : undefined} />
+		{#snippet extra()}{@render more?.({ page: o.page, text: o.text, rects: o.rects, hold: () => (kept = true), done: () => ((offered = null), (kept = false)) })}{/snippet}
 	{/if}
 </section>
 

@@ -4,7 +4,7 @@ This spec says exactly what loom reads from an author's LaTeX and what each cons
 
 ## 1. What is read
 
-Loom scans every `.tex` file under the quilt root outside `.loom/`, the history and sync directories and tools' directories (a Lake project's `.lake`, its build and every package it depends on, among them), every digest in `.loom/library/` outside its store, and every agent copy in `.loom/agents/copies/`, unless its first twenty lines include the line `% !LOOM ignore`. A directory left out is pruned as the tree is walked, never listed. A master is any file read here with `\documentclass`, wherever it sits, named by its path without `.tex`; it compiles from its own directory, so every name it gives (`\input`, a package, a figure, a bibliography) is read against that directory at every depth, a name with `..` reaches nothing, and files it reaches by `\input`, `\include` or `\nest` (an `\input` one heading level down) are read in its context. Files no master reaches are scanned too.
+Loom scans every `.tex` file under the quilt root outside `.loom/`, the history and sync directories and tools' directories (a Lake project's `.lake`, its build and every package it depends on, among them), and every agent copy in `.loom/agents/copies/`, unless its first twenty lines include the line `% !LOOM ignore`. A directory left out is pruned as the tree is walked, never listed. A master is any file read here with `\documentclass`, wherever it sits, named by its path without `.tex`; it compiles from its own directory, so every name it gives (`\input`, a package, a figure, a bibliography) is read against that directory at every depth, a name with `..` reaches nothing, and files it reaches by `\input`, `\include` or `\nest` (an `\input` one heading level down) are read in its context. Files no master reaches are scanned too.
 
 Comments are blanked first: each, from an unescaped `%` to the end of the line, becomes spaces, except in `verbatim`, `lstlisting`, `comment` and `filecontents` environments and `\verb`. A commented-out environment defines nothing, and a commented-out `\ref` is no dependency. Directives (section 8) are read before blanking.
 
@@ -21,11 +21,11 @@ Theorem-like environments, headings and proofs are nodes. "With an id" means the
 | heading, `\part` to `\subparagraph`, with an id | the id |
 | heading without | `FILE#LABEL`, else `FILE#COMMAND:N` |
 | attached proof (section 5) | its id, else `S/proof`, `S/proof/2`, … |
-| unattached proof | its id, else `FILE#LABEL`, else `FILE#proof:N`, the Nth unattached proof in FILE; `loom:unattached-proof` (error) |
+| unattached proof | its id, else `FILE#LABEL`, else `FILE#proof:N`, the Nth unattached proof in FILE; `loom:unattached-proof` (warning) |
 | other environment: `equation`, `figure`, undeclared | none; its labels name regions, `KEY#LABEL` |
 | a file | none; it owns the text no node claims |
 
-An environment is theorem-like when a master declares it: by `\newtheorem` or `\declaretheorem` in its preamble or the local files the preamble loads, or by `% !LOOM environment: ENV = Name, style` in the master. The declared name is the taxon. An undeclared environment is prose, and `loom:unknown-environment` (error) if it has a common theorem-like name. In a digest, a result's environment declares itself: every result opens `\begin{ENV}[{\cite[LOCATOR]{key}}]`, so `ENV` is theorem-like in that file, its taxon the locator's first word when that names a kind of result and otherwise the environment's own name, and a master's declaration wins (`digests.md` §2).
+An environment is theorem-like when a master declares it: by `\newtheorem` or `\declaretheorem` in its preamble or the local files the preamble loads, or by `% !LOOM environment: ENV = Name, style` in the master. The declared name is the taxon. An undeclared environment is prose, and `loom:unknown-environment` (warning) if it has a common theorem-like name.
 
 ### 2.1 Basis
 
@@ -37,7 +37,7 @@ Each theorem-like node has a basis, inferred from its environment name or taxon,
 | `expository` | definition defn def notation construction convention remark rmk rem comment example examples exmp caveat warning note recall terminology |
 | `assumption` | assumption axiom postulate hypothesis |
 | `open-claim` | conjecture conj question problem |
-| `cited-result` | a block whose title holds, or whose body opens with, `\cite[LOCATOR]{KEY}`; every digest node |
+| `cited-result` | a block whose title holds, or whose body opens with, `\cite[LOCATOR]{KEY}` |
 
 A block is **unclassified** when its names give no basis or two, when it cites without a locator, or when it has a proof but another basis. A line `% !LOOM basis: CATEGORY` inside the block settles it. An unclassified block a master reaches is `loom:needs-classification` (warning), and `loom accept --all-live` and `--master` refuse while one is in scope.
 
@@ -48,15 +48,13 @@ A `local-proof` block needs a proof unless it holds `\incomplete{TEXT}`, which m
 ### 3.1 Grammar
 
 ```
-id         := prefix "-" local
+id         := prefix "-" loomlocal
 prefix     := [A-Za-z0-9]+
-local      := loomlocal | paperlocal
 loomlocal  := [0-9A-Z]{4}                          base 36: 0001, 00ZZ
-paperlocal := [A-Za-z0-9.]+ ("-" [A-Za-z0-9.]+)*   a paper's number: thm-4.1
 derived    := prefix "-" loomlocal "-ai"           an agent document's copy
 ```
 
-A prefix that is a citekey slug takes `paperlocal`; others take `loomlocal` or `derived`. A slug is a citekey stripped to ASCII letters and digits (`Fulton-Int:1998` gives `FultonInt1998`); loom knows the slugs of the citekeys in `.loom/library/bibliography.bib` and the prefixes digests declare. So `sec-intro` is an id only if `sec` is a slug, while `\label{fig-0001}` on a lemma is its id whatever the quilt's prefix.
+So `\label{fig-0001}` on a lemma is its id whatever the quilt's prefix, and `sec-intro` is never an id.
 
 ### 3.2 Never reused
 
@@ -66,7 +64,7 @@ A prefix that is a citekey slug takes `paperlocal`; others take `loomlocal` or `
 - the acceptance and history ledgers, the history's step file names, and the annotation log;
 - with git, every tracked file in the newest 500 commits on any ref (`git rev-list --all`, then `git grep`).
 
-A number is free only if nothing ever wrote it down; renaming an id deletes one node and creates another. Redefining an id the history recorded as removed, with a text it never recorded, is `loom:id-reused` (error).
+A number is free only if nothing ever wrote it down; renaming an id deletes one node and creates another. Redefining an id the history recorded as removed, with a text it never recorded, is `loom:id-reused` (warning).
 
 ### 3.3 Defined once
 
@@ -106,8 +104,9 @@ An edge runs from a key's own text (section 7) to a node: a statement-, proof- o
 
 1. `\ref`, `\eqref`, `\autoref`, `\pageref`, `\vref`, `\Vref` (one label) and `\cref`, `\Cref` (a list), starred or not;
 2. `\uses{X, Y}`, for a dependency the text does not name;
-3. `\cite[POSTNOTE]{CITEKEY}` and `\citep`, `\citet`, `\parencite`, `\textcite`, `\autocite`, `\footcite`, `\cites`, `\Cite`, `\Parencite`, `\Textcite`, when the postnote (the second of two optional arguments) matches nodes of CITEKEY's digest (section 9);
-4. a theorem-like environment directly inside a proof.
+3. a theorem-like environment directly inside a proof.
+
+A citation, `\cite` and its kin, is no edge: it names a work, not a node.
 
 A label resolves to the node with that id or alias, or owning that region, else is `dangling-link` (error). No node depends on itself, nor a proof on its statement.
 
@@ -134,18 +133,6 @@ A directive is a line whose first non-blank characters are `% !LOOM` (the space 
 
 `see:` declares a relation, never a dependency. Items resolve like references. A relation enters no closure, acceptance or staleness check, so a detailed version of a result can change without staling the short one.
 
-## 9. Digest nodes
-
-A digest is a file whose first twenty lines carry `% !LOOM digest: CITEKEY`, kept at `.loom/library/CITEKEY.tex` and specified in [digests.md](digests.md). Its theorem-like environments, proofs and sections are digest nodes: a cited paper's results, with locators in their titles, never proved here.
-
-```tex
-\begin{theorem}[{\cite[Theorem 4.1]{Man12}}]\label{Man12-thm-4.1}
-```
-
-The id is `PREFIX-PAPERLOCAL`: PREFIX is the header's `% !LOOM prefix:`, else the citekey's slug. Loom writes the prefix into each digest it makes, so the citekey is not always the prefix; `loom search CITEKEY` gives the ids. Digests are loose, yet never `unreachable`, and references to them are never `loom:reference-to-loose`.
-
-A postnote matches the nodes whose locator, or the taxon and number in whose id, it names once both are normalised ([digests.md §5](digests.md#5-citing-a-result)); `Lemmas 2.1 and 2.3` gives an edge to each. With no digest, or no match, there is no edge.
-
-## 10. Diagnostics
+## 9. Diagnostics
 
 Every code named here is defined in [diagnostics.md](diagnostics.md).

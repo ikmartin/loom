@@ -67,12 +67,17 @@ export function paperPlace(view: () => PdfView, link: () => { seq: number; page:
 		return (told = { ...(v.place ?? keptPlace(v.file) ?? { page: 1, share: 0 }), seq: 0 });
 	});
 
-	// Kept once the column has been still a moment, and when the page goes: not on every frame of a scroll.
+	// Kept once the column has been still a moment, and when the page goes: not on every frame of a scroll. A paper opened where it was remembered writes nothing until it moves, nor one left where it last kept, so when the page goes a paper open beside another of the same file never puts back its older place over the place the other was read to last, whichever of them was drawn first. Where a link sent it is kept, since that is where the reader is from then on.
 	let saving: ReturnType<typeof setTimeout> | undefined;
+	let wrote: PagePlace | null = null;
 	function save(): void {
 		clearTimeout(saving);
 		const v = view();
-		if (v.place && v.file) keepPlace(v.file, v.place);
+		if (!v.place || !v.file) return;
+		const last = wrote ?? (told && !told.seq ? { page: told.page, share: told.share } : null);
+		if (last && last.page === v.place.page && Math.abs(last.share - v.place.share) < 1e-4) return;
+		keepPlace(v.file, v.place);
+		wrote = { page: v.place.page, share: v.place.share };
 	}
 	$effect(() => {
 		void view().place;

@@ -55,19 +55,8 @@ def region_text(result: ScanResult, key: str, override: str | None = None) -> st
 
 
 def statement_block(result: ScanResult, key: str, override: str | None = None) -> str:
-    n = result.nodes[key]
     text = region_text(result, key, override)
-    if n.digest:
-        block = _macro_block(result, n.file)
-        if block:
-            return f"% id: {key} (digest {n.digest})\n\\begingroup\n{block}\n{text}\n\\endgroup\n"
     return f"% id: {key}\n{text}\n"
-
-
-def _macro_block(result: ScanResult, file: str) -> str:
-    src = result.files[file]
-    m = re.search(r"^\s*%\s*!LOOM\s+begin\s+macros\s*$(.*?)^\s*%\s*!LOOM\s+end\s+macros\s*$", src.text, re.M | re.S)
-    return m.group(1).strip("\n") if m else ""
 
 
 def build_bundle(result: ScanResult, key: str, master: str | None = None, override_text: str | None = None) -> Bundle:

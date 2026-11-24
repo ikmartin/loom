@@ -51,7 +51,7 @@ AGENT_WORDS = ("agent", "ai", "bot", "assistant")
 def is_agent(name: str) -> bool:
     """Whether a declared identity is an agent's, by the word it was asked to include in its own name.
 
-    The words are matched however they are punctuated, because the form loom's own documents ask for is `Referee (Agent)` and the showcase writes exactly that. Splitting on whitespace and hyphens made `(agent)` a different word from `agent`, so the name the orientation teaches was read as a person's: the session picker showed a parked agent as `⟨person⟩`, and `refuse_under_agent` let that name run `loom accept` and `loom library verify`. Found by the reading study, 2026-09-21.
+    The words are matched however they are punctuated, because the form loom's own documents ask for is `Referee (Agent)` and the showcase writes exactly that. Splitting on whitespace and hyphens made `(agent)` a different word from `agent`, so the name the orientation teaches was read as a person's: the session picker showed a parked agent as `⟨person⟩`, and `refuse_under_agent` let that name run `loom accept`. Found by the reading study, 2026-09-21.
     """
     import re
 
@@ -101,7 +101,7 @@ def signed(declared: str | None) -> str:
 def whoever(root: Path, author: str | None = None, *, sniff: bool = True) -> str:
     """Who is running this, for a record that wants provenance and must not refuse for want of it.
 
-    Opening, retitling or closing a session is not an authored claim about anybody's mathematics, so an unconfigured author name costs the record a name and never the command; a name that is declared is held to `signed` like any other. The verbs that *are* claims -- `accept`, `library verify`, a comment -- keep asking. `sniff=False` is the write API's: a write over HTTP is somebody at a browser, and the shell `loom serve` was started in says nothing about them.
+    Opening, retitling or closing a session is not an authored claim about anybody's mathematics, so an unconfigured author name costs the record a name and never the command; a name that is declared is held to `signed` like any other. The verbs that *are* claims -- `accept`, a comment -- keep asking. `sniff=False` is the write API's: a write over HTTP is somebody at a browser, and the shell `loom serve` was started in says nothing about them.
     """
     from loom.scan.quilt import NoAuthorError, resolve_author
 

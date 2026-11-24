@@ -1,7 +1,7 @@
-// A PDF and nothing else (plan 0.30.2): Bellamy19 in the showcase, and a project's own PDF. Every annotation on their pages with a place on one is drawn there in its look, sidecar's and drawings alike; one detached from a changed file is listed in Comments and drawn on no page; one found again on a changed file says so in its popup. The PDF's toolbar is the one a document has, then the PDF's own tools, in either theme.
+// A PDF and nothing else (plan 0.30.2): Bellamy19's in the showcase's library, and a project's own PDF. Every annotation on their pages with a place on one is drawn there in its look, on words and drawings alike; one detached from a changed file is listed in Comments and drawn on no page; one found again on a changed file says so in its popup. The PDF's toolbar is the one a document has, then the PDF's own tools, in either theme.
 //
 // Rows the fixture does not carry yet are added to the manifest as served: a drawing, an underline and a strike, an own colour, a taken-in mark, a resolved one, a detached one and a re-found one.
-import { expect, readOnly, test } from '../served';
+import { expect, readOnly, test, workOf } from '../served';
 import type { Page, Locator } from '@playwright/test';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,7 +21,7 @@ function made(base: Row, id: string, target: Row['target'], over: Record<string,
 const look = (color: string, style: string, weight = 2, opacity = 100) => ({ color, style, weight, opacity });
 
 /** Serve the manifest with `rows(manifest)` added to its annotations. */
-async function adding(page: Page, rows: (m: { annotations: Rows; references: Record<string, { work: string }> }) => Row[]): Promise<void> {
+async function adding(page: Page, rows: (m: { annotations: Rows }) => Row[]): Promise<void> {
 	await page.route('**/build/manifest.json', async (route) => {
 		// asked afresh, so a copy the browser holds never comes back as an empty 304
 		const headers = Object.fromEntries(Object.entries(route.request().headers()).filter(([k]) => !/^if-(none-match|modified-since)$/i.test(k)));
@@ -88,10 +88,11 @@ test.afterEach(({}, info) => {
 	expect(info.annotations.filter((a) => a.type === 'pageerror')).toEqual([]);
 });
 
-readOnly("every annotation on a cited work's pages with a place is drawn there in its look, and a detached one is listed and drawn nowhere", async ({ page }) => {
+readOnly("every annotation on a cited work's pages with a place is drawn there in its look, and a detached one is listed and drawn nowhere", async ({ page, served }) => {
+	const ref = workOf(served.root, 'Bellamy19')!.ref;
 	await adding(page, (m) => {
 		const base = Object.values(m.annotations)[0];
-		const on = (p: number) => ({ key: m.references.Bellamy19.work, work: 'Bellamy19', page: p });
+		const on = (p: number) => ({ key: ref, work: ref, page: p });
 		return [
 			made(base, 'a-pdf-only-box', on(1), { mark: 'box', rects: [[60, 60, 200, 110]], look: look('green', 'highlight', 3) }),
 			made(base, 'a-pdf-only-ink', on(1), { mark: 'ink', rects: [[300, 60, 400, 110]], strokes: [[300, 60, 350, 110, 400, 60]], look: look('blue', 'highlight') }),
@@ -103,9 +104,9 @@ readOnly("every annotation on a cited work's pages with a place is drawn there i
 			made(base, 'a-pdf-only-gone', on(2), { mark: 'oval', detached: true, anchored: false, rects: null, body: 'its words are gone', body_html: '<p>its words are gone</p>', look: look('grey', 'highlight') })
 		];
 	});
-	await page.goto('/library/Bellamy19?page=1');
+	await page.goto(`/library/${ref}?page=1`);
 	await toPage(page, 1);
-	const rows = onPages((await asServed(page)).annotations, (r) => r.target.work === 'Bellamy19');
+	const rows = onPages((await asServed(page)).annotations, (r) => r.target.work === ref);
 	expect(rows.filter((r) => r.detached).length).toBeGreaterThan(0);
 	await drawnAndListed(page, rows);
 
@@ -193,42 +194,54 @@ test.describe('the toolbar', () => {
 			return -1;
 		}, prop);
 
-	for (const scheme of ['light', 'dark'] as const) {
-		test(`a cited work and a project PDF carry the same bar, in the ${scheme} theme`, async ({ page }) => {
-			await page.emulateMedia({ colorScheme: scheme });
-			for (const url of ['/library/Bellamy19?page=1', `/file/${FILE}`]) {
-				await page.goto(url);
-				await toPage(page, 1);
-				const tops: number[] = [];
-				for (const row of [BAR, ROW]) {
-					let left = -Infinity;
-					for (const id of row) {
-						const at = page.getByTestId(id);
-						await expect(at, `${url}: ${id}`).toBeVisible();
-						const box = (await at.boundingBox())!;
-						expect(box.x, `${url}: ${id} after the one before it`).toBeGreaterThan(left);
-						left = box.x;
-					}
-					tops.push((await page.getByTestId(row[0]).boundingBox())!.y);
-				}
-				expect(tops[1], `${url}: the annotation row beneath the row that reads`).toBeGreaterThan(tops[0]);
-				// drawn in the theme: dark words on light, light on dark, in the bar and in the menus it opens
-				const words = await lightness(page.getByTestId('open-comments'), 'color');
-				expect(scheme === 'light' ? words < 0.5 : words > 0.5, `${url}: the bar's words in the ${scheme} theme`).toBe(true);
-				await page.getByTestId('format-toggle').click();
-				const menu = await lightness(page.getByTestId('format-menu'), 'backgroundColor');
-				expect(scheme === 'light' ? menu > 0.5 : menu < 0.5, `${url}: the format menu in the ${scheme} theme`).toBe(true);
-				await page.keyboard.press('Escape');
-				await page.getByTestId('pdf-menu').click();
-				await expect(page.getByTestId('mark-save-copy')).toBeVisible();
-				const items = await lightness(page.getByTestId('pdf-menu-items'), 'backgroundColor');
-				expect(scheme === 'light' ? items > 0.5 : items < 0.5, `${url}: PDF ▾ in the ${scheme} theme`).toBe(true);
-				await page.keyboard.press('Escape');
-				// and Annotate draws on it
-				await page.getByTestId('tool-annotate').click();
-				await expect(page.getByTestId('tool-annotate')).toHaveAttribute('aria-pressed', 'true');
-				await page.keyboard.press('Escape');
+	/** The bar a PDF at `url` carries, in order and in the theme, and what it opens. */
+	async function bar(page: Page, url: string, scheme: 'light' | 'dark'): Promise<void> {
+		await page.emulateMedia({ colorScheme: scheme });
+		await page.goto(url);
+		await toPage(page, 1);
+		const tops: number[] = [];
+		for (const row of [BAR, ROW]) {
+			let left = -Infinity;
+			for (const id of row) {
+				const at = page.getByTestId(id);
+				await expect(at, `${url}: ${id}`).toBeVisible();
+				const box = (await at.boundingBox())!;
+				expect(box.x, `${url}: ${id} after the one before it`).toBeGreaterThan(left);
+				left = box.x;
 			}
+			tops.push((await page.getByTestId(row[0]).boundingBox())!.y);
+		}
+		expect(tops[1], `${url}: the annotation row beneath the row that reads`).toBeGreaterThan(tops[0]);
+		// every tool of the annotation row a target of 28 px at the least
+		for (const id of ROW) {
+			const box = (await page.getByTestId(id).boundingBox())!;
+			expect(Math.min(box.width, box.height), `${url}: ${id} is ${box.width} by ${box.height}`).toBeGreaterThanOrEqual(28);
+		}
+		// drawn in the theme: dark words on light, light on dark, in the bar and in the menus it opens
+		const words = await lightness(page.getByTestId('open-comments'), 'color');
+		expect(scheme === 'light' ? words < 0.5 : words > 0.5, `${url}: the bar's words in the ${scheme} theme`).toBe(true);
+		await page.getByTestId('format-toggle').click();
+		const menu = await lightness(page.getByTestId('format-menu'), 'backgroundColor');
+		expect(scheme === 'light' ? menu > 0.5 : menu < 0.5, `${url}: the format menu in the ${scheme} theme`).toBe(true);
+		await page.keyboard.press('Escape');
+		await page.getByTestId('pdf-menu').click();
+		await expect(page.getByTestId('mark-save-copy')).toBeVisible();
+		const items = await lightness(page.getByTestId('pdf-menu-items'), 'backgroundColor');
+		expect(scheme === 'light' ? items > 0.5 : items < 0.5, `${url}: PDF ▾ in the ${scheme} theme`).toBe(true);
+		await page.keyboard.press('Escape');
+		// and Annotate draws on it
+		await page.getByTestId('tool-annotate').click();
+		await expect(page.getByTestId('tool-annotate')).toHaveAttribute('aria-pressed', 'true');
+		await page.keyboard.press('Escape');
+	}
+
+	for (const scheme of ['light', 'dark'] as const) {
+		test(`a project PDF carries the bar a document has, then its own tools, in the ${scheme} theme`, async ({ page }) => {
+			await bar(page, `/file/${FILE}`, scheme);
+		});
+
+		test(`a cited work carries the bar a project PDF has, in the ${scheme} theme`, async ({ page, served }) => {
+			await bar(page, `/library/${workOf(served.root, 'Bellamy19')!.ref}?page=1`, scheme);
 		});
 	}
 });

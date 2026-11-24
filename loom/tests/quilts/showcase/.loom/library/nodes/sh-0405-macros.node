@@ -1,0 +1,10 @@
++++
+schema = 1
+id = "sh-0405-macros"
+taxon = "macros"
++++
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage[margin=1.15in]{geometry}
+\DeclareMathOperator{\rank}{rank}
+\newcommand{\ZZ}{\mathbb{Z}}
+\newcommand{\Zc}{\mathcal{Z}}

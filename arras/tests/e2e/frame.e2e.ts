@@ -1,12 +1,12 @@
-// The frame at each width the layout defines: the column open beside two panes; the column folded to its strip below 1200px; one pane below the workspace's two-pane width. At each, what must stay in reach does, every pane draws its toolbar, and nothing scrolls sideways.
+// The frame at each width the layout defines: the column open beside two panes; the column folded to its strip below 1200px; one pane below the workspace's two-pane width. At each, what must stay in reach does, every pane draws its toolbar, and nothing scrolls sideways; and the column's message, which goes by itself however the last one was ended.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane } from '../workspace';
-import { servePapers } from '../manifest';
+import { PDF } from '../manifest';
 
 async function open(page: Page, width: number): Promise<void> {
-	await servePapers(page);
+	await page.route('**/_files/drafting/figures/fig.pdf', (route) => route.fulfill({ body: PDF, contentType: 'application/pdf' }));
 	await page.setViewportSize({ width, height: 900 });
-	await page.goto('/master/drafting/main' + beside('/library/Kre99'));
+	await page.goto('/master/drafting/main' + beside('/file/drafting/figures/fig.pdf'));
 	await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
 }
 
@@ -95,4 +95,105 @@ test("the quilt's name is not a way anywhere, and the head's icons are 28 px tar
 		expect(target.height).toBeGreaterThanOrEqual(28);
 		expect(glyph.width).toBeGreaterThanOrEqual(16);
 	}
+});
+
+test("a message dismissed by mouse lets the next go by itself, and one dismissed by keyboard hands the keyboard to the foot's next control", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/review?fixture=round6');
+	await page.getByTestId('review-kind-agents').click();
+	const tasks = page.getByTestId('review-task');
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	const said = page.getByTestId('column-message');
+	await expect(said).toContainText('Task deleted.');
+	// dismissed with the pointer: the box goes from under it
+	await said.getByTestId('column-message-dismiss').click();
+	await expect(said).toHaveCount(0);
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await expect(said).toContainText('Task deleted.');
+	await page.mouse.move(900, 600);
+	await expect(said).toHaveCount(0, { timeout: 9000 });
+	// dismissed from the keyboard
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await said.getByTestId('column-message-dismiss').focus();
+	await page.keyboard.press('Enter');
+	await expect(said).toHaveCount(0);
+	await expect(page.getByTestId('legend-open')).toBeFocused();
+});
+
+test("an undo by keyboard hands the keyboard to the foot's next control, and a message under the pointer when the column folds lets the next go by itself", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	const row = page.getByTestId('work-row').filter({ hasText: 'Widgets and their bounds' }).first();
+	await row.hover();
+	await row.getByRole('button', { name: 'more' }).click();
+	await page.getByTestId('row-delete').click();
+	const said = page.getByTestId('column-message');
+	await said.getByTestId('column-message-undo').focus();
+	await page.keyboard.press('Enter');
+	await expect(said).toHaveCount(0);
+	await expect(page.getByTestId('legend-open')).toBeFocused();
+	// a message under the pointer, then the column folds beneath it
+	await page.goto('/review?fixture=round6');
+	await page.getByTestId('review-kind-agents').click();
+	const tasks = page.getByTestId('review-task');
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await said.hover();
+	await page.setViewportSize({ width: 1100, height: 900 });
+	await expect(page.getByTestId('column-message-dot')).toBeVisible();
+	await tasks.first().hover();
+	await tasks.first().getByRole('button', { name: 'delete' }).click();
+	await page.mouse.move(700, 600);
+	await expect(page.getByTestId('column-message-dot')).toHaveCount(0, { timeout: 9000 });
+});
+
+test("a quilt an earlier loom made: the frame's head, one sentence and one button, said while it runs and when it fails, and the quilt itself once upgraded", async ({ page }) => {
+	// a publisher waiting on a quilt in an earlier layout, as `write-api.md` §1 has it: only the upgrade served
+	let found = 1;
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: found < 2 ? ['library-upgrade'] : [], format: { found, reads: 2 }, token: 't' } }));
+	const answers: (() => Promise<void>)[] = [];
+	await page.route('**/_api/library-upgrade', (route) => new Promise<void>((done) => answers.push(() => route.fulfill(next()).then(done))));
+	let next: () => { status: number; json: unknown } = () => ({ status: 409, json: { error: { code: 'format-unknown', message: "this quilt's .loom/format says 7, and this loom reads format 2" } } });
+	await page.setViewportSize({ width: 1440, height: 900 });
+	// nothing the frame drew before it knew throws once it is taken away
+	const thrown: string[] = [];
+	page.on('pageerror', (e) => thrown.push(e.message));
+	await page.goto('/library');
+	await expect(page.getByTestId('format-old')).toBeVisible();
+	await page.goto('/');
+	const old = page.getByTestId('format-old');
+	await expect(old).toBeVisible();
+	await page.waitForTimeout(300);
+	expect(thrown).toEqual([]);
+	await expect(page.getByTestId('format-old-said')).toHaveText('This quilt was made by an earlier version of loom; upgrading it carries its papers over to this one.');
+	// only the head: no view names, no files, no foot
+	await expect(page.getByTestId('quilt-name')).toHaveText('loom');
+	for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`primary-${v}`)).toHaveCount(0);
+	await expect(page.getByTestId('session-footer')).toHaveCount(0);
+	await expect(page.locator('main code')).toHaveCount(0);
+	// while it runs, then refused: a sentence of loom's, never the publisher's message or a command
+	const button = page.getByTestId('format-old-upgrade');
+	await button.click();
+	await expect(page.getByTestId('format-old-said')).toHaveText('Upgrading the quilt and carrying its papers over…');
+	await expect(button).toBeDisabled();
+	await expect.poll(() => answers.length).toBe(1);
+	await answers.shift()!();
+	await expect(page.getByTestId('format-old-said')).toHaveText('This quilt was made by a version of loom this one cannot upgrade from.');
+	await expect(old).not.toContainText('.loom');
+	await expect(old).not.toContainText('loom upgrade');
+	// carried, but not all of it: said, and the button opens the quilt
+	next = () => ({ status: 200, json: { ok: true, result: 'brought the quilt forward', carried: { references: 3, documents: 1, notes_rekeyed: 0, overviews: 0, links_rewritten: 0, removed: [], problems: ['one entry could not be read'] } } });
+	await button.click();
+	await expect.poll(() => answers.length).toBe(1);
+	found = 2;
+	await answers.shift()!();
+	await expect(page.getByTestId('format-old-said')).toHaveText('The quilt is upgraded, but one thing could not be carried over.');
+	await expect(button).toHaveText('open the quilt');
+	await button.click();
+	await expect(old).toHaveCount(0);
+	await expect(page.getByTestId('primary-docs')).toBeVisible();
 });

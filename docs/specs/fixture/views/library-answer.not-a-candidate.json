@@ -1,0 +1,14 @@
+{
+ "answer": {
+  "error": {
+   "code": "not-a-candidate",
+   "message": "sh-0404-ref is not one of this question's works"
+  },
+  "status": 400
+ },
+ "endpoint": "library-answer",
+ "request": {
+  "question": "q-2f1ndp",
+  "same": "sh-0404-ref"
+ }
+}

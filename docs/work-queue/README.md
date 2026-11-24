@@ -21,7 +21,7 @@ Several triggers below are numbers loom already prints. That is the property to 
 | id | item | repo | trigger |
 |---|---|---|---|
 | [WQ-08](WQ-08-nest-sectioning-classes.md) | `\nest` under `\part` and class-specific sectioning | loom | a fixture uses memoir, KOMA-Script or `\part` |
-| [WQ-10](WQ-10-locator-normalization.md) | locator normalization beyond English | loom | a digest whose locators do not match its citations |
+| [WQ-10](WQ-10-locator-normalization.md) | locator normalization beyond English | loom | a citation's locator in another language that the postnote matcher does not match |
 | [WQ-13](WQ-13-graph-at-scale.md) | graph layout precomputed by the publisher | loom, arras | a quilt's graph exceeds roughly 2000 nodes, or the force layout takes over a second |
 | [WQ-16](WQ-16-overleaf.md) | the Overleaf procedure | — | cutting the first tagged release |
 | [WQ-17](WQ-17-external-user.md) | acceptance criterion 10: an external user | — | someone outside the project has a paper to bring in |

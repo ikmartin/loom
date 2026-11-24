@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath
 
 from loom.history.ledger import History, load_history
 from loom.paths import COPIES, document_dir
-from loom.scan.bib import BIBLIOGRAPHY, BibEntry, parse_bib
+from loom.scan.bib import BibEntry
 from loom.scan.diagnostics import LATEX, MODEL
 from loom.scan.edges import EdgeResult, find_edges
 from loom.scan.expand import Expansion, expand_master
@@ -47,7 +47,9 @@ class ScanResult:
     closures: dict[str, PreambleClosure] = field(default_factory=dict)
     expansions: dict[str, Expansion] = field(default_factory=dict)
     taxa: dict[str, Taxon] = field(default_factory=dict)
+    #: The library's references by the key their entries have: each entry, and the reference holding it (`library.references.entries`).
     bib: dict[str, BibEntry] = field(default_factory=dict)
+    refs: dict[str, str] = field(default_factory=dict)
     assembly: Assembly = field(default_factory=Assembly)
     diagnostics: list[Diagnostic] = field(default_factory=list)
     edges: EdgeResult = field(default_factory=EdgeResult)
@@ -318,9 +320,12 @@ def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | 
                 [],
             )
         )
-    # the quilt's own bibliography, gathered from the landmarks by `loom library update`; an author's `.bib` reaches it only through a landmark that names it
-    if (root / BIBLIOGRAPHY).is_file():
-        result.bib.update(parse_bib(read_source(root, BIBLIOGRAPHY).text))
+    # the citekeys loom knows are the library's references' (gathering makes one for each entry a document's bibliography holds)
+    from loom.library.references import entries
+
+    for key, (ref, held) in entries(root).items():
+        result.bib[key] = held
+        result.refs[key] = ref
     from loom.scan.directives import parse_directives
 
     for m in result.masters:
@@ -346,7 +351,6 @@ def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | 
         result.closures,
         result.expansions,
         result.taxa,
-        set(result.bib),
         result.default_master,
         result.quilt.config.basis,
     )
@@ -375,9 +379,7 @@ def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | 
                     class_=LATEX if unended else MODEL,
                 )
             )
-    from loom.refs.scan import other_versions
-
-    result.edges = find_edges(result.assembly, result.files, other_versions(result.bib))
+    result.edges = find_edges(result.assembly, result.files)
     # relations are resolved beside the edges and stored beside them; nothing that walks the graph can reach one
     seen = find_relations(result.assembly, result.files)
     result.relations = seen.relations

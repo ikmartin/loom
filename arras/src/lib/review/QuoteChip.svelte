@@ -1,5 +1,6 @@
 <script lang="ts">
-	// Quote, on a bare selection: copies the words and where they came from, as a link an agent can follow, and says so. It writes nothing; a quote is not a record.
+	// Quote, on a bare selection: copies the words and where they came from, as a link an agent can follow, and says so. It writes nothing; a quote is not a record. A view that does more with a selection lays its own actions beside it (`more`), as the Library's reader does.
+	import type { Snippet } from 'svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { copyText } from '$lib/clipboard';
 	import AtSelection from './AtSelection.svelte';
@@ -14,7 +15,8 @@
 		words,
 		name,
 		href,
-		ondone
+		ondone,
+		more
 	}: {
 		at: Box;
 		range?: Range;
@@ -26,6 +28,8 @@
 		href: string;
 		/** The chip has done its work and goes. */
 		ondone: () => void;
+		/** Actions of the view's own beside Quote. */
+		more?: Snippet;
 	} = $props();
 
 	async function quote(): Promise<void> {
@@ -39,4 +43,5 @@
 
 <AtSelection {at} {range}>
 	<button type="button" class="chip" title="Quote these words to your agent, with where they came from" data-testid="quote-offer" onclick={() => void quote()}><Icon name="quote" size={14} />Quote</button>
+	{#if more}{@render more()}{/if}
 </AtSelection>

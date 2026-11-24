@@ -11,11 +11,10 @@ import pytest
 
 from loom.links import ANNOTATION as ANNOTATION_LINK
 from loom.links import SESSION as SESSION_LINK
-from loom.paths import ANNOTATION_LOG, LINKS
+from loom.paths import ANNOTATION_LOG
 from loom.records.ids import draw, repeated
 from loom.records.log import ID as ANNOTATION_ID
 from loom.records.log import replay
-from loom.refs.links import add_link, read_links, remove_link
 from loom.sessions import ID as SESSION_ID
 from loom.sessions import INDEX, sessions
 from tests.helpers import copy, json_of, ok
@@ -68,18 +67,6 @@ def test_two_clones_merge_into_sessions_each_with_an_id_of_its_own(tmp_path: Pat
     _merge(one, two, INDEX, 1)
     assert {mine, theirs} <= set(sessions(one))
     _no_report(one)
-
-
-def test_two_clones_merge_into_links_each_with_an_id_of_its_own(tmp_path: Path) -> None:
-    """A link's count held no day, so it was shared on any day, and undoing either removed both."""
-    one, two = _clones(tmp_path)
-    mine = add_link(one, "a", "b", "depends-on", "why", "A").id
-    theirs = add_link(two, "a", "c", "depends-on", "why", "B").id
-    assert mine != theirs
-    _merge(one, two, LINKS, 1)
-    _no_report(one)
-    remove_link(one, mine)
-    assert [x.id for x in read_links(one)] == [theirs]
 
 
 @pytest.mark.parametrize(
@@ -146,17 +133,10 @@ def _second_session(q: Path) -> str:
     return str(made["id"])
 
 
-def _second_link(q: Path) -> str:
-    link = {"id": "link-zhxqxj", "from": "a", "to": "b", "kind": "depends-on", "why": "w"}
-    _append(q, LINKS, link)
-    _append(q, LINKS, {**link, "to": "c"})
-    return "link-zhxqxj"
-
-
 @pytest.mark.parametrize(
     ("rel", "provoke"),
-    [(ANNOTATION_LOG, _second_annotation), (INDEX, _second_session), (LINKS, _second_link)],
-    ids=["annotation", "session", "link"],
+    [(ANNOTATION_LOG, _second_annotation), (INDEX, _second_session)],
+    ids=["annotation", "session"],
 )
 def test_lint_reports_two_records_under_one_id(tmp_path: Path, rel: str, provoke: Callable[[Path], str]) -> None:
     """Keeping both sides of a merge conflict leaves two records under one id, which a reply or a link cannot tell apart; nothing said so."""

@@ -16,7 +16,7 @@ describe('an item and its address', () => {
 			'/master/drafting/main#sy-0200',
 			'/master/drafting/main?review=sy-0001&cause=0#sy-0001',
 			'/canon/flows-v2',
-			'/library/Kre99?page=4&result=Kre99-thm-2.1&view=info',
+			'/library/sy-0099-ref?page=4&annot=a-2026-09-16-ecnav2',
 			'/library/Kre99?page=1&quote=Artin+stacks',
 			'/node/sy-0002/proof',
 			'/node/sy-0002?note=a-2026-09-16-ecnav2',
@@ -38,11 +38,11 @@ describe('an item and its address', () => {
 	});
 
 	it('names nothing for a route that is not something to read', () => {
-		for (const href of ['/', '/graph', '/review?show=all', '/review/library']) expect(itemFromPath(m, href)).toBeNull();
+		for (const href of ['/', '/graph', '/review?show=all', '/review/problems']) expect(itemFromPath(m, href)).toBeNull();
 	});
 
 	it('is one item whatever its place, so a place never makes a second tab', () => {
-		expect(itemKey(itemFromPath(m, '/library/Kre99?page=4')!)).toBe(itemKey(itemFromPath(m, '/library/Kre99?view=info')!));
+		expect(itemKey(itemFromPath(m, '/library/Kre99?page=4')!)).toBe(itemKey(itemFromPath(m, '/library/Kre99?page=1&quote=Artin+stacks')!));
 	});
 });
 

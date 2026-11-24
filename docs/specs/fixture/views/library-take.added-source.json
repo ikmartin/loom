@@ -1,0 +1,37 @@
+{
+ "answer": {
+  "gen": 1789808400001,
+  "ok": true,
+  "result": "took in 1: 1 added",
+  "rows": [
+   {
+    "act": "x-v3rjtb",
+    "authors": [
+     "Halberd",
+     "Ravel"
+    ],
+    "found_by": "entry",
+    "id": "6710e171473d322a529fb29633f6145429d553fb7afcb0fc7d5d2fa87ff940c4",
+    "identifier": null,
+    "item": 0,
+    "name": "gadget-towers.tex",
+    "ref": "sh-0408-ref",
+    "short": "Halberd and Ravel",
+    "state": "added",
+    "tex": true,
+    "title": "Gadget towers",
+    "unconfirmed": false,
+    "under": false,
+    "year": ""
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "incoming": "6710e171473d322a529fb29633f6145429d553fb7afcb0fc7d5d2fa87ff940c4"
+   }
+  ]
+ }
+}

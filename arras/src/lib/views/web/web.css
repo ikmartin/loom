@@ -1,0 +1,396 @@
+/* The Web's look, as round six draws it (`docs/design/mockups/library-round-6/`, screens 7a and 7b): the list beside the focus, the focus card and its neighbourhood, and the graph. Everything is under `.wv`, the Web's root. */
+
+.wv {
+	flex: 1;
+	min-width: 0;
+	height: 100vh;
+	overflow: hidden;
+	background: var(--paper);
+	font-size: 13px;
+	color: var(--ink);
+}
+.wv .webp {
+	display: grid;
+	grid-template-columns: minmax(380px, 520px) minmax(0, 1fr);
+	height: 100%;
+}
+.wv .wlist {
+	display: flex;
+	flex-direction: column;
+	min-height: 0;
+	border-right: 1px solid var(--rule);
+}
+.wv .wbar {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 12px 16px 10px;
+	border-bottom: 1px solid var(--rule);
+}
+.wv .search {
+	width: 220px;
+	font: inherit;
+	padding: 5px 10px;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	background: var(--sheet);
+	color: var(--ink);
+}
+.wv .wbar .seg {
+	margin-left: auto;
+}
+.wv .seg {
+	display: inline-flex;
+	border: 1px solid var(--rule);
+	border-radius: 7px;
+	overflow: hidden;
+	background: var(--sheet);
+}
+.wv .seg button {
+	font: inherit;
+	border: 0;
+	background: none;
+	padding: 2px 10px;
+	font-size: 11.5px;
+	color: var(--ink-faint);
+	cursor: pointer;
+}
+.wv .seg button + button {
+	border-left: 1px solid var(--rule);
+}
+.wv .seg button.on {
+	background: var(--leaf);
+	color: var(--ink);
+	font-weight: 500;
+}
+.wv .quiet {
+	font-size: 12px;
+	color: var(--ink-faint);
+}
+.wv .wscroll {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	padding-bottom: 40px;
+}
+.wv .whead {
+	margin: 14px 16px 4px;
+	font-size: 11.5px;
+	color: var(--ink-faint);
+}
+.wv .wrow {
+	display: flex;
+	align-items: center;
+}
+.wv .wrow .wl {
+	flex: 1;
+	min-width: 0;
+}
+.wv .wrow.in .wl {
+	padding-left: 52px;
+}
+.wv .pick {
+	flex: none;
+	margin: 0 12px 0 6px;
+}
+.wv .pick:disabled {
+	visibility: hidden;
+}
+.wv .pickbar {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	padding: 10px 16px;
+	border-top: 1px solid var(--rule);
+	background: var(--sheet);
+}
+.wv .pickbar .grow {
+	flex: 1;
+}
+.wv .linkish.quiet {
+	color: var(--ink-faint);
+}
+.wv .foldrow {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	margin-top: 12px;
+	border-top: 1px solid var(--rule);
+}
+.wv .foldrow .foldline {
+	flex: 1;
+	margin-top: 0;
+	border-top: 0;
+}
+.wv .wl,
+.wv .wdoc {
+	display: flex;
+	align-items: center;
+	width: 100%;
+	min-height: 28px;
+	padding: 0 16px 0 34px;
+	font: inherit;
+	text-align: left;
+	color: inherit;
+	background: none;
+	border: 0;
+	cursor: pointer;
+}
+.wv .wl.in {
+	padding-left: 52px;
+}
+.wv .wl:hover,
+.wv .wdoc:hover {
+	background: var(--ann-neutral-wash);
+}
+.wv .wl.sel {
+	background: var(--link-wash);
+}
+.wv .wdoc {
+	gap: 8px;
+	padding-left: 12px;
+}
+.wv .wdoc .wt {
+	font-family: var(--font-text, serif);
+	color: var(--ink-faint);
+}
+.wv .wdoc .n,
+.wv .wl .src {
+	margin-left: auto;
+	font-size: 11.5px;
+	color: var(--ink-faint);
+}
+.wv .slot {
+	flex: none;
+	width: 16px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.wv .nm {
+	margin-left: 10px;
+}
+.wv .tl {
+	color: var(--ink-faint);
+}
+.wv .hit {
+	margin: -2px 16px 6px 62px;
+	font-size: 12px;
+	color: var(--ink-soft);
+}
+.wv .hit mark {
+	background: var(--ann-yellow-wash, #fbefc4);
+	color: inherit;
+}
+.wv .outscope {
+	margin: 4px 16px;
+	font-size: 12px;
+	color: var(--ink-faint);
+}
+.wv .linkish {
+	font: inherit;
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--link);
+	cursor: pointer;
+}
+.wv .linkish.more {
+	margin: 8px 16px;
+}
+.wv .wfocus,
+.wv .drawn {
+	min-width: 0;
+	height: 100%;
+	overflow: auto;
+	padding: 14px 22px 60px;
+}
+.wv .trail {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
+	margin-bottom: 12px;
+	font-size: 12px;
+}
+.wv .trail .sep {
+	color: var(--ink-faint);
+}
+.wv .focus {
+	padding: 14px 16px 10px;
+	background: var(--sheet);
+	border: 1px solid var(--rule);
+	border-radius: 10px;
+}
+.wv .fh {
+	margin: 0;
+	font-family: var(--font-text, serif);
+	font-size: 18px;
+	font-weight: 400;
+}
+.wv .fh .tl {
+	margin-left: 0.2em;
+}
+.wv .fsrc {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 4px 0 10px;
+	font-size: 12px;
+	color: var(--ink-soft);
+}
+.wv .chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	color: var(--ink-faint);
+}
+.wv .fbody {
+	padding-left: 12px;
+	border-left: 3px solid var(--ink-soft);
+	font-family: var(--font-text, serif);
+	font-size: 15.5px;
+	line-height: 1.55;
+}
+.wv .vr {
+	margin: 12px 0 0;
+}
+.wv .foldline {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	margin-top: 12px;
+	padding: 8px 0 2px;
+	font: inherit;
+	font-size: 12px;
+	color: var(--ink-faint);
+	text-align: left;
+	background: none;
+	border: 0;
+	border-top: 1px solid var(--rule);
+	cursor: pointer;
+}
+.wv .moreb {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 4px 14px;
+	margin: 8px 0 4px 22px;
+	font-size: 12.5px;
+}
+.wv .moreb dt {
+	color: var(--ink-faint);
+}
+.wv .moreb dd {
+	margin: 0;
+}
+.wv .nb3 {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 20px;
+	margin-top: 18px;
+}
+.wv .nb3 .wl {
+	padding-left: 4px;
+	border-bottom: 1px solid var(--rule);
+}
+.wv .nbh {
+	margin: 12px 0 4px;
+	font-size: 11.5px;
+	font-weight: 400;
+	color: var(--ink-faint);
+}
+.wv .nb3 .outscope {
+	margin-left: 4px;
+}
+.wv .graph {
+	margin-bottom: 14px;
+}
+.wv .graph svg {
+	display: block;
+	font-size: 12.5px;
+}
+.wv .graph .head,
+.wv .graph .sub {
+	fill: var(--ink-faint);
+	font-size: 11px;
+}
+.wv .graph text {
+	fill: var(--ink);
+}
+.wv .graph text.bold {
+	font-weight: 600;
+}
+.wv .graph .box {
+	fill: var(--sheet);
+	stroke: var(--rule-strong);
+}
+.wv .graph .box.focus {
+	stroke: var(--ink);
+	stroke-width: 1.5;
+}
+.wv .graph .box.more {
+	stroke-dasharray: 3 3;
+}
+.wv .graph .n {
+	cursor: pointer;
+}
+.wv .graph .n:hover .box,
+.wv .graph .n:focus-visible .box {
+	fill: var(--link-wash);
+}
+.wv .graph .edge {
+	fill: none;
+	stroke: var(--rule-strong);
+	stroke-width: 1.2;
+}
+.wv .graph .edge.proof {
+	stroke-dasharray: 4 4;
+}
+.wv .legend {
+	display: flex;
+	gap: 18px;
+	margin-top: 6px;
+	font-size: 11px;
+	color: var(--ink-faint);
+}
+.wv .window {
+	position: relative;
+}
+.wv .window .line {
+	position: absolute;
+	left: 0;
+	right: 0;
+}
+.wv .window .wl,
+.wv .window .wdoc {
+	height: 28px;
+	min-height: 0;
+	white-space: nowrap;
+	overflow: hidden;
+}
+.wv .window .wdoc {
+	height: 30px;
+}
+.wv .window .whead {
+	margin: 0;
+	padding: 12px 16px 4px;
+	height: 32px;
+	box-sizing: border-box;
+}
+.wv .window .outscope {
+	margin: 0;
+	padding: 6px 16px;
+}
+.wv .pending {
+	display: block;
+	height: 10px;
+	margin: 9px 16px 9px 52px;
+	border-radius: 4px;
+	background: var(--ann-neutral-wash);
+}
+.wv .none {
+	margin: 40px 0 0;
+	color: var(--ink-faint);
+	text-align: center;
+}

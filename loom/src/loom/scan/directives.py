@@ -16,15 +16,7 @@ KNOWN_KEYS = {
     "tags",
     "see",
     "environment",
-    "digest",
-    "prefix",
-    "extracted-from",
-    "published-as",
-    "method",
-    "proofs",
-    "requires",
-    "numbering",
-    "shared",
+    "shared",  # what loom writes over the input of a file another document includes too (`cli.history_cmds`)
     "basis",
     "name",
 }

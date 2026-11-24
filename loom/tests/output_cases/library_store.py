@@ -1,6 +1,6 @@
-"""Output cases for `library update` and `library add`: the commands that fill the store; see `tests/output_cases/__init__.py`.
+"""Output cases for `library add`, the command that takes documents into the library; see `tests/output_cases/__init__.py`.
 
-Nothing here touches the network: `update` runs offline, and `--online` is run only where it is refused.
+Nothing here touches the network.
 """
 
 from __future__ import annotations
@@ -37,21 +37,10 @@ def wrong(q: Path) -> None:
 
 
 KIND: dict[str, str] = {
-    "library update": "report",
     "library add": "report",
 }
 
 CASES: dict[str, list[Case]] = {
-    "library update": [
-        Case(),
-        Case(("--dry-run",), unchanged=True),
-        Case(("--only", "gather")),
-        Case(("Calloway14", "--only", "map", "--redo")),
-        Case(("Man12", "--only", "fetch"), why="offline: says how to go online"),
-        Case(("Nobody99xyz",), exit=2, why="names no work", unchanged=True),
-        Case(("--only", "polish"), exit=2, why="an unknown step", unchanged=True),
-        Case(("--online",), env=AGENT, exit=2, why="an agent may not grant itself the network", unchanged=True),
-    ],
     "library add": [
         Case(("man12.tex", "--for", "Man12", "--as", "Tester"), tex_file),
         Case(("pile",), pile, why="each filed under its work or as a work of its own"),

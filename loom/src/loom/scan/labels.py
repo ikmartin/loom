@@ -1,6 +1,6 @@
 """Id grammar and allocation.
 
-An id is <prefix>-<local>. A prefix that is a citekey slug takes the paper-local form; any other prefix takes four uppercase base-36 characters, which keeps hyphenated human labels from being mistaken for ids. A derived id is a loom-local id with `-ai` after it, `zk-0001-ai`: the id of a node an agent's copy defines, whose counterpart is `zk-0001`.
+An id is <prefix>-<local>, the local part four uppercase base-36 characters, which keeps hyphenated human labels from being mistaken for ids. A derived id is a loom-local id with `-ai` after it, `zk-0001-ai`: the id of a node an agent's copy defines, whose counterpart is `zk-0001`.
 """
 
 from __future__ import annotations
@@ -8,7 +8,6 @@ from __future__ import annotations
 import re
 
 LOOMLOCAL = re.compile(r"^[0-9A-Z]{4}$")
-PAPERLOCAL = re.compile(r"^[A-Za-z0-9.]+(?:-[A-Za-z0-9.]+)*$")
 PREFIX = re.compile(r"^[A-Za-z0-9]+$")
 DERIVED = re.compile(r"^([A-Za-z0-9]+-[0-9A-Z]{4})-ai(?:-[0-9A-Z]{2,})?$")
 SUFFIX = "-ai"
@@ -30,21 +29,15 @@ def split_id(label: str) -> tuple[str, str] | None:
     return prefix, local
 
 
-def is_id_shaped(label: str, citeslugs: set[str] | frozenset[str] = frozenset()) -> bool:
+def is_id_shaped(label: str) -> bool:
     parts = split_id(label)
     if parts is None:
         return False
-    prefix, local = parts
-    if prefix in citeslugs:
-        return PAPERLOCAL.match(local) is not None
-    return LOOMLOCAL.match(local) is not None or DERIVED.match(label) is not None
+    return LOOMLOCAL.match(parts[1]) is not None or DERIVED.match(label) is not None
 
 
 def derived_of(label: str) -> str | None:
-    """The plain id a derived id names, `zk-0001` for `zk-0001-ai`; None for any other label.
-
-    A citekey-slug prefix never makes a derived id, so a caller that may meet paper-local ids checks `is_id_shaped` with the slugs first.
-    """
+    """The plain id a derived id names, `zk-0001` for `zk-0001-ai`; None for any other label."""
     m = DERIVED.match(label)
     return m.group(1) if m else None
 

@@ -10,18 +10,15 @@ from pathlib import Path
 from typing import Any
 
 from loom.paths import document_build, document_pdf_address
-from loom.refs.identity import declared, identify, primary
-from loom.refs.pages import store_address
-from loom.refs.resolve import load as load_candidates
-from loom.render.fragments import digest_macro_set, master_title, plain_text
+from loom.render.fragments import master_title, plain_text
 from loom.render.threads import build_threads
-from loom.scan.digests import OtherVersion, extracted_from, loaded_packages, other_version, published_as, source_version
 from loom.scan.directives import list_value
 from loom.scan.hashing import pair_hash
 from loom.scan.macros import compatibility_macros, declared_alphabets, package_macros, to_mathjax
 from loom.scan.model import Diagnostic
 from loom.scan.nodes import NodeRec
 from loom.scan.owntext import key_hash
+from loom.scan.preamble import loaded_packages
 from loom.scan.scan import ScanResult
 from loom.scan.sections import starred_at
 from loom.tex.aux import AuxNumber
@@ -30,7 +27,6 @@ from loom.version import __version__
 STATE_LABELS = {
     "labels": {
         "draft": {"label": "draft", "color": "neutral"},
-        "proposed": {"label": "proposed", "color": "info"},
         "accepted": {"label": "accepted", "color": "positive"},
         "stale": {"label": "stale", "color": "warning", "modifier": True},
         "incomplete": {"label": "incomplete", "color": "negative"},
@@ -64,70 +60,6 @@ def _sessions(root: Path) -> list[dict[str, Any]]:
         }
         for s in sessions(root).values()
     ]
-
-
-def _version(result: ScanResult, ck: str) -> dict[str, Any]:
-    """One version of a work as its primary's `versions` lists it: citekey, identifier and what the store holds."""
-    bib = result.bib[ck]
-    wid = primary(bib)
-    home = _work_home(result.quilt.root, bib)
-    return {
-        "citekey": ck,
-        "work": str(wid) if wid else "",
-        "artifacts": {
-            "dir": store_address(result.quilt.root, home) if home else "",
-            "pdf": bool(home and (home / "paper.pdf").is_file()),
-            "source": bool(home and (home / "src").is_dir()),
-        },
-    }
-
-
-def _results_for(root: Path, citekey: str, version: OtherVersion | None = None) -> dict[str, dict[str, Any]]:
-    """The work's recorded results, as the viewer needs them (digest contract §9).
-
-    `state` is `state_of`'s, never the stored word, so a mechanical result nobody verified reads `extracted`. `version` is the digest's `OtherVersion` when its numbers are another version's; it rides on every mechanical result, whose numbers are the extraction's.
-
-    `source_text` travels for every result read off a page, verified or not: it is what a link's two endpoints are compared by eye against (§7), and a verified transcription is exactly the case where that comparison is worth making. It does **not** travel for a mechanically extracted result, whose `source_text` is its own LaTeX and is already in the digest fragment -- carrying it would put the whole literature in the manifest twice.
-
-    `statement` travels only for a proposal, because that is the one claim a person is being asked to make and the surface that must show both texts together (§5.3).
-    """
-    from loom.refs.proposals import PROPOSED, load_results, page_context, state_of
-    from loom.refs.search import words_not_on_page
-
-    out: dict[str, dict[str, Any]] = {}
-    for rid, r in load_results(root, citekey).items():
-        state = state_of(r)
-        row: dict[str, Any] = {
-            "state": state,
-            "level": r.level,
-            "class": r.cls,
-            "page": r.anchor.page,
-            "artifact": r.anchor.sha256[:12],
-            "origin": r.origin,
-        }
-        if r.cls != "mechanical":
-            row["source_text"] = r.source_text
-        elif version is not None:
-            row["version"] = version.to_json()
-        if r.anchor.kind == "tex" and r.cls != "mechanical":
-            row["source_file"] = r.anchor.path
-        if state == PROPOSED:
-            row["statement"] = r.statement
-            row["local"] = r.local
-            row["taxon"] = r.taxon
-            # what the rendering is judged against: the page around the quote, because an agent quotes only as much
-            # as the anchor check needs, and a ten-line rendering beside one clause cannot be judged (§5.3)
-            context, found = page_context(root, r)
-            if found:
-                row["page_text"] = context
-            # the rendering's words the page does not have: against the page around the quote where it was found, since an agent quotes a clause and renders the statement round it, and the quote alone would flag the paper's own words
-            added = words_not_on_page(r.statement, context if found else r.source_text)
-            if added:
-                row["not_on_page"] = added
-            if r.supersedes:
-                row["supersedes"] = r.supersedes
-        out[rid] = row
-    return out
 
 
 def _base_math(record: Any, base: dict[str, Any]) -> dict[str, str]:
@@ -196,16 +128,6 @@ def _locator(node: NodeRec) -> str | None:
 PUBLISHES = {"documents": True, "review": True, "bibliography": True, "discussions": True}
 
 
-def _work_home(root: Path, entry: Any) -> Path | None:
-    """Where this work's documents are, or None when the entry names no identity at all."""
-    from loom.refs.fetch import FetchRefused, work_dir
-
-    try:
-        return work_dir(root, entry)
-    except FetchRefused:
-        return None
-
-
 def build_manifest(
     result: ScanResult,
     numbers: dict[str, dict[str, AuxNumber]],
@@ -242,7 +164,6 @@ def build_manifest(
         "diagnostics": [d.to_dict() for d in diagnostics],
         "tags": {},
         "taxa": {},
-        "references": {},
         "macros": {"default": [], "sets": {}},
         "search": [],
     }
@@ -326,7 +247,6 @@ def build_manifest(
             "children": [c for c in n.claimants if asm.nodes[c].kind in ("environment", "section") or asm.nodes[c].id],
             "proofs": list(n.proofs),
             "external": n.external,
-            "digest": n.digest,
             "incomplete": list(n.incomplete),
             "state": "draft",
             "derived": {"proved": False, "settled": False},
@@ -385,130 +305,6 @@ def build_manifest(
         manifest["inclusion"][m] = _inclusion_tree(result, m)
     for taxon_name, group in _taxa(result).items():
         manifest["taxa"][taxon_name] = group
-    cited_by: dict[str, list[str]] = {}
-    for c in result.edges.cites:
-        if c.file in asm.digest_files:
-            continue  # cited by another paper's digest is not cited by the author: Brion read "cited 8" and was cited 0
-        cited_by.setdefault(c.citekey, []).append(c.src)
-    # A work can have two files claiming it: the digest a bundle inputs, and the shadow file holding proposals that
-    # nothing inputs (plan 0.12 §4.1). They must not be confused -- a `{ck: f}` comprehension keeps whichever came
-    # last, so `digest.fragment` would sometimes have pointed at the proposals.
-    digests = {ck: f for f, ck in asm.digest_files.items() if not f.endswith(".proposed.tex")}
-    proposals = {ck: f for f, ck in asm.digest_files.items() if f.endswith(".proposed.tex")}
-    from loom.refs.links import read_links
-    from loom.refs.unreadable import declarations
-
-    manifest["links"] = [x.to_json() for x in read_links(result.quilt.root)]
-    unreadable = declarations(result.quilt.root, "unreadable")
-    from loom.refs.scan import versions_of
-
-    versions = versions_of(result.bib)
-    tops = {v: top for top, vs in versions.items() for v in vs}
-    for ck in sorted(set(result.bib) | set(digests) | set(proposals)):
-        bib = result.bib.get(ck)
-        fields = {
-            k: v
-            for k, v in (bib.fields.items() if bib else [])
-            if k in ("author", "title", "year", "eprint", "version", "doi", "journal")
-        }
-        if "year" in fields and fields["year"].isdigit():
-            fields["year"] = int(fields["year"])  # type: ignore[assignment]
-        digest_entry = None
-        version_mismatch = False
-        if ck in digests:
-            f = digests[ck]
-            ds = {d.key: d.value for d in asm.directives.get(f, []) if d.form == "kv"}
-            nodes = [k for k, n in asm.nodes.items() if n.file == f and n.kind == "environment"]
-            digest_entry = {
-                "file": f,
-                "fragment": fragments.get(f"digest:{f}", ""),
-                "source": extracted_from(ds),
-                "extracted_from": extracted_from(ds),
-                "published_as": published_as(ds),
-                "method": ds.get("method", ""),
-                "nodes": nodes,
-            }
-            sv = source_version(extracted_from(ds))
-            if bib and bib.version and sv and bib.version != sv:
-                version_mismatch = True
-            manifest["macros"]["sets"][ck] = digest_macro_set(result, f)
-        # Proposals ride in the same reference record, flagged, so the viewer meets them among the verified nodes
-        # rather than in a queue of their own (§5.2). They are in no bundle and no closure.
-        proposed_entry = None
-        if ck in proposals:
-            pf = proposals[ck]
-            proposed_entry = {
-                "file": pf,
-                "fragment": fragments.get(f"digest:{pf}", ""),
-                "nodes": [k for k, n in asm.nodes.items() if n.file == pf and n.kind == "environment"],
-            }
-            manifest["macros"]["sets"].setdefault(ck, digest_macro_set(result, pf))
-        # what is on disk for this work, so the viewer can offer a PDF or say it has not been fetched.
-        wid = primary(bib) if bib else None
-        # through `work_dir`, so the viewer looks where the document was actually filed: a paper that states no
-        # identifier lives under its content hash, which its entry's synthetic identifier does not name
-        home = _work_home(result.quilt.root, bib) if bib else None
-        manifest["references"][ck] = {
-            "citekey": ck,
-            "slug": asm.prefix_of(ck),
-            "bib": fields,
-            "work": str(wid) if wid else "",
-            "works": [str(w) for w in identify(bib)] if bib else [],
-            "artifacts": {
-                "dir": store_address(result.quilt.root, home) if home else "",
-                "pdf": bool(home and (home / "paper.pdf").is_file()),
-                "source": bool(home and (home / "src").is_dir()),
-            },
-            "digest": digest_entry,
-            "proposed": proposed_entry,
-            "results": _results_for(result.quilt.root, ck, other_version(asm, digests[ck]) if ck in digests else None),
-            "version_mismatch": version_mismatch,
-            "cited_by": sorted(set(cited_by.get(ck, []))),
-        }
-        # one work, several documents: a primary names its versions, each with what is on disk for it
-        if ck in versions:
-            manifest["references"][ck]["versions"] = [_version(result, v) for v in versions[ck]]
-        if ck in tops:
-            manifest["references"][ck]["version_of"] = tops[ck]
-        # the author's claim that there is no document to hold, so the reading view says so rather than showing an
-        # empty pane and the digest as though it were the paper (plan 0.13 §4)
-        said = unreadable.get(ck)
-        if said is not None:
-            manifest["references"][ck]["unreadable"] = {"why": said.why, "who": said.who, "when": said.when}
-        # a work the person added by hand, which no document need cite (plan 0.24.2)
-        if bib is not None:
-            from loom.refs.added import ORDER, entry_text
-            from loom.refs.added import added as by_hand
-
-            when_who = by_hand(bib)
-            if when_who is not None:
-                manifest["references"][ck]["added"] = when_who
-            # the entry as a person pastes it into a .bib (plan 0.24.4): its type and the bibliographic fields, never loom's own nor a local one such as `file`
-            manifest["references"][ck]["bibtex"] = entry_text(
-                ck, bib.type, {k: v for k, v in bib.fields.items() if k in ORDER}
-            )
-        # the work's overview, a reading an agent or the person wrote (plan 0.21.3)
-        if bib is not None and ck not in tops:
-            from loom.pages import overview_page
-            from loom.pages import published as page_published
-
-            ov = page_published(result, overview_page(result.quilt.root, result.bib, ck))
-            if ov is not None:
-                manifest["references"][ck]["overview"] = ov
-        # identifiers a lookup proposed for a work that states none: unconfirmed, and never the work's identity
-        if bib is not None and not declared(bib):
-            found = load_candidates(result.quilt.root, bib)
-            if found:
-                manifest["references"][ck]["candidates"] = [
-                    {
-                        "id": c.id,
-                        "source": c.source,
-                        "confidence": c.confidence,
-                        "strength": c.strength,
-                        "title": c.title,
-                    }
-                    for c in found
-                ]
     for doc, entry in zip(canon or [], manifest["canon"], strict=False):
         from loom.render.canon import macro_set
 
@@ -574,7 +370,6 @@ def _conflict_entry(n: NodeRec) -> dict[str, Any]:
         "children": [],
         "proofs": [],
         "external": False,
-        "digest": None,
         "incomplete": [],
         "state": "conflicted",
         "derived": {"proved": False, "settled": False},

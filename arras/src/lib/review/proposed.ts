@@ -1,13 +1,12 @@
-// Review › Proposed Changes read from the manifest: one card for each thing someone proposes that the person decides in a pass of its own (a pull, an agent's copy, a work's proposed results), and what a copy's card says of it. A suggested edit is a pending change, kept or discarded in the document and in Your Changes; one on an agent's copy is listed on the copy's card, since it comes in with the copy. Model facts in, display facts out.
+// Review › Proposed Changes read from the manifest: one card for each thing someone proposes that the person decides in a pass of its own (a pull, an agent's copy), and what a copy's card says of it. A suggested edit is a pending change, kept or discarded in the document and in Your Changes; one on an agent's copy is listed on the copy's card, since it comes in with the copy. Model facts in, display facts out.
 import type { AdoptionReview, IncomingReview, Manifest, SuggestedEdit } from '$lib/manifest/types';
 import { documentOf, openEdits } from './suggestions';
 
 export type Card =
 	| { kind: 'pull'; id: 'pull'; pull: IncomingReview; label: string }
-	| { kind: 'copy'; id: string; copy: AdoptionReview; edits: SuggestedEdit[] }
-	| { kind: 'results'; id: string; citekey: string; count: number };
+	| { kind: 'copy'; id: string; copy: AdoptionReview; edits: SuggestedEdit[] };
 
-type Read = Pick<Manifest, 'nodes' | 'keys' | 'masters'> & Partial<Pick<Manifest, 'regions' | 'suggested_edits' | 'contributions' | 'incoming' | 'references'>>;
+type Read = Pick<Manifest, 'nodes' | 'keys' | 'masters'> & Partial<Pick<Manifest, 'regions' | 'suggested_edits' | 'contributions' | 'incoming'>>;
 
 /** The agents' copies waiting to be taken in. */
 export function adoptionsOf(m: Pick<Manifest, 'contributions'>): AdoptionReview[] {
@@ -19,16 +18,8 @@ export function pullLabel(m: Pick<Manifest, 'contributions' | 'incoming'>): stri
 	return m.contributions?.find((c) => c.kind === 'workspace')?.label ?? `Pull from ${m.incoming?.workspace}`;
 }
 
-/** Each work with results proposed and how many, by key. */
-export function resultsOf(m: Pick<Manifest, 'references'>): { citekey: string; count: number }[] {
-	return Object.entries(m.references ?? {})
-		.map(([citekey, ref]) => ({ citekey, count: Object.values(ref.results ?? {}).filter((r) => r.state === 'proposed').length }))
-		.filter((w) => w.count > 0)
-		.sort((a, b) => a.citekey.localeCompare(b.citekey));
-}
-
 /**
- * Everything to decide here, in the order the page lists it: the fetched pull, the agents' copies, then the works with results proposed.
+ * Everything to decide here, in the order the page lists it: the fetched pull, then the agents' copies.
  *
  * Parameters
  * ----------
@@ -45,8 +36,7 @@ export function cardsOf(m: Read): Card[] {
 	for (const e of openEdits(m)) onCopy.get(documentOf(m as Manifest, e)?.path ?? '')?.push(e);
 	return [
 		...(m.incoming ? [{ kind: 'pull' as const, id: 'pull' as const, pull: m.incoming, label: pullLabel(m as Manifest) }] : []),
-		...copies.map((copy) => ({ kind: 'copy' as const, id: copy.copy, copy, edits: onCopy.get(copy.copy) ?? [] })),
-		...resultsOf(m as Manifest).map((w) => ({ kind: 'results' as const, id: w.citekey, ...w }))
+		...copies.map((copy) => ({ kind: 'copy' as const, id: copy.copy, copy, edits: onCopy.get(copy.copy) ?? [] }))
 	];
 }
 

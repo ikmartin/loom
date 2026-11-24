@@ -1,0 +1,13 @@
+{
+ "answer": {
+  "gen": 1789808400013,
+  "ok": true,
+  "ref": "sh-0404-ref",
+  "result": "rewrote the entry of Cortez 2007"
+ },
+ "endpoint": "library-entry",
+ "request": {
+  "bibtex": "@article{Cortez07,\n  author = {Cortez, Hilario},\n  title = {Flows on infinite quivers: a survey},\n  journal = {Bull. Imag. Soc.},\n  volume = {12},\n  year = {2007},\n  pages = {1--44},\n}\n",
+  "ref": "sh-0404-ref"
+ }
+}

@@ -69,8 +69,13 @@ ALLOWED = {
     ("sync.py", 'stage / "build" / f"{index}-{Path(projected).stem}",'),
     ("section_drafts.py", 'stage, base, under(base, "paper.tex"), stage / "build", result.quilt.config.engine'),
     # the viewer's route to a work, not a folder
-    ("cli/library/agent.py", 'link = open_url(result.quilt.root, f"library/{citekey}?page={page_no}&{locator}")'),
-    ("cli/review.py", 'where = open_url(result.quilt.root, f"library/{citekey}?page={page}&annot={ann_id}")'),
+    ("cli/review.py", 'where = open_url(result.quilt.root, f"library/{work}?page={page}&annot={ann_id}")'),
+    # the library as an earlier loom left it, in layout format 1, which only the carry-over reads (`library.carry`)
+    ("library/carry.py", 'BIBLIOGRAPHY = f"{LIBRARY}/bibliography.bib"'),
+    ("library/carry.py", 'UNREADABLE = f"{LIBRARY}/unreadable.json"'),
+    ("library/carry.py", 'LINKS = f"{LIBRARY}/links.jsonl"'),
+    ("library/carry.py", 'LINKS_REMOVED = f"{LIBRARY}/links-removed.jsonl"'),
+    ("library/carry.py", 'STORAGE = f"{LIBRARY}/storage"'),
     # a module of loom's own source, not of a quilt
     ("render/keys.py", 'RENDERING = ("render", "scan", "tex", "records/selectors.py")'),
 }
@@ -183,27 +188,27 @@ KIND = {
         (
             "LEDGER", "ANNOTATIONS", "ANNOTATION_LOG", "EDITS", "EDIT_LOG", "ANNOTATION_TYPES", "REVIEW_DECISIONS",
             "REVIEW_ORIGINS", "REVIEW_OBSERVATIONS", "ADOPTION_DECISIONS", "SOURCE_SYNC", "RETIRED", "LOOKED", "HISTORY",
-            "EVIDENCE", "EVIDENCE_LOG", "ASKS", "ASK_LOG", "TAGS", "TAG_LOG",
+            "EVIDENCE", "EVIDENCE_LOG", "ASKS", "ASK_LOG", "TAGS", "TAG_LOG", "LIBRARY_RECORDS", "LIBRARY_LOG",
         ),
         "RECORDS",
     ),
     **dict.fromkeys(
-        ("BIBLIOGRAPHY", "UNREADABLE", "LINKS", "LINKS_REMOVED", "SUGGESTED_WORKS", "LIBRARY_NODES", "STORAGE", "STORE_LEDGER"),
+        ("SUGGESTED_WORKS", "LIBRARY_NODES", "LIBRARY_DOCUMENTS"),
         "LIBRARY",
     ),
     **dict.fromkeys(("AI", "SESSIONS", "SESSION_INDEX", "ACTIVE_SESSION", "COPIES", "SCRATCH"), "AGENTS"),
     **dict.fromkeys(
         (
             "SERVE_JSON", "COMPILES", "SINCE", "DELETED", "SHOWN_SEEN", "LIVE", "INCOMING", "LAST_SEEN", "JOURNAL", "JOURNAL_INDEX",
-            "WRITES_LOCK", "ID_LOCK", "LIBRARY_LOCK", "SURVEY_LOCK", "BEFORE_DELETE", "ADOPTION_PREVIEWS", "INCORPORATION_PREVIEWS",
+            "WRITES_LOCK", "ID_LOCK", "LIBRARY_LOCK", "SURVEY_LOCK", "LIBRARY_UNDO", "LIBRARY_DELETING", "LIBRARY_ACT", "BEFORE_DELETE", "ADOPTION_PREVIEWS", "INCORPORATION_PREVIEWS",
         ),
         "LOCAL",
     ),
     **dict.fromkeys(
         (
             "SITE", "MANIFEST", "SITE_SVG", "DRAFT_PREVIEWS", "TEX", "BLOCKS", "BUILD_INDEX", "SNIPPETS",
-            "BLOCK_PREVIEWS", "BLOCK_SPANS", "LIBRARY_CACHE", "STORE_BOXES", "RESOLVED", "MARKS", "MARK_BOXES",
-            "REFOUND", "CROPS", "CLOSURES", "NODE_INDEX", "LIBRARY_SURVEYS",
+            "BLOCK_PREVIEWS", "LIBRARY_CACHE", "LIBRARY_PAGES", "MARKS", "MARK_BOXES",
+            "REFOUND", "CROPS", "CLOSURES", "NODE_INDEX", "LIBRARY_SOURCES", "LIBRARY_THUMBS", "LIBRARY_SURVEYS",
         ),
         "CACHE",
     ),
@@ -252,7 +257,7 @@ def test_the_ignore_file_names_the_three_folders_that_stay_on_one_machine() -> N
 
 
 def test_git_ignores_the_three_folders_and_nothing_of_the_same_name_deeper_down(tmp_path: Path) -> None:
-    """A session's `cache/`, a session's `local/` and a stored source's `local/` are files of the quilt and travel; a file in each of the three folders stays on this machine."""
+    """A session's `cache/` and `local/` are files of the quilt and travel; a file in each of the three folders stays on this machine."""
     import shutil
     import subprocess
 
@@ -265,7 +270,6 @@ def test_git_ignores_the_three_folders_and_nothing_of_the_same_name_deeper_down(
     travels = [
         f"{paths.SESSIONS}/s-x/cache/result.csv",
         f"{paths.SESSIONS}/s-x/local/notes.md",
-        f"{paths.STORAGE}/arxiv/1234/src/local/macros.sty",
     ]
     stays = [f"{paths.LOCAL}/serve.json", f"{paths.CACHE}/site/manifest.json", f"{paths.scratch('s-x')}/run.tex"]
     for rel in travels + stays:

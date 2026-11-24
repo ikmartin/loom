@@ -1,9 +1,6 @@
 info loom:detached-annotation model
 info loom:detached-annotation model
-info loom:postnote-from-another-version internal
 info loom:superseded-file model
-info loom:unresolved-work internal
 info unreachable model
 warning duplicate-id model
 warning loom:missing-proof model
-warning loom:unmatched-postnote internal

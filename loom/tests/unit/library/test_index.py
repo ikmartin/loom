@@ -125,7 +125,7 @@ def test_search_by_number_matches_it_exactly(root: Path) -> None:
 
 
 def test_search_by_taxon_and_tag(root: Path) -> None:
-    tag(root, "tq-00K5", "Bounds", by="Isaac", kind="person")
+    tag(root, "tq-00K5", "Bounds", by="A. Author", kind="person")
     with NodeIndex.open(root) as index:
         assert found(index, taxon="lemma") == ["tq-00K3", "tq-00B7"]
         assert found(index, tag="bounds") == ["tq-00K5"]
@@ -142,7 +142,7 @@ def test_search_looks_in_proofs_when_asked_and_marks_the_statement(root: Path) -
 
 
 def test_tags_in_the_index_come_from_the_log(root: Path) -> None:
-    tag(root, "tq-00K3", "14A20", by="Isaac", kind="person")
+    tag(root, "tq-00K3", "14A20", by="A. Author", kind="person")
     tag(root, "tq-00K5", "14a20", by="Claude agent", kind="agent")
     tag(root, "tq-00K5", "compact", by="Claude agent", kind="agent")
     with NodeIndex.open(root) as index:
@@ -325,15 +325,15 @@ def test_the_generation_moves_when_a_node_or_a_tag_changes_and_not_otherwise(tmp
         assert index.refresh().generation == first + 1
         (root / LIBRARY_NODES / "tq-00K3.node").touch()
         assert index.refresh().generation == first + 1, "a file touched and not changed is no change"
-        tag(root, "tq-00K5", "bounds", by="Isaac", kind="person")
+        tag(root, "tq-00K5", "bounds", by="A. Author", kind="person")
         assert index.refresh().generation == first + 2
-        tag(root, "tq-00K5", "Bounds", by="Isaac", kind="person")
+        tag(root, "tq-00K5", "Bounds", by="A. Author", kind="person")
         assert index.refresh().generation == first + 2, "a tag written again changes nothing"
         (root / LIBRARY_NODES / "tq-00K6.node").write_bytes(b"not a node\n")
         assert index.refresh().generation == first + 2, "a file that does not read changes no node"
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- the generation, what says a file changed, words written in TeX, keys, and a damaged index -------------------------
 
 
 def _lemmas(root: Path, count: int) -> None:
@@ -572,3 +572,46 @@ def test_muller_finds_mueller_written_either_way(root: Path) -> None:
             "Müller",
             'M{\\"u}ller',
         }
+
+
+@pytest.mark.parametrize(
+    ("written", "typed"),
+    [
+        ("Østergaard", "ostergaard"),
+        ("{\\O}stergaard", "ostergaard"),
+        ("Łukasiewicz", "lukasiewicz"),
+        ("\\L{}ukasiewicz", "lukasiewicz"),
+        ("Ostergaard", "Østergaard"),
+        ("Æsop", "aesop"),
+    ],
+)
+def test_a_letter_of_its_own_is_found_as_it_is_typed_in_ascii(root: Path, written: str, typed: str) -> None:
+    """N-11: ø, ł, æ and their like are letters of their own to Unicode, folded to the ASCII a person types; what is shown is as written."""
+    put(root, Node(id="tq-0T01", taxon="remark", number="8.1", source="tq-00A1-ref", body=f"As {written} showed.\n"))
+    with NodeIndex.open(root) as index:
+        hits = index.search(typed)
+        assert [h.row.id for h in hits] == ["tq-0T01"]
+        assert hits[0].snippet is not None and hits[0].snippet.match == written
+
+
+def test_a_word_in_a_command_s_group_is_shown_without_the_group_s_braces() -> None:
+    """N-28: `\\emph{finite}` shows `finite`; a group that is part of a word, `{K}ova`, shows its braces."""
+    hit = snippet("A set \\emph{finite} here.\n", ["finite"])
+    assert hit is not None and hit.match == "finite"
+    joined = snippet("By {K}ova\\v{c} here.\n", ["kovac"])
+    assert joined is not None and joined.match == "{K}ova\\v{c}"
+
+
+def test_an_index_held_open_is_made_again_when_a_sweep_removes_it(tmp_path: Path) -> None:
+    """N-26: a publisher holds an index across requests; the build's sweep may remove the cache under it."""
+    import shutil
+
+    root = quilt(tmp_path)
+    with NodeIndex.open(root) as index:
+        held = index.generation()
+        shutil.rmtree(root / NODE_INDEX.rsplit("/", 1)[0])
+        put(root, Node(id="tq-0T02", taxon="remark", number="8.2", source="tq-00A1-ref", body="A remark on gadgets.\n"))
+        index.refresh()
+        assert found(index, "gadgets") == ["tq-0T02"]
+        assert index.generation() > held
+        assert (root / NODE_INDEX).is_file()
