@@ -37,6 +37,7 @@ from loom.paths import (
     LIBRARY_NODES,
     LIBRARY_PAGES,
     LIBRARY_SOURCES,
+    LIBRARY_SURVEYS,
     LIBRARY_THUMBS,
     MARK_BOXES,
     MARKS,
@@ -440,7 +441,17 @@ _FOLDERS = (
     )
     | frozenset(
         within(CACHE, p)
-        for p in (LIBRARY_PAGES, LIBRARY_SOURCES, LIBRARY_THUMBS, MARKS, MARK_BOXES, REFOUND, CROPS, CLOSURES)
+        for p in (
+            LIBRARY_PAGES,
+            LIBRARY_SOURCES,
+            LIBRARY_SURVEYS,
+            LIBRARY_THUMBS,
+            MARKS,
+            MARK_BOXES,
+            REFOUND,
+            CROPS,
+            CLOSURES,
+        )
     )
     | {
         "site/compare",
@@ -453,6 +464,7 @@ _FOLDERS = (
 #: The node index's name, and the folders of what is drawn from stored documents, in `LIBRARY_CACHE`.
 _NODE_INDEX = within(LIBRARY_CACHE, NODE_INDEX)
 _SOURCES = within(LIBRARY_CACHE, LIBRARY_SOURCES)
+_SURVEYS = within(LIBRARY_CACHE, LIBRARY_SURVEYS)
 _THUMBS = within(LIBRARY_CACHE, LIBRARY_THUMBS)
 _PAGES = within(LIBRARY_CACHE, LIBRARY_PAGES)
 
@@ -501,6 +513,16 @@ class _Rules:
                 # a stored source unpacked, while the store holds its tar
                 return (
                     (self.root / LIBRARY_DOCUMENTS / f"{PurePosixPath(name).parts[0]}.tar").is_file() if name else True
+                )
+            if first == _SURVEYS:
+                # a source's survey while the store holds the source and the PDF it is kept by; the folder a compile runs in, which the next empties
+                part = PurePosixPath(name).parts[0] if name else ""
+                if part in ("", "run"):
+                    return True
+                tex_hex, _, pdf_hex = PurePosixPath(part).stem.partition("-")
+                documents = self.root / LIBRARY_DOCUMENTS
+                return (documents / f"{tex_hex}.tar").is_file() and (
+                    not pdf_hex or (documents / f"{pdf_hex}.pdf").is_file()
                 )
             # the index of the library's nodes, and its journal while a write to it is under way, while the library has nodes
             return first in (_NODE_INDEX, f"{_NODE_INDEX}-journal") and (self.root / LIBRARY_NODES).is_dir()

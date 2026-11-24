@@ -5,17 +5,20 @@ Made in two steps, when something asks for it and never by a build or the list o
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
+import shutil
 import tempfile
+from collections.abc import Iterator
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from loom import locks
 from loom.library.counters import Numbering, plain
-from loom.paths import LIBRARY_SURVEYS, SURVEY_LOCK
+from loom.paths import LIBRARY_SURVEYS, SURVEY_LOCK, SURVEY_RUN
 from loom.reshape.importer import closure_of
 from loom.scan.directives import parse_directives
 from loom.scan.envtree import FileEnvs, labels_in, scan_environments
@@ -905,7 +908,7 @@ def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None) -> No
 def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
     """A copy of `s` judged by `auxes`, the `.aux` files of its marked copy's compile, the person's own act; its numbers and pages kept only as confirmed.
 
-    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. With the work's stored PDF (`pages`), the stored document governs: each heading's and result's number and page are the PDF's own, read at the start of its line (`place`), the compile's hint one way to tell it. Without one, a number is kept where it is loom's own reading of the source's counters and the compile says the same, and no page. Labels are numbered by `_labels`. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. The survey is `ready` when every mark loom added is there, else `failed`, `incomplete`, with `unseen` naming what fell short by its id in the survey.
+    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. With the work's stored PDF (`pages`), the stored document governs: each heading's and result's number and page are the PDF's own, read at the start of its line (`place`), the compile's hint one way to tell it. Without one, a number is kept where it is loom's own reading of the source's counters and the compile says the same, and no page. Labels are numbered by `_labels`. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. A mark the compile never reached, a result inside `\\iffalse`, is named in `unseen` and fails only itself: the survey is `ready` unless no mark at all was reached (`failed`, `incomplete`).
     """
     found: dict[str, AuxNumber] = {}
     sheets: dict[str, int] = {}
@@ -919,28 +922,40 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
     out = Survey.from_json(s.to_json())
     out.compiled = True
     out.unseen = [name for mark, name in marks if MARK + mark not in found]
-    if out.unseen:
+    if len(out.unseen) == len(marks) and marks:
+        # not one mark reached: the compile never read the source's body
         out.state, out.why = "failed", "incomplete"
         return out
-    hints = {name: _hint(found[MARK + mark].number, found) for mark, name in marks}
+    hints = {name: _hint(found[MARK + mark].number, found) for mark, name in marks if MARK + mark in found}
     near = {name: sheets[MARK + mark] for mark, name in marks if sheets.get(MARK + mark)}
     if pages is not None:
         out.unconfirmed = _placed(out, pages, {k: v for k, v in hints.items() if v is not None}, near)
     else:
         for sec in out.sections:
-            sec.number = sec.emulated if sec.emulated is not None and hints[sec.section] == sec.emulated else None
+            sec.number = sec.emulated if sec.emulated is not None and hints.get(sec.section) == sec.emulated else None
         for item in out.items:
             numbered = item.numbered and item.emulated is not None
-            item.number = item.emulated if numbered and hints[item.item] == item.emulated else None
+            item.number = item.emulated if numbered and hints.get(item.item) == item.emulated else None
         out.unconfirmed = [x.section for x in out.sections if x.emulated is not None and x.number is None] + [
             i.item for i in out.items if i.numbered and i.number is None
         ]
+    # a mark the compile never reached stands in no printed document (`\iffalse`): it is named in `unseen`, has no number, and prints none to be confirmed
+    hidden = set(out.unseen)
+    for sec in out.sections:
+        if sec.section in hidden:
+            sec.number, sec.page = None, None
+    for item in out.items:
+        if item.item in hidden:
+            item.number, item.page = None, None
+    out.unconfirmed = [name for name in out.unconfirmed if name not in hidden]
     _labels(out, found, pages)
     out.state, out.why = "ready", None
     return out
 
 
-def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
+def compile_marks(
+    src: Path, s: Survey, pdf: Path | None = None, *, scratch: Path | None = None, online: bool = True
+) -> Survey:
     """Compile a marked copy of the source in a scratch folder, removed after, and keep of what it wrote only what is confirmed (`confirm`): the person's own act, never the unasked path.
 
     Parameters
@@ -951,6 +966,10 @@ def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
         Its survey as `read` made it.
     pdf : Path, optional
         The work's stored PDF, the one `s.pdf` names, which governs its numbers and pages; without one a number is kept only as loom's own reading the compile agrees with, and no page.
+    scratch : Path, optional
+        The folder the compile runs in, emptied before and removed after; default a temporary one.
+    online : bool, default True
+        Whether what the source's text names and loom's TeX lacks may be fetched.
 
     Returns
     -------
@@ -959,10 +978,12 @@ def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
     """
     if s.state == "failed":
         return s
-    with tempfile.TemporaryDirectory(prefix="loom-survey-") as tmp:
-        root = marked(src, s, Path(tmp) / "src")
-        res = compile_tex(root, s.main, Path(tmp) / "out", s.engine, halt_on_error=False, timeout=TIMEOUT, foreign=True)
-        auxes = [p.read_text(encoding="utf-8", errors="replace") for p in sorted((Path(tmp) / "out").rglob("*.aux"))]
+    with _scratch(scratch) as tmp:
+        root = marked(src, s, tmp / "src")
+        res = compile_tex(
+            root, s.main, tmp / "out", s.engine, halt_on_error=False, timeout=TIMEOUT, foreign=True, online=online
+        )
+        auxes = [p.read_text(encoding="utf-8", errors="replace") for p in sorted((tmp / "out").rglob("*.aux"))]
     if res.aux is None or not auxes:
         out = Survey.from_json(s.to_json())
         out.state, out.compiled = "failed", True
@@ -971,12 +992,34 @@ def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
     return confirm(s, auxes, Pages.of(pdf))
 
 
+@contextlib.contextmanager
+def _scratch(at: Path | None) -> Iterator[Path]:
+    """A folder for one compile: `at`, emptied first and removed after, or a temporary one."""
+    if at is None:
+        with tempfile.TemporaryDirectory(prefix="loom-survey-") as tmp:
+            yield Path(tmp)
+        return
+    shutil.rmtree(at, ignore_errors=True)
+    at.mkdir(parents=True)
+    try:
+        yield at
+    finally:
+        shutil.rmtree(at, ignore_errors=True)
+
+
 def complete(
-    root: Path, tex: str, src: Path, main: str, pdf: str | None = None, pdf_path: Path | None = None
+    root: Path,
+    tex: str,
+    src: Path,
+    main: str,
+    pdf: str | None = None,
+    pdf_path: Path | None = None,
+    *,
+    online: bool = True,
 ) -> Survey:
     """A source's survey once compiled, the person's own act: the kept one when a compile already judged it, else compiled now and kept.
 
-    One compile at a time in a quilt: each holds `SURVEY_LOCK`, decides again under it, and waits up to `QUEUE` seconds for another to end.
+    One compile at a time in a quilt: each holds `SURVEY_LOCK`, decides again under it, and waits up to `QUEUE` seconds for another to end. It runs in `.loom/cache/library/survey/run/`, which it empties first, so what a compile killed part way left goes at the next.
 
     Parameters
     ----------
@@ -992,6 +1035,8 @@ def complete(
         The hash of the work's stored PDF, which the survey is kept by and which governs its numbers.
     pdf_path : Path, optional
         That PDF on the disk.
+    online : bool, default True
+        Whether what the source's text names and loom's TeX lacks may be fetched.
 
     Returns
     -------
@@ -1010,7 +1055,7 @@ def complete(
         if s.state == "failed":
             return s
         base = Survey.from_json({**s.to_json(), "state": "reading", "why": None, "unconfirmed": []})
-        done = compile_marks(src, base, pdf_path if pdf else None)
+        done = compile_marks(src, base, pdf_path if pdf else None, scratch=root / SURVEY_RUN, online=online)
         keep(root, done)
         return done
 

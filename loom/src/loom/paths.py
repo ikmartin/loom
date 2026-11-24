@@ -153,6 +153,8 @@ NODE_INDEX = f"{LIBRARY_CACHE}/nodes.sqlite3"
 LIBRARY_SURVEYS = f"{LIBRARY_CACHE}/survey"
 #: Held while a source's survey compiles, so a quilt compiles one source at a time.
 SURVEY_LOCK = f"{LOCAL}/library-survey.lock"
+#: Where a source's survey compiles, emptied by the next compile (`library.survey.complete`).
+SURVEY_RUN = f"{LIBRARY_SURVEYS}/run"
 #: A stored source unpacked, `<hex>/`, made when something reads it.
 LIBRARY_SOURCES = f"{LIBRARY_CACHE}/sources"
 #: A stored PDF's first page, `<hex>.png`, made when first asked for (`library.thumbs`).

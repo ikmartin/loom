@@ -5,6 +5,7 @@ The engine is the master's `% !TEX program` if present, else `[quilt] engine`. T
 
 from __future__ import annotations
 
+import atexit
 import contextlib
 import os
 import re
@@ -31,6 +32,10 @@ ENGINE_FLAGS = {
 LIMITS = {"openout_any": "p", "shell_escape": "p"}
 #: What a source nobody at loom wrote is compiled under: as `LIMITS`, and no command at all is started for it, a figure TeX would convert among them.
 FOREIGN = {**LIMITS, "shell_escape": "f"}
+#: Seconds of CPU each program a foreign compile starts may spend (`ulimit -t`): a TeX left running when loom is killed dies by itself.
+FOREIGN_CPU = 600
+#: The foreign compiles running now, ended with their process groups when loom exits.
+_LIVE: set[subprocess.Popen[str]] = set()
 
 
 def tex_env(*, foreign: bool = False) -> dict[str, str]:
@@ -296,10 +301,11 @@ def compile_tex(
     started: Callable[[subprocess.Popen[str]], None] | None = None,
     *,
     foreign: bool = False,
+    online: bool = True,
 ) -> CompileResult:
     """Compile `tex_rel` (relative to `root`) with latexmk into `outdir`, fetching what it lacks into loom's TeX; return a result even when latexmk is missing.
 
-    Under loom's own TeX the preamble is checked first and what it names that TeX lacks is installed in one go (`missing.preflight`); a run that still fails on a missing file, font or program has it fetched and runs again, up to `missing.ROUNDS` times. The person's own TeX is never installed into. `fetched`, `needed` and `note` say what happened.
+    Under loom's own TeX the preamble is checked first and what it names that TeX lacks is installed in one go (`missing.preflight`); a run that still fails on a missing file, font or program has it fetched and runs again, up to `missing.ROUNDS` times. A foreign source's compile fetches only what its own text names, never what its log does, since the log is the source's to write and the names asked of the mirror would carry what it read out of the machine. The person's own TeX is never installed into. `fetched`, `needed` and `note` say what happened.
 
     Parameters
     ----------
@@ -316,19 +322,21 @@ def compile_tex(
     started : callable, optional
         Handed latexmk's process as it starts, for a caller that may end it with `stop_run`.
     foreign : bool, default False
-        A source nobody at loom wrote: compiled under `FOREIGN` (`tex_env`).
+        A source nobody at loom wrote: compiled under `FOREIGN` (`tex_env`), each program capped at `FOREIGN_CPU` seconds of CPU, ended when loom exits, and fetched for from its text alone.
+    online : bool, default True
+        Whether the network may be used to fetch what it lacks.
 
     Returns
     -------
     CompileResult
     """
-    fetching = private.can_fetch()
+    fetching = private.can_fetch() and online
     rounds = missing.Round()
     if fetching:
         rounds.fetch(missing.preflight(root, tex_rel))
     res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, foreign=foreign)
     for _ in range(missing.ROUNDS):
-        if res.ok or not fetching or res.returncode == 124 or res.stopped:
+        if res.ok or not fetching or foreign or res.returncode == 124 or res.stopped:
             break
         log = res.log.read_text(encoding="utf-8", errors="replace") if res.log is not None else ""
         if not rounds.fetch(missing.from_log(log, res.stdout)):
@@ -373,6 +381,9 @@ def _compile_once(
         if halt_on_error:
             cmd.append("-halt-on-error")
         cmd.append(tex_rel)
+        if foreign:
+            # `ulimit -t` holds in every program latexmk starts, so a TeX outlives a killed loom by its CPU cap at most
+            cmd = ["/bin/sh", "-c", f'ulimit -t {FOREIGN_CPU} && exec "$@"', "sh", *cmd]
         proc = subprocess.Popen(
             cmd,
             cwd=root,
@@ -385,12 +396,16 @@ def _compile_once(
         )
         if started is not None:
             started(proc)
+        if foreign:
+            _LIVE.add(proc)
         try:
             out, err = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
             stop_run(proc)
             proc.communicate()
             return CompileResult(False, engine, outdir, 124, errors=[f"latexmk timed out after {timeout}s"])
+        finally:
+            _LIVE.discard(proc)
         if proc.returncode < 0 or getattr(proc, "loom_stopped", False):
             # cut short, its log is part of a run: what the last whole compile left stays
             return CompileResult(
@@ -426,6 +441,13 @@ def _compile_once(
         warnings,
         root,
     )
+
+
+@atexit.register
+def _end_live() -> None:
+    """End every foreign compile still running when loom exits, with what it started."""
+    for proc in list(_LIVE):
+        stop_run(proc)
 
 
 def stop_run(proc: subprocess.Popen[str]) -> None:

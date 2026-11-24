@@ -7,7 +7,9 @@ import re
 import shutil
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -700,14 +702,22 @@ def test_a_restated_result_is_numbered_as_its_stored_pdf_prints_it_and_without_o
     ("without", "unseen"),
     [("loom-survey-i1", ["i2"]), ("loom-survey-p1-0", ["i2:proof0"]), ("loom-survey-s1", ["s2"])],
 )
-def test_a_mark_the_compile_never_reached_fails_the_survey_and_is_named_by_its_id(
+def test_a_mark_the_compile_never_reached_fails_only_itself_and_is_named_by_its_id(
     tmp_path: Path, without: str, unseen: list[str]
 ) -> None:
-    """The review's D-4: what fell short is named as the survey names it, never by the mark's own count from 0."""
+    """The review's D-4 and D-5: what fell short is named as the survey names it, never by the mark's own count from 0, and it alone has no number, the paper's other results keeping theirs."""
     s = survey.read(_source(tmp_path), "main.tex", TEX)
     done = survey.confirm(s, _aux(without=without))
-    assert (done.state, done.why, done.unseen) == ("failed", "incomplete", unseen)
-    assert all(i.number is None and i.page is None for i in done.items)
+    assert (done.state, done.why, done.unseen) == ("ready", None, unseen)
+    if without == "loom-survey-i1":
+        assert done.item("i2").number is None and done.unconfirmed == [], "it prints nothing to confirm"  # type: ignore[union-attr]
+    assert done.item("thm:main").number == "2.1" and done.item("not:hom").number == "7.1"  # type: ignore[union-attr]
+
+
+def test_a_compile_that_reached_no_mark_fails_the_survey(tmp_path: Path) -> None:
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    done = survey.confirm(s, ["\\relax"])
+    assert (done.state, done.why, len(done.unseen)) == ("failed", "incomplete", 13)
 
 
 def test_a_source_s_compile_starts_no_command(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -730,7 +740,7 @@ def test_a_quilt_compiles_one_source_at_a_time_and_keeps_what_it_made(
     root, src = tmp_path / "quilt", _source(tmp_path)
     spans: list[tuple[float, float]] = []
 
-    def slow(_src: Path, s: survey.Survey, _pdf: Path | None = None) -> survey.Survey:
+    def slow(_src: Path, s: survey.Survey, _pdf: Path | None = None, **_kw: object) -> survey.Survey:
         start = time.monotonic()
         time.sleep(0.3)
         spans.append((start, time.monotonic()))
@@ -804,6 +814,73 @@ def test_a_book_s_chapters_and_its_appendix_are_read_from_its_pdf(tmp_path: Path
     assert [(x.number, x.page) for x in done.sections] == [("1", 1), ("1.1", 1), ("2", 3), ("A", 5)]
     assert [(i.number, i.page) for i in done.items] == [("1.1", 1), ("2.1", 3), ("A.1", 5)]
     assert (done.unconfirmed, done.compiled) == ([], False)
+
+
+#: A source whose compile never ends, spending CPU all the while.
+NEVER_ENDS = "\\documentclass{article}\n\\begin{document}\nSpinning.\n\\loop\\iftrue\\repeat\n\\end{document}\n"
+
+
+def _tex_under(marker: str) -> list[str]:
+    """The command lines of TeX's programs running in a folder whose path holds `marker`."""
+    import subprocess
+
+    listed = subprocess.run(["ps", "-axo", "command="], capture_output=True, text=True, check=False).stdout
+    return [line for line in listed.splitlines() if marker in line and ("tex" in line or "latexmk" in line)]
+
+
+def _waited(until: Callable[[], bool], seconds: float) -> bool:
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if until():
+            return True
+        time.sleep(0.2)
+    return until()
+
+
+def _surveying(tmp_path: Path, script: str) -> tuple[Any, str, Path]:
+    """A process surveying `NEVER_ENDS` by `script`, once its TeX runs: the process, what names its run folder, the quilt."""
+    import subprocess
+    import sys
+
+    from loom.paths import SURVEY_RUN
+
+    src, quilt = tmp_path / "spin", tmp_path / "quilt"
+    src.mkdir()
+    (src / "main.tex").write_text(NEVER_ENDS, encoding="utf-8")
+    child = subprocess.Popen([sys.executable, "-c", script, str(quilt), str(src)])
+    marker = f"{tmp_path.name}/quilt/{SURVEY_RUN}"
+    assert _waited(lambda: bool(_tex_under(marker)), 60), "the survey's TeX never started"
+    return child, marker, quilt
+
+
+@pytest.mark.tex
+def test_a_survey_killed_part_way_leaves_no_tex_past_its_cap_and_no_folder_past_the_next(tmp_path: Path) -> None:
+    """The review's D-2: a foreign compile's programs are capped in CPU, so killing loom leaves nothing running for long; and the next compile empties the folder it ran in."""
+    from loom.paths import SURVEY_RUN
+
+    child, marker, quilt = _surveying(
+        tmp_path,
+        "import sys; from pathlib import Path; from loom.tex import runner; runner.FOREIGN_CPU = 2; "
+        "from loom.library import survey; survey.complete(Path(sys.argv[1]), 'sha256:' + 'ab' * 32, Path(sys.argv[2]), 'main.tex')",
+    )
+    child.kill()
+    child.wait()
+    assert _waited(lambda: not _tex_under(marker), 30), _tex_under(marker)
+    assert (quilt / SURVEY_RUN).is_dir(), "left by the kill"
+    done = survey.complete(quilt, TEX, _source(tmp_path), "main.tex")
+    assert done.state == "ready" and not (quilt / SURVEY_RUN).exists()
+
+
+@pytest.mark.tex
+def test_a_loom_that_exits_ends_the_foreign_compile_it_started(tmp_path: Path) -> None:
+    child, marker, _quilt = _surveying(
+        tmp_path,
+        "import sys, threading; from pathlib import Path; from loom.library import survey; "
+        "threading.Thread(target=lambda: survey.complete(Path(sys.argv[1]), 'sha256:' + 'ab' * 32, Path(sys.argv[2]), 'main.tex'), daemon=True).start(); "
+        "import time; from loom.tex import runner\nwhile not runner._LIVE: time.sleep(0.1)\ntime.sleep(2)\nsys.exit(0)",
+    )
+    child.wait(timeout=60)
+    assert _waited(lambda: not _tex_under(marker), 10), "ended at once, long before its CPU cap"
 
 
 @pytest.mark.tex
