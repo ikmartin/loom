@@ -335,7 +335,9 @@ export const review = {
 		/** Over a copy opened from Proposed edits: back to the list. */
 		back: '‹ Proposed edits',
 		/** Under Accepted results that changed, narrowed to a draft with no blocks to accept. */
-		none: (doc: string) => `Nothing of ${file(doc)} waits to be accepted.`
+		none: (doc: string) => `Nothing of ${file(doc)} waits to be accepted.`,
+		/** Under Accepted results that changed, over every draft's folded blocks, when none waits. */
+		nothing: 'Nothing waits to be accepted.'
 	},
 	statement: {
 		/** In place of a statement whose rendering could not be read. */

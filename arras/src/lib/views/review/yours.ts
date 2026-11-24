@@ -1,4 +1,4 @@
-// Review's two kinds that today's Your Changes draws on a served quilt, in place of round six's rows for them: "Accepted results that changed" shows its Waiting to be accepted section whole, "Proposed edits" its Changes to keep and the agents' copies. The column counts for them what these sections list as waiting, and a draft narrows them as it narrows every kind.
+// Review's two kinds that today's Your Changes draws on a served quilt, in place of round six's rows for them: "Accepted results that changed" shows its Waiting to be accepted section, every document's blocks by document, "Proposed edits" its Changes to keep and the agents' copies. The column counts for them what these sections list as waiting, and a draft narrows them as it narrows every kind.
 
 import type { Manifest } from '$lib/manifest/types';
 import type { ReviewKind, ReviewList } from '$lib/library/types';
@@ -6,7 +6,7 @@ import { isAgentDocument } from '$lib/manifest/documents';
 import { byDocument, pending, type ChangeGroup } from '$lib/review/changes';
 import { adoptionsOf } from '$lib/review/proposed';
 import { documentsWithBlocks } from '$lib/review/queue';
-import { acceptanceOf } from '$lib/review/yourChanges';
+import { acceptanceOf, waitingIn, type Acceptance } from '$lib/review/yourChanges';
 
 /** Which section of Your Changes a kind draws. */
 export type Part = 'accept' | 'changes';
@@ -30,15 +30,32 @@ export function blockDocuments(m: Manifest): Manifest['masters'] {
 	);
 }
 
-/** The blocks the accept section lists as waiting, changed since accepted or taken in, each once; in one draft when given. Never accepted and accepted blocks are folded there and count nothing. */
-export function acceptWaiting(m: Manifest, doc?: string | null): number {
-	const keys = new Set<string>();
+/** One document's part of the accept section. */
+export interface AcceptSection {
+	path: string;
+	/** The document's file name. */
+	file: string;
+	/** Its blocks, less those an earlier document lists. */
+	a: Acceptance;
+}
+
+/** What the accept section draws: each document with blocks, its own blocks grouped by why they wait, each block once, under the first document that reads it; one draft's only when given. Never accepted and accepted blocks are folded there and count nothing. */
+export function acceptSections(m: Manifest, doc?: string | null): AcceptSection[] {
+	const seen = new Set<string>();
+	const once = <T extends { key: string }>(rows: T[]): T[] => rows.filter((b) => (seen.has(b.key) ? false : (seen.add(b.key), true)));
+	const out: AcceptSection[] = [];
 	for (const d of blockDocuments(m)) {
 		if (doc && d.path !== doc) continue;
-		const a = acceptanceOf(m, d.path);
-		for (const b of [...a.changed, ...a.taken.flatMap((t) => t.rows)]) keys.add(b.key);
+		const g = acceptanceOf(m, d.path);
+		const a: Acceptance = { changed: once(g.changed), taken: g.taken.map((t) => ({ label: t.label, rows: once(t.rows) })).filter((t) => t.rows.length), never: once(g.never), accepted: once(g.accepted) };
+		if (a.changed.length || a.taken.length || a.never.length || a.accepted.length) out.push({ path: d.path, file: d.path.split('/').pop() ?? d.path, a });
 	}
-	return keys.size;
+	return out;
+}
+
+/** The blocks the accept section lists as waiting, changed since accepted or taken in, each once; in one draft when given. */
+export function acceptWaiting(m: Manifest, doc?: string | null): number {
+	return acceptSections(m, doc).reduce((n, s) => n + waitingIn(s.a), 0);
 }
 
 /** The changes the changes section draws, by the document listing them: every one, or, in a draft, one group of those in its text. Changes just kept or discarded (`gone`) are left out at once. */

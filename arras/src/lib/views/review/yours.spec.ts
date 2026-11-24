@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import fixture from '../../../../tests/fixture/manifest.json';
 import type { Manifest, PendingChange } from '$lib/manifest/types';
 import type { ReviewList } from '$lib/library/types';
-import { acceptWaiting, changeGroups, changesWaiting, theirs } from './yours';
+import { acceptSections, acceptWaiting, changeGroups, changesWaiting, theirs } from './yours';
 
 const m = fixture as unknown as Manifest;
 const MAIN = 'drafting/main.tex';
@@ -15,6 +15,17 @@ describe('the accept section', () => {
 		const waiting = new Set(m.unresolved!.filter((r) => r.cause !== 'never-accepted').map((r) => r.key));
 		expect(acceptWaiting(m)).toBe(waiting.size);
 		expect(acceptWaiting(m)).toBeLessThanOrEqual(acceptWaiting(m, MAIN) + acceptWaiting(m, TALK));
+	});
+
+	it('draws every document with blocks, each block once, under the first document that reads it, and counts what it draws', () => {
+		const sections = acceptSections(m);
+		const keys = sections.flatMap((s) => [...s.a.changed, ...s.a.taken.flatMap((t) => t.rows), ...s.a.never, ...s.a.accepted].map((b) => b.key));
+		expect(new Set(keys).size).toBe(keys.length);
+		expect(sections.map((s) => s.path)).toContain(TALK);
+		const waiting = sections.reduce((n, s) => n + s.a.changed.length + s.a.taken.reduce((k, t) => k + t.rows.length, 0), 0);
+		expect(acceptWaiting(m)).toBe(waiting);
+		// a draft alone keeps every block it reads, those an earlier draft lists too
+		expect(acceptSections(m, TALK).map((s) => s.path)).toEqual([TALK]);
 	});
 
 	it('counts in a draft only what that draft reads, and nothing in a draft the quilt does not hold', () => {

@@ -391,9 +391,17 @@ test('Accepted results that changed and Proposed edits draw the sections of Your
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
 	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
-	await expect(accept.locator('[data-testid="review-group"][data-group="changed"]')).toBeVisible();
+	await expect(accept.locator('[data-testid="review-group"][data-group="changed"]').first()).toBeVisible();
+	// every document's blocks, by document, each once, and no choice of document: as many waiting as the column counts
+	await expect(accept.getByTestId('review-document')).toHaveCount(0);
+	await expect(accept.getByTestId('accept-document')).toHaveCount(2);
+	const waiting = accept.locator('[data-group="changed"] [data-testid="review-row"], [data-group="taken"] [data-testid="review-row"]');
+	await expect(waiting).toHaveCount(5);
+	await expect(count(page, 'review-kind-accepted-changed')).toHaveText('5');
+	const keys = await accept.getByTestId('review-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-key')));
+	expect(new Set(keys).size).toBe(keys.length);
 	// the blocks never accepted are folded beneath, and count nothing
-	await expect(accept.locator('[data-testid="review-group"][data-group="never"]')).not.toHaveAttribute('open', '');
+	await expect(accept.locator('[data-testid="review-group"][data-group="never"]').first()).not.toHaveAttribute('open', '');
 	await expect(rows(page)).toHaveCount(0);
 	await page.getByTestId('review-draft').filter({ hasText: 'bounds.tex' }).click();
 	await expect(accept).toContainText('Nothing of bounds.tex waits to be accepted.');

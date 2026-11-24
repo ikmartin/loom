@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar. On a served quilt Review draws it in two parts (`part`): Waiting to be accepted under Accepted results that changed, Changes to keep with the agents' copies under Proposed edits, each narrowed to the draft the column chooses (`views/review/yours.ts`).
+	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar. On a served quilt Review draws it in two parts (`part`): Waiting to be accepted under Accepted results that changed, every document's blocks by document with no choice of document, each block once (`acceptSections`); Changes to keep with the agents' copies under Proposed edits; each narrowed to the draft the column chooses (`views/review/yours.ts`).
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount, tick } from 'svelte';
@@ -27,7 +27,7 @@
 	import Said from '$lib/review/Said.svelte';
 	import Copies from '$lib/views/review/Copies.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
-	import { blockDocuments, changeGroups, type Part } from '$lib/views/review/yours';
+	import { acceptSections, blockDocuments, changeGroups, type AcceptSection, type Part } from '$lib/views/review/yours';
 	import { review as reviewWords } from '$lib/words/review';
 
 	let { part }: { part?: Part } = $props();
@@ -52,15 +52,20 @@
 	let todoOn = $state(false);
 	const todoAlone = $derived(todo.filter((t) => !groups.some((g) => g.path === t.path)));
 
-	// the documents with blocks to accept, one at a time: asked for by name, else the first with something waiting, else the default
+	// the documents with blocks to accept: in Review every one, or the draft the column chooses; on the page of its own one at a time, asked for by name, else the first with something waiting, else the default
 	const mine = $derived(blockDocuments(m));
 	const waiting = (path: string) => waitingIn(acceptanceOf(m, path));
+	const all = $derived(part === 'accept' && !draft);
 	const doc = $derived(draft ? mine.find((x) => x.path === draft) : mine.find((x) => x.path === page.url.searchParams.get('document')) ?? mine.find((x) => waiting(x.path) > 0) ?? mine.find((x) => x.default) ?? mine[0]);
 	const file = $derived(doc ? doc.path.split('/').pop()! : '');
-	const y = $derived(doc ? acceptanceOf(m, doc.path) : null);
+	// what is drawn, by document, each block once
+	const sections = $derived<AcceptSection[]>(all ? acceptSections(m) : doc ? [{ path: doc.path, file, a: acceptanceOf(m, doc.path) }] : []);
+	const y = $derived(all ? null : (sections[0]?.a ?? null));
 	const lists = $derived(y ? [...y.changed, ...y.taken.flatMap((t) => t.rows)] : []);
-	const changedCount = $derived(y ? y.changed.length : 0);
-	const takenCount = $derived(y ? y.taken.reduce((n, t) => n + t.rows.length, 0) : 0);
+	const changedCount = $derived(sections.reduce((n, s) => n + s.a.changed.length, 0));
+	const takenCount = $derived(sections.reduce((n, s) => n + s.a.taken.reduce((k, t) => k + t.rows.length, 0), 0));
+	// the document each drawn block is listed under, which names it
+	const home = $derived(new Map(sections.flatMap((s) => [...s.a.changed, ...s.a.taken.flatMap((t) => t.rows), ...s.a.never, ...s.a.accepted].map((b) => [b.key, s.path] as const))));
 	const reviewer = $derived(m.reviewer?.name ?? '');
 	const since = $derived(m.changes_since ? m.changes_since.when.slice(0, 16).replace('T', ' ') : '');
 	// whether edits in place since the person's look wait here too, as well as suggestions
@@ -79,7 +84,7 @@
 		void can('change-discard').then((yes) => (writes.discard = yes));
 	});
 
-	const name = (key: string) => displayNode(m, key, doc?.path).name;
+	const name = (key: string) => displayNode(m, key, home.get(key) ?? doc?.path).name;
 	const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 	const some = (n: number, words: string) => (n ? `${n} ${words}` : '');
 
@@ -112,9 +117,8 @@
 	/** Whether the row asked from, a block's key, is still drawn. */
 	function stands(at: string): boolean {
 		const now = store.manifest;
-		if (!now || !doc) return false;
-		const list = acceptanceOf(now, doc.path);
-		return [...list.changed, ...list.taken.flatMap((t) => t.rows), ...list.never].some((b) => b.key === at);
+		if (!now || (!all && !doc)) return false;
+		return acceptSections(now, all ? null : doc!.path).some((s) => [...s.a.changed, ...s.a.taken.flatMap((t) => t.rows), ...s.a.never].some((b) => b.key === at));
 	}
 
 	/** Accept `keys` at once; what loom accepts leaves its row, and each refusal is said by the block it refuses, in the row when one was pressed, in the bar for a selection. */
@@ -164,7 +168,7 @@
 	// a link to one block's row (a block's "See this block in Review") opens the fold it is in
 	$effect(() => {
 		const hash = page.url.hash.slice(1);
-		if (!hash || !y) return;
+		if (!hash || !sections.length) return;
 		void tick().then(() => {
 			const row = window.document.getElementById(hash);
 			const fold = row?.closest('details');
@@ -186,19 +190,19 @@
 	</ul>
 {/snippet}
 
-{#snippet blockRow(b: BlockRow)}
+{#snippet blockRow(b: BlockRow, path: string)}
 	{@const r = b.row}
 	{@const cause = r?.cause === 'earlier-change' ? why(b.key) || 'changed since you accepted' : ''}
-	{@const context = displayNode(m, b.key, doc?.path).context}
+	{@const context = displayNode(m, b.key, path).context}
 	<li class="block" id={`review-${anchorId(b.key)}`} data-testid="review-row" data-key={b.key}>
 		<div class="line">
 			{#if acts && r}<input type="checkbox" disabled={!!r.refusal} checked={picked.has(b.key)} onchange={() => toggle(b.key)} aria-label={`Select ${name(b.key)}`} data-testid="review-pick" />{/if}
-			<a class="name" href={reviewReadUrl(doc!.path, b.key)}>{name(b.key)}</a>
+			<a class="name" href={reviewReadUrl(path, b.key)}>{name(b.key)}</a>
 			{#if context}<span class="of">{context}</span>{/if}
 			{#if cause}<span class="tag changed" data-testid="tag-changed">{cause}</span>{/if}
-			{#each notesOf(m, b.key) as note (note)}<a class="note" href={reviewReadUrl(doc!.path, b.key)} data-testid="review-note">{note}</a>{/each}
+			{#each notesOf(m, b.key) as note (note)}<a class="note" href={reviewReadUrl(path, b.key)} data-testid="review-note">{note}</a>{/each}
 			<span class="acts">
-				{#if r}<a class="btn quiet small" href={reviewReadUrl(doc!.path, b.key, cause ? 0 : undefined)} data-testid="review-read">{cause ? 'See change' : 'Read'}</a>{/if}
+				{#if r}<a class="btn quiet small" href={reviewReadUrl(path, b.key, cause ? 0 : undefined)} data-testid="review-read">{cause ? 'See change' : 'Read'}</a>{/if}
 				{#if acts && r && !r.refusal}<button class="btn small primary" disabled={!!busy} onclick={() => void accept([b.key], b.key)} data-testid="review-accept">{busy === b.key ? 'Accepting…' : 'Accept'}</button>{/if}
 			</span>
 		</div>
@@ -207,24 +211,24 @@
 	</li>
 {/snippet}
 
-{#snippet group(id: string, title: string, rows: BlockRow[], open: boolean)}
+{#snippet group(id: string, title: string, rows: BlockRow[], open: boolean, path: string)}
 	<details {open} class="group" data-testid="review-group" data-group={id}>
 		<summary>
 			{#if acts && acceptable(rows).length}<input type="checkbox" checked={allPicked(rows)} onclick={(e) => e.stopPropagation()} onchange={() => toggleGroup(rows)} aria-label={`Select every block ${title.toLowerCase()} that can be accepted`} data-testid="review-pick-group" />{/if}
 			<span class="title">{title}</span> <span class="count" data-testid="review-group-count">{rows.length}</span>
 		</summary>
-		<ul>{#each rows as b (b.key)}{@render blockRow(b)}{/each}</ul>
+		<ul>{#each rows as b (b.key)}{@render blockRow(b, path)}{/each}</ul>
 	</details>
 {/snippet}
 
 {#snippet choice()}
-	{#if mine.length > 1 && !draft}<select aria-label="Document" data-testid="review-document" value={doc!.path} onchange={(e) => goto(`?document=${encodeURIComponent(e.currentTarget.value)}`)}>{#each mine as d (d.path)}<option value={d.path}>{d.path.split('/').pop()}{waiting(d.path) ? ` · ${waiting(d.path)}` : ''}</option>{/each}</select>{:else}<strong>{file}</strong>{/if}
+	{#if mine.length > 1}<select aria-label="Document" data-testid="review-document" value={doc!.path} onchange={(e) => goto(`?document=${encodeURIComponent(e.currentTarget.value)}`)}>{#each mine as d (d.path)}<option value={d.path}>{d.path.split('/').pop()}{waiting(d.path) ? ` · ${waiting(d.path)}` : ''}</option>{/each}</select>{:else}<strong>{file}</strong>{/if}
 {/snippet}
 
 {#snippet bar()}
 	<ActionBar said={said?.at === '*' ? said.text : ''} refused={said?.refused} testid="review-bar">
 		{#snippet lead()}
-			{#if part === 'accept'}{#if y && doc}{@render choice()}{/if}{:else if !part}<span class="muted" data-testid="review-summary">{[some(changedCount, 'changed since you accepted'), some(takenCount, 'taken in'), some(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || 'Nothing waits'}</span>{/if}
+			{#if draft && part === 'accept'}{#if doc}<strong>{file}</strong>{/if}{:else if part !== 'changes'}<span class="muted" data-testid="review-summary">{[some(changedCount, 'changed since you accepted'), some(takenCount, 'taken in'), part ? '' : some(changeCount, changeCount === 1 ? 'change waiting' : 'changes waiting'), reviewer ? `reviewing as ${reviewer}` : ''].filter(Boolean).join(' · ') || 'Nothing waits'}</span>{/if}
 		{/snippet}
 		{#snippet actions()}
 			<!-- a keep or a discard, here or in a document, is undone as the document's toolbar undoes it -->
@@ -244,28 +248,40 @@
 	{:else if !served}<p class="muted" data-testid="review-read-only">This copy of the quilt only reads; accepting needs the quilt served for writing.</p>{/if}
 	{#if !mine.length}<NoDrafts what="blocks to review" />
 	{:else if draft && !doc}<Empty text={reviewWords.yours.none(draft)} testid="review-empty" />
+	{:else if all}
+		{#if !changedCount && !takenCount}<Empty text={reviewWords.yours.nothing} testid="review-empty" />{/if}
+		{#each sections as s (s.path)}
+			<section class="document" data-testid="accept-document" data-path={s.path}>
+				<div class="dhead"><span class="title">{s.file}</span>{#if waitingIn(s.a)}<span class="count" data-testid="accept-document-count">{waitingIn(s.a)}</span>{/if}</div>
+				{@render blocks(s)}
+			</section>
+		{/each}
 	{:else if y && doc}
 		{#if !part}<p class="pick">{@render choice()}</p>{/if}
 		{#if !lists.length && !y.never.length}<Empty text={`Every block of ${file} is accepted.`} testid="review-empty" />{/if}
-		{#if y.changed.length}{@render group('changed', 'Changed', y.changed, y.changed.length <= OPEN)}{/if}
-		{#each y.taken as t (t.label)}{@render group('taken', t.label, t.rows, true)}{/each}
-		{#if y.never.length}{@render group('never', 'Never accepted', y.never, false)}{/if}
-		{#if y.accepted.length}
-			<details class="group" data-testid="review-group" data-group="accepted">
-				<summary><span class="title">Accepted</span> <span class="count" data-testid="review-group-count">{y.accepted.length}</span></summary>
-				<ul>
-					{#each y.accepted as k (k.key)}
-						<li class="block" id={`review-${anchorId(k.key)}`} data-testid="review-row" data-key={k.key}>
-							<div class="line">
-								<a class="name" href={readUrl(doc.path, k.key)}>{name(k.key)}</a>
-								<Badge parts={reviewRowBadge(m, k)} />
-								{#if k.acceptance}<span class="of">by {k.acceptance.author}, {shortDate(k.acceptance.date)}</span>{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
-			</details>
-		{/if}
+		{@render blocks(sections[0])}
+	{/if}
+{/snippet}
+
+{#snippet blocks(s: AcceptSection)}
+	{#if s.a.changed.length}{@render group('changed', 'Changed', s.a.changed, s.a.changed.length <= OPEN, s.path)}{/if}
+	{#each s.a.taken as t (t.label)}{@render group('taken', t.label, t.rows, true, s.path)}{/each}
+	{#if s.a.never.length}{@render group('never', 'Never accepted', s.a.never, false, s.path)}{/if}
+	{#if s.a.accepted.length}
+		<details class="group" data-testid="review-group" data-group="accepted">
+			<summary><span class="title">Accepted</span> <span class="count" data-testid="review-group-count">{s.a.accepted.length}</span></summary>
+			<ul>
+				{#each s.a.accepted as k (k.key)}
+					<li class="block" id={`review-${anchorId(k.key)}`} data-testid="review-row" data-key={k.key}>
+						<div class="line">
+							<a class="name" href={readUrl(s.path, k.key)}>{name(k.key)}</a>
+							<Badge parts={reviewRowBadge(m, k)} />
+							{#if k.acceptance}<span class="of">by {k.acceptance.author}, {shortDate(k.acceptance.date)}</span>{/if}
+						</div>
+					</li>
+				{/each}
+			</ul>
+		</details>
 	{/if}
 {/snippet}
 
@@ -400,6 +416,20 @@
 	}
 	.pick {
 		margin: 0 0 var(--gap-tight);
+	}
+	.dhead {
+		display: flex;
+		align-items: baseline;
+		gap: 10px;
+		margin: 0 0 var(--gap-tight);
+		font-size: 13.5px;
+	}
+	.dhead .title {
+		font-weight: 600;
+	}
+	.dhead .count {
+		color: var(--ink-soft);
+		font-variant-numeric: tabular-nums;
 	}
 	.group {
 		margin: 0 0 var(--gap);
