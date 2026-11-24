@@ -161,5 +161,5 @@ test('what taking a copy in did is said even when the copy leaves the manifest b
 	// the copy taken in leaves nothing to decide
 	await expect(page.getByTestId('proposed-none')).toBeVisible();
 	answer();
-	await expect(page.getByTestId('proposed-answer')).toContainText('Took 1 change into main: 0 accepted, 1 wait in Your Changes.');
+	await expect(page.getByTestId('proposed-answer')).toContainText('Took 1 change into main: 0 accepted, 1 wait to be accepted.');
 });

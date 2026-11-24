@@ -85,7 +85,7 @@
 {/snippet}
 
 <main class="page" use:barShown class:review-page={!opened} data-testid="proposed">
-	<ReviewHeading title="Proposed Changes" />
+	<ReviewHeading title={rv.served ? reviewWords.kinds.edits.name : 'Proposed Changes'} />
 	<!-- where Review's reads are served, a copy is opened from Proposed edits, and goes back there -->
 	{#if opened}<p class="back">{#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="proposed-back">{reviewWords.yours.back}</a>{:else}<a href={here} data-testid="proposed-back">‹ Everything proposed</a>{/if}</p>{/if}
 	{#if adoption}
@@ -98,7 +98,7 @@
 		{#if !cards.length}
 			<Empty text="Nobody has proposed anything." testid="proposed-none" />
 		{:else}
-			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy or a pull is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Your Changes.</p>
+			<p class="lead" data-testid="proposed-summary">{cards.length} to decide. What agents and collaborators propose in a pass of its own: a copy or a pull is reviewed whole. A suggested edit is kept or discarded where it stands, in its document or in Review.</p>
 			<ul class="plain cards" data-testid="proposed-cards">
 				{#each cards as c (c.kind + c.id)}
 					<li class="card" data-testid="proposed-card" data-kind={c.kind} data-id={c.id}>
