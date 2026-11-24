@@ -406,7 +406,7 @@ def test_an_agent_app_s_mcp_file_keeps_its_texts_on_this_machine_and_none_in_the
 def test_an_act_left_for_a_file_of_an_agent_app_s_is_settled_by_a_later_act_of_its_kind_that_writes_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Recovery never writes a file loom keeps for an agent app: an act cut short on an MCP file and a note is left and said, with what settles it, rather than put back from this machine's store; a later act of another kind on the file leaves it so, and the next act of its own kind that writes the file settles it, so it is no longer said (R2-22)."""
+    """Recovery writes nothing in a dot-named place outside loom's own: an act cut short on an MCP file and a note is left and said, with what settles it, rather than put back from this machine's store; a later act of another kind on the file leaves it so, and the next act of its own kind that writes the file settles it, so it is no longer said (R2-22)."""
     from loom import writes
     from loom.scan.quilt import load_quilt
     from tests.unit.test_write_safety import Died, dying_before_the_rename
@@ -424,13 +424,13 @@ def test_an_act_left_for_a_file_of_an_agent_app_s_is_settled_by_a_later_act_of_i
     cut = (root / ".mcp.json").read_bytes()
     assert cut != before
     said = writes.recover(root, hist)
-    assert len(said) == 1 and said[0].startswith("left agents:") and "which loom keeps for an agent app" in said[0], (
-        said
-    )
+    assert (
+        len(said) == 1 and said[0].startswith("left agents:") and "in a place whose name begins with a dot" in said[0]
+    ), said
     assert (root / ".mcp.json").read_bytes() == cut
     ((kind, files, _, settles),) = writes.left(root, hist)
     assert kind == "the agent layer's files" and files == [".mcp.json", "notes.md"]
-    assert settles.startswith("Check that .mcp.json reads as you want")
+    assert settles.startswith("Making .mcp.json read as it did before the act")
     writes.put(root, hist, ".mcp.json", b'{"mcpServers": {}}\n', kind="restore")
     assert len(writes.left(root, hist)) == 1
     writes.put(root, hist, ".mcp.json", cut, kind="agents")
@@ -440,40 +440,151 @@ def test_an_act_left_for_a_file_of_an_agent_app_s_is_settled_by_a_later_act_of_i
     assert writes.recover(root, hist) == [] and (root / ".mcp.json").read_bytes() == cut
 
 
-def _files_for_apps() -> list[str]:
-    """A file of each kind loom keeps for each agent app: its MCP or settings file, its permission file, and a skill."""
-    from loom.ai.clients import CLIENTS
+def _case_blind(path: Path) -> bool:
+    """Whether the file system under the folder `path` takes two spellings that differ only in case for one file, as macOS's does by default."""
+    probe = path / "Case-Probe"
+    probe.write_text("")
+    try:
+        return (path / "case-probe").exists()
+    finally:
+        probe.unlink()
 
-    out = [rel for c in CLIENTS for rel in (c.file, c.permissions) if rel]
-    return out + [f"{c.skills}/draft/SKILL.md" for c in CLIENTS if c.skills]
+
+def _layered(tmp_path: Path) -> Path:
+    """A quilt with every app's files loom writes, and a `.git/config` of the person's."""
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "none", "--yes", cwd=tmp_path)
+    ok("ai", "init", cwd=root)
+    (root / ".git").mkdir(exist_ok=True)
+    (root / ".git/config").write_text("[core]\n\tbare = false\n")
+    (root / "notes").mkdir(exist_ok=True)
+    return root
 
 
-@pytest.mark.parametrize("target", [*_files_for_apps(), "config.toml"])
-def test_a_journal_line_that_would_have_recovery_write_a_file_kept_for_an_agent_app_is_left_and_said(
-    tmp_path: Path, target: str
-) -> None:
-    """The review's forged line (R2-22): an act named on two files, one holding the bytes the line claims as its after and one its before, reads as cut short half way. Where putting it back would write a file loom keeps for an agent app, which the app may hold its own shell out of, recovery leaves it and says so, and the file keeps its bytes; the person's config, which a shell able to write the journal can write directly, is put back as any file is."""
+def _forged_move(root: Path, target: str, *, made: bool = False) -> tuple[list[str], bytes]:
+    """The review's forged line, and recovery run on it: an `mv` naming `target`, which holds the line's after (none where `made`, so putting the act back makes it), and `notes.md`, which holds its before. Returns what recovery said and the text the line would put into `target`."""
     from loom import writes
     from loom.scan.quilt import load_quilt
 
-    root = tmp_path / "q"
-    ok("init", str(root), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
     hist = load_quilt(root).history_dir
-    t = root / target
-    if not t.exists():
-        t.parent.mkdir(parents=True, exist_ok=True)
-        t.write_text("what the app reads\n")
-    now = t.read_bytes()
-    (root / "notes.md").write_text("a note\n")
     forged = b"what the line would have recovery write\n"
-    _begun(root, "mv", {target: [writes.store(hist, forged), writes.store(hist, now)], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
-    said = writes.recover(root, hist)
-    if target == "config.toml":
-        assert said == ["undid mv:e0e0e0e0e0e0e0e0"] and t.read_bytes() == forged
-        return
+    after = None if made else writes.store(hist, (root / target).read_bytes())
+    (root / "notes.md").write_text("a note\n")
+    _begun(root, "mv", {target: [writes.store(hist, forged), after], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
+    return writes.recover(root, hist), forged
+
+
+#: The review's cases: the path the forged line names, the file it reaches, and whether putting the act back would make it; a link or another spelling is set up first.
+REACHED = {
+    "another case: .CLAUDE/settings.json": (".CLAUDE/settings.json", ".claude/settings.json", False),
+    "another case: .Mcp.json": (".Mcp.json", ".mcp.json", False),
+    "another case: .codex/RULES/loom.rules": (".codex/RULES/loom.rules", ".codex/rules/loom.rules", False),
+    "a link to .claude from an open place": ("notes/cl/settings.json", ".claude/settings.json", False),
+    "a link to .mcp.json from an open place": ("notes/m.json", ".mcp.json", False),
+    "Claude Code's local settings, whose hooks it runs": (".claude/settings.local.json", ".claude/settings.local.json", True),
+    "a Codex rule allowing a command outside its sandbox": (".codex/rules/mine.rules", ".codex/rules/mine.rules", True),
+    "git's config, whose fsmonitor git runs": (".git/config", ".git/config", False),
+    "a task run as the folder opens": (".vscode/tasks.json", ".vscode/tasks.json", True),
+    "a Claude Code command": (".claude/commands/forged.md", ".claude/commands/forged.md", True),
+    "a Cursor file": (".cursor/forged.json", ".cursor/forged.json", True),
+    "a git hook": (".git/hooks/pre-commit", ".git/hooks/pre-commit", True),
+    "a dot-named file at depth": ("notes/deep/.hidden.tex", "notes/deep/.hidden.tex", True),
+    "a file in a dot-named folder at depth": ("notes/.private/x.tex", "notes/.private/x.tex", True),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("which", REACHED)
+def test_recovery_writes_nothing_in_a_dot_named_place_however_the_line_names_it(tmp_path: Path, which: str) -> None:
+    """A forged line that names a file in a place whose name begins with a dot, outside loom's own, in another spelling, through a link from an open place, or one the apps run a command from later, is left and said, and the file it reaches is neither made nor changed: recovery judges the file reached, never the path's spelling (R2-23, R2-24)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    named, reached, made = REACHED[which]
+    if which.startswith("another case") and not _case_blind(root):
+        pytest.skip("the file system tells the two spellings apart")
+    if named == "notes/cl/settings.json":
+        (root / "notes/cl").symlink_to("../.claude")
+    if named == "notes/m.json":
+        (root / "notes/m.json").symlink_to("../.mcp.json")
+    if made:
+        (root / named).parent.mkdir(parents=True, exist_ok=True)
+    was = None if made else (root / reached).read_bytes()
+    said, _ = _forged_move(root, named, made=made)
     assert len(said) == 1 and said[0].startswith("left mv:e0e0e0e0e0e0e0e0: putting it back would write"), said
-    assert t.read_bytes() == now and (root / "notes.md").read_bytes() == b"a note\n"
-    assert len(writes.left(root, hist)) == 1
+    assert "in a place whose name begins with a dot" in said[0]
+    assert ((root / reached).read_bytes() if (root / reached).exists() else None) == was
+    assert (root / "notes.md").read_text() == "a note\n"
+    ((_, _, _, settles),) = writes.left(root, load_quilt(root).history_dir)
+    assert settles.startswith("Making ") and "the next act of the same kind" in settles
+
+
+@pytest.mark.parametrize(
+    "which",
+    [
+        "another case: .LOOM",
+        "a link into .loom from an open place",
+        "a link out of .loom to .claude",
+        "config.toml",
+        "a note",
+    ],
+)
+def test_loom_s_own_places_are_known_by_the_file_reached_and_the_person_s_open_files_are_put_back(
+    tmp_path: Path, which: str
+) -> None:
+    """Loom's own places are found by the same test of the file reached: `.LOOM/` where case is ignored and a link from an open place into `.loom/` are loom's, which recovery puts back, while a link out of `.loom/` to an app's folder is judged by where it leads and left. An open file of the person's, `config.toml` among them, is put back as any act's is: a shell that can write the journal can write it directly."""
+    from loom.paths import LOOM
+
+    root = _layered(tmp_path)
+    if which == "another case: .LOOM":
+        if not _case_blind(root):
+            pytest.skip("the file system tells the two spellings apart")
+        named, reached, made = ".LOOM/records/forged.json", f"{LOOM}/records/forged.json", True
+    elif which == "a link into .loom from an open place":
+        (root / "notes/lm").symlink_to("../.loom")
+        named, reached, made = "notes/lm/records/forged.json", f"{LOOM}/records/forged.json", True
+    elif which == "a link out of .loom to .claude":
+        (root / LOOM / "records/out").symlink_to("../../.claude")
+        named, reached, made = f"{LOOM}/records/out/settings.json", ".claude/settings.json", False
+    elif which == "config.toml":
+        named, reached, made = "config.toml", "config.toml", False
+    else:
+        named, reached, made = "notes/x.tex", "notes/x.tex", True
+    was = None if made else (root / reached).read_bytes()
+    said, forged = _forged_move(root, named, made=made)
+    if which == "a link out of .loom to .claude":
+        assert len(said) == 1 and said[0].startswith("left mv:"), said
+        assert (root / reached).read_bytes() == was
+        return
+    assert said == ["undid mv:e0e0e0e0e0e0e0e0"] and (root / reached).read_bytes() == forged
+
+
+def test_every_file_loom_writes_for_an_agent_app_lies_where_recovery_writes_nothing(tmp_path: Path) -> None:
+    """Every file loom writes for an app, from each app's entry (its MCP or settings file, its permission file and its skills), lies in a dot-named place, and a forged line that would put any of them back is left with the file as it was; only the root instruction files lie apart, open to recovery as any file of the person's is (R2-22, R2-23)."""
+    import shutil
+
+    from loom import writes
+    from loom.ai.clients import CLIENTS
+    from loom.scan.quilt import load_quilt
+
+    (tmp_path / "made").mkdir()
+    layered = _layered(tmp_path / "made")
+    hist = load_quilt(layered).history_dir
+    files = sorted(
+        {rel for c in CLIENTS for rel in (c.file, c.permissions) if rel and (layered / rel).is_file()}
+        | {p.relative_to(layered).as_posix() for c in CLIENTS if c.skills for p in (layered / c.skills).rglob("*") if p.is_file()}
+    )  # fmt: skip
+    assert len([rel for rel in files if "/skills/" in rel]) >= 2 and ".claude/settings.json" in files, files
+    assert [rel for rel in files if writes._may_put_back(layered, hist, rel)] == []
+    roots = {c.root_file for c in CLIENTS if c.root_file}
+    assert roots and all(writes._may_put_back(layered, hist, rel) for rel in roots)
+    for i, rel in enumerate(files):
+        root = tmp_path / f"q{i}"
+        shutil.copytree(layered, root, symlinks=True)
+        was = (root / rel).read_bytes()
+        said, _ = _forged_move(root, rel)
+        assert len(said) == 1 and said[0].startswith("left mv:"), (rel, said)
+        assert (root / rel).read_bytes() == was, rel
 
 
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------

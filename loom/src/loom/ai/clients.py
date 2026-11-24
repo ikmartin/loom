@@ -113,16 +113,6 @@ PROJECT_FILES = tuple(c.file for c in PROJECT if c.file)
 BY_KEY = {c.key: c for c in CLIENTS}
 
 
-def for_an_app(rel: str) -> bool:
-    """Whether the quilt-relative `rel` is a file loom keeps for an agent app: an app's MCP or settings file, its permission file, or a file under its skills (each `Client`'s `file`, `permissions` and `skills`).
-
-    Apps hold their own shells out of such files, some of them, so recovery never writes one (`writes._judge`): a journal line could otherwise hand an agent a write its app refuses it.
-    """
-    return any(
-        rel in (c.file, c.permissions) or (c.skills is not None and rel.startswith(f"{c.skills}/")) for c in CLIENTS
-    )
-
-
 def apps_in(root: Path) -> list[str] | None:
     """The apps the quilt is set up for, by key in `PROJECT`'s order, as its agent layer records them (`layout.APPS_FILE`); None where it records none, or none that can be read (`layout.read_plain`), which is a quilt set up for every app.
 

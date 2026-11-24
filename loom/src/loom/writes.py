@@ -857,6 +857,36 @@ def _in_quilt(root: Path, rel: Any) -> bool:
     return Path(os.path.realpath(root / rel)).is_relative_to(os.path.realpath(root))
 
 
+def _may_put_back(root: Path, history: Path, rel: str) -> bool:
+    """Whether recovery may write, make or remove what the journal's path `rel` reaches: a file of the quilt's under no folder whose name begins with a dot and not itself so named, or one in loom's own places, `.loom/` and the history.
+
+    Judged by the file reached, never by the path's spelling: every link resolved, and loom's places known by the file system's identity, so `.LOOM/` where case is ignored is loom's, and a link into or out of a place is judged by where it leads. The apps keep what they hold their own shells out of in such places, so a journal line never writes there for an agent.
+    """
+    from loom.paths import LOOM
+
+    top = Path(os.path.realpath(root))
+    real = Path(os.path.realpath(root / rel))
+    if not real.is_relative_to(top):
+        return False
+    own = set()
+    for place in (root / LOOM, history):
+        try:
+            st = os.stat(place)
+        except OSError:
+            continue
+        own.add((st.st_dev, st.st_ino))
+    at = real
+    while at != top:
+        try:
+            st = os.stat(at)
+        except OSError:
+            st = None
+        if st is not None and (st.st_dev, st.st_ino) in own:
+            return True
+        at = at.parent
+    return not any(part.startswith(".") for part in real.relative_to(top).parts)
+
+
 def _logs(root: Path, history: Path) -> dict[str, Path]:
     """The record logs an act may append to, by the name a journal gives each: the edits', the annotations' and the ledger, nothing else."""
     from loom.history.ledger import LEDGER
@@ -1118,10 +1148,8 @@ def _judge(
 ) -> _Verdict:
     """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`).
 
-    Putting an act back never writes a file loom keeps for an agent app (`ai.clients.for_an_app`), which an app may hold its own shell out of: such an act is left and said, and `settled` once a later act of its kind has written each such file again (`again`, `Journal.again`).
+    Putting an act back writes only where recovery may (`_may_put_back`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again (`again`, `Journal.again`).
     """
-    from loom.ai.clients import for_an_app
-
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
@@ -1138,16 +1166,16 @@ def _judge(
             holds,
             settles=f"Its files are as it left them, but loom can neither record the rest of its history nor put it back, so {BY_HAND}.",
         )
-    held = sorted(rel for rel in files if for_an_app(rel) and not holds[rel][0])
+    held = sorted(rel for rel in files if not holds[rel][0] and not _may_put_back(root, history, rel))
     if held:
         if set(held) <= set(again):
             return _Verdict("settled", f"a later act of its kind wrote {_named(held)} again", holds)
-        it = "it" if len(held) == 1 else "them"
+        one = len(held) == 1
         return _Verdict(
             "left",
-            f"putting it back would write {_named(held)}, which loom keeps for an agent app, and recovery never writes such a file, so it changed nothing: {_where(holds)}",
+            f"putting it back would write {_named(held)}, in a place whose name begins with a dot, where recovery writes nothing but loom's own, so it changed nothing: {_where(holds)}",
             holds,
-            settles=f"Check that {_named(held)} {'reads' if len(held) == 1 else 'read'} as you want: the next act of the same kind that writes {it} again settles this.",
+            settles=f"Making {_named(held)} read as {'it' if one else 'they'} did before the act, which removing {'it' if one else 'each'} does where the act made {'it' if one else 'one'}, lets loom put the rest back; the next act of the same kind that writes {'it' if one else 'them'} again settles this too.",
         )
     over = [rel for rel in crossed if rel in holds and holds[rel][1]]
     if over:
@@ -1243,7 +1271,10 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             continue
         _prune(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
         _unfollow(root, history, e)
-        _remove_folders(root, [str(d) for d in e.get("folders") or [] if _in_quilt(root, d)])
+        _remove_folders(
+            root,
+            [str(d) for d in e.get("folders") or [] if _in_quilt(root, d) and _may_put_back(root, history, str(d))],
+        )
         j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
         said.append(f"undid {act_id}")
     return said
