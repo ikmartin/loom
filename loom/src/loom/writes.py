@@ -5,6 +5,7 @@ An act holds `.loom/local/writes.lock` across processes and threads, settles wha
 
 from __future__ import annotations
 
+import contextlib
 import difflib
 import hashlib
 import json
@@ -852,39 +853,230 @@ def _in_quilt(root: Path, rel: Any) -> bool:
     try:
         if contained(root, rel) != rel:
             return False
-    except WriteRefused:
+    except (WriteRefused, OSError):
+        # a path the file system cannot even look at, as while a folder on it is being renamed, is not taken on trust
         return False
     return Path(os.path.realpath(root / rel)).is_relative_to(os.path.realpath(root))
 
 
-def _may_put_back(root: Path, history: Path, rel: str) -> bool:
-    """Whether recovery may write, make or remove what the journal's path `rel` reaches: a file of the quilt's under no folder whose name begins with a dot and not itself so named, or one in loom's own places, `.loom/` and the history.
+#: How recovery opens each folder on its way to a file it writes on a journal line's word: as a folder, never through a link.
+_FOLDER = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
 
-    Judged by the file reached, never by the path's spelling: every link resolved, and loom's places known by the file system's identity, so `.LOOM/` where case is ignored is loom's, and a link into or out of a place is judged by where it leads. The apps keep what they hold their own shells out of in such places, so a journal line never writes there for an agent.
-    """
+
+def _loom_named(top: int, name: str) -> bool:
+    """Whether `name` in the quilt's open root `top` is the real `.loom/` folder: a folder, never a link, the same file as `.loom` by the file system's identity, so a second spelling of it where case is ignored is it."""
     from loom.paths import LOOM
 
-    top = Path(os.path.realpath(root))
-    real = Path(os.path.realpath(root / rel))
-    if not real.is_relative_to(top):
+    try:
+        own = os.stat(LOOM, dir_fd=top, follow_symlinks=False)
+        it = os.stat(name, dir_fd=top, follow_symlinks=False)
+    except OSError:
         return False
-    own = set()
-    for place in (root / LOOM, history):
-        try:
-            st = os.stat(place)
-        except OSError:
-            continue
-        own.add((st.st_dev, st.st_ino))
-    at = real
-    while at != top:
-        try:
-            here = os.stat(at)
-        except OSError:
-            here = None
-        if here is not None and (here.st_dev, here.st_ino) in own:
+    return stat.S_ISDIR(own.st_mode) and (it.st_dev, it.st_ino) == (own.st_dev, own.st_ino)
+
+
+def _open_parts(top: int, parts: tuple[str, ...]) -> bool:
+    """Whether the place rule lets recovery write at `parts`, a real path under the quilt's open root `top`: anywhere in the real `.loom/`, else where no part begins with a dot."""
+    if parts and _loom_named(top, parts[0]):
+        return True
+    return not any(part.startswith(".") for part in parts)
+
+
+def _place(root: Path, rel: str) -> tuple[str, ...] | None:
+    """Where recovery may write, make or remove what the journal's path `rel` reaches: the parts of its real path under the quilt's real root, every link resolved; None where it may not.
+
+    It may write in the real `.loom/` folder, which is loom's own, and elsewhere only where no part of the real path begins with a dot. Nothing a line or the config says moves loom's own place: the history is written only where it lies in one of those (`_history_place`). The parts are the judgment, and `_folder_at` opens them one at a time without following a link, so what is judged is what is written.
+    """
+    top_path = os.path.realpath(root)
+    real = Path(os.path.realpath(root / rel))
+    if not real.is_relative_to(top_path) or real == Path(top_path):
+        return None
+    parts = real.relative_to(top_path).parts
+    try:
+        top = os.open(top_path, _FOLDER)
+    except OSError:
+        return None
+    try:
+        return parts if _open_parts(top, parts) else None
+    finally:
+        os.close(top)
+
+
+def _history_place(root: Path, history: Path) -> tuple[str, ...] | None:
+    """The parts of the history's real path under the quilt's real root where recovery may write it: in the real `.loom/` under no further folder whose name begins with a dot, or under no such folder at all; None anywhere else, outside the quilt among it, whatever `[quilt] history` says."""
+    top_path = os.path.realpath(root)
+    real = Path(os.path.realpath(history))
+    if not real.is_relative_to(top_path) or real == Path(top_path):
+        return None
+    parts = real.relative_to(top_path).parts
+    try:
+        top = os.open(top_path, _FOLDER)
+    except OSError:
+        return None
+    try:
+        inside = parts[1:] if _loom_named(top, parts[0]) else parts
+    finally:
+        os.close(top)
+    return None if any(part.startswith(".") for part in inside) else parts
+
+
+@contextmanager
+def _folder_at(root: Path, folders: tuple[str, ...], *, make: bool = False) -> Iterator[int]:
+    """The folder `folders` under the quilt's real root, opened one part at a time without following a link, each part checked by the place rule as it is reached (`_open_parts`); with `make`, a part that is not there is made. Raises OSError where a part is gone, is a link (ELOOP), or is not one recovery writes in."""
+    opened = [os.open(os.path.realpath(root), _FOLDER)]
+    try:
+        for i, part in enumerate(folders):
+            try:
+                fd = os.open(part, _FOLDER, dir_fd=opened[-1])
+            except FileNotFoundError:
+                if not make:
+                    raise
+                os.mkdir(part, 0o777, dir_fd=opened[-1])
+                fd = os.open(part, _FOLDER, dir_fd=opened[-1])
+            opened.append(fd)
+            if not _open_parts(opened[0], folders[: i + 1]):
+                raise OSError(f"{part} is not a folder recovery writes in")
+        yield opened[-1]
+    finally:
+        for fd in opened:
+            os.close(fd)
+
+
+def _read_at(at: int, name: str) -> bytes | None:
+    """The bytes of the regular file `name` in the open folder `at`, never through a link; None where there is none. Raises OSError for a link or anything but a regular file."""
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), dir_fd=at)
+    except FileNotFoundError:
+        return None
+    with os.fdopen(fd, "rb") as fh:
+        if not stat.S_ISREG(os.fstat(fh.fileno()).st_mode):
+            raise OSError(f"{name} is not a regular file")
+        return fh.read()
+
+
+def _put_back_at(root: Path, parts: tuple[str, ...], before: bytes | None, after: bytes | None) -> bool:
+    """Recovery's put-back of one file at the place it judged (`_place`): `before` again, or removed for None, while the file holds `after`, written beside it and renamed in, through folders opened without following a link (`_folder_at`). False, with nothing written, when it holds something else, or a folder on the way is gone or became a link."""
+    folders, name = parts[:-1], parts[-1]
+    try:
+        with _folder_at(root, folders, make=before is not None) as at:
+            if _read_at(at, name) != after:
+                return False
+            if before is None:
+                os.unlink(name, dir_fd=at)
+                os.fsync(at)
+                return True
+            try:
+                mode = os.stat(name, dir_fd=at, follow_symlinks=False).st_mode & 0o7777
+            except FileNotFoundError:
+                umask = os.umask(0)
+                os.umask(umask)
+                mode = 0o666 & ~umask
+            tmp = f".{name}.{secrets.token_hex(6)}{TEMP}"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=at)
+            try:
+                with os.fdopen(fd, "wb") as fh:
+                    fh.write(before)
+                    os.fchmod(fh.fileno(), mode)
+                    _flush(fh)
+                if _read_at(at, name) != after:
+                    raise OSError(f"{name} changed while recovery put it back")
+                os.rename(tmp, name, src_dir_fd=at, dst_dir_fd=at)
+            except BaseException:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp, dir_fd=at)
+                raise
+            os.fsync(at)
             return True
-        at = at.parent
-    return not any(part.startswith(".") for part in real.relative_to(top).parts)
+    except OSError:
+        return False
+
+
+def _remove_made_at(root: Path, parts: tuple[str, ...], made: str) -> bool:
+    """Recovery's removal of a file an act made, at the place it judged, while it holds the bytes it was made with (`_unkept`), through folders opened without following a link; False, with nothing removed, otherwise."""
+    try:
+        with _folder_at(root, parts[:-1]) as at:
+            if digest(_read_at(at, parts[-1])) != made:
+                return False
+            os.unlink(parts[-1], dir_fd=at)
+            os.fsync(at)
+    except OSError:
+        return False
+    return True
+
+
+def _clear_temps_at(root: Path, rel: str) -> None:
+    """Remove the temporary files a write of the journal's path `rel` left beside the file it reaches, `.<name>.<token>.loom-tmp`, where that file's folder is one recovery writes in (`_place`), whatever the file's own name: a name of that form is loom's own, and no app reads one. Through folders opened without following a link."""
+    real = Path(os.path.realpath(root / rel))
+    top = os.path.realpath(root)
+    if not real.is_relative_to(top) or real == Path(top):
+        return
+    parts = real.relative_to(top).parts
+    folders, name = parts[:-1], parts[-1]
+    pattern = re.compile(r"^\." + re.escape(name) + r"\.[0-9a-f]{12}" + re.escape(TEMP) + "$")
+    try:
+        with _folder_at(root, folders) as at:
+            for entry in os.listdir(at):
+                if pattern.match(entry) and stat.S_ISREG(os.stat(entry, dir_fd=at, follow_symlinks=False).st_mode):
+                    with contextlib.suppress(OSError):
+                        os.unlink(entry, dir_fd=at)
+    except OSError:
+        return
+
+
+def _rmdir_at(root: Path, parts: tuple[str, ...]) -> bool:
+    """Remove the empty folder at `parts`, reached through folders opened without following a link; False where it is not there, holds anything, or is a link."""
+    try:
+        with _folder_at(root, parts[:-1]) as at:
+            os.rmdir(parts[-1], dir_fd=at)
+    except OSError:
+        return False
+    return True
+
+
+def _prune_at(root: Path, history: Path, rels: list[str]) -> None:
+    """`_prune` for recovery: the folders left empty under `.loom/` or the history once the files an act made there are taken out, deepest first, each through folders opened without following a link; a folder of the person's is never removed, nor anything in a history recovery does not write (`_history_place`)."""
+    tops: list[tuple[str, ...]] = []
+    kept = _history_place(root, history)
+    for rel in rels:
+        parts = _place(root, rel)
+        if parts is None:
+            continue
+        tops = [parts[:1]] if _loom_parts(root, parts) else []
+        if kept is not None and parts[: len(kept)] == kept:
+            tops.append(kept)
+        if not tops:
+            continue
+        depth = max(len(top) for top in tops)
+        for end in range(len(parts) - 1, depth, -1):
+            if not _rmdir_at(root, parts[:end]):
+                break
+
+
+def _loom_parts(root: Path, parts: tuple[str, ...]) -> bool:
+    """Whether the real path `parts` lies in the real `.loom/` folder."""
+    try:
+        top = os.open(os.path.realpath(root), _FOLDER)
+    except OSError:
+        return False
+    try:
+        return bool(parts) and _loom_named(top, parts[0])
+    finally:
+        os.close(top)
+
+
+def _needs_history(root: Path, history: Path, entry: dict[str, Any]) -> bool:
+    """Whether settling the act `entry` may write the history: a record bound for its ledger, a look, whose texts the history keeps, a person's act, whose follow-up keeps the look's texts there, or a file of the act that lies in it."""
+    from loom.history.ledger import LEDGER
+    from loom.identity import agents_act
+
+    ledger = _log_name(root, history / LEDGER)
+    if entry.get("look") or any(isinstance(r, dict) and r.get("log") == ledger for r in entry.get("records") or []):
+        return True
+    agent = entry["by"] == "agent" if entry.get("by") in ("agent", "person") else agents_act(entry.get("actor"))
+    if not agent:
+        return True
+    real = os.path.realpath(history)
+    return any(Path(os.path.realpath(root / rel)).is_relative_to(real) for rel in entry.get("files") or {})
 
 
 def _logs(root: Path, history: Path) -> dict[str, Path]:
@@ -1133,6 +1325,8 @@ class _Verdict:
     made: dict[str, str] = field(default_factory=dict)
     #: for an act left, what settles it, as the person reads it
     settles: str = ""
+    #: for an act put back, where each file it writes was judged to lie (`_place`), which is where it is written
+    places: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
 
 #: What settles an act nothing but a person's hand can: said where recovery leaves such an act.
@@ -1148,13 +1342,21 @@ def _judge(
 ) -> _Verdict:
     """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`).
 
-    Putting an act back writes only where recovery may (`_may_put_back`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again (`again`, `Journal.again`).
+    Putting an act back writes only where recovery may (`_place`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again (`again`, `Journal.again`). An act whose settling would write the history is left while the history lies where recovery writes nothing (`_history_place`).
     """
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
     files: dict[str, list[str | None]] = entry.get("files") or {}
     holds = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
+    if _history_place(root, history) is None and _needs_history(root, history, entry):
+        return _Verdict(
+            "left",
+            "settling it would write the history, which is kept outside the quilt or in a folder whose name begins with a dot, where recovery writes nothing, so it changed nothing: "
+            + _where(holds),
+            holds,
+            settles="Keeping the history inside the quilt, under no folder whose name begins with a dot but .loom/, lets recovery settle this.",
+        )
     guards = _guards(entry.get("records") or [])
     guards_hold = all(_guard_holds(root, log, at, lines) for log, (at, lines) in guards.items())
     if all(after for _, after in holds.values()) and guards_hold:
@@ -1166,7 +1368,8 @@ def _judge(
             holds,
             settles=f"Its files are as it left them, but loom can neither record the rest of its history nor put it back, so {BY_HAND}.",
         )
-    held = sorted(rel for rel in files if not holds[rel][0] and not _may_put_back(root, history, rel))
+    placed = {rel: _place(root, rel) for rel in files if not holds[rel][0]}
+    held = sorted(rel for rel, at in placed.items() if at is None)
     if held:
         if set(held) <= set(again):
             return _Verdict("settled", f"a later act of its kind wrote {_named(held)} again", holds)
@@ -1175,7 +1378,7 @@ def _judge(
             "left",
             f"putting it back would write {_named(held)}, in a place whose name begins with a dot, where recovery writes nothing but loom's own, so it changed nothing: {_where(holds)}",
             holds,
-            settles=f"Making {_named(held)} read as {'it' if one else 'they'} did before the act, which removing {'it' if one else 'each'} does where the act made {'it' if one else 'one'}, lets loom put the rest back; the next act of the same kind that writes {'it' if one else 'them'} again settles this too.",
+            settles=f"Making {_named(held)} read as {'it' if one else 'they'} did before the act, which removing {'it' if one else 'each'} does where the act made {'it' if one else 'one'}, lets recovery put the rest back at once, your own files among it; the next act of the same kind that writes {'it' if one else 'them'} again settles this too.",
         )
     over = [rel for rel in crossed if rel in holds and holds[rel][1]]
     if over:
@@ -1218,11 +1421,13 @@ def _judge(
             kept=kept,
             settles=settles,
         )
+    putting = {rel: texts[rel] for rel, (b, a) in holds.items() if a and not b}
     return _Verdict(
         "undo",
         holds=holds,
-        texts={rel: texts[rel] for rel, (b, a) in holds.items() if a and not b},
+        texts=putting,
         made={rel: str(ab[1]) for rel, ab in files.items() if ab[0] is None and ab[1]},
+        places={rel: at for rel, at in placed.items() if rel in putting and at is not None},
     )
 
 
@@ -1241,8 +1446,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             said.append(f"settled {act_id}: {v.why}")
             continue
         for rel in e.get("files") or {}:
-            for tmp in _temps(root, rel):
-                tmp.unlink(missing_ok=True)
+            _clear_temps_at(root, rel)
         if v.how == "finish":
             _append_records(root, e.get("records") or [], unless_there=True)
             j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
@@ -1262,19 +1466,22 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
         failed = [
             rel
             for rel, texts in v.texts.items()
-            if not (_remove_made(root, rel, v.made[rel]) if rel in v.made else _put_back(root, rel, *texts))
+            if not (
+                _remove_made_at(root, v.places[rel], v.made[rel])
+                if rel in v.made
+                else _put_back_at(root, v.places[rel], *texts)
+            )
         ]
         if failed:
             files: dict[str, list[str | None]] = e.get("files") or {}
             now = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
             said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now, kept=True)}")
             continue
-        _prune(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
+        _prune_at(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
         _unfollow(root, history, e)
-        _remove_folders(
-            root,
-            [str(d) for d in e.get("folders") or [] if _in_quilt(root, d) and _may_put_back(root, history, str(d))],
-        )
+        made_folders = [_place(root, str(d)) for d in e.get("folders") or [] if _in_quilt(root, d)]
+        for parts in sorted((at for at in made_folders if at is not None), key=lambda at: -len(at)):
+            _rmdir_at(root, parts)
         j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "cut short", "recovered": True})
         said.append(f"undid {act_id}")
     return said
@@ -1561,7 +1768,7 @@ LEFT = 3600.0
 def recover(root: Path, history: Path, *, now: float | None = None) -> list[str]:
     """Settle what a crash left, holding the lock: the acts it cut short, and the temporary files a crash in `store` left in the history's `texts/` (`LEFT`). What `loom serve` runs as it starts; every act settles the acts first. Returns what was done, in words."""
     with locked(root / WRITES_LOCK):
-        said = _left_temps(history, time.time() if now is None else now)
+        said = _left_temps(root, history, time.time() if now is None else now)
         j = read_journal(root)
         if not j.begun:
             return said
@@ -1570,24 +1777,26 @@ def recover(root: Path, history: Path, *, now: float | None = None) -> list[str]
         return said
 
 
-def _left_temps(history: Path, now: float) -> list[str]:
-    """Remove each temporary file `store` names `.<hex>.<ext>.<token>.loom-tmp` in the history's `texts/` that is older than `LEFT`, and say so."""
-    texts = history / "texts"
+def _left_temps(root: Path, history: Path, now: float) -> list[str]:
+    """Remove each temporary file `store` names `.<hex>.<ext>.<token>.loom-tmp` in the history's `texts/` that is older than `LEFT`, and say so; nothing in a history recovery does not write (`_history_place`), and each through folders opened without following a link."""
+    kept = _history_place(root, history)
+    if kept is None:
+        return []
     gone = 0
     try:
-        entries = list(os.scandir(texts)) if texts.is_dir() and not texts.is_symlink() else []
+        with _folder_at(root, (*kept, "texts")) as at:
+            for name in os.listdir(at):
+                if not _STORE_TEMP.match(name):
+                    continue
+                try:
+                    st = os.stat(name, dir_fd=at, follow_symlinks=False)
+                    if stat.S_ISREG(st.st_mode) and now - st.st_mtime > LEFT:
+                        os.unlink(name, dir_fd=at)
+                        gone += 1
+                except OSError:
+                    continue
     except OSError:
-        entries = []
-    for entry in entries:
-        if not _STORE_TEMP.match(entry.name):
-            continue
-        try:
-            st = entry.stat(follow_symlinks=False)
-            if stat.S_ISREG(st.st_mode) and now - st.st_mtime > LEFT:
-                os.unlink(entry.path)
-                gone += 1
-        except OSError:
-            continue
+        pass
     return (
         [f"removed {gone} temporary file{'s' if gone != 1 else ''} a crash left in the history's texts/"]
         if gone

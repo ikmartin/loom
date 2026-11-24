@@ -369,7 +369,6 @@ def test_an_import_writes_claude_code_s_permission_file_at_once_in_an_act_of_its
 ) -> None:
     """What the import says is protected is protected for Claude Code at once, not after the next upgrade (P-6); the file is written in an act of its own once the import's is done, since recovery writes nothing in the dot-named places the apps keep, so an import cut short is put back whole (R2-22)."""
     from loom import writes
-    from loom.scan.quilt import load_quilt
 
     p = paper_dir(tmp_path)
     ok("init", str(tmp_path / "q"), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
@@ -379,8 +378,7 @@ def test_an_import_writes_claude_code_s_permission_file_at_once_in_an_act_of_its
     assert any(r.startswith("Edit(/main/") for r in deny), deny
     journal = [json.loads(x) for x in (q / ".loom/local/writes.jsonl").read_text().splitlines()]
     (act,) = [e for e in journal if e["event"] == "begin" and e["kind"] == "import"]
-    hist = load_quilt(q).history_dir
-    assert "config.toml" in act["files"] and all(writes._may_put_back(q, hist, rel) for rel in act["files"])
+    assert "config.toml" in act["files"] and all(writes._place(q, rel) is not None for rel in act["files"])
     after = journal[journal.index(act) + 1 :]
     (claude,) = [e for e in after if e["event"] == "begin" and ".claude/settings.json" in e["files"]]
     assert claude["kind"] == "agents"

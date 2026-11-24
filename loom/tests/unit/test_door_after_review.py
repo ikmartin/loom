@@ -565,19 +565,17 @@ def test_every_file_loom_writes_for_an_agent_app_lies_where_recovery_writes_noth
 
     from loom import writes
     from loom.ai.clients import CLIENTS
-    from loom.scan.quilt import load_quilt
 
     (tmp_path / "made").mkdir()
     layered = _layered(tmp_path / "made")
-    hist = load_quilt(layered).history_dir
     files = sorted(
         {rel for c in CLIENTS for rel in (c.file, c.permissions) if rel and (layered / rel).is_file()}
         | {p.relative_to(layered).as_posix() for c in CLIENTS if c.skills for p in (layered / c.skills).rglob("*") if p.is_file()}
     )  # fmt: skip
     assert len([rel for rel in files if "/skills/" in rel]) >= 2 and ".claude/settings.json" in files, files
-    assert [rel for rel in files if writes._may_put_back(layered, hist, rel)] == []
+    assert [rel for rel in files if (writes._place(layered, rel) is not None)] == []
     roots = {c.root_file for c in CLIENTS if c.root_file}
-    assert roots and all(writes._may_put_back(layered, hist, rel) for rel in roots)
+    assert roots and all((writes._place(layered, rel) is not None) for rel in roots)
     for i, rel in enumerate(files):
         root = tmp_path / f"q{i}"
         shutil.copytree(layered, root, symlinks=True)
@@ -585,6 +583,195 @@ def test_every_file_loom_writes_for_an_agent_app_lies_where_recovery_writes_noth
         said, _ = _forged_move(root, rel)
         assert len(said) == 1 and said[0].startswith("left mv:"), (rel, said)
         assert (root / rel).read_bytes() == was, rel
+
+
+# ---- R2-26 and R2-27: nothing a line can write moves where recovery writes, and what is judged is what is written ----
+
+
+def _history_at(root: Path, place: str) -> None:
+    """Set the quilt's `[quilt] history` to `place`, as the person, or a line put back over `config.toml`, could."""
+    config = root / "config.toml"
+    config.write_text(config.read_text().replace("[quilt]\n", f'[quilt]\nhistory = "{place}"\n', 1))
+
+
+@pytest.mark.parametrize("history", [".claude", ".git", "a link to .claude", "outside the quilt"])
+def test_a_history_kept_where_recovery_writes_nothing_makes_no_place_loom_s_own(tmp_path: Path, history: str) -> None:
+    """Loom's own place for recovery is the real `.loom/` folder, and the history only where it lies inside the quilt under no dot-named folder but `.loom/`: a history set in `.claude` or `.git`, in a link to `.claude`, or outside the quilt widens nothing, and a line that would make `.claude/settings.local.json` or rewrite `.git/config` there is left with the file as it was (R2-26)."""
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    if history == "a link to .claude":
+        (root / "hist").symlink_to(".claude")
+        _history_at(root, "hist")
+    elif history == "outside the quilt":
+        _history_at(root, "../outside-history")
+    else:
+        _history_at(root, history)
+    named = ".git/config" if history == ".git" else ".claude/settings.local.json"
+    made = named != ".git/config"
+    was = None if made else (root / named).read_bytes()
+    if history == "outside the quilt":
+        named, made, was = "notes/x.tex", True, None
+    said, _ = _forged_move(root, named, made=made)
+    assert len(said) == 1 and said[0].startswith("left mv:"), said
+    assert ((root / named).read_bytes() if (root / named).exists() else None) == was
+    if history != "outside the quilt":
+        assert not (root / ".claude/settings.local.json").exists()
+    hist = load_quilt(root).history_dir
+    assert _history_place_of(root, hist) is None
+
+
+def _history_place_of(root: Path, hist: Path) -> tuple[str, ...] | None:
+    from loom import writes
+
+    return writes._history_place(root, hist)
+
+
+def test_two_forged_lines_that_move_the_history_and_then_write_in_it_write_nothing_there(tmp_path: Path) -> None:
+    """The review's two lines: the first, put back over `config.toml` as the accepted reach allows, sets the history in `.claude`; the second, its texts in this machine's store, would make `.claude/settings.local.json`, and is left with nothing made (R2-26)."""
+    from loom import writes
+    from loom.paths import LOCAL
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    hist = load_quilt(root).history_dir
+    now = (root / "config.toml").read_bytes()
+    moved = now.replace(b"[quilt]\n", b'[quilt]\nhistory = ".claude"\n', 1)
+    (root / "notes.md").write_text("a note\n")
+    _begun(root, "mv", {"config.toml": [writes.store(hist, moved), writes.store(hist, now)], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}, act="a1a1a1a1a1a1a1a1")  # fmt: skip
+    assert writes.recover(root, hist) == ["undid mv:a1a1a1a1a1a1a1a1"]
+    hist = load_quilt(root).history_dir
+    assert hist.name == ".claude"
+    here = root / LOCAL
+    _begun(root, "mv", {".claude/settings.local.json": [writes.store(here, b'{"hooks": {}}\n'), None], "notes.md": [writes.store(here, b"a note\n"), writes.store(here, b"after\n")]}, act="b2b2b2b2b2b2b2b2")  # fmt: skip
+    said = writes.recover(root, hist)
+    assert len(said) == 1 and said[0].startswith("left mv:b2b2b2b2b2b2b2b2:"), said
+    assert not (root / ".claude/settings.local.json").exists()
+
+
+@pytest.mark.parametrize("by", ["person", "agent"])
+def test_an_act_left_for_a_history_recovery_does_not_write_is_one_whose_settling_would_write_it(
+    tmp_path: Path, by: str
+) -> None:
+    """With the history outside the quilt, an act whose settling would write it, as a person's act's follow-up keeps the look's texts there, is left with words that say so and what settles it; an agent's act on an open file, whose settling writes nothing there, is put back (R2-26)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    _history_at(root, "../outside-history")
+    hist = load_quilt(root).history_dir
+    (root / "notes.md").write_text("a note\n")
+    _begun(root, "mv", {"notes/x.tex": [writes.store(hist, b"x\n"), None], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}, by=by)  # fmt: skip
+    said = writes.recover(root, hist)
+    if by == "agent":
+        assert said == ["undid mv:e0e0e0e0e0e0e0e0"] and (root / "notes/x.tex").read_text() == "x\n"
+        return
+    assert len(said) == 1 and "settling it would write the history" in said[0], said
+    ((_, _, _, settles),) = writes.left(root, hist)
+    assert settles.startswith("Keeping the history inside the quilt") and not (root / "notes/x.tex").exists()
+
+
+#: The shapes of a put-back the swap is tried on: the path the line names under `notes/d`, and the line's before and after, from the bytes of `.claude/settings.json` (`C`).
+SWAPPED = ["a file made", "a file rewritten", "a made file removed"]
+
+
+def _swap_line(root: Path, which: str) -> None:
+    """A forged line whose putting back writes under `notes/d`, a real folder at judgment, in the shape `which`: making `settings.local.json`, rewriting `settings.json` that holds the same bytes as `.claude/settings.json`, or removing it as a file the act made."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(root).history_dir
+    c = (root / ".claude/settings.json").read_bytes()
+    (root / "notes/d").mkdir(parents=True, exist_ok=True)
+    (root / "notes.md").write_text("a note\n")
+    note = [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]
+    if which == "a file made":
+        files = {"notes/d/settings.local.json": [writes.store(hist, b'{"hooks": {}}\n'), None]}
+    elif which == "a file rewritten":
+        (root / "notes/d/settings.json").write_bytes(c)
+        files = {"notes/d/settings.json": [writes.store(hist, b'{"forged": true}\n'), writes.store(hist, c)]}
+    else:
+        (root / "notes/d/settings.json").write_bytes(c)
+        files = {"notes/d/settings.json": [None, writes.digest(c)]}
+    _begun(root, "mv", {**files, "notes.md": note})
+
+
+def _swap(root: Path) -> None:
+    """Put a link to `.claude` where the folder `notes/d` was."""
+    os.rename(root / "notes/d", root / "notes/d-aside")
+    (root / "notes/d").symlink_to("../.claude")
+
+
+@pytest.mark.parametrize("which", SWAPPED)
+def test_a_folder_swapped_for_a_link_between_judgment_and_write_takes_no_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, which: str
+) -> None:
+    """Recovery writes through the folders it judged, each opened without following a link: `notes/d`, a real folder when the act is judged, swapped for a link to `.claude` before the write, makes the write refused every time, and `.claude` is as it was (R2-27)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    claude = (root / ".claude/settings.json").read_bytes()
+    _swap_line(root, which)
+    real = writes._judge
+
+    def judged_then_swapped(*args: object, **kwargs: object) -> object:
+        verdict = real(*args, **kwargs)  # type: ignore[arg-type]
+        if verdict.how == "undo":
+            _swap(root)
+        return verdict
+
+    monkeypatch.setattr(writes, "_judge", judged_then_swapped)
+    said = writes.recover(root, load_quilt(root).history_dir)
+    assert len(said) == 1 and said[0].startswith("left mv:") and "changed while recovery put the act back" in said[0], (
+        said
+    )
+    assert (root / ".claude/settings.json").read_bytes() == claude
+    assert not (root / ".claude/settings.local.json").exists()
+
+
+def test_a_folder_swapped_for_a_link_by_a_racing_thread_never_takes_a_write(tmp_path: Path) -> None:
+    """A thread swapping `notes/d` and a link to `.claude` as fast as it can, while recovery puts back a line that makes `notes/d/settings.local.json`, three hundred times: the file is made in the real folder or not at all, never in `.claude` (R2-27)."""
+    import threading
+
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    hist = load_quilt(root).history_dir
+    d, aside = root / "notes/d", root / "notes/d-aside"
+    d.mkdir(parents=True)
+    stop = threading.Event()
+
+    def swapping() -> None:
+        while not stop.is_set():
+            try:
+                if d.is_dir() and not d.is_symlink():
+                    os.rename(d, aside)
+                    d.symlink_to("../.claude")
+                elif d.is_symlink():
+                    d.unlink()
+                    os.rename(aside, d)
+            except OSError:
+                continue
+
+    racer = threading.Thread(target=swapping, daemon=True)
+    racer.start()
+    try:
+        for i in range(300):
+            if not writes.unsettled(root, hist):
+                for place in (d, aside):
+                    if place.is_dir() and not place.is_symlink():
+                        (place / "settings.local.json").unlink(missing_ok=True)
+                (root / "notes.md").write_text("a note\n")
+                files = {"notes/d/settings.local.json": [writes.store(hist, b'{"hooks": {}}\n'), None], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}  # fmt: skip
+                _begun(root, "mv", files, act=f"{i:016x}")
+            writes.recover(root, hist)
+            assert not (root / ".claude/settings.local.json").exists(), i
+    finally:
+        stop.set()
+        racer.join()
+    assert not (root / ".claude/settings.local.json").exists()
 
 
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
@@ -1156,11 +1343,13 @@ def _names(rule: str, rel: str) -> bool:
     return rel.startswith(body.removesuffix("**")) if body.endswith("/**") else rel == body
 
 
-def _begun(root: Path, kind: str, files: dict, look: dict | None = None) -> None:
-    """Append a person's `begin` line of `kind` on `files` (path: [before, after] digests), in the form the door writes one."""
+def _begun(
+    root: Path, kind: str, files: dict, look: dict | None = None, *, by: str = "person", act: str = "e0e0e0e0e0e0e0e0"
+) -> None:
+    """Append a `begin` line of `kind` on `files` (path: [before, after] digests), a person's unless `by` says otherwise, in the form the door writes one."""
     from loom.paths import JOURNAL
 
-    line = {"event": "begin", "act": f"{kind}:e0e0e0e0e0e0e0e0", "kind": kind, "actor": "Tester", "by": "person", "when": "2026-11-24T00:00:00Z", "files": files, "edits": [], "records": []}  # fmt: skip
+    line = {"event": "begin", "act": f"{kind}:{act}", "kind": kind, "actor": "Tester", "by": by, "when": "2026-11-24T00:00:00Z", "files": files, "edits": [], "records": []}  # fmt: skip
     if look is not None:
         line["look"] = look
     (root / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
