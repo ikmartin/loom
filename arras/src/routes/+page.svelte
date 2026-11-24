@@ -4,10 +4,12 @@
 	import { store } from '$lib/manifest/client.svelte';
 	import { readingAddress } from '$lib/shell/views';
 	import { rememberedIn } from '$lib/workspace/remember';
+	import { served } from '$lib/manifest/kept.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 
 	const m = $derived(store.manifest!);
-	const to = $derived(readingAddress(m, workspace.canonical(m) || rememberedIn(m)));
+	// what was open is remembered per quilt, which `/_api` says: the address waits for it
+	const to = $derived(served.digest === undefined ? '' : readingAddress(m, workspace.canonical(m) || rememberedIn(m)));
 	$effect(() => {
 		if (to) void goto(to, { replaceState: true, noScroll: true, keepFocus: true });
 	});

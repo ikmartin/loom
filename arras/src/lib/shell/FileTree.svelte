@@ -2,6 +2,7 @@
 	// Docs as the project's tree (plan 0.22.7): the person's directories and the files the viewer shows, each directory folding as an explorer's does. A document opens as itself, with its compiled PDF and the agent's copies of it beneath its row; the research state opens as the page it is, where it lives; an included `.tex` file opens the document that reads it, at its place (V7); every other file opens as a file. Which directories are open is the reader's, kept per quilt in this browser; the ones holding a live document start open, and the one holding what is being read opens when it is read.
 	import { store } from '$lib/manifest/client.svelte';
 	import { compileError, compileWord, compiles } from '$lib/manifest/compiles.svelte';
+	import { keptUnder } from '$lib/manifest/kept.svelte';
 	import type { Master, ProjectFile } from '$lib/manifest/types';
 	import { masterUrl } from '$lib/nav';
 	import { pdfRoute } from '$lib/workspace/item';
@@ -24,7 +25,8 @@
 
 	const KEY = 'arras.tree';
 	const m = $derived(store.manifest!);
-	const corpus = $derived(m.corpus.name);
+	// the folders opened are kept per quilt, keyed as `keptUnder` says
+	const corpus = $derived(keptUnder(m.corpus.name));
 	const statePath = $derived(m.research_state?.path ?? '');
 
 	/** The directories and files as a tree, each level's directories first and every name in the order a person sorts them. */
@@ -92,6 +94,7 @@
 	let toggled = $state<Record<string, boolean>>({});
 	$effect(() => {
 		const name = corpus;
+		if (!name) return;
 		try {
 			toggled = (JSON.parse(globalThis.localStorage?.getItem(KEY) ?? '{}') as Record<string, Record<string, boolean>>)[name] ?? {};
 		} catch {
@@ -99,6 +102,7 @@
 		}
 	});
 	function save(): void {
+		if (!corpus) return;
 		try {
 			const all = JSON.parse(globalThis.localStorage?.getItem(KEY) ?? '{}') as Record<string, Record<string, boolean>>;
 			all[corpus] = toggled;
