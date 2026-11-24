@@ -4,13 +4,16 @@
 Usage:
     scripts/checks/words.py [--base REF] [--all] [--file PATH ...]
 
-Every `.svelte` file under `arras/src/` is read, except those on `LEGACY` below: the components that predate the words folder, each taken off the list when its words move. The list only shrinks, and the check holds it so: a path on `LEGACY` that the list at `--base` (default `$WORDS_BASE`, else `$HARDWRAP_BASE`, else HEAD) does not hold fails, as does a path on it that no longer exists or whose component now holds no words. In a component read, once its `<script>`, `<style>` and `<!-- -->` comments are dropped, these are words:
+Every `.svelte` file under `arras/src/` is read, except those on `LEGACY` below: the components that predate the words folder, each taken off the list when its words move. The list only shrinks, and the check holds it so: a path on `LEGACY` that the list at `--base` (default `$WORDS_BASE`, else `$HARDWRAP_BASE`, else HEAD) does not hold fails, a component moved since keeping its place (git's rename, or a copy whose source left the list; a copy made to start a new component leaves its source listed), as does a path on it that no longer exists or whose component now holds no words. A base that names no commit fails; a base whose `words.py` holds no list is said in the output, and then nothing is compared. In a component read, once its `<script>`, `<style>` and `<!-- -->` comments are dropped, these are words:
 
 - text between tags that holds a letter once its HTML entities are decoded; glyphs, digits and punctuation alone (`×`, `›`, `·`, `…`, `2`) are not words;
 - the static part, holding a letter, of a `title`, `aria-label`, `aria-description`, `aria-roledescription`, `aria-valuetext`, `aria-placeholder`, `placeholder`, `alt` or `label` attribute, or of `value` on an `<input>` of type `button`, `submit` or `reset`, quoted or not (`title="Open {name}"` is words; `title={words.x}` and `title="{words.x}"` are not);
-- a string literal, or a template literal's fixed part, that holds a word, a space with a letter or a leading capital, inside an expression in text (`{ok ? 'Saved.' : 'Saving…'}`), inside `{@html …}` or `{@const …}`, or inside such an attribute's expression (``title={`Opened ${n} minutes ago`}``); a literal such as `'docs'` or `' ↑'` is not words.
+- in an expression in text, in such an attribute's expression, or in `{@html …}`: a string literal, or a template literal's fixed part, that holds a word, a space with a letter or a leading capital (`{ok ? 'Saved.' : 'Saving…'}`, ``title={`Opened ${n} minutes ago`}``), and, at the expression's top level, where it can be the value shown, one that holds any letter (`{busy ? 'undoing' : 'undo'}`); markup in a literal is not words, the text between its tags is;
+- in the expression of an event handler (`onclick={…}`), an action (`use:hovercard={{ text: … }}`) or `data-tip`, in an attachment or a spread inside a tag (`{@attach tip("…")}`), and in every block tag (`{@render row(…)}`, `{@const …}`, `{#each [...]}`, `{#if …}`, `{:else if …}`, `{#key …}`, `{#await …}`): a literal that holds a word by the same rule, a space with a letter or a leading capital.
 
-What it does not see: a string written in `<script>` and used by name (`title={tip}`), a string passed to a component's prop other than `label`, and words in CSS (`content:`). Those are held by review, not by this check.
+Never words, anywhere: a value tested, the operand of `===`, `!==`, `==` or `!=`, a `case` label, or a key tested with `in` (`e.key === 'Escape'`, `'short' in source`).
+
+What it does not read: a string written in `<script>` and used by name (`title={tip}`); a string in a `.ts` module, beside a component or anywhere outside `words/`; a component's prop other than `label`, static or in an expression (`<Empty hint="…">`, `hint={'…'}`); any other attribute's expression (`class={…}`, `href={…}`); a lone lower-case word with no space anywhere but at the top level of text, a seen attribute or `{@html}` (`message.post('undone')`, `{#each ['open', 'shut'] as w}`); a literal inside brackets in such an expression that holds neither a space nor a capital (`{fmt('undo')}`); and words in CSS (`content:`). Those are held by review.
 
 Each is printed as `path:line: words`. `--all` reads every component, those on `LEGACY` too, and reports only a count of words per file, for measuring what is left. `--file PATH` reads the files named, on `LEGACY` or not, as when a component's words are being moved.
 
@@ -36,6 +39,8 @@ FIX = f"move the words into {WORDS} (the file for the component's view, or frame
 
 #: Attributes whose value a person sees or hears.
 SEEN = {"title", "aria-label", "aria-description", "aria-roledescription", "aria-valuetext", "aria-placeholder", "placeholder", "alt", "label"}
+#: Attributes whose expression may hold words shown elsewhere: a hover card's text given to an action (`use:hovercard={{ text: … }}`), a message posted from a handler (`onclick={() => message.post(…)}`), a tip. Their expressions are read; a static value is a name, not words.
+CARRIERS = ("use:", "on", "data-tip")
 #: The `<input>` types whose `value` is the button's words.
 BUTTONS = {"button", "submit", "reset"}
 #: The character before a `/` that makes it open a regular expression rather than divide.
@@ -45,24 +50,14 @@ BLOCK = "#:/@"
 
 #: The components that predate `arras/src/lib/words/` and still write their own words. A path comes off when its words move, and none is ever added (the check compares the list with its base's).
 LEGACY = (
-    "arras/src/lib/components/AddWork.svelte",
-    "arras/src/lib/components/AskAgent.svelte",
     "arras/src/lib/components/Diagnostics.svelte",
     "arras/src/lib/components/DiffView.svelte",
     "arras/src/lib/components/DraftActions.svelte",
     "arras/src/lib/components/HelpDot.svelte",
-    "arras/src/lib/components/JobProgress.svelte",
-    "arras/src/lib/components/LibraryRun.svelte",
     "arras/src/lib/components/LinkPreview.svelte",
-    "arras/src/lib/components/Locator.svelte",
-    "arras/src/lib/components/NetworkAsk.svelte",
     "arras/src/lib/components/NoDrafts.svelte",
     "arras/src/lib/components/OutOfStep.svelte",
     "arras/src/lib/components/Palette.svelte",
-    "arras/src/lib/components/PdfViewer.svelte",
-    "arras/src/lib/components/ResultCard.svelte",
-    "arras/src/lib/components/WorkLinks.svelte",
-    "arras/src/lib/components/WorkStatus.svelte",
     "arras/src/lib/fragments/Fragment.svelte",
     "arras/src/lib/fragments/FragmentNotes.svelte",
     "arras/src/lib/graph/LocalBoxGraph.svelte",
@@ -75,7 +70,6 @@ LEGACY = (
     "arras/src/lib/pdf/PdfMenu.svelte",
     "arras/src/lib/pdf/PdfPage.svelte",
     "arras/src/lib/pdf/PdfTools.svelte",
-    "arras/src/lib/pdf/Reading.svelte",
     "arras/src/lib/pdf/Swatches.svelte",
     "arras/src/lib/review/AnnotateBar.svelte",
     "arras/src/lib/review/AnnotationPopup.svelte",
@@ -88,16 +82,13 @@ LEGACY = (
     "arras/src/lib/review/ContributionReview.svelte",
     "arras/src/lib/review/DeletedBar.svelte",
     "arras/src/lib/review/IncomingPull.svelte",
-    "arras/src/lib/review/LibraryRow.svelte",
-    "arras/src/lib/review/LinkList.svelte",
     "arras/src/lib/review/LookControls.svelte",
-    "arras/src/lib/review/ProposalCard.svelte",
-    "arras/src/lib/review/ProposalQueue.svelte",
     "arras/src/lib/review/QuoteChip.svelte",
     "arras/src/lib/review/ReviewPanel.svelte",
     "arras/src/lib/review/SideList.svelte",
     "arras/src/lib/review/TypeList.svelte",
     "arras/src/lib/review/VersionView.svelte",
+    "arras/src/lib/review/YourChanges.svelte",
     "arras/src/lib/sessions/DeleteSession.svelte",
     "arras/src/lib/sessions/SessionFooter.svelte",
     "arras/src/lib/sessions/SessionPicker.svelte",
@@ -106,8 +97,6 @@ LEGACY = (
     "arras/src/lib/shell/FileTree.svelte",
     "arras/src/lib/shell/Settings.svelte",
     "arras/src/lib/shell/column/DocumentList.svelte",
-    "arras/src/lib/shell/column/FilesShelf.svelte",
-    "arras/src/lib/shell/column/LibraryShelf.svelte",
     "arras/src/lib/shell/settings/Agents.svelte",
     "arras/src/lib/shell/settings/Annotations.svelte",
     "arras/src/lib/shell/settings/Appearance.svelte",
@@ -141,12 +130,9 @@ LEGACY = (
     "arras/src/lib/workspace/items/PageMeta.svelte",
     "arras/src/lib/workspace/items/SessionDid.svelte",
     "arras/src/lib/workspace/items/WorkControls.svelte",
-    "arras/src/lib/workspace/items/WorkItem.svelte",
     "arras/src/routes/+page.svelte",
     "arras/src/routes/graph/+page.svelte",
     "arras/src/routes/loose/+page.svelte",
-    "arras/src/routes/review/+page.svelte",
-    "arras/src/routes/review/library/+page.svelte",
     "arras/src/routes/review/problems/+page.svelte",
     "arras/src/routes/review/proposed/+page.svelte",
     "arras/src/routes/review/record/+layout.svelte",
@@ -271,34 +257,41 @@ def is_words(literal: str) -> bool:
     return (any(ch.isspace() for ch in text) and any(ch.isalpha() for ch in text)) or text[:1].isupper()
 
 
-def literals(src: str, i: int, end: int) -> list[tuple[int, str]]:
-    """The string literals, and the fixed parts of template literals, in the expression `src[i:end]`, as (offset, text).
+def literals(src: str, i: int, end: int, depth: int = 0) -> list[tuple[int, str, int, bool]]:
+    """The string literals, and the fixed parts of template literals, in the expression `src[i:end]`, as (offset, text, depth, compared).
 
-    Comments are stepped over; a template literal's `${...}` is read for literals of its own.
+    `depth` is how many brackets enclose the literal within the expression, a template literal's `${...}` counting as none, so a literal at depth 0 can be what the expression gives; `compared` says it is an operand of `===`, `!==`, `==` or `!=`, or a `case` label: a value tested, never shown. Comments are stepped over; a template literal's `${...}` is read for literals of its own.
     """
-    out: list[tuple[int, str]] = []
-    j = i
+    out: list[tuple[int, str, int, bool]] = []
+    j, level = i, depth
     while j < end:
         c = src[j]
         if c in "\"'":
             k = close_quote(src, j)
-            out.append((j, src[j + 1 : max(j + 1, k - 1)]))
+            out.append((j, src[j + 1 : max(j + 1, k - 1)], level, compared(src, i, j, k, end)))
             j = k
         elif c == "`":
             k = close_template(src, j)
             seg, m = j + 1, j + 1
+            tested = compared(src, i, j, k, end)
             while m < k - 1:
                 if src[m] == "\\":
                     m += 2
                 elif src[m] == "$" and src.startswith("{", m + 1):
-                    out.append((seg, src[seg:m]))
+                    out.append((seg, src[seg:m], level, tested))
                     close = close_brace(src, m + 1)
-                    out.extend(literals(src, m + 2, close - 1))
+                    out.extend(literals(src, m + 2, close - 1, level))
                     m = seg = close
                 else:
                     m += 1
-            out.append((seg, src[seg : max(seg, k - 1)]))
+            out.append((seg, src[seg : max(seg, k - 1)], level, tested))
             j = k
+        elif c in "([{":
+            level += 1
+            j += 1
+        elif c in ")]}":
+            level = max(depth, level - 1)
+            j += 1
         elif c == "/" and src.startswith("/", j + 1):
             nl = src.find("\n", j)
             j = end if nl < 0 else nl
@@ -310,9 +303,30 @@ def literals(src: str, i: int, end: int) -> list[tuple[int, str]]:
     return out
 
 
-def spoken(src: str, i: int, end: int) -> list[tuple[int, str]]:
-    """The literals in `src[i:end]` that read as words, as (offset, words)."""
-    return [(at, shown(text)) for at, text in literals(src, i, end) if is_words(text)]
+COMPARE = ("===", "!==", "==", "!=")
+
+
+def compared(src: str, i: int, at: int, stop: int, end: int) -> bool:
+    """Whether the literal `src[at:stop]` is a value tested in the expression `src[i:end]`: an operand of a comparison, a `case` label, or a key tested with `in`."""
+    before, after = src[i:at].rstrip(), src[stop:end].lstrip()
+    return before.endswith(COMPARE) or after.startswith(COMPARE) or re.search(r"\bcase$", before) is not None or re.match(r"in\b", after) is not None
+
+
+def spoken(src: str, i: int, end: int, shown_as_is: bool = False) -> list[tuple[int, str]]:
+    """The literals in `src[i:end]` that read as words, as (offset, words), a value compared never among them.
+
+    With `shown_as_is`, for an expression whose value is what a person sees (text, a seen attribute, `{@html}`), a literal at its top level is words when it holds any letter (`{busy ? 'undoing' : 'undo'}`), since it can be the value shown.
+    """
+    return [
+        (at, shown(text))
+        for at, text, depth, tested in literals(src, i, end)
+        if not tested and (is_words(untagged(text)) or (shown_as_is and depth == 0 and has_letter(untagged(text))))
+    ]
+
+
+def untagged(text: str) -> str:
+    """A literal's text with its HTML tags taken out, so markup given to `{@html}` (`'<style>'`) is not read as words, and the words between its tags are."""
+    return re.sub(r"<[^>]*>", "", text)
 
 
 def shown(raw: str) -> str:
@@ -343,6 +357,10 @@ def scan_tag(src: str, i: int, found: list[tuple[int, str]]) -> int:
     def judge() -> None:
         kind = next((src[v0:v1].strip("\"' ").lower() for a, v0, v1, _, _ in attrs if a == "type"), "")
         for a, v0, v1, static, exprs in attrs:
+            if a.startswith(CARRIERS) and not (a in SEEN):
+                for x, y in exprs:
+                    found.extend((at, f"{a}={{…{words}…}}") for at, words in spoken(src, x + 1, y - 1))
+                continue
             if not (a in SEEN or (a == "value" and name == "input" and kind in BUTTONS)):
                 continue
             raw = src[v0:v1]
@@ -350,7 +368,7 @@ def scan_tag(src: str, i: int, found: list[tuple[int, str]]) -> int:
                 found.append((v0 + len(raw) - len(raw.lstrip()), f'{a}="{shown(raw)}"'))
                 continue
             for x, y in exprs:
-                found.extend((at, f"{a}={{…{words}…}}") for at, words in spoken(src, x + 1, y - 1))
+                found.extend((at, f"{a}={{…{words}…}}") for at, words in spoken(src, x + 1, y - 1, shown_as_is=True))
 
     while k < n:
         c = src[k]
@@ -368,7 +386,10 @@ def scan_tag(src: str, i: int, found: list[tuple[int, str]]) -> int:
                 return n if end < 0 else end + 1
             return k
         if c == "{":
-            k = close_brace(src, k)
+            # an attachment or a spread in the tag (`{@attach tip("…")}`, `{...props}`): read by the words rule
+            end = close_brace(src, k)
+            found.extend((at, f"{{…{words}…}}") for at, words in spoken(src, k + 1, end - 1))
+            k = end
             continue
         a = k
         while k < n and not (src[k].isspace() or src[k] in "=>" or src.startswith("/>", k)):
@@ -458,13 +479,14 @@ def findings(src: str) -> list[tuple[int, str]]:
             end = close_brace(src, i)
             if block_tag(src, i):
                 flush(i)
-                if src.startswith("@html", i + 1) or src.startswith("@const", i + 1):
-                    found.extend(spoken(src, i + 1, end - 1))
+                # every block tag's literals: `{@html}`'s are shown as they are; `{@const}`, `{@render row(…)}`, `{#each [...]}`, `{#if}`, `{:else if}`, `{#key}` and `{#await}` hold words only by the rule
+                head = re.match(r"[#:/@]\s*(?:else\s+if|[a-z]+)", src[i + 1 : end])
+                found.extend(spoken(src, i + 1 + (head.end() if head else 1), end - 1, shown_as_is=src.startswith("@html", i + 1)))
             else:
                 if run is None:
                     run = i
                 exprs.append((i, end))
-                found.extend(spoken(src, i + 1, end - 1))
+                found.extend(spoken(src, i + 1, end - 1, shown_as_is=True))
             i = end
         else:
             if run is None:
@@ -482,7 +504,7 @@ def holds_words(src: str) -> bool:
     """Whether a component holds words anywhere, its script's strings included: what keeps a component on `LEGACY`, which is read more widely than a component off it, since a string in `<script>` is words the check cannot otherwise see."""
     if findings(src):
         return True
-    return any(is_words(text) for m in SCRIPT.finditer(src) for _, text in literals(m.group(1), 0, len(m.group(1))))
+    return any(is_words(text) for m in SCRIPT.finditer(src) for _, text, _, _ in literals(m.group(1), 0, len(m.group(1))))
 
 
 def rel(path: Path) -> str:
@@ -501,6 +523,11 @@ def report(paths: list[Path]) -> list[str]:
     return out
 
 
+def resolves(ref: str) -> bool:
+    """Whether `ref` names a commit here."""
+    return subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}"], cwd=ROOT, capture_output=True).returncode == 0
+
+
 def legacy_at(base: str) -> set[str] | None:
     """`LEGACY` as this script held it at `base`, or None where the script did not exist there."""
     shown_ = subprocess.run(["git", "show", f"{base}:scripts/checks/words.py"], cwd=ROOT, capture_output=True, text=True)
@@ -510,6 +537,20 @@ def legacy_at(base: str) -> set[str] | None:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "LEGACY" for t in node.targets):
             return set(ast.literal_eval(node.value))
     return None
+
+
+def moved_since(base: str, legacy: set[str]) -> dict[str, str]:
+    """The components on `LEGACY` at `base` that moved since, each old path to its new one, so that a component keeps its place on the list when it moves.
+
+    A rename moves a path. To git a move whose old path now holds something new is a copy, so a copy counts as a move too, but only where its old path has left the list: a component copied to start a new one leaves its source where it was, on the list, and the copy is read like any new component. One `git diff` answers for every path.
+    """
+    shown_ = subprocess.run(["git", "diff", "-C", "-C", "--name-status", base, "--", "arras/src"], cwd=ROOT, capture_output=True, text=True)
+    moved: dict[str, str] = {}
+    for line in shown_.stdout.splitlines():
+        parts = line.split("\t")
+        if len(parts) == 3 and (parts[0].startswith("R") or (parts[0].startswith("C") and parts[1] not in legacy)):
+            moved[parts[1]] = parts[2]
+    return moved
 
 
 def main() -> int:
@@ -535,9 +576,13 @@ def main() -> int:
             f"{total} word finding(s) in {files} of {len(components)} components; the check reads only those off LEGACY ({len(LEGACY)} on it)"
         )
         return 0
+    if not args.file and not resolves(args.base):
+        print(f"words: the base {args.base} names no commit here, so LEGACY cannot be held to it; fix: give --base (or $WORDS_BASE) a commit, branch or tag this checkout has, fetching it first in CI")
+        return 1
     gone = [] if args.file else [p for p in LEGACY if not (ROOT / p).is_file()]
     before = None if args.file else legacy_at(args.base)
-    added = [] if before is None else sorted(legacy - before)
+    moved = {} if before is None else moved_since(args.base, legacy)
+    added = [] if before is None else sorted(legacy - {moved.get(p, p) for p in before})
     clean = [] if args.file else [p for p in LEGACY if (ROOT / p).is_file() and not holds_words((ROOT / p).read_text(encoding="utf-8"))]
     read = args.file or [p for p in components if rel(p) not in legacy]
     bad = report(read)
@@ -553,7 +598,8 @@ def main() -> int:
         print(f"fix: {FIX}")
     if bad or gone or added or clean:
         return 1
-    print(f"words: ok ({len(read)} component(s) read hold no words{'' if args.file else f'; {len(LEGACY)} on LEGACY'})")
+    unheld = "" if args.file or before is not None else f"; LEGACY not compared with {args.base}, which holds no list"
+    print(f"words: ok ({len(read)} component(s) read hold no words{'' if args.file else f'; {len(LEGACY)} on LEGACY'}{unheld})")
     return 0
 
 

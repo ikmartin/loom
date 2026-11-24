@@ -1,4 +1,4 @@
-"""`loom write TARGET TEXT`: write a page, the quilt's research state or a cited work's overview (plan 0.21.3)."""
+"""`loom write TARGET TEXT`: write a page, the quilt's research state (plan 0.21.3)."""
 
 from __future__ import annotations
 
@@ -33,12 +33,12 @@ def write(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """Write a page: TARGET `state`, the quilt's research state, or a WORK, that work's overview; `-` reads TEXT from stdin.
+    """Write a page: TARGET `state`, the quilt's research state; `-` reads TEXT from stdin.
 
-    A page is a reading the person edits directly and an agent writes here, never by hand; it says who wrote it, and it is never a source. Once the page exists, --base must be the hash it had when you read it -- `loom ai orient` prints the research state's, `loom library read WORK` an overview's -- so an edit you have not seen is never overwritten: a stale base is refused, with that edit shown. A link that names nothing the viewer shows is refused, as in a message. Every write is recorded in the history, with who made it.
+    A page is a reading the person edits directly and an agent writes here, never by hand; it says who wrote it, and it is never a source. Once the page exists, --base must be the hash it had when you read it, which `loom ai orient` prints, so an edit you have not seen is never overwritten: a stale base is refused, with that edit shown. A link that names nothing the viewer shows is refused, as in a message. Every write is recorded in the history, with who made it.
     """
     from loom.links import refuse_bad_links
-    from loom.pages import STATE, overview_page, read, state_page, text_hash
+    from loom.pages import STATE, read, state_page, text_hash
     from loom.pages import write as write_page
 
     (given,) = from_stdin({"TEXT": text})
@@ -47,21 +47,17 @@ def write(
         raise EnvError("nothing to write: a page needs words")
     if not body.endswith("\n"):
         body += "\n"
+    if target != STATE:
+        raise EnvError(f"no page {target}: TARGET is `{STATE}`, the research state")
     result = open_scan(quilt_path)
     root = result.quilt.root
-    if target == STATE:
-        page = state_page(result.quilt.config)
-    else:
-        from loom.cli.library._works import one_work
-
-        page = overview_page(root, result.bib, one_work(result, target))
+    page = state_page(result.quilt.config)
     current = read(root, page)
     if current is None and base is not None:
         raise EnvError(f"{page.name} does not exist yet; write it without --base")
     if current is not None and base is None:
-        where = "loom ai orient" if page.kind == STATE else f"loom library read {page.work}"
         raise EnvError(
-            f"{page.name} exists; read it first (`{where}` prints it with its hash) and pass that hash as --base"
+            f"{page.name} exists; read it first (`loom ai orient` prints it with its hash) and pass that hash as --base"
         )
     if current is not None and base != text_hash(current):
         from loom.records.snapshots import read_raw
@@ -81,7 +77,7 @@ def write(
 
     links = linked(result, root, body)
     new = text_hash(body)
-    data = {"page": page.kind, "path": page.path, "hash": new, "work": page.work or None, "links": len(links)}
+    data = {"page": page.kind, "path": page.path, "hash": new, "links": len(links)}
     linking = f", linking {counted(len(links), 'thing')}" if links else ""
     if dry_run:
         Report(f"would write {page.name}{linking}", dry_run=True, data=data).emit(as_json)

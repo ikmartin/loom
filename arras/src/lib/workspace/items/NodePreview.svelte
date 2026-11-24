@@ -61,8 +61,7 @@
 			await tick();
 			if (!body || gone) return;
 			wire(body, manifest, () => {});
-			const sets = manifest.macros.sets ?? {};
-			await typeset(body, manifest.macros.default ?? [], current.digest ? (sets[current.digest] ?? []) : []);
+			await typeset(body, manifest.macros.default ?? []);
 			if (!gone) onresize();
 		})();
 		return () => {
@@ -84,7 +83,7 @@
 		{#if identity.context}<span class="title">{identity.context}</span>{/if}
 		<span class="id">{node.id}</span>
 	</p>
-	<p class="state"><Badge parts={nodeBadge(m, node)} />{#if node.external && node.digest}<span class="from">from {node.digest}{node.locator ? ', ' + node.locator : ''}</span>{/if}</p>
+	<p class="state"><Badge parts={nodeBadge(m, node)} /></p>
 	{#if node.kind === 'section'}
 		{#if node.children.length}<p class="more">{node.children.length} {node.children.length === 1 ? 'entry' : 'entries'} in this section</p>{/if}
 	{:else}
@@ -124,7 +123,6 @@
 		gap: var(--gap-tight);
 		margin: var(--gap-hair) 0;
 	}
-	.from,
 	.more {
 		color: var(--ink-faint);
 		font-size: 10px;

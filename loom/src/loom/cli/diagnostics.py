@@ -1,6 +1,6 @@
-"""Diagnostics as report groups (plan 0.18.3): one group per code with its count and class, the author's before the cited works', which are summarised under a heading of their own, and a single line for the works nothing cites.
+"""Diagnostics as report groups (plan 0.18.3): one group per code with its count and class.
 
-Every command that reports diagnostics (`lint`, `build`, `check`, `library update`, `history verify`) builds its groups here, so a diagnostic reads the same wherever it is printed: its location, its message, the keys it names, and the commands that would resolve it as `fix:` lines. A heading says the code's class in brackets after it (`scan.diagnostics`): `latex`, `model` or `internal`.
+Every command that reports diagnostics (`lint`, `build`, `check`, `history verify`) builds its groups here, so a diagnostic reads the same wherever it is printed: its location, its message, the keys it names, and the commands that would resolve it as `fix:` lines. A heading says the code's class in brackets after it (`scan.diagnostics`): `latex`, `model` or `internal`.
 """
 
 from __future__ import annotations
@@ -9,7 +9,6 @@ import re
 
 from loom.cli.report import Group, Item, counted
 from loom.scan.model import Diagnostic
-from loom.scan.owners import AUTHOR, CITED, UNCITED, Owners
 from loom.scan.scan import ScanResult
 
 SEVERITY = {"error": 0, "warning": 1, "info": 2}
@@ -59,51 +58,15 @@ def _code_group(severity: str, code: str, cls: str, ds: list[Diagnostic]) -> Gro
     return Group(f"{severity} {code} ({cls}): {gist}", items, problem=severity == "error", limit=20)
 
 
-def groups(diags: list[Diagnostic], result: ScanResult | None, cited_next: str = "loom lint --json") -> list[Group]:
-    """The author's diagnostics as one group per code, most severe first; a cited work's summarised in one group, a line per code with its count; a work's nothing cites in one line.
-
-    A cited paper's digest can carry hundreds of diagnostics the author did not write and need not read one by one, which drowned the author's own (CLI study C3); they are counted, and `cited_next` names the command that lists every one. The uncited works' line carries every one of its diagnostics in the JSON.
-    """
-    owners = Owners(result)
-    split = owners.split(_once(diags))
-    own, cited, uncited = split[AUTHOR], split[CITED], split[UNCITED]
+def groups(diags: list[Diagnostic], result: ScanResult | None) -> list[Group]:
+    """The diagnostics as one group per code, most severe first, each said once."""
     out: list[Group] = []
     by_code: dict[tuple[int, str, str, str], list[Diagnostic]] = {}
-    for d in own:
+    for d in _once(diags):
         by_code.setdefault((SEVERITY.get(d.severity, 3), d.code, d.severity, d.class_), []).append(d)
     for (_, code, severity, cls), ds in sorted(by_code.items()):
         ds.sort(key=lambda d: (d.locations[0].file, d.locations[0].line) if d.locations else ("", 0))
         out.append(_code_group(severity, code, cls, ds))
-    if cited:
-        tally: dict[tuple[int, str, str, str], int] = {}
-        for d in cited:
-            k = (SEVERITY.get(d.severity, 3), d.code, d.severity, d.class_)
-            tally[k] = tally.get(k, 0) + 1
-        out.append(
-            Group(
-                "in cited works",
-                [
-                    Item(
-                        f"{counted(n, severity)}  {code} ({cls})",
-                        data={"code": code, "severity": severity, "class": cls, "count": n},
-                    )
-                    for (_, code, severity, cls), n in sorted(tally.items())
-                ],
-                count=len(cited),
-                limit=None,
-                next=cited_next,
-            )
-        )
-    if uncited:
-        works = set().union(*(owners.works(d) for d in uncited))
-        out.append(
-            Group(
-                f"{counted(len(uncited), 'diagnostic')} in {counted(len(works), 'work')} nothing cites; loom library check lists them",
-                [item(d) for d in uncited],
-                limit=0,
-                counted=False,
-            )
-        )
     return out
 
 
@@ -120,27 +83,16 @@ def _once(diags: list[Diagnostic]) -> list[Diagnostic]:
 
 
 def tally(diags: list[Diagnostic], result: ScanResult | None) -> str:
-    """`2 errors, 1 warning in your documents; 88 errors in cited works`, or `no problems`: the count a verdict carries; a work's nothing cites counts toward neither."""
-    split = Owners(result).split(_once(diags))
-    own, cited = split[AUTHOR], split[CITED]
-
-    def counts(ds: list[Diagnostic]) -> str:
-        parts = [
-            counted(sum(1 for d in ds if d.severity == s), s)
-            for s in ("error", "warning", "info")
-            if any(d.severity == s for d in ds)
-        ]
-        return ", ".join(parts)
-
-    parts = []
-    if own:
-        parts.append(f"{counts(own)} in your documents")
-    if cited:
-        parts.append(f"{counts(cited)} in cited works")
-    return "; ".join(parts) or "no problems"
+    """`2 errors, 1 warning in your documents`, or `no problems`: the count a verdict carries."""
+    own = _once(diags)
+    parts = [
+        counted(sum(1 for d in own if d.severity == s), s)
+        for s in ("error", "warning", "info")
+        if any(d.severity == s for d in own)
+    ]
+    return f"{', '.join(parts)} in your documents" if parts else "no problems"
 
 
 def has_errors(diags: list[Diagnostic], result: ScanResult | None) -> bool:
-    """Whether any diagnostic is an error, the author's or a cited work's; a work nothing cites never counts."""
-    owners = Owners(result)
-    return any(d.severity == "error" and owners.of(d) in (AUTHOR, CITED) for d in diags)
+    """Whether any diagnostic is an error."""
+    return any(d.severity == "error" for d in diags)

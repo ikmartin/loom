@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from loom import layout
 from loom.paths import MANIFEST, document_build
 from tests.helpers import edit, exits, json_of, ok
 from tests.unit._quilts import demo
@@ -271,7 +272,7 @@ def test_doing_what_an_id_defined_twice_says_leaves_no_new_problem(tmp_path: Pat
     q = tmp_path / "q"
     (q / "drafting" / "nodes").mkdir(parents=True)
     (q / ".loom").mkdir()
-    (q / ".loom" / "format").write_text("1\n")
+    (q / ".loom" / "format").write_text(f"{layout.NUMBER}\n")
     (q / "config.toml").write_text('[quilt]\nname = "fix"\nmain = "drafting/main.tex"\nprefix = "gr"\n')
     (q / "drafting" / "loom.sty").write_text(
         (QUILTS / "edge" / "double-inclusion" / "drafting" / "loom.sty").read_text()

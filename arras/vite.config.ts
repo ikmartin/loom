@@ -11,11 +11,11 @@ import type { ProxyOptions } from 'vite';
 const raw = (process.env.ARRAS_BASE ?? '').replace(/\/+$/, '');
 const base = (raw && !raw.startsWith('/') ? '/' + raw : raw) as '' | `/${string}`;
 
-// ARRAS_LOOM names a running `loom serve` (`ARRAS_LOOM=http://127.0.0.1:8791 npm run dev:loom`). The dev server then sends the quilt's own paths to it, so the viewer under development reads a real quilt and writes to it, with hot reload: the write API and its stream, the build directory, the fetched works and the project's files. Everything else, the app itself, is the dev server's.
+// ARRAS_LOOM names a running `loom serve` (`ARRAS_LOOM=http://127.0.0.1:8791 npm run dev:loom`). The dev server then sends the quilt's own paths to it, so the viewer under development reads a real quilt and writes to it, with hot reload: the write API and its stream, a work's stored PDF among its answers, the build directory and the project's files. Everything else, the app itself, is the dev server's.
 //
 // `loom serve` answers only a request that names it and comes from one of its own pages. A proxied request is therefore sent as the server's own: its `Host`, and, where the browser says the request came from a page of this dev server, the server's `Origin` and `Referer` in place of the dev server's. A request from any other page goes on as it came and is refused there as it would be.
 const loom = (process.env.ARRAS_LOOM ?? '').replace(/\/+$/, '');
-const LOOM_PATHS = ['/_api', '/build', '/digests', '/_files'];
+const LOOM_PATHS = ['/_api', '/build', '/_files'];
 
 function toLoom(): ProxyOptions {
 	return {

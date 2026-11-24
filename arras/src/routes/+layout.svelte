@@ -10,7 +10,6 @@
 	import DropZone from '$lib/components/DropZone.svelte';
 	import Palette from '$lib/components/Palette.svelte';
 	import LinkPreview from '$lib/components/LinkPreview.svelte';
-	import PdfViewer from '$lib/components/PdfViewer.svelte';
 	import DeletedBar from '$lib/review/DeletedBar.svelte';
 	import OutOfStep from '$lib/components/OutOfStep.svelte';
 	import Toast from '$lib/review/Toast.svelte';
@@ -31,14 +30,21 @@
 	import { sessionView } from '$lib/sessions/sessions.svelte';
 	import { startReporting } from '$lib/here.svelte';
 	import { frame } from '$lib/words/frame';
+	import { chooseSource } from '$lib/library/source';
+	import OldFormat from '$lib/shell/OldFormat.svelte';
+	import { upgrade } from '$lib/shell/upgrade.svelte';
+	import { capabilities } from '$lib/write';
 
 	let { children } = $props();
 
 	onMount(() => {
+		void chooseSource();
 		prefs.load();
 		sessionView.load();
 		store.start(1000);
 		void listen();
+		// asked at once, so a quilt an earlier loom made is known before anything else is drawn of it
+		void capabilities();
 	});
 
 	// A stored selection the corpus no longer lists is dropped once, on the first manifest; after that a session just made with `+ new` is briefly missing from the manifest and must survive it.
@@ -72,7 +78,7 @@
 	const defaultMaster = $derived(m?.masters.find((x) => x.default) ?? m?.masters[0]);
 
 	// Reading mode is the things a reader reads (plan 0.13.3): documents and their compiled PDFs, works, nodes, a node's context, sessions and the project's files, each an item in the workspace. The tables, the graph and home render full width outside it.
-	const READING = new Set(['/master/[...name]', '/pdf/[...path]', '/canon/[stem]', '/node/[...key]', '/library/[citekey]', '/context/[...key]', '/session/[id]', '/page/[id]', '/file/[...path]']);
+	const READING = new Set(['/master/[...name]', '/pdf/[...path]', '/canon/[stem]', '/node/[...key]', '/library/[citekey]', '/context/[...key]', '/session/[id]', '/page/[id]', '/file/[...path]', '/notes']);
 	const inReading = $derived(READING.has(page.route.id ?? ''));
 	$effect(() => {
 		workspace.onScreen = inReading;
@@ -144,6 +150,10 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
+<!-- a quilt an earlier loom made: the frame's head, one sentence and one button, and nothing else until it is upgraded -->
+{#if upgrade.waiting}
+	<OldFormat />
+{:else}
 <Column
 	label={m ? m.corpus.name : frame.column.unnamed}
 	primary={primaryOf(page.route.id)}
@@ -183,7 +193,7 @@
 <Palette />
 <DropZone />
 <LinkPreview />
-<PdfViewer />
 <DeletedBar />
 <OutOfStep />
 <Toast />
+{/if}

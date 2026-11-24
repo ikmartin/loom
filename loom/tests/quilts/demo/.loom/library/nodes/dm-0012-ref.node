@@ -1,0 +1,16 @@
++++
+schema = 1
+id = "dm-0012-ref"
+taxon = "reference"
+pdf = "sha256:4b8db624054bd31793f24d46bdd083c0a77cee85b243fed90c5d7dcf2482841b"
+tex = "sha256:4dde8d2a11feae0ad6ec9b4e3366596638daa8b0ccc6f52cccae7fd93baf66d5"
++++
+@article{Calloway14,
+  author  = {Calloway, Imogen},
+  title   = {Fixed loci of involutions on separated spaces},
+  journal = {Ann. Fict. Topol.},
+  volume  = {14},
+  year    = {2014},
+  pages   = {87--119},
+  doi     = {10.4171/demo/14-1},
+}

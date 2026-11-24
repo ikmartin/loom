@@ -13,7 +13,14 @@ from pathlib import Path
 from loom.paths import FORMAT, LOOM
 
 #: The layout this loom reads and writes.
-NUMBER = 1
+NUMBER = 2
+#: The earlier layouts this loom can bring forward to its own (`loom upgrade`, `library.carry`), which every other command refuses.
+CARRIES = frozenset({"1"})
+
+
+def carriable(root: Path) -> bool:
+    """Whether the quilt at `root` is in an earlier layout this loom can bring forward to its own."""
+    return found(root) in CARRIES
 
 
 def found(root: Path) -> str | None:
@@ -37,6 +44,8 @@ def refusal(root: Path) -> str | None:
         return (
             f"this quilt's {LOOM}/ has no format number, so an older loom made it, and this loom reads format {NUMBER}"
         )
+    if said in CARRIES:
+        return f"this quilt was made by an earlier loom, in format {said}, and this loom reads format {NUMBER}: loom upgrade brings it forward, its library carried into the node store"
     return f"this quilt's {FORMAT} says {said or 'nothing'}, and this loom reads format {NUMBER}"
 
 

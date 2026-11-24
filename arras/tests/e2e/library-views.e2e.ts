@@ -1,0 +1,354 @@
+// The Library view on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/`), as the author settled it (`docs/design/mockups/library-round-6/`): the list of works and its thumbnails, adding a work, the digest menus, a work's tab with its outline, the result beside its page and the digest marks, deleting with undo; and the rules that hold everywhere: no control but the four view names changes view, no id is drawn, and nothing is asked for before it is shown.
+import { expect, test, type Page, type Request } from '@playwright/test';
+import { paperBytes } from '../../src/lib/library/fixtures/paper';
+
+/** A paper of two pages, as a file the person drops on the intake. */
+const PAPER = Buffer.from(paperBytes(2));
+
+async function open(page: Page): Promise<Request[]> {
+	const asked: Request[] = [];
+	page.on('request', (r) => asked.push(r));
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	return asked;
+}
+
+const row = (page: Page, title: string) => page.getByTestId('work-row').filter({ hasText: title }).first();
+
+test("the list holds round six's 300 works, sorted by title, and sorts, filters and narrows as asked", async ({ page }) => {
+	await open(page);
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+	await expect(page.getByTestId('work-row').first()).toContainText('A note on admissible weightings');
+	await page.getByTestId('sort-title').click();
+	await expect(page.getByTestId('work-row').first()).not.toContainText('A note on admissible weightings');
+	await page.getByTestId('filter-nodoc').click();
+	const nodoc = await page.getByTestId('work-row').count();
+	expect(nodoc).toBeGreaterThan(3);
+	expect(nodoc).toBeLessThan(300);
+	await page.getByTestId('filter-all').click();
+	await page.getByTestId('works-search').fill('widgets and their');
+	await expect(page.getByTestId('work-row')).toHaveCount(1);
+	await expect(page.getByText('1 of 300')).toBeVisible();
+	await expect(row(page, 'Widgets and their bounds')).toContainText('11 of 62 · 2 compared');
+});
+
+test('thumbnails draw sixty at first, and the choice is remembered', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('works-thumbs').click();
+	await expect(page.getByTestId('work-thumb')).toHaveCount(60);
+	// the pages of a row stand level, whatever the length of each caption
+	const rows = await page.getByTestId('work-thumb').evaluateAll((cards) => {
+		const tops = new Map<number, number[]>();
+		for (const c of cards.slice(0, 24)) {
+			const pg = c.querySelector('.pg')!.getBoundingClientRect();
+			const row = Math.round(pg.top / 100);
+			tops.set(row, [...(tops.get(row) ?? []), pg.top]);
+		}
+		return [...tops.values()].map((t) => Math.max(...t) - Math.min(...t));
+	});
+	expect(rows.length).toBeGreaterThan(1);
+	for (const spread of rows) expect(spread).toBeLessThan(0.5);
+	await page.reload();
+	await expect(page.getByTestId('works-thumbnails')).toBeVisible();
+	await page.getByTestId('works-list').click();
+	await expect(page.getByTestId('works-table')).toBeVisible();
+});
+
+test('a pasted arXiv number adds its work, said in the column with undo, and the view does not change', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('add-work').click();
+	await expect(page.getByTestId('choose-files')).toBeVisible();
+	await page.getByTestId('paste-identifier').fill('2209.01234v2');
+	await page.getByTestId('paste-identifier').press('Enter');
+	await expect(page.getByTestId('column-message')).toContainText('Added Gadget towers, Halberd and Ravel 2021, found by its arXiv number, with its TeX source.');
+	await expect(page.getByTestId('column-message-undo')).toBeVisible();
+	await expect(page).toHaveURL(/\/library/);
+});
+
+test('the digest menu over the list counts what the drafts use, and selecting takes ⌘-click', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('digest-all').click();
+	await expect(page.getByTestId('digest-used')).toContainText('(14)');
+	await expect(page.getByTestId('digest-selected')).toBeDisabled();
+	await page.getByTestId('digest-all').click();
+	await expect(page.getByTestId('digest-menu')).toHaveCount(0);
+	await row(page, 'Widgets and their bounds').click({ modifiers: ['Meta'] });
+	await expect(page.getByTestId('library-tab')).toHaveCount(0);
+	await page.getByTestId('digest-all').click();
+	await expect(page.getByTestId('digest-selected')).toBeEnabled();
+	await expect(page.getByTestId('digest-selected')).toContainText('(1 selected)');
+});
+
+test("a work's tab: its outline, a result beside its page, and the person's yes", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page.getByTestId('library-tab')).toHaveCount(1);
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await expect(page.getByTestId('outline-section')).toHaveCount(8);
+	const radius = page.getByTestId('outline-item').filter({ hasText: 'Radius' });
+	await expect(radius.locator('[data-mark="unchecked"]')).toHaveCount(1);
+	await radius.click();
+	await expect(page.getByTestId('node-side')).toContainText("Does loom's copy match the paper?");
+	await page.getByTestId('it-matches').click();
+	await expect(radius.locator('[data-mark="checked"]')).toHaveCount(1);
+	// the yes opens the next result not compared, beside its page
+	await expect(page.getByTestId('column-message')).toContainText('Definition 3.1 matches the paper; the next not compared is open.');
+	await expect(page.getByTestId('node-side')).toContainText('Lemma 3.2');
+});
+
+test('results chosen in the outline are digested from the TeX source', async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await page.getByTestId('work-digest').click();
+	await expect(page.getByTestId('digest-used')).toContainText('(2)');
+	await page.getByTestId('digest-choose').click();
+	const ticks = page.getByTestId('outline-tick');
+	await ticks.nth(0).check();
+	await ticks.nth(1).check();
+	await page.getByTestId('digest-chosen').click();
+	await expect(page.getByTestId('column-message')).toContainText('Digested 2 results from the TeX source');
+	await expect(page.getByTestId('outline-tick')).toHaveCount(0);
+});
+
+test('the digest marks are asked for only once they are on', async ({ page }) => {
+	const asked = await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page.getByTestId('work-reader')).toBeVisible();
+	await page.waitForTimeout(300);
+	expect(asked.some((r) => r.url().includes('library-places'))).toBe(false);
+	await page.getByTestId('reader-view').click();
+	await page.getByTestId('overlay-toggle').click();
+	// Definition 2.1 stands on page 3, where Section 2 begins
+	await page.getByTestId('work-reader').getByTestId('page-at').fill('3');
+	await page.getByTestId('work-reader').getByTestId('page-at').press('Enter');
+	await expect(page.locator('[data-testid="digest-chip"][data-node="tq-00A4"]')).toBeInViewport();
+});
+
+test('a work held only as a PDF lists its marks and the stubs no place is known for', async ({ page }) => {
+	await open(page);
+	await row(page, 'Median orders on weighting lattices').click();
+	await expect(page.getByText("Contents, from the PDF's outline")).toBeVisible();
+	await expect(page.getByTestId('outline-mark')).toHaveCount(1);
+	await expect(page.getByText('Cited, not yet placed')).toBeVisible();
+	await expect(page.getByTestId('locate-in-pdf')).toBeVisible();
+});
+
+test('deleting a work takes it out, and undo puts it back', async ({ page }) => {
+	await open(page);
+	const jones = row(page, 'Covering estimates');
+	await jones.hover();
+	await jones.getByTestId('row-more').click();
+	await page.getByTestId('row-delete').click();
+	await expect(page.getByTestId('column-message')).toContainText('Deleted Jones 2019, with its results and notes');
+	await expect(page.getByTestId('work-row')).toHaveCount(299);
+	await page.getByTestId('column-message-undo').click();
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+});
+
+test('no control in the Library changes view, and no id is drawn', async ({ page }) => {
+	test.setTimeout(600000);
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page.getByTestId('work-reader')).toBeVisible();
+	// every control the Library draws, in its view and its column, but today's reader's own toolbar and the file chooser, which are not the Library's and open the system's dialogs
+	const n = await page.evaluate(() => {
+		const roots = [document.querySelector('[data-testid="library-view"]'), document.querySelector('[data-testid="library-column"]')];
+		const buttons = roots.flatMap((r) => [...(r?.querySelectorAll('button') ?? [])]).filter((b) => !b.closest('.tb') && !b.closest('[data-testid="pdf-doc"]') && b.getAttribute('data-testid') !== 'choose-files' && b.getAttribute('data-testid') !== 'row-delete');
+		buttons.forEach((b, i) => b.setAttribute('data-crawl', String(i)));
+		return buttons.length;
+	});
+	expect(n).toBeGreaterThan(20);
+	for (let i = 0; i < n; i++) {
+		const b = page.locator(`[data-crawl="${i}"]`);
+		if (!(await b.isVisible().catch(() => false))) continue;
+		await b.click({ timeout: 5000 }).catch(() => {});
+		expect(page.url()).toMatch(/\/library/);
+		await page.keyboard.press('Escape');
+	}
+	const text = await page.locator('body').innerText();
+	expect(text).not.toMatch(/\btq-[0-9A-Z]{4}\b/);
+});
+
+test("a work's tab has an address: a reload keeps the open works, and Back stays within the Library", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page).toHaveURL(/\/library\?work=/);
+	await page.reload();
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await expect(page.getByTestId('library-tab')).toHaveCount(1);
+	await page.goBack();
+	await expect(page).toHaveURL(/\/library(\?fixture=round6)?$/);
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await expect(page.getByTestId('library-tab')).toHaveCount(1);
+});
+
+test("the Library's name goes back to the tab it was left at, after another view and after a reload there", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await page.getByTestId('primary-docs').click();
+	await expect(page).not.toHaveURL(/\/library/);
+	await page.getByTestId('primary-library').click();
+	await expect(page).toHaveURL(/\/library\?work=/);
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	await page.getByTestId('primary-docs').click();
+	await page.reload();
+	await page.getByTestId('primary-library').click();
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+	// left at the list, it goes back to the list
+	await page.getByTestId('library-tab-works').click();
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('primary-docs').click();
+	await page.getByTestId('primary-library').click();
+	await expect(page.getByTestId('works-table')).toBeVisible();
+});
+
+test("the list works from the keyboard: a row's title opens its work, and its own controls show while it holds the keyboard", async ({ page }) => {
+	await open(page);
+	const smith = row(page, 'Widgets and their bounds');
+	await smith.getByTestId('work-open').focus();
+	await expect(smith.getByTestId('row-digest')).toHaveCSS('opacity', '1');
+	await page.keyboard.press('Tab');
+	await expect(smith.getByTestId('row-digest')).toBeFocused();
+	await smith.getByTestId('work-open').focus();
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets and their bounds');
+});
+
+test('several files chosen at once are said together, and one undo takes every work back', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('choose-files-input').setInputFiles([
+		{ name: 'alpha.pdf', mimeType: 'application/pdf', buffer: PAPER },
+		{ name: 'beta.pdf', mimeType: 'application/pdf', buffer: PAPER },
+		{ name: 'gamma.pdf', mimeType: 'application/pdf', buffer: PAPER }
+	]);
+	await expect(page.getByTestId('column-message')).toContainText('Added 3 works.');
+	await expect(page.getByTestId('work-row')).toHaveCount(303);
+	await page.getByTestId('column-message-undo').click();
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+});
+
+test("edit its entry… opens the work's entry as a field, a refusal says why in the viewer's words, and a saved entry is the work's", async ({ page }) => {
+	await open(page);
+	const smith = row(page, 'Widgets and their bounds');
+	await smith.hover();
+	await smith.getByTestId('row-more').click();
+	await page.getByTestId('row-edit-entry').click();
+	const field = page.getByTestId('entry-field');
+	await expect(field).toBeFocused();
+	await expect(field).toHaveValue(/^@article\{Smi24,/);
+	await field.fill('not an entry');
+	await page.getByTestId('entry-save').click();
+	await expect(page.getByTestId('entry-refused')).toHaveText('That is not a BibTeX entry loom can keep for this work.');
+	await field.fill('@article{Smi24,\n  author = {Smith},\n  title  = {Widgets, bounded},\n  year   = {2024},\n}');
+	await page.getByTestId('entry-save').click();
+	await expect(page.getByTestId('column-message')).toContainText('Saved the entry of Smith 2024.');
+	await expect(page.getByTestId('entry-field')).toHaveCount(0);
+	await expect(page.getByTestId('work-title')).toHaveText('Widgets, bounded');
+});
+
+test("a file stating an arXiv number a work states is asked about in the column, each answer settles it, and one closed unanswered is not asked again here", async ({ page }) => {
+	await open(page);
+	const msg = page.getByTestId('column-message');
+	const choose = async (name: string) => {
+		await page.getByTestId('add-work').click();
+		await page.getByTestId('choose-files-input').setInputFiles([{ name, mimeType: 'application/pdf', buffer: PAPER }]);
+	};
+	// yes: the file is filed under the work, and no row is added
+	await choose('2000.01000v2.pdf');
+	await expect(msg).toContainText('2000.01000v2.pdf states arXiv 2000.01000, as Arden 2024 in your library does. Is it that work?');
+	const answers = msg.getByTestId('column-message-choice');
+	await expect(answers).toHaveText(['yes', 'no, a work of its own']);
+	for (const a of await answers.all()) expect((await a.boundingBox())!.height).toBeGreaterThanOrEqual(28);
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+	await answers.filter({ hasText: 'yes' }).click();
+	await expect(msg).toContainText('Filed 2000.01000v2.pdf under Arden 2024.');
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+	// no: a work of its own
+	await choose('2000.01000v3.pdf');
+	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
+	await expect(page.getByTestId('work-row')).toHaveCount(301);
+	// closed unanswered: not asked again on this page, and nothing written
+	await choose('2000.01000v4.pdf');
+	await expect(msg).toContainText('Is it that work?');
+	await page.getByTestId('column-message-dismiss').click();
+	await expect(msg).toHaveCount(0);
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('2209.01234v2');
+	await page.getByTestId('paste-identifier').press('Enter');
+	await expect(msg).toContainText('Added');
+	await page.getByTestId('column-message-dismiss').click();
+	await expect(msg).toHaveCount(0);
+	await expect(page.getByTestId('work-row')).toHaveCount(302);
+});
+
+test('on a quilt that has not said whether loom may use the network, a work added by an identifier asks in its row to be looked up this once', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6&network=unasked');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	await page.getByTestId('add-work').click();
+	await page.getByTestId('paste-identifier').fill('2209.01234v2');
+	await page.getByTestId('paste-identifier').press('Enter');
+	const added = row(page, 'arXiv 2209.01234v2');
+	await expect(added).toContainText('look it up this once?');
+	// not now leaves it unconfirmed; a later look up, refused as the quilt has not answered, asks again
+	await added.getByTestId('look-not').click();
+	await expect(added).toContainText('details unconfirmed');
+	await added.getByRole('button', { name: 'look up' }).click();
+	await expect(added).toContainText('look it up this once?');
+	await expect(page.getByTestId('column-message')).not.toContainText('Loom could not do that.');
+	await added.getByTestId('look-yes').click();
+	await expect(row(page, 'Gadget towers')).toBeVisible();
+	await expect(row(page, 'Gadget towers')).not.toContainText('look it up');
+});
+
+test('with no backend, the list says so in a sentence, with no name of an endpoint', async ({ page }) => {
+	await page.goto('/library');
+	await expect(page.getByTestId('works-failed')).toHaveText('This loom does not serve the Library yet.');
+});
+
+test('the chosen columns and the sort are kept across a reload', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('sort-year').click();
+	await page.getByTestId('works-columns').click();
+	await page.getByTestId('col-holds').click();
+	await page.reload();
+	await expect(page.getByTestId('sort-year').locator('xpath=..')).toHaveAttribute('aria-sort', 'ascending');
+	await expect(page.getByTestId('sort-holds')).toBeVisible();
+});
+
+test("words selected on a page offer Quote, and the Library's mark to digest and ask an agent beside it; an agent's question takes the keyboard and is said", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	const reader = page.getByTestId('work-reader');
+	await expect(reader.locator('.text span').first()).toBeAttached();
+	await reader.evaluate((box) => {
+		const span = [...box.querySelectorAll('.text span')].find((s) => (s.textContent ?? '').trim().length > 8)!;
+		const range = document.createRange();
+		range.selectNodeContents(span);
+		getSelection()!.removeAllRanges();
+		getSelection()!.addRange(range);
+		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+	// the one reader's Quote, with the Library's own actions laid beside it
+	await expect(page.getByTestId('quote-offer')).toBeVisible();
+	await expect(page.getByTestId('mark-to-digest')).toBeVisible();
+	await expect(page.getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
+	await page.getByTestId('ask-agent').click();
+	await expect(page.getByTestId('ask-field')).toBeFocused();
+	await page.keyboard.type('Is this the bound used in Section 4?');
+	await page.keyboard.press('Enter');
+	await expect(page.getByTestId('column-message')).toContainText('Added to agent tasks: a question on these words.');
+});
+
+test("the reader's zoom controls are 28 pixel targets", async ({ page }) => {
+	await open(page);
+	await row(page, 'Widgets and their bounds').click();
+	for (const id of ['zoom-fit', 'zoom-out', 'zoom-in']) {
+		const box = (await page.getByTestId('work-reader').getByTestId(id).boundingBox())!;
+		expect(Math.round(box.width)).toBeGreaterThanOrEqual(28);
+		expect(Math.round(box.height)).toBeGreaterThanOrEqual(28);
+	}
+});

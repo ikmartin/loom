@@ -118,12 +118,13 @@ def test_cli_override_selects_its_own_stale_rows_without_changing_settings(quilt
 
 
 def test_external_transcription_verification_remains_shared(quilt):
+    """A block of basis `cited-result` states somebody else's theorem, so its verification is shared, not a reviewer's own."""
+    node = quilt.root / "drafting/nodes/sy-0003.tex"
+    cited = "\\label{sy-0003}\n% !LOOM basis: cited-result\nAs in \\cite[Theorem 1]{Har77}: "
+    node.write_text(node.read_text().replace("\\label{sy-0003}\n", cited))
     result = scan(quilt)
-    external = next(
-        key
-        for key, node in result.nodes.items()
-        if node.external and node.kind == "environment" and not node.file.endswith(".proposed.tex")
-    )
+    external = "sy-0003"
+    assert result.nodes[external].external
     write_acceptance(result, [external], "Alice")
     save_author("Bob")
     state = Records(quilt.root).key_states(result)[external]

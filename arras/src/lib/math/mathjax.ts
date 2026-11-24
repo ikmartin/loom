@@ -186,7 +186,7 @@ async function typesetWaiting(defaults: Macro[]): Promise<void> {
  * defaults : Macro[]
  *     The corpus-wide macros, applied when MathJax first loads.
  * perFragment : Macro[], default []
- *     The fragment's own macro set (a landmark's, a digest's), defined just before its formulas are typeset.
+ *     The fragment's own macro set (a landmark's), defined just before its formulas are typeset.
  * until : Element | null, default null
  *     Typeset at least through this element before resolving.
  *

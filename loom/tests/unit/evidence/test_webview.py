@@ -394,8 +394,8 @@ def test_the_library_lists_its_statements_by_work_with_how_each_reads_its_paper(
     [first, second] = listed["sections"][0]["groups"]
     assert (first["group"], first["n"], "rows" in first) == ("tq-00A1-ref", 3, False)
     assert (second["group"], second["n"]) == ("tq-00B1-ref", 1)
-    # the second work's one result is a stub: nothing of it is read
-    assert listed["undigested"] == 1
+    # the second work's one result is a stub, and the demo's own works hold no statement: of every work but the first, nothing is read
+    assert "tq-00B1-ref" in d.works and listed["undigested"] == len(d.works) - 1
 
 
 def test_everything_holds_the_drafts_and_the_library_and_a_works_group_opens(library: Path) -> None:

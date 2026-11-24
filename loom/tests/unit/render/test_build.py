@@ -50,7 +50,7 @@ def test_build_layout_and_manifest(tmp_path: Path) -> None:
     assert (b / "manifest.json").exists()
     assert (b / "fragments" / "nodes" / "dm-0003.html").exists()
     assert (b / "fragments" / "masters" / "drafting" / "main.html").exists()
-    assert (b / "fragments" / "digests" / "Calloway14.html").exists()
+    assert not (b / "fragments" / "digests").exists()
     m = json.loads((b / "manifest.json").read_text())
     for field in (
         "publisher",
@@ -68,7 +68,6 @@ def test_build_layout_and_manifest(tmp_path: Path) -> None:
         "diagnostics",
         "tags",
         "taxa",
-        "references",
         "macros",
         "search",
     ):
@@ -84,12 +83,7 @@ def test_build_layout_and_manifest(tmp_path: Path) -> None:
     assert n["parent"]["drafting/main.tex"] == "dm-0011" and n["proofs"] == ["dm-0003/proof"]
     k = m["keys"]["dm-0003/proof"]
     assert k["kind"] == "proof" and k["hash"].startswith("sha256:")
-    assert set(k["closure"]) == {
-        "dm-0002",
-        "dm-0003",
-        "Calloway14-prop-3.2",
-        "Calloway14-def-3.1",
-    }  # the postnote edge brings the digest nodes in
+    assert set(k["closure"]) == {"dm-0002", "dm-0003"}  # a citation is no edge
     assert m["keys"]["dm-0005/proof"]["state"] == "incomplete"
     assert m["regions"]["dm-0001#eq:fix"]["numbers"]["drafting/main.tex"]["number"] == "1.1"
     assert any(e["from"] == "dm-0003/proof" and e["to"] == "dm-0002" for e in m["edges"])
@@ -99,13 +93,7 @@ def test_build_layout_and_manifest(tmp_path: Path) -> None:
         "drafting/nodes/dm-0001.tex",
         "drafting/nodes/dm-0002.tex",
     ]
-    assert m["references"]["Calloway14"]["digest"]["nodes"] == [
-        "Calloway14-setup",
-        "Calloway14-def-3.1",
-        "Calloway14-prop-3.2",
-        "Calloway14-prop-3.3",
-        "Calloway14-thm-3.4",
-    ]
+    assert "references" not in m
     assert m["taxa"]["Lemma"]["count"] == 1 and "setup" in m["tags"]
     assert any(s["key"] == "dm-0002" and "lem:orbits" in s["aliases"] for s in m["search"])
     # the author's own macro, plus the stand-ins amsmath's presence in the preamble publishes (loom.scan.macros.PACKAGE_COMMANDS)
@@ -141,9 +129,7 @@ def test_fragment_kinds_and_dialect_validity(tmp_path: Path) -> None:
     assert 'class="include"' not in master
     section = (b / "fragments" / "nodes" / "sy-0200.html").read_text()
     assert 'data-key="sy-0003"' in section and 'id="sy-0201"' in section  # its statements and subsection, in place
-    digest = (b / "fragments" / "digests" / "Kre99.html").read_text()
-    assert 'data-macros="Kre99"' in digest and "Kre99-thm-2.1" in digest
-    for fragment in (node, master, section, digest):
+    for fragment in (node, master, section):
         assert "<script" not in fragment and "<html" not in fragment
     code, out = validate(b)
     assert code == 0, out

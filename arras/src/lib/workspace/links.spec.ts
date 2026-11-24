@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { goto } from '$app/navigation';
 import type { Manifest } from '$lib/manifest/types';
-import { pdf } from '$lib/pdf.svelte';
 import { sessionView } from '$lib/sessions/sessions.svelte';
 import { follow, holding, interceptLinks, itemForQuilt, openChat, previewOfHref, previewOfKey, soleSession } from './links';
 import { itemKey, regionAt, type Item } from './item';
@@ -10,7 +9,7 @@ import { linkName, regionName } from './names';
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(async () => {}) }));
 
-// The least of a manifest that a `quilt:` link reads: two documents, a node with a proof and an equation, a cited work, an annotation on each kind of target, and a session.
+// The least of a manifest that a `quilt:` link reads: two documents, a node with a proof and an equation, an annotation on each kind of target, a work's page among them, and a session.
 const m = {
 	masters: [{ path: 'drafting/main.tex', default: true }],
 	canon: [{ path: 'canon/main-v1.tex' }],
@@ -20,11 +19,10 @@ const m = {
 	},
 	keys: { 'sy-0003': { node: 'sy-0003' }, 'sy-0003/proof': { node: 'sy-0003' } },
 	regions: { 'sy-0003#eq:fix': { container: 'sy-0003', label: 'eq:fix', numbers: { 'drafting/main.tex': { number: '4' } } } },
-	references: { Kre99: { citekey: 'Kre99', work: 'arXiv:math/9810166v2', works: ['arXiv:math/9810166v2'] } },
 	annotations: {
 		'a-2026-09-16-ecnav2': { id: 'a-2026-09-16-ecnav2', type: 'revision', target: { key: 'sy-0003' } },
 		'a-2026-09-16-tc3rcf': { id: 'a-2026-09-16-tc3rcf', type: 'note', target: { key: 'drafting/main.tex' } },
-		'a-2026-09-17-qe0ph7': { id: 'a-2026-09-17-qe0ph7', type: 'question', target: { key: 'arXiv:math/9810166v2', page: 2 } },
+		'a-2026-09-17-qe0ph7': { id: 'a-2026-09-17-qe0ph7', type: 'question', target: { key: 'sy-0099-ref', work: 'sy-0099-ref', page: 2 } },
 		'a-2026-09-23-srw667': { id: 'a-2026-09-23-srw667', type: 'revision', target: { key: 'sy-0003#eq:fix' } },
 		'a-2026-09-23-qq96rn': { id: 'a-2026-09-23-qq96rn', type: 'question', target: { key: 'sy-0003#eq:fix' }, in_reply_to: 'a-2026-09-23-srw667' }
 	},
@@ -46,7 +44,8 @@ describe('a quilt: link', () => {
 	it('opens an annotation at its target, with its box', () => {
 		expect(itemForQuilt(m, 'a-2026-09-16-ecnav2')).toMatchObject({ kind: 'node', id: 'sy-0003', note: 'a-2026-09-16-ecnav2' });
 		expect(itemForQuilt(m, 'a-2026-09-16-tc3rcf')).toEqual({ kind: 'document', id: 'drafting/main.tex', note: 'a-2026-09-16-tc3rcf' });
-		expect(itemForQuilt(m, 'a-2026-09-17-qe0ph7')).toEqual({ kind: 'work', id: 'Kre99', place: { page: 2, annot: 'a-2026-09-17-qe0ph7' } });
+		// one on a work's page opens the work, by its reference, at the page
+		expect(itemForQuilt(m, 'a-2026-09-17-qe0ph7')).toEqual({ kind: 'work', id: 'sy-0099-ref', place: { page: 2, annot: 'a-2026-09-17-qe0ph7' } });
 		// a box drawn round an equation is filed under the region's key; it opens the node it is in, never `/node/sy-0003#eq:fix`, a node that does not exist
 		expect(itemForQuilt(m, 'a-2026-09-23-srw667')).toMatchObject({ kind: 'node', id: 'sy-0003', note: 'a-2026-09-23-srw667' });
 		// a reply opens the box of the thread it is in, which is where it is read
@@ -70,7 +69,7 @@ describe('an empty link', () => {
 		expect(linkName(m, 'quilt:a-2026-09-23-qq96rn')).toBe('reply on (4) in Theorem 2.1'); // not `question on`, which reads as a new one
 		expect(linkName(m, 'quilt:s-2026-09-16-p9z37z')).toBe('referee');
 		expect(linkName(m, 'quilt:state')).toBe('the research state');
-		expect(linkName(m, 'cited:arxiv:math/9810166v2?page=3')).toBe('Kre99 p. 3');
+		expect(linkName(m, 'cited:arxiv:math/9810166v2?page=3')).toBe('arxiv:math/9810166v2 p. 3');
 		expect(linkName(m, 'quilt:sy-9999')).toBe('sy-9999');
 	});
 });
@@ -381,10 +380,15 @@ describe('the link listener', () => {
 		expect(workspace.active(0)?.anchor).toBe('sec 2');
 	});
 
-	it('opens the modal for a cited: link with no copy on file', () => {
-		const open = vi.spyOn(pdf, 'open').mockImplementation(() => {});
+	it('opens a cited: link at its identifier’s own service, in a new tab, and never in the viewer', () => {
+		const open = vi.fn();
+		vi.stubGlobal('window', { open });
 		expect(click(anchor('cited:arxiv:math/9810166v2?page=3')).preventDefault).toHaveBeenCalled();
-		expect(open).toHaveBeenCalledWith({ id: 'arxiv:math/9810166v2', page: 3 });
+		expect(open).toHaveBeenCalledWith('https://arxiv.org/pdf/math/9810166v2#page=3', '_blank', 'noopener');
+		// a scheme no service resolves opens nothing, and still never navigates the viewer
+		expect(click(anchor('cited:isbn:9780000000000')).preventDefault).toHaveBeenCalled();
+		expect(open).toHaveBeenCalledTimes(1);
 		expect(panes()).toEqual([['*document:drafting/main.tex']]);
+		expect(goto).not.toHaveBeenCalled();
 	});
 });

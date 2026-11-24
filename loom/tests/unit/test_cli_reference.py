@@ -17,4 +17,4 @@ def test_cli_reference_matches_checked_in() -> None:
     assert (REPO / "docs" / "cli-reference.md").read_text(encoding="utf-8") == generated, (
         "run scripts/gen_cli_reference.py"
     )
-    assert "## `loom ai`" in generated and "`loom library update`" in generated and "`loom upgrade`" in generated
+    assert "## `loom ai`" in generated and "`loom library add`" in generated and "`loom upgrade`" in generated

@@ -1,0 +1,29 @@
+{
+ "answer": {
+  "gen": 1789808400006,
+  "ok": true,
+  "result": "2504.01234v3 (1).pdf: added",
+  "row": {
+   "act": "x-z0qfbc",
+   "authors": [],
+   "found_by": "arxiv",
+   "id": "65cbcf852973e0b0cd129c16e4524c874cc2ad5689cbd701d92c5502babe48c8",
+   "identifier": "arxiv:2504.01234v3",
+   "item": 0,
+   "name": "2504.01234v3 (1).pdf",
+   "ref": "sh-040B-ref",
+   "short": "2504.01234v3 (1).pdf",
+   "state": "added",
+   "tex": false,
+   "title": "2504.01234v3 (1).pdf",
+   "unconfirmed": true,
+   "under": false,
+   "year": ""
+  }
+ },
+ "endpoint": "library-answer",
+ "request": {
+  "question": "q-ht0dhy",
+  "same": null
+ }
+}

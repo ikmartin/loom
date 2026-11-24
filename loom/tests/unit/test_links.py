@@ -32,8 +32,10 @@ def test_each_kind_resolves(q: Path) -> None:
     assert resolve(result, q, "quilt:a-2026-09-16-ecnav2").kind == "annotation"
     assert resolve(result, q, "quilt:s-2026-09-16-p9z37z").kind == "session"
     work = resolve(result, q, "cited:doi:10.4171/demo/14-1?page=2")
-    assert (work.kind, work.key, work.place) == ("work", "Calloway14", "page=2")
-    assert resolve(result, q, "cited:arxiv:0805.2065v2").key == "Man12"
+    assert (work.kind, work.key, work.place) == ("work", result.refs["Calloway14"], "page=2")
+    assert resolve(result, q, "cited:arxiv:0805.2065v2").key == result.refs["Man12"]
+    library = resolve(result, q, f"quilt:{result.refs['Har77']}")  # a work stating no identifier, by its reference
+    assert (library.kind, library.key) == ("library", result.refs["Har77"])
 
 
 def test_what_the_viewer_does_not_show_is_refused(q: Path) -> None:
@@ -50,7 +52,7 @@ def test_what_the_viewer_does_not_show_is_refused(q: Path) -> None:
         ("quilt:s-2026-01-01-54qgjt", "no session"),
         (f"quilt:drafting/main.tex#{unreached}", "does not include"),
         ("quilt:dm-0003#dm-0001", "is not in"),
-        ("cited:doi:10.0/nobody", "no entry in the bibliography"),
+        ("cited:doi:10.0/nobody", "no work in the library states"),
         ("cited:Calloway14", "identifier"),
         ("cited:doi:10.4171/demo/14-1?page=zero", "page"),
     ]:
@@ -87,8 +89,12 @@ def test_loom_link_prints_what_the_viewer_follows(q: Path) -> None:
         link("Calloway14", "--page", "2", "--quote", "a phrase")
         == "[](cited:doi:10.4171/demo/14-1?page=2&quote=a%20phrase)"
     )
+    # a work stating no identifier is linked whole, by its reference
+    har77 = scanned(q).refs["Har77"]
+    assert link("Har77") == f"[](quilt:{har77})"
+    refused("link", "Har77", "--page", "2", cwd=q, code=2, match="states no identifier")
     refused("link", "drafting/nodes/dm-0001.tex", cwd=q, code=2, match="file the documents include")
-    refused("link", "dm-0003", "--page", "2", cwd=q, code=2, match="for a cited work")  # a page is a work's
+    refused("link", "dm-0003", "--page", "2", cwd=q, code=2, match="for a work")  # a page is a work's
 
 
 def test_an_agent_posting_a_bad_link_is_refused_and_a_good_one_lands(q: Path) -> None:

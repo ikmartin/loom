@@ -1,0 +1,13 @@
+{
+ "answer": {
+  "error": {
+   "code": "no-document",
+   "message": "Cortez 2007 holds no PDF, so nothing on it has a place"
+  },
+  "status": 409
+ },
+ "endpoint": "library-places",
+ "request": {
+  "ref": "sh-0404-ref"
+ }
+}

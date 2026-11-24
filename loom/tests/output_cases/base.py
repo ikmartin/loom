@@ -6,6 +6,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+#: The repository's `loom/`.
+REPO = Path(__file__).resolve().parents[2]
+
 Setup = Callable[[Path], None]
 
 
@@ -22,12 +25,10 @@ def solo_spine(q: Path) -> None:
 
 
 def ingest_pdf(q: Path) -> None:
-    """An input PDF exists even in a checkout containing only tracked files."""
-    from tests.unit._quilts import work_home
-
+    """The PDF the demo's Calloway14 holds, again, in a folder to add."""
     inbox = q / "refs"
     inbox.mkdir(exist_ok=True)
-    (inbox / "paper.pdf").write_bytes((work_home(q, "Calloway14") / "paper.pdf").read_bytes())
+    (inbox / "paper.pdf").write_bytes((REPO / "tests/quilts/sources/demo-works/calloway-fixed-loci.pdf").read_bytes())
 
 
 def ai_copy(q: Path) -> None:

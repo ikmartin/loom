@@ -1,0 +1,10 @@
++++
+schema = 1
+id = "sy-999C-ref"
+taxon = "reference"
++++
+@book{Har77,
+  author = {Hartshorne, Robin},
+  title = {Algebraic Geometry},
+  year = {1977},
+}

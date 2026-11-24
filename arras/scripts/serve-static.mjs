@@ -2,7 +2,7 @@
 //
 // Usage: node scripts/serve-static.mjs DIR PORT
 //
-// Resolution follows loom's `render/serve.py`: `/build/...` is a file of the staged corpus or 404, taken literally since fragment names carry `%2F`, and `/build/tex/...` a file of the compile folders `scripts/stage-fixture.mjs` stages there from a quilt (loom answers it from `.loom/cache/tex/`); `/digests/storage/...` is percent-decoded; a missing `_app/` file or asset is 404, never the shell; `/_api` is 404, so the viewer shows no editing affordances; every other path is the app shell, dots in keys included. Listens on 127.0.0.1 only.
+// Resolution follows loom's `render/serve.py`: `/build/...` is a file of the staged corpus or 404, taken literally since fragment names carry `%2F`, and `/build/tex/...` a file of the compile folders `scripts/stage-fixture.mjs` stages there from a quilt (loom answers it from `.loom/cache/tex/`); a missing `_app/` file or asset is 404, never the shell; `/_api` is 404, so the viewer shows no editing affordances; every other path is the app shell, dots in keys included. Listens on 127.0.0.1 only.
 
 import { createServer } from 'node:http';
 import { createReadStream, statSync } from 'node:fs';
@@ -65,15 +65,6 @@ function within(base, rel) {
 function locate(path) {
 	if (path === '/_api' || path.startsWith('/_api/')) return null;
 	if (path.startsWith('/build/')) return within(join(root, 'build'), path.slice('/build/'.length));
-	if (path.startsWith('/digests/storage/')) {
-		let rel;
-		try {
-			rel = decodeURIComponent(path.slice('/digests/storage/'.length));
-		} catch {
-			return null;
-		}
-		return within(join(root, 'digests', 'storage'), rel);
-	}
 	const rel = path.replace(/^\/+/, '');
 	if (!rel) return shell;
 	const found = within(root, rel) ?? within(root, join(rel, 'index.html'));

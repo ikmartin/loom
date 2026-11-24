@@ -1,0 +1,11 @@
++++
+schema = 1
+id = "dm-0014-ref"
+taxon = "reference"
++++
+@book{Har77,
+  author    = {Hartshorne, Robin},
+  title     = {Algebraic Geometry},
+  publisher = {Springer},
+  year      = {1977},
+}

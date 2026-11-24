@@ -1,0 +1,33 @@
+{
+ "answer": {
+  "gen": 1789808400003,
+  "ok": true,
+  "result": "took in 2: 2 cannot",
+  "rows": [
+   {
+    "code": "no-service",
+    "id": "t-af9199dc59ca6d8c",
+    "item": 0,
+    "name": "ISBN 978-3-16-148410-0",
+    "state": "cannot",
+    "why": "Loom has no service to look this up: paste its DOI, its arXiv id or its BibTeX entry instead."
+   },
+   {
+    "code": "not-recognised",
+    "id": "t-6ca7c9c82d628ee7",
+    "item": 0,
+    "name": "the paper Okafor mentioned",
+    "state": "cannot",
+    "why": "This is not an identifier loom recognises: paste a DOI, an arXiv id, a zbMATH number or a BibTeX entry."
+   }
+  ]
+ },
+ "endpoint": "library-take",
+ "request": {
+  "items": [
+   {
+    "text": "ISBN 978-3-16-148410-0\nthe paper Okafor mentioned"
+   }
+  ]
+ }
+}

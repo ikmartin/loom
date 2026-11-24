@@ -8,17 +8,15 @@
 	import { documentColor, memberships } from '$lib/graph/layout';
 	// The graph: one page, four drawings of one filtered graph — Dots, Box, Sections and Reading Order — with the selection, the filters and the scope kept across them. Pan and zoom belong to the three laid-out drawings; dragging a node belongs to Dots alone, since a laid-out drawing's positions are its meaning, and Reading Order scrolls like the document it follows.
 	import { store } from '$lib/manifest/client.svelte';
-	import { graphInput, layout, PAPER, type Layout } from '$lib/graph/layout';
+	import { graphInput, layout, type Layout } from '$lib/graph/layout';
 	import { sectionLayout, type Sections } from '$lib/graph/sections';
 	import { readingOrder, type Reading } from '$lib/graph/reading';
 	import { forceKey, forceLayoutOff, R, redecorate } from '$lib/graph/force';
 	import PagePanel from '$lib/shell/PagePanel.svelte';
 	import PageRail from '$lib/shell/PageRail.svelte';
 	import RailList from '$lib/components/RailList.svelte';
-	import { workUrl, keyUrl, readUrl } from '$lib/nav';
+	import { keyUrl, readUrl } from '$lib/nav';
 	import { route } from '$lib/paths';
-	import WorkLinks from '$lib/components/WorkLinks.svelte';
-	import { bibText } from '$lib/works';
 
 	type Mode = 'dots' | 'box' | 'sections' | 'reading';
 
@@ -28,7 +26,6 @@
 	let taxon = $state('');
 	let tag = $state('');
 	let stateFilter = $state('');
-	const external = 'all' as const;
 	let documentHighlight = $state('');
 	const memberOf = (id: string) => memberships(m, id);
 	let selected = $state('');
@@ -50,9 +47,9 @@
 	let seed = new Map<string, { x: number; y: number }>();
 	let moved = $state(new Map<string, { x: number; y: number }>());
 
-	const filters = $derived({ master: master || undefined, taxon: taxon || undefined, tag: tag || undefined, external, allNodes: true, reached: new Set<string>() });
+	const filters = $derived({ master: master || undefined, taxon: taxon || undefined, tag: tag || undefined, allNodes: true });
 
-	const scopeGraph = $derived(graphInput(m, { master: master || undefined, external, allNodes: true }));
+	const scopeGraph = $derived(graphInput(m, { master: master || undefined, allNodes: true }));
 	const relation = $derived(relationships(scopeGraph.edges, selected, highlight));
 	const related = $derived(relation.reached);
 	const neighbours = $derived.by(() => {
@@ -65,9 +62,7 @@
 	/** What the drawing's positions were laid out for (`forceKey`): a manifest that leaves it unchanged re-colours the drawing and moves nothing, the reader's own moves included. */
 	let dotsKey = '';
 	$effect(() => { mode = scopedDrawing(mode, master); });
-	const paper = $derived(selected.startsWith(PAPER) ? m.references[selected.slice(PAPER.length)] : undefined);
-	// a cited result opens its paper at its page, as every link to it does
-	const open = (id: string) => (id.startsWith(PAPER) ? workUrl(id.slice(PAPER.length)) : keyUrl(m, id));
+	const open = (id: string) => keyUrl(m, id);
 
 	/** Nodes within `depth` steps of the selection in the corpus's dependency graph, ignoring direction; 0 means the whole scope. */
 	const scope = $derived.by(() => {
@@ -79,11 +74,6 @@
 			const b = stmtOf(e.to);
 			(adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
 			(adj.get(b) ?? adj.set(b, []).get(b)!).push(a);
-		}
-		for (const e of laid?.edges ?? []) {
-			// the work graph's paper nodes are the drawing's, not the manifest's
-			(adj.get(e.from) ?? adj.set(e.from, []).get(e.from)!).push(e.to);
-			(adj.get(e.to) ?? adj.set(e.to, []).get(e.to)!).push(e.from);
 		}
 		const seen = new Set([selected]);
 		let front = [selected];
@@ -442,7 +432,6 @@
 							<path
 								d={path(e.points, e)}
 								class="edge edge-{e.kind}"
-								stroke-width={e.count && e.count > 1 ? 1.1 + Math.min(3, Math.log2(e.count)) : undefined}
 								class:dim={dimmed(e.from) && dimmed(e.to)}
 								class:lit={relation.paths.has(`${e.from}\0${e.to}`)}
 								marker-end={laidMode === 'box' || (selected ? relation.paths.has(`${e.from}\0${e.to}`) : hover === e.from || hover === e.to) ? 'url(#arrow)' : undefined}
@@ -452,7 +441,6 @@
 							{@const p = at(n.id, n.x, n.y)}
 							<g
 								class="node"
-								class:paper={n.style === 'paper'}
 								class:selected={n.id === selected}
 								class:hl={related.has(n.id)}
 								class:direct={relation.direct.has(n.id)}
@@ -474,15 +462,9 @@
 								data-testid="gnode-{n.id}"
 							>
 								{@render membershipMarks(n.id, laidMode === 'dots' ? p.x - memberOf(n.id).length * 3.5 : p.x + n.w - memberOf(n.id).length * 7 - 4, laidMode === 'dots' ? p.y - R - 8 : p.y + 4)}
-								{#if laidMode === 'dots' && n.style === 'paper'}
-									<rect x={p.x - R * 1.4} y={p.y - R * 1.4} width={R * 2.8} height={R * 2.8} rx="2" class="paper-box" />
-									<text x={p.x} y={p.y + R * 1.4 + 10} class="under">{n.label}</text>
-								{:else if laidMode === 'dots'}
+								{#if laidMode === 'dots'}
 									<circle cx={p.x} cy={p.y} r={n.id === selected ? R * 1.7 : n.section ? R * 1.3 : R} class="taxon" stroke-dasharray={n.external ? '3 2' : ''} />
 
-								{:else if n.style === 'paper'}
-									<rect x={p.x} y={p.y} width={n.w} height={n.h} rx="2" class="paper-box" />
-									<text x={p.x + 8} y={p.y + 21}><tspan class="taxon">paper</tspan> <tspan class="id">{n.label}</tspan></text>
 								{:else}
 									<rect x={p.x} y={p.y} width={n.w} height={n.h} rx={n.style === 'definition' ? 12 : n.style === 'remark' ? 0 : 4} class="taxon" stroke-dasharray={n.external ? '4 2' : ''} />
 									<text x={p.x + 8} y={p.y + 23} class="box-name">{clip(n.label, 29)}</text>
@@ -525,17 +507,7 @@
 	</div>
 </PagePanel>
 
-{#if paper}
-	<PageRail>
-		<RailList label="selected paper">
-			<p class="sel"><a href={workUrl(paper.citekey)}>{bibText(paper.bib.title) || paper.citekey}</a></p>
-			<p class="faint">{bibText(paper.bib.author)}{paper.bib.year ? ` · ${paper.bib.year}` : ''}</p>
-			<p><WorkLinks ref={paper} /></p>
-
-			<p><button class="as-link" onclick={() => (selected = '')}>clear</button></p>
-		</RailList>
-	</PageRail>
-{:else if node}
+{#if node}
 	<PageRail>
 		<RailList label="selected">
 			<NodePreview item={{ kind: 'node', id: selected }} {master} persistent />
@@ -663,25 +635,10 @@
 	.edge-proof {
 		stroke-dasharray: 5 3;
 	}
-	.edge-cites {
-		stroke-dasharray: 6 2 1 2;
-	}
 	.edge-prose {
 		stroke-dasharray: 1.5 3;
 	}
 	.edge.lit {
-		stroke: var(--link);
-	}
-	.paper-box {
-		fill: var(--leaf);
-		stroke: var(--ink-soft);
-		stroke-width: 1.4;
-	}
-	.node.selected .paper-box {
-		stroke: var(--link);
-		stroke-width: 2.5;
-	}
-	.node.hl .paper-box {
 		stroke: var(--link);
 	}
 	.node {
@@ -697,9 +654,6 @@
 		font-size: 10px;
 		fill: var(--ink-soft);
 		pointer-events: none;
-	}
-	.node text.under {
-		text-anchor: middle;
 	}
 	.node .taxon,
 	.node text.note {

@@ -776,8 +776,6 @@ def test_status_filters_and_never_fails(tmp_path: Path) -> None:
         ["--draft"],
         ["--incomplete"],
         ["--loose"],
-        ["--undigested"],
-        ["--unmatched-cites"],
         ["--retired"],
         ["--master", "drafting/main.tex"],
         ["--tag", "orbits"],
@@ -785,12 +783,10 @@ def test_status_filters_and_never_fails(tmp_path: Path) -> None:
         ok("status", *flags, cwd=q)
     assert "sy-000C/proof" in ok("status", "--incomplete", cwd=q).output
     assert "sy-0009" in ok("status", "--loose", cwd=q).output
-    undigested = ok("status", "--undigested", cwd=q).output.splitlines()
-    assert undigested[0].startswith("1 work") and undigested[2:] == ["Har77"]
     j = status_json(q)
     envelope = {"verdict", "ok", "exit", "groups", "notes"}
     assert set(j) - envelope == {
-        "summary", "keys", "agent_documents", "undigested", "retired", "digests", "reading", "unmatched", "unplaced",
+        "summary", "keys", "agent_documents", "retired", "reading", "unplaced",
     }  # fmt: skip
     assert j["summary"]["incomplete"] == 1
 
@@ -909,7 +905,7 @@ def test_status_json_answers_the_same_question_as_the_text_form(tmp_path: Path) 
     q = synthetic(tmp_path)
     text = ok("status", "--master", "drafting/main.tex", cwd=q)
     # the author's rows; the cited works' are summarised after them, one line per work
-    lines = [t for heading, t in status_rows(text.output) if not heading.startswith("in cited works")]
+    lines = [t for _heading, t in status_rows(text.output)]
     js = json_of("status", "--master", "drafting/main.tex", "--json", cwd=q)
     assert all(ln.split()[-1] in js["keys"] for ln in lines)
     assert all("drafting/main.tex" in e["reached_by"] for e in js["keys"].values())
@@ -960,7 +956,7 @@ def test_an_agent_lists_its_own_annotations_and_a_deleted_one_is_gone(tmp_path: 
 
 def test_ai_annotations_lists_every_annotation_and_each_filter_narrows_it(tmp_path: Path) -> None:
     """With no filter every annotation in the quilt; `--by`, `--target`, `--type` and `--status` each narrow it, and together every one must hold."""
-    d = demo(tmp_path, clean=False)  # the shipped store, for a note on a page of a cited work
+    d = demo(tmp_path, clean=False)  # the shipped library, for a note on a page of a work's PDF
     mine = ok("annotate", "dm-0002", "Which orbits?", "--type", "question", *AS, cwd=d).output.split()[0]
     theirs = ok(
         "annotate", "dm-0002", "Wrong.", "--type", "revision", "--as", "agent", cwd=d, env=AGENT
@@ -978,7 +974,7 @@ def test_ai_annotations_lists_every_annotation_and_each_filter_narrows_it(tmp_pa
     assert listed("--by", "Markas Hecht", "--type", "Note") == [elsewhere]
     assert listed("--by", "Nobody") == []
     assert ok("ai", "annotations", "--by", "Nobody", cwd=d).stdout.startswith("no annotations match")
-    # a citekey reaches the notes on its pages, which carry the work's identifier as their target
+    # the key a work's entry has reaches the notes on its pages, which carry the work's reference as their target
     page = ok(
         "annotate", "Calloway14", "On page one.", "--page", "1", "--box", "72,72,300,120", *AS, cwd=d
     ).output.split()[0]
@@ -1166,65 +1162,6 @@ def test_a_finding_on_a_section_is_visible_where_the_author_looks(tmp_path: Path
     # it takes no acceptance row, and a section nobody annotated is structure rather than work
     refused("accept", "sy-0100", *AS, cwd=q, code=2, match="sy-0100 is not a statement or proof key")
     assert not any(ln.split()[-1:] == ["sy-0200"] for ln in ok("status", cwd=q).output.splitlines())
-
-
-def test_status_is_the_authors_to_do_list_not_the_literatures(tmp_path: Path) -> None:
-    """A digest holds every result of a cited paper; relloc printed 150 rows of which 92 were Manolache's, and the summary counted his one `incomplete` and his 92 `loose` as the author's (F4, A3, A4)."""
-    q = synthetic(tmp_path)
-    # a result of the cited paper that nothing in this quilt uses, which is most of a real digest
-    digest = q / ".loom/library" / "Kre99.tex"
-    digest.write_text(
-        digest.read_text()
-        + "\n\\begin{theorem}[{\\cite[Theorem 9.9, p.~40]{Kre99}}]\\label{Kre99-thm-9.9}\n"
-        + "An unrelated result nobody here leans on.\n\\end{theorem}\n"
-    )
-    all_rows = json_of("status", "--include-digests", "--json", cwd=q)
-    shown = json_of("status", "--json", cwd=q)
-
-    external = {k for k in all_rows["keys"] if k.startswith("Kre99")}
-    assert "Kre99-thm-9.9" in external
-    kept = external & set(shown["keys"])
-    assert kept and kept < external  # the ones the author's own arguments reach, and no more
-    assert "Kre99-thm-9.9" not in kept and "Kre99-thm-2.1" in kept
-    assert shown["digests"] == {"shown": len(kept), "reached": len(kept), "not_counted": len(external - kept)}
-
-    # the summary counts the author's keys in both forms, so the flag changes the rows and never the arithmetic
-    assert shown["summary"] == all_rows["summary"]
-    assert all(not k.startswith("Kre99") for k in shown["summary"])  # it is a tally, not a key list
-    line = status_row(ok("status", cwd=q).output, "Kre99")  # the cited work's keys, summarised on one line
-    assert f"{len(kept)} results you depend on" in line
-    assert f"{len(external - kept)} not counted" in line
-
-
-def test_accept_refuses_a_digest_node_and_names_the_command_that_does_it(tmp_path: Path) -> None:
-    """Two claims, two commands (plan 0.12 §5.6). `loom accept` is the author's own mathematics; someone else's theorem is not theirs to accept, and DR-172 relabelled the output where the command needed splitting."""
-    q = synthetic(tmp_path)
-    r = refused("accept", "Kre99-thm-2.1", *AS, cwd=q, code=2, match="not yours to accept")
-    assert "loom library verify Kre99-thm-2.1" in r.output
-
-    # the author's own keys are untouched by any of it
-    assert ok("accept", "sy-0002", *AS, cwd=q).output.startswith("accepted sy-0002")
-
-
-def test_verifying_a_digest_node_says_what_it_claims(tmp_path: Path) -> None:
-    """Verifying an external node claims loom's copy of the cited paper is faithful, never that this quilt proved the theorem; both printed `accepted` (H22)."""
-    q = synthetic(tmp_path)
-    # a digest extracted before the reference layer existed gains its records from one `library update` (contract §1.4)
-    ok("library", "update", "--only", "extract", cwd=q)
-    r = ok("library", "verify", "Kre99-thm-2.1", "--as", "A. Author", "--yes", cwd=q)
-    assert "verified Kre99-thm-2.1" in r.output
-    assert "--- the source ---" in r.output, "a mechanical result's anchor is its LaTeX, and it says so"
-    assert "as a faithful transcription of Kre99" in r.output
-
-    line = status_row(ok("status", cwd=q).output, "Kre99")  # a cited work's keys are summarised by work
-    assert "transcription verified" in line and "accepted" not in line
-
-    # and what moved is the transcription, not the author's own text
-    p = q / ".loom/library" / "Kre99.tex"
-    p.write_text(p.read_text().replace("is well defined", "is well-defined", 1))
-    e = ok("status", "--explain", "Kre99-thm-2.1", cwd=q).output
-    assert "transcription verified, stale" in e and "its transcription changed" in e
-    assert "edited" not in e
 
 
 def test_a_status_change_is_reversed_by_appending_its_undo(tmp_path: Path) -> None:
@@ -1520,12 +1457,12 @@ def test_a_conflicted_id_is_a_row_of_its_own_and_its_definitions_are_not(tmp_pat
     """Two live files defining one id left status listing two positional keys and a clean summary, never the word conflicted (CLI study, defect 11)."""
     q = synthetic(tmp_path)
     keys = status_json(q)["keys"]
-    assert keys["sy-999B"]["state"] == "conflicted"
-    assert keys["sy-999B"]["conflict"] == ["drafting/nodes/sy-999B.tex", "drafting/talk.tex"]
-    assert not [k for k in keys if "#lemma:" in k and k.startswith(("drafting/talk.tex", "drafting/nodes/sy-999B.tex"))]
+    assert keys["sy-999E"]["state"] == "conflicted"
+    assert keys["sy-999E"]["conflict"] == ["drafting/nodes/sy-999E.tex", "drafting/talk.tex"]
+    assert not [k for k in keys if "#lemma:" in k and k.startswith(("drafting/talk.tex", "drafting/nodes/sy-999E.tex"))]
     said = ok("status", cwd=q).output
     assert (
-        "loom id --next, and put that id in place of sy-999B in drafting/talk.tex, and in every reference to sy-999B in drafting/talk.tex and the files it inputs"
+        "loom id --next, and put that id in place of sy-999E in drafting/talk.tex, and in every reference to sy-999E in drafting/talk.tex and the files it inputs"
         in flat(said)
     )
     assert ": 1 conflicted," in said.splitlines()[0]  # the verdict counts it, first
@@ -1655,17 +1592,6 @@ def test_a_reply_and_an_edit_are_checked_as_a_new_annotation_is(tmp_path: Path) 
     ok("annotate", "--edit", note, "--type", "", "--color", "pink", *AS, cwd=d)
     last = events(d)[-1]
     assert (last["type"], last["look"], last["drawn"]["color"]) == (None, {"color": "pink"}, "pink")
-
-
-def test_cited_works_nothing_depends_on_are_one_line(tmp_path: Path) -> None:
-    """T2: on relloc `status` ended with 52 rows of "N not counted  CITEKEY", the same sentence 52 times."""
-    from tests.unit._quilts import showcase
-
-    q = showcase(tmp_path)
-    out = ok("status", cwd=q).stdout
-    cited = out.split("in cited works", 1)[1]
-    idle = [ln for ln in cited.splitlines() if "none you depend on, not counted" in ln]
-    assert len(idle) == 1 and not any(re.match(r"^\s+\d+ not counted\s", ln) for ln in cited.splitlines()), cited
 
 
 def test_status_lists_a_document_the_server_last_compiled_into_no_pdf(tmp_path: Path) -> None:

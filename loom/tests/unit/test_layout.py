@@ -33,7 +33,7 @@ def test_init_and_the_demo_write_the_number(tmp_path: Path) -> None:
             None,
             f"this quilt's .loom/ has no format number, so an older loom made it, and this loom reads format {NUMBER}",
         ),
-        ("2\n", f"this quilt's {FORMAT} says 2, and this loom reads format {NUMBER}"),
+        ("3\n", f"this quilt's {FORMAT} says 3, and this loom reads format {NUMBER}"),
     ],
 )
 def test_a_quilt_in_another_layout_is_refused_and_doctor_says_so(tmp_path: Path, number: str | None, said: str) -> None:

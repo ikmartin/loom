@@ -155,3 +155,8 @@ def mint_proof(statement: str, seen: Iterable[str]) -> str:
     if nxt >= 36**2:
         raise ValueError(f"every proof number under {statement} has been given")
     return f"{statement}-proof{base36_encode(nxt, 2)}"
+
+
+def macros_of(ref: str) -> str:
+    """The id of a reference's macros node: `tq-00A1-ref` has `tq-00A1-macros`."""
+    return ref.removesuffix("-ref") + "-macros"

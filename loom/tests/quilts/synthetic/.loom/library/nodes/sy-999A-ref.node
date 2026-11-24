@@ -1,0 +1,11 @@
++++
+schema = 1
+id = "sy-999A-ref"
+taxon = "reference"
++++
+@article{Man12,
+  author = {Manolache, Cristina},
+  title = {Virtual pull-backs},
+  year = {2012},
+  eprint = {0805.2065v2},
+}

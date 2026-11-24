@@ -106,8 +106,8 @@ TOOLS = [
         "a document's HTML as TeX makes it, and text no compile makes; without it they show as their source",
     ),
     Tool("extractbb", OPTIONAL, ("--version",), TEX, "the size of a PDF or image figure in a document's HTML"),
-    Tool("pdftotext", OPTIONAL, ("-v",), POPPLER, "cited works' page text and geometry, and the identity test"),
-    Tool("pdfinfo", OPTIONAL, ("-v",), POPPLER, "cited works' page rotation"),
+    Tool("pdftotext", OPTIONAL, ("-v",), POPPLER, "works' page text and geometry, and the identity test"),
+    Tool("pdfinfo", OPTIONAL, ("-v",), POPPLER, "works' page rotation"),
     Tool(
         "gs",
         OPTIONAL,
@@ -323,13 +323,13 @@ def _tiny_pdf() -> bytes:
 
 
 def _bbox(got: Answer, item: Item) -> None:
-    """pdftotext must write `-bbox-layout` word boxes, which `loom library locate` and the viewer's highlights need; xpdf's has no such flag."""
+    """pdftotext must write `-bbox-layout` word boxes, which anchoring on a work's page and the viewer's highlights need; xpdf's has no such flag."""
     if got.hung:
         item.status, item.detail = FAIL, f"{item.detail}: hung writing word boxes (-bbox-layout)"
     elif got.code != 0 or "<page " not in got.out:
         item.status, item.detail = (
             FAIL,
-            f"{item.detail}: no -bbox-layout, so cited works have no page geometry (xpdf's?)",
+            f"{item.detail}: no -bbox-layout, so works' pages have no geometry (xpdf's?)",
         )
     else:
         return

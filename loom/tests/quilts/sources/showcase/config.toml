@@ -5,7 +5,7 @@ prefix = "sh"               # default id prefix for loom new
 engine = "pdflatex"         # default engine; % !TEX program in a master overrides
 
 [library]
-online = false              # may loom library update look identifiers up (zbMATH Open, Crossref) and fetch documents (arXiv); --online allows one run
+online = false              # may loom look a paper's identifier up (doi.org, arXiv, zbMATH Open); --online allows one run
 
 [lint]
 disable = []                # diagnostic codes to silence, e.g. ["loom:unmatched-postnote"]

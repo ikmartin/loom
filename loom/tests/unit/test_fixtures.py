@@ -188,7 +188,7 @@ def test_synthetic_structure() -> None:
         n["sy-0202"].directives["author"] == "A Coauthor" and n["sy-0003"].directives["author"] == "The synthetic quilt"
     )
     assert n["sy-000B"].taxon == "Main Theorem"
-    assert n["Kre99-thm-2.1"].digest == "Kre99" and n["Kre99-thm-2.1"].external
+    assert "Kre99" in r.bib and r.refs["Kre99"].endswith("-ref")  # the bibliography's entries are references
     assert "drafting/old.tex" not in n and r.files["drafting/old.tex"].ignored
     assert r.taxa["lemma"].style == "plain"
 

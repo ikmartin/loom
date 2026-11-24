@@ -1,7 +1,5 @@
 // A kind's internal views (plan 0.13.3, plan 0.16 decision 10): several readings of one thing, drawn at the head of its pane's tab strip, before the tabs, rather than in a band the renderer draws for itself.
 
-import type { Manifest } from '$lib/manifest/types';
-
 export interface View {
 	id: string;
 	label: string;
@@ -9,14 +7,7 @@ export interface View {
 	off?: string;
 }
 
-/** A work's views, Text · Info (K1): its text greyed where no copy can be read, and what is known of the work, its digest's results among it, behind Info. A work may be a book or notes as well as a paper; `paper` stays as the view's address. */
-export function workViews(m: Manifest, citekey: string): View[] {
-	const ref = m.references[citekey];
-	const off = ref?.unreadable ? `Declared unreadable: ${ref.unreadable.why}` : !ref?.artifacts?.pdf ? 'No copy of this work is on file' : undefined;
-	return [{ id: 'paper', label: 'Text', ...(off ? { off } : {}) }, { id: 'info', label: 'Info' }];
-}
-
-/** The item's default view: its first that can be read, so a paper with no copy opens on what is known of it. */
+/** The item's default view: its first that can be read. */
 export function defaultView(views: View[]): string | undefined {
 	return (views.find((v) => !v.off) ?? views[0])?.id;
 }

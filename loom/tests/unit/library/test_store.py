@@ -12,7 +12,7 @@ from loom.library.checks import check
 from loom.library.index import NodeIndex
 from loom.library.node import Node, node_bytes, node_hash, read_node
 from loom.library.store import NodeRefused, node_ids, read, remove_node, write_node, write_nodes
-from loom.paths import LIBRARY_NODES
+from loom.paths import LIBRARY_ACT, LIBRARY_NODES
 from tests.unit.library._examples import fixtures
 from tests.unit.library._store import quilt
 
@@ -125,7 +125,7 @@ def test_a_proof_s_number_is_one_past_the_largest_seen(tmp_path: Path) -> None:
     root = quilt(tmp_path)
     assert next_proof(root, "tq-00K3") == "tq-00K3-proof01"
     assert next_proof(root, "tq-00A4") == "tq-00A4-proof00"
-    tag(root, "tq-00K3-proof00", "short", by="Isaac", kind="person")
+    tag(root, "tq-00K3-proof00", "short", by="A. Author", kind="person")
     remove_node(root, "tq-00K3-proof00")
     assert next_proof(root, "tq-00K3") == "tq-00K3-proof01", "the tag log still names proof00"
 
@@ -161,12 +161,12 @@ def test_a_library_stem_is_drawn_from_everything_loom_id_counts(tmp_path: Path) 
     from tests.unit._quilts import demo
 
     q = demo(tmp_path)
-    (q / LIBRARY_NODES).mkdir(parents=True)
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
     (q / LIBRARY_NODES / "dm-0050-ref.node").write_text("+++\n")
     assert next_stem(scan(load_quilt(q))) == "dm-0051"
 
 
-# ---- the review's findings ---------------------------------------------------------------------------------------------
+# ---- writes as one act, new nodes, ids, and what reaches the disk ------------------------------------------------------
 
 
 def _pair() -> list[Node]:
@@ -322,3 +322,110 @@ def test_a_lone_surrogate_is_refused_not_raised(tmp_path: Path) -> None:
     with pytest.raises(NodeRefused) as caught:
         write_node(root, Node(id="tq-0M08", taxon="remark", source="tq-00A1-ref", body="half \ud800 a pair\n"))
     assert [d.code for d in caught.value.diagnostics] == ["loom:node-unreadable"]
+
+
+def _sixty(stem: str = "tq-0N", body: str = "Lemma {i}.\n") -> list[Node]:
+    """Sixty lemmas of one work, each using the next, as a digest writes them."""
+    return [
+        Node(
+            id=f"{stem}{i:02d}",
+            taxon="lemma",
+            source="tq-00A1-ref",
+            number=f"5.{i}",
+            uses=(f"{stem}{i + 1:02d}",) if i < 59 else (),
+            body=body.format(i=i),
+        )
+        for i in range(60)
+    ]
+
+
+def _stop_after(monkeypatch: pytest.MonkeyPatch, calls: int, name: str = "link") -> None:
+    """Interrupt the placing once, after `calls` files are in place, as a Ctrl-C does."""
+    real = getattr(os, name)
+    count = {"n": 0}
+
+    def placing(*args: object, **kw: object) -> object:
+        if str(args[1]).endswith(".node"):
+            count["n"] += 1
+            if count["n"] == calls + 1:
+                raise KeyboardInterrupt
+        return real(*args, **kw)
+
+    monkeypatch.setattr(os, name, placing)
+
+
+def test_a_batch_interrupted_while_placing_leaves_nothing_of_itself(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N-25: a Ctrl-C after the thirtieth of sixty files takes out the thirty, so the same batch can be written again as new."""
+    root = quilt(tmp_path)
+    before = snapshot(root)
+    _stop_after(monkeypatch, 30)
+    with pytest.raises(KeyboardInterrupt):
+        write_nodes(root, _sixty(), new=True)
+    monkeypatch.undo()
+    assert snapshot(root) == before
+    assert not (root / LIBRARY_ACT).exists()
+    assert check(root) == []
+    write_nodes(root, _sixty(), new=True)
+    assert check(root) == [] and len(node_ids(root)) == 69
+
+
+def test_a_batch_replacing_files_interrupted_puts_them_back(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = quilt(tmp_path)
+    write_nodes(root, _sixty())
+    before = snapshot(root)
+    _stop_after(monkeypatch, 45, "replace")
+    with pytest.raises(KeyboardInterrupt):
+        write_nodes(root, _sixty(body="Lemma {i}, again.\n"))
+    monkeypatch.undo()
+    assert snapshot(root) == before
+
+
+def test_a_batch_a_killed_writer_left_part_way_is_rolled_back_by_the_next_writer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """N-25: a writer killed while renaming leaves part of its batch and its record; the next write, or a removal, takes the part out first."""
+    import loom.library.store as store
+
+    root = quilt(tmp_path)
+    write_nodes(root, _sixty())
+    replaced = (root / LIBRARY_NODES / "tq-0N10.node").read_bytes()
+    monkeypatch.setattr(store, "_undo", lambda *a, **k: None)  # a killed writer undoes nothing
+    _stop_after(monkeypatch, 20, "replace")
+    with pytest.raises(KeyboardInterrupt):
+        write_nodes(root, [*_sixty(body="Lemma {i}, again.\n"), *_sixty(stem="tq-0P")])
+    monkeypatch.undo()
+    assert (root / LIBRARY_ACT / "act.json").is_file(), "the dead writer's record is left"
+    assert (root / LIBRARY_NODES / "tq-0N10.node").read_bytes() != replaced, "and part of its batch"
+    assert remove_node(root, "tq-0ZZZ") is False
+    assert (root / LIBRARY_NODES / "tq-0N10.node").read_bytes() == replaced
+    assert not (root / LIBRARY_ACT).exists() and check(root) == []
+    write_nodes(root, _sixty(stem="tq-0P"), new=True)
+    assert check(root) == []
+
+
+def test_two_ids_differing_only_in_case_are_refused_in_one_batch(tmp_path: Path) -> None:
+    """N-5: on a disk blind to case they are one file, and one text would be lost."""
+    root = quilt(tmp_path)
+    twins = [
+        Node(id="tq-0A05", taxon="remark", source="tq-00A1-ref", body="One.\n"),
+        Node(id="TQ-0A05", taxon="remark", source="tq-00A1-ref", body="Other.\n"),
+    ]
+    with pytest.raises(NodeRefused, match="only in case"):
+        write_nodes(root, twins)
+    assert not (root / LIBRARY_NODES / "tq-0A05.node").exists()
+
+
+def test_a_file_named_like_a_writer_s_but_not_one_is_left(tmp_path: Path) -> None:
+    """N-28: the next writer removes only names loom gives its temporary files, `.<id>.node.<pid>.tmp`."""
+    root = quilt(tmp_path)
+    theirs = [
+        root / LIBRARY_NODES / n for n in (".notes.node.backup.tmp", ".notes.node.123.tmp", ".x.node.12.tmp.keep")
+    ]
+    for path in theirs:
+        path.write_text("mine")
+    ours = root / LIBRARY_NODES / ".tq-0M06.node.99999.tmp"
+    ours.write_bytes(b"half a node")
+    write_node(root, Node(id="tq-0M07", taxon="remark", source="tq-00A1-ref", body="x\n"))
+    assert not ours.exists() and all(p.exists() for p in theirs)

@@ -45,18 +45,18 @@ def test_the_synthetic_quilt_carries_the_intended_errors() -> None:
 
 @pytest.mark.tree
 def test_the_showcase_carries_the_faults_it_is_meant_to_show() -> None:
-    """One fault on purpose -- a sketch made live again over the node file its own atomize wrote, an id two documents define, which LaTeX accepts, so a warning of loom's model -- and the four facts about a lived-in quilt that the viewer has something to say about; nothing in the person's LaTeX."""
+    """One fault on purpose -- a sketch made live again over the node file its own atomize wrote, an id two documents define, which LaTeX accepts, so a warning of loom's model -- and the three facts about a lived-in quilt that the viewer has something to say about; nothing in the person's LaTeX."""
     lines = (REPO / "tests" / "quilts" / "showcase" / "EXPECTED-LINT.txt").read_text(encoding="utf-8").splitlines()
     codes = sorted(line.split()[1] for line in lines)
     assert [line for line in lines if line.startswith("error") or line.endswith(" latex")] == []
     assert "warning duplicate-id model" in lines
-    for code in ("loom:detached-annotation", "loom:missing-proof", "loom:unmatched-postnote", "unreachable"):
+    for code in ("loom:detached-annotation", "loom:missing-proof", "unreachable"):
         assert code in codes, code
 
 
 def test_the_showcase_referee_findings_are_the_agents() -> None:
-    """The showcase's referee findings are recorded as the agent's, so none goes back to the agent in the author's packet."""
+    """The showcase's referee findings on the paper are recorded as the agent's, so none goes back to the agent in the author's packet."""
     log = REPO / "tests" / "quilts" / "showcase" / ".loom/records/annotations" / "log.jsonl"
     events = [json.loads(line) for line in log.read_text().splitlines()]
-    first = [e for e in events if e.get("event") == "created"][:5]
+    first = [e for e in events if e.get("event") == "created" and not e["target"].endswith("-ref")][:5]
     assert [(e["author"], e["kind"]) for e in first] == [("Referee (Agent)", "agent")] * 5

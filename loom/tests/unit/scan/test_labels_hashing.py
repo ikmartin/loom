@@ -2,15 +2,13 @@ from loom.scan.hashing import child_marker, hash_text, normalize
 from loom.scan.labels import is_id_shaped, next_local, split_id
 
 
-def test_id_grammar_loomlocal_and_paperlocal() -> None:
+def test_id_grammar_is_a_prefix_and_four_base36_characters() -> None:
     assert is_id_shaped("rl-0004")
     assert is_id_shaped("rl-000Z")
     assert not is_id_shaped("rl-0004x")
     assert not is_id_shaped("lem:res-indep")
     assert not is_id_shaped("rl-intro")
-    assert is_id_shaped("Man12-thm-4.1", {"Man12"})
-    assert is_id_shaped("stacksproject-05QA", {"stacksproject"})
-    assert not is_id_shaped("Man12-thm 4.1", {"Man12"})
+    assert not is_id_shaped("Man12-thm-4.1")
     assert split_id("sec-intro") == ("sec", "intro") and not is_id_shaped("sec-intro")
 
 

@@ -1,16 +1,14 @@
 <script lang="ts">
-	// Review › Problems: the problems in a document's LaTeX, one that did not compile among them, filtered by class from the manifest, which keeps loom's model and its own difficulties for agents. The person's files first, open and counted; an agent's copy's, the cited works' and every remark below, each folded and said to be whose it is. Each problem is titled by what is wrong, opens at its place, and offers a fix only where the viewer can do it as a button: never a command. The filters stand in the page; the severity and a code live in the URL, so a link can open it showing one of them.
+	// Review › Problems: the problems in a document's LaTeX, one that did not compile among them, filtered by class from the manifest, which keeps loom's model and its own difficulties for agents. The person's files first, open and counted; an agent's copy's and every remark below, each folded and said to be whose it is. Each problem is titled by what is wrong, opens at its place, and offers a fix only where the viewer can do it as a button: never a command. The filters stand in the page; the severity and a code live in the URL, so a link can open it showing one of them.
 	import { barShown } from '$lib/shell/scrollbars';
 	import { page } from '$app/state';
 	import HelpDot from '$lib/components/HelpDot.svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import type { Diagnostic, Fix } from '$lib/manifest/types';
-	import { byWork, forPerson, groupProblems, lineUrl, openUrl, partsOf, splitFixes, titleOf, type Group } from '$lib/diagnostics';
-	import { keyTarget, placeUrl, workUrl } from '$lib/nav';
+	import { forPerson, groupProblems, lineUrl, openUrl, partsOf, splitFixes, titleOf, type Group } from '$lib/diagnostics';
+	import { keyTarget, placeUrl } from '$lib/nav';
 	import { route } from '$lib/paths';
 	import { setQuery } from '$lib/query';
-	import { jobs } from '$lib/jobs.svelte';
-	import { bibText } from '$lib/works';
 	import { can, write } from '$lib/write';
 	import Empty from '$lib/review/Empty.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
@@ -29,7 +27,6 @@
 	const parts = $derived(partsOf(shown.filter(matches)));
 	const filtered = $derived(!!(severity || code || words));
 	const counts = $derived(Object.fromEntries(SEVERITIES.map((s) => [s, shown.filter((d) => d.severity === s).length])));
-	const works = $derived(byWork(m, parts.works));
 	const pick = (v: string) => void setQuery(page.url, 'severity', severity === v ? '' : v);
 	// what the person opened or folded, kept across the manifest drawn again after an act
 	let folds = $state<Record<string, boolean>>({});
@@ -39,52 +36,30 @@
 	// the acts this publisher serves; a static build serves none, and the page then offers no fix
 	let served = $state<Record<string, boolean>>({});
 	$effect(() => {
-		void Promise.all(['library-update', 'agents-update'].map((e) => can(e))).then(([library, agents]) => (served = { 'library-update': library, 'agents-update': agents }));
+		void can('agents-update').then((agents) => (served = { 'agents-update': agents }));
 	});
 
-	// each act's answer, said beside it until the next act there; a library run's follows the run to its end
-	let answers = $state<Record<string, { text: string; refused: boolean; works?: string[] }>>({});
+	// each act's answer, said beside it until the next act there
+	let answers = $state<Record<string, { text: string; refused: boolean }>>({});
 	let busy = $state('');
-	function said(id: string): { text: string; refused: boolean } | undefined {
-		const a = answers[id];
-		const run = a?.works && !a.refused ? jobs.forWorks(a.works) : undefined;
-		if (!run || run.state === 'queued' || run.state === 'running') return a;
-		if (run.state === 'failed') return { text: run.error ?? 'The library run failed.', refused: true };
-		return { text: ['Done.', run.report?.verdict].filter(Boolean).join(' '), refused: false };
-	}
+	const said = (id: string): { text: string; refused: boolean } | undefined => answers[id];
 	async function act(id: string, fix: Fix): Promise<void> {
 		const a = fix.act!;
 		busy = id;
 		let text = '';
 		let refused = false;
-		let works: string[] | undefined;
-		if (a.endpoint === 'library-update') {
-			const b = a.body as { works?: string[]; redo?: boolean; steps?: string[] };
-			const done = await jobs.start(b.works ?? [], { redo: !!b.redo, steps: b.steps });
-			const named = (b.works ?? []).join(', ') || 'every work';
-			works = b.works ?? [];
-			if (done.ok) text = `Digesting ${named}${b.redo ? ' again' : ''}; the Library shows the run, and this page is drawn again when it ends.`;
-			else [text, refused] = [done.error?.message ?? 'The library run did not start.', true];
-		} else {
-			const done = await write(a.endpoint, a.body);
-			if (done.ok) {
-				text = typeof done.result === 'string' ? `Done: ${done.result}.` : 'Done.';
-				await store.refresh();
-			} else [text, refused] = [done.error?.message ?? 'That was not done.', true];
-		}
-		answers = { ...answers, [id]: { text, refused, works } };
+		const done = await write(a.endpoint, a.body);
+		if (done.ok) {
+			text = typeof done.result === 'string' ? `Done: ${done.result}.` : 'Done.';
+			await store.refresh();
+		} else [text, refused] = [done.error?.message ?? 'That was not done.', true];
+		answers = { ...answers, [id]: { text, refused } };
 		busy = '';
 	}
-	const running = (ck: string) => jobs.forWorks([ck])?.state === 'queued' || jobs.forWorks([ck])?.state === 'running';
-
-	const workTitle = (ck: string) => bibText(m.references[ck]?.bib.title as string) || ck;
-	// a cited work's digest-again fix is offered once, beside the work, so its problems do not each repeat it
-	const again = (ck: string, f: Fix) => f.act?.endpoint === 'library-update' && (f.act.body as { works?: string[] }).works?.[0] === ck && !!(f.act.body as { redo?: boolean }).redo;
-	const workAct = (ck: string, items: Diagnostic[]) => items.flatMap((d) => d.fixes ?? []).find((f) => again(ck, f));
 </script>
 
-{#snippet problem(d: Diagnostic, id: string, ck: string)}
-	{@const acts = splitFixes(d).acts.filter((f) => served[f.act!.endpoint] && !again(ck, f))}
+{#snippet problem(d: Diagnostic, id: string)}
+	{@const acts = splitFixes(d).acts.filter((f) => served[f.act!.endpoint])}
 	{@const open = openUrl(m, d)}
 	<li data-testid="problem">
 		<span class="message">{d.message}</span>
@@ -106,18 +81,18 @@
 	</li>
 {/snippet}
 
-{#snippet groups(items: Diagnostic[], part: string, ck: string)}
+{#snippet groups(items: Diagnostic[], part: string)}
 	{#each groupProblems(items) as g (g.title)}
-		{@render group(g, part, ck)}
+		{@render group(g, part)}
 	{/each}
 {/snippet}
 
-{#snippet group(g: Group, part: string, ck: string)}
-	<!-- the person's groups stand open; in a folded part each is folded to its title and count, since a digest's can run to forty -->
-	<details class="group sev-{g.severity}" open={isOpen(`${part}:${ck}:${g.title}`, part === 'yours')} ontoggle={toggled(`${part}:${ck}:${g.title}`)} data-testid="problem-group" data-codes={g.codes.join(' ')}>
+{#snippet group(g: Group, part: string)}
+	<!-- the person's groups stand open; in a folded part each is folded to its title and count -->
+	<details class="group sev-{g.severity}" open={isOpen(`${part}:${g.title}`, part === 'yours')} ontoggle={toggled(`${part}:${g.title}`)} data-testid="problem-group" data-codes={g.codes.join(' ')}>
 		<summary><h3><span class="title">{g.title}</span> <span class="n">{g.items.length}</span> {#each g.codes as c (c)}<code class="code">{c}</code>{/each}</h3></summary>
 		<ul>
-			{#each g.items as d, i (i)}{@render problem(d, `${part}:${ck}:${g.title}:${i}`, ck)}{/each}
+			{#each g.items as d, i (i)}{@render problem(d, `${part}:${g.title}:${i}`)}{/each}
 		</ul>
 	</details>
 {/snippet}
@@ -136,7 +111,7 @@
 	<section class="part yours" data-testid="problems-yours">
 		<h2>In your files <span class="n" data-testid="problems-yours-count">{parts.yours.length}</span></h2>
 		{#if parts.yours.length}
-			{@render groups(parts.yours, 'yours', '')}
+			{@render groups(parts.yours, 'yours')}
 		{:else}
 			<Empty text={filtered && all.yours.length ? 'None of yours matches these filters.' : 'Nothing is wrong in your LaTeX.'} testid="problems-none" />
 		{/if}
@@ -146,28 +121,7 @@
 		<details class="part" open={isOpen('copy', false)} ontoggle={toggled('copy')} data-testid="problems-copy">
 			<summary><h2>In an agent's copy <span class="n">{parts.copy.length}</span></h2></summary>
 			<p class="whose">The agent's to put right, or to leave out when you take the copy back in <a href={route('/review/proposed')}>Proposed Changes</a>.</p>
-			{@render groups(parts.copy, 'copy', '')}
-		</details>
-	{/if}
-
-	{#if parts.works.length}
-		<details class="part" open={isOpen('works', false)} ontoggle={toggled('works')} data-testid="problems-works">
-			<summary><h2>In cited works <span class="n">{parts.works.length}</span></h2></summary>
-			<p class="whose">Problems in the digests of the papers you cite. A digest is loom's reading of a paper, not your writing; digesting the work again mends what the reading got wrong.</p>
-			{#each works as w (w.work)}
-				{@const f = w.work ? workAct(w.work, w.items) : undefined}
-				<div class="work" data-testid="problem-work" data-work={w.work}>
-					<h3>
-						{#if w.work}<a href={workUrl(w.work)}>{workTitle(w.work)}</a> <code class="code">{w.work}</code>{:else}A cited work{/if}
-						<span class="n">{w.items.length}</span>
-						{#if f && served['library-update']}
-							<button class="btn small" disabled={!!busy || running(w.work)} onclick={() => act(`work:${w.work}`, f)} data-testid="digest-again">{running(w.work) ? 'Digesting…' : 'Digest it again'}</button>
-						{/if}
-					</h3>
-					{#if said(`work:${w.work}`)}<Said text={said(`work:${w.work}`)!.text} refused={said(`work:${w.work}`)!.refused} testid="digest-said" />{/if}
-					{@render groups(w.items, 'works', w.work)}
-				</div>
-			{/each}
+			{@render groups(parts.copy, 'copy')}
 		</details>
 	{/if}
 
@@ -175,11 +129,11 @@
 		<details class="part" open={isOpen('remarks', false)} ontoggle={toggled('remarks')} data-testid="problems-remarks">
 			<summary><h2>Remarks <span class="n">{parts.remarks.length}</span></h2></summary>
 			<p class="whose">Things worth knowing that are not wrong.</p>
-			{@render groups(parts.remarks, 'remarks', '')}
+			{@render groups(parts.remarks, 'remarks')}
 		</details>
 	{/if}
 
-	{#if filtered && !parts.yours.length && !parts.copy.length && !parts.works.length && !parts.remarks.length && shown.length}
+	{#if filtered && !parts.yours.length && !parts.copy.length && !parts.remarks.length && shown.length}
 		<p class="faint" data-testid="problems-unmatched">Nothing anywhere matches these filters.</p>
 	{/if}
 </main>
@@ -257,20 +211,6 @@
 		font-size: 12.5px;
 		color: var(--ink-soft);
 		margin: 0 0 var(--gap);
-	}
-	.work {
-		margin: 0 0 var(--gap-wide);
-		padding-left: var(--gap);
-		border-left: 2px solid var(--rule);
-	}
-	.work h3 {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: baseline;
-		gap: 6px;
-		font-size: 14px;
-		font-weight: 600;
-		margin: 0 0 var(--gap-tight);
 	}
 	.group {
 		margin: 0 0 var(--gap);

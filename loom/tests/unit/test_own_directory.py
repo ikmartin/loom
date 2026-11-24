@@ -5,8 +5,8 @@ from __future__ import annotations
 from importlib import resources
 from pathlib import Path
 
+from loom.library.gather import named_bibs
 from loom.paths import document_build
-from loom.refs.scan import _named_bibs, bib_file
 from loom.render.assets import resolve_graphic
 from loom.reshape.linearize import with_macro_block
 from loom.scan.expand import resolve_inclusion
@@ -62,7 +62,7 @@ def test_dotdot_is_refused_by_every_resolver(tmp_path: Path) -> None:
     assert resolve_inclusion(q, "../shared", base="paper") == (None, "missing")
     assert _local(q, "../up", (".sty",), "paper") is None
     assert resolve_graphic(q, "../up.pdf", "paper") is None
-    assert _named_bibs(q, "\\bibliography{../up}", "paper") == ([], ["../up"])
+    assert named_bibs(q, "\\bibliography{../up}", "paper") == ([], ["../up"])
 
 
 def test_an_agent_copy_and_a_landmark_read_their_source_s_directory(tmp_path: Path) -> None:
@@ -75,8 +75,9 @@ def test_an_agent_copy_and_a_landmark_read_their_source_s_directory(tmp_path: Pa
     ok("compile", ".loom/agents/copies/aidoc.tex", cwd=q)
     assert (q / document_build(".loom/agents/copies/aidoc.tex") / "aidoc.pdf").is_file()
     ok("stamp", "paper/main.tex", "-m", "first", cwd=q)
-    assert set(landmark_bases(load_quilt(q)).values()) == {"paper"}
-    assert bib_file(scan(load_quilt(q))) == "paper/refs.bib"
+    ((landmark, base),) = landmark_bases(load_quilt(q)).items()
+    assert base == "paper"
+    assert named_bibs(q, (q / landmark).read_text(encoding="utf-8"), base)[0] == [q / "paper" / "refs.bib"]
 
 
 def test_loom_new_and_atomize_write_node_files_beside_the_document(tmp_path: Path) -> None:

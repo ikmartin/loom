@@ -2,9 +2,7 @@
 	type Box = { left: number; top: number; width: number; height: number };
 	// One page of a PDF: the canvas, PDF.js's text layer over it, and loom's rectangles over that.
 	//
-	// **A dumb renderer** (plan 0.13 §6). It is given a document, a page and the rectangles to draw, and it reports what
-	// the reader did. It fetches no annotations, knows nothing of sessions, and decides nothing about what a highlight
-	// means — which is what lets the same component serve the pane, the modal, the proposal box and a preview.
+	// **A dumb renderer** (plan 0.13 §6). It is given a document, a page and the rectangles to draw, and it reports what the reader did. It fetches no annotations, knows nothing of sessions, and decides nothing about what a highlight means — which is what lets the same component serve the pane and a preview.
 	//
 	// **`render` is the virtualisation seam.** A page outside the window keeps its size and loses its canvas, its text
 	// layer and its overlay; the parent decides which pages are in, and this decides nothing about scrolling.
@@ -12,7 +10,7 @@
 	// It is deliberately NOT keyed on the manifest store: arras polls every second and swaps the manifest whenever its
 	// hash changes, so a pane that re-derived from it would re-render a page a second — the failure `Fragment.svelte`
 	// has been patched for twice.
-	import { onDestroy, untrack } from 'svelte';
+	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import { asPercent, document_, pdfjs } from './document';
 	import { markAt, type PageMark } from './marks';
 	import PageMarks, { type Drawn, type Moved } from './PageMarks.svelte';
@@ -41,7 +39,8 @@
 		ondraw,
 		onpick,
 		onmove,
-		onembedded
+		onembedded,
+		overlay
 	}: {
 		url: string;
 		page?: number;
@@ -80,6 +79,8 @@
 		onmove?: (e: Moved) => void;
 		/** The reader clicked an annotation the PDF holds. */
 		onembedded?: (e: Embedded & { client: Box }) => void;
+		/** What a caller draws over a drawn page, positioned by rectangles in loom's space through `at`: the Library's digest marks. */
+		overlay?: Snippet<[{ page: number; at: (r: Rect) => { left: string; top: string; width: string; height: string } }]>;
 	} = $props();
 
 	let host: HTMLDivElement;
@@ -376,6 +377,7 @@
 				{/each}
 			{/each}
 		</div>
+		{#if overlay}<div class="overlay">{@render overlay({ page, at: (r) => asPercent(r, box) })}</div>{/if}
 	{:else}
 		<div class="held" aria-hidden="true"></div>
 	{/if}
@@ -392,6 +394,12 @@
 </div>
 
 <style>
+	/* a caller's layer over the page, which takes the pointer only where what it draws does */
+	.overlay {
+		position: absolute;
+		inset: 0;
+		pointer-events: none;
+	}
 	.page {
 		position: relative;
 		background: var(--surface, #fff);

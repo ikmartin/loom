@@ -91,10 +91,10 @@ def test_an_agent_reaches_its_own_commands(path: str, tmp_path) -> None:  # type
 
 
 def test_the_guard_reads_options_before_a_subcommand(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """A group's own options before the subcommand do not hide which command runs: `library --session S add` is `library add`."""
-    r = run("library", "--session", "x", "add", PROBE, cwd=tmp_path, env={"AI_AGENT": "1"})
-    assert r.exit_code == 2 and "may not run `loom library add`" in r.stderr, r.output
-    r = run("library", "--json", "search", PROBE, cwd=tmp_path, env={"AI_AGENT": "1"})
+    """A group's own options before the subcommand do not hide which command runs: `history --quilt Q restore` is `history restore`."""
+    r = run("history", "--quilt", str(tmp_path), "restore", PROBE, cwd=tmp_path, env={"AI_AGENT": "1"})
+    assert r.exit_code == 2 and "may not run `loom history restore`" in r.stderr, r.output
+    r = run("history", "--json", "show", PROBE, cwd=tmp_path, env={"AI_AGENT": "1"})
     assert "No such option" in r.stderr, r.output
 
 
@@ -126,13 +126,8 @@ def test_outside_a_quilt_names_how_to_get_into_one(tmp_path) -> None:  # type: i
     assert "cd " in r.stderr and "loom init DIR" in r.stderr, r.stderr
 
 
-def test_the_librarys_help_is_a_map_of_its_work() -> None:
-    """K6: `loom library --help` listed its fifteen subcommands alphabetically, the person's not first and upkeep not marked."""
-    out = ok("library", "--help").stdout
-    heads = [ln.rstrip(":") for ln in out.splitlines() if ln and not ln.startswith(" ") and ln.endswith(":")]
-    assert heads[-4:] == ["Read", "Decide", "Fill", "Upkeep"], heads
-    assert (
-        "  propose*" in out
-        and "  verify " in out
-        and " ".join(out.split()).endswith("(.loom/agents/instructions/rules.md lists which).")
-    )
+def test_the_librarys_help_lists_its_one_command() -> None:
+    """`loom library`, named alone or with `--help`, lists `add`, the author's, and exits 0."""
+    for args in (("library",), ("library", "--help")):
+        out = ok(*args).stdout
+        assert "  add " in out and "*" not in out, out

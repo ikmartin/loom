@@ -1,0 +1,15 @@
++++
+schema = 1
+id = "sh-0403-ref"
+taxon = "reference"
+pdf = "sha256:e16ea0a74da711cddafcb5a49851aeb5e78f16f22ea7ee1a1fa2a0b9acb80d45"
++++
+@article{Bellamy19,
+  author = {Bellamy, Rosalind},
+  title = {Median orders on weighted digraphs},
+  journal = {Ann. Fict. Math.},
+  volume = {19},
+  year = {2019},
+  pages = {203--241},
+  doi = {10.4171/showcase/19-2},
+}

@@ -1,9 +1,5 @@
-// Links into a cited work (plan 0.13 item 6): `cited:<scheme>:<value>?page=N&span=A-B` names a place in a paper by the work's global identifier, never by a citekey, so it survives a bibliography re-export and means the same thing to a collaborator whose citekeys differ. The keys are the app URL's own -- `page`, `span`, `box`, `annot`, spelled out because agents and authors write them by hand -- so there is one locator syntax with two prefixes. The `#page=`/`#quote=` fragment form is still read, for the links written before the query form was decided.
-import { artifactUrl } from '$lib/paths';
-// The link form is the interface's (specs/dialect.md §2.13); nothing here knows the publisher.
-
-import type { Manifest, Reference } from '$lib/manifest/types';
-import { resolve } from '$lib/works';
+// Links into a work (specs/dialect.md §2.13): `cited:<scheme>:<value>?page=N&quote=…` names a place in a work by its global identifier, never by a citekey, so it survives a bibliography re-export and means the same thing to a collaborator whose citekeys differ. The keys are the app URL's own -- `page`, `span`, `box`, `annot`, spelled out because agents and authors write them by hand -- so there is one locator syntax with two prefixes. The `#page=`/`#quote=` fragment form is read too, as the spec allows.
+// The link form is the interface's; nothing here knows the publisher.
 
 export interface WorkLink {
 	/** `scheme:value`, the scheme lowercased. */
@@ -16,8 +12,6 @@ export interface WorkLink {
 	box?: [number, number, number, number];
 	/** An annotation whose own anchor says where; the form most links should take, since it survives re-anchoring. */
 	annot?: string;
-	/** A result of this work, by its digest node's id. Where the place is a result the corpus already knows, this is the form to use: the geometry is in the work's sidecar, so it needs no publisher to resolve and it moves when the result is re-anchored. */
-	result?: string;
 }
 
 const PREFIX = 'cited:';
@@ -31,7 +25,7 @@ export function isWorkLink(href: string | null | undefined): boolean {
 export function parseWorkLink(href: string): WorkLink | null {
 	if (!isWorkLink(href)) return null;
 	const body = href.slice(PREFIX.length);
-	// the query is the form; the fragment is read too, for links written before it was decided
+	// the query is the form; the fragment is read too
 	const [target, rest = ''] = body.split(/[?#](.*)/s, 2);
 	const at = target.indexOf(':');
 	if (at < 1 || at === target.length - 1) return null;
@@ -58,7 +52,6 @@ export function readKeys(link: WorkLink, query: string): WorkLink {
 			if (nums.length === 4 && nums.every((n) => Number.isFinite(n))) link.box = [nums[0], nums[1], nums[2], nums[3]];
 		}
 		if (key === 'annot' && /^a-\d{4}-\d{2}-\d{2}-[0-9a-z]+$/.test(value)) link.annot = value;
-		if (key === 'result' && /^[A-Za-z0-9][\w.:-]*$/.test(value)) link.result = value;
 	}
 	return link;
 }
@@ -70,7 +63,6 @@ export function placeParams(link: Omit<WorkLink, 'id'>): URLSearchParams {
 	if (link.span) q.set('span', `${link.span[0]}-${link.span[1]}`);
 	if (link.box) q.set('box', link.box.join(','));
 	if (link.annot) q.set('annot', link.annot);
-	if (link.result) q.set('result', link.result);
 	if (link.quote) q.set('quote', link.quote);
 	return q;
 }
@@ -92,67 +84,44 @@ export function normalId(id: string): string {
 	return `${scheme}:${scheme === 'doi' ? value.toLowerCase() : value}`;
 }
 
-export interface WorkTarget {
-	/** The reference that states this identifier, if the corpus cites the work at all. */
-	ref?: Reference;
-	/** The fetched PDF when the copy on file is the very artifact the identifier names. */
-	local?: string;
-	/** A copy is on file, but it is another artifact of the same work (a preprint for a published article, or the reverse), so its pages need not match. */
-	otherCopy?: { id: string; url: string };
-	/** The identifier's own resolver, with the page where the resolver honours one. */
-	external?: string;
-}
-
 /**
- * Where a link into a work can be opened.
+ * What `locate` is asked for a place on a work's pages: the work by its reference, with the span on `page`, else the quote on the place's own page or, where it names none, across the work.
  *
- * A local copy is offered only when it is filed under the identifier the link names: a link to page 9 of a published article must not open page 9 of the preprint, because that is exactly where the two differ. A copy of another artifact of the same work is reported separately, so the reader can open it knowing the pages may not match.
+ * Parameters
+ * ----------
+ * ref : str
+ *     The work's reference.
+ * place : Omit<WorkLink, 'id'>
+ *     The place a link or an item names.
+ * page : number
+ *     The page a span is on.
+ *
+ * Returns
+ * -------
+ * Record<string, unknown> | null
+ *     The body of a `locate` request; null for a place naming neither a span nor a quote, which `locate` is not asked about.
  */
-export function locate(m: Manifest, link: WorkLink): WorkTarget {
-	const ref = Object.values(m.references).find((r) => (r.works ?? (r.work ? [r.work] : [])).some((w) => normalId(w) === link.id));
-	const out: WorkTarget = { ref, external: externalUrl(link) };
-	if (ref?.artifacts?.pdf && ref.work) {
-		const url = artifactUrl(ref.artifacts.dir);
-		if (normalId(ref.work) === link.id) out.local = url + (link.page ? `#page=${link.page}` : '');
-		else out.otherCopy = { id: ref.work, url };
-	}
-	return out;
+export function locateBody(ref: string, place: Omit<WorkLink, 'id'>, page: number): Record<string, unknown> | null {
+	if (place.span) return { ref, page, span: place.span };
+	if (place.quote) return { ref, ...(place.page ? { page: place.page } : {}), text: place.quote };
+	return null;
 }
 
-/** The identifier at its own service: arXiv's PDF at the page, a DOI's landing page, or whatever `works.ts` resolves the scheme to. */
+/** The identifier at its own service: arXiv's PDF at the page, a DOI's landing page, MathSciNet's or zbMATH's record; undefined for a scheme none resolves. */
 export function externalUrl(link: WorkLink): string | undefined {
-	const [scheme, ...rest] = link.id.split(':');
-	const value = rest.join(':');
-	if (scheme === 'arxiv') return `https://arxiv.org/pdf/${value}` + (link.page ? `#page=${link.page}` : '');
-	return resolve(link.id)?.href;
-}
-
-/** The page a digest locator names, as written by extraction: `Proposition 3.1, p.~18`, `p. 18`, `pp. 18–20`, `page 18`. */
-export function pageOf(locator: string | undefined): number | undefined {
-	const m = (locator ?? '').match(/\b(?:pp?\.|pages?)\s*~?\s*(\d+)/i);
-	return m ? Number(m[1]) : undefined;
-}
-
-/** A cited result at the place it is read: its work, the page it is printed on, and the result, whose rectangles the work's sidecar carries. */
-export interface ResultPlace {
-	citekey: string;
-	page: number;
-	result: string;
-}
-
-/**
- * Where a cited result is read: its paper, at its page (V7). Every link to a result asks this, so a citation, a `\ref`, a graph, a locator and a hover all name one place.
- *
- * The page is the one its anchor was read from on the copy filed, else the one its locator names. A locator's page is the extraction's, so it is used only where the copy filed is the version extracted. Null where no copy is filed, no page is known, or the page is another version's; the digest node's own page is then the place.
- */
-export function resultPlace(m: (Pick<Manifest, 'nodes'> & Partial<Pick<Manifest, 'references'>>) | null, key: string): ResultPlace | null {
-	const node = m?.nodes[key];
-	const ref = node?.digest ? m?.references?.[node.digest] : undefined;
-	if (!node || !ref?.artifacts?.pdf) return null;
-	const record = ref.results?.[key];
-	const read = record && record.page > 0 ? record.page : undefined;
-	const from = ref.digest?.extracted_from;
-	const otherVersion = !!record?.version || ref.version_mismatch || (!!from && (!ref.work || normalId(ref.work) !== normalId(from)));
-	const page = read ?? (otherVersion ? undefined : pageOf(node.locator));
-	return page ? { citekey: ref.citekey, page, result: key } : null;
+	const at = link.id.indexOf(':');
+	const value = link.id.slice(at + 1).trim();
+	if (at < 1 || !value) return undefined;
+	switch (link.id.slice(0, at)) {
+		case 'arxiv':
+			return `https://arxiv.org/pdf/${value}` + (link.page ? `#page=${link.page}` : '');
+		case 'doi':
+			return 'https://doi.org/' + value;
+		case 'mr':
+			return 'https://mathscinet.ams.org/mathscinet-getitem?mr=' + value.replace(/^MR/i, '');
+		case 'zbl':
+			return 'https://zbmath.org/?q=an:' + value;
+		default:
+			return undefined;
+	}
 }

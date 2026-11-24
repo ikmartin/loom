@@ -48,8 +48,8 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 24px;
-		height: 22px;
+		width: 28px;
+		height: 28px;
 		padding: 0;
 		color: var(--ink-soft);
 		background: none;

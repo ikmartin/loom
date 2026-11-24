@@ -1,10 +1,10 @@
-"""One anchor type, shared by results, digest nodes and annotations (plan 0.13 item 2).
+"""One anchor type, the place an annotation on a page of a work's PDF or in a LaTeX file stands (plan 0.13 item 2).
 
-Where something was read from. A **PDF anchor** names a page of an artifact by the artifact's hash, and says which of its two descriptions is of record: `basis: text` when `start`/`end` locate the quotation in the committed page text -- searchable, listable, re-findable in another copy of the work -- and `basis: box` when they cannot, which is what a display formula does, whose text layer is control bytes. A **LaTeX anchor** names a file under the quilt by its path and hash, and `bytes` the range the quotation occupies.
+Where something was read from. A **PDF anchor** names a page of an artifact by the artifact's hash, and says which of its two descriptions is of record: `basis: text` when `start`/`end` locate the quotation in the PDF's page text -- searchable, listable, re-findable in another copy of the work -- and `basis: box` when they cannot, which is what a display formula does, whose text layer is control bytes. A **LaTeX anchor** names a file under the quilt by its path and hash, and `bytes` the range the quotation occupies.
 
 `quads` is one rectangle per line, in points with the origin at the top left. For a text anchor it is derived at build time from the offsets and never recorded; for a box it *is* the anchor, and is recorded. Recording never fails: what cannot be found in the text is recorded as geometry.
 
-A result's anchor lives in `.loom/library/<citekey>.results.json`; an annotation's lives in the `anchor` field of its `created` event, beside the `exact`/`prefix`/`suffix` triple annotations have always carried (`records/selectors.py`), and is told from a plain text selector by carrying `kind`.
+An annotation's anchor lives in the `anchor` field of its `created` event, beside the `exact`/`prefix`/`suffix` triple annotations have always carried (`records/selectors.py`), and is told from a plain text selector by carrying `kind`.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ class Anchor:
     path: str = ""
     bytes: list[int] | None = None
     basis: str = ""  # pdf only: `text` | `box`
-    start: int = 0  # pdf, basis text: offsets into the committed page text of `page`
+    start: int = 0  # pdf, basis text: offsets into the page text of `page`
     end: int = 0
 
     @property

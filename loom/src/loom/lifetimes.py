@@ -24,7 +24,6 @@ from loom.paths import (
     ADOPTION_PREVIEWS,
     ANNOTATION_LOG,
     BLOCK_PREVIEWS,
-    BLOCK_SPANS,
     BLOCKS,
     BUILD_INDEX,
     CACHE,
@@ -34,19 +33,20 @@ from loom.paths import (
     INCORPORATION_PREVIEWS,
     KINDS,
     LIBRARY_CACHE,
+    LIBRARY_DOCUMENTS,
     LIBRARY_NODES,
+    LIBRARY_PAGES,
+    LIBRARY_SOURCES,
+    LIBRARY_THUMBS,
     MARK_BOXES,
     MARKS,
     NODE_INDEX,
     REFOUND,
-    RESOLVED,
     SCRATCH,
     SESSIONS,
     SITE,
     SITE_SVG,
     SNIPPETS,
-    STORAGE,
-    STORE_BOXES,
     TEX,
     document_build,
     within,
@@ -436,10 +436,12 @@ _CROP = re.compile(r"^([0-9a-f]{16})-p(\d+)-")
 #: The folders loom writes into by name, relative to the cache, which stay when empty: a writer makes one and then writes in it.
 _FOLDERS = (
     frozenset(
-        within(CACHE, p)
-        for p in (SITE, SITE_SVG, DRAFT_PREVIEWS, TEX, BLOCKS, SNIPPETS, BLOCK_PREVIEWS, BLOCK_SPANS, LIBRARY_CACHE)
+        within(CACHE, p) for p in (SITE, SITE_SVG, DRAFT_PREVIEWS, TEX, BLOCKS, SNIPPETS, BLOCK_PREVIEWS, LIBRARY_CACHE)
     )
-    | frozenset(within(CACHE, p) for p in (STORE_BOXES, RESOLVED, MARKS, MARK_BOXES, REFOUND, CROPS, CLOSURES))
+    | frozenset(
+        within(CACHE, p)
+        for p in (LIBRARY_PAGES, LIBRARY_SOURCES, LIBRARY_THUMBS, MARKS, MARK_BOXES, REFOUND, CROPS, CLOSURES)
+    )
     | {
         "site/compare",
         "site/incorporation-review",
@@ -448,8 +450,11 @@ _FOLDERS = (
 )
 
 
-#: The node index's name in `LIBRARY_CACHE`.
+#: The node index's name, and the folders of what is drawn from stored documents, in `LIBRARY_CACHE`.
 _NODE_INDEX = within(LIBRARY_CACHE, NODE_INDEX)
+_SOURCES = within(LIBRARY_CACHE, LIBRARY_SOURCES)
+_THUMBS = within(LIBRARY_CACHE, LIBRARY_THUMBS)
+_PAGES = within(LIBRARY_CACHE, LIBRARY_PAGES)
 
 
 class _Rules:
@@ -463,7 +468,6 @@ class _Rules:
         self._documents: set[str] | None = None
         self._keys: set[str] | None = None
         self._marks: set[tuple[str, int]] | None = None
-        self._answers: set[str] | None = None
         self._pictures: set[str] | None = None
 
     def keeps(self, rel: str, mtime: float) -> bool:
@@ -485,15 +489,21 @@ class _Rules:
             m = _CROP.match(first)
             return m is not None and (m.group(1), int(m.group(2))) in self.marks
         if top == "library":
-            work = PurePosixPath(name).parts[:2]
-            if first == "boxes" and len(PurePosixPath(name).parts) > 2:
-                # a stored work's word boxes, its source's among them, while the work's folder, `<scheme>/<id>`, is in the store
-                return (self.root / STORAGE).joinpath(*work).is_dir()
-            if first in (_NODE_INDEX, f"{_NODE_INDEX}-journal"):
-                # the index of the library's nodes, and its journal while a write to it is under way, while the library has nodes
-                return (self.root / LIBRARY_NODES).is_dir()
-            # an answer of a lookup, which loom can only ask again online, while an entry of the library asks it
-            return first == "resolve" and name in self.answers
+            if first == _PAGES:
+                # a stored PDF's page text, section map and word boxes, while the store holds the PDF
+                return (
+                    (self.root / LIBRARY_DOCUMENTS / f"{PurePosixPath(name).parts[0]}.pdf").is_file() if name else True
+                )
+            if first == _THUMBS:
+                # a stored PDF's first page, while the store holds the PDF
+                return (self.root / LIBRARY_DOCUMENTS / f"{PurePosixPath(name).stem}.pdf").is_file() if name else True
+            if first == _SOURCES:
+                # a stored source unpacked, while the store holds its tar
+                return (
+                    (self.root / LIBRARY_DOCUMENTS / f"{PurePosixPath(name).parts[0]}.tar").is_file() if name else True
+                )
+            # the index of the library's nodes, and its journal while a write to it is under way, while the library has nodes
+            return first in (_NODE_INDEX, f"{_NODE_INDEX}-journal") and (self.root / LIBRARY_NODES).is_dir()
         # `blocks/`, `marks/` and anything else: named by the build or not at all
         return False
 
@@ -543,18 +553,6 @@ class _Rules:
         if self._marks is None:
             self._marks = _marked_pages(self.root)
         return self._marks
-
-    @property
-    def answers(self) -> set[str]:
-        if self._answers is None:
-            from loom.refs.resolve import answer_names
-
-            contact = self.result.quilt.config.contact
-            self._answers = set()
-            for entry in self.result.bib.values():
-                with contextlib.suppress(Exception):
-                    self._answers |= answer_names(entry, contact)
-        return self._answers
 
     @property
     def pictures(self) -> set[str]:

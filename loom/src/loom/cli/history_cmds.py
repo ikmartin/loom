@@ -1166,6 +1166,6 @@ def history_verify(as_json: bool, quilt_path: str | None) -> None:
         else f"history verified: {counted(len(steps), 'step')}, {counted(files, 'recorded version')}",
         ok=not bad,
         exit=EXIT_CONTENT if bad else 0,
-        groups=diagnostic_groups(diags, result, cited_next="loom history verify --json"),
+        groups=diagnostic_groups(diags, result),
         data={"diagnostics": [d.to_dict() for d in diags]},
     ).emit(as_json)

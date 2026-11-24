@@ -198,7 +198,12 @@ CASES: dict[str, list[Case]] = {
     "ai orient": [Case(()), Case(NOWHERE, exit=2, why="names no session")],
     "write": [
         Case(("state", "Goals: the parity theorem.", *AGENT)),
-        Case(("Calloway14", "## [overview]\nA reading of the paper.", *AGENT), why="a work's overview"),
+        Case(
+            ("Calloway14", "A reading of the paper.", *AGENT),
+            exit=2,
+            unchanged=True,
+            why="a page is the research state",
+        ),
         Case(("state", "Goals.", "--dry-run", *AGENT), unchanged=True),
         Case(
             ("state", "Goals.", "--base", "sha256:00", *AGENT),

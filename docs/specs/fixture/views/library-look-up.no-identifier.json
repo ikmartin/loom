@@ -1,0 +1,14 @@
+{
+ "answer": {
+  "error": {
+   "code": "no-identifier",
+   "message": "its entry states no DOI, arXiv number or zbMATH number to look up"
+  },
+  "status": 409
+ },
+ "endpoint": "library-look-up",
+ "request": {
+  "online": true,
+  "ref": "sh-0404-ref"
+ }
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { neighbourhood } from './local';
-import { documentColor, memberships, graphInput, PAPER } from './layout';
+import { documentColor, memberships, graphInput } from './layout';
 import type { Manifest } from '$lib/manifest/types';
 
 const m = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
@@ -36,37 +36,6 @@ describe('the local graph', () => {
 });
 
 
-describe('the work graph', () => {
-	it('draws each cited work as one node and keeps the corpus own results', () => {
-		const { nodes, edges } = graphInput(m, { external: 'papers' });
-		const ids = new Set(nodes.map((n) => n.id));
-		expect([...ids]).toContain(PAPER + 'Kre99'); // digested, and used
-		expect([...ids]).toContain(PAPER + 'Har77'); // cited and never digested, which the expanded graph cannot show
-		expect([...ids].filter((id) => m.nodes[id]?.external)).toEqual([]); // no external result survives as itself
-		expect(edges.filter((e) => !ids.has(e.from) || !ids.has(e.to))).toEqual([]);
-		const toKre = edges.filter((e) => e.to === PAPER + 'Kre99');
-		expect(toKre.length).toBeGreaterThan(0);
-		expect(toKre.filter((e) => (e.count ?? 0) < 1)).toEqual([]);
-	});
-
-	it('contracts a digest section, which is not marked external, into its paper', () => {
-		const fake = JSON.parse(JSON.stringify(m)) as typeof m;
-		const file = fake.references.Kre99.digest!.file;
-		fake.nodes['Kre99-sec-1'] = { ...fake.nodes['Kre99-thm-2.1'], id: 'Kre99-sec-1', kind: 'section', external: false, digest: null, file };
-		fake.edges = [...fake.edges, { from: 'sy-0003', to: 'Kre99-sec-1', kind: 'prose' } as (typeof fake.edges)[number]];
-		const { nodes, edges } = graphInput(fake, { external: 'papers' });
-		expect(nodes.map((n) => n.id)).not.toContain('Kre99-sec-1');
-		expect(edges).toContainEqual(expect.objectContaining({ from: 'sy-0003', to: PAPER + 'Kre99' }));
-	});
-
-	it('is the expanded graph with its external results removed, apart from the paper nodes', () => {
-		const expanded = graphInput(m, { external: 'none' });
-		const papers = graphInput(m, { external: 'papers' });
-		const own = new Set(expanded.nodes.map((n) => n.id));
-		expect(papers.nodes.filter((n) => !n.id.startsWith(PAPER)).map((n) => n.id).sort()).toEqual([...own].sort());
-	});
-});
-
 it("whole quilt retains all the person's nodes; document scope uses reachability across source files", () => {
 	const changed = structuredClone(m);
 	const node = changed.nodes['sy-0003'];
@@ -74,7 +43,7 @@ it("whole quilt retains all the person's nodes; document scope uses reachability
 	const secondary = 'drafting/toy.tex';
 	changed.masters.push({ ...changed.masters[0], path: secondary });
 	node.reached_by = [primary, secondary];
-	const options = { allNodes: true, external: 'all' as const };
+	const options = { allNodes: true };
 	// every node but an agent document's derived ones, which only their own document's scope draws
 	expect(graphInput(changed, options).nodes).toHaveLength(Object.values(changed.nodes).filter((n) => !n.derived_of).length);
 	const before = graphInput(changed, { ...options, master: secondary });

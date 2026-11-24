@@ -1,0 +1,13 @@
+{
+ "answer": {
+  "gen": 1789808400000,
+  "ok": true,
+  "result": "unchanged",
+  "unchanged": true
+ },
+ "endpoint": "library-places",
+ "request": {
+  "ref": "sh-0403-ref",
+  "since": 1789808400000
+ }
+}

@@ -1,17 +1,17 @@
 # The library as a web of results
 
-**Decided with the author on 2026-11-20.** The node file, its checks, the index and the tag log are built (`loom/src/loom/library/`); the rest is not built yet (see [README](README.md#decided-not-yet-built)), and nothing makes a node from a work. This document is the design of the library as it is to be rebuilt: what it is for, what a node is, how nodes are joined, how evidence about them is kept, and how formalization stands on it. The shape of the files is [`docs/specs/nodes.md`](../specs/nodes.md), which wins over this document about a shape, as this one wins about what a thing means. Until it is built, the library section of [`model.md`](model.md#the-library) and `docs/specs/digests.md` describe what loom does.
+**Decided with the author on 2026-11-20.** Built (`loom/src/loom/library/`): the node file, its checks, the index and the tag log; a reference for each work a quilt holds, with its macros node and its documents stored by hash; the intake that adds a work; the library's log; and the carry-over of an earlier loom's library. The rest is not built yet (see [README](README.md#decided-not-yet-built)), and nothing makes a statement or a proof from a work. This document is the design of the library as it is being built: what it is for, what a node is, how nodes are joined, how evidence about them is kept, and how formalization stands on it. The shape of the files is [`docs/specs/nodes.md`](../specs/nodes.md), which wins over this document about a shape, as this one wins about what a thing means. What loom does today is the library section of [`model.md`](model.md#the-library).
 
 ## What it is for
 
-A quilt grows as its author works. References accrue, each brings results the author uses, compares and builds on, and with digests and Lean those results can be joined into a slowly growing web of mathematics. The library is where that web is kept: in the author's words, "a literal library organized as a graph rather than in stacks of shelves", which shows what rests on what and what has been formally verified.
+A quilt grows as its author works. References accrue, each brings results the author uses, compares and builds on, and digested, and formalized in Lean, those results can be joined into a slowly growing web of mathematics. The library is where that web is kept: in the author's words, "a literal library organized as a graph rather than in stacks of shelves", which shows what rests on what and what has been formally verified.
 
 There are two ways of looking at one body of nodes. **By work**: the papers and books, as a reference manager lists them, each with the results read from it. **By dependency**: a result, what it uses, and what uses it. Neither is a second store; they are two indexes of the same nodes.
 
 Two uses decide the design.
 
 - **First, and built for the pilot: an author formalizes a draft.** The author gives loom a draft. Loom digests the results of other works that the draft depends on, and nothing more. The author's agent then formalizes the draft in Lean with those outside results assumed, so that no effort goes into proving mathematics that is already published.
-- **Later: a publisher keeps a web of what it holds.** An open publisher digests each paper it receives into one growing web, of the size of the Stacks project. A submitter who used loom hands over their digests, so the publisher need only run the Lean again. Nothing is built for this now. What it needs later should be additions, almost without exception: the core of the library, which is the node, its edges and its evidence, should not have to change for it.
+- **Later: a publisher keeps a web of what it holds.** An open publisher digests each paper it receives into one growing web, of the size of the Stacks project. A submitter who used loom hands over their digested nodes, so the publisher need only run the Lean again. Nothing is built for this now. What it needs later should be additions, almost without exception: the core of the library, which is the node, its edges and its evidence, should not have to change for it.
 
 Two words are kept apart throughout. **To digest** is to make a node from mathematics in paper form, a TeX source or a PDF. It is not to formalize: a digested node says nothing in Lean. **To formalize** is to state a node in Lean and, for the author's own results, to prove it. Works in the library are digested, and almost never proved.
 
@@ -85,7 +85,7 @@ To these is added **parentage**, read from the id and written nowhere: a proof i
 
 A dependency is written on the node whose text makes it. A proposition depends on a lemma through its proof, and a statement with two proofs may rest on different things by each, so the proof lists what the argument uses and the statement lists what the statement needs. What a proposition depends on is a question asked of both. There is no edge for containment: reading a work opens its PDF, and the order of a work's nodes is where each stands in it.
 
-**Three are written in records, because someone asserts them**: that two nodes are the **same** result, that one **generalises** another, that two **contradict**. Loom has these today as relations, each with who said it and why. Nothing is merged silently, and nothing detects that two nodes are one; that is a later piece, and these words are kept for it.
+**Three are written in records, because someone asserts them**: that two nodes are the **same** result, that one **generalises** another, that two **contradict**, each with who said it and why (not built yet). Nothing is merged silently, and nothing detects that two nodes are one; that is a later piece, and these words are kept for it.
 
 **Four are read from Lean by loom and written by nobody**: a declaration **states** a node, or part of one; a declaration **supports** a node, serving its proof without being a node; a node is **assumed**, stated as an axiom with no proof behind it; and one declaration **depends** on another.
 
@@ -147,24 +147,23 @@ The library is built so that it can reach the size of the Stacks project and so 
 - **An index loom derives**, under `.loom/cache/`, so that no command reads every file.
 - **A node is drawn in the browser** (the author, 2026-11-20), with TeX run only for what a node needs it for, such as a diagram, and that result kept by the node's hash. A person's documents stay TeX's own output: that was chosen for speed and for faithfulness, after earlier versions of loom drew a paper's source in the browser very unfaithfully. A node's body is short prose and mathematics, the easy case, and it is to work well and fast or not be used; so it is compared with TeX's output on real statements before anything rests on it.
 - **Nothing is made before it is asked for** where that is possible: a node is typeset when it is first shown, a work's pages are read when it is opened, and the index follows the files that changed.
-- **The viewer is sent what it is showing, and no more.** Today the server sends the viewer one file listing every node of the quilt whenever anything changes, ten megabytes at the author's 2,354 nodes. For the library the viewer asks instead for what is on screen, a work's results, a node and what it uses, what a draft rests on, and is sent that.
+- **The viewer is sent what it is showing, and no more.** Today the server sends the viewer one file listing every node of the quilt whenever anything changes. For the library the viewer asks instead for what is on screen, a work's results, a node and what it uses, what a draft rests on, and is sent that.
 - **A number for the format in every file**, raised only when the format changes, since files travel without the loom that wrote them.
 - **Nothing local in a node but its prefix.** A quilt keeps the prefix it has; a clash between two quilts is settled when they are joined.
 - **Evidence travels as a claim.** An imported record that Lean accepted a node is a report until the loom that receives it runs the check, which is the reason a publisher runs the Lean again (P15).
 
-## What this replaces
+## Works and the earlier library
 
-Nothing of today's library is kept because it exists (the author, 2026-11-20). Every page, control, command, record and rule that belongs to the library as built is a candidate to be replaced or removed, a work's Info with its cards of results among them, and what stays, stays on its merits against this design. The old decisions were often made in passing, and this rework is not to be shaped by them. What follows is what is known to go; an inventory of the rest comes before the build is planned.
+Nothing of the earlier library is kept because it existed (the author, 2026-11-20): what stays of it, in loom or in the viewer, stays on its merits against this design, since its decisions were often made in passing.
 
-- **Digests** as one LaTeX file for each work with a record beside it, and ids made from a citekey and the paper's number.
-- **The bibliography file as the place loom keeps its own facts.** A work is a node, so its id, its stored copies and its entry are one file; a bibliography for TeX is generated from the references.
-- **Work ids made from authors, title and year**, and the piece of 2026-11-20 that pinned them, which was stopped. Its lessons stay as rules: two entries are not one work unless the person says so, an entry a person corrected is not rewritten, and an entry is found where the parser reads it.
+- **A work is a node**, so its id, its stored documents and its entry are one file, and no other file keeps loom's facts about a work. A bibliography for TeX is to be generated from the references (not built yet).
+- **An entry is the person's.** Two entries are not one work unless the person says so, an entry a person corrected is not rewritten, and an entry is found where the parser reads it.
 
-The quilt's layout changes under `.loom/library/` alone, so the format number becomes 2. Works and their stored documents are carried into references. Digests are not converted: the author starts fresh. Nothing else of the old library is carried or kept working: a link written to a work's old id is not honoured, and a quilt whose pages hold such links has them written again once (the author, 2026-11-20: "no need to support an old unreleased link format forever"). An existing quilt may break for this; the product is not held back to spare one.
+The quilt's layout number is 2 (`loom/src/loom/layout.py`). `loom upgrade`, or the publisher's `library-upgrade`, brings a quilt an earlier loom made forward, both by one function (`loom/src/loom/upgrade.py`) that also makes the quilt's agents' layer this loom's, so no agent is left told of a command that is gone. The carry (`loom/src/loom/library/carry.py`): each work and its stored documents become a reference, each note on a work names its reference, each overview becomes a note on its work, and each `cited:work:` link in loom's own pages becomes a `quilt:` link, and what else its library held, its digests among it, is removed, not converted: the author starts fresh. A link to a work by a name loom made for it is not honoured (the author, 2026-11-20: "no need to support an old unreleased link format forever"). An existing quilt may break for this; the product is not held back to spare one.
 
-Two pieces built the same week have a place in the new design, the tray, which is the way a work comes in and now makes a reference, and the tool that places a result in a paper, which records where a node stands. Whether what was built of each is kept, changed or made again is judged like everything else.
+Two pieces built the same week have a place in this design: the intake, the way a work comes in, which makes a reference (`loom/src/loom/library/intake.py`), and the mapping of a place on a page to an anchor (`loom/src/loom/refs/anchoring.py`), which is how where a node stands is to be recorded. Whether what was built of each is kept, changed or made again is judged like everything else.
 
-**Settled from the inventory of today's library** (the author, 2026-11-20).
+**Settled from the inventory of the earlier library** (the author, 2026-11-20).
 
 - **Deleting a work with results** is one act with one undo, and whatever used those results says they are gone.
 - **A work has no overview of its own.** What an agent wants to say of a work, so that later agents find it, is a note on the work, with tags.
@@ -180,7 +179,7 @@ Two pieces built the same week have a place in the new design, the tray, which i
 One path through the model, enough for the first use.
 
 1. The node file and its checks, with the index (built).
-2. References and their macros, made from the works a quilt holds.
+2. References and their macros, made from the works a quilt holds (built).
 3. Digest, as one act for any source, run by loom only on what a draft depends on.
 4. The Library view: works, a work's results beside its PDF, a result's page.
 5. Formalization on top: declarations that name their nodes, loom's fenced check, assumed results, attestation, and what a theorem is verified relative to.
