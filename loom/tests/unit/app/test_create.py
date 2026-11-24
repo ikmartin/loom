@@ -222,3 +222,25 @@ def test_a_paper_dropped_over_the_wire_becomes_a_quilt_that_is_served(home_serve
     entry = registry.find(done["quilt"])
     assert entry is not None
     until(lambda: home_server.supervisor.state(entry)["state"] == "running", "the quilt served")
+
+
+def test_a_file_dropped_where_a_folder_was_dropped_is_refused() -> None:
+    key = drop({"a/b.tex": PAPER})
+    with pytest.raises(ApiError) as refused:
+        create.receive(key, "a", io.BytesIO(b"x"), 1)
+    assert refused.value.code == "bad-path" and [p.name for p in (create.incoming() / key / "files").iterdir()] == ["a"]
+
+
+def test_an_import_stopped_by_anything_leaves_no_folder_behind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom.cli import paper
+
+    def stopped(*a: object, **k: object) -> None:
+        raise RuntimeError("stopped")
+
+    monkeypatch.setattr(paper, "run_import", stopped)
+    key = drop({"paper.tex": PAPER})
+    main = create.paper(key, None)
+    assert isinstance(main, Path)
+    with pytest.raises(RuntimeError):
+        create.make(create.target("Gone", str(tmp_path)), main, lambda step: None, served)
+    assert not (tmp_path / "Gone").exists() and registry.entries() == []

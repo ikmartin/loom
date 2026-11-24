@@ -105,7 +105,11 @@ def receive(drop: str | None, rel: str, stream: _Reads, length: int) -> dict[str
     if left:
         tmp.unlink()
         raise ApiError("cut-short", "the file ended before its length")
-    tmp.replace(target)
+    try:
+        tmp.replace(target)
+    except OSError as exc:
+        tmp.unlink()
+        raise ApiError("bad-path", "a dropped file's path is a folder already") from exc
     return {"drop": drop, "path": path.as_posix(), "size": length}
 
 
@@ -268,9 +272,13 @@ def make(
             except Differs:
                 brought = run_import(load_quilt(where), main, True, check=False, fix_anchors=True)
                 done["differs"] = True
-        except (ContentError, EnvError, OSError) as exc:
+        except Exception as exc:
+            # whatever stopped it, no half-made quilt is left to refuse the next try as "inside a quilt"
             undo_minimal_quilt(where, existed, made)
-            raise ApiError("cannot-import", str(exc).splitlines()[0] if str(exc) else type(exc).__name__, 409) from exc
+            if isinstance(exc, (ContentError, EnvError, OSError)):
+                said = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
+                raise ApiError("cannot-import", said, 409) from exc
+            raise
         document = brought.data["document"]
         # the quilt opens on the paper, not on a page about loom
         set_values(load_quilt(where), {"quilt.home": document})
