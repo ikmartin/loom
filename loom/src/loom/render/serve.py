@@ -856,6 +856,10 @@ class LoomHandler(SimpleHTTPRequestHandler):
             connected = (
                 {"connected": json.loads(self.publications.connected_state)} if self.publications is not None else {}
             )
+            from loom.app.registry import home_url
+
+            # the home page, so a page whose server stopped can send the person back to it
+            home = home_url()
             self._json(
                 HTTPStatus.OK,
                 {
@@ -866,6 +870,7 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     **connected,
                     **frames,
                     **served,
+                    **({"home": home} if home else {}),
                 },
             )
             return

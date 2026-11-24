@@ -39,6 +39,22 @@ def _path() -> Path:
     return folder() / "quilts.json"
 
 
+def address() -> Path:
+    """Where the running home records its port, pid and address."""
+    return folder() / "serve.json"
+
+
+def home_url() -> str:
+    """The home page's address while a home runs on this machine, else ''."""
+    try:
+        data = json.loads(address().read_text(encoding="utf-8"))
+        pid, url = data["pid"], data["url"]
+        os.kill(pid, 0)
+    except (OSError, ValueError, KeyError, TypeError):
+        return ""
+    return url if isinstance(url, str) else ""
+
+
 def _read() -> tuple[dict[str, Entry], set[int]]:
     """The list and every port ever given; both empty when there is no list or it cannot be read."""
     try:

@@ -9,7 +9,6 @@ import json
 import os
 import signal
 import socket
-import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -19,35 +18,12 @@ from loom.app import registry, supervise
 from loom.app.registry import Entry
 from loom.app.supervise import Supervisor
 from loom.render.serve import read_serve_json
-from tests.helpers import PATIENCE
-
-
-def until(done: Callable[[], bool], what: str) -> None:
-    end = time.monotonic() + PATIENCE
-    while time.monotonic() < end:
-        if done():
-            return
-        time.sleep(0.1)
-    raise AssertionError(f"waited {PATIENCE} s for {what}")
+from tests.unit.app.conftest import until
 
 
 @pytest.fixture
-def bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A stand-in viewer, version 1, which every server the test starts serves."""
-    b = tmp_path / "bundle"
-    (b / "_app").mkdir(parents=True)
-    (b / "index.html").write_text("<p>viewer</p>")
-    (b / "_app" / "version.json").write_text(json.dumps({"version": "1"}))
-    monkeypatch.setenv("LOOM_ARRAS_BUNDLE", str(b))
-    return b
-
-
-@pytest.fixture
-def sups(bundle: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Supervisor]]:
+def sups(bundle: Path, ports: None) -> Iterator[list[Supervisor]]:
     """Homes for the test, each serving with no compiles; whatever they run is stopped at the end."""
-    with socket.socket() as s:
-        s.bind(("127.0.0.1", 0))
-        monkeypatch.setattr(registry, "FIRST_PORT", s.getsockname()[1])
     made: list[Supervisor] = []
     yield made
     for sup in made:
@@ -55,10 +31,6 @@ def sups(bundle: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[list[Supervi
             if child.proc is not None and child.proc.poll() is None:
                 child.proc.kill()
                 child.proc.wait()
-    for entry in registry.entries():
-        pid = read_serve_json(Path(entry.root)).get("pid")
-        if isinstance(pid, int) and supervise.ask(entry) is not None:
-            os.kill(pid, signal.SIGKILL)
 
 
 def home(sups: list[Supervisor]) -> Supervisor:

@@ -70,7 +70,6 @@ None is registered, so help, the command reference and the agent's tools are unc
 | `loom library suggest REF --why`, an agent's command and tool | the library |
 | `loom formal record KEY …`, an agent's command and tool | formalization |
 | `loom formal attest KEY`, the author's | formalization |
-| `loom app` | install and launch |
 | the mode `formalize` | formalization |
 
 ## Diagnostics and doctor
