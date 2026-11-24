@@ -1151,6 +1151,7 @@ class ServeSession:
         compile_masters: bool = True,
         interval: float = 1.0,
         live: bool = False,
+        unasked: bool = True,
     ) -> None:
         self.quilt = quilt
         self.bundle_dir = bundle_dir
@@ -1164,6 +1165,10 @@ class ServeSession:
         self.port = port
         self.compile_masters = compile_masters
         self.interval = interval
+        from loom.library.unasked import Unasked
+
+        #: The unasked job: the works the library's stubs name, tried one at a time after each build (`library.unasked`); None where the server runs without it.
+        self.unasked = Unasked(quilt.root, online=self._online) if unasked else None
         # reentrant: a write through the API publishes under the hold that wrote it (`LoomHandler.do_POST`)
         self.lock = threading.RLock()
         self.builds = 0
@@ -1200,6 +1205,11 @@ class ServeSession:
             if compile_masters
             else None
         )
+
+    def _online(self) -> bool:
+        """Whether the quilt lets loom use the network, read each time: `[library] online` set, and true."""
+        cfg = self.quilt.config
+        return bool(cfg.online_asked and cfg.online)
 
     def rebuild(
         self,
@@ -1252,6 +1262,10 @@ class ServeSession:
                 self.watcher.rebaseline(seen)
             self.publications.published()
             self.library_moved(report.result)
+            if self.unasked is not None:
+                from loom.library.unasked import due as works_due
+
+                self.unasked.want(works_due(root))
         if changed is not None:
             from loom.cli.report import counted
 
@@ -1569,6 +1583,8 @@ class ServeSession:
 
         if self.compiles is not None:
             self.compiles.stop()
+        if self.unasked is not None:
+            self.unasked.stop()
         (self.quilt.root / COMPILES).unlink(missing_ok=True)
         if self.presence:
             self.presence.stop()
