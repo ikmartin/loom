@@ -309,9 +309,12 @@ def test_a_document_is_read_from_its_html_and_an_edit_since_is_made_again_by_tex
     assert len(pictures) == 2 and all(
         s.startswith("svg/") and (q / ".loom/cache/site" / s).is_file() for s in pictures
     ), pictures
-    # a block's span takes in the citation it ends with, so the citation finds its command, and through its postnote its target
+    # a block's span takes in the citation it ends with, so the citation finds its own command and its postnote; nothing resolves the result a postnote names, so it claims no target
     node = (q / ".loom/cache/site/fragments/nodes/sy-000A.html").read_text(encoding="utf-8")
-    assert 'data-postnote="Theorem 2.1" data-target="Kre99-thm-2.1"' in node
+    cite = re.search(r'<span class="cite" data-citekey="Kre99"[^>]*>', node)
+    assert cite is not None, node
+    assert 'data-tex="\\cite[Theorem 2.1]{Kre99}"' in cite.group(0) and 'data-postnote="Theorem 2.1"' in cite.group(0)
+    assert re.search(r'data-at="\d+"', cite.group(0)) and "data-target" not in cite.group(0), cite.group(0)
     # the paper formats set the title and heads by the document's class
     assert re.match(r'<h1 [^>]*data-documentclass="amsart"', frag)
     # each formula as the source writes it, which is what a quote copies, and not as TeX4ht writes it back
