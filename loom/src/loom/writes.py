@@ -846,6 +846,14 @@ def _all_after(root: Path, entry: dict[str, Any]) -> bool:
     return all(_holds(root, rel, ab[1]) for rel, ab in (entry.get("files") or {}).items())
 
 
+def _real(p: Path | str) -> Path | None:
+    """`p` with every link resolved, or None where the file system cannot say, as while a folder on the way is being renamed: Python before 3.13 raises then rather than answer, and recovery takes a path it cannot resolve on trust no more than one that leads out."""
+    try:
+        return Path(os.path.realpath(p))
+    except OSError:
+        return None
+
+
 def _in_quilt(root: Path, rel: Any) -> bool:
     """Whether `rel`, as a journal names it, is a path in the quilt in its normal form that stays inside it with every symlink followed: the only kind recovery reads or writes."""
     if not isinstance(rel, str):
@@ -856,7 +864,8 @@ def _in_quilt(root: Path, rel: Any) -> bool:
     except (WriteRefused, OSError):
         # a path the file system cannot even look at, as while a folder on it is being renamed, is not taken on trust
         return False
-    return Path(os.path.realpath(root / rel)).is_relative_to(os.path.realpath(root))
+    real = _real(root / rel)
+    return real is not None and real.is_relative_to(os.path.realpath(root))
 
 
 #: How recovery opens each folder on its way to a file it writes on a journal line's word: as a folder, never through a link.
@@ -888,8 +897,8 @@ def _place(root: Path, rel: str) -> tuple[str, ...] | None:
     It may write in the real `.loom/` folder, which is loom's own, and elsewhere only where no part of the real path begins with a dot. Nothing a line or the config says moves loom's own place: the history is written only where it lies in one of those (`_history_place`). The parts are the judgment, and `_folder_at` opens them one at a time without following a link, so what is judged is what is written.
     """
     top_path = os.path.realpath(root)
-    real = Path(os.path.realpath(root / rel))
-    if not real.is_relative_to(top_path) or real == Path(top_path):
+    real = _real(root / rel)
+    if real is None or not real.is_relative_to(top_path) or real == Path(top_path):
         return None
     parts = real.relative_to(top_path).parts
     try:
@@ -905,8 +914,8 @@ def _place(root: Path, rel: str) -> tuple[str, ...] | None:
 def _history_place(root: Path, history: Path) -> tuple[str, ...] | None:
     """The parts of the history's real path under the quilt's real root where recovery may write it: in the real `.loom/` under no further folder whose name begins with a dot, or under no such folder at all; None anywhere else, outside the quilt among it, whatever `[quilt] history` says."""
     top_path = os.path.realpath(root)
-    real = Path(os.path.realpath(history))
-    if not real.is_relative_to(top_path) or real == Path(top_path):
+    real = _real(history)
+    if real is None or not real.is_relative_to(top_path) or real == Path(top_path):
         return None
     parts = real.relative_to(top_path).parts
     try:
@@ -1006,8 +1015,10 @@ def _remove_made_at(root: Path, parts: tuple[str, ...], made: str) -> bool:
 
 def _clear_temps_at(root: Path, rel: str) -> None:
     """Remove the temporary files a write of the journal's path `rel` left beside the file it reaches, `.<name>.<token>.loom-tmp`, wherever that is in the quilt, a dot-named folder among it: a regular file of that name is loom's own litter, which no app reads, so removing one reaches nothing of an app's. Through folders opened without following a link."""
-    real = Path(os.path.realpath(root / rel))
+    real = _real(root / rel)
     top = os.path.realpath(root)
+    if real is None:
+        return
     if not real.is_relative_to(top) or real == Path(top):
         return
     parts = real.relative_to(top).parts
@@ -1076,7 +1087,8 @@ def _needs_history(root: Path, history: Path, entry: dict[str, Any]) -> bool:
     if not agent:
         return True
     real = os.path.realpath(history)
-    return any(Path(os.path.realpath(root / rel)).is_relative_to(real) for rel in entry.get("files") or {})
+    # a file the file system cannot resolve is taken to lie in the history, so the act is left rather than settled blind
+    return any((at := _real(root / rel)) is None or at.is_relative_to(real) for rel in entry.get("files") or {})
 
 
 def _logs(root: Path, history: Path) -> dict[str, Path]:
@@ -1100,8 +1112,8 @@ def _log_ok(root: Path, history: Path, name: Any) -> bool:
     p = _logs(root, history).get(name) if isinstance(name, str) else None
     if p is None:
         return False
-    real = Path(os.path.realpath(p))
-    return any(real.is_relative_to(os.path.realpath(d)) for d in (root / LOOM, history))
+    real = _real(p)
+    return real is not None and any(real.is_relative_to(os.path.realpath(d)) for d in (root / LOOM, history))
 
 
 def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
