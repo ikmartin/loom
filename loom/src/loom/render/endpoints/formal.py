@@ -115,17 +115,22 @@ class _Planner:
         return elaborated(self.drafts.evidence, found, self.drafts.lean_now)
 
     def before(self, target: str, found: Any) -> list[Any]:
-        """What stands before `target` reads formalized, from the gate's own needs of the Lean the request will make (`plan.asked`, `status.needs`, `plan.needed`), the target's own Lean first."""
-        from loom.evidence.plan import asked, needed, target_need
-        from loom.evidence.status import needs
+        """What stands before `target` reads formalized, from the gate's own needs (`plan.asked_of`) of its Lean, or of the Lean the request will make (`plan.asked`, `status.needs`), each as the person reads it (`plan.needed`), the target's own Lean first."""
+        from loom.evidence.plan import asked, asked_of, needed, target_need
+        from loom.evidence.status import Waiting, needs
         from loom.evidence.web import Here
 
         here = Here("block", target)
-        nodes, assumed, rests = asked(found, target, self.drafts.is_library, self.key_of)
-        nodes += [n for kind, n in self.web.closure(here) if kind == "node" and n not in nodes]
-        subject = self.web.subject(here)
-        seen = frozenset({subject.name}) if subject is not None else frozenset()
-        leaves = needs(self.drafts.evidence, self.web, nodes, assumed, self.drafts.lean_now, seen, list(self.web.cited(here)), here, rests)  # fmt: skip
+        evidence, now = self.drafts.evidence, self.drafts.lean_now
+
+        def planned() -> list[Waiting]:
+            nodes, assumed, rests = asked(found, target, self.drafts.is_library, self.key_of)
+            nodes += [n for kind, n in self.web.closure(here) if kind == "node" and n not in nodes]
+            subject = self.web.subject(here)
+            seen = frozenset({subject.name}) if subject is not None else frozenset()
+            return needs(evidence, self.web, nodes, assumed, now, seen, list(self.web.cited(here)), here, rests)
+
+        leaves = asked_of(evidence, self.web, self.drafts.standing(target), now, planned)
 
         def own(key: tuple[str, str]) -> tuple[str, Any, bool] | None:
             if key[0] == "node":
@@ -137,7 +142,7 @@ class _Planner:
             return there.name, standing, self.elaborated(standing)
 
         mine = target_need(target, self.drafts.standing(target), self.elaborated(self.drafts.standing(target)))
-        return ([mine] if mine is not None else []) + needed(leaves, own)
+        return ([mine] if mine is not None else []) + needed(leaves, own, self.web.texts)
 
     def row(self, key: str) -> dict[str, Any]:
         from loom.evidence.webview import node_row
@@ -146,6 +151,16 @@ class _Planner:
             return self.drafts.row(key)
         held = self.library.file(key)
         return node_row(key, self._node(key), held[1] if held else None)
+
+    def entry(self, need: Any) -> dict[str, Any]:
+        """One thing standing before, as `before` sends it: a result's row, a citation's `{cite}`, a label's `{label, results}` with a row for each block bearing it, or a node the library holds no result by, `{node}`."""
+        if need.of == "cite":
+            return {"cite": need.key}
+        if need.of == "label":
+            return {"label": need.key, "results": [self.row(n.key) for n in self.drafts.web.bearing.get(need.key, [])]}
+        if need.of == "node":
+            return {"node": need.key}
+        return self.row(need.key)
 
     def target(self, key: str) -> dict[str, Any]:
         row = self.row(key)
@@ -182,7 +197,7 @@ def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     row = planner.row
     groups: dict[tuple[str, str], list[dict[str, Any]]] = {}
     for need in found.before:
-        groups.setdefault((need.why, need.when), []).append({"cite": need.key} if need.why == "cite" else row(need.key))
+        groups.setdefault((need.why, need.when), []).append({**planner.entry(need), "for": found.asking[need]})
     return {
         "ok": True,
         "targets": [planner.target(k) for k in found.targets],

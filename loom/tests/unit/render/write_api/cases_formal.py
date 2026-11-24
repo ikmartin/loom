@@ -51,7 +51,7 @@ UNLABELLED = "drafting/talk.tex#lemma:1"
 
 @case("formal-plan")
 def _formal_plan(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    s, _root = synthetic(serve, tmp_path, watch=False)
+    s, root = synthetic(serve, tmp_path, watch=False)
     refuses(s, "formal-plan", {}, 400, "bad-field", "targets")
     refuses(s, "formal-plan", {"targets": ["sy-9999"]}, 404, "no-such-result", "sy-9999")
     # the theorem's proof uses a lemma, whose statement uses a definition: one to prove and one to state
@@ -66,6 +66,60 @@ def _formal_plan(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assumed = succeeds(s, "formal-plan", {"targets": ["sy-0003"], "assume": ["sy-0002"]})
     assert [(r["result"], r["assume"]) for r in assumed["prove"]] == [("sy-0002", True)]
     assert [r["result"] for r in succeeds(s, "formal-plan", {"targets": [UNLABELLED]})["stops"]] == [UNLABELLED]
+    _two_texts(s, root)
+
+
+def _before(found: dict[str, Any]) -> list[tuple[str, str, list[Any]]]:
+    return [(g["why"], g["when"], [r.get("result") or r.get("label") for r in g["results"]]) for g in found["before"]]
+
+
+#: A lemma in a file both of the synthetic quilt's documents read, and the lemma its proof uses, with a text in each.
+BOUNDED = "drafting/nodes/bounded.tex#lemma:1"
+
+
+def _two_texts(s: Any, root: Path) -> None:
+    """The target proved from a lemma assumed for now, with a text in each document that reads the target: the list names the label two texts answer to before the agent's Lean is written and after the person attests it, while the target waits on it; once the texts are one, that lemma's own Lean."""
+    import json
+
+    from loom.evidence.log import write
+    from loom.evidence.subjects import Who
+    from loom.evidence.webview import drafts
+    from loom.paths import MANIFEST
+    from loom.render.endpoints.base import _scan
+
+    (root / "drafting/nodes/bounded.tex").write_text("\\begin{lemma}[Bounded]\\label{thm:t}\nEvery widget is bounded.\n\\end{lemma}\n\\begin{proof}\nBy Lemma~\\ref{lem:b}.\n\\end{proof}\n", encoding="utf-8")  # fmt: skip
+    for doc, text, around in (("main.tex", "One text of it.", "BODY"), ("talk.tex", "Another text of it.", "\\begin{frame}{Bounded}BODY\\end{frame}")):  # fmt: skip
+        body = f"\\input{{nodes/bounded}}\n\\begin{{lemma}}\\label{{lem:b}}\n{text}\n\\end{{lemma}}\n"
+        path = root / "drafting" / doc
+        path.write_text(path.read_text(encoding="utf-8").replace("\\end{document}", around.replace("BODY", body) + "\n\\end{document}"), encoding="utf-8")  # fmt: skip
+    s.rebuild()
+    ask = {"targets": [BOUNDED], "assume": ["drafting/main.tex#lemma:1"]}
+    # the lemma, assumed for now, is an axiom of the Lean to be made, and no one text answers to its label near the target
+    found = succeeds(s, "formal-plan", ask)
+    assert [(r["result"], r["assume"]) for r in found["prove"]] == [("drafting/main.tex#lemma:1", True)]
+    assert _before(found) == [("ambiguous", "now", ["lem:b"]), ("attest", "after", [BOUNDED])]
+    # the agent's Lean as the plan says, an axiom stating the lemma, and the person attests it
+    web = drafts(_scan(root), {}, root).web
+    decls = [{"name": "t", "kind": "theorem", "role": "states", "names": {"label": "thm:t"}, "statement": "sha256:" + "1" * 64, "axioms": ["propext", "b"], "sorry": False}, {"name": "b", "kind": "axiom", "role": "states", "names": {"label": "lem:b"}, "statement": "sha256:" + "5" * 64, "axioms": [], "sorry": False}]  # fmt: skip
+    (root / "lean").mkdir(exist_ok=True)
+    (root / "lean/A.lean").write_text("theorem t : True := trivial\n", encoding="utf-8")
+    lean_file = "sha256:" + hashlib.sha256((root / "lean/A.lean").read_bytes()).hexdigest()
+    record = write(root, "lean", Who("loom"), on=web.subject(web.heres("thm:t")[0]), project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64}, files={"lean/A.lean": lean_file}, declarations=decls, assumed=[], uses=[], replay={"tool": "leanchecker", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+    succeeds(s, "formal-attest", {"result": BOUNDED, "observation": record.id})
+    standing = drafts(_scan(root), json.loads((root / MANIFEST).read_text(encoding="utf-8")), root).standing(BOUNDED)
+    assert standing.lean == "waiting" and [(w.key, w.why) for w in standing.waiting_on] == [(("label", "lem:b"), "unknown")]  # fmt: skip
+    found = succeeds(s, "formal-plan", ask)
+    assert _before(found) == [("ambiguous", "now", ["lem:b"])], found["before"]
+    [label] = found["before"][0]["results"]
+    assert sorted(r["source"]["doc"] for r in label["results"]) == ["drafting/main.tex", "drafting/talk.tex"]
+    assert label["for"] == [BOUNDED]
+    # one text: what it then needs is its own Lean, which the agent writes
+    talk = root / "drafting/talk.tex"
+    talk.write_text(
+        talk.read_text(encoding="utf-8").replace("Another text of it.", "One text of it."), encoding="utf-8"
+    )
+    s.rebuild()
+    assert [(w, t) for w, t, _ in _before(succeeds(s, "formal-plan", ask))] == [("attest", "after")]
 
 
 @case("formal-ask")

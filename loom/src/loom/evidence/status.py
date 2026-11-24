@@ -30,12 +30,20 @@ class Cause:
     now: str | None
 
 
+#: Every reason the gate gives (`Waiting.why`); one it does not list is refused, so whatever reads them (`plan.needed`) is made to say each.
+WHYS = ("stub", "unchecked", "unattested", "unknown")
+
+
 @dataclass(frozen=True)
 class Waiting:
-    """What keeps a result from reading formalized, and why: a node `stub` (not read) or `unchecked` (not compared with its paper on its text now); a node or a result of the person's assumed in Lean, or whose Lean its Lean uses and does not state, `unattested` (its own Lean statement not attested, or not over everything its own Lean rests on); or a node, a result or a citation (`("cite", "KEY LOCATOR")`, or `"KEY"` with none) `unknown`, which nothing can say of yet."""
+    """What keeps a result from reading formalized, and why: a node `stub` (not read) or `unchecked` (not compared with its paper on its text now); a node or a result of the person's assumed in Lean, or whose Lean its Lean uses and does not state, `unattested` (its own Lean statement not attested, or not over everything its own Lean rests on, or that Lean coming round to a result already asked of); or a node, a result or a citation (`("cite", "KEY LOCATOR")`, or `"KEY"` with none) `unknown`, which nothing can say of yet."""
 
     key: tuple[str, str]
     why: str
+
+    def __post_init__(self) -> None:
+        if self.why not in WHYS:
+            raise ValueError(f"the gate gives no reason {self.why!r}; add it to WHYS and to plan.needed")
 
 
 @dataclass(frozen=True)
@@ -89,6 +97,8 @@ class Status:
     #: When loom wrote the current Lean record: since when the result has waited for the person's word.
     lean_since: str | None = field(default=None, compare=False)
     attestation: str | None = field(default=None, compare=False)
+    #: What the gate was asked of its current Lean record, as `gate` takes it after `evidence`, `web` and `lean_now`; () where it has none on its text now (`own_needs`).
+    asked: tuple[Any, ...] = field(default=(), compare=False, repr=False)
 
 
 def files_unchanged(root: Path) -> Callable[[Record], bool]:
@@ -424,6 +434,14 @@ def needs(
     return out
 
 
+def own_needs(evidence: Evidence, web: Web, found: Status, lean_now: Callable[[Record], bool]) -> list[Waiting]:
+    """What the gate asks of a result's current Lean record, thing by thing: `needs` of what `status` gave `gate` (`Status.asked`), so [] exactly when `waiting_on` is empty; [] where it has no Lean record on its text now."""
+    if not found.asked:
+        return []
+    uses, assumed, seen, cites, near, rests = found.asked
+    return needs(evidence, web, uses, assumed, lean_now, seen, cites, near, rests)
+
+
 def brief(found: Status) -> dict[str, Any]:
     """How a result stands as a row of a list carries it (`docs/specs/evidence.md` §6, §8): the Lean word with its role and what it waits on, so a row never reads a bare word; the reading of the paper is the row's `reading` beside it."""
     return {
@@ -525,8 +543,9 @@ def status(
             return replace(found, lean="rerun")
         attested_nodes = [m["node"] for m in attestation.get("closure", []) if "node" in m]
         uses = itself + [k[1] for k in now if k[0] == "node"] + attested_nodes
-        waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here, rested(current, subject))  # fmt: skip
-        found = replace(found, waiting_on=waiting)
+        asked = (uses, found.relative_to, _seen | {name}, cites, here, rested(current, subject))
+        waiting = gate(evidence, web, asked[0], asked[1], lean_now, *asked[2:])
+        found = replace(found, waiting_on=waiting, asked=asked)
         if not proves(current, subject):
             return replace(found, lean="failed")
         if never is None or never:
@@ -549,8 +568,9 @@ def status(
         return replace(found, lean="rerun")
     never = notation_of(evidence, web, here)[1]
     uses = itself + [k[1] for k in now if k[0] == "node"]
-    waiting = gate(evidence, web, uses, found.relative_to, lean_now, _seen | {name}, cites, here, rested(current, subject))  # fmt: skip
-    found = replace(found, unattested_notation=_rows(never), waiting_on=waiting)
+    asked = (uses, found.relative_to, _seen | {name}, cites, here, rested(current, subject))
+    waiting = gate(evidence, web, asked[0], asked[1], lean_now, *asked[2:])
+    found = replace(found, unattested_notation=_rows(never), waiting_on=waiting, asked=asked)
     if not proves(current, subject):
         return replace(found, lean="failed")
     return replace(found, lean="unattested")

@@ -2,7 +2,7 @@
 
 The plan walks what each result uses by statement and by proof from the targets, as a caller's `uses` gives it, and reads each result as a caller's `item` gives it, so the drafts and the library are walked alike. One thing stops a request, a target or a result to state or prove with no label, which the person adds by hand; nothing unread or unchecked stops it.
 
-What stands before is the gate's own (`status.needs`), asked of the Lean the request will make: each target stated and proved, each library result to assume, and each result of the person's assumed for now, an axiom; each library result to state, and each result reached that has its Lean already, used. Each thing the gate asks is named once, and says whether the person can do it `now` or only `after` the agent's work, so the list and the gate cannot differ.
+What stands before is the gate's own (`status.needs`), asked of the Lean the request will make: each target stated and proved, each library result to assume, and each result of the person's assumed for now, an axiom; each library result to state, and each result reached that has its Lean already, used. Each thing the gate asks is named once, with what is wrong and whether the person can do it `now`, only `after` the agent's work, or nothing anyone does settles it yet (`waiting`), so the list and the gate cannot differ.
 """
 
 from __future__ import annotations
@@ -12,14 +12,17 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from loom.evidence.log import Evidence, Record
-from loom.evidence.status import Status, Waiting
+from loom.evidence.status import Status, Waiting, own_needs
+from loom.evidence.web import Web
 
 #: The kinds of result that are stated in Lean, never proved: a definition, a notation, a convention, a construction.
 STATED = frozenset({"definition", "notation", "convention", "construction"})
-#: Why something stands before the targets read formalized, in the order the panel lists them: a library result not read, or not compared with its paper on its text now; a citation in what the targets' statements use that names no result a node answers for; a Lean statement to attest; one attested and changed since.
-WHY = ("not-read", "not-checked", "cite", "attest", "attested-changed")
-#: When the person can do it: now, or only once the agent has stated it (and, for a library result, once its work's macros can be shown).
-WHEN = ("now", "after")
+#: Why something stands before the targets read formalized, in the order the panel lists them: a library result not read, or not compared with its paper on its text now; a label two texts answer to near the targets; a label or a library result nothing answers to; a citation that names no result a node answers for; a Lean statement to attest; one attested and changed since; a Lean that comes round, through what it rests on, to a result already asked of.
+WHY = ("not-read", "not-checked", "ambiguous", "missing", "cite", "attest", "attested-changed", "cycle")
+#: When it can be done: by the person now; only once the agent has done its work (and, for a library result, once its work's macros can be shown); or by nobody yet, as a citation waits until loom resolves citations to results.
+WHEN = ("now", "after", "waiting")
+#: What a `Need`'s key names: a result, by its key; a citation (`KEY LOCATOR`); a label no one text answers to; a library node by an id the library holds no result by.
+OF = ("result", "cite", "label", "node")
 
 
 @dataclass(frozen=True)
@@ -35,16 +38,17 @@ class Item:
 
 @dataclass(frozen=True)
 class Need:
-    """One thing that stands before the targets read formalized: a result's key, or a citation's `KEY LOCATOR` for `cite`; why (`WHY`); and when the person can do it (`WHEN`)."""
+    """One thing that stands before the targets read formalized: its key, what the key names (`OF`), why (`WHY`) and when it can be done (`WHEN`)."""
 
     key: str
     why: str
     when: str
+    of: str = "result"
 
 
 @dataclass
 class Plan:
-    """A plan, each list in the order the walk reached it: `prove` with whether each was chosen assumed for now, `assume` with how each reads its paper (`not-read`, `not-checked` or None), `lean` the results reached that have their own Lean already, which the agent uses as it is, and `before` what stands before the targets read formalized."""
+    """A plan, each list in the order the walk reached it: `prove` with whether each was chosen assumed for now, `assume` with how each reads its paper (`not-read`, `not-checked` or None), `lean` the results reached that have their own Lean already, which the agent uses as it is, `before` what stands before the targets read formalized, and `asking` the targets each of those stands before."""
 
     targets: list[str]
     state: list[str] = field(default_factory=list)
@@ -54,6 +58,7 @@ class Plan:
     lean: list[str] = field(default_factory=list)
     stops: list[str] = field(default_factory=list)
     before: list[Need] = field(default_factory=list)
+    asking: dict[Need, list[str]] = field(default_factory=dict)
 
 
 def _paper(found: Status) -> str | None:
@@ -132,11 +137,13 @@ def plan(
             out.stops.append(key)
         follow(key, it)
     if before is not None:
-        found: list[Need] = []
         for key in targets:
-            found += [n for n in before(key, out) if n not in found]
+            for need in before(key, out):
+                asking = out.asking.setdefault(need, [])
+                if key not in asking:
+                    asking.append(key)
         order = {(w, t): i for i, (w, t) in enumerate((w, t) for t in WHEN for w in WHY)}
-        out.before = sorted(found, key=lambda n: order[n.why, n.when])
+        out.before = sorted(out.asking, key=lambda n: order[n.why, n.when])
     return out
 
 
@@ -153,38 +160,66 @@ def asked(
     return nodes, [k for k in assumed if k is not None], [k for k in rests if k is not None]
 
 
-def needed(leaves: list[Waiting], own: Callable[[tuple[str, str]], tuple[str, Status, bool] | None]) -> list[Need]:
-    """Each thing the gate asks (`status.needs`) as the person reads it, with when they can do it.
+def asked_of(
+    evidence: Evidence,
+    web: Web,
+    standing: Status,
+    lean_now: Callable[[Record], bool],
+    planned: Callable[[], list[Waiting]],
+) -> list[Waiting]:
+    """What the gate asks before a target reads formalized: of its own Lean record, where one stands on its text now and proves it (`status.own_needs`); else of the Lean the request will make (`planned`, `status.needs` of `asked`).
 
-    A node not read or not compared, and a citation that names no result a node answers for, are the person's to do now. A Lean statement the gate asks to be attested is to attest now where Lean has accepted it on the result's text now and it waits for the person's word (`attested-changed` where they gave it before something it uses changed); after, where it has no Lean on its text now that elaborated, which the agent writes or loom runs again, or where its notation cannot be shown yet. A Lean that is attested and still asked of is waiting only on what it in turn needs, each of which is a leaf of its own. `own` gives, for a result's key, the result as a row names it, its status, and whether its current Lean is on its text now, standing and elaborated; None where nothing can say of it, which is left out.
+    Once the agent has written the target's Lean, what it rests on is that record's, which the plan as walked now may no longer reach.
+    """
+    if standing.asked and standing.lean != "failed":
+        return own_needs(evidence, web, standing, lean_now)
+    return planned()
+
+
+def needed(
+    leaves: list[Waiting],
+    own: Callable[[tuple[str, str]], tuple[str, Status, bool] | None],
+    texts: Callable[[tuple[str, str]], set[str]],
+) -> list[Need]:
+    """Each thing the gate asks (`status.needs`) as the person reads it, with when it can be done: every leaf an entry, and a leaf of a reason this does not say refused (`ValueError`).
+
+    `now`: a node not read or not compared; a label that two texts answer to near the targets (`ambiguous`, by `texts`), or a label or node nothing answers to (`missing`); a Lean statement Lean accepted on its result's text now that waits for the person's word (`attest`, `attested-changed` where they gave it before something it uses changed). `after`: a Lean statement with no Lean on its text now that elaborated, which the agent writes or loom runs again, or whose notation cannot be shown yet; one attested and still asked of, whose Lean comes round to a result already asked of (`cycle`). `waiting`: a citation, until loom resolves citations to results. `own` gives a result's key as a row names it, its status, and whether its current Lean is on its text now, standing and elaborated; None where no row can say of it.
     """
     out: list[Need] = []
-
-    def add(need: Need) -> None:
-        if need not in out:
-            out.append(need)
-
     for w in leaves:
         kind, name = w.key
         if kind == "cite":
-            add(Need(name, "cite", "now"))
-            continue
-        if w.why in ("stub", "unchecked"):
-            add(Need(name, "not-read" if w.why == "stub" else "not-checked", "now"))
-            continue
-        found = own(w.key) if w.why == "unattested" else None
-        if found is None:
-            continue
-        key, standing, elaborated = found
-        if standing.lean_record is None or not elaborated or standing.lean == "rerun":
-            add(Need(key, "attest", "after"))
-        elif standing.lean == "changed":
-            add(Need(key, "attested-changed", "now"))
-        elif standing.attestation is not None and not standing.causes and standing.unattested_notation is None:
-            add(Need(key, "attest", "after"))
-        elif standing.attestation is None or standing.unattested_notation:
-            add(Need(key, "attest", "now"))
+            need = Need(name, "cite", "waiting", "cite")
+        elif w.why in ("stub", "unchecked"):
+            need = Need(name, "not-read" if w.why == "stub" else "not-checked", "now")
+        elif w.why == "unknown":
+            need = Need(name, "ambiguous" if kind == "label" and texts(w.key) else "missing", "now", kind)
+        elif w.why == "unattested":
+            need = _to_attest(name, kind, own(w.key))
+        else:
+            raise ValueError(f"the panel has no entry for the gate's {w.why!r}")
+        if need not in out:
+            out.append(need)
     return out
+
+
+def _to_attest(name: str, kind: str, found: tuple[str, Status, bool] | None) -> Need:
+    """What a Lean statement the gate asks to be attested needs, by how its result stands (`needed`).
+
+    Attested, holding and elaborated, and still asked of, it is asked only where its Lean comes round to a result already asked of (`status.assumption_needs`), which attesting cannot settle.
+    """
+    if found is None:
+        return Need(name, "attest", "after", kind)
+    key, standing, elaborated = found
+    if standing.lean_record is None or not elaborated or standing.lean == "rerun":
+        return Need(key, "attest", "after")
+    if standing.lean == "changed":
+        return Need(key, "attested-changed", "now")
+    if standing.attestation is not None and not standing.causes and standing.unattested_notation is None:
+        return Need(key, "attest", "after")
+    if standing.attestation is None or standing.unattested_notation:
+        return Need(key, "attest", "now")
+    return Need(key, "cycle", "after")
 
 
 def target_need(key: str, standing: Status, elaborated: bool) -> Need | None:
