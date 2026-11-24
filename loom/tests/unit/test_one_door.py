@@ -40,6 +40,7 @@ MODULES = {
     "digest/": "the library's digests",
     "records/": "loom's records under `.loom/`",
     "tex/": "TeX's runs, its staging and the machine's own TeX",
+    "fence.py": "the fence's canary, two files in temporary folders of its own",
     "render/serve.py": "the server's own files in `.loom/local/` and the viewer's copies on the machine",
     "render/publish.py": "the build's output",
     "render/assets.py": "the build's output",
