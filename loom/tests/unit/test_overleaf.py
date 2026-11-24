@@ -518,6 +518,24 @@ def test_a_block_both_touched_is_listed_and_a_change_that_only_removed_lines_is_
     assert list(listed(root).values()) == [["Colleague"]]
 
 
+def test_a_block_whose_own_words_did_not_change_is_not_listed_when_what_it_uses_did(tmp_path: Path) -> None:
+    uses = (
+        mirror.PREAMBLE
+        + "\\begin{document}\n"
+        + "\\begin{lemma}\\label{lem:tree}Every finite tree with two vertices has a leaf.\\end{lemma}\n"
+        + "\\begin{lemma}\\uses{lem:tree}By Lemma~\\ref{lem:tree}, a forest has a leaf.\\end{lemma}\n"
+        + "\\end{document}\n"
+    )
+    root, bare = mirror.paired(tmp_path, {"main.tex": uses, "loom.sty": "% local support\n"})
+    mirror.edit(
+        mirror.colleague(tmp_path, bare),
+        "sharper",
+        {"main.tex": uses.replace("has a leaf.\\end", "has two leaves.\\end", 1)},
+    )
+    overleaf.update(load_quilt(root))
+    assert list(listed(root)) == ["lem:tree"]
+
+
 def test_with_no_address_of_the_person_s_every_change_is_listed(tmp_path: Path) -> None:
     root = mirror.quilt_at(tmp_path)
     bare = mirror.overleaf(tmp_path, {"main.tex": TWO, "loom.sty": "% local support\n"})

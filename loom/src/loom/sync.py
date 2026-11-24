@@ -527,8 +527,8 @@ def _changed_blocks(
     written: dict[str, bytes | None],
     me: list[str],
 ) -> tuple[dict[str, list[str]], int]:
-    """The blocks the update changed that Review lists, each with the names of whoever else's commits touched it, and how many it left out because every commit that touched them is the person's alone (`me`)."""
-    from loom.review_queue import fingerprint
+    """The blocks whose own words the update changed that Review lists, each with the names of whoever else's commits touched it, and how many it left out because every commit that touched them is the person's alone (`me`)."""
+    from loom.scan.owntext import own_text
     from loom.scan.source import decode
 
     mine = {m.lower() for m in me}
@@ -538,7 +538,8 @@ def _changed_blocks(
     for key, node in after.nodes.items():
         if node.kind in ("master", "file", "conflict") or node.file not in texts:
             continue
-        if key in before.nodes and fingerprint(before, key) == fingerprint(after, key):
+        # a block is changed when its own words are: one whose only change is in what it uses is not listed
+        if key in before.nodes and own_text(before, before.nodes[key]) == own_text(after, node):
             continue
         text = texts[node.file]
         first, last = text.count("\n", 0, node.start) + 1, text.count("\n", 0, max(node.start, node.end - 1)) + 1
