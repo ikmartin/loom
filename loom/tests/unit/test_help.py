@@ -60,7 +60,7 @@ def test_every_group_lists_its_commands_by_whole_first_sentence() -> None:
     assert plain == [], "groups whose help cuts its commands' first sentences"
 
 
-@pytest.mark.parametrize("group", ["sync", "ai", "session"])
+@pytest.mark.parametrize("group", ["ai", "session"])
 def test_a_bare_group_prints_its_help_and_succeeds(group: str, tmp_path) -> None:  # type: ignore[no-untyped-def]
     """A group named alone asks for its help (T7): the help on stdout, exit 0, and no `Error:`."""
     r = run(group, cwd=tmp_path)

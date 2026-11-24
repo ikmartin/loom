@@ -31,12 +31,6 @@ KIND: dict[str, str] = {
     "ai reopen": "report",
     "ai annotations": "report",
     "ai refresh": "report",
-    "sync init": "report",
-    "sync fetch": "report",
-    "sync status": "report",
-    "sync documents": "report",
-    "sync incorporate": "report",
-    "sync publish": "report",
 }
 
 

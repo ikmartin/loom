@@ -464,8 +464,7 @@ def test_the_reviewers_history_in_the_cache_is_refused_and_kept(tmp_path: Path) 
     assert any(i["name"] == "tex" for i in got["items"])
 
 
-def test_a_setting_reached_through_a_link_and_the_sync_directory_are_refused(tmp_path: Path) -> None:
-    from loom.paths import SOURCE_SYNC
+def test_a_setting_reached_through_a_link_is_refused(tmp_path: Path) -> None:
     from loom.scan.quilt import SettingError
 
     q = demo(tmp_path)
@@ -474,10 +473,6 @@ def test_a_setting_reached_through_a_link_and_the_sync_directory_are_refused(tmp
     config = (q / "config.toml").read_text(encoding="utf-8")
     (q / "config.toml").write_text(config.replace("[quilt]\n", '[quilt]\nhistory = "hist"\n', 1), encoding="utf-8")
     with pytest.raises(SettingError, match="history is hist, inside .loom/cache/"):
-        load_quilt(q)
-    (q / "config.toml").write_text(config, encoding="utf-8")
-    (q / SOURCE_SYNC).write_text(json.dumps({"directory": ".loom/local/overleaf"}), encoding="utf-8")
-    with pytest.raises(SettingError, match="the sync directory is .loom/local/overleaf, inside .loom/local/"):
         load_quilt(q)
 
 
