@@ -507,8 +507,21 @@ export interface FormalMarks extends Gen {
 	marks: Record<string, 'formalized' | 'not' | 'attest' | 'assumed'>;
 }
 
-/** A result in the formalize panel: a draft's carries its fragment, its statement one click away. */
+/** A result in the formalize panel: one of the person's carries its statement's fragment, shown a click away. */
 export type PlanRow = Row & { fragment?: string };
+
+/** Why something stands before the targets read formalized (`evidence.md` §7), in the order loom sends them. */
+export type BeforeWhy = 'not-read' | 'not-checked' | 'ambiguous' | 'missing' | 'cite' | 'attest' | 'attested-changed' | 'cycle';
+
+/** One thing the gate asks: a result; a label two texts answer to, or none, with a row for each block bearing it; a citation that names no result; or a node the library holds no result by. `for`, the targets whose plan asks it. */
+export type BeforeItem = (PlanRow | { label: string; results: PlanRow[] } | { cite: string } | { node: string }) & { for: string[] };
+
+/** A group of what stands before the targets read formalized: why, and when it can be done, by the person `now`, `after` the agent's work, or by nobody yet (`waiting`). */
+export interface Before {
+	why: BeforeWhy;
+	when: 'now' | 'after' | 'waiting';
+	results: BeforeItem[];
+}
 
 /** `formal-plan`: what an agent would state, prove and assume, what stops the request and what keeps it from reading formalized. */
 export interface FormalPlan extends Gen {
@@ -518,5 +531,5 @@ export interface FormalPlan extends Gen {
 	assume: (PlanRow & { why: 'not-read' | 'not-checked' | null })[];
 	formalized: PlanRow[];
 	stops: PlanRow[];
-	before: { why: 'not-read' | 'not-checked' | 'attest' | 'attested-changed'; results: PlanRow[] }[];
+	before: Before[];
 }
