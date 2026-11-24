@@ -1,6 +1,6 @@
 """Numbers a source's results would print, emulated from its counters, for a survey still `reading` (`library.survey`): shown in a work's outline, and kept as printed only where a compile or the stored PDF agrees.
 
-Sectioning counters step and reset what numbers within them, a chapter's sections numbered within it where the class has chapters; a theorem counter shared with `[theorem]` follows the owning declaration's `[section]`-style reset; a theorem sharing a sectioning counter (`[subsection]`) steps it and prints as it; `\\newtheorem*` results have no number; a heading deeper than `secnumdepth` (the class's, or one set by hand) steps nothing and prints no number; `\\appendix` letters the section counter, or the chapter counter where there are chapters. A source's own settings move it as TeX would: `\\numberwithin` and `\\counterwithin` / `\\counterwithout`, starred or not; `\\setcounter` and `\\addtocounter` of a sectioning or theorem counter; and `\\the<counter>` redefined, until its group closes, from `\\arabic`, `\\roman`, `\\Roman`, `\\alph`, `\\Alph`, other counters' `\\the` and plain text, with font commands such as `\\textup` read through. Only what the source writes literally is followed, never a value it computes or reads, so what loom reads cannot carry a file the source read; a format loom cannot read leaves the counter with no reading at all.
+Sectioning counters step and reset what numbers within them, a chapter's sections numbered within it where the class has chapters; a theorem counter shared with `[theorem]` follows the owning declaration's `[section]`-style reset; a theorem sharing a sectioning counter (`[subsection]`) steps it and prints as it; `\\newtheorem*` results have no number; a heading deeper than `secnumdepth` (the class's, or one set by hand) steps nothing and prints no number; `\\appendix` letters the section counter, or the chapter counter where there are chapters. A source's own settings move it as TeX would: `\\numberwithin` and `\\counterwithin` / `\\counterwithout`, starred or not; `\\setcounter` and `\\addtocounter` of a sectioning or theorem counter; and `\\the<counter>` redefined, until its group closes, from `\\arabic`, `\\roman`, `\\Roman`, `\\alph`, `\\Alph`, other counters' `\\the`, a `\\ref` of a label loom has read (a restated result) and plain text, with font commands such as `\\textup` read through. Only what the source writes literally is followed, never a value it computes or reads, so what loom reads cannot carry a file the source read; a format loom cannot read leaves the counter with no reading at all.
 """
 
 from __future__ import annotations
@@ -20,14 +20,15 @@ FACES = re.compile(
     r"|bfseries|mdseries|itshape|slshape|sffamily|relax|protect)(?![A-Za-z@])\s*"
 )
 _PIECE = re.compile(
-    r"\\(arabic|roman|Roman|alph|Alph)\s*\{\s*([A-Za-z@]+)\s*\}"
+    r"\\ref\s*\*?\s*\{\s*([^{}\s]+)\s*\}"
+    r"|\\(arabic|roman|Roman|alph|Alph)\s*\{\s*([A-Za-z@]+)\s*\}"
     r"|\\@(arabic|roman|Roman|alph|Alph)\s*\\c@([A-Za-z@]+)"
     r"|\\the([A-Za-z@]+)"
     r"|([A-Za-z0-9.\-()/:])"
     r"|[{}\s]+"
 )
 
-#: One piece of a format: a counter's value in a style, another counter's `\the`, or text.
+#: One piece of a format: a counter's value in a style, another counter's `\the`, a label's reading (`ref`, as a restated result prints its original's number), or text.
 Piece = tuple[str, str]
 
 
@@ -89,12 +90,14 @@ def _format_of(body: str) -> tuple[Piece, ...] | None:
         m = _PIECE.match(body, at)
         if m is None:
             return None
-        if m.group(1) or m.group(3):
-            pieces.append((m.group(1) or m.group(3), m.group(2) or m.group(4)))
-        elif m.group(5):
-            pieces.append(("the", m.group(5)))
+        if m.group(1):
+            pieces.append(("ref", m.group(1)))
+        elif m.group(2) or m.group(4):
+            pieces.append((m.group(2) or m.group(4), m.group(3) or m.group(5)))
         elif m.group(6):
-            pieces.append(("text", m.group(6)))
+            pieces.append(("the", m.group(6)))
+        elif m.group(7):
+            pieces.append(("text", m.group(7)))
         at = m.end()
     return tuple(pieces)
 
@@ -121,6 +124,8 @@ class Numbering:
         Each `\\the<counter>` as redefined; None where loom cannot read it.
     saved : dict[str, list[tuple[bool, tuple[Piece, ...] | None]]]
         Each counter's format before a definition still in force, whether there was one, put back by `close`.
+    labels : dict[str, str]
+        Each label met so far with loom's reading of what it numbers, which a `\\ref` in a format reads.
     """
 
     taxa: dict[str, Taxon]
@@ -131,6 +136,7 @@ class Numbering:
     parents: dict[str, str | None] = field(default_factory=dict)
     formats: dict[str, tuple[Piece, ...] | None] = field(default_factory=dict)
     saved: dict[str, list[tuple[bool, tuple[Piece, ...] | None]]] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
 
     def _counter(self, taxon: Taxon) -> str:
         return taxon.counter or taxon.env
@@ -248,7 +254,7 @@ class Numbering:
         """
         if self._known(counter):
             pieces = _format_of(body)
-            readable = pieces is not None and all(kind == "text" or self._known(arg) for kind, arg in pieces)
+            readable = pieces is not None and all(kind in ("text", "ref") or self._known(arg) for kind, arg in pieces)
             self.saved.setdefault(counter, []).append((counter in self.formats, self.formats.get(counter)))
             self.formats[counter] = pieces if readable else None
 
@@ -289,6 +295,10 @@ class Numbering:
             for kind, arg in pieces:
                 if kind == "text":
                     out.append(arg)
+                elif kind == "ref":
+                    if arg not in self.labels:
+                        return None
+                    out.append(self.labels[arg])
                 elif kind != "the":
                     out.append(_styled(kind, self._value(arg)))
                 elif (got := self._the(arg, depth + 1)) is not None:

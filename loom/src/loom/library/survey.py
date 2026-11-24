@@ -29,7 +29,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 2
+VERSION = 3
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -125,7 +125,7 @@ _BIBLIOGRAPHY = re.compile(r"\\(?:bibliography|addbibresource)\s*(?:\[[^\]]*\]\s
 
 @dataclass
 class Section:
-    """A heading of the source: `section` its id in the survey (`s1`, `s2`, … in source order), `command` the sectioning command, `emulated` loom's own reading of its number, and `number` and `page` only as confirmed (`confirm`)."""
+    """A heading of the source: `section` its id in the survey (`s1`, `s2`, … in source order), `command` the sectioning command, `emulated` loom's own reading of its number, `order` its place among the source's headings and results, and `number` and `page` only as confirmed (`confirm`, `place`)."""
 
     section: str
     command: str
@@ -138,6 +138,7 @@ class Section:
     opening: str | None = None
     number: str | None = None
     page: int | None = None
+    order: int = 0
 
 
 @dataclass
@@ -157,7 +158,7 @@ class Proof:
 class Item:
     """A result of the source, digested or not (`library-views.md` §3.2's `item`).
 
-    `item` is its own label, else `i` and its place among the source's results. `name` is the word the source prints for it ("Lemma") and `taxon` the node's (`nodes.md` §5). `emulated` is loom's own reading of its number, from the source's counters; `number` is the number it prints, only once confirmed, and `page` its page in the work's stored PDF, only once found there (`confirm`). Offsets are in `file`, the source's own text.
+    `item` is its own label, else `i` and its place among the source's results. `name` is the word the source prints for it ("Lemma") and `taxon` the node's (`nodes.md` §5). `emulated` is loom's own reading of its number, from the source's counters; `number` is the number it prints, only once confirmed, and `page` its page in the work's stored PDF, only once found there (`confirm`, `place`). `order` is its place among the source's headings and results. Offsets are in `file`, the source's own text.
     """
 
     item: str
@@ -179,6 +180,7 @@ class Item:
     number: str | None = None
     page: int | None = None
     proofs: list[Proof] = field(default_factory=list)
+    order: int = 0
 
 
 @dataclass
@@ -197,7 +199,7 @@ class Label:
 class Survey:
     """What one source holds, confirmed against the work's stored PDF `pdf` where there is one.
 
-    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one.
+    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`).
     """
 
     tex: str
@@ -214,6 +216,7 @@ class Survey:
     bbl: str | None = None
     unseen: list[str] = field(default_factory=list)
     unconfirmed: list[str] = field(default_factory=list)
+    compiled: bool = False
 
     def to_json(self) -> dict[str, Any]:
         """The survey as its kept file holds it."""
@@ -385,8 +388,11 @@ def _walk(
                     file=u.file,
                     heading_end=u.heading_end,
                     opening=_opening(u.title, least=6),
+                    order=len(out.sections) + len(out.items),
                 )
             )
+            if (read_as := out.sections[-1].emulated) is not None:
+                numbering.labels.update(dict.fromkeys(u.labels, read_as))
             places.append((u.exp_start, u.exp_end, sid))
         else:
             rel, env = payload
@@ -414,7 +420,10 @@ def _walk(
                 body_start=env.body_start,
                 body_end=env.body_end,
                 opening=_opening(files[rel].clean[env.body_start : env.body_end]),
+                order=len(out.sections) + len(out.items),
             )
+            if item.emulated is not None:
+                numbering.labels.update(dict.fromkeys(labels, item.emulated))
             out.items.append(item)
             statements[(rel, env.start)] = item
     for rel, fe in envs.items():
@@ -654,30 +663,49 @@ def _opening(text: str, *, least: int = 12) -> str | None:
     return words if len(words) >= least else None
 
 
-#: A number as a counter prints it, in the stored PDF's text: `SHAPED`'s parts, joined by dots or hyphens.
-_PRINTED = rf"\(?{_PART}(?:[.\-]{_PART})*\)?"
-#: What may stand between a printed number and a statement's words: a title in parentheses, then a full stop or a colon.
-_TITLE = r"(?:\s*\([^()]{0,120}\))?\s*[.:]?\s*$"
+#: A number at the start of a heading's or result's own line in the stored PDF's text: `SHAPED`'s parts joined by dots or hyphens, never stopped short of a longer one.
+_LINE_NUMBER = rf"\(?{_PART}(?:[.\-]{_PART})*\)?(?![.\-]?\w)"
+#: How a heading's line opens: its number, after a word naming its kind where the class prints one.
+_HEADING = re.compile(rf"(?:(?:appendix|chapter|section)\s+)?(?P<n>{_LINE_NUMBER})\.?(?:\s+(?P<rest>\S.*))?", re.I)
+#: What follows a title on a contents page's entry, compared with spaces dropped: the page number, perhaps after dot leaders.
+_CONTENTS = re.compile(r"\.*\d{1,4}")
+#: The words a heading's line may open with before its number.
+_HEADING_WORDS = ("appendix", "chapter", "section")
 
 
 class Pages:
-    """A stored PDF's text, a page at a time, compared as `refs.search` compares quotations: what a compile's word is checked against, since the compile cannot have written it.
+    """A stored PDF's text, a page at a time and a line at a time, as `pdftotext` writes it: where a heading's or result's printed number is read, only at the start of its own line (`place`), and where a proof's opening words give its page, compared as `refs.search` compares quotations.
 
-    `texts` are the pages as quotations are compared, spaces and hyphens dropped; `flat` the same pages with their spaces, where a printed number is read, so `12` is never taken for the `2` it ends in; `at` maps each offset of the one into the other.
+    `lines` holds every line in order with its page, each normalised on its own; `contents` the lines of a contents page, where no heading is read; `texts` the pages with spaces and hyphens dropped.
     """
 
     def __init__(self, texts: list[str]) -> None:
-        from array import array
+        from loom.refs.search import _loose, normalize
 
-        from loom.refs.search import _LOOSE, normalize
+        self.texts = [_loose(t) for t in texts]
+        self.lines = [(k + 1, normalize(line).strip()) for k, t in enumerate(texts) for line in t.split("\n")]
+        self._by_word: dict[str, list[int]] = {}
+        self._numbered: list[int] = []
+        number = re.compile(_LINE_NUMBER)
+        for k, (_page, line) in enumerate(self.lines):
+            word = line.split(" ", 1)[0] if line else ""
+            self._by_word.setdefault(word.lower(), []).append(k)
+            if number.fullmatch(word.rstrip(".")):
+                self._numbered.append(k)
+        self.contents = self._contents()
 
-        self.flat = [normalize(t) for t in texts]
-        self.texts: list[str] = []
-        self.at: list[array[int]] = []
-        for flat in self.flat:
-            keep = array("I", (k for k, c in enumerate(flat) if c not in _LOOSE))
-            self.texts.append("".join(flat[k] for k in keep))
-            self.at.append(keep)
+    def _contents(self) -> range:
+        """The lines of a contents page: from its "Contents" line to where its first entry stands again, as the heading it lists; empty where there is none."""
+        from loom.refs.search import _loose
+
+        # an entry and its heading compared without dots, spaces or the entry's page number
+        lines = [re.sub(r"\d{1,4}$", "", _loose(line).replace(".", "").lower()) for _p, line in self.lines]
+        start = next((k for k, line in enumerate(lines) if line in ("contents", "tableofcontents")), None)
+        if start is None:
+            return range(0)
+        first = next((k for k in range(start + 1, len(lines)) if lines[k]), None)
+        again = next((k for k in range(first + 1, len(lines)) if lines[k] == lines[first]), None) if first else None
+        return range(start, again) if again is not None else range(0)
 
     @classmethod
     def of(cls, pdf: Path | None) -> Pages | None:
@@ -696,36 +724,25 @@ class Pages:
             return None
         return cls(done.stdout.decode("utf-8", errors="replace").split("\f"))
 
+    def after(self, at: int, word: str | None) -> list[int]:
+        """The lines from `at` on that open with `word`, or with a number where `word` is None."""
+        import bisect
+
+        pool = self._numbered if word is None else self._by_word.get(word, [])
+        return pool[bisect.bisect_left(pool, at) :]
+
+    def following(self, k: int) -> str:
+        """The next line after `k` that holds anything, within three."""
+        return next((line for _p, line in self.lines[k + 1 : k + 4] if line), "")
+
+    def opens(self, k: int) -> bool:
+        """Whether line `k` opens a block: the first of its page, or after an empty line."""
+        return k == 0 or not self.lines[k - 1][1] or self.lines[k - 1][0] != self.lines[k][0]
+
     def find(self, words: str, near: int | None) -> list[tuple[int, int]]:
         """Each place `words` stand, as (page from 1, offset in its compared text), those on the page `near` and its neighbours first, then the rest by page."""
         out = [(k + 1, m.start()) for k, t in enumerate(self.texts) for m in re.finditer(re.escape(words), t)]
         return sorted(out, key=lambda at: (abs(at[0] - near) if near else 0, at[0], at[1]))
-
-    def heading(self, page: int, at: int, name: str) -> str | None:
-        """The number the PDF heads the words at `at` on `page` with, under `name` ("Lemma 11.2.", "Lemma 11.2 (Title).", "11.2 Lemma.", or a heading's "12 Title"); None where it prints none loom can read.
-
-        A number that continues a longer one, a digit, a letter or a dot before it, is refused. Only a number shaped as a counter prints one is read (`shaped`).
-        """
-        from loom.refs.search import normalize
-
-        flat, offsets = self.flat[page - 1], self.at[page - 1]
-        end = offsets[at] if at < len(offsets) else len(flat)
-        before = flat[max(0, end - 200) : end]
-        word = r"\s*".join(re.escape(w) for w in normalize(name).split())
-        forms = [rf"(?<![\w.\-])(?P<n>{_PRINTED})\.?{_TITLE}"]
-        if word:
-            forms = [
-                rf"(?<!\w){word}\s*(?P<n>{_PRINTED}){_TITLE}",
-                rf"(?<![\w.\-])(?P<n>{_PRINTED})\.?\s*{word}{_TITLE}",
-            ]
-        for form in forms:
-            if (m := re.search(form, before, re.IGNORECASE if word else 0)) is not None:
-                number = m.group("n")
-                # a heading's lone lower-case letter or roman numeral is a word of the text before it more often than a number
-                if not word and re.fullmatch(r"[a-z]+", number):
-                    continue
-                return shaped(number)
-        return None
 
     def shows(self, page: int, text: str) -> bool:
         """Whether `page` shows `text`, compared as quotations are."""
@@ -734,81 +751,136 @@ class Pages:
         return 0 < page <= len(self.texts) and _loose(text) in self.texts[page - 1]
 
 
-def _confirmed(
-    emulated: str | None,
-    hint: str | None,
-    name: str,
-    opening: str | None,
-    near: int | None,
-    pages: Pages | None,
-    *,
-    numbered: bool = True,
-) -> tuple[str | None, int | None]:
-    """A printed number and a page for one heading, result or proof, each only where something the compile could not have written confirms it.
+def place(s: Survey, pages: Pages, hints: dict[str, str] | None = None) -> dict[str, tuple[str, int]]:
+    """Each numbered heading's and result's printed number and page, read in the work's stored PDF.
 
-    With a stored PDF, the stored document governs: the number is the one it heads the opening words with where it shows them, and none where it heads them with none loom can read or does not show them; loom's own reading never stands alone. Where the words stand at several places, a title that is another's prefix or a contents page, the place headed by loom's reading is the statement's; failing that, the number every place agrees on, and none where they disagree. Without one, the number is loom's own reading (`emulated`) where the compile's `hint` is that very reading. The page is where the PDF shows the opening words, the page nearest the compile's `near` among several; nothing of the compile's is kept for itself.
+    The marks are looked for in the source's order, each only after the line where the last was found. A number is read only at the start of the mark's own line: a result's line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`) or the number and then the name (`2.2 Lemma.`); a heading's opening with its number and title (`12 Title`, `A. Proofs`), or the number alone on a line that opens a block, with no full stop, and the title next (`Chapter 3`, and article's headings as `pdftotext` writes them). The number is taken where it is loom's reading of the mark or the compile's `hints` of it, or where the mark's own words witness the line: a result's opening words in the rest of its line and the four after, a heading's title beginning its line or the next. So a token that ends the line before a mark is never read as its number.
+
+    Parameters
+    ----------
+    s : Survey
+        The source's survey.
+    pages : Pages
+        The work's stored PDF.
+    hints : dict of str to str, optional
+        What a compile of the source, the person's own act, says each mark prints, by its id.
+
+    Returns
+    -------
+    dict of str to (str, int)
+        Each mark found, by its id: the number the PDF prints there and its page.
     """
-    if pages is None:
-        return (emulated if numbered and emulated is not None and hint == emulated else None), None
+    hints = hints or {}
+    at = 0
+    out: dict[str, tuple[str, int]] = {}
+    marks: list[Section | Item] = [*s.sections, *s.items]
+    for mark in sorted(marks, key=lambda m: m.order):
+        if isinstance(mark, Section):
+            got = _heading(pages, at, mark, hints.get(mark.section)) if mark.emulated is not None else None
+            key = mark.section
+        else:
+            got = _result(pages, at, mark, hints.get(mark.item)) if mark.numbered else None
+            key = mark.item
+        if got is not None:
+            number, page, at = got
+            out[key] = (number, page)
+    return out
+
+
+def _result(pages: Pages, at: int, item: Item, hint: str | None) -> tuple[str, int, int] | None:
+    """The first line after `at` that is `item`'s heading: its number, its page, and the line after it."""
+    import heapq
+
+    from loom.refs.search import normalize
+
+    words = normalize(item.name).split()
+    if not words:
+        return None
+    name = r"\s*".join(re.escape(w) for w in words)
+    forms = (
+        re.compile(rf"(?:{name})\s+(?P<n>{_LINE_NUMBER})(?P<rest>\s*(?:[.:(].*)?)", re.I),
+        re.compile(rf"(?P<n>{_LINE_NUMBER})\.?\s+(?:{name})(?P<rest>\s*(?:[.:(].*)?)", re.I),
+    )
+    wanted = {item.emulated, hint} - {None}
+    for k in heapq.merge(pages.after(at, words[0].lower()), pages.after(at, None)):
+        page, line = pages.lines[k]
+        m = forms[0].fullmatch(line) or forms[1].fullmatch(line)
+        number = shaped(m.group("n")) if m is not None else None
+        if m is not None and number is not None and (number in wanted or _witness(pages, k, item.opening, m["rest"])):
+            return number, page, k + 1
+    return None
+
+
+def _heading(pages: Pages, at: int, sec: Section, hint: str | None) -> tuple[str, int, int] | None:
+    """The first line after `at` that is `sec`'s heading: its number, its page, and the line after it."""
+    import heapq
+
+    from loom.refs.search import _loose
+
+    whole = (_opening(sec.title, least=1) or "").lower()
+    title = whole[:24]
+    wanted = {sec.emulated, hint} - {None}
+    for k in heapq.merge(pages.after(at, None), *(pages.after(at, w) for w in _HEADING_WORDS)):
+        if k in pages.contents:
+            continue
+        page, line = pages.lines[k]
+        m = _HEADING.fullmatch(line)
+        number = shaped(m.group("n")) if m is not None else None
+        if m is None or number is None:
+            continue
+        if m["rest"] and whole and _CONTENTS.fullmatch(_loose(m["rest"]).lower().removeprefix(whole)):
+            # a contents page's entry: its title, then nothing but the page it stands on
+            continue
+        if m["rest"]:
+            words = f"{m['rest']} {pages.following(k)}"
+        elif line.endswith(".") or not pages.opens(k):
+            # a number alone on a line is a heading only where it opens a block: a paragraph's last word never is
+            continue
+        else:
+            words = pages.following(k)
+        if _loose(words).lower().startswith(title) if title else number in wanted:
+            return number, page, k + 1
+    return None
+
+
+def _witness(pages: Pages, k: int, opening: str | None, rest: str) -> bool:
+    """Whether a result's opening words stand in the rest of line `k` and the four after it."""
+    from loom.refs.search import _loose
+
+    if not opening:
+        return False
+    near = _loose(" ".join([rest, *(line for _p, line in pages.lines[k + 1 : k + 5])])).lower()
+    return opening.lower()[:24] in near
+
+
+def _page_of(opening: str | None, near: int | None, pages: Pages) -> int | None:
+    """The page where a proof's opening words stand in the stored PDF: the one page, or the one nearest the compile's `near` among several."""
     found = pages.find(opening, near) if opening is not None else []
-    printed = [
-        (page, n) for page, at in (found if numbered else []) if (n := pages.heading(page, at, name)) is not None
-    ]
-    # words stand at several places when a title is another's prefix or a contents page repeats it
-    for page, n in printed:
-        if n == emulated:
-            return n, page
-    if printed and len({n for _p, n in printed}) == 1:
-        return printed[0][1], printed[0][0]
     if not found:
-        return None, None
-    # the page nearest where the compile says it stands, when one page is nearest; several pages and no word from the compile is no page
+        return None
     on = {p for p, _a in found}
     nearest = {p for p in on if near and abs(p - near) == abs(found[0][0] - near)}
-    return None, (found[0][0] if len(on) == 1 or len(nearest) == 1 else None)
+    return found[0][0] if len(on) == 1 or len(nearest) == 1 else None
 
 
-def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
-    """A copy of `s` judged by `auxes`, the `.aux` files of its marked copy's compile, its numbers and pages kept only as confirmed.
-
-    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. With the work's stored PDF (`pages`), a heading's or result's number is the one the PDF heads its opening words with, and none where it shows them under no number loom can read or does not show them; without one, a number is kept where it is loom's own reading of the source's counters and the compile says the same. A page comes only from the stored PDF; a label's number is its result's or its heading's, or, for a display or an item inside a result, the compile's where the PDF numbers that result as loom reads it and shows the number in parentheses on its page. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. The survey is `ready` when every mark loom added is there, else `failed`, `incomplete`, with `unseen` naming what fell short by its id in the survey.
-    """
-    found: dict[str, AuxNumber] = {}
-    sheets: dict[str, int] = {}
-    for text in auxes:
-        found.update(parse_aux(text))
-        sheets.update({m.group(1): int(m.group(2)) for m in _SHEET.finditer(text)})
-    marks: list[tuple[str, str]] = [(f"s{k}", sec.section) for k, sec in enumerate(s.sections)]
-    for k, item in enumerate(s.items):
-        marks.append((f"i{k}", item.item))
-        marks += [(f"p{k}-{j}", f"{item.item}:proof{j}") for j in range(len(item.proofs))]
-    out = Survey.from_json(s.to_json())
-    out.unseen = [name for mark, name in marks if MARK + mark not in found]
-    if out.unseen:
-        out.state, out.why = "failed", "incomplete"
-        return out
-
-    def hint(mark: str) -> tuple[str | None, int | None]:
-        return _hint(found[MARK + mark].number, found), sheets.get(MARK + mark) or None
-
-    unconfirmed: list[str] = []
-    for k, sec in enumerate(out.sections):
-        said, near = hint(f"s{k}")
-        sec.number, sec.page = _confirmed(
-            sec.emulated, said, "", sec.opening, near, pages, numbered=sec.emulated is not None
-        )
+def _placed(out: Survey, pages: Pages, hints: dict[str, str], near: dict[str, int]) -> list[str]:
+    """Number and page `out`'s headings and results by the stored PDF (`place`) and its proofs by their words; the numbered marks it leaves without a number, headings first."""
+    got = place(out, pages, hints)
+    left: list[str] = []
+    for sec in out.sections:
+        sec.number, sec.page = got.get(sec.section, (None, None))
         if sec.emulated is not None and sec.number is None:
-            unconfirmed.append(sec.section)
-    for k, item in enumerate(out.items):
-        said, near = hint(f"i{k}")
-        item.number, item.page = _confirmed(
-            item.emulated, said, item.name, item.opening, near, pages, numbered=item.numbered
-        )
-        if item.numbered and item.number is None:
-            unconfirmed.append(item.item)
+            left.append(sec.section)
+    for item in out.items:
+        item.number, item.page = got.get(item.item, (None, None))
         for j, proof in enumerate(item.proofs):
-            _n, proof_near = hint(f"p{k}-{j}")
-            _no, proof.page = _confirmed(None, None, "", proof.opening, proof_near, pages, numbered=False)
+            proof.page = _page_of(proof.opening, near.get(f"{item.item}:proof{j}"), pages)
+    left += [item.item for item in out.items if item.numbered and item.number is None]
+    return left
+
+
+def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None) -> None:
+    """Each label's number and page: its result's or its heading's where it is one's own; a display's or an item's inside a result, the compile's, only where the stored PDF numbers that result as loom reads it and shows the number in parentheses on its page."""
     by_item = {i.item: i for i in out.items}
     by_label = {sec.label: sec for sec in out.sections if sec.label}
     for name, label in out.labels.items():
@@ -821,7 +893,6 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
             page = owner.page if label.proof is None else owner.proofs[label.proof].page
             got = found.get(name)
             said = _hint(got.number, found) if got is not None else None
-            # only where the PDF numbers the result as the source does, so a display's number is the PDF's too
             alike = owner.number is not None and owner.number == owner.emulated
             shown = (
                 said is not None and page is not None and pages is not None and alike and pages.shows(page, f"({said})")
@@ -829,13 +900,48 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
             label.number, label.page = (said if shown else None), page
         else:
             label.number, label.page = None, None
-    out.unconfirmed = unconfirmed
+
+
+def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
+    """A copy of `s` judged by `auxes`, the `.aux` files of its marked copy's compile, the person's own act; its numbers and pages kept only as confirmed.
+
+    Nothing a source's compile says is kept on its own word, since a source nobody at loom wrote can read the person's files into what it prints: the compile's numbers and pages are hints to look with. With the work's stored PDF (`pages`), the stored document governs: each heading's and result's number and page are the PDF's own, read at the start of its line (`place`), the compile's hint one way to tell it. Without one, a number is kept where it is loom's own reading of the source's counters and the compile says the same, and no page. Labels are numbered by `_labels`. What nothing confirms is left without, and each heading and result that prints a number nothing confirmed is named in `unconfirmed`. The survey is `ready` when every mark loom added is there, else `failed`, `incomplete`, with `unseen` naming what fell short by its id in the survey.
+    """
+    found: dict[str, AuxNumber] = {}
+    sheets: dict[str, int] = {}
+    for text in auxes:
+        found.update(parse_aux(text))
+        sheets.update({m.group(1): int(m.group(2)) for m in _SHEET.finditer(text)})
+    marks: list[tuple[str, str]] = [(f"s{k}", sec.section) for k, sec in enumerate(s.sections)]
+    for k, item in enumerate(s.items):
+        marks.append((f"i{k}", item.item))
+        marks += [(f"p{k}-{j}", f"{item.item}:proof{j}") for j in range(len(item.proofs))]
+    out = Survey.from_json(s.to_json())
+    out.compiled = True
+    out.unseen = [name for mark, name in marks if MARK + mark not in found]
+    if out.unseen:
+        out.state, out.why = "failed", "incomplete"
+        return out
+    hints = {name: _hint(found[MARK + mark].number, found) for mark, name in marks}
+    near = {name: sheets[MARK + mark] for mark, name in marks if sheets.get(MARK + mark)}
+    if pages is not None:
+        out.unconfirmed = _placed(out, pages, {k: v for k, v in hints.items() if v is not None}, near)
+    else:
+        for sec in out.sections:
+            sec.number = sec.emulated if sec.emulated is not None and hints[sec.section] == sec.emulated else None
+        for item in out.items:
+            numbered = item.numbered and item.emulated is not None
+            item.number = item.emulated if numbered and hints[item.item] == item.emulated else None
+        out.unconfirmed = [x.section for x in out.sections if x.emulated is not None and x.number is None] + [
+            i.item for i in out.items if i.numbered and i.number is None
+        ]
+    _labels(out, found, pages)
     out.state, out.why = "ready", None
     return out
 
 
 def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
-    """Compile a marked copy of the source in a scratch folder, removed after, and keep of what it wrote only what is confirmed (`confirm`).
+    """Compile a marked copy of the source in a scratch folder, removed after, and keep of what it wrote only what is confirmed (`confirm`): the person's own act, never the unasked path.
 
     Parameters
     ----------
@@ -844,7 +950,7 @@ def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
     s : Survey
         Its survey as `read` made it.
     pdf : Path, optional
-        The work's stored PDF, the one `s.pdf` names, which its numbers and pages are confirmed against; without one a number is kept only as loom's own reading, and no page.
+        The work's stored PDF, the one `s.pdf` names, which governs its numbers and pages; without one a number is kept only as loom's own reading the compile agrees with, and no page.
 
     Returns
     -------
@@ -859,7 +965,7 @@ def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
         auxes = [p.read_text(encoding="utf-8", errors="replace") for p in sorted((Path(tmp) / "out").rglob("*.aux"))]
     if res.aux is None or not auxes:
         out = Survey.from_json(s.to_json())
-        out.state = "failed"
+        out.state, out.compiled = "failed", True
         out.why = {127: "no-tex", 124: "timeout"}.get(res.returncode, "stopped" if res.stopped else "compile")
         return out
     return confirm(s, auxes, Pages.of(pdf))
@@ -868,7 +974,7 @@ def compile_marks(src: Path, s: Survey, pdf: Path | None = None) -> Survey:
 def complete(
     root: Path, tex: str, src: Path, main: str, pdf: str | None = None, pdf_path: Path | None = None
 ) -> Survey:
-    """A source's survey once compiled: the kept one when it is `ready` or `failed`, else compiled now and kept.
+    """A source's survey once compiled, the person's own act: the kept one when a compile already judged it, else compiled now and kept.
 
     One compile at a time in a quilt: each holds `SURVEY_LOCK`, decides again under it, and waits up to `QUEUE` seconds for another to end.
 
@@ -883,7 +989,7 @@ def complete(
     main : str
         Its main file, relative to `src`.
     pdf : str, optional
-        The hash of the work's stored PDF, which the survey is kept by and confirmed against.
+        The hash of the work's stored PDF, which the survey is kept by and which governs its numbers.
     pdf_path : Path, optional
         That PDF on the disk.
 
@@ -891,11 +997,71 @@ def complete(
     -------
     Survey
         `ready` or `failed` (see `compile_marks`).
+
+    See Also
+    --------
+    confirmed : the unasked path, which never compiles.
     """
     with locks.locked(root / SURVEY_LOCK, wait=QUEUE):
+        kept_now = kept(root, tex, pdf)
+        if kept_now is not None and kept_now.compiled:
+            return kept_now
         s = survey(root, tex, src, main, pdf)
-        if s.state != "reading":
+        if s.state == "failed":
             return s
-        done = compile_marks(src, s, pdf_path if pdf else None)
+        base = Survey.from_json({**s.to_json(), "state": "reading", "why": None, "unconfirmed": []})
+        done = compile_marks(src, base, pdf_path if pdf else None)
         keep(root, done)
         return done
+
+
+def confirmed(
+    root: Path, tex: str, src: Path, main: str, pdf: str | None = None, pdf_path: Path | None = None
+) -> Survey:
+    """A source's survey as the unasked path has it: numbered and paged by the work's stored PDF alone, never compiled.
+
+    With a PDF, each heading's and result's number and page are the PDF's own, read at the start of its line in the source's order (`place`), what it leaves named in `unconfirmed`; kept by both hashes. Without one, nothing is confirmed: the outline is loom's own reading, every numbered heading and result is named, and `why` is `no-pdf`. A PDF `pdftotext` cannot read leaves it `failed`, `pdf`.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    tex : str
+        The source's hash.
+    src : Path
+        The source's folder, unpacked.
+    main : str
+        Its main file, relative to `src`.
+    pdf : str, optional
+        The hash of the work's stored PDF.
+    pdf_path : Path, optional
+        That PDF on the disk.
+
+    Returns
+    -------
+    Survey
+        `ready`, or `failed` with why.
+
+    See Also
+    --------
+    complete : the person's own act, which compiles.
+    """
+    s = survey(root, tex, src, main, pdf)
+    if s.state != "reading":
+        return s
+    out = Survey.from_json(s.to_json())
+    if pdf is None:
+        out.unconfirmed = [x.section for x in out.sections if x.emulated is not None] + [
+            i.item for i in out.items if i.numbered
+        ]
+        out.state, out.why = "ready", "no-pdf"
+        return out
+    pages = Pages.of(pdf_path)
+    if pages is None:
+        out.state, out.why = "failed", "pdf"
+    else:
+        out.unconfirmed = _placed(out, pages, {}, {})
+        _labels(out, {}, pages)
+        out.state, out.why = "ready", None
+    keep(root, out)
+    return out

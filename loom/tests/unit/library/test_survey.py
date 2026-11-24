@@ -284,7 +284,7 @@ def test_loom_follows_only_the_numbering_a_source_writes_literally(tmp_path: Pat
 
 
 def test_a_format_holds_until_its_group_closes(tmp_path: Path) -> None:
-    """A result restated in a group, as Slice4D writes it, has no reading of loom's, and the results after it are read again."""
+    """A result restated in a group, as Slice4D writes it, reads as the result it restates, and the results after it are read again."""
     src = tmp_path / "src"
     src.mkdir()
     (src / "main.tex").write_text(
@@ -296,7 +296,7 @@ def test_a_format_holds_until_its_group_closes(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     s = survey.read(src, "main.tex", TEX)
-    assert [i.emulated for i in s.items] == ["1", "2", None, "3", "4", "5"]
+    assert [i.emulated for i in s.items] == ["1", "2", "1", "3", "4", "5"]
 
 
 IRREGULAR = [
@@ -563,26 +563,29 @@ def test_a_number_a_compile_says_is_kept_on_no_word_of_its_own(tmp_path: Path, s
         assert said == "" or said not in json.dumps(done.to_json()), "no byte of it in what is kept"
 
 
-def test_a_stored_pdf_governs_the_number_heading_a_statement_and_gives_its_page(tmp_path: Path) -> None:
+def test_a_stored_pdf_numbers_each_heading_and_result_at_the_start_of_its_own_line(tmp_path: Path) -> None:
     s = survey.read(_source(tmp_path), "main.tex", TEX)
     done = survey.confirm(s, _aux(said={"loom-survey-i2": "2.3"}), survey.Pages(PDF))
-    main = done.item("thm:main")
-    assert main is not None and (main.number, main.page) == ("2.3", 1), "the number the PDF heads its words with"
-    assert [(i.item, i.number, i.page) for i in done.items if i.item != "thm:main"] == [
+    assert [(i.item, i.number, i.page) for i in done.items] == [
         ("def:widget", "1.1", 1),
         ("i2", "1.2", 1),
+        ("thm:main", "2.3", 1),
         ("claim:star", None, None),
-        ("not:hom", None, None),
+        ("not:hom", "7.1", 2),
         ("thm:app", "A.1", 2),
-    ], "with a stored PDF loom's reading never stands alone: a statement whose words are too few to find has no number"
-    assert [(x.number, x.page) for x in done.sections] == [("1", 1), ("2", 1), (None, 1), (None, None), ("A", 2)]
-    assert done.unconfirmed == ["s4", "not:hom"]
+    ], "the number the PDF prints, a notation of too few words among them"
+    assert [(x.number, x.page) for x in done.sections] == [("1", 1), ("2", 1), (None, None), ("7", 2), ("A", 2)]
+    assert done.unconfirmed == [] and done.compiled
     assert (done.labels["eq:bound"].number, done.labels["eq:bound"].page) == ("1", 1), (
         "shown in parentheses on its result's page"
     )
     assert done.labels["it:first"].number is None, "not shown so"
     wrong = survey.confirm(s, _aux(said={"loom-survey-i2": "9.9"}), survey.Pages(PDF))
     assert wrong.item("thm:main").number == "2.3", "whatever the compile says"  # type: ignore[union-attr]
+    assert survey.place(s, survey.Pages(PDF)) == {
+        **{x.section: (x.number, x.page) for x in done.sections if x.number},
+        **{i.item: (i.number, i.page) for i in done.items if i.number},
+    }, "and with no compile at all"
 
 
 #: The fixture as its published version prints it, numbered otherwise: sections 11, 12 and 17 where the source has 1, 2 and 7.
@@ -604,20 +607,81 @@ def test_a_stored_pdf_that_numbers_otherwise_governs_and_a_longer_number_is_neve
         ("claim:star", None, None),
         ("not:hom", None, None),
         ("thm:app", "A.1", 2),
-    ]
-    assert [x.number for x in done.sections] == ["11", "12", None, None, "A"], "12 is never read as the 2 it ends in"
+    ], "a notation of too few words to witness it, printed otherwise than loom reads it, is left"
+    assert [x.number for x in done.sections] == ["11", "12", None, "17", "A"], "12 is never read as the 2 it ends in"
     labels = {k: v.number for k, v in done.labels.items()}
     assert (labels["def:widget"], labels["thm:alias"], labels["sec:intro"]) == ("11.1", "12.1", "11")
     assert labels["eq:bound"] is None, "the PDF numbers its result otherwise, so the compile's (1) is not its number"
-    assert done.unconfirmed == ["s4", "not:hom"]
-    contents = "Contents\n1 Introduction\n9 Bounds\n"
-    honest = survey.confirm(s, _aux(), survey.Pages([contents + PDF[0], PDF[1]]))
-    assert honest.sections[1].number == "2", "of the places its words stand, the one headed as loom reads it"
-    other = survey.confirm(s, _aux(), survey.Pages([contents + RENUMBERED[0], RENUMBERED[1]]))
-    assert other.sections[1].number is None and "s2" in other.unconfirmed, "two places, two numbers, none loom's: none"
+    assert done.unconfirmed == ["not:hom"]
     unnumbered = [RENUMBERED[0].replace("Lemma 11.2.", "Lemma."), RENUMBERED[1]]
     bare = survey.confirm(s, _aux(), survey.Pages(unnumbered))
     assert bare.item("i2").number is None and "i2" in bare.unconfirmed, "shown under no number loom can read"  # type: ignore[union-attr]
+
+
+@pytest.mark.parametrize(
+    "contents",
+    ["Contents\n1 Introduction\n2 Bounds\n7 Later\n", "Contents\n1. Introduction . . . 2\n2. Bounds . . . 2\n"],
+)
+def test_a_contents_page_is_never_where_a_heading_is_read(tmp_path: Path, contents: str) -> None:
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    got = survey.place(s, survey.Pages([contents, *PDF]))
+    assert (got["s1"], got["s2"]) == (("1", 2), ("2", 2)), "on the page the heading stands, not the contents'"
+
+
+#: A line ending a paragraph, then a mark the PDF prints unnumbered: what the review's D-15 found taken as its number.
+BEFORE = ["as in 2019.", "on X.", "and Y.", "in MCMXC.", "as DC.", "the group G.", "as in Theorem 3."]
+
+
+@pytest.mark.parametrize("before", BEFORE)
+def test_a_token_before_a_mark_is_never_read_as_its_number(tmp_path: Path, before: str) -> None:
+    """The review's D-15: a heading and a lemma the PDF prints with no number keep none, whatever ends the line before them, alone on its own line or not."""
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    for tail in (f"By (1), {before}\n", f"By (1),\n{before.removesuffix('.').split()[-1]}\n"):
+        page = (
+            PDF[0]
+            .replace("Proof. By (1).\n", tail)
+            .replace("2. Bounds", "Bounds")
+            .replace("Lemma 1.2. Every", f"{tail}Lemma. Every")
+        )
+        got = survey.place(s, survey.Pages([page, PDF[1]]))
+        assert "s2" not in got and "i2" not in got, (tail, got)
+        assert got["thm:main"] == ("2.3", 1), "the marks after are read as before"
+
+
+def test_a_heading_is_read_as_it_is_printed_with_its_number_first_and_never_short(tmp_path: Path) -> None:
+    s = survey.read(_source(tmp_path), "main.tex", TEX)
+    swapped = survey.place(s, survey.Pages([PDF[0].replace("Lemma 1.2. Every", "1.2 Lemma. Every"), PDF[1]]))
+    assert swapped["i2"] == ("1.2", 1), "the number then the name"
+    # a line of prose that opens with the name and a longer number, the lemma's words just after: read as nothing, never as its first part
+    prose = PDF[0].replace("Lemma 1.2. Every widget", "Lemma 1.7 also shows the rest.\nEvery widget")
+    assert "i2" not in survey.place(s, survey.Pages([prose, PDF[1]]))
+
+
+def test_with_no_stored_pdf_the_unasked_path_confirms_nothing_and_names_every_numbered_mark(tmp_path: Path) -> None:
+    done = survey.confirmed(tmp_path / "quilt", TEX, _source(tmp_path), "main.tex")
+    assert (done.state, done.why, done.compiled) == ("ready", "no-pdf", False)
+    assert done.unconfirmed == ["s1", "s2", "s4", "s5", "def:widget", "i2", "thm:main", "not:hom", "thm:app"]
+    assert all(x.number is None and x.page is None for x in [*done.sections, *done.items])
+    assert [i.emulated for i in done.items] == ["1.1", "1.2", "2.1", None, "7.1", "A.1"], (
+        "the outline is loom's reading"
+    )
+
+
+@pytest.mark.poppler
+@pytest.mark.parametrize("work", ["arden-cycle-spaces", "arden-cycle-spaces-v2", "bellamy-median-orders"])
+def test_each_fixture_work_is_numbered_whole_from_its_own_pdf_with_no_compile(tmp_path: Path, work: str) -> None:
+    """The route on the showcase's works and the PDFs committed beside them: every numbered heading and result is found, as loom reads it."""
+    src = tmp_path / "src"
+    src.mkdir()
+    shutil.copy(ARDEN.with_name(f"{work}.tex"), src / "main.tex")
+    done = survey.confirmed(
+        tmp_path / "quilt", TEX, src, "main.tex", pdf="sha256:" + "ef" * 32, pdf_path=ARDEN.with_name(f"{work}.pdf")
+    )
+    numbered = [(x.emulated, x.number) for x in done.sections if x.emulated] + [
+        (i.emulated, i.number) for i in done.items if i.numbered
+    ]
+    assert (done.state, done.unconfirmed, done.compiled) == ("ready", [], False), done.why
+    assert numbered and all(read == printed for read, printed in numbered)
 
 
 def test_a_restated_result_is_numbered_as_its_stored_pdf_prints_it_and_without_one_not_at_all(tmp_path: Path) -> None:
@@ -712,14 +776,34 @@ def test_a_compile_numbers_each_result_as_confirmed_and_pages_it_only_from_the_s
     assert [(i.item, i.number) for i in alone.items] == numbers
     assert all(i.page is None for i in alone.items) and [x.number for x in alone.sections] == ["1", "2", None, "7", "A"]
     pdf = _stored(tmp_path, src)
+    unasked = survey.confirmed(tmp_path / "quilt", TEX, src, "main.tex", pdf="sha256:" + "ef" * 32, pdf_path=pdf)
+    assert [(i.item, i.number) for i in unasked.items] == numbers and not unasked.compiled
     held = survey.complete(tmp_path / "quilt", TEX, src, "main.tex", pdf="sha256:" + "ef" * 32, pdf_path=pdf)
-    assert [(i.item, i.number) for i in held.items] == [
-        (item, None if item == "not:hom" else number) for item, number in numbers
-    ], "the notation opens with too few words to find, and with a stored PDF loom's reading never stands alone"
-    assert [i.page for i in held.items] == [1, 1, 1, None, None, 2], "found on the stored PDF's own pages"
+    assert held.compiled, "the person's own act compiles, whatever the unasked path kept"
+    assert [(i.item, i.number) for i in held.items] == numbers
+    assert [i.page for i in held.items] == [1, 1, 1, None, 2, 2], "found on the stored PDF's own pages"
     assert held.labels["eq:bound"].number == "1" and held.labels["sec:proofs"].number == "A"
     assert _bytes(src) == before and survey.kept(tmp_path / "quilt", TEX) == alone
     assert survey.kept(tmp_path / "quilt", TEX, "sha256:" + "ef" * 32) == held
+
+
+@pytest.mark.tex
+def test_a_book_s_chapters_and_its_appendix_are_read_from_its_pdf(tmp_path: Path) -> None:
+    """A book prints `Chapter 1` and `Appendix A` on a line of their own, the title under them: the route reads them there, with no compile."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.tex").write_text(
+        "\\documentclass{book}\n\\usepackage{amsthm}\n\\newtheorem{thm}{Theorem}[chapter]\n\\begin{document}\n"
+        "\\chapter{Gadgets and towers}\nSome words about gadgets.\n\\section{First steps}\n"
+        "\\begin{thm}Every gadget is a tower.\\end{thm}\n\\chapter{Widgets}\n\\begin{thm}Every widget is bounded.\\end{thm}\n"
+        "\\appendix\n\\chapter{Proofs}\n\\begin{thm}A theorem in the appendix.\\end{thm}\n\\end{document}\n",
+        encoding="utf-8",
+    )
+    pdf = _stored(tmp_path, src)
+    done = survey.confirmed(tmp_path / "quilt", TEX, src, "main.tex", pdf="sha256:" + "ef" * 32, pdf_path=pdf)
+    assert [(x.number, x.page) for x in done.sections] == [("1", 1), ("1.1", 1), ("2", 3), ("A", 5)]
+    assert [(i.number, i.page) for i in done.items] == [("1.1", 1), ("2.1", 3), ("A.1", 5)]
+    assert (done.unconfirmed, done.compiled) == ([], False)
 
 
 @pytest.mark.tex
