@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.paths import CACHE, HISTORY, LOCAL, LOOM, SCRATCH, SOURCE_SYNC
+from loom.paths import CACHE, HISTORY, LOCAL, LOOM, OVERLEAF_CLONE, SCRATCH, SOURCE_SYNC
 
 NO_AUTHOR_MESSAGE = (
     'no author name: add name = "Your Name" under [author] in ~/.config/loom/config.toml, or pass --as NAME'
@@ -244,7 +244,8 @@ def removed_in(root: Path, config: QuiltConfig) -> str | None:
         synced = json.loads((root / SOURCE_SYNC).read_text(encoding="utf-8")).get("directory")
     except (OSError, ValueError, AttributeError):
         synced = None
-    if isinstance(synced, str) and synced:
+    # the Overleaf mirror's clone is loom's own, made in `.loom/local/` because it is this machine's (`loom.overleaf`)
+    if isinstance(synced, str) and synced and synced != OVERLEAF_CLONE:
         named.append(("the sync directory", synced))
     real_root = Path(os.path.realpath(root))
     for setting, value in named:

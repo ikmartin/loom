@@ -51,6 +51,8 @@ class SyncState:
     incoming: str = ""
     observed: str = ""
     published_main: str = ""
+    # the quilt folder an Overleaf mirror keeps the project in, as Overleaf holds it (`loom.overleaf`); '' for any other pairing
+    folder: str = ""
     last_pull: dict[str, Any] = field(default_factory=dict)
     # Projections of the shared origin store (`loom.review_origins`), where they are persisted.
     review_origins: dict[str, str] = field(default_factory=dict)

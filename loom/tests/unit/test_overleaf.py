@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 import loom.overleaf as overleaf
-from loom.overleaf import LinkRefused, MirrorError, address, run, store_token
+from loom.overleaf import LinkRefused, MirrorError, address, here, pair, paired, prepare, run, store_token
+from loom.scan.quilt import Quilt, load_quilt
+from loom.sync import SyncState
 from tests.unit._overleaf_server import TOKEN, Server, serving
 
 ID = "5f1e0c2a9b3d4e6f7a8b9c0d"
@@ -180,3 +184,156 @@ def test_a_token_of_more_than_one_printable_line_never_reaches_the_helper(
         store_token(server.url(ID), token)
     assert refused.value.code == "bad-token"
     assert stand_in(tmp_path) == ""
+
+
+# ---- pairing ---------------------------------------------------------------------------------------------------------
+
+INTRO = "\\section{Introduction}\nWe study things.\n"
+PAPER = "\\documentclass{article}\n\\begin{document}\n\\input{sections/intro}\n\\end{document}\n"
+FIGURE = bytes(range(256))
+
+
+def new_quilt(tmp_path: Path) -> Quilt:
+    """A quilt as `loom init` leaves a new one: no main document, nothing denied to agents."""
+    from loom.layout import stamp
+
+    root = tmp_path / "quilt"
+    root.mkdir(parents=True)
+    stamp(root)
+    (root / "config.toml").write_text('[quilt]\nname = "test"\n', encoding="utf-8")
+    return load_quilt(root)
+
+
+def overleaf_project(tmp_path: Path, files: dict[str, str] | None = None) -> Path:
+    bare = project(tmp_path / "overleaf.git", files or {"main.tex": PAPER, "sections/intro.tex": INTRO})
+    if files is None:
+        seed = tmp_path / "overleaf.git.seed"
+        (seed / "figures").mkdir()
+        (seed / "figures/plot.pdf").write_bytes(FIGURE)
+        git(seed, "add", "-A")
+        git(seed, "commit", "-q", "-m", "a figure")
+        git(seed, "push", "-q", str(bare), "main")
+    return bare
+
+
+def journal(root: Path) -> list[dict[str, Any]]:
+    path = root / ".loom/local/writes.jsonl"
+    return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
+
+
+def mirrored(tmp_path: Path) -> tuple[Quilt, Path]:
+    """A new quilt paired with a project in `paper/`, the person known as Pat."""
+    q = new_quilt(tmp_path)
+    bare = overleaf_project(tmp_path)
+    pair(q, str(bare), "paper", "main.tex", [PAT[1]])
+    return load_quilt(q.root), bare
+
+
+def test_pairing_says_what_it_asks_and_writes_nothing_of_the_person_s(tmp_path: Path) -> None:
+    q = new_quilt(tmp_path)
+    asked = prepare(q, str(overleaf_project(tmp_path)))
+    assert asked == {
+        "folder": "paper",
+        "mains": ["main.tex"],
+        "main": "main.tex",
+        "authors": [{"name": PAT[0], "email": PAT[1]}],
+        "me": [],
+    }
+    assert sorted(p.name for p in q.root.iterdir()) == [".loom", "config.toml"]
+    assert journal(q.root) == []
+
+
+def test_pairing_copies_the_project_into_a_new_folder_as_one_act(tmp_path: Path) -> None:
+    q, bare = mirrored(tmp_path)
+    root = q.root
+    assert (root / "paper/main.tex").read_text() == PAPER
+    assert (root / "paper/sections/intro.tex").read_text() == INTRO
+    assert (root / "paper/figures/plot.pdf").read_bytes() == FIGURE
+    (act,) = [e for e in journal(root) if e.get("event", "begin") == "begin" and e.get("kind") == "pull"]
+    assert {"paper/main.tex", "paper/sections/intro.tex", "config.toml", ".loom/records/source-sync.json"} <= set(
+        act["files"]
+    )
+    assert q.config.main == "paper/main.tex" and q.config.agents_deny == ["paper/"]
+    state = SyncState.read(root)
+    assert (state.folder, state.url, state.master, state.directory) == (
+        "paper",
+        str(bare),
+        "paper/main.tex",
+        ".loom/local/overleaf",
+    )
+    assert state.integrated == git(bare, "rev-parse", "main")
+    assert not (root / ".loom/local/overleaf/main.tex").exists(), "loom's clone has no checkout"
+
+
+def test_who_the_person_is_on_overleaf_stays_on_this_machine(tmp_path: Path) -> None:
+    q, _ = mirrored(tmp_path)
+    assert here(q.root)["me"] == [PAT[1]]
+    assert PAT[1] not in (q.root / ".loom/records/source-sync.json").read_text()
+    assert prepare(new_quilt(tmp_path / "again"), str(overleaf_project(tmp_path / "again")))["me"] == []
+
+
+def test_a_main_file_a_person_already_named_keeps_its_place(tmp_path: Path) -> None:
+    q = new_quilt(tmp_path)
+    (q.root / "notes.md").write_text("# Notes\n")
+    (q.root / "config.toml").write_text('[quilt]\nname = "test"\nmain = "notes.md"\n')
+    pair(load_quilt(q.root), str(overleaf_project(tmp_path)), "paper", "main.tex", [])
+    assert load_quilt(q.root).config.main == "notes.md"
+
+
+@pytest.mark.parametrize("folder", ["", "../outside", ".hidden", "a/.git", "/abs"])
+def test_a_folder_name_loom_cannot_use_is_refused(tmp_path: Path, folder: str) -> None:
+    q = new_quilt(tmp_path)
+    with pytest.raises(MirrorError) as refused:
+        pair(q, str(overleaf_project(tmp_path)), folder, "main.tex", [])
+    assert refused.value.code == "bad-folder" and paired(q.root) is None
+
+
+def test_a_folder_that_exists_is_refused_and_nothing_is_written(tmp_path: Path) -> None:
+    q = new_quilt(tmp_path)
+    (q.root / "paper").mkdir()
+    (q.root / "paper/mine.tex").write_text("mine\n")
+    bare = overleaf_project(tmp_path)
+    with pytest.raises(MirrorError) as refused:
+        pair(q, str(bare), "paper", "main.tex", [])
+    assert refused.value.code == "folder-exists"
+    assert sorted(p.name for p in (q.root / "paper").iterdir()) == ["mine.tex"] and journal(q.root) == []
+    assert prepare(q, str(bare))["folder"] == "overleaf"
+
+
+def test_a_quilt_mirrors_one_project(tmp_path: Path) -> None:
+    q, bare = mirrored(tmp_path)
+    with pytest.raises(MirrorError) as asked:
+        prepare(q, str(bare))
+    with pytest.raises(MirrorError) as paired_again:
+        pair(q, str(bare), "other", "main.tex", [])
+    assert asked.value.code == paired_again.value.code == "paired"
+    assert not (q.root / "other").exists()
+
+
+def test_of_several_main_files_main_tex_is_taken_else_the_person_chooses(tmp_path: Path) -> None:
+    two = {"main.tex": PAPER, "talk.tex": PAPER, "macros.tex": "\\newcommand{\\R}{\\mathbb{R}}\n"}
+    assert prepare(new_quilt(tmp_path / "a"), str(project(tmp_path / "a.git", two)))["main"] == "main.tex"
+    other = {"paper.tex": PAPER, "talk.tex": PAPER}
+    asked = prepare(new_quilt(tmp_path / "b"), str(project(tmp_path / "b.git", other)))
+    assert (asked["mains"], asked["main"]) == (["paper.tex", "talk.tex"], "")
+    with pytest.raises(MirrorError) as refused:
+        pair(new_quilt(tmp_path / "c"), str(project(tmp_path / "c.git", other)), "paper", "macros.tex", [])
+    assert refused.value.code == "no-main"
+
+
+def test_a_project_with_no_file_that_begins_a_document_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(MirrorError) as refused:
+        prepare(new_quilt(tmp_path), str(project(tmp_path / "p.git", {"notes.tex": "Just notes.\n"})))
+    assert refused.value.code == "no-main"
+
+
+def test_pairing_through_overleaf_s_password_keeps_the_token_out_of_the_quilt(server: Server, tmp_path: Path) -> None:
+    q = new_quilt(tmp_path)
+    with pytest.raises(MirrorError) as refused:
+        prepare(q, server.url(ID))
+    assert refused.value.code == "no-token"
+    store_token(server.url(ID), TOKEN)
+    asked = prepare(q, server.url(ID))
+    pair(q, server.url(ID), asked["folder"], asked["main"], [])
+    assert (q.root / "paper/main.tex").read_text() == MAIN
+    assert not [p for p in q.root.rglob("*") if p.is_file() and TOKEN.encode() in p.read_bytes()]
