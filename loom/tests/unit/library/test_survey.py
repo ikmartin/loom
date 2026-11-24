@@ -270,6 +270,43 @@ def test_loom_reads_the_numbering_a_source_sets_as_tex_prints_it(tmp_path: Path,
     assert ([x.emulated for x in s.sections], [i.emulated for i in s.items]) == (sections, items)
 
 
+def _one_file(tmp_path: Path, text: str) -> Path:
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.tex").write_text(text, encoding="utf-8")
+    return src
+
+
+def test_ntheorem_s_standard_results_are_read_each_on_its_own_counter(tmp_path: Path) -> None:
+    """The review's D-3: a paper that loads ntheorem with `standard` declares no theorem of its own and still has results."""
+    src = _one_file(
+        tmp_path,
+        "\\documentclass{article}\n\\usepackage[standard,thmmarks]{ntheorem}\n\\begin{document}\n\\section{N}\n"
+        "\\begin{Theorem}\\label{t:n}An ntheorem Theorem.\\end{Theorem}\n\\begin{Lemma}An ntheorem Lemma.\\end{Lemma}\n"
+        "\\begin{Proof}Its proof.\\end{Proof}\n\\begin{theorem}A second theorem.\\end{theorem}\n\\end{document}\n",
+    )
+    s = survey.read(src, "main.tex", TEX)
+    assert [(i.item, i.name, i.taxon, i.emulated) for i in s.items] == [
+        ("t:n", "Theorem", "theorem", "1"),
+        ("i2", "Lemma", "lemma", "1"),
+        ("i3", "Theorem", "theorem", "1"),
+    ], "each of the set on its own counter, as ntheorem.std declares them"
+    assert s.why is None
+
+
+def test_a_paper_whose_results_loom_cannot_read_says_so(tmp_path: Path) -> None:
+    """The review's D-3: tcolorbox's theorems are not ones the scanner reads, so the survey says it found none rather than showing an empty paper."""
+    src = _one_file(
+        tmp_path,
+        "\\documentclass{article}\n\\usepackage{tcolorbox}\n\\tcbuselibrary{theorems}\n\\newtcbtheorem{mytheo}{Theorem}{}{th}\n"
+        "\\begin{document}\n\\section{Boxes}\n\\begin{mytheo}{A title}{one}Boxed.\\end{mytheo}\n\\end{document}\n",
+    )
+    s = survey.read(src, "main.tex", TEX)
+    assert (s.state, s.why, s.items) == ("reading", "no-results", [])
+    done = survey.confirmed(tmp_path / "quilt", TEX, src, "main.tex")
+    assert (done.state, done.why) == ("ready", "no-results")
+
+
 def test_loom_follows_only_the_numbering_a_source_writes_literally(tmp_path: Path) -> None:
     """A counter set from a value the source computes or reads stays where loom's reading had it, and a format of anything else has no reading at all, so nothing loom reads can carry a file the source read."""
     src = tmp_path / "src"

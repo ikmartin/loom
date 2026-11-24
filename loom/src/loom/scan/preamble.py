@@ -127,6 +127,7 @@ def build_closure(
     if foreign:
         if doc is not None:
             _parse_body_taxa(closure, master, doc)
+        _ntheorem_standard(closure, master)
         _parse_wrappers(closure, master, doc)
     for d in directives:
         if d.form == "kv" and d.key == "environment" and d.file == master.path:
@@ -269,6 +270,25 @@ def _parse_taxa(closure: PreambleClosure) -> None:
                         env_name, disp, _style_class(st), numbered, frag.file, m.start(), counter, within
                     )
             pos = max(after, m.end())
+
+
+#: The results ntheorem's `standard` option declares (`ntheorem.std`), each on a counter of its own, by style; its proofs are not results.
+NTHEOREM_STANDARD = {
+    "plain": ("Theorem", "Satz", "Proposition", "Lemma", "Korollar", "Corollary"),
+    "definition": ("Example", "Beispiel", "Bemerkung", "Anmerkung", "Remark", "Definition"),
+}
+_NTHEOREM = re.compile(r"\\usepackage\s*\[([^\]]*)\]\s*\{[^{}]*\bntheorem\b[^{}]*\}")
+
+
+def _ntheorem_standard(closure: PreambleClosure, master: SourceFile) -> None:
+    """The results `\\usepackage[standard]{ntheorem}` declares, in both cases, which no `\\newtheorem` of the source's own shows; a declaration of the source's own wins."""
+    loaded = _NTHEOREM.search(closure.clean_text())
+    if loaded is None or "standard" not in [o.strip() for o in loaded.group(1).split(",")]:
+        return
+    for style, names in NTHEOREM_STANDARD.items():
+        for name in names:
+            for env in (name, name.lower()):
+                closure.taxa.setdefault(env, Taxon(env, name, style, True, master.path, 0))
 
 
 def _parse_body_taxa(closure: PreambleClosure, master: SourceFile, doc: int) -> None:

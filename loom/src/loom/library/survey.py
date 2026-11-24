@@ -262,7 +262,7 @@ def read(src: Path, main: str, tex: str) -> Survey:
     Returns
     -------
     Survey
-        `reading`, or `failed` with why: `not-regular` when the folder holds anything but folders and regular files with no other name (a link, a hard link, a FIFO, a device), judged before anything is read; `no-main`, `unreadable` or `no-document` when the main file is missing, unreadable or begins no document.
+        `reading`, with why `no-results` where loom finds no result in it; or `failed` with why: `not-regular` when the folder holds anything but folders and regular files with no other name (a link, a hard link, a FIFO, a device), judged before anything is read; `no-main`, `unreadable` or `no-document` when the main file is missing, unreadable or begins no document.
     """
     out = Survey(tex=tex, main=main)
     if not _plain_folder(src):
@@ -298,6 +298,9 @@ def read(src: Path, main: str, tex: str) -> Survey:
     # a local style's settings stand before the document's own, as it is loaded in the preamble
     styles = [f.src.clean[f.start : f.end] for f in closure.fragments if f.file not in exp.reached]
     _walk(out, exp.text, units, envs, files, taxa, exp, styles)
+    if not out.items:
+        # a paper whose theorems loom cannot read (tcolorbox's, say) never shows as one with nothing in it
+        out.why = "no-results"
     _label_all(out, units, envs, files, doc)
     _bibliography(out, src, main, files, exp.reached)
     return out
@@ -949,7 +952,7 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
             item.number, item.page = None, None
     out.unconfirmed = [name for name in out.unconfirmed if name not in hidden]
     _labels(out, found, pages)
-    out.state, out.why = "ready", None
+    out.state, out.why = "ready", None if out.items else "no-results"
     return out
 
 
@@ -1099,7 +1102,7 @@ def confirmed(
         out.unconfirmed = [x.section for x in out.sections if x.emulated is not None] + [
             i.item for i in out.items if i.numbered
         ]
-        out.state, out.why = "ready", "no-pdf"
+        out.state, out.why = "ready", "no-pdf" if out.items else "no-results"
         return out
     pages = Pages.of(pdf_path)
     if pages is None:
@@ -1107,6 +1110,6 @@ def confirmed(
     else:
         out.unconfirmed = _placed(out, pages, {}, {})
         _labels(out, {}, pages)
-        out.state, out.why = "ready", None
+        out.state, out.why = "ready", None if out.items else "no-results"
     keep(root, out)
     return out
