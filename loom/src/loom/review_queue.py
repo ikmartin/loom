@@ -64,26 +64,45 @@ def fingerprint(result: ScanResult, key: str) -> str:
     return hashlib.sha256(json.dumps(context, sort_keys=True).encode()).hexdigest()
 
 
-def refusal(result: ScanResult, key: str) -> str:
-    """Why the author cannot accept `key` from the viewer, in the person's words; '' when they can.
+def refusal_code(result: ScanResult, key: str) -> str:
+    """Which reason keeps the author from accepting `key`: `not-yours`, `incomplete`, `open-claim`, `unclassified` or `unidentified`; '' when they can.
 
-    The one rule behind the queue's rows, `review-accept` and a copy's or a pull's accept-as-checked. A statement with no proof yet is accepted as stated (it stays unproved), and a cited result is a settled leaf, so neither is refused.
+    The one rule behind the queue's rows, `review-accept` and a copy's or a pull's accept-as-checked; `refusal` says it. A statement with no proof yet is accepted as stated (it stays unproved), and a cited result is a settled leaf, so neither is refused.
     """
     from loom.cli.review import _owned
 
     n = result.nodes[key]
     if n.external or n.derived_of or not _owned(result, key):
-        return "It is not in your documents."
+        return "not-yours"
     if n.incomplete:
-        said = "; ".join(t.replace("~", " ").strip().rstrip(".") for t in n.incomplete if t.strip())
-        return f"It is marked incomplete: {said}." if said else "It is marked incomplete."
+        return "incomplete"
     if n.kind == "environment" and n.basis == "open-claim":
-        return "It is a conjecture or a question, which is not accepted."
+        return "open-claim"
     if n.kind == "environment" and n.basis == "unclassified":
-        return "Its basis is not said; a % !LOOM basis: line inside it says it."
+        return "unclassified"
     if any(result.dependencies.texts.get(d) is None for d in result.dependencies.closure(key)):
-        return "Something it rests on cannot be identified."
+        return "unidentified"
     return ""
+
+
+_REFUSALS = {
+    "not-yours": "It is not in your documents.",
+    "open-claim": "It is a conjecture or a question, which is not accepted.",
+    "unclassified": "Its basis is not said; a % !LOOM basis: line inside it says it.",
+    "unidentified": "Something it rests on cannot be identified.",
+}
+
+
+def refusal(result: ScanResult, key: str) -> str:
+    """Why the author cannot accept `key` (`refusal_code`), as an agent or the command line reads it; '' when they can.
+
+    The viewer words the code itself, so a person never reads the directive or the keys this names.
+    """
+    code = refusal_code(result, key)
+    if code == "incomplete":
+        said = "; ".join(t.replace("~", " ").strip().rstrip(".") for t in result.nodes[key].incomplete if t.strip())
+        return f"It is marked incomplete: {said}." if said else "It is marked incomplete."
+    return _REFUSALS.get(code, "")
 
 
 def rows_for(result: ScanResult, manifest: dict[str, Any]) -> list[dict[str, Any]]:
@@ -169,6 +188,9 @@ def rows_for(result: ScanResult, manifest: dict[str, Any]) -> list[dict[str, Any
                 "changed_text": changed_by_pull.get(key, False),
                 "local_changed": local_changed,
                 "refusal": refusal(result, key),
+                "refusal_code": refusal_code(result, key),
+                # the person's own notes on a block marked incomplete, as they wrote them, which the viewer words
+                "incomplete": [t.strip() for t in result.nodes[key].incomplete if t.strip()],
             }
         )
     return out
