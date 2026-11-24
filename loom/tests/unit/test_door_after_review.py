@@ -793,6 +793,32 @@ def test_a_folder_swapped_for_a_link_by_a_racing_thread_never_takes_a_write(tmp_
     assert not (root / ".claude/settings.local.json").exists()
 
 
+@pytest.mark.parametrize("after", [0, 1])
+def test_an_honest_move_into_a_dot_named_folder_cut_at_a_rename_leaves_no_temporary_of_loom_s(
+    q: Path, monkeypatch: pytest.MonkeyPatch, after: int
+) -> None:
+    """`loom mv` into `.drafts/`, cut short as it renames a file in, is put back, or left with words that, done, let recovery put it back, and loom's own temporary files are cleared once it is: a name of that form is loom's own, cleared wherever it lies, a dot-named folder among it (R2-27)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    restore = dying_before_the_rename(monkeypatch, after=after)
+    with pytest.raises(Died):
+        run("mv", "drafting/main.tex", ".drafts/paper.tex", cwd=q)
+    restore()
+    hist = load_quilt(q).history_dir
+    said = writes.recover(q, hist)
+    assert len(said) == 1 and said[0].startswith(("undid mv:", "left mv:")), said
+    if said[0].startswith("left mv:"):
+        assert "putting it back would write .drafts/paper.tex" in said[0]
+        (q / ".drafts/paper.tex").unlink()  # what the words say: remove what the act made there
+        said = writes.recover(q, hist)
+        assert len(said) == 1 and said[0].startswith("undid mv:"), said
+    assert [p.name for p in q.rglob("*.loom-tmp") if ".loom" not in p.relative_to(q).parts] == []
+    assert (q / "drafting/main.tex").is_file() and not (q / ".drafts/paper.tex").exists()
+
+
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
 
 

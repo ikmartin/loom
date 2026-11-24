@@ -921,8 +921,8 @@ def _history_place(root: Path, history: Path) -> tuple[str, ...] | None:
 
 
 @contextmanager
-def _folder_at(root: Path, folders: tuple[str, ...], *, make: bool = False) -> Iterator[int]:
-    """The folder `folders` under the quilt's real root, opened one part at a time without following a link, each part checked by the place rule as it is reached (`_open_parts`); with `make`, a part that is not there is made. Raises OSError where a part is gone, is a link (ELOOP), or is not one recovery writes in."""
+def _folder_at(root: Path, folders: tuple[str, ...], *, make: bool = False, judged: bool = True) -> Iterator[int]:
+    """The folder `folders` under the quilt's real root, opened one part at a time without following a link, each part checked by the place rule as it is reached (`_open_parts`) unless `judged` is False; with `make`, a part that is not there is made. Raises OSError where a part is gone, is a link (ELOOP), or is not one recovery writes in."""
     opened = [os.open(os.path.realpath(root), _FOLDER)]
     try:
         for i, part in enumerate(folders):
@@ -934,7 +934,7 @@ def _folder_at(root: Path, folders: tuple[str, ...], *, make: bool = False) -> I
                 os.mkdir(part, 0o777, dir_fd=opened[-1])
                 fd = os.open(part, _FOLDER, dir_fd=opened[-1])
             opened.append(fd)
-            if not _open_parts(opened[0], folders[: i + 1]):
+            if judged and not _open_parts(opened[0], folders[: i + 1]):
                 raise OSError(f"{part} is not a folder recovery writes in")
         yield opened[-1]
     finally:
@@ -1005,7 +1005,7 @@ def _remove_made_at(root: Path, parts: tuple[str, ...], made: str) -> bool:
 
 
 def _clear_temps_at(root: Path, rel: str) -> None:
-    """Remove the temporary files a write of the journal's path `rel` left beside the file it reaches, `.<name>.<token>.loom-tmp`, where that file's folder is one recovery writes in (`_place`), whatever the file's own name: a name of that form is loom's own, and no app reads one. Through folders opened without following a link."""
+    """Remove the temporary files a write of the journal's path `rel` left beside the file it reaches, `.<name>.<token>.loom-tmp`, wherever that is in the quilt, a dot-named folder among it: a regular file of that name is loom's own litter, which no app reads, so removing one reaches nothing of an app's. Through folders opened without following a link."""
     real = Path(os.path.realpath(root / rel))
     top = os.path.realpath(root)
     if not real.is_relative_to(top) or real == Path(top):
@@ -1014,7 +1014,7 @@ def _clear_temps_at(root: Path, rel: str) -> None:
     folders, name = parts[:-1], parts[-1]
     pattern = re.compile(r"^\." + re.escape(name) + r"\.[0-9a-f]{12}" + re.escape(TEMP) + "$")
     try:
-        with _folder_at(root, folders) as at:
+        with _folder_at(root, folders, judged=False) as at:
             for entry in os.listdir(at):
                 if pattern.match(entry) and stat.S_ISREG(os.stat(entry, dir_fd=at, follow_symlinks=False).st_mode):
                     with contextlib.suppress(OSError):
