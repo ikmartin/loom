@@ -114,7 +114,7 @@ Only a person. Two forms.
 
 ### 3.7 `mention`: a citation that names no result is only a mention
 
-The person's word that a citation of a work with no result named in it is a mention and rests on nothing. `block`, the citing block as a note names its block: its `key`, the `hash` of its text and its `context` (`records.locate.context_of`), found again by `records.locate.follow`; `cites`, the reference; `undo`, true to take an earlier one back. Only a person. It holds while that block still cites the work with no locator.
+The person's word that a citation of a work with no result named in it is a mention and rests on nothing. `block`, the citing block as a note names its block: its `key`, the `hash` of its text and its `context` (`records.locate.context_of`), its key read as the records read a stored key (`evidence.web.blocks_named`, over `ScanResult.node_named` and `records.locate.shared_label`), so a mention written on a statement's place key holds once a label keys it, and one on a label a copied draft defines again holds for each copy; `cites`, the reference; `undo`, true to take an earlier one back. Only a person. It holds while that block still cites the work with no locator.
 
 ```json
 {"at":"2026-11-21T18:30:00Z","block":{"context":{"after":{"gap":1,"hash":"sha256:511c96ceb7174affc0b103d8fbbb33384196d849f1eeb3c2e9da6145053ae9d3"},"before":{"gap":1,"hash":"sha256:8f9d61fac39402898f831bfec31c774438bb77be6a0cbd47c83cf53d31858372"},"copies":1,"documents":["drafting/main.tex"],"kind":"proof","twin":false},"hash":"sha256:b5a45e5f4685d21700a0c4f00c2d7a11872c7f5f4a22a6cdf9525d36c2a66a90","key":"thm:main/proof"},"by":{"kind":"person","name":"A. Author"},"cites":"tq-00B1-ref","id":"ev-2026-11-21-m1nt0b","kind":"mention","undo":false}
@@ -186,7 +186,7 @@ An ask is open until what it asked for exists, whoever made it; an agent's `done
 | `ask`, `question` | it is answered |
 | `correct` | a `digested` or a `proposed` on the node is written after it |
 | `restate` | loom observes the target's Lean after it, standing (§5.1), with statements other than the person's last attestation's |
-| `which-result` | the person says only a mention (§3.7) of that block and work, or an agent files a suggested edit on that block after it |
+| `which-result` | the person says only a mention (§3.7) of that block and work, or an agent files a suggested edit on that block after it; the block's key, the mention's and the edit's each read as the records read a stored key (§3.7), so one block under its place key and its label key is one |
 | `formalize` | loom observes the target's Lean after it, standing, and Lean accepts it |
 | `paper` | the work holds the document wanted, read from the store |
 
