@@ -813,3 +813,14 @@ def test_two_takes_at_once_keep_every_work_under_an_id_of_its_own(tmp_path: Path
     assert len(held) == 30 and len(set(held.values())) == 30, sorted(held)
     made = [a["ref"] for a in log.replay(root).lines if a["event"] == "made"]
     assert len(made) == len(set(made)) == 30
+
+
+def test_a_drop_as_it_arrives_is_no_file_a_build_reads(tmp_path: Path) -> None:
+    """The review's M-28: receiving a drop sets the watcher rebuilding nothing, since only the intake reads `.loom/local/incoming/`."""
+    from loom.render.watch import snapshot
+
+    root = quilt(tmp_path)
+    before = snapshot(root)
+    drop = dropped(root, "paper.pdf", a_pdf(tmp_path, ["Gadget towers", "A. Halberd"]))
+    assert (root / ".loom" / "local" / "incoming" / drop / "arrived.json").is_file()
+    assert snapshot(root) == before
