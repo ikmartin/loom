@@ -60,6 +60,17 @@ MODULES = {
     "review_queue.py": "loom's records",
     "mcp/server.py": "an agent's scratch and the server's log",
     "section_drafts.py": "an agent's copies under `.loom/` and temporary trees",
+    "library/intake.py": "the intake's drops waiting in `.loom/local/incoming/`, and the documents it files into the library's store; a person's file it reads, never writes",
+    "library/documents.py": "the library's documents by hash in `.loom/library/documents/`, sources unpacked under `.loom/cache/library/sources/`, and its own temporary spool",
+    "library/store.py": "the node store, `.loom/library/nodes/`, and the record of a batch it is placing, `.loom/local/library-act/`, which a writer cut short rolls back",
+    "library/acts.py": "the node store, and what a delete took, kept for its undo in `.loom/local/library-undo/`",
+    "library/carry.py": "the old library under `.loom/library/` that it removes once carried, and the annotation log it re-keys; the research state, the person's, it writes only through the door",
+    "library/index.py": "the index derived from the nodes, `.loom/cache/library/`",
+    "library/log.py": "the library's log, `.loom/records/library/`",
+    "library/tags.py": "the tag log, `.loom/records/tags/`",
+    "library/thumbs.py": "the stored PDFs' first pages as pictures, `.loom/cache/library/thumbs/`",
+    "evidence/log.py": "the evidence log, `.loom/records/evidence/`",
+    "cli/library/add.py": "a folder's source, packed into a drop in `.loom/local/incoming/`",
 }
 
 #: Functions of mixed modules that write only loom's own places, by `module:qualname`, with why.
@@ -72,6 +83,7 @@ FUNCTIONS = {
     "ai/layout.py:_write": "the layer's own records in `.loom/`; a person's file goes through `writes.put`",
     "ai/layout.py:init_layer": "the layer's records in `.loom/`",
     "ai/layout.py:upgrade_layer": "the layer's records in `.loom/`",
+    "ai/layout.py:_gone_modes": "a mode file of the layer's in `.loom/agents/instructions/modes/`, removed only while its text is the one loom recorded",
     "ai/layout.py:write_versions": "the layer's records in `.loom/`",
     "ai/skills.py:write_skills": "a skill's folder left empty once the door removed its file",
     "cli/history_cmds.py:_draft_ai": "an agent's copy under `.loom/`",
@@ -92,6 +104,7 @@ FUNCTIONS = {
     "reshape/canon.py:plan_draft": "a temporary stage",
     "reshape/importer.py:_mirror_quilt": "a temporary stage",
     "scan/quilt.py:save_author": "the machine's own config",
+    "upgrade.py:upgrade": "the annotation types, `.loom/records/annotation-types.toml`, written only where there are none",
 }
 
 
