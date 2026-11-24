@@ -736,6 +736,17 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('open-pdf')).toHaveAttribute('title', 'No PDF of this work is open');
 	});
 
+	test("a work the library no longer holds says so, its toolbar holding view and the pane's own line alone", async ({ page }) => {
+		await serveWork(page, 'sy-0098-ref');
+		await page.goto('/library/sy-0099-ref');
+		await expect(pane(page, 0).getByTestId('work-unread')).toHaveText('This work is no longer in the library.');
+		const bar = pane(page, 0).getByTestId('item-controls');
+		await expect(bar.getByTestId('zoom-fit')).toHaveCount(0);
+		await expect(bar.getByRole('button')).toHaveText(['view']);
+		await viewMenu(page);
+		await expect(page.getByTestId('toolbar-menu').locator('[role^="menuitem"]')).toHaveText(['turn annotations off']);
+	});
+
 	test("a landmark, a context and a session draw a toolbar too: their views, and view with the pane's own line", async ({ page }) => {
 		for (const at of ['/canon/widgets-v1', '/context/sy-0003', '/session/s-2026-09-16-p9z37z']) {
 			await page.goto(at);
