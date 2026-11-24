@@ -680,7 +680,7 @@ def _temps(root: Path, rel: str) -> list[Path]:
 
 @dataclass
 class Journal:
-    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled), and of those, the ones a later act of its own kind wrote (`again`), which settle an act left for a file of an agent app's (`_judge`)."""
+    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled), and of those, the ones a later act of its own kind wrote (`again`), which settle an act left for a file in a dot-named place (`_judge`)."""
 
     offset: int = 0
     begun: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)

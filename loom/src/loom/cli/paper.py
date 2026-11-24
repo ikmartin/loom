@@ -408,7 +408,7 @@ def run_import(
         main_set = set_main(load_quilt(root), plan.dest_rel)
         denied = deny_documents(load_quilt(root), [plan.dest_rel, *written, *originals])
     if denied:
-        # the permission files in acts of their own, once the import's is done: recovery never writes a file loom keeps for an agent app
+        # the permission files in acts of their own, once the import's is done: recovery writes nothing in the dot-named places where the apps keep their files
         write_denies(root)
     written.append(plan.dest_rel)
     after = scan(load_quilt(root))
