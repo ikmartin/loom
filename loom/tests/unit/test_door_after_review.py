@@ -620,3 +620,347 @@ def test_a_keep_recovery_puts_back_opens_its_edit_again_and_takes_its_words_out_
     assert find(root, edit).status == "open"  # type: ignore[union-attr]
     assert [c["id"] for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"]] == [edit]
     assert _rows(root) == rows
+
+
+def test_keep_all_cut_short_at_any_step_keeps_an_in_place_change_with_its_keep_line_or_not_at_all(
+    tmp_path: Path,
+) -> None:
+    """Keep-all, killed at every step it takes holding the door with an agent's new note and a suggestion waiting: the note's change goes into the look in the act's follow-up and its keep line with the act, so after recovery the list is as before or after, and the note is listed exactly when no keep line names it (R2-18)."""
+    import shutil
+
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_adopt import TEXT, made
+    from tests.unit.test_write_safety import Died
+
+    base = tmp_path / "base"
+    base.mkdir()
+    made(base, TEXT)
+    take(load_quilt(base), "Tester")
+    ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=base, env={"AI_AGENT": "1"})  # fmt: skip
+    (base / "notes").mkdir()
+    (base / "notes/agent.md").write_text("an agent's note\n", encoding="utf-8")
+    note = ("notes/agent.md", "an agent's note")
+
+    def kept_line(root: Path) -> bool:
+        hist = load_quilt(root).history_dir
+        return any(e.action == "keep" and e.data.get("path") == note[0] for e in load_history(hist).entries)
+
+    before = _rows(base)
+    whole = tmp_path / "whole"
+    shutil.copytree(base, whole)
+    with pytest.MonkeyPatch.context() as mp:
+        count = dying_at_step(mp, whole, 0)
+        run("changes", "--keep-all", cwd=whole)
+    after = _rows(whole)
+    assert note in before and note not in after and kept_line(whole) and count[0] > 5, (before, after, count)
+    for k in range(1, count[0] + 1):
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q)
+        with pytest.MonkeyPatch.context() as mp:
+            dying_at_step(mp, q, k)
+            try:
+                run("changes", "--keep-all", cwd=q)
+            except Died:
+                pass
+        writes.recover(q, load_quilt(q).history_dir)
+        rows = _rows(q)
+        assert rows in (before, after), (k, rows)
+        assert (note in rows) is not kept_line(q), (k, rows, kept_line(q))
+        shutil.rmtree(q)
+
+
+# ---- R2-20: two acts on one file's in-place changes, each listed before the other ran --------------------------
+
+#: The agent's two in-place changes in one file: an early one that lengthens the statement, and a later one in its proof.
+EARLY = ("Let $(X,\\sigma)$ be a widget.", "Let $(X,\\sigma)$ be a finite widget, with its involution given.")
+LATE = ("\\incomplete{Not yet attempted.", "\\incomplete{Not attempted yet.")
+
+
+@pytest.mark.parametrize("pair", ["keep, keep", "accept, accept", "keep all, keep", "discard, keep"])
+@pytest.mark.parametrize("first", ["early", "late"])
+def test_two_acts_on_one_file_listed_before_each_other_leave_it_as_a_person_could_have_chosen(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, pair: str, first: str
+) -> None:
+    """Two acts on in-place changes of one file at once, as two quick clicks make them: the second lists its changes, then waits at the door while the first runs. Each cuts its changes again under the door, so neither splices at a stale offset: no change is listed after them that no one made, and once what is left is discarded the file is byte for byte one a person could have chosen (R2-20)."""
+    import threading
+
+    from loom import writes
+    from loom.locks import locked
+    from loom.looks import take
+    from loom.paths import WRITES_LOCK
+    from loom.pending import PendingRefused, discard, in_place, keep, keep_accepted
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.unit._quilts import demo, opened
+
+    q = opened(demo(tmp_path))
+    take(load_quilt(q), "Tester")
+    node = q / "drafting/nodes/dm-0006.tex"
+    base = node.read_text(encoding="utf-8")
+    node.write_text(base.replace(*EARLY).replace(*LATE), encoding="utf-8")
+    outcomes = {base, base.replace(*EARLY), base.replace(*LATE), base.replace(*EARLY).replace(*LATE)}
+    who, writer = "Tester", ("human", "Tester")
+
+    def listed() -> list:  # type: ignore[type-arg]
+        return sorted(
+            (p for p in in_place(scan(load_quilt(q)), who) if p.path == "drafting/nodes/dm-0006.tex"),
+            key=lambda p: p.at,
+        )
+
+    rows = listed()
+    assert len(rows) == 2, rows
+    ids = {"early": rows[0].id, "late": rows[1].id}
+    second = "late" if first == "early" else "early"
+
+    def run_act(which: str) -> None:
+        r = scan(load_quilt(q))
+        if pair == "accept, accept":
+            keep_accepted(r, who, ["dm-0006" if which == "early" else "dm-0006/proof"])
+        elif pair == "discard, keep" and which == first:
+            discard(r, who, [ids[which]], writer)
+        elif pair == "keep all, keep" and which == first:
+            keep(r, who, list(ids.values()), writer)
+        else:
+            keep(r, who, [ids[which]], writer)
+
+    real = writes.act
+    at_door = threading.Event()
+
+    def act(*a, **k):  # type: ignore[no-untyped-def]
+        if threading.current_thread() is not threading.main_thread():
+            at_door.set()
+        return real(*a, **k)
+
+    monkeypatch.setattr(writes, "act", act)
+    failed: list[BaseException] = []
+
+    def later() -> None:
+        try:
+            run_act(second)
+        except PendingRefused:
+            pass  # refused, which is no damage
+        except BaseException as exc:  # noqa: BLE001
+            failed.append(exc)
+
+    thread = threading.Thread(target=later)
+    with locked(q / WRITES_LOCK):
+        thread.start()
+        assert at_door.wait(30), "the second act never reached the door"
+        run_act(first)
+    thread.join(60)
+    assert not failed, failed
+    monkeypatch.setattr(writes, "act", real)
+    words = {(p.old, p.new) for p in rows}
+    left = listed()
+    assert {(p.old, p.new) for p in left} <= words, [(p.old, p.new) for p in left]
+    if left:
+        discard(scan(load_quilt(q)), who, [p.id for p in left], writer)
+    assert node.read_text(encoding="utf-8") in outcomes
+
+
+@pytest.mark.parametrize("which", ["a keep of one in-place change", "the viewer's accept"])
+def test_an_act_with_a_look_and_no_file_cut_short_at_any_step_is_finished_or_put_back(
+    tmp_path: Path, which: str
+) -> None:
+    """A Keep of in-place changes alone, and the viewer's Accept that keeps them, write no file, only the look and their keep lines; killed at every step they take holding the door, recovery finishes or puts back each, never leaves it, so the list is as before or after, the change is listed exactly when no keep line names it, and nothing is left to settle (R2-19)."""
+    import shutil
+
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.looks import take
+    from loom.pending import keep_accepted
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+    from tests.helpers import run
+    from tests.unit.test_adopt import DOC, TEXT, made
+    from tests.unit.test_write_safety import Died
+
+    base = tmp_path / "base"
+    base.mkdir()
+    made(base, TEXT)
+    take(load_quilt(base), "Tester")
+    doc = base / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    (change,) = [
+        c["id"] for c in json.loads(run("changes", "--json", cwd=base).stdout)["changes"] if c["kind"] == "edit"
+    ]
+
+    def act(root: Path) -> None:
+        if which == "the viewer's accept":
+            keep_accepted(scan(load_quilt(root)), "Tester", ["zk-0001"])
+        else:
+            run("changes", "--keep", change, cwd=root)
+
+    def kept_line(root: Path) -> bool:
+        return any(e.action == "keep" and e.data.get("path") == DOC for e in load_history(load_quilt(root).history_dir).entries)  # fmt: skip
+
+    def listed(root: Path) -> bool:
+        return any(path == DOC for path, _ in _rows(root))
+
+    whole = tmp_path / "whole"
+    shutil.copytree(base, whole)
+    with pytest.MonkeyPatch.context() as mp:
+        count = dying_at_step(mp, whole, 0)
+        act(whole)
+    assert listed(base) and not listed(whole) and kept_line(whole) and count[0] > 5, count
+    for k in range(1, count[0] + 1):
+        q = tmp_path / f"at-{k}"
+        shutil.copytree(base, q)
+        with pytest.MonkeyPatch.context() as mp:
+            dying_at_step(mp, q, k)
+            try:
+                act(q)
+            except Died:
+                pass
+        hist = load_quilt(q).history_dir
+        writes.recover(q, hist)
+        assert writes.left(q, hist) == [], (k, writes.left(q, hist))
+        assert listed(q) is not kept_line(q), (k, listed(q), kept_line(q))
+        assert writes.recover(q, hist) == [], k
+        shutil.rmtree(q)
+
+
+# ---- R2-21: a journal line's look is checked as its files are -------------------------------------------------
+
+#: The act a forged line names, as the review's did.
+FORGED = "keep:f0f0f0f0f0f0f0f0"
+
+
+def _forge(root: Path, look: dict, keeps: tuple[str, ...] = (), by: str = "person") -> None:
+    """Append a `begin` line that names no file and carries `look`, with a `keep` line of `who`'s for each path of `keeps`: what a hand, an agent's shell or a copied quilt could leave in the journal."""
+    from loom import writes
+    from loom.history.acts import KEEP, ledger_line
+    from loom.paths import JOURNAL
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(root).history_dir
+    records = []
+    for path in keeps:
+        log, line = ledger_line(
+            hist, KEEP, {"who": look.get("who"), "path": path, "changes": ["c-00000000"]}, look.get("who")
+        )
+        records.append({"log": writes._log_name(root, log), "line": line})
+    line = {"event": "begin", "act": FORGED, "kind": "keep", "actor": "Tester", "by": by, "when": "2026-11-22T00:00:00Z", "files": {}, "edits": [], "records": records, "look": look}  # fmt: skip
+    with (root / JOURNAL).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+#: Each forged look, the `keep` lines its line carries, and the words recovery leaves it with.
+FORGERIES = {
+    "an agent's waiting change taken in with no keep line": (lambda h: {"looked": {"drafting/main.tex": h}}, (), "no keep line of the act names"),
+    "a path outside the quilt": (lambda h: {"looked": {"../outside.txt": h}}, ("../outside.txt",), "not a file in the quilt"),
+    "a hash the store does not hold": (lambda h: {"looked": {"drafting/main.tex": "sha256:" + "0" * 64}}, ("drafting/main.tex",), "a text the history does not hold"),
+    "a hash that is not a hash": (lambda h: {"looked": {"drafting/main.tex": "not a hash"}}, ("drafting/main.tex",), "a text the history does not hold"),
+    "a file it drops that is there": (lambda h: {"looked": {"drafting/main.tex": None}}, ("drafting/main.tex",), "drops drafting/main.tex, which is there"),
+    "a file agents are denied": (lambda h: {"looked": {"config.toml": h}}, ("config.toml",), "in a place agents are denied"),
+    "places in a file the act does not write": (lambda h: {"spans": {"drafting/main.tex": [[0, 10**6]]}}, (), "a file the act does not write"),
+    "a tick in a file the act does not write": (lambda h: {"tick": {"path": "drafting/main.tex", "line": 0}}, (), "tick is not a line of a file the act writes"),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("which", [*FORGERIES, "another reviewer's look", "an agent's act"])
+def test_a_journal_line_whose_look_recovery_may_not_write_is_left_and_said_and_takes_nothing_in(
+    tmp_path: Path, which: str
+) -> None:
+    """A `begin` line that names no file and carries a look is checked as a line's files are: recovery writes it only when it is the reviewer's, from a person's act, each path it takes in a watched file in the quilt that a keep line of the act names, and each text one the store holds. Otherwise the line is left and said, the look stays as it was, and the list with it: the review's forged lines took an agent's waiting change in unseen, put `../outside.txt` into Review, and listed the whole of `main.tex` for a Discard that emptied it (R2-21)."""
+    from loom import writes
+    from loom.looks import look_path, take
+    from loom.records.snapshots import write_raw
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_adopt import DOC, TEXT, made
+
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    (tmp_path / "outside.txt").write_text("a file of the person's outside the quilt\n")
+    take(load_quilt(root), "Tester")
+    doc = root / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    hist = load_quilt(root).history_dir
+    stored = write_raw(root, doc.read_text(), hist)
+    if which == "another reviewer's look":
+        _forge(root, {"who": "Somebody Else", "looked": {DOC: stored}}, (DOC,))
+        why = "its look is not the reviewer's"
+    elif which == "an agent's act":
+        _forge(root, {"who": "Tester", "looked": {DOC: stored}}, (DOC,), by="agent")
+        why = "an agent's act, which writes no look"
+    else:
+        make, keeps, why = FORGERIES[which]
+        _forge(root, {"who": "Tester", **make(stored)}, keeps)
+
+    def listed() -> list[tuple[str, str]]:
+        return sorted((c["path"], c["id"]) for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"])
+
+    look = look_path(root, "Tester").read_bytes()
+    rows = _rows(root)
+    said = writes.recover(root, hist)
+    assert all(not path.startswith("..") for path, _ in listed())
+    assert _rows(root) == rows and any(path == DOC for path, _ in rows)
+    assert look_path(root, "Tester").read_bytes() == look
+    assert len(said) == 1 and said[0].startswith(f"left {FORGED}: ") and why in said[0], said
+    assert said[0].endswith("recovery changed nothing"), said
+    assert len(writes.left(root, hist)) == 1
+
+
+def test_a_line_whose_look_passes_every_check_takes_in_only_what_its_keep_lines_name(tmp_path: Path) -> None:
+    """The check leaves an honest act's line alone: a look of the reviewer's, on a watched file, with a stored text and the keep line naming it, is written as the act's follow-up would have written it, and the change it takes in is named in the history by that keep line."""
+    from loom import writes
+    from loom.history.ledger import load_history
+    from loom.looks import read_look, take
+    from loom.records.snapshots import write_raw
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_adopt import DOC, TEXT, made
+
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    take(load_quilt(root), "Tester")
+    doc = root / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    hist = load_quilt(root).history_dir
+    stored = write_raw(root, doc.read_text(), hist)
+    _forge(root, {"who": "Tester", "looked": {DOC: stored}}, (DOC,))
+    assert writes.recover(root, hist) == [f"finished {FORGED}"]
+    assert read_look(root, "Tester").files[DOC] == stored  # type: ignore[union-attr]
+    assert [e.data.get("path") for e in load_history(hist).entries if e.action == "keep"] == [DOC]
+    assert not any(path == DOC for path, _ in _rows(root))
+
+
+def test_the_journal_is_denied_to_agents_by_the_rule_that_denies_them_the_records_and_the_look(tmp_path: Path) -> None:
+    """What keeps an agent from writing a journal line is the rule that keeps it from the records and the look: all sit in `.loom/`, which `agents.denied_by` denies an agent, and the permission file loom writes for Claude Code refuses its file tools each of their folders. That file refuses no shell command but `rm`, so an agent's shell is refused none of them, and another app is only told."""
+    from loom.agents import claude_denies, denied_by
+    from loom.paths import EDIT_LOG, JOURNAL, JOURNAL_INDEX, LOCAL, LOOKED
+    from loom.scan.quilt import load_quilt
+
+    q = demo(tmp_path)
+    config = load_quilt(q).config
+    ledger = f"{config.history}/ledger.jsonl"
+    look = f"{LOOKED}/tester.json"
+    assert {denied_by(config, rel) for rel in (JOURNAL, JOURNAL_INDEX, look, EDIT_LOG, ledger)} == {".loom/"}
+    for folder in (LOCAL, LOOKED, os.path.dirname(EDIT_LOG), config.history):
+        assert f"/{folder}/**" in claude_denies(config), folder
+    deny = json.loads((q / ".claude/settings.json").read_text())["permissions"]["deny"]
+    assert {f"Edit(/{LOCAL}/**)", f"Edit(/{LOOKED}/**)"} <= set(deny)
+    assert [r for r in deny if r.startswith("Bash(") and not r.startswith("Bash(loom ")] == ["Bash(rm *)"]
+
+
+def test_a_keep_that_kept_nothing_because_every_change_was_refused_exits_as_a_refusal(tmp_path: Path) -> None:
+    """Every change a Keep names refused is a refusal, and the command exits 1 as one does, so a script reading the exit status never takes it for success; one kept beside one refused is a success that leaves work undone: exit 0, not ok."""
+    from loom.scan.quilt import save_author
+    from tests.helpers import json_of
+    from tests.unit.records.test_edits import LEMMA, filed, suggest
+
+    save_author("Tom")
+    q = demo(tmp_path)
+    old = filed(q, "dm-0002", "More.", "\\end{lemma}", "after")
+    before = (q / LEMMA).read_text()
+    r = refused("changes", "--keep", old, cwd=q, code=1, match="kept nothing")
+    assert f"{old} not kept" in r.output and (q / LEMMA).read_text() == before
+    good = suggest(q, "--quote", "one or two points", "--with", "at most two points")
+    data = json_of("changes", "--keep", old, "--keep", good, "--json", cwd=q)
+    assert data["ok"] is False and data["exit"] == 0 and data["done"] == [good]

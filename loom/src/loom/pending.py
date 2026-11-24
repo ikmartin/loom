@@ -657,8 +657,7 @@ def keep(
         The ids kept, and `{id, why}` for each that cannot be, with `code` where it has one: one unplaced, on an agent's copy, no longer open, in a file that is not UTF-8 (`not-utf8`), or in a file that changed while it was being placed (`changed`).
     """
     from loom import writes
-    from loom.history.acts import KEEP, keep_versions
-    from loom.history.ledger import append_entry
+    from loom.history.acts import KEEP, keep_versions, ledger_line
     from loom.records.carry import carry_all
     from loom.records.edits import home, where_taken
 
@@ -675,23 +674,39 @@ def keep(
     kept: _Kept | None = None
     try:
         with writes.act(root, hist, "keep", writer[1]) as w:
+            # the in-place changes go into the look with the act, and their keep lines with it, so a cut Keep writes neither
+            looked: dict[str, str | None] = {}
+            taken: list[str] = []
             for path in sorted({p.path for p in edits}):
-                mine = [p for p in edits if p.path == path]
-                _into_look(result, who, path, mine)
-                append_entry(hist, KEEP, {"who": who, "path": path, "changes": [p.id for p in mine]}, who)
-            if edits:
+                # cut again under the door, from the look and the file as they are now: a change listed before another act moved them goes in at its place now, never at a stale offset, and one no longer there is refused
+                ids = [p.id for p in edits if p.path == path]
+                held, entry, found = _look_entry_now(root, hist, who, path, ids)
+                refused += [{"id": i, "why": CHANGED_SINCE_LISTED, "code": "changed"} for i in ids if i not in found]
+                if not found:
+                    continue
+                if held:
+                    looked[path] = entry
+                w.log(*ledger_line(hist, KEEP, {"who": who, "path": path, "changes": found}, who))
+                taken += found
+            if taken:
                 # what was kept is a version of each document it is part of
-                _say(said, keep_versions(result, sorted({p.path for p in edits}), KEEP, "Kept an edit", writer[1]))
-            done += [p.id for p in edits]
+                paths = sorted({p.path for p in edits if p.id in taken})
+                _say(said, keep_versions(result, paths, KEEP, "Kept an edit", writer[1]))
+            done += taken
             if asked:
                 kept = _keep_suggested(w, result, [p.id for p in asked], writer, said)
                 refused += kept.refused
                 done += kept.ids
-                if who and kept.spans:
-                    # what the follow-up does to the look, for recovery to do if a crash comes first (`relook`)
-                    w.look = {"who": who, "spans": {f: [list(s) for s in v] for f, v in kept.spans.items()}}
+            # what the follow-up does to the look, for recovery to do if a crash comes first (`relook`)
+            record: dict[str, Any] = {"looked": looked} if who and looked else {}
+            if who and kept and kept.spans:
+                record["spans"] = {f: [list(s) for s in v] for f, v in kept.spans.items()}
+            if record:
+                w.look = {"who": who, **record}
 
             def follow() -> None:
+                if who and looked:
+                    _set_look(root, who, looked)
                 after = _rescan(kept.result if kept else result)
                 spans = {path: list(s) for path, s in kept.spans.items()} if kept else {}
                 for edit in kept.taken if kept else []:
@@ -1265,7 +1280,7 @@ def follow_words(w: Any, path: str, before: bytes | None, after: bytes | None, w
 
 
 def relook(root: Path, look: dict[str, Any]) -> None:
-    """For a Keep or an undo that recovery finished, do what its follow-up does to the person's look.
+    """For a Keep or an undo that recovery finished, do what its follow-up does to the person's look: its in-place changes, then the words it wrote.
 
     The words loom wrote go into the reviewer's look, as `absorb` puts them, so they are not listed as the person's own edit. A journal travels with a copied quilt, so only the quilt's own reviewer's look is touched, and only at places in files the scan reads.
 
@@ -1274,7 +1289,7 @@ def relook(root: Path, look: dict[str, Any]) -> None:
     root : Path
         The quilt.
     look : dict
-        The act's `look` from its `begin` line: `who`, whose look, and `spans`, by file the `[start, end]` places in the scan's reading after the act of the words loom wrote.
+        The act's `look` from its `begin` line: `who`, whose look; `looked`, by file what the look holds once the act's in-place changes are in it (a text's hash, or None for a file it drops); and `spans`, by file the `[start, end]` places in the scan's reading after the act of the words loom wrote.
 
     See Also
     --------
@@ -1284,8 +1299,13 @@ def relook(root: Path, look: dict[str, Any]) -> None:
     from loom.scan.scan import scan
 
     who = look.get("who") if isinstance(look, dict) else None
-    spans = look.get("spans") if isinstance(look, dict) else None
-    if not isinstance(who, str) or not who or not isinstance(spans, dict) or who != (reviewer_identity(root)[0] or ""):
+    if not isinstance(who, str) or not who or who != (reviewer_identity(root)[0] or ""):
+        return
+    looked = look.get("looked")
+    if isinstance(looked, dict):
+        _set_look(root, who, {str(p): (h if isinstance(h, str) else None) for p, h in looked.items()})
+    spans = look.get("spans")
+    if not isinstance(spans, dict):
         return
     result = scan(load_quilt(root))
     for path, places in spans.items():
@@ -1558,25 +1578,78 @@ def _kept_texts(result: ScanResult, chosen: list[Pending]) -> dict[str, str]:
     return out
 
 
-def _into_look(result: ScanResult, who: str, path: str, changes: list[Pending]) -> None:
-    """Put `changes` of `path` into `who`'s look, each alone: the look's text with each change's new words in place of its old."""
-    from loom.looks import _write, read_look
+def _look_entry(result: ScanResult, who: str, path: str, changes: list[Pending]) -> tuple[bool, str | None]:
+    """What `who`'s look holds of `path` once `changes` are in it, each alone (the look's text with each change's new words in place of its old), its text stored: `(True, hash)`, `(True, None)` for a file it drops, `(False, None)` before a first look. Writes no look (`_set_look`)."""
     from loom.records.snapshots import write_raw
 
-    look = read_look(result.quilt.root, who)
     texts = look_texts(result, who)
-    if look is None or texts is None:
-        return
+    if texts is None:
+        return False, None
     then, now = texts
     text = then.get(path, "")
     current = now.get(path) or ""
     for p in sorted(changes, key=lambda x: x.was, reverse=True):
         text = text[: p.was[0]] + current[p.span[0] : p.span[1]] + text[p.was[1] :]
     if now.get(path) is None and not text:
-        look.files.pop(path, None)
-    else:
-        look.files[path] = write_raw(result.quilt.root, text, result.quilt.history_dir)
-    _write(result.quilt.root, look)
+        return True, None
+    return True, write_raw(result.quilt.root, text, result.quilt.history_dir)
+
+
+#: Why an in-place change is not kept when it is no longer where it was listed: another act, or a save, moved the look or the file since.
+CHANGED_SINCE_LISTED = "it changed since it was listed; look at it again"
+
+
+def _look_entry_now(
+    root: Path, history: Path, who: str, path: str, ids: list[str]
+) -> tuple[bool, str | None, list[str]]:
+    """What `who`'s look holds of `path` once the in-place changes `ids` are in it, each alone, cut again from the look and the file as they are now (`cuts`): `(held, entry, found)`, `found` the ids still there, `entry` a text's hash or None for a file the look drops, and `(False, None, [])` before a first look. Called under the door's lock, so a change listed against an earlier look or file goes in at its place now, never at a stale offset (Discard does the same, `_discard_in`). Writes no look (`_set_look`)."""
+    from loom.looks import held as looks_held
+    from loom.looks import read_look
+    from loom.records.snapshots import read_raw, write_raw
+
+    look = read_look(root, who)
+    if look is None:
+        return False, None, []
+    seen = looks_held(look, path)
+    old = (read_raw(root, seen, history) or "") if seen else ""
+    try:
+        text: str | None = (root / path).read_bytes().decode("utf-8")
+    except FileNotFoundError:
+        text = None
+    except (OSError, UnicodeDecodeError):
+        return True, seen, []
+    wanted = set(ids)
+    found = [(cid, was, span) for cid, was, span in cuts(path, old, text) if cid in wanted]
+    now = text or ""
+    out = old
+    for _, (o0, o1), (n0, n1) in sorted(found, key=lambda f: f[1], reverse=True):
+        out = out[:o0] + now[n0:n1] + out[o1:]
+    kept = [cid for cid in ids if cid in {f[0] for f in found}]
+    if text is None and not out:
+        return True, None, kept
+    return True, write_raw(root, out, history), kept
+
+
+def _set_look(root: Path, who: str, looked: dict[str, str | None]) -> None:
+    """Give `who`'s look each entry of `looked`, a text's hash or None for a file it drops (`_look_entry`); nothing before a first look."""
+    from loom.looks import _write, read_look
+
+    look = read_look(root, who)
+    if look is None:
+        return
+    for path, entry in looked.items():
+        if entry is None:
+            look.files.pop(path, None)
+        else:
+            look.files[path] = entry
+    _write(root, look)
+
+
+def _into_look(result: ScanResult, who: str, path: str, changes: list[Pending]) -> None:
+    """Put `changes` of `path` into `who`'s look, each alone, at once (`_look_entry`, `_set_look`): for a follow-up inside its act, whose recovery redoes it from the act's `look`."""
+    held, entry = _look_entry(result, who, path, changes)
+    if held:
+        _set_look(result.quilt.root, who, {path: entry})
 
 
 def absorb(result: ScanResult, who: str, path: str, spans: list[tuple[int, int]]) -> None:
@@ -1593,16 +1666,30 @@ def keep_accepted(result: ScanResult, who: str, keys: list[str]) -> list[str]:
 
     A change running across a block not accepted stays, since that one still waits. For the viewer's Accept, which shows the change it keeps; `loom accept` shows none, and leaves the look alone.
     """
-    from loom.history.acts import KEEP
-    from loom.history.ledger import append_entry
+    from loom import writes
+    from loom.history.acts import KEEP, ledger_line
 
     accepted = set(keys)
     chosen = [p for p in in_place(result, who) if p.blocks and accepted.issuperset(p.blocks)]
-    for path in sorted({p.path for p in chosen}):
-        mine = [p for p in chosen if p.path == path]
-        _into_look(result, who, path, mine)
-        append_entry(result.quilt.history_dir, KEEP, {"who": who, "path": path, "changes": [p.id for p in mine]}, who)
-    return sorted({p.path for p in chosen})
+    if not chosen:
+        return []
+    root, hist = result.quilt.root, result.quilt.history_dir
+    # the look's change and the keep lines in one act, as Keep's, so a cut accept writes neither; cut again under the door, as Keep's
+    looked: dict[str, str | None] = {}
+    moved: list[str] = []
+    with writes.act(root, hist, "keep", who) as w:
+        for path in sorted({p.path for p in chosen}):
+            held, entry, found = _look_entry_now(root, hist, who, path, [p.id for p in chosen if p.path == path])
+            if not found:
+                continue
+            if held:
+                looked[path] = entry
+            w.log(*ledger_line(hist, KEEP, {"who": who, "path": path, "changes": found}, who))
+            moved.append(path)
+        if looked:
+            w.look = {"who": who, "looked": looked}
+            w.then(lambda: _set_look(root, who, looked))
+    return moved
 
 
 def patch_of(result: ScanResult, change: Pending, who: str | None = None) -> str:

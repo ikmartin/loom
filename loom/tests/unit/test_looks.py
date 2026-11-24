@@ -566,3 +566,16 @@ def test_a_file_renamed_while_its_place_is_closed_is_found_by_its_text_when_it_o
     # a change against the text the look held, not the whole file as new
     assert rows["notes/b.md"]["old"].strip() == "first" and "an agent's word" in rows["notes/b.md"]["new"]
     assert rows["notes/moved.md"]["new"].strip() == "an agent's new note"
+
+
+def test_two_files_with_one_text_renamed_while_their_place_is_closed_are_both_found(person: Path) -> None:
+    """Each gone file of a closed place is kept by its text, files that share a text each their own, so two of an agent's new files with the same text, both renamed while the place is closed, are both listed as new when it opens; nothing an agent made is taken in without having been listed (R2-17)."""
+    for name in ("one.md", "two.md"):
+        (person / f"notes/{name}").write_text("a stub\n", encoding="utf-8")
+    assert edits(person) == ["notes/one.md", "notes/two.md"]
+    denying(person, "notes/")
+    assert edits(person) == []
+    (person / "notes/one.md").rename(person / "notes/first.md")
+    (person / "notes/two.md").rename(person / "notes/second.md")
+    denying(person)
+    assert edits(person) == ["notes/first.md", "notes/second.md"]

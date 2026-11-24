@@ -146,13 +146,16 @@ def _align(root: Path, look: Look) -> Look:
                 # made since the look while agents could write there: listed as new if the place is opened again
                 look.files[rel] = ABSENT
             look.closed[rel] = sha256(text)
-    # a file of a closed place that is gone since it closed, by the text it held then: one renamed meanwhile is found by it
-    moved = {h: rel for rel, h in look.closed.items() if rel not in texts and rel in look.files}
-    for rel, text in texts.items():
+    # each file of a closed place gone since it closed, by the text it held then, one list per text since files may share one: a file renamed meanwhile is found by it, one gone file for each
+    moved: dict[str, list[str]] = {}
+    for rel, h in sorted(look.closed.items()):
+        if rel not in texts and rel in look.files:
+            moved.setdefault(h, []).append(rel)
+    for rel, text in sorted(texts.items()):
         if now(rel) and not was(rel) and rel not in look.files:
-            old = moved.pop(sha256(text), None)
-            if old is not None:
-                look.files[rel] = look.files.pop(old)
+            gone = moved.get(sha256(text))
+            if gone:
+                look.files[rel] = look.files.pop(gone.pop(0))
             else:
                 look.files[rel] = write_raw(root, text, quilt.history_dir)
     look.closed = {rel: h for rel, h in look.closed.items() if not now(rel) and rel in look.files}

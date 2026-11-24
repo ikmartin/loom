@@ -8,7 +8,7 @@ import click
 
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.report import Group, Item, Report, counted, table
-from loom.errors import EnvError, NotFoundError
+from loom.errors import EXIT_CONTENT, EnvError, NotFoundError
 from loom.identity import refuse_under_agent
 
 
@@ -103,7 +103,9 @@ def changes_command(
         if first:
             said = f"{first}; {said}" if ids else first
         lines = [f"  {r['id']} not {verb}: {r['why']}" for r in refused]
-        Report(said, ok=not refused, lines=lines, data={"done": done, "refused": refused}).emit(as_json)
+        # every change it named refused is a refusal, and exits as one; some done and some refused is a success that leaves work undone
+        out = EXIT_CONTENT if refused and not done else 0
+        Report(said, ok=not refused, exit=out, lines=lines, data={"done": done, "refused": refused}).emit(as_json)
         return
     listed = pending(result, who)
     if change is not None:
