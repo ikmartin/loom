@@ -1,6 +1,6 @@
 """Numbers a source's results would print, emulated from its counters, for a survey still `reading` (`library.survey`): shown in a work's outline, and kept as printed only where a compile or the stored PDF agrees.
 
-Sectioning counters step and reset what numbers within them, a chapter's sections numbered within it where the class has chapters; a theorem counter shared with `[theorem]` follows the owning declaration's `[section]`-style reset; a theorem sharing a sectioning counter (`[subsection]`) steps it and prints as it; `\\newtheorem*` results have no number; a heading deeper than `secnumdepth` (the class's, or one set by hand) steps nothing and prints no number; `\\appendix` letters the section counter, or the chapter counter where there are chapters. A source's own settings move it as TeX would: `\\numberwithin` and `\\counterwithin` / `\\counterwithout`, starred or not; `\\setcounter` and `\\addtocounter` of a sectioning or theorem counter; and `\\the<counter>` redefined, until its group closes, from `\\arabic`, `\\roman`, `\\Roman`, `\\alph`, `\\Alph`, other counters' `\\the`, a `\\ref` of a label loom has read (a restated result) and plain text, with font commands such as `\\textup` read through. Only what the source writes literally is followed, never a value it computes or reads, so what loom reads cannot carry a file the source read; a format loom cannot read leaves the counter with no reading at all.
+Sectioning counters step and reset what numbers within them, a chapter's sections numbered within it where the class has chapters; a theorem counter shared with `[theorem]` follows the owning declaration's `[section]`-style reset; a theorem sharing a sectioning counter (`[subsection]`) steps it and prints as it; `\\newtheorem*` results have no number; a heading deeper than `secnumdepth` (the class's, or one set by hand) steps nothing and prints no number; `\\appendix` letters the section counter, or the chapter counter where there are chapters. A source's own settings move it as TeX would: `\\numberwithin` and `\\counterwithin` / `\\counterwithout`, starred or not; `\\setcounter` and `\\addtocounter` of a sectioning or theorem counter; and `\\the<counter>` redefined, until its group closes, from `\\arabic`, `\\roman`, `\\Roman`, `\\alph`, `\\Alph`, other counters' `\\the`, a `\\ref` of a label loom has read (a restated result) and plain text, with font commands such as `\\textup` read through. Only what the source writes literally is followed, never a value it computes or reads, so what loom reads cannot carry a file the source read; a format loom cannot read leaves the counter with no reading at all. Numbered displays step `equation` (`display`), numbered within the chapter where the class has chapters, and follow the same settings.
 """
 
 from __future__ import annotations
@@ -14,6 +14,8 @@ from loom.scan.model import Taxon
 LEVELS = {"part": 0, "chapter": 0, "section": 1, "subsection": 2, "subsubsection": 3, "paragraph": 4, "subparagraph": 5}
 #: The sectioning counter at each depth, as `\the<name>` names it.
 NAMES = ("chapter", "section", "subsection", "subsubsection", "paragraph", "subparagraph")
+#: The counter numbered displays step.
+EQUATION = "equation"
 #: Commands that set a number in a face or a box without changing what it says, read through in a format and in a printed number.
 FACES = re.compile(
     r"\\(?:textup|textnormal|textrm|textbf|textit|textsl|textsf|textmd|emph|mbox|hbox|upshape|normalfont|rmfamily"
@@ -126,6 +128,8 @@ class Numbering:
         Each counter's format before a definition still in force, whether there was one, put back by `close`.
     labels : dict[str, str]
         Each label met so far with loom's reading of what it numbers, which a `\\ref` in a format reads.
+    resets : int
+        How many times `equation` was reset or set, so a reader of displays knows where loom's count starts again.
     """
 
     taxa: dict[str, Taxon]
@@ -137,6 +141,7 @@ class Numbering:
     formats: dict[str, tuple[Piece, ...] | None] = field(default_factory=dict)
     saved: dict[str, list[tuple[bool, tuple[Piece, ...] | None]]] = field(default_factory=dict)
     labels: dict[str, str] = field(default_factory=dict)
+    resets: int = 0
 
     def _counter(self, taxon: Taxon) -> str:
         return taxon.counter or taxon.env
@@ -144,14 +149,25 @@ class Numbering:
     def _theorems(self) -> set[str]:
         return {self._counter(t) for t in self.taxa.values()} - set(LEVELS)
 
+    def _stepped(self) -> set[str]:
+        """The counters below the sectioning ones: the theorems' and `equation`."""
+        return self._theorems() | {EQUATION}
+
     def _known(self, name: str) -> bool:
-        """Whether `name` is a counter this numbering steps: a sectioning one or a theorem's."""
-        return (name in LEVELS and name != "part") or name in self._theorems()
+        """Whether `name` is a counter this numbering steps: a sectioning one, a theorem's or `equation`."""
+        return (name in LEVELS and name != "part") or name in self._stepped()
 
     def _declared(self, counter: str) -> str | None:
-        """The counter a theorem counter's declaration numbers it within (`[section]`), which its default `\\the` prints before it."""
+        """The counter a theorem counter's declaration numbers it within (`[section]`), which its default `\\the` prints before it; `equation`'s is the chapter where the class has chapters."""
         owner = self.taxa.get(counter)
-        return owner.within if owner is not None and owner.within else None
+        if owner is not None and owner.within:
+            return owner.within
+        return "chapter" if counter == EQUATION and owner is None and self.chapters else None
+
+    def _zero(self, counter: str) -> None:
+        self.counters[counter] = 0
+        if counter == EQUATION:
+            self.resets += 1
 
     def _parent(self, counter: str) -> str | None:
         """The counter whose step resets `counter`: the declaration's, unless `\\numberwithin` or its kin moved it."""
@@ -159,19 +175,19 @@ class Numbering:
 
     def _reset_within(self, counter: str, seen: frozenset[str] = frozenset()) -> None:
         """Reset every theorem counter numbered within `counter`, and what numbers within those."""
-        for c in self._theorems() - seen:
+        for c in self._stepped() - seen:
             if self._parent(c) == counter:
-                self.counters[c] = 0
+                self._zero(c)
                 self._reset_within(c, seen | {counter})
 
     def _step(self, level: int) -> None:
         self.sec[level] += 1
         for deeper in range(level + 1, len(self.sec)):
             self.sec[deeper] = 0
-        for c in self._theorems():
+        for c in self._stepped():
             p = self._parent(c)
             if p in LEVELS and p != "part" and LEVELS[p] >= level:
-                self.counters[c] = 0
+                self._zero(c)
                 self._reset_within(c)
 
     def heading(self, name: str, starred: bool = False) -> str | None:
@@ -217,6 +233,7 @@ class Numbering:
             self.sec[LEVELS[name]] = now
         else:
             self.counters[name] = now
+            self.resets += name == EQUATION
 
     def within(
         self, counter: str, parent: str, *, style: str = "arabic", reset: bool = True, renumber: bool = True
@@ -339,3 +356,15 @@ class Numbering:
         self.counters[c] = self.counters.get(c, 0) + 1
         self._reset_within(c)
         return self._the(c)
+
+    def display(self) -> str | None:
+        """Step `equation` for a numbered display, or a line of one, and reset what numbers within it.
+
+        Returns
+        -------
+        str or None
+            The number it prints; None for a format loom cannot read.
+        """
+        self.counters[EQUATION] = self.counters.get(EQUATION, 0) + 1
+        self._reset_within(EQUATION)
+        return self._the(EQUATION)

@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 3
+VERSION = 4
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -99,6 +99,10 @@ DISPLAYS = frozenset(
         "subequations",
     }
 )
+#: The displays numbered a line at a time; the others (`equation`, `multline`) take one number for the whole.
+LINED = frozenset({"align", "gather", "flalign", "alignat", "eqnarray", "xalignat", "xxalignat"})
+_TAG = re.compile(r"\\tag(\*?)\s*\{([^{}]*)\}")
+_NOTAG = re.compile(r"\\(?:notag|nonumber)(?![A-Za-z@])")
 #: The counters of the levels of `enumerate`.
 ITEMS = ("enumi", "enumii", "enumiii", "enumiv")
 #: `\setcounter` and `\addtocounter` with a literal integer; a value the source computes or reads moves nothing loom reads.
@@ -188,21 +192,33 @@ class Item:
 
 @dataclass
 class Label:
-    """Every `\\label` of the source: whose text holds it (`owner`, an item; `proof`, which of its proofs), whether it is that item's own, `kind`, the counter it numbers as (`section`, `equation`, `enumi`, `figure`, a result's own, or `other`), and its number and page only as confirmed (`confirm`)."""
+    """Every `\\label` of the source: whose text holds it (`owner`, an item; `proof`, which of its proofs), whether it is that item's own, `kind`, the counter it numbers as (`section`, `equation`, `enumi`, `figure`, a result's own, or `other`), a display's number as loom reads it (`emulated`), and its number and page only as confirmed (`confirm`)."""
 
     kind: str
     owner: str | None = None
     proof: int | None = None
     result: bool = False
+    emulated: str | None = None
     number: str | None = None
     page: int | None = None
+
+
+@dataclass
+class Display:
+    """A numbered display of the source, or one line of one, in document order: its number as loom reads it (`emulated`; a `\\tag`'s text where it is tagged), its labels, `after` the number of headings and results before it, and `reset` how often `equation` was reset or set before it, so the stored PDF is read for it between its neighbours and from where loom's count starts again."""
+
+    emulated: str | None
+    labels: list[str] = field(default_factory=list)
+    after: int = 0
+    reset: int = 0
+    tagged: bool = False
 
 
 @dataclass
 class Survey:
     """What one source holds, confirmed against the work's stored PDF `pdf` where there is one.
 
-    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`).
+    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `displays` are its numbered displays in order, which number its labels of displays (`_labels`). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`).
     """
 
     tex: str
@@ -215,6 +231,7 @@ class Survey:
     sections: list[Section] = field(default_factory=list)
     items: list[Item] = field(default_factory=list)
     labels: dict[str, Label] = field(default_factory=dict)
+    displays: list[Display] = field(default_factory=list)
     bibliography: list[str] = field(default_factory=list)
     bbl: str | None = None
     unseen: list[str] = field(default_factory=list)
@@ -228,8 +245,9 @@ class Survey:
     @classmethod
     def from_json(cls, data: dict[str, Any]) -> Survey:
         """A survey from its kept file's JSON."""
-        out = cls(**{k: v for k, v in data.items() if k not in ("sections", "items", "labels")})
+        out = cls(**{k: v for k, v in data.items() if k not in ("sections", "items", "labels", "displays")})
         out.sections = [Section(**s) for s in data.get("sections", [])]
+        out.displays = [Display(**d) for d in data.get("displays", [])]
         out.items = [Item(**{**i, "proofs": [Proof(**p) for p in i.get("proofs", [])]}) for i in data.get("items", [])]
         out.labels = {k: Label(**v) for k, v in data.get("labels", {}).items()}
         return out
@@ -360,6 +378,10 @@ def _walk(
             at = exp.exp_offset(rel, env.start)
             if at is not None and env.name in taxa:
                 events.append((at, 1, "result", (rel, env)))
+        for env in _displays(fe.roots):
+            at = exp.exp_offset(rel, env.start)
+            if at is not None:
+                events.append((at, 2, "display", (rel, env)))
     events.sort(key=lambda e: (e[0], e[1]))
     cls = m.group(1) if (m := _CLASS.search(text)) is not None else ""
     chapters = cls in CHAPTERED or any(u.name == "chapter" for u in units)
@@ -380,6 +402,9 @@ def _walk(
             numbering.define(*payload)
         elif kind == "close":
             numbering.close(payload)
+        elif kind == "display":
+            rel, env = payload
+            _display(out, files[rel].clean, env, numbering)
         elif kind == "heading":
             u: SectionUnit = payload
             sid = f"s{len(out.sections) + 1}"
@@ -440,6 +465,64 @@ def _walk(
                 p = att.proof
                 opening = _opening(files[rel].clean[p.body_start : p.body_end])
                 owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
+
+
+def _displays(roots: list[Env], inside: bool = False) -> Iterator[Env]:
+    """The display environments under `roots`, outermost only: a display inside another is a part of it (`subequations` holds its own)."""
+    for env in roots:
+        if env.name.rstrip("*") in DISPLAYS:
+            yield env
+        elif not inside:
+            yield from _displays(env.children)
+
+
+def _display(out: Survey, clean: str, env: Env, numbering: Numbering, inner: bool = False) -> None:
+    """One display's numbers, a line at a time where it numbers its lines, each stepping `equation` as TeX does; `subequations` steps it once, and its lines (`inner`) are recorded with no number loom reads."""
+    name, starred = env.name.rstrip("*"), env.name.endswith("*")
+    if name == "subequations":
+        numbering.display()
+        for sub in _displays(env.children, inside=True):
+            _display(out, clean, sub, numbering, inner=True)
+        return
+    spans = _lines(clean, env) if name in LINED else [(env.body_start, env.body_end)]
+    for start, end in spans:
+        line = clean[start:end]
+        tag = _TAG.search(line)
+        if tag is not None:
+            number: str | None = tag.group(2).strip() if not tag.group(1) else None
+        elif starred or name == "xxalignat" or _NOTAG.search(line):
+            continue
+        else:
+            number = None if inner else numbering.display()
+        labels = [lab for lab, _ in labels_in(clean, [(start, end)])]
+        if number is not None:
+            numbering.labels.update(dict.fromkeys(labels, number))
+        after = len(out.sections) + len(out.items)
+        out.displays.append(Display(number, labels, after, numbering.resets, tag is not None))
+
+
+def _lines(clean: str, env: Env) -> list[tuple[int, int]]:
+    """A display's lines: its body cut at each `\\\\` outside braces and outside the environments inside it (`aligned`, `cases`)."""
+    inner = [(c.start, c.end) for c in env.children]
+    out: list[tuple[int, int]] = []
+    start, depth, at = env.body_start, 0, env.body_start
+    while at < env.body_end:
+        skip = next((e for s, e in inner if s <= at < e), None)
+        if skip is not None:
+            at = skip
+            continue
+        ch = clean[at]
+        if ch == "\\":
+            if clean.startswith("\\\\", at) and depth == 0:
+                out.append((start, at))
+                start = at + 2
+            at += 2
+            continue
+        depth += {"{": 1, "}": -1}.get(ch, 0)
+        at += 1
+    if clean[start : env.body_end].strip():
+        out.append((start, env.body_end))
+    return out
 
 
 def _settings(text: str) -> list[tuple[int, str, Any]]:
@@ -513,6 +596,7 @@ def _label_all(
     A label inside a result or one of its proofs is that result's: its own when it stands in the result's own text and is first there, else an anchor. A heading's label is its section's; anything else is classed by the environments around it.
     """
     headings = {(u.file, lab): u.name for u in units for lab in u.labels}
+    shown = {lab: d.emulated for d in out.displays for lab in d.labels}
     by_file: dict[str, list[Item]] = {}
     for item in out.items:
         by_file.setdefault(item.file, []).append(item)
@@ -536,11 +620,11 @@ def _label_all(
             if owner is not None and proof is None and lab in owner.labels:
                 out.labels[lab] = Label(kind=owner.env, owner=owner.item, result=True)
             elif owner is not None:
-                out.labels[lab] = Label(kind=_kind(chain), owner=owner.item, proof=proof)
+                out.labels[lab] = Label(kind=_kind(chain), owner=owner.item, proof=proof, emulated=shown.get(lab))
             elif (rel, lab) in headings:
                 out.labels[lab] = Label(kind=headings[(rel, lab)])
             else:
-                out.labels[lab] = Label(kind=_kind(chain))
+                out.labels[lab] = Label(kind=_kind(chain), emulated=shown.get(lab))
 
 
 def _bibliography(out: Survey, src: Path, main: str, files: dict[str, SourceFile], reached: dict[str, int]) -> None:
@@ -677,6 +761,10 @@ _HEADING = re.compile(rf"(?:(?:appendix|chapter|section)\s+)?(?P<n>{_LINE_NUMBER
 _CONTENTS = re.compile(r"\.*\d{1,4}")
 #: The words a heading's line may open with before its number.
 _HEADING_WORDS = ("appendix", "chapter", "section")
+#: A line that is a display's number alone, in its parentheses.
+_ALONE = re.compile(r"\((?P<n>[^()\s]{1,16})\)")
+#: A line a display's number begins, before its formula's first line.
+_OPENS = re.compile(r"\((?P<n>[^()\s]{1,16})\)\s")
 
 
 class Pages:
@@ -692,12 +780,16 @@ class Pages:
         self.lines = [(k + 1, normalize(line).strip()) for k, t in enumerate(texts) for line in t.split("\n")]
         self._by_word: dict[str, list[int]] = {}
         self._numbered: list[int] = []
+        #: the lines that are a display's number and nothing else, `(2.1)`, as `pdftotext` sets one apart from its formula
+        self.displayed: list[int] = []
         number = re.compile(_LINE_NUMBER)
         for k, (_page, line) in enumerate(self.lines):
             word = line.split(" ", 1)[0] if line else ""
             self._by_word.setdefault(word.lower(), []).append(k)
             if number.fullmatch(word.rstrip(".")):
                 self._numbered.append(k)
+            if _ALONE.fullmatch(line):
+                self.displayed.append(k)
         self.contents = self._contents()
 
     def _contents(self) -> range:
@@ -776,9 +868,13 @@ def place(s: Survey, pages: Pages, hints: dict[str, str] | None = None) -> dict[
     dict of str to (str, int)
         Each mark found, by its id: the number the PDF prints there and its page.
     """
-    hints = hints or {}
+    return {key: (number, page) for key, (number, page, _k) in _route(s, pages, hints or {}).items()}
+
+
+def _route(s: Survey, pages: Pages, hints: dict[str, str]) -> dict[str, tuple[str, int, int]]:
+    """`place`'s marks, each with the line it was read at as well."""
     at = 0
-    out: dict[str, tuple[str, int]] = {}
+    out: dict[str, tuple[str, int, int]] = {}
     marks: list[Section | Item] = [*s.sections, *s.items]
     for mark in sorted(marks, key=lambda m: m.order):
         if isinstance(mark, Section):
@@ -789,7 +885,7 @@ def place(s: Survey, pages: Pages, hints: dict[str, str] | None = None) -> dict[
             key = mark.item
         if got is not None:
             number, page, at = got
-            out[key] = (number, page)
+            out[key] = (number, page, at - 1)
     return out
 
 
@@ -869,9 +965,12 @@ def _page_of(opening: str | None, near: int | None, pages: Pages) -> int | None:
     return found[0][0] if len(on) == 1 or len(nearest) == 1 else None
 
 
-def _placed(out: Survey, pages: Pages, hints: dict[str, str], near: dict[str, int]) -> list[str]:
-    """Number and page `out`'s headings and results by the stored PDF (`place`) and its proofs by their words; the numbered marks it leaves without a number, headings first."""
-    got = place(out, pages, hints)
+def _placed(out: Survey, pages: Pages, hints: dict[str, str], near: dict[str, int]) -> tuple[list[str], dict[int, int]]:
+    """Number and page `out`'s headings and results by the stored PDF (`place`) and its proofs by their words: the numbered marks it leaves without a number, headings first, and the line each mark found stands at, by its `order`."""
+    routed = _route(out, pages, hints)
+    got = {key: (number, page) for key, (number, page, _k) in routed.items()}
+    lines = {sec.order: routed[sec.section][2] for sec in out.sections if sec.section in routed}
+    lines.update({item.order: routed[item.item][2] for item in out.items if item.item in routed})
     left: list[str] = []
     for sec in out.sections:
         sec.number, sec.page = got.get(sec.section, (None, None))
@@ -882,19 +981,31 @@ def _placed(out: Survey, pages: Pages, hints: dict[str, str], near: dict[str, in
         for j, proof in enumerate(item.proofs):
             proof.page = _page_of(proof.opening, near.get(f"{item.item}:proof{j}"), pages)
     left += [item.item for item in out.items if item.numbered and item.number is None]
-    return left
+    return left, lines
 
 
-def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None) -> None:
-    """Each label's number and page: its result's or its heading's where it is one's own; a display's or an item's inside a result, the compile's, only where the stored PDF numbers that result as loom reads it and shows the number in parentheses on its page."""
+def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None, lines: dict[int, int] | None = None) -> None:
+    """Each label's number and page: its result's or its heading's where it is one's own; a display's as `_shown` reads it in the stored PDF, or without one loom's reading where a compile says the same; an item's inside a result, the compile's, only where the stored PDF numbers that result as loom reads it and shows the number in parentheses on its page."""
     by_item = {i.item: i for i in out.items}
     by_label = {sec.label: sec for sec in out.sections if sec.label}
+    hints = {name: said for name, got in found.items() if (said := _hint(got.number, found)) is not None}
+    if pages is not None:
+        displayed = _shown(out, pages, lines or {}, hints)
+    else:
+        displayed = {
+            lab: (d.emulated, None)
+            for d in out.displays
+            for lab in d.labels
+            if d.emulated is not None and hints.get(lab) == d.emulated
+        }
     for name, label in out.labels.items():
         owner = by_item.get(label.owner) if label.owner else None
         if label.result and owner is not None:
             label.number, label.page = owner.number, owner.page
         elif name in by_label:
             label.number, label.page = by_label[name].number, by_label[name].page
+        elif label.kind == "equation":
+            label.number, label.page = displayed.get(name, (None, None))
         elif owner is not None:
             page = owner.page if label.proof is None else owner.proofs[label.proof].page
             got = found.get(name)
@@ -906,6 +1017,52 @@ def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None) -> No
             label.number, label.page = (said if shown else None), page
         else:
             label.number, label.page = None, None
+
+
+def _shown(
+    out: Survey, pages: Pages, lines: dict[int, int], hints: dict[str, str]
+) -> dict[str, tuple[str, int | None]]:
+    """Each label of a display the stored PDF numbers as loom reads it, with its page.
+
+    The displays are read in order, each between the line the last was read at and the lines its neighbouring headings and results were found at: kept where a line there is the number loom reads (or a compile's `hints`, for a label), alone or before its formula, before any line that is another number alone. Once the next number shown alone is another, no later display is kept until `equation` starts again, since loom's count has lost its step.
+    """
+    import bisect
+
+    placed = sorted(lines.items())
+    orders = [o for o, _k in placed]
+    out_: dict[str, tuple[str, int | None]] = {}
+    last, lost, since = -1, False, None
+    for d in out.displays:
+        if d.reset != since:
+            lost, since = False, d.reset
+        if d.emulated is None and d.tagged:
+            # `\tag*` prints its text with no parentheses
+            continue
+        i = bisect.bisect_left(orders, d.after)
+        lo = max(last, placed[i - 1][1] if i > 0 else -1)
+        hi = placed[i][1] if i < len(placed) else len(pages.lines)
+        j = bisect.bisect_right(pages.displayed, lo)
+        alone = pages.displayed[j] if j < len(pages.displayed) and pages.displayed[j] < hi else hi
+        if d.emulated is None:
+            # a line of `subequations`: its number is shown, and read by no one
+            last = alone if alone < hi else last
+            continue
+        wanted = {hints[lab] for lab in d.labels if lab in hints} or {d.emulated} - {None}
+        k = next((k for k in range(lo + 1, alone + 1) if k < hi and _number_at(pages.lines[k][1]) in wanted), None)
+        if k is None:
+            # the next number shown alone is another, or none is shown before the next heading or result
+            last, lost = (alone if alone < hi else last), lost or not d.tagged
+            continue
+        last = k
+        if not lost:
+            out_.update(dict.fromkeys(d.labels, (_number_at(pages.lines[k][1]) or "", pages.lines[k][0])))
+    return out_
+
+
+def _number_at(line: str) -> str | None:
+    """The display's number a line is, or begins its formula with; None for any other line."""
+    m = _ALONE.fullmatch(line) or _OPENS.match(line)
+    return m.group("n") if m is not None else None
 
 
 def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
@@ -931,8 +1088,9 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
         return out
     hints = {name: _hint(found[MARK + mark].number, found) for mark, name in marks if MARK + mark in found}
     near = {name: sheets[MARK + mark] for mark, name in marks if sheets.get(MARK + mark)}
+    lines: dict[int, int] = {}
     if pages is not None:
-        out.unconfirmed = _placed(out, pages, {k: v for k, v in hints.items() if v is not None}, near)
+        out.unconfirmed, lines = _placed(out, pages, {k: v for k, v in hints.items() if v is not None}, near)
     else:
         for sec in out.sections:
             sec.number = sec.emulated if sec.emulated is not None and hints.get(sec.section) == sec.emulated else None
@@ -951,7 +1109,7 @@ def confirm(s: Survey, auxes: list[str], pages: Pages | None = None) -> Survey:
         if item.item in hidden:
             item.number, item.page = None, None
     out.unconfirmed = [name for name in out.unconfirmed if name not in hidden]
-    _labels(out, found, pages)
+    _labels(out, found, pages, lines)
     out.state, out.why = "ready", None if out.items else "no-results"
     return out
 
@@ -1108,8 +1266,8 @@ def confirmed(
     if pages is None:
         out.state, out.why = "failed", "pdf"
     else:
-        out.unconfirmed = _placed(out, pages, {}, {})
-        _labels(out, {}, pages)
+        out.unconfirmed, lines = _placed(out, pages, {}, {})
+        _labels(out, {}, pages, lines)
         out.state, out.why = "ready", None if out.items else "no-results"
     keep(root, out)
     return out

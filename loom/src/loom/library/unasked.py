@@ -1,6 +1,6 @@
 """Loom's own work on the works a draft cites, unasked (`docs/design/library.md`, "Loom alone"): each work the library's stubs name is tried once for what it holds, one at a time, by a worker of the server's after each build. It compiles nothing.
 
-A try fetches, under `online`, arXiv's PDF for a work whose entry states an arXiv number and that holds no PDF, and its source too where it holds neither, one request at a time naming loom and its version, each filed under the work its entry names (`references.attach`). Then a work that holds a source is surveyed and numbered from its PDF alone (`survey.confirmed`); a work that holds only a PDF waits for a reader, since an ask is a person's to make (`evidence.asks`); a work that holds neither waits for a document. Each try is recorded in the library's log (`tried`), keyed by what the work holds and its arXiv number, so a work is tried again only once those change; a try the network being off held back records nothing.
+A try fetches, under `online`, arXiv's PDF for a work whose entry states an arXiv number and that holds no PDF, and its source too where it holds neither, one request at a time naming loom and its version, each filed under the work its entry names (`references.attach`). Then a work that holds a source is surveyed and numbered from its PDF alone (`survey.confirmed`) and the results the drafts cite of it are digested (`digest`, scope `used`); a work that holds only a PDF waits for a reader, since an ask is a person's to make (`evidence.asks`); a work that holds neither waits for a document. Each try is recorded in the library's log (`tried`), keyed by what the work holds, its arXiv number and the numbers of its stubs, so a work is tried again only once those change; a try the network being off held back records nothing.
 """
 
 from __future__ import annotations
@@ -8,7 +8,7 @@ from __future__ import annotations
 import tempfile
 import threading
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -17,6 +17,7 @@ from loom.library.store import folder, read
 
 if TYPE_CHECKING:
     from loom.library.node import Node
+    from loom.scan.scan import ScanResult
 
 #: Who a try is recorded as.
 LOOM = {"by": "loom", "kind": "loom"}
@@ -24,7 +25,7 @@ LOOM = {"by": "loom", "kind": "loom"}
 
 @dataclass(frozen=True)
 class Tried:
-    """What one try of a work came to: `outcome` is `surveyed`, `waiting` or `failed`, `why` the survey's own word or what the work waits for, and `held` whether the network being off held part of it back, so it is not recorded."""
+    """What one try of a work came to: `outcome` is `digested`, `surveyed`, `waiting` or `failed`, `why` the survey's own word or what the work waits for, and `held` whether the network being off held part of it back, so it is not recorded."""
 
     ref: str
     on: str
@@ -44,19 +45,20 @@ def arxiv_of(node: Node) -> str | None:
     return None
 
 
-def key_of(node: Node) -> str:
-    """What a work is tried for: the documents it holds and the arXiv number it states."""
-    return "|".join(f"{k}:{v}" for k, v in (("tex", node.tex), ("pdf", node.pdf), ("arxiv", arxiv_of(node))) if v)
+def key_of(node: Node, stubs: Iterable[str] = ()) -> str:
+    """What a work is tried for: the documents it holds, the arXiv number it states and the printed numbers of its stubs."""
+    held = (("tex", node.tex), ("pdf", node.pdf), ("arxiv", arxiv_of(node)), ("stubs", ",".join(sorted(stubs))))
+    return "|".join(f"{k}:{v}" for k, v in held if v)
 
 
-def wanted(root: Path) -> list[str]:
-    """The works the library's stubs name, in the order of their references' ids."""
+def stubbed(root: Path) -> dict[str, list[str]]:
+    """The works the library's stubs name, in the order of their references' ids, each with its stubs' printed numbers."""
     from loom.library.node import NodeUnreadable, read_node
 
     nodes = folder(root)
-    out: set[str] = set()
+    out: dict[str, list[str]] = {}
     if not nodes.is_dir():
-        return []
+        return out
     for path in nodes.glob("*.node"):
         if ids.kind_of(path.stem) != ids.STATEMENT:
             continue
@@ -65,19 +67,31 @@ def wanted(root: Path) -> list[str]:
         except NodeUnreadable:
             continue
         if node.empty and node.source:
-            out.add(node.source)
-    return sorted(out)
+            out.setdefault(node.source, []).append(node.number or "")
+    return dict(sorted(out.items()))
 
 
-def due(root: Path) -> list[str]:
-    """The works the stubs name that were never tried for what they hold now."""
+def wanted(root: Path) -> list[str]:
+    """The works the library's stubs name, in the order of their references' ids."""
+    return list(stubbed(root))
+
+
+def cited(result: ScanResult) -> set[str]:
+    """The works the drafts cite by a result, as the scan resolved their citations: the only works the unasked job tries, so a work reached only through a digested proof is never fetched unasked."""
+    return {c.ref for c in result.edges.cites if c.ref and c.results}
+
+
+def due(root: Path, works: set[str] | None = None) -> list[str]:
+    """The works the stubs name, of `works` where given, that were never tried for what they hold and the stubs they have now."""
     acts = log.replay(root)
     out: list[str] = []
-    for ref in wanted(root):
+    for ref, numbers in stubbed(root).items():
+        if works is not None and ref not in works:
+            continue
         node = read(root, ref)
         if node is None:
             continue
-        on = key_of(node)
+        on = key_of(node, numbers)
         if not any(act.get("event") == "tried" and act.get("on") == on for act in acts.of(ref)):
             out.append(ref)
     return out
@@ -114,15 +128,16 @@ def attempt(root: Path, ref: str, *, online: bool) -> Tried | None:
                 node = _fetched(root, ref, ident, want_source=not node.tex)
             except fetch.FetchRefused as exc:
                 failed = str(exc)
-    on = key_of(node)
     if failed is not None:
-        tried = Tried(ref, on, "failed", f"fetch: {failed}"[:300], held)
+        tried = Tried(ref, "", "failed", f"fetch: {failed}"[:300], held)
     elif node.tex:
-        tried = _surveyed(root, node, on, held)
+        tried = _surveyed(root, node, held)
     else:
-        tried = Tried(ref, on, "waiting", "pdf-only" if node.pdf else "no-document", held)
+        tried = Tried(ref, "", "waiting", "pdf-only" if node.pdf else "no-document", held)
+    # keyed by what the work holds and the stubs it has once tried, so the stubs its own digest made want no second try
+    tried = replace(tried, on=key_of(read(root, ref) or node, stubbed(root).get(ref, [])))
     if not tried.held:
-        log.record(root, "tried", ref, **LOOM, on=on, outcome=tried.outcome, why=tried.why)
+        log.record(root, "tried", ref, **LOOM, on=tried.on, outcome=tried.outcome, why=tried.why)
     return tried
 
 
@@ -142,18 +157,32 @@ def _fetched(root: Path, ref: str, ident: str, *, want_source: bool) -> Node:
     return node
 
 
-def _surveyed(root: Path, node: Node, on: str, held: bool) -> Tried:
-    """A work holding a source, surveyed and numbered from its PDF alone."""
+def _surveyed(root: Path, node: Node, held: bool) -> Tried:
+    """A work holding a source, surveyed and numbered from its PDF alone, and the results the drafts cite of it digested: `digested` where that wrote anything, `why` how many wait."""
     from loom.library import survey
+    from loom.library.citations import resolve
+    from loom.library.digest import digest, used
+    from loom.library.gather import writing
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
 
     assert node.tex is not None
     src = documents.source_dir(root, node.tex)
     main = documents.main_file(src)
     if main is None:
-        return Tried(node.id, on, "failed", "no-main", held)
+        return Tried(node.id, "", "failed", "no-main", held)
     pdf_path = documents.path_of(root, node.pdf, "pdf") if node.pdf else None
     s = survey.confirmed(root, node.tex, src, main.relative_to(src).as_posix(), pdf=node.pdf, pdf_path=pdf_path)
-    return Tried(node.id, on, "surveyed" if s.state == "ready" else "failed", s.why, held)
+    if s.state != "ready":
+        return Tried(node.id, "", "failed", s.why, held)
+    with writing(root):
+        # scanned under the id lock, as every writer that draws a stem is
+        result = scan(load_quilt(root))
+        resolve(result)
+        done = digest(result, node.id, used(result, node.id, s), s, closure=True)
+    wrote = done.made or done.filled or done.rewritten
+    why = f"{len(done.waiting)} waiting" if done.waiting else s.why
+    return Tried(node.id, "", "digested" if wrote else "surveyed", why, held)
 
 
 class Unasked:

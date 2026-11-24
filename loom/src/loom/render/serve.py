@@ -1263,9 +1263,10 @@ class ServeSession:
             self.publications.published()
             self.library_moved(report.result)
             if self.unasked is not None:
+                from loom.library.unasked import cited
                 from loom.library.unasked import due as works_due
 
-                self.unasked.want(works_due(root))
+                self.unasked.want(works_due(root, cited(report.result)))
         if changed is not None:
             from loom.cli.report import counted
 

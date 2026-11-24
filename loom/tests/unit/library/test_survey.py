@@ -558,11 +558,11 @@ def _aux(*, without: str = "", said: dict[str, str] | None = None) -> list[str]:
     return ["\n".join(lines)]
 
 
-#: The fixture as a stored PDF's text, two pages, as `pdftotext` reads one: what a compile's word is checked against.
+#: The fixture as a stored PDF's text, two pages, as `pdftotext` reads one, a display's number alone on its line: what a compile's word is checked against.
 PDF = [
-    "1. Introduction\nDefinition 1.1 (Widget). A widget is a set.\nLemma 1.2. Every widget is bounded:\n|x| ≤ 1 . (1)\nProof. By (1).\n"
+    "1. Introduction\nDefinition 1.1 (Widget). A widget is a set.\nLemma 1.2. Every widget is bounded:\n|x| ≤ 1 .\n(1)\nProof. By (1).\n"
     "2. Bounds\nTheorem 2.3 (Main). Widgets are compact.\nProof. Lemma.\nAcknowledgements\nClaim. Unnumbered.\n",
-    "7. Later\nFigure 1. A picture\ny = 2 (2)\nNotation 7.1. We write Hom.\nAppendix A. Proofs\nTheorem A.1. A theorem in the appendix.\n",
+    "7. Later\nFigure 1. A picture\ny = 2\n(2)\nNotation 7.1. We write Hom.\nAppendix A. Proofs\nTheorem A.1. A theorem in the appendix.\n",
 ]
 
 
@@ -581,7 +581,8 @@ def test_with_no_stored_pdf_a_number_is_kept_only_where_it_is_loom_s_own_reading
     assert [x.number for x in done.sections] == ["1", "2", None, "7", "A"]
     labels = {k: v.number for k, v in done.labels.items()}
     assert (labels["def:widget"], labels["thm:alias"], labels["sec:proofs"]) == ("1.1", "2.1", "A")
-    assert (labels["eq:bound"], labels["it:first"], labels["fig:one"], labels["claim:star"]) == (None, None, None, None)
+    assert labels["eq:bound"] == "1", "a display's number, as loom reads it and the compile agrees"
+    assert (labels["it:first"], labels["fig:one"], labels["claim:star"]) == (None, None, None)
     other = survey.confirm(s, _aux(said={"loom-survey-i4": "7.2", "loom-survey-s1": "3"}))
     assert (other.item("not:hom").number, other.sections[1].number) == (None, None)  # type: ignore[union-attr]
     assert other.unconfirmed == ["s2", "not:hom"], "named, so the item waits where the person looks"
@@ -629,9 +630,9 @@ def test_a_stored_pdf_numbers_each_heading_and_result_at_the_start_of_its_own_li
 
 #: The fixture as its published version prints it, numbered otherwise: sections 11, 12 and 17 where the source has 1, 2 and 7.
 RENUMBERED = [
-    "11. Introduction\nDefinition 11.1 (Widget). A widget is a set.\nLemma 11.2. Every widget is bounded:\n|x| ≤ 1 . (11.1)\n"
+    "11. Introduction\nDefinition 11.1 (Widget). A widget is a set.\nLemma 11.2. Every widget is bounded:\n|x| ≤ 1 .\n(11.1)\n"
     "Proof. By (11.1).\n12. Bounds\nTheorem 12.1 (Main). Widgets are compact.\nProof. Lemma.\nAcknowledgements\nClaim. Unnumbered.\n",
-    "17. Later\nFigure 1. A picture\ny = 2 (17.1)\nNotation 17.1. We write Hom.\nAppendix A. Proofs\nTheorem A.1. A theorem in the appendix.\n",
+    "17. Later\nFigure 1. A picture\ny = 2\n(17.1)\nNotation 17.1. We write Hom.\nAppendix A. Proofs\nTheorem A.1. A theorem in the appendix.\n",
 ]
 
 
@@ -650,7 +651,9 @@ def test_a_stored_pdf_that_numbers_otherwise_governs_and_a_longer_number_is_neve
     assert [x.number for x in done.sections] == ["11", "12", None, "17", "A"], "12 is never read as the 2 it ends in"
     labels = {k: v.number for k, v in done.labels.items()}
     assert (labels["def:widget"], labels["thm:alias"], labels["sec:intro"]) == ("11.1", "12.1", "11")
-    assert labels["eq:bound"] is None, "the PDF numbers its result otherwise, so the compile's (1) is not its number"
+    assert labels["eq:bound"] is None, (
+        "the PDF numbers the display (11.1), so neither loom's (1) nor the compile's is its number"
+    )
     assert done.unconfirmed == ["not:hom"]
     unnumbered = [RENUMBERED[0].replace("Lemma 11.2.", "Lemma."), RENUMBERED[1]]
     bare = survey.confirm(s, _aux(), survey.Pages(unnumbered))
@@ -1026,3 +1029,78 @@ def test_no_byte_of_a_file_a_source_reads_from_outside_is_kept(tmp_path: Path, c
         )
     kept = b"".join(p.read_bytes() for p in quilt.rglob("*") if p.is_file())
     assert kept and not [x for x in secrets if x.encode() in kept]
+
+
+#: Displays as a paper numbers them: within sections, a line at a time in `align`, a line left unnumbered, a tag, one inside a result, `subequations`, a starred one.
+DISPLAYS = r"""\documentclass{article}
+\newtheorem{lemma}{Lemma}[section]
+\numberwithin{equation}{section}
+\begin{document}
+\section{One}
+\begin{equation}\label{e:a} a \end{equation}
+By (1.2) at a line's end, which is no display.
+\begin{align}
+b &= c \label{e:b}\\
+d &= e \nonumber\\
+f &= g \tag{$\star$}\label{e:star}\\
+h &= i \label{e:c}
+\end{align}
+\begin{lemma}\label{l:x}
+\begin{equation}\label{e:in} x \end{equation}
+\end{lemma}
+\begin{subequations}
+\begin{align} p \label{e:p} \\ q \end{align}
+\end{subequations}
+\begin{equation}\label{e:after} r \end{equation}
+\begin{equation*} z \end{equation*}
+\section{Two}
+\begin{equation}\label{e:two} w \end{equation}
+\end{document}
+"""
+#: Its PDF as `pdftotext` reads one: each display's number alone on its line, or opening its formula's first.
+DISPLAYED = "1 One\na\n(1.1)\nBy (1.2) at a line's end, which is no display.\nb = c\n(1.2)\nd = e\nf = g\n(⋆)\n(1.3) h = i\nLemma 1.1. x\n(1.4)\np\n(1.5a)\nq\n(1.5b)\nr\n(1.6)\nz\n2 Two\nw\n(2.1)\n"
+
+
+def _displayed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> survey.Survey:
+    monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([text])))
+    root = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
+    root.mkdir()
+    return survey.confirmed(root, TEX, _one_file(root, DISPLAYS), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
+
+
+def test_a_display_is_numbered_by_its_counter_a_line_at_a_time(tmp_path: Path) -> None:
+    s = survey.read(_one_file(tmp_path, DISPLAYS), "main.tex", TEX)
+    shown = {k: v.emulated for k, v in s.labels.items() if v.kind == "equation"}
+    assert shown == {
+        "e:a": "1.1",
+        "e:b": "1.2",
+        "e:star": "$\\star$",
+        "e:c": "1.3",
+        "e:in": "1.4",
+        "e:p": None,
+        "e:after": "1.6",
+        "e:two": "2.1",
+    }, "an unnumbered line steps nothing, a tag is its own text, subequations steps once and loom reads none inside"
+    assert s.labels["e:in"].owner == "l:x" and s.labels["e:a"].owner is None
+
+
+def test_a_display_s_number_is_kept_where_the_stored_pdf_shows_it_in_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    done = _displayed(tmp_path, monkeypatch, DISPLAYED)
+    kept = {k: (v.number, v.page) for k, v in done.labels.items() if v.kind == "equation" and v.number}
+    assert kept == {
+        "e:a": ("1.1", 1),
+        "e:b": ("1.2", 1),
+        "e:c": ("1.3", 1),
+        "e:in": ("1.4", 1),
+        "e:after": ("1.6", 1),
+        "e:two": ("2.1", 1),
+    }, (
+        "a number opening its formula's line read too; a tag's text loom cannot compare, and a mention at a line's end never"
+    )
+    lost = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i (1.3)"))
+    kept = {k for k, v in lost.labels.items() if v.kind == "equation" and v.number}
+    assert kept == {"e:a", "e:b", "e:two"}, (
+        "once one is not where loom counts it, none is kept until the counter starts again"
+    )

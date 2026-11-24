@@ -258,6 +258,7 @@ def _library_works(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
         "version",
         "lookup",
         "cited_as",
+        "cited_from",
     } <= set(said["works"][0])
     assert isinstance(said["gen"], int) and s.builds == builds
     # `since` while the generation stands: unchanged, and nothing else

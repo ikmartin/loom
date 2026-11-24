@@ -28,8 +28,8 @@ EVENTS: dict[str, tuple[str, ...]] = {
     "undone": ("act",),
     "tried": ("on", "outcome", "why"),
 }
-#: How a reference was made.
-HOW = ("drop", "paste", "gather", "carry", "source")
+#: How a reference was made: `cited` from the bibliography of a work loom digested, whose id is its `source`.
+HOW = ("drop", "paste", "gather", "carry", "source", "cited")
 #: What a work was known by when it was made, as the intake's rows say it (`write-api.md` §6): an identifier it states, its entry (a pasted or gathered one, or the work a document was dropped on), its file's name, or nothing.
 FOUND_BY = ("arxiv", "doi", "zbl", "entry", "title", "none")
 #: Who acts: a person, an agent, or loom of itself (gathering, the carry-over).
@@ -53,6 +53,11 @@ class Acts:
     def made(self, ref: str) -> dict[str, Any] | None:
         """The latest act that made `ref`, or None when the log holds none."""
         return next((a for a in reversed(self.of(ref)) if a["event"] == "made"), None)
+
+    def cited_from(self, ref: str) -> str | None:
+        """The work whose bibliography `ref` was made from, as digesting that work made it; None for a work made any other way."""
+        made = self.made(ref)
+        return str(made.get("source")) if made is not None and made.get("how") == "cited" else None
 
     def unconfirmed(self, ref: str) -> bool:
         """Whether `ref` was made from an identifier and its details were not looked up, by the act that made it or since."""

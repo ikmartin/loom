@@ -102,7 +102,7 @@ def works(result: ScanResult, *, doc: str | None = None) -> list[dict[str, Any]]
     Returns
     -------
     list of dict
-        One row a reference, by `short` then id: `ref`, `short`, `title`, `authors`, `year`, `holds`, `digested`, `used_in`, `link`, `version`, `lookup`, `cited_as`.
+        One row a reference, by `short` then id: `ref`, `short`, `title`, `authors`, `year`, `holds`, `digested`, `used_in`, `link`, `version`, `lookup`, `cited_as`, and `cited_from`, the work whose bibliography digesting made it from.
 
     See Also
     --------
@@ -148,6 +148,7 @@ def works(result: ScanResult, *, doc: str | None = None) -> list[dict[str, Any]]
                 if stated and acts.unconfirmed(ref)
                 else None,
                 "cited_as": labels.get(key.casefold()),
+                "cited_from": acts.cited_from(ref),
             }
         )
     return sorted(rows, key=lambda r: (r["short"].lower(), r["ref"]))

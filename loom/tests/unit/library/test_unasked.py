@@ -82,7 +82,7 @@ def test_a_work_with_a_source_is_surveyed_and_compiles_nothing(tmp_path: Path, m
     monkeypatch.setattr(survey, "compile_marks", compiled)
     done = attempt(root, smith, online=False)
     assert done is not None and (done.outcome, done.why) == ("surveyed", "no-pdf"), done
-    assert [(a["on"], a["outcome"]) for a in tried(root, smith)] == [(key_of(read(root, smith)), "surveyed")]  # type: ignore[arg-type]
+    assert [(a["on"], a["outcome"]) for a in tried(root, smith)] == [(key_of(read(root, smith), ["2.1"]), "surveyed")]  # type: ignore[arg-type]
     assert smith not in due(root), "tried once for what it holds"
 
 
@@ -147,7 +147,7 @@ def test_online_arxiv_s_pdf_and_source_are_fetched_and_filed_under_the_work_its_
         ("pdf", "loom"),
         ("tex", "loom"),
     ]
-    assert [a["on"] for a in tried(root, arden)] == [key_of(node)] and arden not in due(root)
+    assert [a["on"] for a in tried(root, arden)] == [key_of(node, ["4.2"])] and arden not in due(root)
 
 
 def test_the_server_s_worker_tries_a_work_once_however_often_it_is_asked(tmp_path: Path) -> None:
@@ -162,3 +162,14 @@ def test_the_server_s_worker_tries_a_work_once_however_often_it_is_asked(tmp_pat
     finally:
         worker.stop()
     assert len(tried(root, smith)) == 1
+
+
+def test_a_work_is_tried_again_once_a_draft_cites_another_of_its_results(tmp_path: Path) -> None:
+    root, refs = quilt(tmp_path)
+    smith = refs["Smi24"]
+    given_source(root, smith, tmp_path)
+    attempt(root, smith, online=False)
+    assert smith not in due(root)
+    (root / "main.tex").write_text(MAIN.replace("By ", "By \\cite[Lemma 9.9]{Smi24}, "))
+    make(scan(load_quilt(root)))
+    assert smith in due(root), "a stub of it it was not tried for"
