@@ -256,9 +256,12 @@ def read(src: Path, main: str, tex: str) -> Survey:
     Returns
     -------
     Survey
-        `reading`, or `failed` with why when the main file is missing or unreadable or begins no document.
+        `reading`, or `failed` with why: `not-regular` when the folder holds anything but folders and regular files with no other name (a link, a hard link, a FIFO, a device), judged before anything is read; `no-main`, `unreadable` or `no-document` when the main file is missing, unreadable or begins no document.
     """
     out = Survey(tex=tex, main=main)
+    if not _plain_folder(src):
+        out.state, out.why = "failed", "not-regular"
+        return out
     if ".." in Path(main).parts or not _regular(src, main):
         out.state, out.why = "failed", "no-main"
         return out
@@ -292,6 +295,23 @@ def read(src: Path, main: str, tex: str) -> Survey:
     _label_all(out, units, envs, files, doc)
     _bibliography(out, src, main, files, exp.reached)
     return out
+
+
+def _plain_folder(src: Path) -> bool:
+    """Whether `src` and everything under it is a folder or a regular file with no other name, judged by `lstat` alone before anything is read: a link, a hard link, a FIFO, a device or a socket refuses the whole source, and none is followed or opened."""
+    import stat
+
+    try:
+        if not stat.S_ISDIR(src.lstat().st_mode):
+            return False
+        for folder, folders, files in os.walk(src, followlinks=False):
+            for name in (*folders, *files):
+                st = (Path(folder) / name).lstat()
+                if not (stat.S_ISDIR(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_nlink == 1)):
+                    return False
+    except OSError:
+        return False
+    return True
 
 
 def _regular(src: Path, rel: str) -> bool:
@@ -593,7 +613,7 @@ def marked(src: Path, s: Survey, dest: Path) -> Path:
 
     Marks are named by place, `s3`, `i12`, `p12-0`, so a source's own labels are untouched. Each file is written in the encoding it was read in; `src` is never written.
     """
-    root = stage_sources(src, dest)
+    root = stage_sources(src, dest, regular_only=True)
     at: dict[str, list[tuple[int, str]]] = {}
     for k, sec in enumerate(s.sections):
         if sec.file:

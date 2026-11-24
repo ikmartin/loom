@@ -155,10 +155,12 @@ BUILD_PRODUCTS = (
 )
 
 
-def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, ...] = ()) -> Path:
+def stage_sources(
+    paper_dir: Path, dest: Path, outside: list[str] | tuple[str, ...] = (), *, regular_only: bool = False
+) -> Path:
     """Copy a paper directory into `dest` without its build products; returns the copy of `paper_dir`, the root to compile.
 
-    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves.
+    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves. With `regular_only`, for a source nobody at loom wrote, only folders and regular files with no other name are copied, judged by `lstat` alone: a link is never followed, and a device or a FIFO never opened.
     """
     paper_dir = paper_dir.resolve()
     reached = [Path(o).resolve() for o in outside if Path(o).is_file()]
@@ -169,7 +171,9 @@ def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, .
     def ignore(folder: str, names: list[str]) -> set[str]:
         skip = set()
         for n in names:
-            if n.startswith(".") and (Path(folder) / n).is_dir():
+            if regular_only and not _plain(Path(folder) / n):
+                skip.add(n)
+            elif n.startswith(".") and (Path(folder) / n).is_dir():
                 skip.add(n)
             elif n.endswith(BUILD_PRODUCTS) and not (n.endswith(".bbl") and not has_bib):
                 skip.add(n)
@@ -182,6 +186,17 @@ def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, .
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy(f, target)
     return root
+
+
+def _plain(path: Path) -> bool:
+    """Whether `path` is a folder, or a regular file with no other name, by `lstat` alone."""
+    import stat
+
+    try:
+        st = path.lstat()
+    except OSError:
+        return False
+    return stat.S_ISDIR(st.st_mode) or (stat.S_ISREG(st.st_mode) and st.st_nlink == 1)
 
 
 def which_latexmk() -> str | None:

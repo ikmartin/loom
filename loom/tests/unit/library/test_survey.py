@@ -299,36 +299,67 @@ def test_a_format_holds_until_its_group_closes(tmp_path: Path) -> None:
     assert [i.emulated for i in s.items] == ["1", "2", None, "3", "4", "5"]
 
 
-@pytest.mark.parametrize(
-    "case", ["a style linked to a file outside", "a folder linked outside", "a master that is a link"]
-)
-def test_a_survey_reads_only_regular_files_inside_its_folder(tmp_path: Path, case: str) -> None:
-    """The review's D-12: whatever its caller passes, a survey reads nothing through a link out of the source's folder, so a style's literal setting there moves nothing loom reads."""
+IRREGULAR = [
+    "a style linked to a file outside",
+    "a folder linked outside",
+    "a master that is a link",
+    "a link loop",
+    "a dangling link",
+    "a hard link to a file outside",
+    "a FIFO",
+]
+
+
+def _irregular(tmp_path: Path, case: str) -> Path:
+    """A source folder holding one thing that is neither a folder nor a regular file with no other name; nothing here opens a device or the FIFO."""
     import os
 
     outside, src = tmp_path / "outside", tmp_path / "src"
     (outside / "sty").mkdir(parents=True)
     src.mkdir()
-    for where in (outside / "evil.sty", outside / "sty" / "evil.sty"):
-        where.write_text("\\setcounter{section}{7390}\n", encoding="utf-8")
+    secret = outside / "evil.sty"
+    secret.write_text("\\setcounter{section}{7390}\n", encoding="utf-8")
+    (outside / "sty" / "evil.sty").write_text("\\setcounter{section}{7390}\n", encoding="utf-8")
     main = (
         HOSTILE_HEAD
-        + "\\usepackage{%s}\n\\begin{document}\n\\section{One}\n\\begin{thm}A theorem.\\end{thm}\n\\end{document}\n"
+        + "\\usepackage{evil}\n\\begin{document}\n\\section{One}\n\\begin{thm}A theorem.\\end{thm}\n\\end{document}\n"
     )
+    if case == "a master that is a link":
+        (outside / "main.tex").write_text(main, encoding="utf-8")
+        os.symlink(outside / "main.tex", src / "main.tex")
+        return src
+    (src / "main.tex").write_text(main, encoding="utf-8")
     if case == "a style linked to a file outside":
-        os.symlink(outside / "evil.sty", src / "evil.sty")
-        (src / "main.tex").write_text(main % "evil", encoding="utf-8")
+        os.symlink(secret, src / "evil.sty")
     elif case == "a folder linked outside":
         os.symlink(outside / "sty", src / "sty")
-        (src / "main.tex").write_text(main % "sty/evil", encoding="utf-8")
+    elif case == "a link loop":
+        os.symlink(src / "loop-b", src / "loop-a")
+        os.symlink(src / "loop-a", src / "loop-b")
+    elif case == "a dangling link":
+        os.symlink(tmp_path / "nowhere.sty", src / "evil.sty")
+    elif case == "a hard link to a file outside":
+        os.link(secret, src / "evil.sty")
     else:
-        (outside / "main.tex").write_text(main % "amsmath", encoding="utf-8")
-        os.symlink(outside / "main.tex", src / "main.tex")
-    s = survey.read(src, "main.tex", TEX)
-    if case == "a master that is a link":
-        assert (s.state, s.why, s.items) == ("failed", "no-main", [])
-    else:
-        assert s.state == "reading" and [x.emulated for x in s.sections] == ["1"]
+        os.mkfifo(src / "evil.sty")
+    return src
+
+
+@pytest.mark.parametrize("case", IRREGULAR)
+def test_a_source_folder_holding_anything_but_plain_files_is_refused_before_anything_reads_it(
+    tmp_path: Path, case: str
+) -> None:
+    """The review's D-12: a link, a file with another name elsewhere, or a FIFO refuses the whole source by `lstat` alone, so nothing is followed or opened and a loop or a dangling link fails rather than raises."""
+    s = survey.read(_irregular(tmp_path, case), "main.tex", TEX)
+    assert (s.state, s.why, s.items, s.sections) == ("failed", "not-regular", [], [])
+
+
+@pytest.mark.parametrize("case", IRREGULAR[3:])
+def test_a_staged_copy_of_a_source_follows_no_link_and_opens_nothing_but_plain_files(tmp_path: Path, case: str) -> None:
+    from loom.tex.runner import stage_sources
+
+    root = stage_sources(_irregular(tmp_path, case), tmp_path / "staged", regular_only=True)
+    assert sorted(p.name for p in root.iterdir()) == ["main.tex"]
 
 
 def test_a_number_a_compile_sets_in_a_face_is_read_through_it(tmp_path: Path) -> None:
