@@ -449,7 +449,8 @@ def extract_digest(
     aux_numbers: dict[str, AuxNumber] = {}
     if compile:
         with tempfile.TemporaryDirectory(prefix="loom-extract-") as tmp:
-            staged = stage_sources(paper_dir, Path(tmp) / "src", outside)
+            # a cited paper's source is staged with nothing from outside its own folder, which no fence could then keep from it
+            staged = stage_sources(paper_dir, Path(tmp) / "src")
             eng = engine or closure.engine or "pdflatex"
             res = compile_tex(staged, master_rel, Path(tmp) / "out", eng, halt_on_error=False)
             if res.aux is not None and res.aux.exists():

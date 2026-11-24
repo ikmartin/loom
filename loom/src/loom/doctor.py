@@ -406,6 +406,45 @@ def check_tex() -> Item:
     return Item("tex", FAIL, REQUIRED, "none: documents show as their source and no PDF is made", REPAIR, extra)
 
 
+def check_fence() -> Item:
+    """Whether a TeX compile loom starts is fenced on this machine (`loom.fence.state`), in the person's words, with the way to turn it off or why it is not up: said in every state, and a warning only where loom's own test found the fence leaking."""
+    from loom import fence
+
+    why = fence.state()
+    if why is None:
+        return Item(
+            "tex fence",
+            OK,
+            OPTIONAL,
+            f"on: a file loom compiles reads only its own folder and the TeX in use, and reaches no network; {fence.OFF}=off turns it off for a paper it breaks",
+            "",
+            {"state": None},
+            shown=True,
+        )
+    said, remedy = {
+        "off": (
+            f"off, as {fence.OFF}=off asks: a file loom compiles can read any file you can",
+            f"unset {fence.OFF} to fence compiles again",
+        ),
+        "absent": (
+            "not on this system: a file loom compiles can read any file you can",
+            "none yet: the fence is macOS's",
+        ),
+        "nested": (
+            "not here: loom runs inside another sandbox, which holds no second, so a file loom compiles reads what that sandbox allows",
+            "run loom outside an agent's sandboxed shell to fence its compiles",
+        ),
+        "leaks": (
+            "not holding: a file read past it in loom's own test, so loom compiles unfenced and a file it compiles can read any file you can",
+            "tell loom's maintainers; nothing is fenced until it holds",
+        ),
+    }[why]
+    # a fence off, absent or nested breaks nothing, so it is said, not warned of; one that leaks is loom's own failing
+    if why == "leaks":
+        return Item("tex fence", WARN, OPTIONAL, said, remedy, {"state": why})
+    return Item("tex fence", OK, OPTIONAL, f"{said} ({remedy})", "", {"state": why}, shown=True)
+
+
 def check_tools() -> list[Item]:
     """Find every tool, ask its version, and probe what loom needs of it beyond presence: pdftotext's word boxes, and whether biber pairs with biblatex.
 
@@ -845,7 +884,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
         # not being in a quilt is normal here; a quilt that cannot be read is not
         if quilt_path or not str(exc).startswith("not inside a quilt"):
             bad_quilt = str(exc)
-    report.items += [check_tex(), *check_tools()]
+    report.items += [check_tex(), check_fence(), *check_tools()]
     report.items += [check_author(quilt), check_bundle(), check_unpacked()]
     if bad_quilt is not None:
         # a path with no quilt at it has no config.toml to fix
