@@ -123,7 +123,11 @@ class World:
                     if self.rng.random() < 0.25:
                         changed.append(n)
         for n in changed:
-            self.write(Node(**{**self.nodes[n].__dict__, "pages": "2"}))
+            # its pages for a node of a work, its words for one that names none, which can have no pages
+            node = self.nodes[n]
+            self.write(
+                Node(**{**node.__dict__, **({"pages": "2"} if node.source else {"body": node.body + " Changed."})})
+            )
         self.statement = [x for x in self.ids if self.rng.random() < 0.4]
         self.proof = [x for x in self.ids if x not in self.statement and self.rng.random() < 0.4]
         self.cites = ["R Theorem 2"] if self.rng.random() < 0.1 else []
