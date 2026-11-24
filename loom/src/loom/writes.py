@@ -680,12 +680,13 @@ def _temps(root: Path, rel: str) -> list[Path]:
 
 @dataclass
 class Journal:
-    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled)."""
+    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled), and of those, the ones a later act of its own kind wrote (`again`), which settle an act left for a file of an agent app's (`_judge`)."""
 
     offset: int = 0
     begun: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)
     wrote: dict[str, int] = field(default_factory=dict)
     crossed: dict[str, list[str]] = field(default_factory=dict)
+    again: dict[str, list[str]] = field(default_factory=dict)
 
     def fold(self, at: int, entry: dict[str, Any]) -> None:
         """Take in the line at `at`."""
@@ -696,6 +697,7 @@ class Journal:
         elif event == "done":
             begun = self.begun.pop(act, None)
             self.crossed.pop(act, None)
+            self.again.pop(act, None)
             if begun is not None:
                 for gen in begun[1].get("edits") or []:
                     self.wrote[str(gen)] = begun[0]
@@ -707,9 +709,12 @@ class Journal:
                     both = mine & set(theirs) if isinstance(theirs, dict) else set()
                     if both:
                         self.crossed[other] = sorted(set(self.crossed.get(other, [])) | both)
+                        if e.get("kind") == begun[1].get("kind"):
+                            self.again[other] = sorted(set(self.again.get(other, [])) | both)
         elif event == "aborted":
             self.begun.pop(act, None)
             self.crossed.pop(act, None)
+            self.again.pop(act, None)
 
     def crossing(self, act: str) -> list[str]:
         """The files of `act`, begun and not settled, that a later act also names: one done since (`crossed`), or one begun after it and not settled, which may have written them before it was cut short."""
@@ -792,13 +797,14 @@ def entry_at(root: Path, offset: int) -> dict[str, Any] | None:
 def _load_index(root: Path) -> Journal | None:
     try:
         data = json.loads((root / JOURNAL_INDEX).read_text(encoding="utf-8"))
-        if "crossed" not in data:
+        if "again" not in data:
             return None  # an index from before it was kept: read the journal from its start
         return Journal(
             offset=int(data["offset"]),
             begun={str(k): (int(v[0]), dict(v[1])) for k, v in data["begun"].items()},
             wrote={str(k): int(v) for k, v in data["wrote"].items()},
             crossed={str(k): [str(x) for x in v] for k, v in (data.get("crossed") or {}).items()},
+            again={str(k): [str(x) for x in v] for k, v in (data.get("again") or {}).items()},
         )
     except (OSError, ValueError, KeyError, TypeError, IndexError, AttributeError):
         return None
@@ -816,6 +822,7 @@ def _save_index(root: Path, j: Journal) -> None:
                     "begun": {k: list(v) for k, v in j.begun.items()},
                     "wrote": j.wrote,
                     "crossed": j.crossed,
+                    "again": j.again,
                 }
             ),
             encoding="utf-8",
@@ -1084,7 +1091,7 @@ def _append_guarded(root: Path, records: list[dict[str, Any]], *, unless_there: 
 
 @dataclass
 class _Verdict:
-    """What recovery would do with an act begun and not settled: `finish` it, `undo` it (with each file's texts to put back), or leave it, with why in words and the state of its files. `trusted` is False for a line `untrusted` refuses, whose paths are never repeated to a person; `kept` is True where the store was looked at and holds both texts of every file."""
+    """What recovery would do with an act begun and not settled: `finish` it, `undo` it (with each file's texts to put back), count it `settled` by a later act of its kind, or leave it, with why in words and the state of its files. `trusted` is False for a line `untrusted` refuses, whose paths are never repeated to a person; `kept` is True where the store was looked at and holds both texts of every file."""
 
     how: str
     why: str = ""
@@ -1102,8 +1109,19 @@ class _Verdict:
 BY_HAND = "it stays until it is settled by hand, which loom does not yet do"
 
 
-def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] | tuple[str, ...] = ()) -> _Verdict:
-    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`)."""
+def _judge(
+    root: Path,
+    history: Path,
+    entry: dict[str, Any],
+    crossed: list[str] | tuple[str, ...] = (),
+    again: list[str] | tuple[str, ...] = (),
+) -> _Verdict:
+    """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`).
+
+    Putting an act back never writes a file loom keeps for an agent app (`ai.clients.for_an_app`), which an app may hold its own shell out of: such an act is left and said, and `settled` once a later act of its kind has written each such file again (`again`, `Journal.again`).
+    """
+    from loom.ai.clients import for_an_app
+
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
@@ -1119,6 +1137,17 @@ def _judge(root: Path, history: Path, entry: dict[str, Any], crossed: list[str] 
             f"its history lines were written and another step was recorded after them, so putting it back would leave those lines naming what it removed, and recovery changed nothing: {_where(holds)}",
             holds,
             settles=f"Its files are as it left them, but loom can neither record the rest of its history nor put it back, so {BY_HAND}.",
+        )
+    held = sorted(rel for rel in files if for_an_app(rel) and not holds[rel][0])
+    if held:
+        if set(held) <= set(again):
+            return _Verdict("settled", f"a later act of its kind wrote {_named(held)} again", holds)
+        it = "it" if len(held) == 1 else "them"
+        return _Verdict(
+            "left",
+            f"putting it back would write {_named(held)}, which loom keeps for an agent app, and recovery never writes such a file, so it changed nothing: {_where(holds)}",
+            holds,
+            settles=f"Check that {_named(held)} {'reads' if len(held) == 1 else 'read'} as you want: the next act of the same kind that writes {it} again settles this.",
         )
     over = [rel for rel in crossed if rel in holds and holds[rel][1]]
     if over:
@@ -1175,9 +1204,13 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
 
     said: list[str] = []
     for act_id, (_, e) in list(j.begun.items()):
-        v = _judge(root, history, e, j.crossing(act_id))
+        v = _judge(root, history, e, j.crossing(act_id), j.again.get(act_id, ()))
         if v.how == "left":
             said.append(f"left {act_id}: {v.why}")
+            continue
+        if v.how == "settled":
+            j.append(root, {"event": "aborted", "act": act_id, "when": stamp(), "why": "settled", "recovered": True})
+            said.append(f"settled {act_id}: {v.why}")
             continue
         for rel in e.get("files") or {}:
             for tmp in _temps(root, rel):
@@ -1265,7 +1298,7 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, str]]:
     out: list[tuple[str, list[str], str, str]] = []
     j = read_journal(root)
     for act_id, (_, e) in j.begun.items():
-        v = _judge(root, history, e, j.crossing(act_id))
+        v = _judge(root, history, e, j.crossing(act_id), j.again.get(act_id, ()))
         if v.how != "left":
             continue
         if not v.trusted:

@@ -403,10 +403,10 @@ def test_an_agent_app_s_mcp_file_keeps_its_texts_on_this_machine_and_none_in_the
     assert named == []
 
 
-def test_an_act_cut_short_on_an_mcp_file_is_put_back_from_this_machine_s_store(
+def test_an_act_left_for_a_file_of_an_agent_app_s_is_settled_by_a_later_act_of_its_kind_that_writes_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Recovery reads the texts kept beside the journal as it reads the history's, so an MCP file an act replaced comes back whole."""
+    """Recovery never writes a file loom keeps for an agent app: an act cut short on an MCP file and a note is left and said, with what settles it, rather than put back from this machine's store; a later act of another kind on the file leaves it so, and the next act of its own kind that writes the file settles it, so it is no longer said (R2-22)."""
     from loom import writes
     from loom.scan.quilt import load_quilt
     from tests.unit.test_write_safety import Died, dying_before_the_rename
@@ -421,10 +421,59 @@ def test_an_act_cut_short_on_an_mcp_file_is_put_back_from_this_machine_s_store(
             w.replace(".mcp.json", before.replace(b"loom", b"loom-elsewhere", 1))
             w.replace("notes.md", b"# Notes\n")
     restore()
-    assert (root / ".mcp.json").read_bytes() != before
+    cut = (root / ".mcp.json").read_bytes()
+    assert cut != before
     said = writes.recover(root, hist)
-    assert said and said[0].startswith("undid agents:"), said
-    assert (root / ".mcp.json").read_bytes() == before
+    assert len(said) == 1 and said[0].startswith("left agents:") and "which loom keeps for an agent app" in said[0], (
+        said
+    )
+    assert (root / ".mcp.json").read_bytes() == cut
+    ((kind, files, _, settles),) = writes.left(root, hist)
+    assert kind == "the agent layer's files" and files == [".mcp.json", "notes.md"]
+    assert settles.startswith("Check that .mcp.json reads as you want")
+    writes.put(root, hist, ".mcp.json", b'{"mcpServers": {}}\n', kind="restore")
+    assert len(writes.left(root, hist)) == 1
+    writes.put(root, hist, ".mcp.json", cut, kind="agents")
+    assert writes.left(root, hist) == []
+    (line,) = writes.recover(root, hist)
+    assert line.startswith("settled agents:") and line.endswith("a later act of its kind wrote .mcp.json again")
+    assert writes.recover(root, hist) == [] and (root / ".mcp.json").read_bytes() == cut
+
+
+def _files_for_apps() -> list[str]:
+    """A file of each kind loom keeps for each agent app: its MCP or settings file, its permission file, and a skill."""
+    from loom.ai.clients import CLIENTS
+
+    out = [rel for c in CLIENTS for rel in (c.file, c.permissions) if rel]
+    return out + [f"{c.skills}/draft/SKILL.md" for c in CLIENTS if c.skills]
+
+
+@pytest.mark.parametrize("target", [*_files_for_apps(), "config.toml"])
+def test_a_journal_line_that_would_have_recovery_write_a_file_kept_for_an_agent_app_is_left_and_said(
+    tmp_path: Path, target: str
+) -> None:
+    """The review's forged line (R2-22): an act named on two files, one holding the bytes the line claims as its after and one its before, reads as cut short half way. Where putting it back would write a file loom keeps for an agent app, which the app may hold its own shell out of, recovery leaves it and says so, and the file keeps its bytes; the person's config, which a shell able to write the journal can write directly, is put back as any file is."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    hist = load_quilt(root).history_dir
+    t = root / target
+    if not t.exists():
+        t.parent.mkdir(parents=True, exist_ok=True)
+        t.write_text("what the app reads\n")
+    now = t.read_bytes()
+    (root / "notes.md").write_text("a note\n")
+    forged = b"what the line would have recovery write\n"
+    _begun(root, "mv", {target: [writes.store(hist, forged), writes.store(hist, now)], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
+    said = writes.recover(root, hist)
+    if target == "config.toml":
+        assert said == ["undid mv:e0e0e0e0e0e0e0e0"] and t.read_bytes() == forged
+        return
+    assert len(said) == 1 and said[0].startswith("left mv:e0e0e0e0e0e0e0e0: putting it back would write"), said
+    assert t.read_bytes() == now and (root / "notes.md").read_bytes() == b"a note\n"
+    assert len(writes.left(root, hist)) == 1
 
 
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
@@ -1003,6 +1052,7 @@ def _begun(root: Path, kind: str, files: dict, look: dict | None = None) -> None
     line = {"event": "begin", "act": f"{kind}:e0e0e0e0e0e0e0e0", "kind": kind, "actor": "Tester", "by": "person", "when": "2026-11-24T00:00:00Z", "files": files, "edits": [], "records": []}  # fmt: skip
     if look is not None:
         line["look"] = look
+    (root / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
     with (root / JOURNAL).open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(line) + "\n")
 
@@ -1073,7 +1123,7 @@ CUTS = {
     "a tick finished": "finished",
     "an act left for a text the history lacks": "left",
     "a Keep put back, its edit opened again": "undid",
-    "an agent app's file, from this machine's store": "undid",
+    "an agent app's file, left rather than written": "left",
 }
 
 
@@ -1124,8 +1174,10 @@ def test_every_file_recovery_reads_in_the_quilt_is_held_from_agents_by_loom_and_
             if rel not in own and not rel.startswith(temps):
                 read.add(rel)
     assert said[0].startswith(f"{CUTS[which]} "), said
-    assert JOURNAL in read and any(rel.startswith(f"{load_quilt(root).config.history}/texts/") for rel in read)
     config = load_quilt(root).config
+    assert JOURNAL in read and (
+        CUTS[which] == "left" or any(rel.startswith(f"{config.history}/texts/") for rel in read)
+    )
     rules = claude_denies(config)
     for rel in sorted(read):
         why = denied_by(config, rel)

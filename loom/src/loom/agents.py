@@ -225,7 +225,7 @@ def _literal(path: str) -> str:
 def deny_documents(quilt: Quilt, paths: Iterable[str]) -> list[str]:
     """Add to `[agents] deny` what `places_to_deny` gives for the person's files `paths`, as `loom import` and `loom init --from` do for the paper they bring in.
 
-    The config is read as the act staging on this thread holds it, if one does, so a `main` set in the same act stands; the person's entries are kept as written, a refused one among them. Where the quilt has an agent layer, its permission files are written with the entries in the same act (`write_permissions`), so Claude Code refuses an agent's own edit there from the start; one loom cannot write is left, and `loom lint` says it lags. Returns the entries added: none when everything is covered, or when the config is laid out in a way loom cannot edit (`ConfigRefused`).
+    The config is read as the act staging on this thread holds it, if one does, so a `main` set in the same act stands; the person's entries are kept as written, a refused one among them. The permission files are not written here: the caller writes them once its act is done (`write_denies`), since recovery never writes a file loom keeps for an agent app, and one written inside the act would leave that act, cut short, half made. Returns the entries added: none when everything is covered, or when the config is laid out in a way loom cannot edit (`ConfigRefused`).
     """
     import tomllib
 
@@ -242,18 +242,38 @@ def deny_documents(quilt: Quilt, paths: Iterable[str]) -> list[str]:
     if not added or not isinstance(written, list):
         return []
     try:
-        config = set_values(quilt, {"agents.deny": [*written, *added]})
+        set_values(quilt, {"agents.deny": [*written, *added]})
     except ConfigRefused:
         return []
-    if (quilt.root / AI).is_dir():
-        from loom.ai.layout import SHELL, variant, write_permissions
-        from loom.writes import WriteRefused
-
-        try:
-            write_permissions(quilt.root, config, shell=variant(quilt.root) == SHELL)
-        except WriteRefused:
-            pass  # a permission file loom cannot write stays as it was, and lint says it lags
     return added
+
+
+def write_denies(root: Path) -> list[str]:
+    """Write the quilt's permission files from its config as it stands, each in an act of its own, so an app reading one refuses an agent's own edit in the places `[agents] deny` names.
+
+    Call it once the act that changed the list is done, never inside it: recovery never writes a file loom keeps for an agent app (`writes._judge`).
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+
+    Returns
+    -------
+    list of str
+        The files written, quilt-relative: none where the quilt has no agent layer, where each was current, or where one cannot be written, which stays as it was and `loom lint` says lags.
+    """
+    if not (root / AI).is_dir():
+        return []
+    from loom.ai.layout import SHELL, variant, write_permissions
+    from loom.scan.quilt import load_quilt
+    from loom.writes import WriteRefused
+
+    try:
+        written, _ = write_permissions(root, load_quilt(root).config, shell=variant(root) == SHELL)
+    except WriteRefused:
+        return []
+    return list(written)
 
 
 def always_denied(config: QuiltConfig, why: str) -> bool:
