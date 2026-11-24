@@ -457,6 +457,8 @@
 	.block {
 		border-top: 1px solid var(--rule);
 		padding: 8px 14px;
+		/* a row a link scrolls to stops below the held bar, which a hash's own scroll would put it under */
+		scroll-margin-top: 64px;
 	}
 	.line {
 		display: flex;

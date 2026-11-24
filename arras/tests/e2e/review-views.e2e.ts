@@ -387,6 +387,19 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	expect(await tasks.allInnerTexts()).toEqual(before);
 });
 
+test('a link to one block\'s row lands with the row in view below the held bar, at the top of the list as further down', async ({ page }) => {
+	await open(page);
+	const ids = await page.locator('[data-testid="your-changes"] [data-testid="review-row"]').evaluateAll((rows) => rows.map((r) => r.id));
+	expect(ids.length).toBeGreaterThan(3);
+	for (const id of [ids[0], ids[1], ids[ids.length - 1]]) {
+		await page.goto(`/review?fixture=round6#${id}`);
+		const row = page.locator(`#${id}`);
+		await expect(row).toBeInViewport();
+		const bar = page.getByTestId('review-bar').first();
+		await expect.poll(async () => (await row.boundingBox())!.y - ((await bar.boundingBox())!.y + (await bar.boundingBox())!.height)).toBeGreaterThanOrEqual(0);
+	}
+});
+
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
