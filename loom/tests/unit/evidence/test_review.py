@@ -15,7 +15,7 @@ from loom.evidence.web import DraftWeb, Here
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
-from tests.unit._quilts import track_edits
+from tests.unit._quilts import opened
 
 PERSON = Who("person", "A. Author")
 AGENT = Who("agent", "Probe Agent")
@@ -45,9 +45,7 @@ def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("LOOM_FIXED_TIME", "2026-11-21T10:00:00Z")
     root = tmp_path / "q"
     ok("init", str(root), "--demo", cwd=tmp_path)
-    # the draft is rewritten here, which a quilt tracking edits would list as changes waiting on the person
-    track_edits(root, on=False)
-    # and the demo ships a suggested edit of its own
+    # the demo ships a suggested edit of its own
     (root / ".loom/records/edits/log.jsonl").unlink()
     (root / DOC).write_text(MAIN, encoding="utf-8")
     (root / "lean").mkdir()
@@ -258,7 +256,7 @@ def test_a_read_under_the_same_scan_and_files_answers_from_the_last(
     from loom.scan.quilt import save_author
 
     save_author("A. Author")
-    track_edits(root)
+    opened(root)  # the paper open to agents, so an edit in it is listed
     take(load_quilt(root), "A. Author")
     _edit(root, "on a tree vanishes", "on a forest vanishes")
     held, calls = _served(root, monkeypatch)
@@ -322,7 +320,7 @@ def test_the_proposed_edits_are_the_changes_a_publication_lists_and_differ_only_
     from loom.scan.quilt import save_author
 
     save_author("A. Author")
-    track_edits(root)
+    opened(root)  # the paper open to agents, so an edit in it is listed
     take(load_quilt(root), "A. Author")
     _edit(root, "on a tree vanishes", "on a forest vanishes")
     ok("suggest", _key(root, "def:connected"), "--with", "Every quiver", "--quote", "A quiver", "--as", "Probe Agent", cwd=root)  # fmt: skip
