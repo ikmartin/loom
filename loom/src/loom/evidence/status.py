@@ -538,17 +538,14 @@ def status(
         causes = causes_of(attestation, web, here, now) + changed
         found = replace(found, attestation=attestation.id, unattested_notation=_rows(never))
         attested_nodes = [m["node"] for m in attestation.get("closure", []) if "node" in m]
-        uses = itself + [k[1] for k in now if k[0] == "node"] + attested_nodes
-        # what the gate is asked of the current record, kept where it reads changed too, for a list of what stands before (`own_needs`)
-        asked: tuple[Any, ...] = (
-            (uses, found.relative_to, _seen | {name}, cites, here, rested(current, subject))
-            if current is not None
-            else ()
-        )
+        uses = itself + [k[1] for k in now if k[0] == "node"]
+        rest = (found.relative_to, _seen | {name}, cites, here, rested(current, subject)) if current is not None else ()
         if causes:
-            return replace(found, lean="changed", causes=tuple(causes), asked=asked)
+            # what the gate would ask once it is attested again, over the closure as it reads now: a node only the old attestation named is not asked (`own_needs`)
+            return replace(found, lean="changed", causes=tuple(causes), asked=(uses, *rest) if rest else ())
         if current is None:
             return replace(found, lean="rerun")
+        asked: tuple[Any, ...] = (uses + attested_nodes, *rest)
         waiting = gate(evidence, web, asked[0], asked[1], lean_now, *asked[2:])
         found = replace(found, waiting_on=waiting, asked=asked)
         if not proves(current, subject):

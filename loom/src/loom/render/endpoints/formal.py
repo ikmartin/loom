@@ -68,6 +68,7 @@ class _Planner:
         except (OSError, ValueError):
             manifest = {}
         self.manifest: dict[str, Any] = manifest
+        self.root = root
         self.drafts = drafts(_scan(root), manifest, root)
         self.library = LibraryWeb(root)
         self.web = Joined(self.drafts.web, self.library)
@@ -116,7 +117,7 @@ class _Planner:
 
     def before(self, target: str, found: Any) -> list[Any]:
         """What stands before `target` reads formalized, from the gate's own needs (`plan.asked_of`) of its Lean, or of the Lean the request will make (`plan.asked`, `status.needs`), each as the person reads it (`plan.needed`), the target's own Lean first."""
-        from loom.evidence.acts import attest_refusal
+        from loom.evidence.acts import attest_refusal, unreadable
         from loom.evidence.plan import asked, asked_of, needed, target_need
         from loom.evidence.status import Waiting, needs
         from loom.evidence.web import Here
@@ -149,8 +150,12 @@ class _Planner:
             return there.name, standing, self.elaborated(standing), refusal(there)
 
         standing = self.drafts.standing(target)
-        mine = target_need(target, standing, self.elaborated(standing), refusal(here), self.web.texts)
-        return mine + [n for n in needed(leaves, own, self.web.texts) if n not in mine]
+
+        def paper(node: str) -> str | None:
+            return unreadable(self.root, node)
+
+        mine = target_need(target, standing, self.elaborated(standing), refusal(here), self.web.texts, paper)
+        return mine + [n for n in needed(leaves, own, self.web.texts, paper) if n not in mine]
 
     def row(self, key: str) -> dict[str, Any]:
         from loom.evidence.webview import node_row

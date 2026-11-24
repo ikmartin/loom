@@ -71,11 +71,72 @@ def test_a_nodes_notation_is_unknown_until_its_works_macros_are_read(root: Path)
     assert LibraryWeb(root).notation(Here("node", "tq-00K3")) is None
 
 
-def test_a_file_that_does_not_read_is_no_text(root: Path) -> None:
+def test_a_file_that_does_not_read_is_no_text_and_what_uses_it_carries_it_so(root: Path) -> None:
     _file(root, "tq-00A4").write_text("not a node\n", encoding="utf-8")
     web = LibraryWeb(root)
     assert web.subject(Here("node", "tq-00A4")) is None
-    assert web.closure(Here("node", "tq-00K3")) == {}
+    assert web.closure(Here("node", "tq-00K3")) == {("node", "tq-00A4"): None}
+
+
+class _Known(LibraryWeb):
+    """The library's web with a node's notation known and empty, as its work's macros make it for a work with none."""
+
+    def notation(self, here: Here) -> dict[str, str] | None:
+        return {} if self.file(here.name) is not None else None
+
+
+def test_a_use_whose_node_is_gone_is_carried_with_no_text_and_nothing_over_it_reads_formalized(root: Path) -> None:
+    """E-45: tq-00K3 uses tq-00A4; both compared, tq-00K3's Lean attested, it reads formalized; tq-00A4's file deleted, as deleting its work deletes it: tq-00K3 reads changed, tq-00A4 its cause with no text, and its word is refused naming it; put back, it reads formalized again."""
+    from loom.evidence.acts import ActRefused, attest, check
+
+    for node in ("tq-00K3", "tq-00A4"):
+        s = LibraryWeb(root).subject(Here("node", node))
+        assert s is not None
+        check(root, node, s.hash, PERSON)
+    k3 = LibraryWeb(root).subject(Here("node", "tq-00K3"))
+    assert k3 is not None
+    declaration = {"name": "k3", "kind": "axiom", "role": "states", "names": {"node": "tq-00K3"}, "statement": h("5"), "axioms": [], "sorry": False}  # fmt: skip
+    lean = write(root, "lean", LOOM, on=k3, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": h("2")}, files={"lean/A.lean": h("8")}, declarations=[declaration], assumed=[], uses=[], replay={"tool": "x", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+    here = Here("node", "tq-00K3")
+    attest(root, _Known(root), here, lean.id, PERSON, lean_now=lambda r: True)
+    read = lambda: status(replay(root), _Known(root), here, lean_now=lambda r: True)  # noqa: E731
+    assert read().lean == "formalized"
+    kept = _file(root, "tq-00A4").read_bytes()
+    _file(root, "tq-00A4").unlink()
+    assert _Known(root).closure(here) == {("node", "tq-00A4"): None}
+    gone = read()
+    assert gone.lean == "changed" and [(c.key, c.now) for c in gone.causes] == [(("node", "tq-00A4"), None)]
+    with pytest.raises(ActRefused, match="tq-00A4"):
+        attest(root, _Known(root), here, lean.id, PERSON, lean_now=lambda r: True)
+    _file(root, "tq-00A4").write_bytes(kept)
+    assert read().lean == "formalized"
+
+
+def test_a_changed_result_is_asked_over_its_closure_as_it_reads_now_not_what_only_its_old_attestation_named(
+    root: Path,
+) -> None:
+    """E-46: tq-00K5 uses tq-00K3, which uses tq-00A4; tq-00K5 attested over both; tq-00K3 rewritten to use nothing and tq-00A4 deleted: tq-00K5 reads changed, and what the gate would ask once it is attested again names tq-00K3, never tq-00A4."""
+    from loom.evidence.acts import attest, check
+    from loom.evidence.status import own_needs
+
+    _rewrite(root, "tq-00K5", 'uses = ["tq-00A4"]', 'uses = ["tq-00K3"]')
+    for node in ("tq-00K5", "tq-00K3", "tq-00A4"):
+        s = LibraryWeb(root).subject(Here("node", node))
+        assert s is not None
+        check(root, node, s.hash, PERSON)
+    k5 = LibraryWeb(root).subject(Here("node", "tq-00K5"))
+    assert k5 is not None
+    declaration = {"name": "k5", "kind": "axiom", "role": "states", "names": {"node": "tq-00K5"}, "statement": h("5"), "axioms": [], "sorry": False}  # fmt: skip
+    lean = write(root, "lean", LOOM, on=k5, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": h("2")}, files={"lean/A.lean": h("8")}, declarations=[declaration], assumed=[], uses=[], replay={"tool": "x", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+    here = Here("node", "tq-00K5")
+    attest(root, _Known(root), here, lean.id, PERSON, lean_now=lambda r: True)
+    _rewrite(root, "tq-00K3", 'uses = ["tq-00A4"]\n', "")
+    _file(root, "tq-00A4").unlink()
+    web, ev = _Known(root), replay(root)
+    found = status(ev, web, here, lean_now=lambda r: True)
+    assert found.lean == "changed"
+    asked = [w.key for w in own_needs(ev, web, found, lambda r: True)]
+    assert ("node", "tq-00K3") in asked and ("node", "tq-00A4") not in asked
 
 
 def test_a_quilt_with_no_library_answers_nothing(tmp_path: Path) -> None:

@@ -53,8 +53,8 @@ class Web(Protocol):
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
         """The hash now of what `key` names, read as `near` reads it; None when nothing answers or two texts could be meant."""
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
-        """Every subject the statement at `here` uses, and what those use in turn, with its hash now."""
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
+        """Every subject the statement at `here` uses, and what those use in turn, with its hash now; None for a library node a statement uses that the library no longer holds, which nothing answers for."""
 
     def notation(self, here: Here) -> dict[str, str] | None:
         """Each command a person defined that the statement at `here` or its closure is typeset with, by the hash of its definition; None when this web cannot say, as for a library node before its work's macros are read."""
@@ -129,8 +129,9 @@ class LibraryWeb:
         got = self.file(name)
         return [u for u in got[1].uses if is_node(u, "statement")] if got else []
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
-        out: dict[tuple[str, str], str] = {}
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
+        """What a node's statement uses, statements and stubs, and what those use in turn; a use whose node the library no longer holds is carried with no text, so what rests on it waits and says why."""
+        out: dict[tuple[str, str], str | None] = {}
         if here.kind != "node":
             return out
         seen, todo = {here.name}, self._uses(here.name)
@@ -140,8 +141,8 @@ class LibraryWeb:
                 continue
             seen.add(name)
             got = self.file(name)
+            out[("node", name)] = got[0] if got is not None else None
             if got is not None:
-                out[("node", name)] = got[0]
                 todo.extend(self._uses(name))
         return out
 
@@ -187,7 +188,7 @@ class Joined:
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
         return (self.library if key[0] == "node" else self.draft).resolve(key, near)
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
         return self._for(here).closure(here)
 
     def notation(self, here: Here) -> dict[str, str] | None:
@@ -419,10 +420,10 @@ class DraftWeb:
         node = self._node(here)
         return [Here("block", k) for k in rests_on(self.result, node.key, self._keys)] if node is not None else []
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
         """What the statement at `here` uses, and what those use in turn, by label with each one's hash now; a result with no label is left out, since nothing could name it."""
         seen: set[str] = {here.name}
-        out: dict[tuple[str, str], str] = {}
+        out: dict[tuple[str, str], str | None] = {}
         todo = self.uses(here)
         while todo:
             step = todo.pop(0)

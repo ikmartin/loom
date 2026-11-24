@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from loom.evidence.acts import attest_refusal
+from loom.evidence.acts import attest_refusal, unreadable
 from loom.evidence.log import Evidence, log_path, parse, replay
 from loom.evidence.plan import STATED, Item, Need, asked, asked_of, elaborated, needed, plan, target_need
 from loom.evidence.status import Status, closure_now, needs, statements_of, status
@@ -22,6 +22,8 @@ from loom.library.node import Node, node_bytes
 from loom.library.store import folder
 
 REF = "tq-00RF-ref"
+#: A work loom holds only as an entry, with no document to read or compare its results with.
+BARE = "tq-00RB-ref"
 T = Here("block", "T")
 LABEL = "t:main"
 
@@ -89,6 +91,7 @@ class World:
         nodes = folder(root)
         nodes.mkdir(parents=True)
         (nodes / f"{REF}.node").write_bytes(node_bytes(Node(id=REF, taxon="reference", pdf=h("9"), body="@article{R,\n  title = {R},\n}\n")))  # fmt: skip
+        (nodes / f"{BARE}.node").write_bytes(node_bytes(Node(id=BARE, taxon="reference", body="@article{B,\n  title = {B},\n}\n")))  # fmt: skip
         self.ids = [f"tq-000{i}" for i in range(self.rng.randint(2, 6))]
         self.cites: list[str] = []
         #: a node whose own Lean uses the target's, so the target's, resting on it, comes round
@@ -98,12 +101,16 @@ class World:
             uses = tuple(x for x in self.ids[:i] if self.rng.random() < 0.35)
             stub = self.rng.random() < 0.2
             taxon = "definition" if self.rng.random() < 0.35 else "lemma"
-            self.write(Node(id=n, taxon=taxon, source=REF, pages="1", uses=uses, body="" if stub else f"Text of {n}."))
+            # most of a work with its document, some of a work with none, a few naming no work
+            r = self.rng.random()
+            source = REF if r < 0.8 else BARE if r < 0.9 else None
+            self.write(Node(id=n, taxon=taxon, source=source, pages="1" if source else None, uses=uses, body="" if stub else f"Text of {n}."))  # fmt: skip
         changed = []
         for n in self.ids:
             node, s = self.nodes[n], self.web().subject(Here("node", n))
             assert s is not None
-            if not node.empty and self.rng.random() < 0.6:
+            # compared only where `check` takes it: a node of a work with its document
+            if not node.empty and node.source == REF and self.rng.random() < 0.6:
                 self.compare(n)
             # a node over a stub has no Lean here: reading the stub would change what its attestation names
             over_stub = any(self.nodes[k].empty for _, k in self.web().closure(Here("node", n)))
@@ -213,8 +220,11 @@ class World:
                 found = standing[key[1]]
                 return key[1], found, elaborated(ev, found, now), refusal(Here("node", key[1]))
 
-            mine = target_need("T", self.status("T"), elaborated(ev, self.status("T"), now), refusal(T), web.texts)
-            return mine + [n for n in needed(leaves, own, web.texts) if n not in mine]
+            def paper(node: str) -> str | None:
+                return unreadable(self.root, node)
+
+            mine = target_need("T", self.status("T"), elaborated(ev, self.status("T"), now), refusal(T), web.texts, paper)  # fmt: skip
+            return mine + [n for n in needed(leaves, own, web.texts, paper) if n not in mine]
 
         self.found = plan(["T"], [], item, uses, before)
         return self.found.before
@@ -223,6 +233,9 @@ class World:
         """Do one entry as the list says: the person's now, the agent's after (a Lean written, which the person attests in a later round)."""
         if need.why == "missing":
             self.write(self.nodes[need.key])
+        elif need.why == "no-document":
+            # the work's document filed under it, as the library's intake files it
+            (folder(self.root) / f"{BARE}.node").write_bytes(node_bytes(Node(id=BARE, taxon="reference", pdf=h("9"), body="@article{B,\n  title = {B},\n}\n")))  # fmt: skip
         elif need.why == "not-read":
             self.write(Node(**{**self.nodes[need.key].__dict__, "body": f"Text of {need.key}."}))
             self.compare(need.key)
@@ -282,7 +295,7 @@ def test_what_the_plan_names_before_is_what_the_gate_asks_both_ways(seeds: range
         world, rounds, left, after = _done(tmp_path / f"{seed}", seed, None)
         # the list names something exactly while the gate keeps the target from reading formalized
         assert (left == []) == (after.lean == "formalized"), (seed, left, after.waiting_on)
-        if not world.cites and world.round is None:
+        if not world.cites and world.round is None and all(n.source for n in world.nodes.values()):
             assert after.lean == "formalized", (seed, rounds, left, after.waiting_on)
         for need in [*left, *(n for r in rounds for n in r)]:
             seen[need.why] = seen.get(need.why, 0) + 1
@@ -292,7 +305,9 @@ def test_what_the_plan_names_before_is_what_the_gate_asks_both_ways(seeds: range
             _, _, left, without = _done(tmp_path / f"{seed}-skip", seed, skip)
             assert without.lean != "formalized" and left, (seed, rounds[last][skip[1]])
     # every kind of thing the random libraries can ask is asked somewhere
-    assert {"missing", "not-read", "not-checked", "cite", "attest", "cycle"} <= set(seen), seen
+    assert {"missing", "not-read", "not-checked", "no-document", "no-source", "cite", "attest", "cycle"} <= set(seen), (
+        seen
+    )
 
 
 #: The person, and the agent that reads a stub, as the acts take them.
@@ -301,11 +316,22 @@ READER = Who("agent", "Reader (Agent)")
 
 
 def _act(world: World, need: Need) -> None:
-    """The act an entry offered `now` names, through the function its endpoint calls: compare a node (`library-check`), attest a Lean (`formal-attest`), have an agent read a stub (its text written and recorded `digested`, as the node store's fill will); a node deleted is put back as the library's undo puts it."""
+    """The act an entry offered `now` names, through the function its endpoint calls: compare a node (`library-check`), attest a Lean (`formal-attest`), file its work's document under the work (`library-take`, `intake.take`), have an agent read a stub (its text written and recorded `digested`, as the node store's fill will); a node deleted is put back as the library's undo puts it."""
     from loom.evidence import acts
 
     if need.why == "missing":
         world.write(world.nodes[need.key])
+        return
+    if need.why == "no-document":
+        from loom.library import intake
+
+        node = world.nodes[need.key]
+        assert node.source is not None, need
+        pdf = world.root / "dropped.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n")
+        [row] = intake.take(world.root, [intake.Item(path=pdf, work=node.source, force=True)], by="A. Author")
+        # another node of the same work may have had it filed already this round
+        assert row.state in ("added", "here"), (need, row)
         return
     if need.why == "not-read":
         # an agent reads it: the text written as the node store's fill writes it, and recorded through the one writer of these records

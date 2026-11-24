@@ -77,6 +77,16 @@ def document_of(root: Path, found: Node) -> dict[str, Any] | None:
     return {"ref": work.id, **held, **({"pages": found.pages} if found.pages else {})}
 
 
+def unreadable(root: Path, node: str) -> str | None:
+    """Why a node cannot be read or compared against its paper now, as `check` and a reading would refuse it (`document_of`): `no-source` where it names no work, `no-document` where its work holds neither PDF nor TeX source; None where it can be, or where the library holds no such node."""
+    got = LibraryWeb(root).file(node)
+    if got is None:
+        return None
+    if not got[1].source:
+        return "no-source"
+    return "no-document" if document_of(root, got[1]) is None else None
+
+
 def _write(root: Path, kind: str, by: Who, **fields: Any) -> Record:
     try:
         return write(root, kind, by, **fields)

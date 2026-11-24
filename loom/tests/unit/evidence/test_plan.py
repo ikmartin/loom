@@ -112,7 +112,7 @@ def test_each_thing_the_gate_asks_is_named_with_when_the_person_can_do_it() -> N
     leaves += [Waiting(("label", "lem:two"), "unknown"), Waiting(("label", "lem:none"), "unknown"), Waiting(("node", "tq-0GNE"), "unknown")]  # fmt: skip
     leaves += [Waiting(("node", k), "unattested") for k in own] + [Waiting(("node", "gone"), "unattested")]
     texts = {("label", "lem:two"): {"sha256:" + "1" * 64, "sha256:" + "2" * 64}}
-    found = needed(leaves, lambda key: (key[1], *own[key[1]], lambda: None) if key[1] in own else None, lambda key: texts.get(key, set()))  # fmt: skip
+    found = needed(leaves, lambda key: (key[1], *own[key[1]], lambda: None) if key[1] in own else None, lambda key: texts.get(key, set()), lambda n: None)  # fmt: skip
     assert found == [
         Need("Cal14", "cite", "waiting", "cite"),
         Need("stub", "not-read", "now"),
@@ -144,16 +144,37 @@ def test_a_word_is_offered_now_only_where_formal_attest_would_take_it_else_what_
     gone = Unattestable("changed", "", gone=(("label", "lem:c"), ("node", "tq-0GNE")))
     short = Unattestable("unchecked", "", unread=("tq-0001",), unchecked=("tq-0002",), cites=("Cal14 Theorem 2",))
     texts = lambda key: two.get(key, set())  # noqa: E731
-    assert target_need("thm:u", moved, True, lambda: gone, texts) == [Need("lem:c", "ambiguous", "now", "label"), Need("tq-0GNE", "missing", "now", "node")]  # fmt: skip
-    assert target_need("thm:u", moved, True, lambda: None, texts) == [Need("thm:u", "attested-changed", "now")]
-    assert target_need("thm:u", fresh, True, lambda: short, texts) == [Need("tq-0001", "not-read", "now"), Need("tq-0002", "not-checked", "now"), Need("Cal14 Theorem 2", "cite", "waiting", "cite")]  # fmt: skip
-    assert target_need("thm:u", fresh, True, lambda: Unattestable("no-lean", ""), texts) == [Need("thm:u", "attest", "after")]  # fmt: skip
+    none = lambda n: None  # noqa: E731
+    assert target_need("thm:u", moved, True, lambda: gone, texts, none) == [Need("lem:c", "ambiguous", "now", "label"), Need("tq-0GNE", "missing", "now", "node")]  # fmt: skip
+    assert target_need("thm:u", moved, True, lambda: None, texts, none) == [Need("thm:u", "attested-changed", "now")]
+    assert target_need("thm:u", fresh, True, lambda: short, texts, none) == [Need("tq-0001", "not-read", "now"), Need("tq-0002", "not-checked", "now"), Need("Cal14 Theorem 2", "cite", "waiting", "cite")]  # fmt: skip
+    assert target_need("thm:u", fresh, True, lambda: Unattestable("no-lean", ""), texts, none) == [Need("thm:u", "attest", "after")]  # fmt: skip
     # E-43: attested, its notation not yet to be shown
     unknown = Status(on, lean="unattested", lean_record="ev-1", attestation="ev-2", unattested_notation=None)
-    assert target_need("thm:u", unknown, True, lambda: None, texts) == [Need("thm:u", "attest", "after")]
+    assert target_need("thm:u", unknown, True, lambda: None, texts, none) == [Need("thm:u", "attest", "after")]
     # the same for a result the target's Lean rests on
     leaf = [Waiting(("node", "tq-0003"), "unattested")]
-    assert needed(leaf, lambda key: ("tq-0003", moved, True, lambda: gone), texts) == target_need("x", moved, True, lambda: gone, texts)  # fmt: skip
+    assert needed(leaf, lambda key: ("tq-0003", moved, True, lambda: gone), texts, none) == target_need("x", moved, True, lambda: gone, texts, none)  # fmt: skip
+
+
+def test_a_node_nothing_can_be_read_against_is_named_for_why_never_offered_to_read_or_compare() -> None:
+    """A node whose work holds no document: that document to add, now, in place of reading or comparing it; one that names no work waits until it is given one, and nothing is offered now (`acts.unreadable`)."""
+    from loom.evidence.acts import Unattestable
+    from loom.evidence.plan import Need, needed, target_need
+    from loom.evidence.status import Waiting
+
+    cannot = {"tq-00B7": "no-document", "tq-00C1": "no-source"}
+    paper = cannot.get
+    leaves = [Waiting(("node", "tq-00B7"), "stub"), Waiting(("node", "tq-00C1"), "unchecked"), Waiting(("node", "tq-00K3"), "unchecked")]  # fmt: skip
+    assert needed(leaves, lambda key: None, lambda key: set(), paper) == [
+        Need("tq-00B7", "no-document", "now"),
+        Need("tq-00C1", "no-source", "waiting"),
+        Need("tq-00K3", "not-checked", "now"),
+    ]
+    on = Subject("label", "thm:v", "sha256:" + "0" * 64)
+    short = Unattestable("unchecked", "", unread=("tq-00B7",), unchecked=("tq-00C1",))
+    fresh = Status(on, lean="unattested", lean_record="ev-1")
+    assert target_need("thm:v", fresh, True, lambda: short, lambda key: set(), paper) == [Need("tq-00B7", "no-document", "now"), Need("tq-00C1", "no-source", "waiting")]  # fmt: skip
 
 
 def test_every_reason_the_gate_gives_is_an_entry_and_one_it_does_not_give_is_refused() -> None:
@@ -186,6 +207,7 @@ def test_every_reason_the_gate_gives_is_an_entry_and_one_it_does_not_give_is_ref
                             [leaf],
                             lambda key, st=standing, r=refused: None if st is None else ("x", *st, lambda: r),  # type: ignore[misc]
                             lambda key, b=borne: b,  # type: ignore[misc]
+                            lambda n: None,
                         )
                         assert found, (leaf, standing, refused)
                         for n in found:
