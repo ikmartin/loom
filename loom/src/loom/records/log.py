@@ -270,10 +270,10 @@ def _annotation(event: dict[str, Any]) -> Annotation:
 
 def _names_a_node(event: dict[str, Any]) -> bool:
     """Whether a created event is a mark to digest naming the stub it locates by a node's id."""
-    from loom.evidence.subjects import NODE
+    from loom.evidence.subjects import is_node
 
     node = event.get("node")
-    return event.get("purpose") in PURPOSES and isinstance(node, str) and NODE.fullmatch(node) is not None
+    return event.get("purpose") in PURPOSES and is_node(node)
 
 
 def _gap(given: Any) -> list[float] | None:

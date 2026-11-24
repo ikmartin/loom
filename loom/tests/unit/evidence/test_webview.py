@@ -365,3 +365,81 @@ def test_a_row_carries_how_its_result_stands_never_a_bare_word(root: Path) -> No
         "role": "proved",
         "waiting_on": [{"cite": "Calloway14 Theorem 2.1", "why": "unknown"}],
     }
+
+
+# ---- the library's results ------------------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def library(root: Path) -> Path:
+    """The demo quilt with the spec's nine example nodes in its library: a definition, two results that use it, one with a proof, and a stub of another work."""
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    return root
+
+
+def test_the_library_lists_its_statements_by_work_with_how_each_reads_its_paper(library: Path) -> None:
+    d = _d(library)
+    assert d.scope("library", None) == ["tq-00A4", "tq-00K3", "tq-00K5", "tq-00B7"]
+    row = d.row("tq-00K3")
+    assert row["name"] == "lemma 3.2" and row["title"] == "Test lemma" and row["taxon"] == "lemma"
+    assert row["source"] == {"ref": "tq-00A1-ref", "short": None} and row["paper"] == row["reading"] == "unchecked"
+    assert d.row("tq-00B7")["reading"] == "stub"
+    listed = webview.listing(d, "library", None)
+    assert [s["head"] for s in listed["sections"]] == ["library"] and listed["count"] == 4
+    [first, second] = listed["sections"][0]["groups"]
+    assert (first["group"], first["n"], "rows" in first) == ("tq-00A1-ref", 3, False)
+    assert (second["group"], second["n"]) == ("tq-00B1-ref", 1)
+    # the second work's one result is a stub, and the demo's own works hold no statement: of every work but the first, nothing is read
+    assert "tq-00B1-ref" in d.works and listed["undigested"] == len(d.works) - 1
+
+
+def test_everything_holds_the_drafts_and_the_library_and_a_works_group_opens(library: Path) -> None:
+    d = _d(library)
+    listed = webview.listing(d, "all", None, opened=["tq-00A1-ref"])
+    assert [s["head"] for s in listed["sections"]] == ["drafts", "library"]
+    opened = listed["sections"][1]["groups"][0]
+    assert [r["result"] for r in opened["rows"]] == ["tq-00A4", "tq-00K3", "tq-00K5"]
+    assert webview.group(d, "all", None, "tq-00A1-ref") == {"group": "tq-00A1-ref", "n": 3, "rows": opened["rows"]}
+
+
+def test_a_library_results_card_draws_its_body_what_it_points_at_and_what_uses_it(library: Path) -> None:
+    d = _d(library)
+    card = webview.focus(d, "library", None, "tq-00K3")
+    assert card["statement"]["body"].startswith("Let $W$ be a widget") and card["statement"]["macros"] is None
+    assert card["statement"]["points"] == {"tq-00A4": {"name": "definition 2.1", "number": "2.1", "paper": "unchecked"}}
+    assert [r["result"] for r in card["uses"]["statement"]] == ["tq-00A4"]
+    assert [r["result"] for r in card["uses"]["proof"]] == ["tq-00A4"]
+    assert card["relative_to"] is None and card["rests_on"] == []
+    used = webview.focus(d, "library", None, "tq-00A4")["used_by"]["rows"]
+    assert [r["result"] for r in used] == ["tq-00K3", "tq-00K5"]
+    fold = webview.focus(d, "library", None, "tq-00K3", more=True)["more"]
+    assert fold["proofs"] == [{"where": {"ref": "tq-00A1-ref", "short": None, "pages": "12-13"}, "uses": [d.row("tq-00A4")]}]  # fmt: skip
+
+
+def test_an_anchor_a_body_points_at_draws_as_the_number_its_source_prints(library: Path) -> None:
+    from loom.library.store import folder
+
+    path = folder(library) / "tq-00K5.node"
+    path.write_text(path.read_text(encoding="utf-8").replace("origin.", "origin, as in \\eqref{tq-00K3-eq00}."), encoding="utf-8")  # fmt: skip
+    assert webview.focus(_d(library), "library", None, "tq-00K5")["statement"]["points"]["tq-00K3-eq00"] == {"number": "3.3"}  # fmt: skip
+
+
+def test_search_and_the_graph_reach_the_library(library: Path) -> None:
+    d = _d(library)
+    found = webview.search(d, "library", None, "widget")
+    assert {h["row"]["result"] for h in found["hits"]} == {"tq-00A4", "tq-00K3", "tq-00K5"}
+    named = next(h for h in found["hits"] if h["row"]["result"] == "tq-00A4")
+    assert named["snippet"] is None, "Widget is the definition's title"
+    drawn = webview.graph(d, "library", None, "tq-00A4")
+    assert [r["result"] for r in drawn["columns"]["used_by"]] == ["tq-00K3", "tq-00K5"]
+    assert {"from": "tq-00K3", "to": "tq-00A4", "proof": False} in drawn["edges"]
+
+
+def test_a_draft_scope_holds_no_library_result_until_citations_reach_one(library: Path) -> None:
+    d = _d(library)
+    assert not any(d.is_library(k) for k in d.scope("draft", DOC) + d.scope("deps", DOC))

@@ -11,7 +11,8 @@ from loom.evidence.asks import ask, open_asks, say, standing
 from loom.evidence.log import replay as replay_evidence
 from loom.evidence.log import write
 from loom.evidence.subjects import Subject, Who
-from loom.evidence.web import Blank, Here
+from loom.evidence.web import Here
+from tests.unit.evidence._nothing import Nothing
 
 H = "sha256:" + "a" * 64
 PERSON = Who("person", "A. Author")
@@ -25,7 +26,7 @@ def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-class Library(Blank):
+class Library(Nothing):
     """A web that knows some nodes have bodies and some works hold documents."""
 
     def __init__(self, bodied: set[str] = frozenset(), held: set[tuple[str, str]] = frozenset()) -> None:  # type: ignore[assignment]
@@ -38,8 +39,8 @@ class Library(Blank):
         return (ref, want) in self.held
 
 
-def _standing(root: Path, made: asks.Ask, web: Blank | None = None, **kw):  # type: ignore[no-untyped-def]
-    return standing(asks.replay(root).asks[made.id], replay_evidence(root), web or Blank(), **kw)
+def _standing(root: Path, made: asks.Ask, web: Nothing | None = None, **kw):  # type: ignore[no-untyped-def]
+    return standing(asks.replay(root).asks[made.id], replay_evidence(root), web or Nothing(), **kw)
 
 
 def test_a_question_closes_by_its_answer(root: Path) -> None:
@@ -270,3 +271,15 @@ def test_the_agents_commands_are_agents_and_their_tools_read_or_write(tmp_path: 
         "tasks withdraw": "write",
     }.items():
         assert command in AGENT_COMMANDS and ACTS[command] == act, command
+
+
+def test_an_ask_refused_is_said_before_anything_is_written(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from loom.evidence.asks import refusal
+
+    monkeypatch.setenv("LOOM_FIXED_TIME", "2026-11-21T10:00:00Z")
+    person = Who("person", "A. Author")
+    assert (
+        refusal(person, "read", "agent", {"node": "tq-00B7"}, origin=["drafting/main.tex"], nodes=["tq-00B7"]) is None
+    )
+    assert refusal(person, "read", "agent", {"node": "tq-00B7"}, origin=["drafting/main.tex"], nodes=["not a node"])
+    assert not (tmp_path / ".loom").exists()

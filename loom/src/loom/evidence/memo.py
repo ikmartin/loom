@@ -62,10 +62,16 @@ def kept(root: Path, what: str, scan: Any, paths: Callable[[], Iterable[Path]], 
 
 
 def read_files(root: Path) -> list[Path]:
-    """What a read of Review or the Web rests on beside the scan: the evidence, asks, annotations and edits logs, the published manifest, and every Lean file a record names."""
+    """What a read of Review or the Web rests on beside the scan: the evidence, asks, annotations and edits logs, the published manifest, every Lean file a record names, and the library's folder of nodes with each node file in it."""
     from loom.evidence.log import replay
+    from loom.library.store import folder
     from loom.paths import ANNOTATION_LOG, ASK_LOG, EDIT_LOG, EVIDENCE_LOG, MANIFEST
 
     lean = {path for r in replay(root).of_kind("lean") for path in dict(r.get("files", {}))}
     logs = [EVIDENCE_LOG, ASK_LOG, ANNOTATION_LOG, EDIT_LOG, MANIFEST]
-    return [*(root / p for p in logs), *(root / p for p in sorted(lean))]
+    nodes = folder(root)
+    try:
+        each = sorted(p for p in nodes.iterdir() if p.name.endswith(".node"))
+    except OSError:
+        each = []
+    return [*(root / p for p in logs), *(root / p for p in sorted(lean)), nodes, *each]

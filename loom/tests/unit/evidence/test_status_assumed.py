@@ -138,3 +138,49 @@ def test_an_assumed_statement_whose_own_statement_uses_an_unread_library_node_do
     for key, assumed in (("kA", ("label", "lem:b")), ("kC", ("node", "tq-00X1"))):
         found = _lean_of(root, web, Here("block", key))
         assert found.lean == "waiting" and [(w.key, w.why) for w in found.waiting_on] == [(assumed, "unattested")], key
+
+
+def _lean_uses(
+    root: Path, web: Small, on: Subject, declarations: list[dict[str, Any]], uses: list[tuple[str, str]]
+) -> Any:
+    """Lean on `on` that elaborated and that uses the Lean of `uses`, each named by its hash now."""
+    used = [{k: n, "hash": web.resolve((k, n), Here("block", "")) or web.subject(Here("node", n)).hash} for k, n in uses]  # type: ignore[union-attr]  # fmt: skip
+    return write(root, "lean", LOOM, on=on, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": h("2")}, files={"lean/A.lean": h("8")}, declarations=declarations, assumed=[], uses=used, replay={"tool": "leanchecker", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+
+
+def _attest_record(root: Path, web: Small, on: Subject, here: Here, record: Any) -> None:
+    from loom.evidence.status import closure_now, statements_of
+
+    closure = [{k[0]: k[1], "hash": v} for k, v in sorted(closure_now(web, here, [record]).items())]
+    write(
+        root, "attested", PERSON, on=on, lean=record.id, statements=statements_of(record), closure=closure, rulings=[]
+    )
+
+
+def test_a_result_reads_formalized_only_once_the_lean_its_lean_uses_is_attested_all_the_way_down(root: Path) -> None:
+    # thm:t's Lean uses def:d's Lean, from def:d's own record, and def:d's uses def:e's
+    web = Small({"kT": "thm:t", "kD": "def:d", "kE": "def:e"}, {}, {})
+    t, d, e = (web.subject(Here("block", k)) for k in ("kT", "kD", "kE"))
+    assert t is not None and d is not None and e is not None
+    lean_e = _lean_uses(root, web, e, [_decl("e", {"label": "def:e"}, kind="def")], [])
+    lean_d = _lean_uses(root, web, d, [_decl("d", {"label": "def:d"}, kind="def")], [("label", "def:e")])
+    lean_t = _lean_uses(root, web, t, [_decl("t", {"label": "thm:t"})], [("label", "def:d")])
+    _attest_record(root, web, t, Here("block", "kT"), lean_t)
+    found = _lean_of(root, web, Here("block", "kT"))
+    assert found.lean == "waiting" and [(w.key, w.why) for w in found.waiting_on] == [
+        (("label", "def:d"), "unattested")
+    ]
+    _attest_record(root, web, d, Here("block", "kD"), lean_d)
+    assert _lean_of(root, web, Here("block", "kT")).lean == "waiting", "def:d's own Lean rests on def:e's, not attested"
+    _attest_record(root, web, e, Here("block", "kE"), lean_e)
+    assert _lean_of(root, web, Here("block", "kT")).lean == "formalized"
+
+
+def test_what_a_record_states_itself_is_covered_by_its_own_attestation(root: Path) -> None:
+    # thm:t's record states def:d too, so thm:t's attestation holds for it, and def:d needs no record of its own
+    web = Small({"kT": "thm:t", "kD": "def:d"}, {}, {})
+    t = web.subject(Here("block", "kT"))
+    assert t is not None
+    lean_t = _lean_uses(root, web, t, [_decl("t", {"label": "thm:t"}), _decl("d", {"label": "def:d"}, kind="def")], [("label", "def:d")])  # fmt: skip
+    _attest_record(root, web, t, Here("block", "kT"), lean_t)
+    assert _lean_of(root, web, Here("block", "kT")).lean == "formalized"
