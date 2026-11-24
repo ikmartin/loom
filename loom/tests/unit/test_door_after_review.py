@@ -730,8 +730,13 @@ def test_a_folder_swapped_for_a_link_between_judgment_and_write_takes_no_write(
     assert not (root / ".claude/settings.local.json").exists()
 
 
+#: How many put-backs the racing thread is given to land in.
+ROUNDS = 400
+
+
 def test_a_folder_swapped_for_a_link_by_a_racing_thread_never_takes_a_write(tmp_path: Path) -> None:
-    """A thread swapping `notes/d` and a link to `.claude` as fast as it can, while recovery puts back a line that makes `notes/d/settings.local.json`, three hundred times: the file is made in the real folder or not at all, never in `.claude` (R2-27)."""
+    """A thread swapping `notes/d` and a link to `.claude` as fast as it can, while recovery puts back a line that makes `notes/d/settings.local.json`, `ROUNDS` times: the file is made in the real folder or not at all, never in `.claude` (R2-27)."""
+    import sys
     import threading
 
     from loom import writes
@@ -739,30 +744,43 @@ def test_a_folder_swapped_for_a_link_by_a_racing_thread_never_takes_a_write(tmp_
 
     root = _layered(tmp_path)
     hist = load_quilt(root).history_dir
-    d, aside = root / "notes/d", root / "notes/d-aside"
+    d = root / "notes/d"
     d.mkdir(parents=True)
     stop = threading.Event()
+    asides: list[Path] = []
 
     def swapping() -> None:
+        n = 0
         while not stop.is_set():
             try:
-                if d.is_dir() and not d.is_symlink():
-                    os.rename(d, aside)
-                    d.symlink_to("../.claude")
-                elif d.is_symlink():
+                if d.is_symlink():
                     d.unlink()
-                    os.rename(aside, d)
+                    if asides:
+                        os.rename(asides.pop(), d)
+                elif d.is_dir():
+                    n += 1
+                    aside = root / f"notes/d-aside-{n}"
+                    os.rename(d, aside)
+                    asides.append(aside)
+                    d.symlink_to("../.claude")
             except OSError:
                 continue
 
     racer = threading.Thread(target=swapping, daemon=True)
+    switching = sys.getswitchinterval()
+    sys.setswitchinterval(
+        1e-6
+    )  # the two threads take turns as often as they can, so the swap lands inside recovery's put-back
     racer.start()
     try:
-        for i in range(300):
+        for i in range(ROUNDS):
             if not writes.unsettled(root, hist):
-                for place in (d, aside):
-                    if place.is_dir() and not place.is_symlink():
-                        (place / "settings.local.json").unlink(missing_ok=True)
+                for place in (root / "notes").glob("d*"):
+                    try:
+                        if place.is_dir() and not place.is_symlink():
+                            (place / "settings.local.json").unlink(missing_ok=True)
+                    except OSError:
+                        continue  # the racer is moving it; the next round clears it
                 (root / "notes.md").write_text("a note\n")
                 files = {"notes/d/settings.local.json": [writes.store(hist, b'{"hooks": {}}\n'), None], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}  # fmt: skip
                 _begun(root, "mv", files, act=f"{i:016x}")
@@ -771,6 +789,7 @@ def test_a_folder_swapped_for_a_link_by_a_racing_thread_never_takes_a_write(tmp_
     finally:
         stop.set()
         racer.join()
+        sys.setswitchinterval(switching)
     assert not (root / ".claude/settings.local.json").exists()
 
 
