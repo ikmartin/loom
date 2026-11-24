@@ -308,6 +308,25 @@ test('the question names each work so its row can be told apart, two works stati
 	const answers = msg.getByTestId('column-message-choice');
 	await expect(answers).toHaveText(['Arden 2024', '2000.01000v3.pdf', '2000.01000v3 (1).pdf', 'none of them: a work of its own']);
 	for (const name of ['2000.01000v3.pdf', '2000.01000v3 (1).pdf']) await expect(page.getByTestId('work-came-as').filter({ hasText: new RegExp(`^${name.replace(/[.()]/g, '\\$&')}$`) })).toHaveCount(1);
+	// a work deleted while the question waits is no longer offered: asked again once the column is quiet, it names what the library still holds
+	const remove = async (w: ReturnType<typeof page.getByTestId>) => {
+		await w.hover();
+		await w.getByTestId('row-more').click();
+		await page.getByTestId('row-delete').click();
+		await expect(msg).toContainText('Deleted');
+		await page.getByTestId('column-message-dismiss').click();
+	};
+	const came = (name: string) => page.getByTestId('work-row').filter({ has: page.getByTestId('work-came-as').filter({ hasText: new RegExp(`^${name.replace(/[.()]/g, '\\$&')}$`) }) });
+	await remove(came('2000.01000v3.pdf'));
+	await expect(answers).toHaveText(['Arden 2024', '2000.01000v3 (1).pdf', 'none of them: a work of its own']);
+	// with every work it named gone, it asks only whether the file is a work of its own
+	await remove(came('2000.01000v3 (1).pdf'));
+	await remove(row(page, 'Cycle spaces of finite quivers').filter({ hasText: '2024' }));
+	await expect(msg).toContainText('2000.01000v3 (2).pdf states arXiv 2000.01000, as a work since deleted from your library did. Add it as a work of its own?');
+	await expect(answers).toHaveText(['yes, a work of its own']);
+	const before = await page.getByTestId('work-row').count();
+	await answers.click();
+	await expect(page.getByTestId('work-row')).toHaveCount(before + 1);
 });
 
 test('on a quilt that has not said whether loom may use the network, a work added by an identifier asks in its row to be looked up this once', async ({ page }) => {
