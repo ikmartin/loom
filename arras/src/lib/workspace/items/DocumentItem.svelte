@@ -11,6 +11,7 @@
 	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
 	import SideHost from '$lib/review/SideHost.svelte';
 	import LeanMarks from '$lib/views/docs/LeanMarks.svelte';
+	import NotCompiled from '$lib/views/docs/NotCompiled.svelte';
 	import { anchorId, keyUrl } from '$lib/nav';
 	import { followNodes, followReading, reading, sectionIds } from '$lib/reading.svelte';
 	import { contentsOf } from '$lib/contents';
@@ -131,6 +132,7 @@
 			<div class="gutters-host" use:guttersHost>
 				<div class="gutters" class:beside={!!notes.side}>
 					<div class="column" bind:this={columnBox}>
+						<NotCompiled path={master.path} />
 						<LeanMarks doc={master.path} host={columnBox} drawn={drawnSeq} />
 						<FragmentNotes {notes} fallback={master.path} in={master.path}>
 							{#key hasComparison}<Fragment
