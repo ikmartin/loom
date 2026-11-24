@@ -31,7 +31,7 @@ On a Mac, with no password and nothing else installed first:
 curl -LsSf https://github.com/ikmartin/loom-arras/releases/latest/download/install.sh | sh
 ```
 
-It installs loom with a Python of its own, and loom's own TeX (TeX Live 2026, about 400 MB on disk) with Ghostscript and poppler beside it, all under `~/Library/Application Support/loom` and `~/.local`; it edits no shell file. The same line updates loom. Loom uses its own TeX even where another is installed; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and `home_tree = true` there lets loom's TeX read your `~/Library/texmf`. A package a paper needs is fetched the first time it is typeset. `loom doctor` names the TeX in use, and `loom doctor --repair` mends loom's own.
+It installs loom with a Python of its own, and loom's own TeX (TeX Live 2026, about 400 MB on disk) with Ghostscript and poppler beside it, all under `~/Library/Application Support/loom` and `~/.local`; it edits no shell file. It writes Loom in `~/Applications`, which opens loom's home page, and opens it. The same line updates loom, and a quilt open at the time restarts with the new loom by itself. Loom uses its own TeX even where another is installed; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and `home_tree = true` there lets loom's TeX read your `~/Library/texmf`. A package a paper needs is fetched the first time it is typeset. `loom doctor` names the TeX in use, and `loom doctor --repair` mends loom's own.
 
 ## Getting started from a clone
 
