@@ -87,6 +87,8 @@ class World:
 
     def __init__(self, root: Path, seed: int) -> None:
         self.root, self.rng = root, random.Random(seed)
+        #: How many corrections Review offered to take, each tried, and how many it showed with their take refused (`_offered`).
+        self.takes = self.untakeable = 0
         self.lines: list[dict[str, Any]] = []
         nodes = folder(root)
         nodes.mkdir(parents=True)
@@ -128,6 +130,7 @@ class World:
             self.write(
                 Node(**{**node.__dict__, **({"pages": "2"} if node.source else {"body": node.body + " Changed."})})
             )
+        self.propose_some(changed)
         self.statement = [x for x in self.ids if self.rng.random() < 0.4]
         self.proof = [x for x in self.ids if x not in self.statement and self.rng.random() < 0.4]
         self.cites = ["R Theorem 2"] if self.rng.random() < 0.1 else []
@@ -158,6 +161,23 @@ class World:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(line) + "\n")
         return line
+
+    def propose_some(self, changed: list[str]) -> None:
+        """An agent's corrections against some nodes compared on their text now, of each kind: a good one, one of no text, one whose pages are only white space, one moving the node to a work with no document; whatever `take` would refuse `propose` refuses (E-53), and the rest are filed for the person."""
+        from loom.evidence import acts
+
+        evidence = self.evidence()
+        for n in self.ids:
+            node, s = self.nodes[n], self.web().subject(Here("node", n))
+            compared = s is not None and any(r.on is not None and r.on.hash == s.hash for r in evidence.about("node", n, of="compared"))  # fmt: skip
+            if n in changed or node.empty or not compared or self.rng.random() > 0.4:
+                continue
+            kind = self.rng.choice(["good", "no-text", "white-pages", "no-document"])
+            change = {"good": {"body": node.body + " Corrected."}, "no-text": {"body": "   \n"}, "white-pages": {"pages": " "}, "no-document": {"source": BARE}}[kind]  # fmt: skip
+            try:
+                acts.propose(self.root, n, node_bytes(Node(**{**node.__dict__, **change})), READER, "page 1")
+            except acts.ActRefused:
+                assert kind != "good", n
 
     def compare(self, n: str) -> None:
         s = self.web().subject(Here("node", n))
@@ -370,6 +390,19 @@ def _as_made(world: World, need: Need, at: Path) -> None:
         shutil.rmtree(at)
 
 
+def _take_as_made(world: World, proposal: str, at: Path) -> None:
+    """The person takes an agent's correction (`library-correction-take`) on a copy of the quilt as it is."""
+    import shutil
+
+    from loom.evidence import acts
+
+    shutil.copytree(world.root, at)
+    try:
+        acts.take(at, proposal, PERSON)
+    finally:
+        shutil.rmtree(at)
+
+
 def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]:
     """The library made from `seed`, worked as the list says: each round, every entry offered `now` tried through its act on the quilt as the list was made, then all done in the panel's order, the agent's `after` work done when nothing is offered now. Each entry whose act loom refused, with why, and how many acts the order of one round alone made refused."""
     from loom.evidence.acts import ActRefused
@@ -390,6 +423,19 @@ def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]
                 _as_made(world, need, root.parent / f"{root.name}-{i}-{j}")
             except ActRefused as exc:
                 refused.append((need, f"{exc.code}: {exc}"))
+        # each correction Review's check rows offer the person to take, taken on the quilt as it is; one whose row says the take is refused now (`acts.take_refusal`) is offered to decline alone
+        from loom.evidence.acts import take_refusal
+
+        for n in [x for x in world.ids if x in world.nodes]:
+            proposal = world.status(n).proposal
+            if proposal is not None and take_refusal(world.root, proposal) is not None:
+                world.untakeable += 1
+            elif proposal is not None:
+                world.takes += 1
+                try:
+                    _take_as_made(world, proposal, root.parent / f"{root.name}-{i}-take-{n}")
+                except ActRefused as exc:
+                    refused.append((Need(n, "take", "now"), f"{exc.code}: {exc}"))
         if refused:
             break
         for need in now:
@@ -402,12 +448,13 @@ def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]
 
 @pytest.mark.parametrize("seeds", [range(0, 150), range(150, 300)], ids=str)
 def test_every_entry_offered_now_is_an_act_loom_takes(seeds: range, tmp_path: Path) -> None:
-    """With the list empty exactly when the target reads formalized, this makes the list and the acts unable to disagree: what the list offers the person now, loom takes, on the quilt as the list was made."""
-    done = 0
+    """With the list empty exactly when the target reads formalized, this makes the lists and the acts unable to disagree: what the formalize list offers the person now, and each correction Review's check rows offer to take, loom takes, on the quilt as it was offered."""
+    done, takes = 0, 0
     for seed in seeds:
         world, refused, _ = _offered(tmp_path / f"{seed}", seed)
         assert refused == [], (seed, refused)
         left, after = world.plan(), world.status("T")
         assert (left == []) == (after.lean == "formalized"), (seed, left, after.waiting_on)
         done += after.lean == "formalized"
-    assert done > len(seeds) // 2
+        takes += world.takes
+    assert done > len(seeds) // 2 and takes > 0

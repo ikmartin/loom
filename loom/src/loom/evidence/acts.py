@@ -168,6 +168,47 @@ def _checked(kind: str, by: Who, **fields: Any) -> None:
         raise ActRefused("refused", str(exc)) from None
 
 
+#: Whoever takes a correction: the record a take makes is checked for its shape before it is filed, by whom it will be made is the person's, not known yet.
+_TAKER = Who("person", "the person")
+
+
+def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]:
+    """A correction's file as `take` would write it, and the document it is compared with; refused as `take` refuses it: `refused` where the file fails the library's checks or the `compared` record taking it makes would be refused by the log, `stub` where it gives the node no text, `no-document` where its work holds no document.
+
+    `propose` calls it before filing a correction and `take` before writing one, so a correction is filed only where it can be taken, and the record is checked before any file changes.
+    """
+    from loom.library.checks import check_file
+    from loom.library.store import check_against
+
+    name = f"{node}.node"
+    new, problems = check_file(name, data, None)
+    if new is None or problems:
+        raise ActRefused("refused", f"the proposed file is not a valid {name}", problems)
+    # and against the library as it stands, as the store will check it when it is written
+    problems = check_against(root, new)
+    if problems:
+        raise ActRefused("refused", "the proposed file fails the library's checks against the library now", problems)
+    if new.empty:
+        raise ActRefused("stub", f"the proposed file gives {node} no text")
+    document = document_of(root, new)
+    if document is None:
+        raise ActRefused("no-document", f"{node}'s work, as the proposed file names it, holds no document to compare it with")  # fmt: skip
+    _checked("compared", _TAKER, on=Subject("node", node, _to_store(new)), **{"with": document})
+    return new, document
+
+
+def take_refusal(root: Path, proposal: str) -> ActRefused | None:
+    """Why `take` would refuse an agent's correction now, by take's own checks, writing nothing; None where it would take it: for Review, which offers the take only then, a correction filed while it could be taken may stop being one, as when a result its file uses leaves the library."""
+    try:
+        found = _proposal(root, proposal)
+        assert found.on is not None
+        _shown(root, found.on.name, found.on.hash)
+        _takeable(found.on.name, str(found.get("bytes")).encode("utf-8"), root)
+    except ActRefused as exc:
+        return exc
+    return None
+
+
 def _to_store(found: Node) -> str:
     """The hash a node will have once the store writes it, its whole file as `node_bytes` makes it."""
     from loom.library.node import node_bytes, node_hash
@@ -286,29 +327,21 @@ def propose(root: Path, node: str, data: bytes, by: Who, why: str) -> tuple[str,
     ActRefused
         `agent-only`; `no-such-node`; `stub` (a stub is filled, not corrected); `refused` for a file that does not read as this node or fails the library's checks.
     """
-    from loom.library.checks import check_file
     from loom.library.node import node_hash
 
     _only(by, "agent")
-    name = f"{node}.node"
     with _held(root):
         digest, found = _text(root, node)
         if found.empty:
             raise ActRefused("stub", f"{node} has no text yet: fill it, do not correct it")
-        new, problems = check_file(name, data, None)
-        if new is None or problems:
-            raise ActRefused("refused", f"the proposed file is not a valid {name}", problems)
+        # whatever taking it would refuse is refused now, by take's own check, so a correction filed is one the person can take
+        new, source = _takeable(node, data, root)
         if node_hash(data) == digest:
             raise ActRefused("refused", "the proposed file is the node's file now")
         evidence = replay(root)
         compared = any(r.on is not None and r.on.hash == digest for r in evidence.about("node", node, of="compared"))
         if compared:
             return "proposed", _write(root, "proposed", by, on=Subject("node", node, digest), bytes=data.decode("utf-8"), why=why)  # fmt: skip
-        if new.empty:
-            raise ActRefused("stub", f"the proposed file gives {node} no text")
-        source = document_of(root, new)
-        if source is None:
-            raise ActRefused("no-document", f"{node}'s work holds no document it was corrected from")
         _checked("digested", by, on=Subject("node", node, _to_store(new)), how="corrected", **{"from": source})
         written = _store(root, new)
         return "written", _write(root, "digested", by, on=Subject("node", node, written), how="corrected", **{"from": source})  # fmt: skip
@@ -347,24 +380,13 @@ def take(root: Path, proposal: str, by: Who) -> Record:
     ActRefused
         `author-only`; `no-such-proposal`; `closed` when declined; `changed` when the node is no longer the text it corrects; `refused` when its bytes do not read as that node's file, or the file fails the library's checks now; `no-document`.
     """
-    from loom.library.node import NodeUnreadable, read_node
 
     _only(by, "person")
     with _held(root):
         found = _proposal(root, proposal)
         assert found.on is not None
         _shown(root, found.on.name, found.on.hash)
-        try:
-            new = read_node(str(found.get("bytes")).encode("utf-8"), f"{found.on.name}.node")
-        except NodeUnreadable as exc:
-            raise ActRefused("refused", f"the proposal is not a file of {found.on.name}", list(exc.problems)) from None
-        if new.empty:
-            raise ActRefused("stub", f"the proposal gives {new.id} no text")
-        document = document_of(root, new)
-        if document is None:
-            raise ActRefused("no-document", f"{new.id}'s work holds no document to compare it with")
-        # the record made and checked before the file changes, so one the log would refuse leaves the store as it was
-        _checked("compared", by, on=Subject("node", new.id, _to_store(new)), **{"with": document})
+        new, _document = _takeable(found.on.name, str(found.get("bytes")).encode("utf-8"), root)
         written = _store(root, new)
         return _matched(root, new, written, by)
 

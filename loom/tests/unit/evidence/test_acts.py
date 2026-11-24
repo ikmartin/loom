@@ -427,3 +427,48 @@ def test_a_refused_first_act_makes_no_evidence_log(root: Path) -> None:
     assert not log_path(root).exists()
     acts.check(root, "tq-00A4", _hash(root, "tq-00A4"), PERSON)
     assert log_path(root).exists()
+
+
+def test_a_correction_the_person_could_not_take_is_never_filed(root: Path) -> None:
+    """E-53: against a compared node, a correction of no text (`stub`), one whose pages are only white space (`refused`) and one moving the node to a work with no document (`no-document`) are refused by take's own check before anything is filed; a good one is filed."""
+    acts.check(root, "tq-00A4", _hash(root, "tq-00A4"), PERSON)
+    text = _file(root, "tq-00A4").read_text(encoding="utf-8")
+    head, body = text.rsplit("+++\n", 1)
+    _refused(root, "stub", acts.propose, "tq-00A4", (head + "+++\n   \n").encode("utf-8"), AGENT, "")
+    _refused(root, "refused", acts.propose, "tq-00A4", text.replace('pages = "4"', 'pages = " "').encode("utf-8"), AGENT, "")  # fmt: skip
+    _refused(root, "no-document", acts.propose, "tq-00A4", text.replace('source = "tq-00A1-ref"', 'source = "tq-00B1-ref"').encode("utf-8"), AGENT, "")  # fmt: skip
+    # one whose file uses a result the library does not hold fails the library's checks against the library now
+    _refused(root, "refused", acts.propose, "tq-00A4", text.replace("compact set", "compact set (Lemma~\\ref{tq-77ZZ})").encode("utf-8"), AGENT, "")  # fmt: skip
+    said, proposal = acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "compact", "closed"), AGENT, "page 4")
+    assert said == "proposed" and acts.take_refusal(root, proposal.id) is None
+    acts.take(root, proposal.id, PERSON)
+
+
+def test_a_correction_that_can_no_longer_be_taken_says_why_and_is_not_offered_to_take(root: Path) -> None:
+    """Filed while it could be taken, a correction to tq-00K3 that uses tq-00A4 cannot be once tq-00A4 has left the library: `take_refusal` says why, by take's own check, and the take is refused alike."""
+    acts.check(root, "tq-00K3", _hash(root, "tq-00K3"), PERSON)
+    proposal = acts.propose(root, "tq-00K3", _corrected(root, "tq-00K3", "Let $W$", "Let now $W$"), AGENT, "")[1].id
+    assert acts.take_refusal(root, proposal) is None
+    _file(root, "tq-00A4").unlink()
+    refused = acts.take_refusal(root, proposal)
+    assert refused is not None and refused.code == "refused"
+    _refused(root, "refused", acts.take, proposal, PERSON)
+    acts.decline(root, proposal, PERSON)
+
+
+@pytest.mark.parametrize("pages", [" ", "\n", " ", " "])
+def test_pages_of_only_white_space_are_refused_by_the_store_and_the_log_alike(pages: str, root: Path) -> None:
+    """E-52: one rule for `pages` (`library.node.pages_problem`), which the store's checks and the evidence log both hold."""
+    from loom.evidence.log import check
+    from loom.library.node import pages_problem
+    from loom.library.store import NodeRefused, read, write_node
+
+    assert pages_problem(pages) is not None and pages_problem("12-13, " * 20) is None
+    node = read(root, "tq-00A4")
+    assert node is not None
+    from dataclasses import replace
+
+    with pytest.raises(NodeRefused):
+        write_node(root, replace(node, pages=pages))
+    with pytest.raises(EvidenceRefused):
+        check("compared", PERSON, on=Subject("node", "tq-00A4", "sha256:" + "1" * 64), **{"with": {"ref": "tq-00A1-ref", "pdf": "sha256:" + "2" * 64, "pages": pages}})  # fmt: skip

@@ -478,6 +478,7 @@ def test_digested_results_to_check_are_a_row_a_work_and_a_correction_a_row_with_
     body = review.body_of(correction, {})
     assert body["compared_at"] is not None and ["-", "compact"] in [[k, w.strip()] for k, w in body["runs"]] and ["+", "closed"] in [[k, w.strip()] for k, w in body["runs"]]  # fmt: skip
     assert "".join(w for k, w in body["runs"] if k != "+") == data.decode().split("+++")[2].lstrip("\n")
+    assert said["refusal"] is None, "the take is offered"
     acts.take(root, proposal.id, PERSON)
     assert [r["kind"] for r in rows() if "correction" in r] == []
 

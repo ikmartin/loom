@@ -313,7 +313,7 @@ def _check(
                 }  # fmt: skip
             )
         if found.proposal is not None:
-            corrections.append(_correction(evidence, library, node, held[1], found.proposal))
+            corrections.append(_correction(root, evidence, library, node, held[1], found.proposal))
     out = []
     for ref, nodes in sorted(by_work.items()):
         work = read(root, ref) if ref else None
@@ -356,8 +356,9 @@ def _cited(
     return out
 
 
-def _correction(evidence: Evidence, library: LibraryWeb, node: str, held: Any, proposal: str) -> Row:
-    """An open correction as a `check` row: whose it is, and as its body when the person compared the text it would replace and the word diff of the two bodies (`runs`, `=` kept, `-` the person's words, `+` the agent's)."""
+def _correction(root: Path, evidence: Evidence, library: LibraryWeb, node: str, held: Any, proposal: str) -> Row:
+    """An open correction as a `check` row: whose it is, why taking it would be refused now (`refusal`, by take's own check, `acts.take_refusal`; null where it would be taken, the take offered only then), and as its body when the person compared the text it would replace and the word diff of the two bodies (`runs`, `=` kept, `-` the person's words, `+` the agent's)."""
+    from loom.evidence.acts import take_refusal
     from loom.library.node import NodeUnreadable, read_node
     from loom.pending import cut
 
@@ -379,7 +380,8 @@ def _correction(evidence: Evidence, library: LibraryWeb, node: str, held: Any, p
     compared = [
         r.at for r in evidence.about("node", node, of="compared") if r.on is not None and r.on.hash == found.on.hash
     ]
-    fields = {"correction": proposal, "node": node, "name": node_name(held), "ref": held.source, "short": library.short(held.source), "by": found.by.name}  # fmt: skip
+    refused = take_refusal(root, proposal)
+    fields = {"correction": proposal, "node": node, "name": node_name(held), "ref": held.source, "short": library.short(held.source), "by": found.by.name, "refusal": str(refused) if refused else None}  # fmt: skip
     return Row(f"check:{proposal}", "check", (), since=found.at, fields=fields, body={"compared_at": compared[-1] if compared else None, "runs": runs})  # fmt: skip
 
 

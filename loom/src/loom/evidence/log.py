@@ -16,6 +16,7 @@ from typing import Any
 
 from loom.clock import stamp
 from loom.evidence.subjects import HASH, Subject, Who, is_node, is_work, name_problem
+from loom.library.node import pages_problem
 from loom.locks import locked
 from loom.paths import EVIDENCE_LOG
 from loom.records.ids import EVIDENCE, draw
@@ -286,9 +287,9 @@ def _node_on(raw: dict[str, Any], kinds: tuple[str, ...] = _READ) -> Subject:
     return on
 
 
-def _text(value: Any, what: str, *, empty: bool = True, most: int | None = 20000) -> str:
-    if not isinstance(value, str) or (not empty and not value.strip()) or (most is not None and len(value) > most):
-        raise ValueError(f"{what} is {'a' if empty else 'a non-empty'} string" + (f" of at most {most} characters" if most is not None else ""))  # fmt: skip
+def _text(value: Any, what: str, *, empty: bool = True, most: int = 20000) -> str:
+    if not isinstance(value, str) or (not empty and not value.strip()) or len(value) > most:
+        raise ValueError(f"{what} is {'a' if empty else 'a non-empty'} string of at most {most} characters")
     return value
 
 
@@ -310,8 +311,10 @@ def _document(value: Any, what: str, *, pages: bool) -> None:
         raise ValueError(f"{what}'s ref is not a reference's id")
     _hash(value[held[0]], f"{what}'s {held[0]}")
     if "pages" in value:
-        # a node's pages as its file gives them, which the store takes of any length: one rule, the node's
-        _text(value["pages"], f"{what}'s pages", empty=False, most=None)
+        # a node's pages as its file gives them, by the store's own rule
+        said = pages_problem(value["pages"])
+        if said:
+            raise ValueError(f"{what}'s pages {said}")
 
 
 def _digested(raw: dict[str, Any], by: Who) -> Subject:
