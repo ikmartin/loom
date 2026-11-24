@@ -7,11 +7,8 @@
 	import { web as words } from '$lib/words/web';
 
 	const SCOPES: WebScope[] = ['library', 'draft', 'deps', 'all'];
-	// the person's drafts, the fixture's when the manifest has not their documents
-	const drafts = $derived.by(() => {
-		const docs = (store.manifest?.masters ?? []).filter((m) => !isAgentDocument(m)).map((m) => m.path);
-		return docs.includes(wb.doc) ? docs : [wb.doc, ...docs];
-	});
+	// the person's drafts; the one shown is the quilt's main draft until another is chosen
+	const drafts = $derived((store.manifest?.masters ?? []).filter((m) => !isAgentDocument(m)).map((m) => m.path));
 </script>
 
 <div class="wb-col" data-testid="web-column">
@@ -20,7 +17,8 @@
 		{#each SCOPES as s (s)}
 			<label class:on={wb.scope === s}><input type="radio" name="web-scope" checked={wb.scope === s} onchange={() => wb.choose(s)} data-testid="web-scope-{s}" />{words.column.scopes[s]}</label>
 			{#if wb.scope === s && (s === 'draft' || s === 'deps')}
-				<select class="draft" aria-label={words.column.draft} bind:value={wb.doc} data-testid="web-draft">
+				<select class="draft" aria-label={words.column.draft} value={wb.doc ?? ''} onchange={(e) => (wb.doc = e.currentTarget.value || null)} data-testid="web-draft">
+					{#if !wb.doc}<option value="" disabled>{words.column.choose}</option>{/if}
 					{#each drafts as d (d)}<option value={d}>{words.file(d)}</option>{/each}
 				</select>
 			{/if}

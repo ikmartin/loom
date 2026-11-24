@@ -334,9 +334,11 @@ Write: `review-task-delete` with `{"task"}`, which withdraws it (`library.md`: a
 - `deps`: the results of one draft and every result they use, by statement or by proof, transitively;
 - `all`: every draft's results and the library's.
 
+The choice of draft starts on the quilt's main draft, the document the manifest marks `default` (`[quilt] main`, or the quilt's only document). Where the quilt names none, the choice reads "choose a draft", the list says "The quilt names no main draft. Choose a draft under Scope." (or "The quilt holds no draft yet."), and nothing is read until one is chosen.
+
 ### 5.2 The list (7a, 7a draft)
 
-**Drawn.** A search, "23 results", and `by document | by status`. By document under `a draft and what it rests on`: "main.tex", the draft's results; "library results main.tex uses", a row for each work, open, with its results under it. Under `everything`: "your drafts", a row for each document, and "library", a row for each work, both folded, then "and 295 works with no results digested". Each result draws its marks, name and title, its source where it is not under its source's row, and, on the person's own results not formalized, a box to choose it for the formalize panel; with any chosen, a bar "3 chosen · formalize… · clear".
+**Drawn.** A search, "23 results", and `by document | by status`. By document under `a draft and what it rests on`: "main.tex", the draft's results; "library results main.tex uses", a row for each work, open, with its results under it. Under `everything`: "your drafts", a row for each document, and "library", a row for each work, both folded, then "and 295 works with no results digested". Each result draws its marks, name and title, its source where it is not under its source's row, and, on the person's own results not formalized, a box to choose it for the formalize panel; with any chosen, a bar "3 chosen · formalize… · clear". A scope that holds no result says so in place of the list: "main.tex holds no result.", "No draft holds a result.", or, under `the library`, "No result of the library is listed yet."
 
 **Read `web-list`.** Given the scope, `"sort"?: "status"` (`document` the default), and `"open"?: [DOC or REF…]` (`evidence.md` §8):
 

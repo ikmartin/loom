@@ -15,6 +15,8 @@ export const web = {
 		scopes: { library: 'the library', draft: 'a draft', deps: 'a draft and what it rests on', all: 'everything' },
 		/** The choice of draft under a scope that needs one; its accessible name. */
 		draft: 'Which draft',
+		/** That choice, where the quilt names no main draft and none is chosen yet. */
+		choose: 'choose a draft',
 		/** The column's line over the two forms. */
 		form: 'Form',
 		/** The two forms. */
@@ -37,6 +39,10 @@ export const web = {
 		undigested: (n: number) => (n === 1 ? 'and 1 work with no results digested' : `and ${n} works with no results digested`),
 		/** Where the search finds nothing. */
 		nothing: 'nothing matches',
+		/** A scope that holds no result. */
+		empty: (scope: string, doc: string) => (scope === 'library' ? 'No result of the library is listed yet.' : scope === 'all' ? 'No draft holds a result.' : `${file(doc)} holds no result.`),
+		/** A scope of one draft, where the quilt names no main draft and none is chosen; `drafts`, how many drafts the quilt holds. */
+		draftless: (drafts: number) => (drafts ? 'The quilt names no main draft. Choose a draft under Scope.' : 'The quilt holds no draft yet.'),
 		/** At the foot of the list by status, where more is read as it comes into view. */
 		more: (n: number) => `${n} more`,
 		/** While the first answer has not come. */
