@@ -56,8 +56,8 @@ def test_taxa_declaretheorem_and_directive(tmp_path: Path) -> None:
 \documentclass{article}
 \usepackage{thmtools}
 \usepackage{loom}
-\declaretheorem[name=Proposition, style=definition]{prop}
-\declaretheorem{corollary}
+\declaretheorem[name=Proposition, style=definition, numberwithin=section]{prop}
+\declaretheorem[sibling=prop]{corollary}
 % !LOOM environment: claim = Claim, plain
 % !TEX program = lualatex
 \begin{document}
@@ -69,6 +69,7 @@ def test_taxa_declaretheorem_and_directive(tmp_path: Path) -> None:
     c = build_closure(m, tmp_path, dict(srcs), parse_directives(m))
     assert (c.taxa["prop"].name, c.taxa["prop"].style) == ("Proposition", "definition")
     assert c.taxa["corollary"].name == "Corollary"
+    assert (c.taxa["prop"].within, c.taxa["prop"].counter, c.taxa["corollary"].counter) == ("section", None, "prop")
     assert (c.taxa["claim"].name, c.taxa["claim"].style) == ("Claim", "plain")
     assert c.loads_loom and c.engine == "lualatex"
 

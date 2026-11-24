@@ -243,7 +243,12 @@ def _parse_taxa(closure: PreambleClosure) -> None:
                     disp = _display_name(kv.get("name", env_name.capitalize()), closure, frag.file, m.start(), env_name)
                     st = kv.get("style", style).strip()
                     numbered = kv.get("numbered", "yes").strip() != "no"
-                    closure.taxa[env_name] = Taxon(env_name, disp, _style_class(st), numbered, frag.file, m.start())
+                    # thmtools' names for `[counter]` and `[section]`
+                    counter = next((kv[k].strip() for k in ("sibling", "numberlike", "sharenumber") if k in kv), None)
+                    within = next((kv[k].strip() for k in ("numberwithin", "parent", "within") if k in kv), None)
+                    closure.taxa[env_name] = Taxon(
+                        env_name, disp, _style_class(st), numbered, frag.file, m.start(), counter, within
+                    )
             pos = max(after, m.end())
 
 

@@ -110,6 +110,202 @@ def test_a_source_s_sections_and_results_are_read_in_order_with_emulated_numbers
     assert PART2[main.body_start : main.body_end].strip() == "\\label{thm:main}\\label{thm:alias}\nWidgets are compact."
 
 
+#: Honest sources that set their own numbering, each with what TeX prints for its headings and its results: the review's D-10.
+NUMBERING: dict[str, tuple[dict[str, str], list[str | None], list[str | None]]] = {
+    "numberwithin, and a theorem counter set by hand": (
+        {
+            "main.tex": r"""\documentclass{article}
+\usepackage{amsthm,amsmath}
+\newtheorem{thm}{Theorem}
+\numberwithin{thm}{section}
+\newtheorem{lem}[thm]{Lemma}
+\newtheorem*{mainthm}{Main Theorem}
+\begin{document}
+\begin{mainthm}The starred main theorem.\end{mainthm}
+\section{A}
+\begin{thm}One.\end{thm}
+\setcounter{thm}{6}
+\begin{lem}After a setcounter.\end{lem}
+\section{B}
+\begin{lem}In B.\end{lem}
+\end{document}
+"""
+        },
+        ["1", "2"],
+        [None, "1.1", "1.7", "2.1"],
+    ),
+    "thmtools' numberwithin and sibling": (
+        {
+            "main.tex": r"""\documentclass{article}
+\usepackage{amsthm,thmtools}
+\declaretheorem[numberwithin=section]{theorem}
+\declaretheorem[sibling=theorem]{lemma}
+\declaretheorem[name=Claim,numbered=no]{claim}
+\begin{document}
+\section{T}
+\begin{theorem}A thmtools theorem.\end{theorem}
+\begin{lemma}A thmtools lemma.\end{lemma}
+\begin{claim}An unnumbered claim.\end{claim}
+\end{document}
+"""
+        },
+        ["1"],
+        ["1.1", "1.2", None],
+    ),
+    "a number printed roman, and one set upright": (
+        {
+            "main.tex": r"""\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{thm}{Theorem}
+\renewcommand{\thethm}{\Roman{thm}}
+\newtheorem{lem}{Lemma}
+\renewcommand{\thelem}{\textup{\arabic{lem}}}
+\begin{document}
+\begin{thm}A roman theorem.\end{thm}
+\begin{thm}Another.\end{thm}
+\begin{lem}A lemma numbered through textup.\end{lem}
+\end{document}
+"""
+        },
+        [],
+        ["I", "II", "1"],
+    ),
+    "a reset with the number left plain, and a counter moved on": (
+        {
+            "main.tex": r"""\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{thm}{Theorem}
+\newtheorem{rem}{Remark}
+\counterwithin*{rem}{section}
+\begin{document}
+\section{A}
+\begin{thm}One.\end{thm}
+\begin{rem}A remark.\end{rem}
+\section{B}
+\begin{rem}Another remark.\end{rem}
+\addtocounter{thm}{2}
+\begin{thm}Three later.\end{thm}
+\end{document}
+"""
+        },
+        ["1", "2"],
+        ["1", "1", "1", "4"],
+    ),
+    "a local style's numbering": (
+        {
+            "main.tex": r"""\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{thm}{Theorem}
+\usepackage{numbering}
+\begin{document}
+\section{A}
+\begin{thm}One.\end{thm}
+\section{B}
+\begin{thm}Two.\end{thm}
+\end{document}
+""",
+            "numbering.sty": "\\RequirePackage{amsmath}\n\\numberwithin{thm}{section}\n",
+        },
+        ["1", "2"],
+        ["1.1", "2.1"],
+    ),
+    "headings deeper than the class numbers, and a depth set by hand": (
+        {
+            "main.tex": r"""\documentclass{article}
+\usepackage{amsthm}
+\newtheorem{thm}{Theorem}[subsection]
+\begin{document}
+\section{A}
+\subsection{B}
+\paragraph{Unnumbered.}
+\begin{thm}One.\end{thm}
+\setcounter{secnumdepth}{1}
+\subsection{C}
+\begin{thm}Two.\end{thm}
+\end{document}
+"""
+        },
+        ["1", "1.1", None, None],
+        ["1.1.1", "1.1.2"],
+    ),
+    "a book's chapters, a section printed through them, and a lettered appendix": (
+        {
+            "main.tex": r"""\documentclass{book}
+\usepackage{amsthm}
+\newtheorem{thm}{Theorem}[chapter]
+\renewcommand{\thesection}{\thechapter.\Alph{section}}
+\begin{document}
+\chapter{One}
+\section{S}
+\begin{thm}In one.\end{thm}
+\chapter{Two}
+\begin{thm}In two.\end{thm}
+\appendix
+\chapter{Extra}
+\section{E}
+\begin{thm}In the appendix.\end{thm}
+\end{document}
+"""
+        },
+        ["1", "1.A", "2", "A", "A.A"],
+        ["1.1", "2.1", "A.1"],
+    ),
+}
+
+
+def _numbering(tmp_path: Path, case: str) -> Path:
+    src = tmp_path / "src"
+    src.mkdir()
+    for name, text in NUMBERING[case][0].items():
+        (src / name).write_text(text, encoding="utf-8")
+    return src
+
+
+@pytest.mark.parametrize("case", list(NUMBERING))
+def test_loom_reads_the_numbering_a_source_sets_as_tex_prints_it(tmp_path: Path, case: str) -> None:
+    _files, sections, items = NUMBERING[case]
+    s = survey.read(_numbering(tmp_path, case), "main.tex", TEX)
+    assert ([x.emulated for x in s.sections], [i.emulated for i in s.items]) == (sections, items)
+
+
+def test_loom_follows_only_the_numbering_a_source_writes_literally(tmp_path: Path) -> None:
+    """A counter set from a value the source computes or reads stays where loom's reading had it, and a format of anything else has no reading at all, so nothing loom reads can carry a file the source read."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.tex").write_text(
+        HOSTILE_HEAD
+        + "\\newtheorem{lem}{Lemma}\n\\newcounter{v}\n\\renewcommand{\\thethm}{\\input{/etc/hosts}}\n\\begin{document}\n"
+        + "\\begin{thm}One.\\end{thm}\n\\setcounter{lem}{\\value{v}}\\addtocounter{lem}{\\v}\n"
+        + "\\begin{lem}Two.\\end{lem}\n\\end{document}\n",
+        encoding="utf-8",
+    )
+    s = survey.read(src, "main.tex", TEX)
+    assert [i.emulated for i in s.items] == [None, "1"]
+
+
+def test_a_format_holds_until_its_group_closes(tmp_path: Path) -> None:
+    """A result restated in a group, as Slice4D writes it, has no reading of loom's, and the results after it are read again."""
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.tex").write_text(
+        HOSTILE_HEAD
+        + "\\begin{document}\n\\begin{thm}\\label{thm:a}First.\\end{thm}\n\\begin{thm}Second.\\end{thm}\n"
+        + "{\n\\renewcommand{\\thethm}{\\ref{thm:a}}\n\\begin{thm}First again.\\end{thm}\n\\addtocounter{thm}{-1}\n}\n"
+        + "\\begin{thm}Third.\\end{thm}\n\\begin{thm}\\renewcommand\\thethm{\\Roman{thm}}Fourth.\\end{thm}\n"
+        + "\\begin{thm}Fifth.\\end{thm}\n\\end{document}\n",
+        encoding="utf-8",
+    )
+    s = survey.read(src, "main.tex", TEX)
+    assert [i.emulated for i in s.items] == ["1", "2", None, "3", "4", "5"]
+
+
+def test_a_number_a_compile_sets_in_a_face_is_read_through_it(tmp_path: Path) -> None:
+    s = survey.read(_numbering(tmp_path, "a number printed roman, and one set upright"), "main.tex", TEX)
+    said = ["I", "II", r"\textup {1}"]
+    done = survey.confirm(s, ["\n".join(rf"\newlabel{{loom-survey-i{k}}}{{{{{n}}}{{1}}}}" for k, n in enumerate(said))])
+    assert ([i.number for i in done.items], done.unconfirmed) == (["I", "II", "1"], [])
+
+
 def test_a_result_s_proofs_and_every_label_are_known_by_whose_text_holds_them(tmp_path: Path) -> None:
     s = survey.read(_source(tmp_path), "main.tex", TEX)
     lemma, main = s.item("i2"), s.item("thm:main")
@@ -457,6 +653,16 @@ def test_a_foreign_compile_has_shell_escape_off_and_a_person_s_build_keeps_it_re
     for foreign, status in ((True, "0"), (False, "2")):
         res = compile_tex(tmp_path, "a.tex", tmp_path / f"out-{foreign}", foreign=foreign)
         assert res.log is not None and f"loom-escape={status}" in res.log.read_text(encoding="utf-8", errors="replace")
+
+
+@pytest.mark.tex
+@pytest.mark.parametrize("case", list(NUMBERING))
+def test_with_no_stored_pdf_an_honest_source_keeps_the_numbers_it_sets_for_itself(tmp_path: Path, case: str) -> None:
+    """The review's D-10: where loom reads a source's numbering as TeX prints it, the compile agrees and every number is kept, with no PDF to confirm it."""
+    _files, sections, items = NUMBERING[case]
+    done = survey.complete(tmp_path / "quilt", TEX, _numbering(tmp_path, case), "main.tex")
+    assert (done.state, done.unconfirmed) == ("ready", [])
+    assert ([x.number for x in done.sections], [i.number for i in done.items]) == (sections, items)
 
 
 #: The reviewer's sources that read files of the person's from outside the source's folder into printed numbers (`review-refs/scripts/survey_hostile.py`).

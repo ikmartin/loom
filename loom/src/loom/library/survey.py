@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from loom import locks
-from loom.library.counters import Numbering
+from loom.library.counters import Numbering, plain
 from loom.paths import LIBRARY_SURVEYS, SURVEY_LOCK
 from loom.reshape.importer import closure_of
 from loom.scan.directives import parse_directives
@@ -24,6 +24,7 @@ from loom.scan.model import Env, SourceFile, Taxon
 from loom.scan.preamble import build_closure, document_start
 from loom.scan.sections import SectionUnit, find_sections
 from loom.scan.source import read_source
+from loom.scan.tokenize import read_args
 from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
@@ -97,8 +98,27 @@ DISPLAYS = frozenset(
 )
 #: The counters of the levels of `enumerate`.
 ITEMS = ("enumi", "enumii", "enumiii", "enumiv")
-#: `\setcounter` of a sectioning counter, which moves where the next heading steps from.
-_SETCOUNTER = re.compile(r"\\setcounter\s*\{(chapter|section|subsection)\}\s*\{\s*(-?\d+)\s*\}")
+#: `\setcounter` and `\addtocounter` with a literal integer; a value the source computes or reads moves nothing loom reads.
+_SETCOUNTER = re.compile(r"\\(set|addto)counter\s*\{\s*([A-Za-z@]+)\s*\}\s*\{\s*(-?\d{1,6})\s*\}")
+#: `\numberwithin[\style]{c}{p}` (amsmath), and the kernel's `\counterwithin` and `\counterwithout`, starred or not.
+_WITHIN = re.compile(
+    r"\\(numberwithin|counterwithin|counterwithout)\s*(\*?)\s*(?:\[\s*\\(arabic|roman|Roman|alph|Alph)\s*\]\s*)?"
+    r"\{\s*([A-Za-z@]+)\s*\}\s*\{\s*([A-Za-z@]+)\s*\}"
+)
+#: How a counter prints, redefined: `\renewcommand{\thethm}{...}`, `\renewcommand*\thethm{...}`, `\def\thethm{...}`.
+_THE = re.compile(
+    r"\\(?:(?:re|provide)?newcommand\s*\*?\s*(?:\{\s*\\the([A-Za-z@]+)\s*\}|\\the([A-Za-z@]+))|def\s*\\the([A-Za-z@]+))(?![A-Za-z@])"
+)
+#: What opens and closes a TeX group, an escaped brace first so it counts as neither.
+_GROUPING = re.compile(
+    r"\\[{}]|\\(begingroup|bgroup)(?![A-Za-z@])|\\(endgroup|egroup)(?![A-Za-z@])"
+    r"|\\begin\s*\{[^{}]*\}|\\end\s*\{[^{}]*\}|([{}])"
+)
+_CLASS = re.compile(r"\\documentclass\s*(?:\[[^\]]*\]\s*)?\{\s*([A-Za-z0-9@-]+)\s*\}")
+#: The classes that number sections within chapters.
+CHAPTERED = frozenset({"book", "report", "memoir", "amsbook", "scrbook", "scrreprt"})
+#: The classes whose `secnumdepth` is 2, subsubsections unnumbered; every other is taken as 3, as article's and amsart's.
+SHALLOW = frozenset({"book", "report", "memoir", "scrbook", "scrreprt"})
 _APPENDIX = re.compile(r"\\appendix(?![A-Za-z@])")
 _BIBLIOGRAPHY = re.compile(r"\\(?:bibliography|addbibresource)\s*(?:\[[^\]]*\]\s*)?\{([^{}]*)\}")
 
@@ -265,7 +285,9 @@ def read(src: Path, main: str, tex: str) -> Survey:
     for rel in [main, *(f for f in exp.reached if f != main)]:
         if rel in files:
             envs[rel] = scan_environments(files[rel], set(taxa), doc if rel == main else 0)
-    _walk(out, exp.text, units, envs, files, taxa, exp)
+    # a local style's settings stand before the document's own, as it is loaded in the preamble
+    styles = [f.src.clean[f.start : f.end] for f in closure.fragments if f.file not in exp.reached]
+    _walk(out, exp.text, units, envs, files, taxa, exp, styles)
     _label_all(out, units, envs, files, doc)
     _bibliography(out, src, main, files, exp.reached)
     return out
@@ -279,21 +301,27 @@ def _walk(
     files: dict[str, SourceFile],
     taxa: dict[str, Taxon],
     exp: Any,
+    styles: list[str],
 ) -> None:
     """The sections and results in the order they stand, each numbered by the emulated counters.
 
-    Events at one place sort headings before results, as TeX steps them; a result outside every reached file is not the document's.
+    Events at one place sort headings before results, as TeX steps them; a local style's settings (`styles`) come first; a result outside every reached file is not the document's.
     """
-    events: list[tuple[int, int, str, Any]] = [(u.exp_start, 0, "heading", u) for u in units]
+    events: list[tuple[int, int, str, Any]] = [
+        (-1, 0, kind, what) for style in styles for _at, kind, what in _settings(style)
+    ]
+    events += [(u.exp_start, 0, "heading", u) for u in units]
     events += [(m.start(), 0, "appendix", None) for m in _APPENDIX.finditer(text)]
-    events += [(m.start(), 0, "set", (m.group(1), int(m.group(2)))) for m in _SETCOUNTER.finditer(text)]
+    events += [(at, 0, kind, what) for at, kind, what in _settings(text)]
     for rel, fe in envs.items():
         for env in fe.theorem_envs:
             at = exp.exp_offset(rel, env.start)
             if at is not None and env.name in taxa:
                 events.append((at, 1, "result", (rel, env)))
     events.sort(key=lambda e: (e[0], e[1]))
-    numbering = Numbering(taxa)
+    cls = m.group(1) if (m := _CLASS.search(text)) is not None else ""
+    chapters = cls in CHAPTERED or any(u.name == "chapter" for u in units)
+    numbering = Numbering(taxa, chapters=chapters, depth=2 if cls in SHALLOW else 3)
     places: list[tuple[int, int, str]] = []
     statements: dict[tuple[str, int], Item] = {}
     taken: set[str] = set()
@@ -301,7 +329,15 @@ def _walk(
         if kind == "appendix":
             numbering.mark_appendix()
         elif kind == "set":
-            numbering.set_counter(*payload)
+            name, value, add = payload
+            numbering.set_counter(name, value, add=add)
+        elif kind == "within":
+            counter, parent, style, reset, renumber = payload
+            numbering.within(counter, parent, style=style, reset=reset, renumber=renumber)
+        elif kind == "the":
+            numbering.define(*payload)
+        elif kind == "close":
+            numbering.close(payload)
         elif kind == "heading":
             u: SectionUnit = payload
             sid = f"s{len(out.sections) + 1}"
@@ -356,6 +392,43 @@ def _walk(
                 p = att.proof
                 opening = _opening(files[rel].clean[p.body_start : p.body_end])
                 owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
+
+
+def _settings(text: str) -> list[tuple[int, str, Any]]:
+    """The counter settings `text` writes literally, each at its offset: `set`, `within` and `the` events for `Numbering`."""
+    out: list[tuple[int, str, Any]] = [
+        (m.start(), "set", (m.group(2), int(m.group(3)), m.group(1) == "addto")) for m in _SETCOUNTER.finditer(text)
+    ]
+    for m in _WITHIN.finditer(text):
+        command, starred, style, counter, parent = m.groups()
+        out.append(
+            (m.start(), "within", (counter, parent, style or "arabic", command != "counterwithout", not starred))
+        )
+    for m in _THE.finditer(text):
+        (body,), _spans, after = read_args(text, m.end(), "m")
+        if body is not None:
+            counter = m.group(1) or m.group(2) or m.group(3)
+            out.append((m.start(), "the", (counter, body)))
+            # a definition holds until its group closes: `{\\renewcommand{\\thethm}{\\ref{x}} ...}` restates one result
+            if (end := _group_end(text, after)) is not None:
+                out.append((end, "close", counter))
+    return sorted(out, key=lambda e: e[0])
+
+
+def _group_end(text: str, at: int) -> int | None:
+    """Where the group holding offset `at` closes: a brace, an environment's `\\end`, `\\endgroup`; None where it does not close in `text`."""
+    depth = 0
+    for m in _GROUPING.finditer(text, at):
+        token = m.group(0)
+        if token.startswith("\\") and len(token) == 2:
+            continue
+        if m.group(1) or token.startswith("\\begin") or m.group(3) == "{":
+            depth += 1
+        else:
+            depth -= 1
+            if depth < 0:
+                return m.start()
+    return None
 
 
 def _innermost(roots: list[Env], at: int) -> list[Env]:
@@ -533,8 +606,8 @@ def _hint(number: str, found: dict[str, AuxNumber]) -> str | None:
     """What the compile says a mark or label printed, shaped as a number, or the number of the label it is a `\\ref` of, followed once; a hint to look with, never kept on its own word."""
     if (m := _REFERS.fullmatch(number.strip())) is not None:
         got = found.get(re.sub(r"\s+", " ", m.group(1)).strip())
-        return shaped(got.number) if got is not None else None
-    return shaped(number)
+        return shaped(plain(got.number)) if got is not None else None
+    return shaped(plain(number))
 
 
 def _opening(text: str, *, least: int = 12) -> str | None:
