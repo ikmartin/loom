@@ -878,10 +878,10 @@ def _may_put_back(root: Path, history: Path, rel: str) -> bool:
     at = real
     while at != top:
         try:
-            st = os.stat(at)
+            here = os.stat(at)
         except OSError:
-            st = None
-        if st is not None and (st.st_dev, st.st_ino) in own:
+            here = None
+        if here is not None and (here.st_dev, here.st_ino) in own:
             return True
         at = at.parent
     return not any(part.startswith(".") for part in real.relative_to(top).parts)
