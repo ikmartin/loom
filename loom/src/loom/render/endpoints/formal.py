@@ -205,6 +205,7 @@ def _planned(root: Path, body: dict[str, Any]) -> tuple[_Planner, list[str], lis
 def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`formal-plan`: what asking an agent to formalize the targets comes to, and what stops it or stands before it reads formalized."""
     from loom.evidence.plan import plan
+    from loom.library.generation import generation
 
     planner, targets, assume = _planned(root, body)
     found = plan(targets, assume, planner.item, planner.uses, planner.before)
@@ -221,6 +222,7 @@ def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "formalized": [row(k) for k in found.formalized],
         "stops": [row(k) for k in found.stops],
         "before": [{"why": why, "when": when, "results": results} for (why, when), results in groups.items()],
+        "gen": generation(_scan(root)),
     }
 
 

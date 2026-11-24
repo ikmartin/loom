@@ -59,7 +59,7 @@ def _formal_plan(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert [t["key"] for t in found["targets"]] == ["sy-0003"] and found["targets"][0]["doc"] == "drafting/main.tex"
     assert [r["result"] for r in found["state"]] == ["sy-0001"]
     assert [(r["result"], r["assume"]) for r in found["prove"]] == [("sy-0002", False)]
-    assert all("fragment" in r for r in [*found["state"], *found["prove"]])
+    assert all("fragment" in r for r in [*found["state"], *found["prove"]]) and isinstance(found["gen"], int)
     assert found["stops"] == [] and found["assume"] == []
     # nothing Lean has said of it yet: its own Lean, which the agent writes, is the person's to attest after
     assert [(g["why"], g["when"], [r["result"] for r in g["results"]]) for g in found["before"]] == [("attest", "after", ["sy-0003"])]  # fmt: skip
