@@ -286,9 +286,9 @@ def _node_on(raw: dict[str, Any], kinds: tuple[str, ...] = _READ) -> Subject:
     return on
 
 
-def _text(value: Any, what: str, *, empty: bool = True, most: int = 20000) -> str:
-    if not isinstance(value, str) or (not empty and not value.strip()) or len(value) > most:
-        raise ValueError(f"{what} is {'a' if empty else 'a non-empty'} string of at most {most} characters")
+def _text(value: Any, what: str, *, empty: bool = True, most: int | None = 20000) -> str:
+    if not isinstance(value, str) or (not empty and not value.strip()) or (most is not None and len(value) > most):
+        raise ValueError(f"{what} is {'a' if empty else 'a non-empty'} string" + (f" of at most {most} characters" if most is not None else ""))  # fmt: skip
     return value
 
 
@@ -310,7 +310,8 @@ def _document(value: Any, what: str, *, pages: bool) -> None:
         raise ValueError(f"{what}'s ref is not a reference's id")
     _hash(value[held[0]], f"{what}'s {held[0]}")
     if "pages" in value:
-        _text(value["pages"], f"{what}'s pages", empty=False, most=40)
+        # a node's pages as its file gives them, which the store takes of any length: one rule, the node's
+        _text(value["pages"], f"{what}'s pages", empty=False, most=None)
 
 
 def _digested(raw: dict[str, Any], by: Who) -> Subject:
@@ -514,21 +515,50 @@ def write(root: Path, kind: str, by: Who, *, on: Subject | None = None, **fields
     EvidenceRefused
         When the record is not of its kind's shape; nothing was written.
     """
-    at = stamp()
-    line: dict[str, Any] = {"kind": kind, "at": at, "by": by.to_dict(), **fields}
-    if on is not None:
-        line["on"] = on.to_dict()
+    line = _line(kind, by, on, fields)
+    at = line["at"]
     path = log_path(root)
     # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
-    try:
-        parse({**line, "id": f"ev-{at[:10]}-0"})
-    except ValueError as exc:
-        raise EvidenceRefused(str(exc)) from None
     with locked(path):
         line["id"] = draw(f"ev-{at[:10]}-", replay(root).ids())
         record = parse(line)
         append_line(path, json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     return record
+
+
+def check(kind: str, by: Who, *, on: Subject | None = None, **fields: Any) -> None:
+    """Whether `write` would take this record, writing nothing: an act that writes a file checks each record it will make first, so a record the log would refuse leaves the file as it was.
+
+    Parameters
+    ----------
+    kind : str
+        One of `KINDS`.
+    by : Who
+        Who acts.
+    on : Subject, optional
+        The text it is about.
+    **fields
+        The kind's own fields.
+
+    Raises
+    ------
+    EvidenceRefused
+        As `write` would, for a record not of its kind's shape.
+    """
+    _line(kind, by, on, fields)
+
+
+def _line(kind: str, by: Who, on: Subject | None, fields: dict[str, Any]) -> dict[str, Any]:
+    """A record's line as `write` appends it, its id still to draw, checked by its kind's rules (`parse`)."""
+    at = stamp()
+    line: dict[str, Any] = {"kind": kind, "at": at, "by": by.to_dict(), **fields}
+    if on is not None:
+        line["on"] = on.to_dict()
+    try:
+        parse({**line, "id": f"ev-{at[:10]}-0"})
+    except ValueError as exc:
+        raise EvidenceRefused(str(exc)) from None
+    return line
 
 
 def append_line(path: Path, text: str) -> None:

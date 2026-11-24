@@ -316,3 +316,114 @@ def test_attesting_again_after_a_word_over_another_closure_writes_the_word_statu
     write(root, "attested", PERSON, on=on, lean=record.id, statements=first.get("statements"), closure=[], rulings=[])
     again = _attest(root, LibraryWeb(root), Here("node", "tq-00K3"), record.id)
     assert again.id != first.id and again.get("closure") == first.get("closure")
+
+
+# ---- E-47 to E-50: no act leaves a file without its record, nor makes a log it does not write in -------------------
+
+
+def _everything(root: Path) -> dict[str, bytes]:
+    """Every node file and every record log of the quilt, by path, to see that a refused act changed none."""
+    loom = root / ".loom"
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(loom.rglob("*")) if p.is_file() and (p.suffix in (".node", ".jsonl"))}  # fmt: skip
+
+
+def _log_refuses(monkeypatch: pytest.MonkeyPatch, kind: str) -> None:
+    """The log's writer refuses every record of `kind`, as it would one not of its kind's shape."""
+    from loom.evidence import log
+
+    real = log._line
+
+    def line(k: str, *args: Any) -> dict[str, Any]:
+        if k == kind:
+            raise EvidenceRefused(f"refused here: a {kind} record")
+        return real(k, *args)
+
+    monkeypatch.setattr(log, "_line", line)
+
+
+def _lean_record(root: Path, node: str) -> Record:
+    on = LibraryWeb(root).subject(Here("node", node))
+    assert on is not None
+    declaration = {"name": "k", "kind": "axiom", "role": "states", "names": {"node": node}, "statement": "sha256:" + "5" * 64, "axioms": [], "sorry": False}  # fmt: skip
+    return write(root, "lean", LOOM, on=on, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64}, files={"lean/A.lean": "sha256:" + "8" * 64}, declarations=[declaration], assumed=[], uses=[], replay={"tool": "x", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+
+
+@pytest.mark.parametrize("act", ["check", "correct", "propose-written", "propose-filed", "take", "decline", "attest", "digested"])  # fmt: skip
+def test_an_act_whose_record_the_log_refuses_writes_no_file_and_no_record(act: str, root: Path, monkeypatch: pytest.MonkeyPatch) -> None:  # fmt: skip
+    """E-47's family: for each act in turn the log's writer refuses one of the records it makes, and the act is refused with the store and both logs as they were."""
+    shown = _hash(root, "tq-00A4")
+    if act in ("take", "decline", "propose-filed"):
+        acts.check(root, "tq-00A4", shown, PERSON)
+    proposal = acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "compact", "closed"), AGENT, "page 4")[1].id if act in ("take", "decline") else ""  # fmt: skip
+    if act == "attest":
+        for node in ("tq-00K3", "tq-00A4"):
+            acts.check(root, node, _hash(root, node), PERSON)
+        record = _lean_record(root, "tq-00K3")
+    call, kind = {
+        "check": (lambda: acts.check(root, "tq-00A4", shown, PERSON), "compared"),
+        "correct": (lambda: acts.correct(root, "tq-00A4", shown, "A widget is a closed set.\n", PERSON), "compared"),
+        "propose-written": (
+            lambda: acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "compact", "closed"), AGENT, ""),
+            "digested",
+        ),  # fmt: skip
+        "propose-filed": (
+            lambda: acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "compact", "closed"), AGENT, ""),
+            "proposed",
+        ),  # fmt: skip
+        "take": (lambda: acts.take(root, proposal, PERSON), "compared"),
+        "decline": (lambda: acts.decline(root, proposal, PERSON), "declined"),
+        "attest": (
+            lambda: acts.attest(
+                root, LibraryWeb(root), Here("node", "tq-00K3"), record.id, PERSON, lean_now=lambda r: True
+            ),
+            "attested",
+        ),  # fmt: skip
+        "digested": (lambda: acts.digested(root, "tq-00A4", shown, AGENT, "read", None), "digested"),
+    }[act]
+    _log_refuses(monkeypatch, kind)
+    before = _everything(root)
+    with pytest.raises(ActRefused) as caught:
+        call()
+    assert caught.value.code == "refused", caught.value
+    assert _everything(root) == before
+
+
+def test_a_correction_and_a_taken_correction_keep_pages_of_any_length_the_store_keeps(root: Path) -> None:
+    """E-47's limits made one: the log takes a node's pages as its file gives them."""
+    long = "12-13, 15, 17-19, 21, 23-24, 26, 28-29, 31, 33"
+    assert len(long) > 40
+    data = (
+        _file(root, "tq-00A4").read_text(encoding="utf-8").replace('pages = "4"', f'pages = "{long}"').encode("utf-8")
+    )
+    _file(root, "tq-00A4").write_bytes(data)
+    record = acts.correct(root, "tq-00A4", _hash(root, "tq-00A4"), "A widget is a closed set.\n", PERSON)
+    assert record.get("with")["pages"] == long and _status(root, "tq-00A4").reading == "matches"
+    proposal = acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "closed", "compact"), AGENT, "page 4")[1]
+    assert acts.take(root, proposal.id, PERSON).get("with")["pages"] == long
+
+
+def test_a_correction_of_no_text_is_refused_and_makes_no_stub(root: Path) -> None:
+    """E-48: a body of only white space, by hand or proposed, is refused `stub`, with nothing written."""
+    shown = _hash(root, "tq-00A4")
+    _refused(root, "stub", acts.correct, "tq-00A4", shown, "   \n", PERSON)
+    head = _file(root, "tq-00A4").read_text(encoding="utf-8").split("+++")
+    empty = ("+++".join(head[:2]) + "+++\n").encode("utf-8")
+    _refused(root, "stub", acts.propose, "tq-00A4", empty, AGENT, "")
+
+
+def test_declining_a_correction_already_taken_is_refused(root: Path) -> None:
+    """E-49: once taken, the text it was made against is gone, so it is not there to decline, decided under the lock."""
+    acts.check(root, "tq-00A4", _hash(root, "tq-00A4"), PERSON)
+    proposal = acts.propose(root, "tq-00A4", _corrected(root, "tq-00A4", "compact", "closed"), AGENT, "page 4")[1].id
+    acts.take(root, proposal, PERSON)
+    _refused(root, "changed", acts.decline, proposal, PERSON)
+
+
+def test_a_refused_first_act_makes_no_evidence_log(root: Path) -> None:
+    """E-50: on a quilt with no evidence log, a refused act takes no lock that makes one."""
+    assert not log_path(root).exists()
+    with pytest.raises(ActRefused):
+        acts.check(root, "tq-00A4", "sha256:" + "0" * 64, PERSON)
+    assert not log_path(root).exists()
+    acts.check(root, "tq-00A4", _hash(root, "tq-00A4"), PERSON)
+    assert log_path(root).exists()

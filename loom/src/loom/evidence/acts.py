@@ -36,9 +36,17 @@ class ActRefused(ValueError):
 
 @contextmanager
 def _held(root: Path) -> Iterator[None]:
-    """The library's lock and then the evidence log's, held for one act."""
-    with locked(root / LIBRARY_LOCK), locked(log_path(root)):
-        yield
+    """The library's lock and then the evidence log's, held for one act; the log's only where it exists, since taking it makes it.
+
+    Before the first record the acts, the only writers of what they decide on, are held apart by the library's lock alone, so a refused act makes no log and moves no generation.
+    """
+    log = log_path(root)
+    with locked(root / LIBRARY_LOCK):
+        if log.exists():
+            with locked(log):
+                yield
+        else:
+            yield
 
 
 def _only(by: Who, kind: str) -> None:
@@ -148,6 +156,23 @@ def _write(root: Path, kind: str, by: Who, **fields: Any) -> Record:
         return write(root, kind, by, **fields)
     except EvidenceRefused as exc:
         raise ActRefused("refused", str(exc)) from None
+
+
+def _checked(kind: str, by: Who, **fields: Any) -> None:
+    """A record the act will make, checked by the log's own rules (`log.check`) before anything is written: refused `refused` where the log would refuse it."""
+    from loom.evidence.log import check
+
+    try:
+        check(kind, by, **fields)
+    except EvidenceRefused as exc:
+        raise ActRefused("refused", str(exc)) from None
+
+
+def _to_store(found: Node) -> str:
+    """The hash a node will have once the store writes it, its whole file as `node_bytes` makes it."""
+    from loom.library.node import node_bytes, node_hash
+
+    return node_hash(node_bytes(found))
 
 
 def _store(root: Path, found: Node) -> str:
@@ -279,9 +304,12 @@ def propose(root: Path, node: str, data: bytes, by: Who, why: str) -> tuple[str,
         compared = any(r.on is not None and r.on.hash == digest for r in evidence.about("node", node, of="compared"))
         if compared:
             return "proposed", _write(root, "proposed", by, on=Subject("node", node, digest), bytes=data.decode("utf-8"), why=why)  # fmt: skip
+        if new.empty:
+            raise ActRefused("stub", f"the proposed file gives {node} no text")
         source = document_of(root, new)
         if source is None:
             raise ActRefused("no-document", f"{node}'s work holds no document it was corrected from")
+        _checked("digested", by, on=Subject("node", node, _to_store(new)), how="corrected", **{"from": source})
         written = _store(root, new)
         return "written", _write(root, "digested", by, on=Subject("node", node, written), how="corrected", **{"from": source})  # fmt: skip
 
@@ -330,8 +358,13 @@ def take(root: Path, proposal: str, by: Who) -> Record:
             new = read_node(str(found.get("bytes")).encode("utf-8"), f"{found.on.name}.node")
         except NodeUnreadable as exc:
             raise ActRefused("refused", f"the proposal is not a file of {found.on.name}", list(exc.problems)) from None
-        if document_of(root, new) is None:
+        if new.empty:
+            raise ActRefused("stub", f"the proposal gives {new.id} no text")
+        document = document_of(root, new)
+        if document is None:
             raise ActRefused("no-document", f"{new.id}'s work holds no document to compare it with")
+        # the record made and checked before the file changes, so one the log would refuse leaves the store as it was
+        _checked("compared", by, on=Subject("node", new.id, _to_store(new)), **{"with": document})
         written = _store(root, new)
         return _matched(root, new, written, by)
 
@@ -362,7 +395,10 @@ def decline(root: Path, proposal: str, by: Who, why: str = "") -> Record:
     """
     _only(by, "person")
     with _held(root):
-        _proposal(root, proposal)
+        found = _proposal(root, proposal)
+        assert found.on is not None
+        # decided under the lock against the text the correction was made against: one taken, or overtaken, is not there to decline
+        _shown(root, found.on.name, found.on.hash)
         return _write(root, "declined", by, proposal=proposal, why=why)
 
 
@@ -395,10 +431,16 @@ def correct(root: Path, node: str, shown: str, body: str, by: Who) -> Record:
     _only(by, "person")
     with _held(root):
         found = _shown(root, node, shown)
+        if not body.strip():
+            raise ActRefused("stub", f"a correction gives {node} a text; one of none would make it a stub")
         new = replace(found, body=body)
         source = document_of(root, new)
         if source is None:
             raise ActRefused("no-document", f"{node}'s work holds no document to correct it against")
+        # both records made and checked before the file changes, so one the log would refuse leaves the store as it was
+        will = Subject("node", node, _to_store(new))
+        _checked("digested", by, on=will, how="written", **{"from": source})
+        _checked("compared", by, on=will, **{"with": source})
         written = _store(root, new)
         _write(root, "digested", by, on=Subject("node", node, written), how="written", **{"from": source})
         return _matched(root, new, written, by)
@@ -444,16 +486,21 @@ def attest(
             raise ActRefused(found.code, found.message)
         subject, latest, closure = found
         rows = web.notation(here) or {}
-        for name, digest in sorted(rows.items()):
-            if not any(r.on is not None and r.on.hash == digest for r in evidence.about("macro", name, of="attested")):
-                _write(root, "attested", by, on=Subject("macro", name, digest))
+        notation = [Subject("macro", name, digest) for name, digest in sorted(rows.items()) if not any(r.on is not None and r.on.hash == digest for r in evidence.about("macro", name, of="attested"))]  # fmt: skip
         members = [{kind: name, "hash": digest} for (kind, name), digest in sorted(closure.items())]
         statements = statements_of(latest)
         # the same word given again is the one already given: the latest of these statements on this text, which status reads, over the same closure
         given = [a for a in evidence.about(*subject.key, of="attested") if a.by.kind == "person" and a.on == subject and dict(a.get("statements", {})) == statements]  # fmt: skip
-        if given and _members(given[-1]) == _members_of(members):
-            return given[-1]
-        return _write(root, "attested", by, on=subject, lean=latest.id, statements=statements, closure=members, rulings=[])  # fmt: skip
+        again = bool(given) and _members(given[-1]) == _members_of(members)
+        word = {"on": subject, "lean": latest.id, "statements": statements, "closure": members, "rulings": []}
+        # every record checked before any is written, so one the log would refuse writes none
+        for row in notation:
+            _checked("attested", by, on=row)
+        if not again:
+            _checked("attested", by, **word)
+        for row in notation:
+            _write(root, "attested", by, on=row)
+        return given[-1] if again else _write(root, "attested", by, **word)
 
 
 @dataclass(frozen=True)
