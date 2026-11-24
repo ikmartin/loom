@@ -292,7 +292,7 @@ The dependency scope is settled: whole displays, explicit mathematical support, 
 
 The following prototypes were approved in this conversation. They are interactive design references, not application code. Their sample names, dates, counts and mathematics must be replaced by publisher facts. Their scenario selectors, simulation notices and design-tweak controls are not product features. Earlier mockups that stack too soon or show an unrelated section edit inside lemma details are superseded by §§1 and 5.
 
-All reference fragments live under `/Users/luisa/.codex/visualizations/2026/09/28/01a0e951-3c57-7881-8828-5e3c17bbb3e8/`:
+All reference fragments live under `~/.codex/visualizations/2026/09/28/01a0e951-3c57-7881-8828-5e3c17bbb3e8/`:
 
 | Reference | Implementation coverage |
 |---|---|

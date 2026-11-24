@@ -45,10 +45,6 @@ ALLOWED = {
 
 #: Files whose home and temporary folders wait on the author, each with its reason. A path comes off when its folders go, and none is ever added (the check compares the list with its base's).
 PENDING = {
-    "docs/plans/0.1-implementation-plan.md": "a plan that is history; the author's home folder in the two commands that run the paper tier",
-    "docs/plans/0.16.1-graph-readability.md": "a plan that is history; a collaborator's home folder as the checkout the plan inspected",
-    "docs/plans/review-panel-and-precise-dependencies.md": "a plan that is history; a collaborator's home folder where the plan's reference mock-ups were kept",
-    "docs/plans/section-drafts-and-responsive-adoption.md": "a plan that is history; a collaborator's home folder holding the paper the plan was tried on",
 }
 
 WORD = frozenset(b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_")
