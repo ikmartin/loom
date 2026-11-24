@@ -473,7 +473,9 @@ def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(r
     [row] = listed()
     said = row.to_dict()
     assert said["what"] == "statement only" and said["paper"] == "matches" and said["docs"] == []
-    assert said["name"] == "lemma 3.2" and said["source"] == {"ref": "tq-00A1-ref", "short": None}
+    assert said["name"] == "lemma 3.2" and said["source"] == {"ref": "tq-00A1-ref", "short": "Smith 2024"}
     body = review.body_of(row, {})
     assert body["observation"] == lean.id and body["statement"]["body"].startswith("Let $W$ be a widget")
-    assert body["notation"] is None, "its work's macros are not read yet"
+    # its notation, its work's macros node's rows its text uses, each not yet attested in its definition
+    assert [(n["part"], n["from"], n["attested"]) for n in body["notation"]] == [("Wid", "macros", False), ("diam", "macros", False)]  # fmt: skip
+    assert body["statement"]["macros"]["node"] == "tq-00A1-macros" and "\\Wid" in body["statement"]["macros"]["body"]

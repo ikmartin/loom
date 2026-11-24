@@ -73,7 +73,7 @@ class Status:
     causes : tuple of Cause
         Why the person's attestation no longer holds, for `changed`.
     unattested_notation : tuple of str, or None
-        Commands it is typeset with that no person has attested in this definition; None where the web cannot say which commands those are, as for a library node before its work's macros are read, which keeps it from reading formalized.
+        Commands it is typeset with that no person has attested in this definition; None where the web cannot say which commands those are, as over a node the library no longer holds, which keeps it from reading formalized.
     accepted : str or None
         A draft's result the person accepted: `fresh` or `changed`; None where they never did.
     waiting_on : tuple of Waiting

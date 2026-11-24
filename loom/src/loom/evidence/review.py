@@ -394,7 +394,10 @@ def _attest(
                 fields={
                     "result": node,
                     "name": node_name(held[1]) if held else node,
-                    "source": {"ref": held[1].source if held else None, "short": None},
+                    "source": {
+                        "ref": held[1].source if held else None,
+                        "short": library.short(held[1].source) if held else None,
+                    },  # fmt: skip
                     "what": "statement only",
                     "paper": found.reading,
                     "record": found.lean_record,
@@ -422,7 +425,7 @@ def _attest_body(
         statement: dict[str, Any] = {"fragment": manifest.get("nodes", {}).get(here.name, {}).get("fragment")}
     else:
         held = library.file(here.name)
-        statement = {"body": held[1].body if held else None, "macros": None}
+        statement = {"body": held[1].body if held else None, "macros": library.macros(held[1].source) if held else None}
     rows = web.notation(here)
     notation = (
         None

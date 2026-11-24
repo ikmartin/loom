@@ -161,9 +161,10 @@ class _Planner:
         from loom.evidence.webview import node_row
 
         if self.drafts.node(key) is not None:
-            return self.drafts.row(key)
+            # a result of the person's carries its statement's fragment, which the panel shows a click away
+            return {**self.drafts.row(key), "fragment": self.manifest.get("nodes", {}).get(key, {}).get("fragment")}
         held = self.library.file(key)
-        return node_row(key, self._node(key), held[1] if held else None)
+        return node_row(key, self._node(key), held[1] if held else None, self.library)
 
     def entry(self, need: Any) -> dict[str, Any]:
         """One thing standing before, as `before` sends it: a result's row, a citation's `{cite}`, a label's `{label, results}` with a row for each block bearing it, or a node the library holds no result by, `{node}`."""

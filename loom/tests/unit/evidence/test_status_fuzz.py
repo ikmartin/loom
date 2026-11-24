@@ -71,7 +71,7 @@ class World:
     macros: dict[tuple[str, str], int] = field(default_factory=dict)
     #: Nodes deleted from the library, which a text may still use; one may be put back.
     gone: dict[str, Node] = field(default_factory=dict)
-    #: Whether a library node's notation is known, empty as for a work with no macros, as commit 8 makes it; unknown otherwise.
+    #: Whether a library node's notation is known, empty as for a work with no macros node; unknown otherwise, as for a work whose macros cannot be read.
     known: bool = False
 
     def rng(self, *parts: object) -> random.Random:
@@ -507,11 +507,11 @@ def said(s: Status) -> tuple[object, ...]:
 CHUNKS = [range(0, 200), range(200, 400), range(400, 600), range(600, 800)]
 
 
-class Known(LibraryWeb):
-    """The library's web with each node's notation known and empty, as its work's macros make it for a work with none."""
+class Unknown(LibraryWeb):
+    """The library's web that cannot say a node's notation, as for a work whose macros are not read, so that status's handling of notation unknown stays tried."""
 
     def notation(self, here: Here) -> dict[str, str] | None:
-        return {} if self.file(here.name) is not None else None
+        return None
 
 
 def stored(w: World, root: Path) -> Joined:
@@ -521,7 +521,8 @@ def stored(w: World, root: Path) -> Joined:
     nodes.mkdir(parents=True)
     for n in w.nodes.values():
         (nodes / f"{n.id}.node").write_bytes(w.node_file(n))
-    return Joined(FakeWeb(w), Known(root) if w.known else LibraryWeb(root))
+    # the store holds no macros node for the world's work, so a node's notation reads known and empty, as the model's `known`
+    return Joined(FakeWeb(w), LibraryWeb(root) if w.known else Unknown(root))
 
 
 def statuses(

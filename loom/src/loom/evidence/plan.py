@@ -37,7 +37,7 @@ WHY = (
     "attested-changed",
     "cycle",
 )
-#: When it can be done: by the person now; only once the agent has done its work (and, for a library result, once its work's macros can be shown); or by nobody yet, as a citation waits until loom resolves citations to results.
+#: When it can be done: by the person now; only once the agent has done its work; or by nobody yet, as a citation waits until loom resolves citations to results.
 WHEN = ("now", "after", "waiting")
 #: What a `Need`'s key names: a result, by its key; a citation (`KEY LOCATOR`); a label no one text answers to; a library node by an id the library holds no result by.
 OF = ("result", "cite", "label", "node")

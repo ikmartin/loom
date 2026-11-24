@@ -232,8 +232,9 @@ def test_attesting_a_library_result_waits_for_it_and_all_it_uses_to_be_read_and_
     attested = _attest(root, LibraryWeb(root), here, record.id)
     assert attested.get("closure") == [{"node": "tq-00A4", "hash": _hash(root, "tq-00A4")}]
     assert attested.get("statements") == {"lem": "sha256:" + "5" * 64} and attested.get("lean") == record.id
-    # its work's macros are not read yet, so its notation is unknown and it does not read formalized
-    assert _status(root, "tq-00K3").lean == "unattested"
+    # the word attests the notation its work's macros give it as shown, each row in its definition, so it reads formalized
+    assert sorted(m.on.name for m in replay(root).of_kind("attested") if m.on is not None and m.on.kind == "macro") == ["Wid", "diam"]  # fmt: skip
+    assert _status(root, "tq-00K3").lean == "formalized"
 
 
 def test_attesting_is_of_the_latest_lean_lean_accepted_on_the_text_now(root: Path) -> None:

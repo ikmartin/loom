@@ -67,8 +67,17 @@ def test_what_a_statement_uses_is_followed_through_the_library_and_a_stub_is_an_
     assert web.resolve(("node", "tq-00A4"), Here("node", "tq-00K3")) == definition.hash
 
 
-def test_a_nodes_notation_is_unknown_until_its_works_macros_are_read(root: Path) -> None:
-    assert LibraryWeb(root).notation(Here("node", "tq-00K3")) is None
+def test_a_nodes_notation_is_what_its_works_macros_node_defines_and_its_text_uses(root: Path) -> None:
+    """tq-00K3 is typeset with `\\Wid` and `\\diam`, both its work's macros node's; tq-00B7's work has no macros node and defines none; a node the library does not hold has none to say."""
+    web = LibraryWeb(root)
+    rows = web.notation(Here("node", "tq-00K3"))
+    assert rows is not None and sorted(rows) == ["Wid", "diam"]
+    assert web.notation(Here("node", "tq-00A4")) == {"Wid": rows["Wid"]}
+    assert web.notation(Here("node", "tq-00B7")) == {}
+    assert web.notation(Here("node", "tq-9999")) is None
+    # a definition changed in the macros node is a row changed
+    _rewrite(root, "tq-00A1-macros", "\\newcommand{\\Wid}{\\mathcal{W}}", "\\newcommand{\\Wid}{\\mathcal{V}}")
+    assert LibraryWeb(root).notation(Here("node", "tq-00A4")) != {"Wid": rows["Wid"]}
 
 
 def test_a_file_that_does_not_read_is_no_text_and_what_uses_it_carries_it_so(root: Path) -> None:
@@ -171,14 +180,19 @@ def _lean_and_attest(root: Path, node: str) -> None:
     write(root, "attested", PERSON, on=on, lean=record.id, statements={"lem": h("5")}, closure=closure, rulings=[])
 
 
-def test_nothing_typeset_with_a_works_unknown_notation_reads_formalized(root: Path) -> None:
-    """Proved, attested, itself and all it uses compared: still not formalized while nobody has been shown the notation its work's macros give it."""
+def test_nothing_typeset_with_a_works_notation_nobody_attested_reads_formalized(root: Path) -> None:
+    """Proved, attested, itself and all it uses compared: still not formalized while a row of the notation its work's macros give it is attested in no definition; formalized once the person attests through `formal-attest`'s act, which attests the rows it shows."""
+    from loom.evidence.acts import attest
+
     web = LibraryWeb(root)
     for node in ("tq-00K3", "tq-00A4"):
         write(root, "compared", PERSON, on=web.subject(Here("node", node)), **{"with": {"ref": "tq-00A1-ref", "pdf": h("4")}})  # fmt: skip
     _lean_and_attest(root, "tq-00K3")
     found = _status(root, "tq-00K3")
-    assert found.lean == "unattested" and found.unattested_notation is None and found.attestation is not None
+    assert found.lean == "unattested" and sorted(found.unattested_notation or ()) == ["Wid", "diam"]
+    assert found.lean_record is not None
+    attest(root, LibraryWeb(root), Here("node", "tq-00K3"), found.lean_record, PERSON, lean_now=lambda r: True)
+    assert _status(root, "tq-00K3").lean == "formalized"
 
 
 def test_a_used_node_changed_is_a_cause_of_an_attestation_no_longer_holding(root: Path) -> None:
@@ -188,17 +202,23 @@ def test_a_used_node_changed_is_a_cause_of_an_attestation_no_longer_holding(root
     assert found.lean == "changed" and [c.key for c in found.causes] == [("node", "tq-00A4")]
 
 
-def test_a_drafts_result_resting_on_a_node_whose_notation_is_unknown_has_unknown_notation(root: Path) -> None:
+def test_a_drafts_result_resting_on_a_node_is_typeset_with_its_notation_too_and_unknown_over_one_gone(
+    root: Path,
+) -> None:
     class Draft:
+        def __init__(self, node: str) -> None:
+            self.node = node
+
         def notation(self, here: Here) -> dict[str, str]:
             return {"Zcyc": h("9")}
 
         def closure(self, here: Here) -> dict[tuple[str, str], str]:
-            return {("label", "lem:a"): h("a"), ("node", "tq-00A4"): h("b")}
+            return {("label", "lem:a"): h("a"), ("node", self.node): h("b")}
 
-    joined = Joined(Draft(), LibraryWeb(root))  # type: ignore[arg-type]
-    assert joined.notation(Here("block", "k1")) is None
-    assert Joined(Draft(), LibraryWeb(root.parent / "none")).notation(Here("block", "k1")) == {"Zcyc": h("9")}  # type: ignore[arg-type]
+    wid = LibraryWeb(root).notation(Here("node", "tq-00A4"))
+    assert wid is not None
+    assert Joined(Draft("tq-00A4"), LibraryWeb(root)).notation(Here("block", "k1")) == {"Zcyc": h("9"), **wid}  # type: ignore[arg-type]
+    assert Joined(Draft("tq-9999"), LibraryWeb(root)).notation(Here("block", "k1")) is None  # type: ignore[arg-type]
 
 
 def test_the_asks_default_web_is_the_library_so_a_read_closes_when_its_stub_gains_a_body(root: Path) -> None:
