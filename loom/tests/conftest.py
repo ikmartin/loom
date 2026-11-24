@@ -145,6 +145,9 @@ def isolated_env(request: pytest.FixtureRequest, tmp_path: Path, fake_bin: Path,
         monkeypatch.delenv(var, raising=False)
     # a command slow enough to show progress depends on how busy the machine is, and a test reads what the command said; the `progress` fixture lets it through
     monkeypatch.setenv("LOOM_PROGRESS", "off")
+    if not request.node.get_closest_marker("tex"):
+        # the shim TeX is a Python script in the test's temporary folder, which the fence lets no compile read; the TeX tier, with real TeX, runs fenced
+        monkeypatch.setenv("LOOM_FENCE", "off")
     monkeypatch.setenv("FAKE_TEX_LOG", str(tmp_path / "fake-tex.log"))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig-none"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
