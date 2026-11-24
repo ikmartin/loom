@@ -1,6 +1,6 @@
 """Review's lists: each kind a rule over the evidence, the asks, the scan and the manifest, saying what puts a row in and what takes it out (`docs/specs/evidence.md` §6).
 
-Computed when they are read, never stored; a read under the same scan and the same files as the last answers from what it computed (`memo.kept`, over `files_read`). A row is what one decision is about; it carries the ids it is addressed by and the fields its words are drawn from, never words of loom's own. `cited` and `check` are a library's, and are empty until the node store gives a web of nodes.
+Computed when they are read, never stored; a read under the same scan and the same files as the last answers from what it computed (`memo.kept`, over `files_read`). A row is what one decision is about; it carries the ids it is addressed by and the fields its words are drawn from, never words of loom's own. `cited` and `check` are the library's, and are empty: a row of either names its work, whose reference the node store does not give yet.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from loom.evidence.asks import Standing, open_asks
 from loom.evidence.log import Evidence, Record
 from loom.evidence.status import Status, brief, gate, status
-from loom.evidence.web import DraftWeb, Here, Web
+from loom.evidence.web import DraftWeb, Here, Joined, LibraryWeb, Web
 
 if TYPE_CHECKING:
     from loom.scan.scan import ScanResult
@@ -39,7 +39,7 @@ ROW_KEYS = frozenset({"row", "kind", "docs"})
 class Row:
     """One row of a list.
 
-    `row` is its id, made from what it is about so it stays the same while that waits; `docs` the drafts it concerns; `waits` `agent` when an agent is stopped until the person acts, else `person`; `rests` whether a draft rests on it; `since` when what put it in was written; `took`, for an ask to an agent, each session that took it with the agent's name, by which `working` marks it and never sent.
+    `row` is its id, made from what it is about so it stays the same while that waits; `docs` the drafts it concerns; `waits` `agent` when an agent is stopped until the person acts, else `person`; `rests` whether a draft rests on it; `since` when what put it in was written; `took`, for an ask to an agent, each session that took it with the agent's name, by which `working` marks it and never sent; `body`, for `attest`, what its body is drawn from.
     """
 
     row: str
@@ -50,6 +50,8 @@ class Row:
     since: str = ""
     fields: dict[str, Any] = field(default_factory=dict)
     took: tuple[tuple[str, str], ...] = ()
+    #: What its body is drawn from where the list computed it, sent by `review-row` alone.
+    body: dict[str, Any] | None = field(default=None, repr=False)
 
     def to_dict(self) -> dict[str, Any]:
         """As `review-list` sends it; a field named for one of `ROW_KEYS` is refused (ValueError) rather than let it overwrite the row's own."""
@@ -238,7 +240,7 @@ class _Result:
     status: Status
 
 
-def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], bool]) -> list[_Result]:
+def _results(evidence: Evidence, drafts: DraftWeb, web: Web, lean_now: Callable[[Record], bool]) -> list[_Result]:
     """Each draft's result some Lean record or attestation speaks of, one for each distinct text of a label; a result nothing formal names has status `none` and no row, so it is not computed."""
     named = {
         r.on.name
@@ -248,7 +250,7 @@ def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], boo
     out: list[_Result] = []
     for label in sorted(named):
         by_text: dict[str, list[Any]] = {}
-        for node in web.bearing.get(label, []):
+        for node in drafts.bearing.get(label, []):
             here = Here("block", node.key)
             subject = web.subject(here)
             if subject is not None and subject.name == label:
@@ -259,6 +261,23 @@ def _results(evidence: Evidence, web: DraftWeb, lean_now: Callable[[Record], boo
             out.append(
                 _Result(first.key, label, docs, status(evidence, web, Here("block", first.key), lean_now=lean_now))
             )
+    return out
+
+
+def _library_results(evidence: Evidence, web: Web, lean_now: Callable[[Record], bool]) -> list[tuple[str, Status]]:
+    """Each library node some Lean record or attestation speaks of, with its status; a node nothing formal names has no row, so it is not computed."""
+    named = sorted(
+        {
+            r.on.name
+            for r in evidence.records
+            if r.on is not None and r.on.kind == "node" and r.kind in ("lean", "attested")
+        }
+    )
+    out = []
+    for node in named:
+        found = status(evidence, web, Here("node", node), lean_now=lean_now)
+        if found.subject is not None:
+            out.append((node, found))
     return out
 
 
@@ -311,20 +330,34 @@ def _attested_changed(results: list[_Result], manifest: dict[str, Any], evidence
     return list(rows.values())
 
 
-def _attest(
-    results: list[_Result], manifest: dict[str, Any], evidence: Evidence, web: Web, lean_now: Callable[[Record], bool]
-) -> list[Row]:
-    """A result Lean accepted on its text now that waits for the person's word, and that may be attested now: no node of its closure is unread or uncompared, and no citation of one result of a work is left that no node answers for. What it assumes in Lean does not hold it back from being attested, only from reading formalized."""
-    out = []
+def _may_attest(evidence: Evidence, web: Web, here: Here, lean_now: Callable[[Record], bool]) -> bool:
+    """Whether nothing under the result keeps it from being attested now: no node of its closure is unread or uncompared, and no citation of one result of a work is left that no node answers for."""
     # a web written before citations were asked of it cites nothing, as `status` reads it
     cited = getattr(web, "cited", None)
+    uses = [k[1] for k in web.closure(here) if k[0] == "node"]
+    cites = list(cited(here)) if cited is not None else []
+    return not gate(evidence, web, uses, [], lean_now, cites=cites)
+
+
+def node_name(found: Any) -> str:
+    """A library node as the person reads it: its taxon's word and the number its source prints, the word alone where it prints none."""
+    return f"{found.taxon} {found.number}".strip() if found.number else str(found.taxon)
+
+
+def _attest(
+    results: list[_Result],
+    nodes: list[tuple[str, Status]],
+    manifest: dict[str, Any],
+    evidence: Evidence,
+    web: Web,
+    library: LibraryWeb,
+    lean_now: Callable[[Record], bool],
+) -> list[Row]:
+    """A result Lean accepted on its text now that waits for the person's word and may be attested now (`_may_attest`): a draft's, and a library node's once it matches its paper, since nothing is attested on a node nobody checked. What it assumes in Lean does not hold it back from being attested, only from reading formalized."""
+    out = []
     for r in results:
-        if r.status.lean != "unattested":
-            continue
         here = Here("block", r.key)
-        uses = [k[1] for k in web.closure(here) if k[0] == "node"]
-        cites = list(cited(here)) if cited is not None else []
-        if gate(evidence, web, uses, [], lean_now, cites=cites):
+        if r.status.lean != "unattested" or not _may_attest(evidence, web, here, lean_now):
             continue
         doc = r.docs[0] if r.docs else None
         out.append(
@@ -344,9 +377,85 @@ def _attest(
                     "reading": r.status.reading,
                     "lean": brief(r.status),
                 },
+                body=_attest_body(evidence, web, library, here, r.status, manifest, doc),
+            )
+        )
+    for node, found in nodes:
+        here = Here("node", node)
+        if found.lean != "unattested" or found.reading != "matches" or not _may_attest(evidence, web, here, lean_now):
+            continue
+        held = library.file(node)
+        out.append(
+            Row(
+                f"attest:{node}",
+                "attest",
+                (),
+                since=found.lean_since or "",
+                fields={
+                    "result": node,
+                    "name": node_name(held[1]) if held else node,
+                    "source": {"ref": held[1].source if held else None, "short": None},
+                    "what": "statement only",
+                    "paper": found.reading,
+                    "record": found.lean_record,
+                    "reading": found.reading,
+                    "lean": brief(found),
+                },
+                body=_attest_body(evidence, web, library, here, found, manifest, None),
             )
         )
     return out
+
+
+def _attest_body(
+    evidence: Evidence,
+    web: Web,
+    library: LibraryWeb,
+    here: Here,
+    found: Status,
+    manifest: dict[str, Any],
+    doc: str | None,
+) -> dict[str, Any]:
+    """What a row to attest opens on (`docs/specs/evidence.md` §7, `review-row`): the Lean record to attest, the statement, its notation, what it uses that the person attested and when, and the declarations that only serve its proof; the agent's account of its parts and of a difference is formalization's, null until an agent's record gives it."""
+    record = next((r for r in evidence.of_kind("lean") if r.id == found.lean_record), None)
+    if here.kind == "block":
+        statement: dict[str, Any] = {"fragment": manifest.get("nodes", {}).get(here.name, {}).get("fragment")}
+    else:
+        held = library.file(here.name)
+        statement = {"body": held[1].body if held else None, "macros": None}
+    rows = web.notation(here)
+    notation = (
+        None
+        if rows is None
+        else [
+            {
+                "part": name,
+                "from": "macros" if here.kind == "node" else "preamble",
+                "attested": any(
+                    r.on is not None and r.on.hash == digest for r in evidence.about("macro", name, of="attested")
+                ),  # fmt: skip
+            }
+            for name, digest in sorted(rows.items())
+        ]
+    )
+    uses: list[dict[str, Any]] = []
+    for (kind, name), digest in sorted(web.closure(here).items()):
+        said = [r for r in evidence.about(kind, name, of="attested") if r.by.kind == "person" and r.on is not None and r.on.hash == digest]  # fmt: skip
+        if not said:
+            continue
+        there = web.holder((kind, name), here) if kind == "label" else Here("node", name)
+        key = there.name if there is not None else name
+        uses.append({"result": key, "name": _name(manifest, key, doc) if kind == "label" else name, "at": said[-1].at})
+    supporting = [d["name"] for d in (record.get("declarations", []) if record else []) if d.get("role") == "supports"]
+    return {
+        "observation": found.lean_record,
+        "statement": statement,
+        "parts": None,
+        "notation": notation,
+        "uses_attested": uses,
+        "supporting": supporting,
+        "difference": None,
+    }
 
 
 def _edits(result: ScanResult, reviewer: str | None, manifest: dict[str, Any]) -> list[Row]:
@@ -393,7 +502,7 @@ def gather(
     reviewer : str, optional
         Whose look and acceptances; default the manifest's reviewer.
     web : Web, optional
-        The texts now; default the drafts' alone, under which `cited` and `check` are empty.
+        The texts now; default the drafts' and the library's (`Joined`).
 
     Returns
     -------
@@ -410,18 +519,21 @@ def gather(
 
     reviewer = reviewer or manifest.get("reviewer", {}).get("name") or None
     drafts = DraftWeb(result, reviewer=reviewer)
-    web = web or drafts
+    library = LibraryWeb(root)
+    web = web or Joined(drafts, library)
     evidence = replay(root)
     lean_now = files_unchanged(root)
     asks = open_asks(root, web=web)
-    results = _results(evidence, drafts, lean_now)
+    results = _results(evidence, drafts, web, lean_now)
     gathered = Gathered()
     gathered.rows = {
         "questions": _questions(asks, asks_log.replay(root).asks),
         "fetch": _fetch(asks),
         "cited": [],
         "check": [],
-        "attest": _attest(results, manifest, evidence, web, lean_now),
+        "attest": _attest(
+            results, _library_results(evidence, web, lean_now), manifest, evidence, web, library, lean_now
+        ),
         "accepted-changed": _accepted_changed(manifest, result, {r.key: r.status for r in results}),
         "attested-changed": _attested_changed(results, manifest, evidence),
         "edits": _edits(result, reviewer, manifest),
@@ -486,6 +598,8 @@ def body_of(row: Row, manifest: dict[str, Any]) -> dict[str, Any]:
     if row.kind == "edits":
         change = next((c for c in manifest.get("changes", []) if c.get("id") == row.fields["change"]), None)
         return {"change": change}
+    if row.body is not None:
+        return row.body
     if row.kind == "attested-changed":
         # "What you attested, on …": the rest of what was attested comes with formalization
         return {"at": row.fields["attested_at"]}

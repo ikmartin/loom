@@ -137,8 +137,8 @@ describe('every generated sample passes through the client as a served answer wo
 	});
 	afterEach(() => vi.unstubAllGlobals());
 
-	it("finds Review's and the Web's sixteen samples and the Library's", () => {
-		expect(samples.filter((s) => !s.endpoint.startsWith('library-')).length).toBe(16);
+	it("finds Review's and the Web's seventeen samples and the Library's", () => {
+		expect(samples.filter((s) => !s.endpoint.startsWith('library-')).length).toBe(17);
 		expect(samples.filter((s) => s.endpoint.startsWith('library-')).length).toBeGreaterThan(20);
 		for (const s of samples) expect(CALLS, s.endpoint).toHaveProperty([s.endpoint]);
 	});

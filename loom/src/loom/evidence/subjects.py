@@ -15,15 +15,24 @@ from loom.identity import is_agent
 KINDS = ("node", "label", "macro")
 #: A text's hash, as records write it.
 HASH = re.compile(r"sha256:[0-9a-f]{64}")
-#: A node's id (`docs/specs/nodes.md` §3): a stem, and a suffix for a work, its macros or a proof.
-NODE = re.compile(r"[A-Za-z0-9]+-[0-9A-Z]{4}(?:-ref|-macros|-proof[0-9A-Z]{2})?")
-#: A work's id.
-REFERENCE = re.compile(r"[A-Za-z0-9]+-[0-9A-Z]{4}-ref")
 #: A macro's name without its backslash, as `scan.macros` reads it: letters (and `@`), or one other character.
 MACRO = re.compile(r"[A-Za-z@]+|\{[A-Za-z@*]+\}|[^A-Za-z@\s{}]")
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 #: The longest label a record takes.
 LONGEST = 256
+
+
+def is_node(text: object, *kinds: str) -> bool:
+    """Whether `text` is a node's id by the library's grammar (`library.ids`), and of one of `kinds` (`statement`, `proof`, `reference`, `macros`) where any are named."""
+    from loom.library.ids import parse_id
+
+    parsed = parse_id(text) if isinstance(text, str) else None
+    return parsed is not None and (not kinds or parsed.kind in kinds)
+
+
+def is_work(text: object) -> bool:
+    """Whether `text` is a work's id: a reference node's."""
+    return is_node(text, "reference")
 
 
 def label_problem(label: object) -> str | None:
@@ -105,7 +114,7 @@ class Subject:
 def name_problem(kind: str, name: object) -> str | None:
     """Why `name` cannot name a thing of `kind`; None when it can."""
     if kind == "node":
-        return None if isinstance(name, str) and NODE.fullmatch(name) else f"{name!r} is not a node's id"
+        return None if is_node(name) else f"{name!r} is not a node's id"
     if kind == "macro":
         return None if isinstance(name, str) and MACRO.fullmatch(name) else f"{name!r} is not a macro's name"
     return label_problem(name)

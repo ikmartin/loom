@@ -11,10 +11,11 @@ from loom.evidence import log
 from loom.evidence.log import replay, write
 from loom.evidence.status import files_unchanged, status
 from loom.evidence.subjects import Subject, Who
-from loom.evidence.web import Blank, DraftWeb, Here, Joined
+from loom.evidence.web import DraftWeb, Here, Joined
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
+from tests.unit.evidence._nothing import Nothing
 
 PERSON = Who("person", "A. Author")
 LOOM = Who("loom")
@@ -359,7 +360,7 @@ def test_an_open_correction_is_on_the_text_it_corrects_until_declined(tmp_path: 
 # ---- the gate: nothing reads formalized while a library result under it is unread, unchecked or, assumed, unattested
 
 
-class _Nodes(Blank):
+class _Nodes(Nothing):
     """A library of a few nodes, each with its text's hash and whether its body is empty, as the node store will answer."""
 
     def __init__(self, nodes: dict[str, tuple[str, bool]]) -> None:
@@ -399,7 +400,7 @@ def _attest_over(root: Path, draft: DraftWeb, lean: log.Record, nodes: list[str]
         write(root, "attested", PERSON, on=Subject("macro", name, digest))
 
 
-def _gated(root: Path, library: Blank):  # type: ignore[no-untyped-def]
+def _gated(root: Path, library: Nothing):  # type: ignore[no-untyped-def]
     draft = _web(root)
     return status(replay(root), Joined(draft, library), Here("block", _key(draft)), lean_now=files_unchanged(root))
 
@@ -421,12 +422,12 @@ def test_a_library_result_nothing_can_say_of_keeps_it_from_reading_formalized(ro
     """Before the node store, no web answers for a node: one under an attestation is a cause with nothing now, and one assumed in Lean waits."""
     draft = _web(root)
     _attest_over(root, draft, _lean(root, draft), ["tq-00B7"])
-    for web in (Joined(draft, Blank()), draft):
+    for web in (Joined(draft, Nothing()), draft):
         found = status(replay(root), web, Here("block", _key(draft)), lean_now=files_unchanged(root))
         assert found.lean == "changed" and [(c.key, c.now) for c in found.causes] == [(("node", "tq-00B7"), None)]
     assumed = Subject("node", "tq-00B8", H1)
     _attest_over(root, draft, _lean(root, draft, assumed=[assumed.to_dict()]), [])
-    found = _gated(root, Blank())
+    found = _gated(root, Nothing())
     assert found.lean == "waiting" and [(w.key, w.why) for w in found.waiting_on] == [(("node", "tq-00B8"), "unknown")]
 
 
