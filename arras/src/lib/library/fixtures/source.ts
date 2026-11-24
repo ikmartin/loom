@@ -252,7 +252,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 				const name = it.incoming ? it.incoming.replace(/^f-\d+-/, '') : (it.text ?? '');
 				// a file named by an arXiv number a work in the library states asks whether it is that work, as the intake asks of an identifier a file states
 				const stated = it.incoming ? /^(\d{4}\.\d{4,5})(v\d+)?/.exec(name) : null;
-				const same = stated ? f.works.filter((w) => w.link?.endsWith(`/${stated[1]}`)) : [];
+				const same = stated ? f.works.filter((w) => w.link?.replace(/v\d+$/, '').endsWith(`/${stated[1]}`)) : [];
 				if (stated && same.length) {
 					const question = `q-${f.gen}-${item}`;
 					f.questions[question] = { name, candidates: same.map((w) => w.ref) };

@@ -164,7 +164,9 @@ export const library = {
 		/** The answers: that it is the one work asked about, that it is a work of its own beside one or several. */
 		isIt: 'yes',
 		notIt: 'no, a work of its own',
-		noneOfThem: 'none of them: a work of its own'
+		noneOfThem: 'none of them: a work of its own',
+		/** A work the question names whose short name another work asked about shares, told apart by its title. */
+		candidate: (short: string, title: string) => `${short} · ${title}`
 	},
 	drop: {
 		/** The cover over any view while a file is dragged over the window. */
