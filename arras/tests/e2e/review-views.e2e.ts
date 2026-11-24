@@ -63,21 +63,17 @@ test("an agent's question is answered by a choice or in the person's words, and 
 	await expect(count(page, 'review-kind-questions')).toHaveText('0');
 });
 
-// The row form for Proposed edits waits until it holds Your Changes' acts; until then the kind draws Your Changes' section.
-test.fixme('a proposed edit opens to its change and is kept; one made in place that broke the compile says why', async ({ page }) => {
+test('under Proposed edits each change is a card with its words out and in, an edit made in place said so, Keep and Discard on each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const broke = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Lemma 2' });
-	await expect(broke).toContainText('bounds.tex has not compiled since this edit (line 14)');
-	await broke.getByRole('button', { expanded: false }).click();
-	await expect(broke.getByTestId('review-statement').locator('span.change[data-side="new"]').first()).toHaveText('Suppose');
-	await expect(broke).toContainText('This edit was made in place. bounds.tex has not compiled since: the command it adds is not defined (line 14).');
-	await expect(broke.getByRole('button', { name: 'undo the edit' })).toBeVisible();
-	const first = page.getByTestId('review-row').first();
-	await first.getByRole('button', { expanded: false }).click();
-	await first.getByRole('button', { name: 'keep' }).click();
-	await expect(page.getByTestId('column-message')).toContainText('Kept.');
-	await expect(page.getByTestId('review-row')).toHaveCount(4);
+	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
+	const edit = changes.locator('[data-testid="change-card"][data-change="c-0f621ccf"]');
+	await expect(edit).toContainText('since your look');
+	await expect(edit.getByTestId('change-words').locator('.del, .ins').first()).toBeVisible();
+	for (const card of await changes.getByTestId('change-card').all()) {
+		await expect(card.getByTestId('card-keep')).toBeVisible();
+		await expect(card.getByTestId('card-discard')).toBeVisible();
+	}
 });
 
 test("a work's results to check open the first a draft rests on beside its page, and the yes takes it away", async ({ page }) => {
@@ -249,7 +245,7 @@ test('an attested definition that changed is asked about in three steps, and eac
 	await expect(cor).toContainText('The Lean above has not changed; only your statement has.');
 });
 
-test('see it lays the document over Review, read only, at the place, and closes back to the list', async ({ page }) => {
+test('see it lays the document over Review, read only, lands at the place, and closes back to the list', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-cited').click();
 	const cite = rows(page).filter({ hasText: 'main.tex · the proof of Theorem 3.4 cites Okafor 2022 without naming a result' });
@@ -259,25 +255,26 @@ test('see it lays the document over Review, read only, at the place, and closes 
 	await expect(over).toContainText('main.tex');
 	await expect(over).toContainText('at the proof of Theorem 3.4 · read only here; edit it in Docs');
 	await expect(over.locator('.fragment').first()).toBeVisible();
+	await expect(over.locator('#sy-0002-proof')).toBeInViewport();
 	await expect(page).toHaveURL(/\/review/);
 	await over.getByRole('button', { name: 'Close the document' }).click();
 	await expect(over).toHaveCount(0);
 	await expect(cite.getByTestId('see-it')).toBeVisible();
 });
 
-// The row form for Proposed edits waits until it holds Your Changes' acts, and with it a proposed edit's see it.
-test.fixme("a proposed edit's see it lands at the result, and one in a draft the quilt does not hold offers none", async ({ page }) => {
+test("a proposed edit's place lays its draft over Review and lands at the result, and a change in no draft's text names no place", async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
-	const bounds = page.getByTestId('review-row').filter({ hasText: 'bounds.tex · Theorem 1' });
-	await bounds.getByRole('button', { expanded: false }).click();
-	await expect(bounds.getByTestId('see-it')).toHaveCount(0);
-	const main = page.getByTestId('review-row').filter({ hasText: 'main.tex · proof of Theorem 3.1' });
-	await main.getByRole('button', { expanded: false }).click();
-	await main.getByTestId('see-it').click();
+	const changes = page.locator('[data-testid="your-changes"][data-part="changes"]');
+	await expect(changes.locator('[data-testid="change-card"][data-change="c-5a59b9ba"]').getByTestId('change-see')).toHaveCount(0);
+	const suggested = changes.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]');
+	const place = suggested.getByTestId('change-where').getByTestId('change-see');
+	const name = (await place.innerText()).trim();
+	await place.click();
 	const over = page.getByTestId('review-over');
-	await expect(over).toContainText('at proof of Theorem 3.1 · read only here; edit it in Docs');
-	await expect(over.locator('#sy-0002-proof')).toBeInViewport();
+	await expect(over).toContainText(`at ${name} · read only here; edit it in Docs`);
+	await expect(over.locator('#sy-0004')).toBeInViewport();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
 test("a collaborator's pull is chosen under the kinds and drawn as today's review of it", async ({ page }) => {

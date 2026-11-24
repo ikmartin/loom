@@ -28,8 +28,8 @@
 		onopen?: () => void;
 		/** Say where it is, with a link there, as Review does. */
 		place?: boolean;
-		/** In Review, how a block it names is shown: laid over Review at it (see it), or, with null, named in words; absent outside Review, where it is a link into its document. */
-		see?: ((key: string) => void) | null;
+		/** In Review, how a block it names is shown: laid over Review at it (see it, given the block and the words that named it), or, with null, named in words; absent outside Review, where it is a link into its document. */
+		see?: ((key: string, said: string) => void) | null;
 	} = $props();
 
 	const m = $derived(store.manifest);
@@ -55,7 +55,7 @@
 </script>
 
 {#snippet goes(text: string, href: string, key: string)}
-	{#if see === undefined}<a {href} onclick={(e) => e.stopPropagation()}>{text}</a>{:else if see}<button type="button" class="see" data-testid="change-see" onclick={(e) => { e.stopPropagation(); see(key); }}>{text}</button>{:else}{text}{/if}
+	{#if see === undefined}<a {href} onclick={(e) => e.stopPropagation()}>{text}</a>{:else if see}<button type="button" class="see" data-testid="change-see" onclick={(e) => { e.stopPropagation(); see(key, text); }}>{text}</button>{:else}{text}{/if}
 {/snippet}
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->

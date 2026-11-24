@@ -65,7 +65,7 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 		{ row: `cited:${refs.okafor}`, kind: 'cited', docs: [MAIN], ref: refs.okafor, short: 'Okafor 2022', holds: { pdf: true, tex: false }, stubs: [{ node: 'tq-04A1', name: 'Theorem 2.3', rests: { docs: [MAIN] }, not_in_source: false, marked: false }, { node: 'tq-04A2', name: 'Corollary 4.2', rests: { docs: [MAIN] }, not_in_source: false, marked: false }] },
 		{ row: `cited:${refs.arden25}`, kind: 'cited', docs: [MAIN], ref: refs.arden25, short: 'Arden 2025', holds: { pdf: true, tex: false }, stubs: [{ node: 'tq-04B1', name: 'Theorem 6.2', rests: { docs: [MAIN] }, not_in_source: false, marked: false }] },
 		{ row: `cited:${refs.smith}`, kind: 'cited', docs: [BOUNDS], ref: refs.smith, short: 'Smith 2024', holds: { pdf: true, tex: true }, stubs: [{ node: 'tq-04C1', name: 'Lemma 8.2', rests: { docs: [BOUNDS] }, not_in_source: true, marked: false }] },
-		{ row: 'cited:m-2026-11-21-oka22', kind: 'cited', docs: [MAIN], citation: 'm-2026-11-21-oka22', doc: MAIN, key: 'thm:count/proof', where: 'the proof of Theorem 3.4', ref: refs.okafor, short: 'Okafor 2022', citekey: 'Oka22' }
+		{ row: 'cited:m-2026-11-21-oka22', kind: 'cited', docs: [MAIN], citation: 'm-2026-11-21-oka22', doc: MAIN, key: 'sy-0002/proof', where: 'the proof of Theorem 3.4', ref: refs.okafor, short: 'Okafor 2022', citekey: 'Oka22' }
 	];
 	const checks: CheckRow[] = [
 		{ row: `check:${refs.arden25}`, kind: 'check', docs: [MAIN], ref: refs.arden25, short: 'Arden 2025', pdf: null, nodes: [{ node: 'tq-05A1', name: 'Theorem 5.1', number: '5.1', title: 'Extension criterion', rests: { docs: [MAIN] }, how: 'transcribed' }] },
@@ -91,7 +91,7 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	bodies[`cited:${refs.okafor}#tq-04A2`] = { cite: { doc: MAIN, key: 'thm:count/proof', where: 'main.tex, proof of Theorem 3.4', fragment: cite('c42', p(`…and the count is a polynomial, as in ${c('2', 'Corollary 4.2')}.`)), nth: 0 }, find: { query: 'Corollary 4.2', hits: [{ page: 1, rects: [[72, 520, 190, 534]] }], pages: 24 } };
 	bodies[`cited:${refs.arden25}#tq-04B1`] = { cite: { doc: MAIN, key: 'sec:intro', where: 'main.tex, Section 1', fragment: cite('t62', p(`The extension criterion ${c('3', 'Theorem 6.2')} appears only in the second arXiv version of that paper.`)), nth: 0 }, find: { query: 'Theorem 6.2', hits: [], pages: 31 } };
 	bodies[`cited:${refs.smith}#tq-04C1`] = { cite: { doc: BOUNDS, key: 'thm:radius/proof', where: 'bounds.tex, proof of Theorem 1', fragment: cite('l82', p(`…by the thinness bound ${c('Smi24', 'Lemma 8.2')}, applied to each widget.`)), nth: 0 }, find: { query: 'Lemma 8.2', hits: [{ page: 2, rects: [[72, 610, 160, 624]] }], pages: 31 } };
-	bodies['cited:m-2026-11-21-oka22'] = { cite: { doc: MAIN, key: 'thm:count/proof', where: 'main.tex, proof of Theorem 3.4', fragment: cite('bare', p(`Each interval ${m('[u, v]')} is a box <span class="cite"><a>[2]</a></span>, so the count over intervals is a sum of products.`)), nth: 0 } };
+	bodies['cited:m-2026-11-21-oka22'] = { cite: { doc: MAIN, key: 'sy-0002/proof', where: 'main.tex, proof of Theorem 3.4', fragment: cite('bare', p(`Each interval ${m('[u, v]')} is a box <span class="cite"><a>[2]</a></span>, so the count over intervals is a sum of products.`)), nth: 0 } };
 	// the Lean kinds: what the agent wrote of its formalization, what loom observed, and the person's last word
 	const frag = (key: string, html: string) => {
 		fragments[`fixture/lean/${key}.html`] = html;

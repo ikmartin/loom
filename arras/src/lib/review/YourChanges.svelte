@@ -86,7 +86,7 @@
 
 	const name = (key: string) => displayNode(m, key, home.get(key) ?? doc?.path).name;
 	/** In Review's sections, a block a row names is laid over Review at it (see it, `SeeIt`) where the quilt has the draft, never opened in Docs; null where it has not, and the block is named in words. */
-	const seeIn = (path: string | null | undefined): ((key: string) => void) | null => (path && m.masters.some((x) => x.path === path) ? (key: string) => (rv.over = { doc: path, key, name: name(key) }) : null);
+	const seeIn = (path: string | null | undefined): ((key: string, said?: string) => void) | null => (path && m.masters.some((x) => x.path === path) ? (key: string, said?: string) => (rv.over = { doc: path, key, name: said ?? name(key) }) : null);
 	const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 	const some = (n: number, words: string) => (n ? `${n} ${words}` : '');
 
