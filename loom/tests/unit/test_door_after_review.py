@@ -862,7 +862,7 @@ FORGERIES = {
 }  # fmt: skip
 
 
-@pytest.mark.parametrize("which", [*FORGERIES, "another reviewer's look", "an agent's act"])
+@pytest.mark.parametrize("which", [*FORGERIES, "another reviewer's look", "an agent's act", "a look that is a list"])
 def test_a_journal_line_whose_look_recovery_may_not_write_is_left_and_said_and_takes_nothing_in(
     tmp_path: Path, which: str
 ) -> None:
@@ -889,6 +889,9 @@ def test_a_journal_line_whose_look_recovery_may_not_write_is_left_and_said_and_t
     elif which == "an agent's act":
         _forge(root, {"who": "Tester", "looked": {DOC: stored}}, (DOC,), by="agent")
         why = "an agent's act, which writes no look"
+    elif which == "a look that is a list":
+        _forge(root, [DOC, stored])  # type: ignore[arg-type]
+        why = "its look is not a look"
     else:
         make, keeps, why = FORGERIES[which]
         _forge(root, {"who": "Tester", **make(stored)}, keeps)

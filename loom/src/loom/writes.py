@@ -880,8 +880,10 @@ def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
 
     A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), any look one recovery may write (`_look_untrusted`), and the act must name a file, or carry a look: the one act the door journals that writes no file is one whose only write is the person's look and its records, as a Keep of in-place changes.
     """
-    files = entry.get("files")
-    if not isinstance(files, dict) or (not files and not isinstance(entry.get("look"), dict)):
+    files, look = entry.get("files"), entry.get("look")
+    if files == {} and look is not None and not isinstance(look, dict):
+        return "its look is not a look"
+    if not isinstance(files, dict) or (not files and not isinstance(look, dict)):
         return "it names no file"
     for rel, ab in files.items():
         if not _in_quilt(root, rel):
