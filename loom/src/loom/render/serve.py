@@ -32,6 +32,7 @@ from loom.render.watch import Watcher, scan_unread, snapshot
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult
 from loom.tex.runner import CompileResult, compile_document, normalise_engine
+from loom.version import code_stamp
 
 DEFAULT_PORT = 8791
 ASSET_SUFFIXES = {
@@ -232,14 +233,6 @@ def viewer_version(bundle: Path) -> str:
         return str(json.loads((bundle / "_app" / "version.json").read_text(encoding="utf-8")).get("version", ""))
     except (OSError, ValueError, AttributeError):
         return ""
-
-
-def code_stamp() -> tuple[int, int]:
-    """loom's Python as it stands on disk: how many modules, and the newest one's mtime, which an edit, a merge or an install moves."""
-    import loom
-
-    times = [p.stat().st_mtime_ns for p in Path(loom.__file__).parent.rglob("*.py")]
-    return len(times), max(times, default=0)
 
 
 class CannotBind(Exception):

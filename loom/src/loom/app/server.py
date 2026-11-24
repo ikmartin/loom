@@ -23,7 +23,8 @@ from loom.app.registry import HOME_PORT, Entry, address
 from loom.app.supervise import SETTLE, Supervisor, tail
 from loom.files import FILES_URL
 from loom.render.endpoints.base import ApiError
-from loom.render.serve import BUILD_URL, STORE_URL, HeldBundle, LoomHandler, code_stamp, from_elsewhere
+from loom.render.serve import BUILD_URL, STORE_URL, HeldBundle, LoomHandler, from_elsewhere
+from loom.version import code_stamp
 
 #: The largest JSON body the home reads; its writes are a few fields each.
 MAX_BODY = 1024 * 1024

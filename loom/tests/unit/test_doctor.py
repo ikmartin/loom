@@ -405,7 +405,29 @@ def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
         "macro block": ("ok", "current"),
         ".gitignore": ("ok", "has loom's lines"),
         "config": ("ok", "config.toml read cleanly"),
+        "server": ("ok", "not running"),
     }
+
+
+def test_doctor_says_whether_the_home_page_and_the_quilts_server_run_and_where(box: Box) -> None:
+    """The home page's address, and the quilt's server's, or the port its quilt keeps on the home's list."""
+    import json
+    import os
+
+    from loom.app import registry
+    from loom.render.serve import write_serve_json
+
+    q = quilt(box)
+    data = doctor(box, cwd=q / "drafting", code=0)
+    assert item(data, "app")["detail"] == "not running" and item(data, "server")["detail"] == "not running"
+    kept = registry.remember(q).port
+    assert item(doctor(box, cwd=q, code=0), "server")["detail"] == f"not running; it keeps http://127.0.0.1:{kept}/"
+    write_serve_json(q, kept)  # this process stands in for the server, and it is alive
+    registry.address().parent.mkdir(parents=True, exist_ok=True)
+    registry.address().write_text(json.dumps({"port": 8790, "pid": os.getpid(), "url": "http://127.0.0.1:8790/"}))
+    data = doctor(box, cwd=q, code=0)
+    assert item(data, "server")["detail"] == f"running at http://127.0.0.1:{kept}/"
+    assert item(data, "app")["detail"] == "the home page at http://127.0.0.1:8790/"
 
 
 def test_quilt_option_names_the_quilt(box: Box) -> None:

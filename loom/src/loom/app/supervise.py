@@ -93,7 +93,7 @@ class Supervisor:
     """
 
     def __init__(self, extra: Sequence[str] = ()) -> None:
-        from loom.render.serve import code_stamp
+        from loom.version import code_stamp
 
         self.extra = tuple(extra)
         self.children: dict[str, Child] = {}
@@ -204,7 +204,7 @@ class Supervisor:
 
     def tick(self, listed: Iterable[Entry]) -> None:
         """Keep each quilt the person left open served: start one not running, start again one that died after its wait, and restart one that is stale once loom's code has been still for `SETTLE`."""
-        from loom.render.serve import code_stamp
+        from loom.version import code_stamp
 
         now = time.monotonic()
         if now - self.stamp_asked >= ASK_EVERY:

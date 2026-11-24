@@ -134,3 +134,15 @@ def test_repair_tex_runs_as_a_job_the_list_follows(home: Home, monkeypatch: pyte
     assert done["job"] == job and done["kind"] == "repair" and done["step"] == "fetching TeX"
     assert done["tex"] == private.active(year=False).kind
     assert steps == ["ran"]
+
+
+def test_the_agents_server_says_once_loom_was_updated_under_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Each call runs the loom on disk while the server, its tools and its instructions stay the one it started as; loom cannot restart it, only say so."""
+    from loom.mcp import server as mcp_server
+    from loom.version import code_stamp
+
+    started = code_stamp()
+    assert mcp_server.updated(started) == ""
+    monkeypatch.setattr(mcp_server, "code_stamp", lambda: (started[0], started[1] + 1))
+    said = mcp_server.updated(started)
+    assert "updated" in said and "restart" in said and "loom " not in said.replace("loom in", "")
