@@ -967,3 +967,167 @@ def test_a_keep_that_kept_nothing_because_every_change_was_refused_exits_as_a_re
     good = suggest(q, "--quote", "one or two points", "--with", "at most two points")
     data = json_of("changes", "--keep", old, "--keep", good, "--json", cwd=q)
     assert data["ok"] is False and data["exit"] == 0 and data["done"] == [good]
+
+
+# ---- R2-22: what recovery believes lies where agents are held out --------------------------------------------
+
+#: The files opened while recovery runs under `_listening`, or None while nothing listens.
+_OPENED: list[str] | None = None
+
+
+def _listen() -> None:
+    """Add, once in the process, an audit hook noting each file opened while `_OPENED` is a list; inert otherwise, since a hook cannot be taken out."""
+    import sys
+
+    if getattr(_listen, "added", False):
+        return
+
+    def hook(event: str, args: tuple) -> None:  # type: ignore[type-arg]
+        if _OPENED is not None and event == "open" and isinstance(args[0], (str, bytes, os.PathLike)):
+            _OPENED.append(os.fsdecode(args[0]))
+
+    sys.addaudithook(hook)
+    _listen.added = True  # type: ignore[attr-defined]
+
+
+def _names(rule: str, rel: str) -> bool:
+    """Whether a deny of loom's own in Claude Code's file (`/dir/**` or `/file`) names the quilt-relative `rel`."""
+    body = rule.removeprefix("/")
+    return rel.startswith(body.removesuffix("**")) if body.endswith("/**") else rel == body
+
+
+def _begun(root: Path, kind: str, files: dict, look: dict | None = None) -> None:
+    """Append a person's `begin` line of `kind` on `files` (path: [before, after] digests), in the form the door writes one."""
+    from loom.paths import JOURNAL
+
+    line = {"event": "begin", "act": f"{kind}:e0e0e0e0e0e0e0e0", "kind": kind, "actor": "Tester", "by": "person", "when": "2026-11-24T00:00:00Z", "files": files, "edits": [], "records": []}  # fmt: skip
+    if look is not None:
+        line["look"] = look
+    with (root / JOURNAL).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def _cut_short(root: Path, hist: Path, mp: pytest.MonkeyPatch, which: str) -> None:
+    """Leave the journal of the quilt `root` holding one act begun and not settled, of the shape `which` names, so recovery reaches each of its verdicts and the look's follow-ups."""
+    from loom import writes
+    from loom.looks import read_look
+    from loom.records.snapshots import read_raw, write_raw
+    from tests.helpers import run
+    from tests.unit.test_adopt import DOC
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    doc = root / DOC
+    if which == "a move put back":
+        (root / "notes.md").write_text("a note\n")
+        _begun(root, "mv", {DOC: [writes.store(hist, b"before\n"), writes.digest(doc.read_bytes())], "notes.md": [writes.digest(b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
+        writes.store(hist, doc.read_bytes())
+        writes.store(hist, b"a note\n")
+    elif which == "a person's act finished, the look following it":
+        seen = read_raw(root, read_look(root, "Tester").files[DOC], hist)  # type: ignore[union-attr]
+        _begun(
+            root, "restore-to", {DOC: [writes.store(hist, str(seen).encode()), writes.store(hist, doc.read_bytes())]}
+        )
+    elif which == "a Keep's look finished":
+        _forge(root, {"who": "Tester", "looked": {DOC: write_raw(root, doc.read_text(), hist)}}, (DOC,))
+    elif which == "a tick finished":
+        d = writes.store(hist, doc.read_bytes())
+        _begun(root, "tick", {DOC: [d, d]}, {"who": "Tester", "tick": {"path": DOC, "line": 0}})
+    elif which == "an act left for a text the history lacks":
+        _begun(root, "mv", {DOC: ["sha256:" + "1" * 64, writes.store(hist, b"not there\n")]})
+    elif which == "a Keep put back, its edit opened again":
+
+        def listed() -> set[str]:
+            return {c["id"] for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"]}
+
+        waiting = listed()
+        ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=root, env={"AI_AGENT": "1"})  # fmt: skip
+        (edit,) = listed() - waiting
+        was = doc.read_bytes()
+        real = writes._append_journal
+
+        def die(at: Path, entry: dict, *, full: bool = False) -> tuple[int, int]:
+            if entry.get("event") == "done" and str(entry.get("act", "")).startswith("keep:"):
+                raise Died
+            return real(at, entry, full=full)
+
+        mp.setattr(writes, "_append_journal", die)
+        with pytest.raises(Died):
+            run("changes", "--keep", edit, cwd=root)
+        mp.undo()
+        doc.write_bytes(was)
+    else:  # an agent app's file, whose texts this machine's store keeps
+        (root / ".mcp.json").write_text('{"mcpServers": {}}\n')
+        restore = dying_before_the_rename(mp, after=1)
+        with pytest.raises(Died):
+            with writes.act(root, hist, "agents") as w:
+                w.replace(".mcp.json", b'{"mcpServers": {"loom": {}}}\n')
+                w.replace("notes.md", b"# Notes\n")
+        restore()
+
+
+#: Each act cut short, and what recovery does with it.
+CUTS = {
+    "a move put back": "undid",
+    "a person's act finished, the look following it": "finished",
+    "a Keep's look finished": "finished",
+    "a tick finished": "finished",
+    "an act left for a text the history lacks": "left",
+    "a Keep put back, its edit opened again": "undid",
+    "an agent app's file, from this machine's store": "undid",
+}
+
+
+@pytest.mark.parametrize("history", ["by default", "elsewhere in the quilt"])
+@pytest.mark.parametrize("which", CUTS)
+def test_every_file_recovery_reads_in_the_quilt_is_held_from_agents_by_loom_and_by_claude_code_s_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, which: str, history: str
+) -> None:
+    """Whatever recovery believes lies where agents are held out: every file it opens in the quilt, the act's own files aside, which it only compares with the digests its line names, is one loom's commands deny every agent whatever the list says (`agents.always_denied`) and one a deny in the permission file loom writes for Claude Code names. The files are the ones recovery opens, noted by an audit hook over each of its verdicts, so a read added anywhere is checked without a list here to keep (R2-22)."""
+    import shutil
+    from pathlib import PurePosixPath
+
+    from loom import writes
+    from loom.agents import always_denied, claude_denies, denied_by
+    from loom.looks import take
+    from loom.paths import HISTORY, JOURNAL
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_adopt import DOC, TEXT, made
+
+    global _OPENED
+    _listen()
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    if history == "elsewhere in the quilt":
+        config = root / "config.toml"
+        config.write_text(config.read_text().replace("[quilt]\n", '[quilt]\nhistory = "hist"\n', 1))
+        shutil.move(root / HISTORY, root / "hist")
+    take(load_quilt(root), "Tester")
+    doc = root / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    hist = load_quilt(root).history_dir
+    _cut_short(root, hist, monkeypatch, which)
+    lines = [json.loads(line) for line in (root / JOURNAL).read_text().splitlines() if line.strip()]
+    own = {rel for e in lines if e.get("event") == "begin" for rel in e.get("files") or {}}
+    temps = tuple(str(PurePosixPath(rel).with_name(f".{PurePosixPath(rel).name}.")) for rel in own)
+    _OPENED = []
+    try:
+        said = writes.recover(root, hist)
+    finally:
+        opened, _OPENED = _OPENED, None
+    top = Path(os.path.realpath(root))
+    read = set()
+    for p in opened:
+        real = Path(os.path.realpath(p))
+        if real.is_relative_to(top) and not real.is_dir():
+            rel = real.relative_to(top).as_posix()
+            if rel not in own and not rel.startswith(temps):
+                read.add(rel)
+    assert said[0].startswith(f"{CUTS[which]} "), said
+    assert JOURNAL in read and any(rel.startswith(f"{load_quilt(root).config.history}/texts/") for rel in read)
+    config = load_quilt(root).config
+    rules = claude_denies(config)
+    for rel in sorted(read):
+        why = denied_by(config, rel)
+        assert why is not None and always_denied(config, why), (rel, why)
+        assert any(_names(rule, rel) for rule in rules), rel
