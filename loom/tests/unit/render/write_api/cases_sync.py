@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -25,43 +24,14 @@ def git(root: Path, *args: str) -> str:
 
 
 def pulled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A quilt with no repository paired with a local Overleaf stand-in, a collaborator's edit to `main.tex` fetched and awaiting incorporation."""
+    """A quilt mirroring a local Overleaf stand-in, a colleague's edit to `main.tex` fetched and awaiting incorporation."""
     import loom.sync as sync
     from loom.scan.quilt import load_quilt
+    from tests.unit._mirror import SOURCE, colleague, edit, paired
 
-    root = tmp_path / "quilt"
-    (root / "drafting").mkdir(parents=True)
-    (root / "config.toml").write_text(
-        '[quilt]\nname = "test"\nmain = "drafting/main.tex"\nprefix = "zk"\nengine = "pdflatex"\n',
-        encoding="utf-8",
-    )
-    source = (
-        "\\documentclass{article}\n\\usepackage{loom}\n\\newtheorem{lemma}{Lemma}\n"
-        "\\begin{document}\n\\begin{lemma}\\label{zk-0001}A\\end{lemma}\n\\end{document}\n"
-    )
-    (root / "drafting" / "main.tex").write_text(source, encoding="utf-8")
-    (root / "loom.sty").write_text("% local support\n", encoding="utf-8")
-    bare = tmp_path / "overleaf.git"
-    subprocess.check_call(["git", "init", "-q", "--bare", "-b", "master", str(bare)])
-    other = tmp_path / "collaborator"
-    subprocess.check_call(["git", "clone", "-q", str(bare), str(other)], stderr=subprocess.DEVNULL)
-    git(other, "config", "user.name", "Colleague")
-    git(other, "config", "user.email", "colleague@example.org")
-    (other / "main.tex").write_text("\\documentclass{article}\n", encoding="utf-8")
-    git(other, "add", ".")
-    git(other, "commit", "-q", "-m", "new project")
-    git(other, "push", "-q", "origin", "HEAD:master")
-    project = tmp_path / "project"
-    subprocess.check_call(["git", "clone", "-q", str(bare), str(project)], stderr=subprocess.DEVNULL)
-    quilt = load_quilt(root)
-    state = sync.configure(quilt, str(project), "main.tex")
-    monkeypatch.setattr(sync, "compile_document", lambda *_a, **_k: SimpleNamespace(ok=True))
-    sync.push_publication(quilt, state, sync.publish(quilt, state).commit)
-    git(other, "pull", "-q", "--ff-only")
-    (other / "main.tex").write_text(source.replace("zk-0001}A", "zk-0001}B"), encoding="utf-8")
-    git(other, "commit", "-q", "-am", "edit statement")
-    git(other, "push", "-q", "origin", "HEAD:master")
-    sync.fetch(quilt, sync.SyncState.read(root))
+    root, bare = paired(tmp_path)
+    edit(colleague(tmp_path, bare), "edit statement", {"main.tex": SOURCE.replace("zk-0001}A", "zk-0001}B")})
+    sync.fetch(load_quilt(root), sync.SyncState.read(root))
     return root
 
 
@@ -71,7 +41,14 @@ def _sync_incorporate(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPa
 
     (tmp_path / "unsynced").mkdir()
     s = serve(demo(tmp_path / "unsynced"))
-    refuses(s, "sync-incorporate", {"incoming": "0" * 40, "base": "0" * 40}, 409, "sync-refused", "not configured")
+    refuses(
+        s,
+        "sync-incorporate",
+        {"incoming": "0" * 40, "base": "0" * 40},
+        409,
+        "sync-refused",
+        "mirrors no Overleaf project",
+    )
     root = pulled(tmp_path, monkeypatch)
     s = serve(root)
     state = SyncState.read(root)

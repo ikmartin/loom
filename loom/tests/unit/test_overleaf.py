@@ -14,6 +14,9 @@ import loom.overleaf as overleaf
 from loom.overleaf import LinkRefused, MirrorError, address, here, pair, paired, prepare, run, store_token
 from loom.scan.quilt import Quilt, load_quilt
 from loom.sync import SyncState
+from tests.helpers import json_of, ok
+from tests.unit import _mirror as mirror
+from tests.unit._mirror import renamed_pair
 from tests.unit._overleaf_server import TOKEN, Server, serving
 
 ID = "5f1e0c2a9b3d4e6f7a8b9c0d"
@@ -337,3 +340,98 @@ def test_pairing_through_overleaf_s_password_keeps_the_token_out_of_the_quilt(se
     pair(q, server.url(ID), asked["folder"], asked["main"], [])
     assert (q.root / "paper/main.tex").read_text() == MAIN
     assert not [p for p in q.root.rglob("*") if p.is_file() and TOKEN.encode() in p.read_bytes()]
+
+
+# ---- a pull ----------------------------------------------------------------------------------------------------------
+
+
+def moves(root: Path) -> list[dict[str, Any]]:
+    p = root / ".loom" / "records" / "history" / "ledger.jsonl"
+    lines = [json.loads(x) for x in p.read_text().splitlines() if x.strip()] if p.is_file() else []
+    return [x for x in lines if x["action"] == "move"]
+
+
+def take_pull(root: Path) -> None:
+    from loom import sync
+
+    q = load_quilt(root)
+    sync.incorporate(q, sync.fetch(q, SyncState.read(root)))
+
+
+def test_a_colleague_s_exact_rename_is_recorded_when_the_pull_is_taken_in(tmp_path: Path) -> None:
+    root, other = renamed_pair(tmp_path)
+    mirror.run(other, "mv", "main.tex", "paper.tex")
+    mirror.run(other, "commit", "-q", "-m", "rename")
+    mirror.run(other, "push", "-q", "origin", "HEAD:main")
+    from loom import sync
+
+    sync.fetch(load_quilt(root), SyncState.read(root))
+    assert moves(root) == []  # never on fetch
+    take_pull(root)
+    assert [{k: m[k] for k in ("from", "to", "moved", "via")} for m in moves(root)] == [
+        {"from": "drafting/main.tex", "to": "drafting/paper.tex", "moved": False, "via": "sync"}
+    ]
+    assert 'main = "drafting/paper.tex"' in (root / "config.toml").read_text()
+    assert SyncState.read(root).published_main == "paper.tex"
+    assert json_of("status", "--json", cwd=root)["keys"]["zk-0001"]["acceptance"]["fresh"] is True
+    assert "drafting/main.tex -> drafting/paper.tex (renamed in a pull)" in ok("history", cwd=root).stdout
+
+
+def test_a_rename_with_an_edit_is_not_recorded_and_the_document_is_gone(tmp_path: Path) -> None:
+    root, other = renamed_pair(tmp_path)
+    text = (other / "main.tex").read_text(encoding="utf-8")
+    mirror.run(other, "rm", "-q", "main.tex")
+    mirror.edit(other, "rename and edit", {"paper.tex": text.replace("zk-0001}A", "zk-0001}B")})
+    take_pull(root)
+    assert moves(root) == []
+    gone = [x for x in json_of("lint", "--json", cwd=root)["diagnostics"] if x["code"] == "loom:document-gone"]
+    assert len(gone) == 1 and "drafting/main.tex" in json.dumps(gone[0])
+
+
+def test_only_an_unambiguous_identical_pair_is_a_rename(tmp_path: Path) -> None:
+    """Two identical files deleted and one added, or one deleted and two added, cannot say which went where."""
+    from loom.sync import exact_renames
+
+    root = tmp_path / "r"
+    root.mkdir()
+    mirror.run(root, "init", "-q", "-b", "main")
+    for name, body in (("a.tex", "same\n"), ("b.tex", "same\n"), ("c.tex", "c\n"), ("d.tex", "d\n")):
+        (root / name).write_text(body, encoding="utf-8")
+    mirror.run(root, "add", ".")
+    mirror.run(root, "commit", "-q", "-m", "before")
+    before = mirror.run(root, "rev-parse", "HEAD")
+    mirror.run(root, "rm", "-q", "a.tex", "b.tex", "c.tex", "d.tex")
+    for name, body in (("e.tex", "same\n"), ("f.tex", "c\n"), ("g.tex", "d\n"), ("h.tex", "d\n")):
+        (root / name).write_text(body, encoding="utf-8")
+    mirror.run(root, "add", ".")
+    mirror.run(root, "commit", "-q", "-m", "after")
+    assert exact_renames(root, before, mirror.run(root, "rev-parse", "HEAD")) == [("c.tex", "f.tex")]
+
+
+def test_the_quilt_s_own_repository_is_never_touched(tmp_path: Path) -> None:
+    root = mirror.quilt_at(tmp_path)
+    mirror.run(root, "init", "-q", "-b", "main")
+    mirror.run(root, "add", ".")
+    mirror.run(root, "commit", "-q", "-m", "the quilt")
+    head, refs = mirror.run(root, "rev-parse", "HEAD"), mirror.run(root, "for-each-ref")
+    bare = mirror.overleaf(tmp_path)
+    pair(load_quilt(root), str(bare), "drafting", "main.tex", [])
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": mirror.SOURCE.replace("}A", "}B")})
+    take_pull(root)
+    assert (mirror.run(root, "rev-parse", "HEAD"), mirror.run(root, "for-each-ref")) == (head, refs)
+
+
+# ---- nothing writes to Overleaf --------------------------------------------------------------------------------------
+
+
+def test_no_command_reaches_overleaf_and_no_git_call_of_loom_s_pushes() -> None:
+    import ast
+
+    from loom.ai.layout import command_tree
+
+    assert not [c for c in command_tree() if c == "sync" or c.startswith("sync ")]
+    src = Path(overleaf.__file__).parent
+    for module in ("sync.py", "overleaf.py"):
+        for node in ast.walk(ast.parse((src / module).read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Constant) and node.value in ("push", "send-pack"):
+                raise AssertionError(f"{module} names git's {node.value!r} at line {node.lineno}")

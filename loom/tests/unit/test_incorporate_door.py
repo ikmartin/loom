@@ -14,9 +14,9 @@ from loom.history.ledger import append_entry, load_history
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from loom.sync import SyncError, SyncState, fetch
+from tests.unit._mirror import SOURCE, colleague, edit, paired, renamed_pair, run
 from tests.unit.test_adopt import COPY, DOC, TEXT, made
 from tests.unit.test_adopt import edit as edit_copy
-from tests.unit.test_sync import SOURCE, colleague, compiled, edit, paired, renamed_pair, run  # noqa: F401
 from tests.unit.test_write_safety import Died, dying_before_the_rename
 
 ORIGINS = ".loom/records/review-origins.json"
@@ -376,10 +376,10 @@ def pulled(tmp_path: Path):  # type: ignore[no-untyped-def]
     return q, fetch(q, SyncState.read(root))
 
 
-def test_a_pull_is_one_act(tmp_path: Path, compiled: list[str]) -> None:  # noqa: F811
+def test_a_pull_is_one_act(tmp_path: Path) -> None:
     q, state = pulled(tmp_path)
     sync.incorporate(q, state)
-    (act,) = [e for e in begun(q.root) if e["kind"] == "pull"]
+    pairing, act = [e for e in begun(q.root) if e["kind"] == "pull"]  # pairing is a pull of the whole project
     assert "drafting/main.tex" in act["files"] and ".loom/records/source-sync.json" in act["files"]
     assert [json.loads(r["line"])["action"] for r in act["records"]] == ["stamp"]
     assert "zk-0001}B" in (q.root / "drafting/main.tex").read_text()
@@ -387,7 +387,6 @@ def test_a_pull_is_one_act(tmp_path: Path, compiled: list[str]) -> None:  # noqa
 
 def test_a_second_pull_of_one_revision_is_refused_as_taken_in_and_writes_nothing(
     tmp_path: Path,
-    compiled: list[str],  # noqa: F811
 ) -> None:
     """Both read the record before either took the lock: the second reads it again under the lock and finds the revision taken in, rather than advising the person to remove what the first brought (D-7)."""
     q, state = pulled(tmp_path)
@@ -403,17 +402,16 @@ def test_a_second_pull_of_one_revision_is_refused_as_taken_in_and_writes_nothing
 
 def test_a_pull_that_moves_the_main_document_changes_the_config_in_the_same_act(
     tmp_path: Path,
-    compiled: list[str],  # noqa: F811
 ) -> None:
     root, other = renamed_pair(tmp_path)
     run(other, "mv", "main.tex", "paper.tex")
     run(other, "commit", "-q", "-m", "rename")
-    run(other, "push", "-q", "origin", "HEAD:master")
+    run(other, "push", "-q", "origin", "HEAD:main")
     q = load_quilt(root)
     sync.incorporate(q, fetch(q, SyncState.read(root)))
     kinds = [e["kind"] for e in begun(root)]
-    assert kinds.count("pull") == 1 and "settings" not in kinds, kinds
-    (act,) = [e for e in begun(root) if e["kind"] == "pull"]
+    assert kinds.count("pull") == 2 and "settings" not in kinds, kinds  # the pairing, then the pull
+    act = [e for e in begun(root) if e["kind"] == "pull"][-1]
     assert {"config.toml", "drafting/main.tex", "drafting/paper.tex"} <= set(act["files"])
     assert act["files"]["drafting/main.tex"][1] is None  # removed, in the same act
     assert 'main = "drafting/paper.tex"' in (root / "config.toml").read_text()
@@ -422,7 +420,6 @@ def test_a_pull_that_moves_the_main_document_changes_the_config_in_the_same_act(
 def test_a_pull_cut_short_between_its_files_is_put_back_whole(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    compiled: list[str],  # noqa: F811
 ) -> None:
     q, state = pulled(tmp_path)
     record = (q.root / ".loom/records/source-sync.json").read_bytes()
@@ -568,7 +565,6 @@ def test_an_adoption_the_person_takes_in_is_not_listed_back_to_them(
 def test_a_pull_the_person_takes_in_is_not_listed_back_and_cannot_be_discarded_behind_its_record(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    compiled: list[str],  # noqa: F811
 ) -> None:
     from loom.pending import in_place
 

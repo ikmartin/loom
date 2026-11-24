@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.paths import CACHE, HISTORY, LOCAL, LOOM, OVERLEAF_CLONE, SCRATCH, SOURCE_SYNC
+from loom.paths import CACHE, HISTORY, LOCAL, LOOM, SCRATCH
 
 NO_AUTHOR_MESSAGE = (
     'no author name: add name = "Your Name" under [author] in ~/.config/loom/config.toml, or pass --as NAME'
@@ -232,7 +232,7 @@ REMOVED_IN = (CACHE, LOCAL, SCRATCH)
 def removed_in(root: Path, config: QuiltConfig) -> str | None:
     """Why a path setting of the quilt at `root` cannot stand, or None: one that lies in a folder of `REMOVED_IN`, by its path or through a link.
 
-    The settings: `[quilt] history`, `research_state`, `main` and `home`, and the sync directory `loom sync init` records. Each names where the person's or loom's kept files go, and the sweep would remove them there.
+    The settings: `[quilt] history`, `research_state`, `main` and `home`. Each names where the person's or loom's kept files go, and the sweep would remove them there.
     """
     named = [
         ("[quilt] history", config.history),
@@ -240,13 +240,6 @@ def removed_in(root: Path, config: QuiltConfig) -> str | None:
         ("[quilt] main", config.main),
         ("[quilt] home", config.home),
     ]
-    try:
-        synced = json.loads((root / SOURCE_SYNC).read_text(encoding="utf-8")).get("directory")
-    except (OSError, ValueError, AttributeError):
-        synced = None
-    # the Overleaf mirror's clone is loom's own, made in `.loom/local/` because it is this machine's (`loom.overleaf`)
-    if isinstance(synced, str) and synced and synced != OVERLEAF_CLONE:
-        named.append(("the sync directory", synced))
     real_root = Path(os.path.realpath(root))
     for setting, value in named:
         if not value:

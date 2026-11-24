@@ -1,12 +1,9 @@
-"""Output cases for the agents commands -- `session`, `here`, `since`, `write`, `ai` and `sync`; see `tests/output_cases/__init__.py`."""
+"""Output cases for the agents commands -- `session`, `here`, `since`, `write` and `ai`; see `tests/output_cases/__init__.py`."""
 
 from __future__ import annotations
 
 import shutil
-import subprocess
 from pathlib import Path
-from types import SimpleNamespace
-from unittest import mock
 
 from tests.output_cases.base import Case, ai_copy, author
 
@@ -61,65 +58,6 @@ def marked(q: Path) -> None:
 
     author(q)
     ok("annotate", "dm-0003", "Is this right?", "--type", "question", cwd=q)
-
-
-def _git(cwd: Path, *args: str) -> None:
-    subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True)
-
-
-def workspace(q: Path) -> None:
-    """A bare repository beside the quilt standing in for an Overleaf project, at `../overleaf.git`, and the person's clone of it at `../overleaf`."""
-    bare, seed = q.parent / "overleaf.git", q.parent / "seed"
-    _git(q.parent, "init", "-q", "--bare", "-b", "master", str(bare))
-    _git(q.parent, "clone", "-q", str(bare), str(seed))
-    _git(seed, "config", "user.name", "Overleaf")
-    _git(seed, "config", "user.email", "overleaf@example.org")
-    (seed / "main.tex").write_text("\\documentclass{article}\n\\begin{document}\n\\end{document}\n", encoding="utf-8")
-    _git(seed, "add", ".")
-    _git(seed, "commit", "-q", "-m", "new project")
-    _git(seed, "push", "-q", "origin", "HEAD:master")
-    _git(q.parent, "clone", "-q", str(bare), str(q.parent / "overleaf"))
-    # named as a person beside it would, so the workspace's label stays short
-    _git(q.parent / "overleaf", "remote", "set-url", "origin", "../overleaf.git")
-
-
-def paired(q: Path) -> None:
-    """The quilt paired with that workspace, its main published there as `main.tex`, with an author to stamp as."""
-    from loom.scan.quilt import load_quilt
-    from loom.sync import configure
-
-    author(q)
-    workspace(q)
-    configure(load_quilt(q), str(q.parent / "overleaf"), "main.tex")
-
-
-def incoming(q: Path) -> None:
-    """Paired and published, then a collaborator's edit to the main document fetched and waiting for review."""
-    import loom.sync as sync
-    from loom.scan.quilt import load_quilt
-
-    paired(q)
-    quilt = load_quilt(q)
-    state = sync.SyncState.read(q)
-    with mock.patch.object(sync, "compile_document", lambda *_a, **_k: SimpleNamespace(ok=True)):
-        publication = sync.publish(quilt, state)
-    sync.push_publication(quilt, state, publication.commit)
-    clone = q.parent / "collaborator"
-    _git(q.parent, "clone", "-q", str(q.parent / "overleaf.git"), str(clone))
-    _git(clone, "config", "user.name", "Colleague")
-    _git(clone, "config", "user.email", "colleague@example.org")
-    main = clone / "main.tex"
-    main.write_text(
-        main.read_text(encoding="utf-8").replace("\\end{document}", "A colleague's sentence.\n\\end{document}")
-    )
-    _git(clone, "commit", "-q", "-am", "a colleague's edit")
-    _git(clone, "push", "-q", "origin", "HEAD:master")
-    sync.fetch(quilt, sync.SyncState.read(q))
-
-
-def patch_file(q: Path) -> None:
-    incoming(q)
-    (q / "pull.patch").write_text("already here\n", encoding="utf-8")
 
 
 NOWHERE = ("--session", "no-such-session")
@@ -236,39 +174,5 @@ CASES: dict[str, list[Case]] = {
         Case(("contribution.tex",), setup=ai_copy),
         Case(("contribution.tex", "--dry-run"), setup=ai_copy, unchanged=True),
         Case(("no-such-copy.tex",), exit=2, why="names no agent document", unchanged=True),
-    ],
-    "sync init": [
-        Case(("../overleaf", "--publish-main", "main.tex"), setup=workspace),
-        Case(("../overleaf", "--dry-run"), setup=workspace, unchanged=True),
-        Case(("../nowhere",), exit=2, why="no directory there", unchanged=True),
-        Case(("https://git.overleaf.com/0123abcd",), exit=2, why="a URL, where a clone is wanted", unchanged=True),
-    ],
-    "sync fetch": [Case((), setup=paired), Case((), exit=2, why="not paired")],
-    "sync status": [
-        Case((), setup=paired),
-        Case((), setup=incoming),
-        Case(("--patch",), setup=incoming),
-        Case(("--patch",), setup=paired, why="nothing incoming"),
-        Case(("--patch", "--to", ".loom/agents/scratch/s/pull.patch"), setup=incoming),
-        Case(("--patch", "--to", "pull.patch"), setup=patch_file, exit=2, why="the file exists", unchanged=True),
-        Case(("--to", "pull.patch"), setup=incoming, exit=2, why="--to without --patch", unchanged=True),
-        Case((), exit=2, why="not paired"),
-    ],
-    "sync documents": [
-        Case((), setup=paired),
-        Case(("add", "drafting/outline.tex", "--dry-run"), setup=paired, unchanged=True),
-        Case(("add",), setup=paired, exit=2, why="add names no document", unchanged=True),
-        Case(("add", "drafting/nowhere.tex"), setup=paired, exit=2, why="names no document", unchanged=True),
-        Case((), exit=2, why="not paired"),
-    ],
-    "sync incorporate": [
-        Case((), setup=incoming),
-        Case(("--dry-run",), setup=incoming, unchanged=True),
-        Case((), setup=paired, exit=2, why="nothing incoming to incorporate", unchanged=True),
-    ],
-    "sync publish": [
-        Case((), setup=paired),
-        Case(("--dry-run",), setup=paired, unchanged=True),
-        Case((), exit=2, why="not paired", unchanged=True),
     ],
 }

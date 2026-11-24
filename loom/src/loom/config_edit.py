@@ -437,13 +437,13 @@ def published(result: ScanResult) -> dict[str, Any]:
         state = SyncState.read(root)
         sync: dict[str, Any] = {
             "paired": True,
-            "directory": state.directory,
+            "directory": state.folder or state.directory,
             "workspace": source_label(state.url) if state.url else "",
             "branch": state.branch,
             "documents": list(state.documents),
         }
     except SyncError:
-        sync = {"paired": False, "command": "loom sync init DIR"}
+        sync = {"paired": False}
     return {
         "editable": list(EDITABLE),
         "read_only": list(READ_ONLY),

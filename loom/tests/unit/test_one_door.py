@@ -93,7 +93,6 @@ FUNCTIONS = {
     "review_origins.py:write": "a record, outside an act that stages it",
     "sync.py:SyncState.write": "the sync record, outside an act that stages it",
     "sync.py:pull_files": "a temporary stage",
-    "sync.py:publish": "the sync directory, loom's clone of the workspace",
     "overleaf.py:_clone": "loom's own clone of an Overleaf project, in `.loom/local/`",
     "overleaf.py:_keep_here": "this machine's part of the mirror, in `.loom/local/`",
     "reshape/canon.py:plan_draft": "a temporary stage",

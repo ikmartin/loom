@@ -127,7 +127,7 @@ TOOLS = [
         OPTIONAL,
         ("--version",),
         GIT,
-        "loom init --git and loom sync",
+        "loom init --git and the Overleaf mirror",
     ),
 ]
 
@@ -493,7 +493,7 @@ def check_tools() -> list[Item]:
                     WARN,
                     tool.severity,
                     "only Apple's installer stub: running it asks to install the Command Line Tools",
-                    "xcode-select --install, or leave it: loom works without git but for loom init --git and loom sync",
+                    "xcode-select --install, or leave it: loom works without git but for loom init --git and the Overleaf mirror",
                     {"path": path},
                 )
             )
