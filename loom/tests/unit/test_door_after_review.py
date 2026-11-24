@@ -653,7 +653,7 @@ def test_two_forged_lines_that_move_the_history_and_then_write_in_it_write_nothi
 def test_an_act_left_for_a_history_recovery_does_not_write_is_one_whose_settling_would_write_it(
     tmp_path: Path, by: str
 ) -> None:
-    """With the history outside the quilt, an act whose settling would write it, as a person's act's follow-up keeps the look's texts there, is left with words that say so and what settles it; an agent's act on an open file, whose settling writes nothing there, is put back (R2-26)."""
+    """With the history outside the quilt, an act whose settling would write it, as a person's act's follow-up keeps the look's texts there, is left with words that say so, and that only settling by hand ends it; an agent's act on an open file, whose settling writes nothing there, is put back (R2-26)."""
     from loom import writes
     from loom.scan.quilt import load_quilt
 
@@ -668,7 +668,8 @@ def test_an_act_left_for_a_history_recovery_does_not_write_is_one_whose_settling
         return
     assert len(said) == 1 and "settling it would write the history" in said[0], said
     ((_, _, _, settles),) = writes.left(root, hist)
-    assert settles.startswith("Keeping the history inside the quilt") and not (root / "notes/x.tex").exists()
+    assert settles.startswith("Recovery writes nothing in a history kept there") and "settled by hand" in settles
+    assert not (root / "notes/x.tex").exists()
 
 
 #: The shapes of a put-back the swap is tried on: the path the line names under `notes/d`, and the line's before and after, from the bytes of `.claude/settings.json` (`C`).

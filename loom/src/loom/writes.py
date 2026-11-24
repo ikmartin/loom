@@ -1355,7 +1355,7 @@ def _judge(
             "settling it would write the history, which is kept outside the quilt or in a folder whose name begins with a dot, where recovery writes nothing, so it changed nothing: "
             + _where(holds),
             holds,
-            settles="Keeping the history inside the quilt, under no folder whose name begins with a dot but .loom/, lets recovery settle this.",
+            settles=f"Recovery writes nothing in a history kept there, and moving the history now leaves this act's own lines naming where it was, so {BY_HAND}.",
         )
     guards = _guards(entry.get("records") or [])
     guards_hold = all(_guard_holds(root, log, at, lines) for log, (at, lines) in guards.items())
