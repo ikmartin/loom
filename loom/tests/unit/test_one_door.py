@@ -37,7 +37,6 @@ WRITE_FLAGS = {"O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND"}
 #: Whole modules that write only loom's own places, by path under `loom/`, with why.
 MODULES = {
     "refs/": "the library's store and records, written under the library's lock (`refs/intake.py`)",
-    "digest/": "the library's digests",
     "records/": "loom's records under `.loom/`",
     "tex/": "TeX's runs, its staging and the machine's own TeX",
     "render/serve.py": "the server's own files in `.loom/local/` and the viewer's copies on the machine",
@@ -46,11 +45,9 @@ MODULES = {
     "render/snippets.py": "the build's output",
     "render/build.py": "the build's output",
     "render/incoming.py": "a temporary tree",
-    "render/endpoints/library.py": "the library's store",
     "cli/help.py": "click's help formatter, which writes no file",
     "cli/build_cmds.py": "build reports and closures under `.loom/`",
     "cli/session.py": "an agent's session under `.loom/`",
-    "cli/library/upkeep.py": "the library's store",
     "lifetimes.py": "the sweep of what is derived, under `.loom/`",
     "locks.py": "the lock files loom holds, made empty and never written",
     "layout.py": "`.loom/`'s layout and its format number",
@@ -84,7 +81,6 @@ FUNCTIONS = {
     "cli/quilt.py:write_demo_quilt": "the demo quilt, into a folder that is new or empty (`init --demo` refuses any other)",
     "cli/quilt.py:undo_minimal_quilt": "taking back what `loom init` made",
     "cli/quilt.py:_write_user_config_template": "the machine's own config",
-    "cli/upgrade.py:upgrade": "the annotation types, a record",
     "doctor.py:check_tools": "a temporary file",
     "gitignore.py:write_loom_ignore": "`.loom/.gitignore`",
     "history/ledger.py:append_entry": "the history, outside an act that stages it (`writes.staging`)",
