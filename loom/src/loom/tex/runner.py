@@ -151,7 +151,7 @@ BUILD_PRODUCTS = (
 def stage_sources(paper_dir: Path, dest: Path, outside: list[str] | tuple[str, ...] = ()) -> Path:
     """Copy a paper directory into `dest` without its build products; returns the copy of `paper_dir`, the root to compile.
 
-    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves; a cited paper's source is given none. A link the directory holds is copied as what it reaches where that lies under the copy's root, and stays a link to anywhere else (`_links`).
+    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves; a cited paper's source is given none. A link the directory holds is copied as what it reaches where that lies under the copy's root and no dot-named folder, and otherwise left out where the fence is up and copied where it is not (`_links`).
     """
     paper_dir = paper_dir.resolve()
     reached = [Path(o).resolve() for o in outside if Path(o).is_file()]
@@ -240,7 +240,7 @@ def stage_document(
 ) -> Path:
     """A copy of the document directory `base` under `dest`, at its quilt-relative place, for latexmk to run in; returns `dest`.
 
-    Left out: build products (`BUILD_PRODUCTS`; a `.bbl` stays when the directory has no `.bib`, as an arXiv source ships only that), hidden directories, the directories never read as a document's (`scan.source.SKIP_DIRS`), and the sync directory. `extra` (quilt-relative files, the document itself when it sits elsewhere, as an agent copy or a closure does) is copied to its own place. Files are copied, never linked, since a package may rewrite a file in its working directory (a TikZ externalisation, a `filecontents`); a link the directory holds is copied as what it reaches where that lies in the quilt, and stays a link to anywhere else (`_links`).
+    Left out: build products (`BUILD_PRODUCTS`; a `.bbl` stays when the directory has no `.bib`, as an arXiv source ships only that), hidden directories, the directories never read as a document's (`scan.source.SKIP_DIRS`), and the sync directory. `extra` (quilt-relative files, the document itself when it sits elsewhere, as an agent copy or a closure does) is copied to its own place. Files are copied, never linked, since a package may rewrite a file in its working directory (a TikZ externalisation, a `filecontents`); a link the directory holds is copied as what it reaches where that lies in the quilt under no dot-named folder, and otherwise left out where the fence is up and copied where it is not (`_links`).
     """
     from loom.scan.source import SKIP_DIRS
     from loom.sync import skipped_directory
@@ -269,15 +269,19 @@ def stage_document(
         (dest / rel).parent.mkdir(parents=True, exist_ok=True)
         (dest / rel).write_bytes(data)
     for rel in extra:
-        target = dest / rel
-        if (root / rel).is_file() and not target.exists():
+        target, source = dest / rel, root / rel
+        if source.is_symlink() and fence.state() is None:
+            if not _linkable(Path(os.path.realpath(source)), Path(os.path.realpath(root))):
+                continue  # as a link in the document's folder is (`_links`)
+        if source.is_file() and not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / rel, target)
+            shutil.copy2(source, target)
     return dest
 
 
 def _links(staged: Path, original: Path, inside: Path) -> None:
-    """In `staged`, a copy of `original` made keeping its links, each link replaced by a copy of what it reaches where that lies in `inside`, as a shared macro file elsewhere in the quilt does, and otherwise left a link to where it leads: a compile then reads that only where the fence is down (`loom.fence`), so a link a source carries never brings a file from outside into the copy."""
+    """In `staged`, a copy of `original` made keeping its links, each link replaced by a copy of what it reaches where that is in `inside` under no dot-named folder (`_linkable`), as a shared macro file elsewhere in the quilt is; any other link is left out where the fence is up (`loom.fence`), and copied as what it reaches where it is not, as every link was before the fence. So a staged copy holds no link, and nothing loom does to it reads or writes through one."""
+    fenced = fence.state() is None
     bound = Path(os.path.realpath(inside))
     for folder, dirs, files in os.walk(staged):
         for name in [*dirs, *files]:
@@ -286,12 +290,17 @@ def _links(staged: Path, original: Path, inside: Path) -> None:
                 continue
             real = Path(os.path.realpath(original / link.relative_to(staged)))
             link.unlink()
-            if real.is_relative_to(bound) and real.is_dir():
-                shutil.copytree(real, link)
-            elif real.is_relative_to(bound) and real.is_file():
+            if fenced and not _linkable(real, bound):
+                continue
+            if real.is_dir():
+                shutil.copytree(real, link, symlinks=True)
+            elif real.is_file():
                 shutil.copy2(real, link)
-            else:
-                link.symlink_to(real)
+
+
+def _linkable(real: Path, bound: Path) -> bool:
+    """Whether a link that reaches `real` is copied into a fenced stage: a file or folder in `bound`, the quilt or a paper's folders, under no folder whose name begins with a dot, `.git` and `.loom` among them."""
+    return real.is_relative_to(bound) and not any(p.startswith(".") for p in real.relative_to(bound).parts)
 
 
 def compile_tex(
@@ -445,10 +454,10 @@ FENCED = ".loom-fenced"
 
 
 def _fenced_env(env: dict[str, str], reads: Path, run: Path) -> dict[str, str]:
-    """`env` for a run inside the fence, whose caller also sets `PWD` to where it runs, as a shell does, since Perl asks `/bin/pwd`, which may not look at a folder outside the fence: its temporary folder in the run's folder, and biber's own (`PAR_GLOBAL_TMPDIR`, and `PAR_GLOBAL_TEMP` where set) there too. Where the sources use biblatex each is a copy-on-write clone of the folder it named, made there, since the fence lets a run neither write nor read the machine's unpacked biber, and an empty one would have biber unpack 200 MB on every run."""
+    """`env` for a run inside the fence, whose caller also sets `PWD` to where it runs, as a shell does, since Perl asks `/bin/pwd`, which may not look at a folder outside the fence: loom's own TeX cache for fenced runs (`fence.texmf_var`), its temporary folder in the run's folder, and biber's own (`PAR_GLOBAL_TMPDIR`, and `PAR_GLOBAL_TEMP` where set) there too. Where the sources use biblatex each is a copy-on-write clone of the folder it named, made there, since the fence lets a run neither write nor read the machine's unpacked biber, and an empty one would have biber unpack 200 MB on every run."""
     own = run / FENCED
     (own / "tmp").mkdir(parents=True, exist_ok=True)
-    env = {**env, "TMPDIR": str(own / "tmp")}
+    env = {**env, "TMPDIR": str(own / "tmp"), "TEXMFVAR": str(fence.texmf_var())}
     biblatex = _uses_biblatex(reads)
     for var in ("PAR_GLOBAL_TMPDIR", "PAR_GLOBAL_TEMP"):
         if var not in env:

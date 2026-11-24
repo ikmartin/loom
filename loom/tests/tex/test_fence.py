@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -191,3 +192,75 @@ def test_a_biblatex_document_compiles_to_the_same_output_fenced_and_unfenced(
     assert "main.bbl" in fenced and b"knuth84" in fenced["main.bbl"]
     monkeypatch.setenv(fence.OFF, "off")
     assert _kept(q, "main.tex", tmp_path / "unfenced") == fenced
+
+
+def test_a_link_to_a_file_outside_the_quilt_is_neither_read_nor_written_by_loom_s_own_steps(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A link in the document's folder to a file outside the quilt is left out of a fenced stage, and copied, never kept as a link, into an unfenced one: loom's own HTML steps, which run outside the fence, then neither read the file into what they keep nor write through the link, as the repair of an unbalanced display once wrote the person's outside file (R2-31)."""
+    from loom.tex.tex4ht import compile_html
+
+    outside = _outside(tmp_path)
+    part = outside / "part.tex"
+    part.write_text(f"{SECRET}\n\\[ x = {{ \\]\n", encoding="utf-8")
+    was = part.read_bytes()
+    q = tmp_path / "q"
+    (q / "drafting").mkdir(parents=True)
+    (q / "drafting/part.tex").symlink_to(part)
+    (q / "drafting/main.tex").write_text(
+        "\\documentclass{article}\\begin{document}\\input{part}\\end{document}\n", encoding="utf-8"
+    )
+    compile_html(q, "drafting", "drafting/main.tex", tmp_path / "fenced", envs=[])
+    kept = b"".join(p.read_bytes() for p in (tmp_path / "fenced").rglob("*") if p.is_file())
+    assert SECRET.encode() not in kept
+    assert part.read_bytes() == was
+    monkeypatch.setenv(fence.OFF, "off")
+    compile_html(q, "drafting", "drafting/main.tex", tmp_path / "unfenced", envs=[])
+    assert part.read_bytes() == was
+
+
+@pytest.mark.parametrize("where", [".git/config", ".loom/records/kept.txt"])
+def test_a_link_into_a_dot_named_folder_of_the_quilt_is_left_out_of_a_fenced_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, where: str
+) -> None:
+    """A link in the document's folder into `.git` or `.loom` reaches a file of the quilt that no document is: a fenced stage leaves it out, so a remote's credentials never reach the log; unfenced it is copied, as before the fence (R2-35)."""
+    q = tmp_path / "q"
+    (q / "drafting").mkdir(parents=True)
+    target = q / where
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(f"url = https://someone:{SECRET}@example.org/repo\n", encoding="utf-8")
+    (q / "drafting/leak.txt").symlink_to(os.path.relpath(target, q / "drafting"))
+    body = "\\newread\\r\\openin\\r=leak.txt \\ifeof\\r\\else\\read\\r to\\x\\typeout{GOT[\\x]}\\closein\\r\\fi"
+    (q / "drafting/main.tex").write_text(
+        f"\\documentclass{{article}}\\begin{{document}}x{body}\\end{{document}}\n", encoding="utf-8"
+    )
+
+    def log(out: Path) -> str:
+        res = compile_document(q, "drafting", "drafting/main.tex", out, halt_on_error=False)
+        return (res.log.read_text(encoding="utf-8", errors="replace") if res.log else "") + res.stdout
+
+    assert SECRET not in log(tmp_path / "fenced")
+    monkeypatch.setenv(fence.OFF, "off")
+    assert SECRET in log(tmp_path / "unfenced"), "unfenced, the link is copied as before, or the test proves nothing"
+
+
+def test_a_lualatex_document_compiles_fenced_with_a_cache_of_loom_s_own(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """LuaTeX's font loader needs a cache it can write: a fenced run is given loom's own (`fence.texmf_var`), apart from the person's TeX cache, and a lualatex document compiles to the same aux fenced and unfenced (R2-33)."""
+    q = tmp_path / "q"
+    q.mkdir()
+    (q / "main.tex").write_text(
+        "\\documentclass{article}\\begin{document}\\section{One}\\label{s}See \\ref{s}.\\end{document}\n",
+        encoding="utf-8",
+    )
+
+    def aux(out: Path) -> bytes:
+        res = compile_document(q, "", "main.tex", out, engine="lualatex", halt_on_error=False)
+        assert res.pdf is not None and res.aux is not None, res.first_error
+        return res.aux.read_bytes()
+
+    fenced = aux(tmp_path / "fenced")
+    assert any(fence.texmf_var().rglob("*")), "the fenced run kept LuaTeX's cache in loom's own folder"
+    monkeypatch.setenv(fence.OFF, "off")
+    assert aux(tmp_path / "unfenced") == fenced

@@ -245,17 +245,17 @@ _EXTERNAL = re.compile(r"\\externaldocument\s*(?:\[([^\]]*)\])?\s*\{([^}]*)\}")
 _NEWLABEL = re.compile(r"^\\newlabel\{([^}]*)\}(.*)$", re.M)
 
 
-def external_labels(text: str, here: Path) -> tuple[str, list[str]]:
+def external_labels(text: str, here: Path, quilt: Path) -> tuple[str, list[str]]:
     """`text` with xr's package and each `\\externaldocument` blanked, and the labels each external document's aux defines, prefixed as xr prefixes them, as aux lines to read in their place.
 
-    TeX4ht cannot read an external aux written by pdflatex (`xr`'s and `xr-hyper`'s links break on it), while the run's own aux, read as the document's, takes the same lines without complaint. A relative path is read from `here`, the document's directory. Blanking keeps every line and offset where it was.
+    TeX4ht cannot read an external aux written by pdflatex (`xr`'s and `xr-hyper`'s links break on it), while the run's own aux, read as the document's, takes the same lines without complaint. A relative path is read from `here`, the document's directory; only an aux whose real file lies in `quilt` is read, since loom reads it unfenced and a cited paper's source or a co-author's file names it. Blanking keeps every line and offset where it was.
     """
     lines: list[str] = []
     for m in _EXTERNAL.finditer(_blank_comments(text)):
         name = m.group(2).strip()
         aux = Path(name if name.endswith(".aux") else name + ".aux")
         aux = aux if aux.is_absolute() else here / aux
-        if not aux.is_file():
+        if not aux.is_file() or not Path(os.path.realpath(aux)).is_relative_to(os.path.realpath(quilt)):
             continue
         prefix = (m.group(1) or "").strip()
         lines += [
@@ -266,14 +266,14 @@ def external_labels(text: str, here: Path) -> tuple[str, list[str]]:
     return _EXTERNAL.sub(blank, _XR.sub(blank, text)), lines
 
 
-def _read_externals(here: Path, files: list[Path], aux: Path) -> None:
-    """Blank xr in each of `files` and add the labels it would have read to `aux`, the run's own (`external_labels`); `here` is the document's directory in the quilt, which a relative path is read from, since the stage carries no aux."""
+def _read_externals(quilt: Path, here: Path, files: list[Path], aux: Path) -> None:
+    """Blank xr in each of `files` and add the labels it would have read to `aux`, the run's own (`external_labels`); `here` is the document's directory in `quilt`, which a relative path is read from, since the stage carries no aux."""
     lines: list[str] = []
     for f in files:
         text = f.read_text(encoding="utf-8", errors="replace")
         if "externaldocument" not in text and "{xr" not in text:
             continue
-        fixed, found = external_labels(text, here)
+        fixed, found = external_labels(text, here, quilt)
         if fixed != text:
             f.write_text(fixed, encoding="utf-8")
         lines += found
@@ -418,7 +418,7 @@ def _html_once(
             for suffix in (".aux", ".bbl", ".toc", ".out"):
                 if (seed / f"{stem}{suffix}").is_file():
                     shutil.copy2(seed / f"{stem}{suffix}", cwd / f"{stem}{suffix}")
-        _read_externals(root / base, sorted(stage.rglob("*.tex")), cwd / f"{stem}.aux")
+        _read_externals(root, root / base, sorted(stage.rglob("*.tex")), cwd / f"{stem}.aux")
         home = Path(tmp) / "home"
         out = Path(tmp) / "out"
         aux = cwd / f"{stem}.aux"
@@ -543,7 +543,13 @@ def _pass(
         run = Path(os.path.commonpath([cwd, out, home]))
         (home / "tmp").mkdir(exist_ok=True)
         # `PWD` where it runs, as a shell sets it: a Perl or Lua script asks `/bin/pwd`, which may not look at a folder outside the fence
-        env = {**env, "TMPDIR": str(home / "tmp"), "PAR_GLOBAL_TMPDIR": str(home / "tmp"), "PWD": str(cwd)}
+        env = {
+            **env,
+            "TMPDIR": str(home / "tmp"),
+            "PAR_GLOBAL_TMPDIR": str(home / "tmp"),
+            "PWD": str(cwd),
+            "TEXMFVAR": str(fence.texmf_var()),
+        }
         cmd = fence.fenced(cmd, stage=run, out=out)
     proc = subprocess.Popen(
         cmd,
@@ -618,7 +624,7 @@ def make_html(
         (cwd / f"{name}.tex").write_text(text, encoding="utf-8")
         if aux is not None and aux.is_file():
             shutil.copy2(aux, cwd / f"{name}.aux")
-        _read_externals(root / base, [cwd / f"{name}.tex"], cwd / f"{name}.aux")
+        _read_externals(root, root / base, [cwd / f"{name}.tex"], cwd / f"{name}.aux")
         out = Path(tmp) / "out"
         log = cwd / f"{name}.log"
         rounds = missing.Round()

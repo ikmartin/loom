@@ -416,7 +416,7 @@ def check_fence() -> Item:
             "tex fence",
             OK,
             OPTIONAL,
-            f"on: a file loom compiles reads only its own folder and the TeX in use, and reaches no network; {fence.OFF}=off turns it off for a paper it breaks",
+            f"on: a file loom compiles reads only its own folder, the TeX in use with your own TeX files, and the system's programs, and reaches no network; {fence.OFF}=off turns it off for a paper it breaks",
             "",
             {"state": None},
             shown=True,

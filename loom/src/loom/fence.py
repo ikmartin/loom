@@ -29,7 +29,7 @@ def state() -> str | None:
     Returns
     -------
     str or None
-        None when it is; otherwise why not, in a word: `off`, the person turned it off (`OFF`); `absent`, this system has no `sandbox-exec` or its profile does not run, as on Linux; `nested`, loom runs inside another sandbox, which may not hold a second; `leaks`, the fence let a program read outside its run. Found once in a process by trying (`_tried`), but for `off`, read each time.
+        None when it is; otherwise why not, in a word: `off`, the person turned it off (`OFF`); `absent`, this system has no `sandbox-exec` or its profile does not run, as on Linux; `nested`, loom runs inside another sandbox, which may not hold a second; `leaks`, the fence let a program read outside its run, or a TeX folder it would read holds the person's files (`_holds_the_person_s`). Found once in a process by trying (`_tried`), but for `off`, read each time.
     """
     if os.environ.get(OFF, "").strip().lower() == "off":
         return "off"
@@ -41,6 +41,8 @@ def _tried() -> str | None:
     """`state` but `off`, found by trying the real profile once: `/bin/cat` must read a file in its run and fail to read one outside it."""
     if not os.access(SANDBOX, os.X_OK) or not PROFILE.is_file():
         return "absent"
+    if _holds_the_person_s(_machine()):
+        return "leaks"
     with tempfile.TemporaryDirectory(prefix="loom-fence-") as a, tempfile.TemporaryDirectory(prefix="loom-fence-") as b:
         inside, outside = Path(a) / "inside", Path(b) / "outside"
         inside.write_text("inside\n", encoding="utf-8")
@@ -93,39 +95,67 @@ def _argv(argv: list[str], stage: Path, out: Path) -> list[str]:
     return [SANDBOX, "-f", str(PROFILE), *(x for name, at in places.items() for x in ("-D", f"{name}={at}")), *argv]
 
 
+def texmf_var() -> Path:
+    """Loom's own TeX cache for fenced runs, which they read and write as their `TEXMFVAR`: the fonts METAFONT draws and LuaTeX's font database, kept between runs and apart from the person's own cache, which a fenced run never writes."""
+    from loom.machine import data_dir
+
+    p = data_dir() / "fenced-texmf-var"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
 def _machine() -> dict[str, str]:
     """The profile's parameters for this machine's TeX, as the environment a TeX program is started in names it (`tex.runner.tex_env`)."""
     from loom.tex.runner import tex_env
 
     env = tex_env()
-    return dict(_places(tuple(env.get(k, "") for k in ("PATH", "HOME", "TEXMFHOME", "TEXMFVAR"))))
+    return dict(_places(tuple(env.get(k, "") for k in ("PATH", "HOME", "TEXMFHOME", "XDG_DATA_HOME"))))
+
+
+#: The places kpsewhich names that the profile reads, by its own names: the programs, the install's own folder (of which two files are read), and its trees.
+_TREES = (
+    ("TEXBIN", "SELFAUTOLOC"),
+    ("TEXPARENT", "SELFAUTOPARENT"),
+    ("TEXDIST", "TEXMFDIST"),
+    ("TEXLOCAL", "TEXMFLOCAL"),
+    ("TEXSYSVAR", "TEXMFSYSVAR"),
+    ("TEXSYSCONFIG", "TEXMFSYSCONFIG"),
+    ("TEXMFHOME", "TEXMFHOME"),
+)
 
 
 @functools.cache
 def _places(key: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
     """`_machine` for one environment, `key` the parts of it that move the places; asked once each.
 
-    TEXROOT is the folder above the TeX in use (`SELFAUTOPARENT`), so TeX Live's `texmf-local` beside it is in; DEVDIR is Xcode's bundle, or the Command Line Tools; USERTMP is the per-user temporary folder, for `xcrun`'s cache.
+    The TeX in use is given as its trees and its programs, as kpsewhich names them, and never a folder above them, which for loom's own TeX or a TinyTeX in `~/Library` would hold the person's files; TEXMFVAR is loom's own (`texmf_var`); DEVDIR is Xcode's bundle, or the Command Line Tools; USERTMP is the per-user temporary folder, for `xcrun`'s cache.
     """
     from loom.tex.runner import tex_env
 
-    env = tex_env()
-    found = _ask(["kpsewhich", "-expand-var=$SELFAUTOPARENT\n$TEXMFVAR\n$TEXMFHOME"], env).splitlines()
-    parent, var, home = (*found, "", "", "")[:3]
+    var = texmf_var()
+    env = {**tex_env(), "TEXMFVAR": str(var)}
+    asked = "\n".join(f"${name}" for _, name in _TREES)
+    found = _ask(["kpsewhich", f"-expand-var={asked}"], env).splitlines()
+    at = dict(zip((param for param, _ in _TREES), (*found, *[""] * len(_TREES)), strict=False))
     dev = _ask(["/usr/bin/xcode-select", "-p"], env).strip()
     if dev.endswith(".app/Contents/Developer"):
         dev = str(Path(dev).parents[1])
-    temp = _ask(["/usr/bin/getconf", "DARWIN_USER_TEMP_DIR"], env).strip()
-    return tuple(
-        (name, os.path.realpath(at).rstrip("/") if at else _NOWHERE)
-        for name, at in (
-            ("TEXROOT", str(Path(parent).parent) if parent else ""),
-            ("TEXMFVAR", var),
-            ("TEXMFHOME", home),
-            ("DEVDIR", dev),
-            ("USERTMP", temp),
-        )
-    )
+    at |= {
+        "TEXMFVAR": str(var),
+        "DEVDIR": dev,
+        "USERTMP": _ask(["/usr/bin/getconf", "DARWIN_USER_TEMP_DIR"], env).strip(),
+    }
+    return tuple((name, os.path.realpath(place).rstrip("/") if place else _NOWHERE) for name, place in at.items())
+
+
+def _holds_the_person_s(places: dict[str, str]) -> bool:
+    """Whether a folder the profile reads whole holds the home folder, `~/Library` or loom's own data folder, where the person's files, cookies and loom's write tokens are: a TeX laid out so would leave the fence open to them."""
+    from loom.machine import data_dir
+
+    home = Path(os.path.realpath(os.path.expanduser("~")))
+    theirs = (home, home / "Library", Path(os.path.realpath(data_dir())))
+    whole = (at for name, at in places.items() if name not in ("TEXPARENT", "USERTMP") and at != _NOWHERE)
+    return any(p.is_relative_to(at) for at in whole for p in theirs)
 
 
 def _ask(argv: list[str], env: dict[str, str]) -> str:
