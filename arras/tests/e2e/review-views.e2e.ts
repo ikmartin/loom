@@ -400,6 +400,33 @@ test('a link to one block\'s row lands with the row in view below the held bar, 
 	}
 });
 
+test('in Review a block, its note, Read, a change card\'s place and a To do item lay their draft over Review; only See change opens Docs', async ({ page }) => {
+	await open(page);
+	const leaving = async (part: string) => {
+		const section = page.locator(`[data-testid="your-changes"][data-part="${part}"]`);
+		await section.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
+		return section.locator('a[href]').evaluateAll((as) => as.filter((a) => !a.getAttribute('href')!.startsWith('/review') && a.textContent!.trim() !== 'See change').map((a) => `${a.textContent!.trim()} ${a.getAttribute('href')}`));
+	};
+	await page.getByTestId('review-kind-accepted-changed').click();
+	expect(await leaving('accept')).toEqual([]);
+	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
+	const first = accept.locator('[data-group="never"] [data-testid="review-row"]').first();
+	const name = (await first.locator('.name').innerText()).trim();
+	await first.locator('.name').click();
+	const over = page.getByTestId('review-over');
+	await expect(over).toContainText(`at ${name}`);
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+	await over.getByRole('button', { name: 'close' }).click();
+	await expect(over).toHaveCount(0);
+	await page.getByTestId('review-kind-edits').click();
+	await page.getByTestId('your-todo').click();
+	expect(await leaving('changes')).toEqual([]);
+	const place = page.locator('[data-testid="your-changes"][data-part="changes"]').getByTestId('change-see').first();
+	await place.click();
+	await expect(over).toBeVisible();
+	await expect(page).toHaveURL(/\/review(\?|$)/);
+});
+
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();

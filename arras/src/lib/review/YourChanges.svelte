@@ -85,6 +85,8 @@
 	});
 
 	const name = (key: string) => displayNode(m, key, home.get(key) ?? doc?.path).name;
+	/** In Review's sections, a block a row names is laid over Review at it (see it, `SeeIt`) where the quilt has the draft, never opened in Docs; null where it has not, and the block is named in words. */
+	const seeIn = (path: string | null | undefined): ((key: string) => void) | null => (path && m.masters.some((x) => x.path === path) ? (key: string) => (rv.over = { doc: path, key, name: name(key) }) : null);
 	const lower = (t: string) => t.charAt(0).toLowerCase() + t.slice(1);
 	const some = (n: number, words: string) => (n ? `${n} ${words}` : '');
 
@@ -178,12 +180,17 @@
 	});
 </script>
 
-{#snippet todoRows(list: import('$lib/manifest/types').Annotation[])}
+{#snippet goes(text: string, href: string, path: string, key: string, cls: string, testid?: string)}
+	{@const see = part ? seeIn(path) : undefined}
+	{#if see === undefined}<a class={cls} {href} data-testid={testid}>{text}</a>{:else if see}<button type="button" class="see {cls}" data-testid={testid} onclick={() => see(key)}>{text}</button>{:else}<span class={cls} data-testid={testid}>{text}</span>{/if}
+{/snippet}
+
+{#snippet todoRows(list: import('$lib/manifest/types').Annotation[], path: string)}
 	<ul class="todo" data-testid="todo-list">
 		{#each list as a (a.id)}
 			<li data-testid="todo-row" data-annotation={a.id}>
 				<span class="dot" style={dotVars(a)}></span>
-				<a href="quilt:{a.id}" data-testid="todo-open">{itemLabel(m, a)}</a>
+				{@render goes(itemLabel(m, a), `quilt:${a.id}`, path, a.target.key, 'open', 'todo-open')}
 				<span class="of">{shortDate(a.created)}</span>
 			</li>
 		{/each}
@@ -197,12 +204,16 @@
 	<li class="block" id={`review-${anchorId(b.key)}`} data-testid="review-row" data-key={b.key}>
 		<div class="line">
 			{#if acts && r}<input type="checkbox" disabled={!!r.refusal} checked={picked.has(b.key)} onchange={() => toggle(b.key)} aria-label={`Select ${name(b.key)}`} data-testid="review-pick" />{/if}
-			<a class="name" href={reviewReadUrl(path, b.key)}>{name(b.key)}</a>
+			{@render goes(name(b.key), reviewReadUrl(path, b.key), path, b.key, 'name')}
 			{#if context}<span class="of">{context}</span>{/if}
 			{#if cause}<span class="tag changed" data-testid="tag-changed">{cause}</span>{/if}
-			{#each notesOf(m, b.key) as note (note)}<a class="note" href={reviewReadUrl(path, b.key)} data-testid="review-note">{note}</a>{/each}
+			{#each notesOf(m, b.key) as note (note)}{@render goes(note, reviewReadUrl(path, b.key), path, b.key, 'note', 'review-note')}{/each}
 			<span class="acts">
-				{#if r}<a class="btn quiet small" href={reviewReadUrl(path, b.key, cause ? 0 : undefined)} data-testid="review-read">{cause ? 'See change' : 'Read'}</a>{/if}
+				<!-- See change opens the draft in Docs, where the change since acceptance is drawn with its causes; see it draws neither -->
+				{#if r}
+					{@const see = part ? seeIn(path) : undefined}
+					{#if cause || see === undefined}<a class="btn quiet small" href={reviewReadUrl(path, b.key, cause ? 0 : undefined)} data-testid="review-read">{cause ? 'See change' : 'Read'}</a>{:else if see}<button type="button" class="btn quiet small" data-testid="review-read" onclick={() => see(b.key)}>Read</button>{/if}
+				{/if}
 				{#if acts && r && !r.refusal}<button class="btn small primary" disabled={!!busy} onclick={() => void accept([b.key], b.key)} data-testid="review-accept">{busy === b.key ? 'Accepting…' : 'Accept'}</button>{/if}
 			</span>
 		</div>
@@ -274,7 +285,7 @@
 				{#each s.a.accepted as k (k.key)}
 					<li class="block" id={`review-${anchorId(k.key)}`} data-testid="review-row" data-key={k.key}>
 						<div class="line">
-							<a class="name" href={readUrl(s.path, k.key)}>{name(k.key)}</a>
+							{@render goes(name(k.key), readUrl(s.path, k.key), s.path, k.key, 'name')}
 							<Badge parts={reviewRowBadge(m, k)} />
 							{#if k.acceptance}<span class="of">by {k.acceptance.author}, {shortDate(k.acceptance.date)}</span>{/if}
 						</div>
@@ -300,10 +311,10 @@
 						<button type="button" class="btn small quiet" disabled={!n || !writes.discard || !!busy} title={says.discard} data-testid="group-discard-all" onclick={() => void every('discard', g)}>Discard all {n}</button>
 					</span>
 				</div>
-				<div class="cards">{#each g.changes as c (c.id)}<ChangeCard {c} place />{/each}</div>
+				<div class="cards">{#each g.changes as c (c.id)}<ChangeCard {c} place see={part ? seeIn(g.document ? g.path : null) : undefined} />{/each}</div>
 				{#if todoOn}
 					{@const here = todo.find((t) => t.path === g.path)}
-					{#if here}{@render todoRows(here.annotations)}{/if}
+					{#if here}{@render todoRows(here.annotations, g.path)}{/if}
 				{/if}
 			</section>
 		{:else}
@@ -314,7 +325,7 @@
 			{#each todoAlone as t (t.path)}
 				<section class="cgroup" data-testid="todo-group" data-path={t.path}>
 					<div class="chead"><span class="title">{t.label}</span><span class="count">{t.annotations.length}</span><span class="muted">open annotations from others</span></div>
-					{@render todoRows(t.annotations)}
+					{@render todoRows(t.annotations, t.path)}
 				</section>
 			{/each}
 			{#if !todoCount}<p class="muted" data-testid="todo-none">No open annotations from others.</p>{/if}
@@ -472,6 +483,15 @@
 	.name {
 		font-size: 14px;
 		overflow-wrap: anywhere;
+	}
+	.see {
+		padding: 0;
+		border: 0;
+		background: none;
+		font-family: inherit;
+		color: var(--link);
+		text-align: left;
+		cursor: pointer;
 	}
 	.of,
 	.note {
