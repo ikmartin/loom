@@ -296,7 +296,7 @@ def run_import(
             f"loom import {shlex.quote(str(paper))} --to {taken.with_name(f'{taken.stem}-{n}.tex').as_posix()}"
         )
     arrows = [(Path(src).relative_to(plan.paper_dir).as_posix(), dest) for dest, src in sorted(plan.assets.items())]
-    from loom.agents import deny_documents, places_to_deny
+    from loom.agents import deny_documents, places_to_deny, write_denies
     from loom.tex.runner import compile_tex, stage_sources
 
     # the person's files the import brings in or reads inside the quilt, which agents propose changes to rather than make
@@ -407,6 +407,9 @@ def run_import(
         )
         main_set = set_main(load_quilt(root), plan.dest_rel)
         denied = deny_documents(load_quilt(root), [plan.dest_rel, *written, *originals])
+    if denied:
+        # the permission files in acts of their own, once the import's is done: recovery writes nothing in the dot-named places where the apps keep their files
+        write_denies(root)
     written.append(plan.dest_rel)
     after = scan(load_quilt(root))
     wrote = [Item(f"{plan.master_rel} -> {plan.dest_rel}, {len(draft.insertions)} ids inserted")]

@@ -364,10 +364,12 @@ def test_an_agent_s_new_result_beside_a_denied_paper_is_refused_with_where_it_go
     assert (q / "notes/agent-lemma.tex").is_file()
 
 
-def test_an_import_writes_claude_code_s_permission_file_with_its_entries_in_the_same_act(
+def test_an_import_writes_claude_code_s_permission_file_at_once_in_an_act_of_its_own_after_its_own(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """What the import says is protected is protected for Claude Code at once, not after the next upgrade (P-6)."""
+    """What the import says is protected is protected for Claude Code at once, not after the next upgrade (P-6); the file is written in an act of its own once the import's is done, since recovery writes nothing in the dot-named places the apps keep, so an import cut short is put back whole (R2-22)."""
+    from loom import writes
+
     p = paper_dir(tmp_path)
     ok("init", str(tmp_path / "q"), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
     q = tmp_path / "q"
@@ -376,7 +378,44 @@ def test_an_import_writes_claude_code_s_permission_file_with_its_entries_in_the_
     assert any(r.startswith("Edit(/main/") for r in deny), deny
     journal = [json.loads(x) for x in (q / ".loom/local/writes.jsonl").read_text().splitlines()]
     (act,) = [e for e in journal if e["event"] == "begin" and e["kind"] == "import"]
-    assert ".claude/settings.json" in act["files"] and "config.toml" in act["files"]
+    assert "config.toml" in act["files"] and all(writes._place(q, rel) is not None for rel in act["files"])
+    after = journal[journal.index(act) + 1 :]
+    (claude,) = [e for e in after if e["event"] == "begin" and ".claude/settings.json" in e["files"]]
+    assert claude["kind"] == "agents"
+    assert [e["event"] for e in after if e.get("act") == claude["act"]] == ["begin", "done"]
+
+
+def test_an_import_cut_short_before_its_permission_file_stands_and_lint_says_the_file_lags(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cut short between its own act and the permission file's, an import stands whole and Claude Code's file lags its deny list, which `loom lint` says; a second import of the paper refuses and writes nothing, and `loom ai init` writes the file (R2-22)."""
+    import loom.agents as agents
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died
+
+    def denies() -> list[str]:
+        return [r for r in json.loads((q / ".claude/settings.json").read_text())["permissions"]["deny"] if "main" in r]
+
+    def die(root: Path) -> list[str]:
+        raise Died
+
+    p = paper_dir(tmp_path)
+    ok("init", str(tmp_path / "q"), "--prefix", "pp", "--ai", "claude", "--yes", cwd=tmp_path)
+    q = tmp_path / "q"
+    monkeypatch.setattr(agents, "write_denies", die)
+    with pytest.raises(Died):
+        run("import", str(p / "main.tex"), "--yes", "--no-check", cwd=q)
+    monkeypatch.undo()
+    assert writes.recover(q, load_quilt(q).history_dir) == []
+    assert (q / "main/main.tex").is_file() and '"/main/"' in (q / "config.toml").read_text() and denies() == []
+    assert "loom:agent-permissions-stale" in run("lint", cwd=q).output
+    refused(
+        "import", str(p / "main.tex"), "--yes", "--no-check", cwd=q, code=2, match="import never overwrites a document"
+    )
+    assert denies() == []
+    ok("ai", "init", cwd=q)
+    assert any(r.startswith("Edit(/main/") for r in denies())
 
 
 def test_id_prints_patch_and_to_writes_copy(tmp_path: Path) -> None:

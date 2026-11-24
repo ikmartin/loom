@@ -403,10 +403,10 @@ def test_an_agent_app_s_mcp_file_keeps_its_texts_on_this_machine_and_none_in_the
     assert named == []
 
 
-def test_an_act_cut_short_on_an_mcp_file_is_put_back_from_this_machine_s_store(
+def test_an_act_left_for_a_file_of_an_agent_app_s_is_settled_by_a_later_act_of_its_kind_that_writes_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Recovery reads the texts kept beside the journal as it reads the history's, so an MCP file an act replaced comes back whole."""
+    """Recovery writes nothing in a dot-named place outside loom's own: an act cut short on an MCP file and a note is left and said, with what settles it, rather than put back from this machine's store; a later act of another kind on the file leaves it so, and the next act of its own kind that writes the file settles it, so it is no longer said (R2-22)."""
     from loom import writes
     from loom.scan.quilt import load_quilt
     from tests.unit.test_write_safety import Died, dying_before_the_rename
@@ -421,10 +421,403 @@ def test_an_act_cut_short_on_an_mcp_file_is_put_back_from_this_machine_s_store(
             w.replace(".mcp.json", before.replace(b"loom", b"loom-elsewhere", 1))
             w.replace("notes.md", b"# Notes\n")
     restore()
-    assert (root / ".mcp.json").read_bytes() != before
+    cut = (root / ".mcp.json").read_bytes()
+    assert cut != before
     said = writes.recover(root, hist)
-    assert said and said[0].startswith("undid agents:"), said
-    assert (root / ".mcp.json").read_bytes() == before
+    assert (
+        len(said) == 1 and said[0].startswith("left agents:") and "in a place whose name begins with a dot" in said[0]
+    ), said
+    assert (root / ".mcp.json").read_bytes() == cut
+    ((kind, files, _, settles),) = writes.left(root, hist)
+    assert kind == "the agent layer's files" and files == [".mcp.json", "notes.md"]
+    assert settles.startswith("Making .mcp.json read as it did before the act")
+    writes.put(root, hist, ".mcp.json", b'{"mcpServers": {}}\n', kind="restore")
+    assert len(writes.left(root, hist)) == 1
+    writes.put(root, hist, ".mcp.json", cut, kind="agents")
+    assert writes.left(root, hist) == []
+    (line,) = writes.recover(root, hist)
+    assert line.startswith("settled agents:") and line.endswith("a later act of its kind wrote .mcp.json again")
+    assert writes.recover(root, hist) == [] and (root / ".mcp.json").read_bytes() == cut
+
+
+def _case_blind(path: Path) -> bool:
+    """Whether the file system under the folder `path` takes two spellings that differ only in case for one file, as macOS's does by default."""
+    probe = path / "Case-Probe"
+    probe.write_text("")
+    try:
+        return (path / "case-probe").exists()
+    finally:
+        probe.unlink()
+
+
+def _layered(tmp_path: Path) -> Path:
+    """A quilt with every app's files loom writes, and a `.git/config` of the person's."""
+    root = tmp_path / "q"
+    ok("init", str(root), "--prefix", "pp", "--ai", "none", "--yes", cwd=tmp_path)
+    ok("ai", "init", cwd=root)
+    (root / ".git").mkdir(exist_ok=True)
+    (root / ".git/config").write_text("[core]\n\tbare = false\n")
+    (root / "notes").mkdir(exist_ok=True)
+    return root
+
+
+def _forged_move(root: Path, target: str, *, made: bool = False) -> tuple[list[str], bytes]:
+    """The review's forged line, and recovery run on it: an `mv` naming `target`, which holds the line's after (none where `made`, so putting the act back makes it), and `notes.md`, which holds its before. Returns what recovery said and the text the line would put into `target`."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(root).history_dir
+    forged = b"what the line would have recovery write\n"
+    after = None if made else writes.store(hist, (root / target).read_bytes())
+    (root / "notes.md").write_text("a note\n")
+    _begun(root, "mv", {target: [writes.store(hist, forged), after], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
+    return writes.recover(root, hist), forged
+
+
+#: The review's cases: the path the forged line names, the file it reaches, and whether putting the act back would make it; a link or another spelling is set up first.
+REACHED = {
+    "another case: .CLAUDE/settings.json": (".CLAUDE/settings.json", ".claude/settings.json", False),
+    "another case: .Mcp.json": (".Mcp.json", ".mcp.json", False),
+    "another case: .codex/RULES/loom.rules": (".codex/RULES/loom.rules", ".codex/rules/loom.rules", False),
+    "a link to .claude from an open place": ("notes/cl/settings.json", ".claude/settings.json", False),
+    "a link to .mcp.json from an open place": ("notes/m.json", ".mcp.json", False),
+    "Claude Code's local settings, whose hooks it runs": (".claude/settings.local.json", ".claude/settings.local.json", True),
+    "a Codex rule allowing a command outside its sandbox": (".codex/rules/mine.rules", ".codex/rules/mine.rules", True),
+    "git's config, whose fsmonitor git runs": (".git/config", ".git/config", False),
+    "a task run as the folder opens": (".vscode/tasks.json", ".vscode/tasks.json", True),
+    "a Claude Code command": (".claude/commands/forged.md", ".claude/commands/forged.md", True),
+    "a Cursor file": (".cursor/forged.json", ".cursor/forged.json", True),
+    "a git hook": (".git/hooks/pre-commit", ".git/hooks/pre-commit", True),
+    "a dot-named file at depth": ("notes/deep/.hidden.tex", "notes/deep/.hidden.tex", True),
+    "a file in a dot-named folder at depth": ("notes/.private/x.tex", "notes/.private/x.tex", True),
+}  # fmt: skip
+
+
+@pytest.mark.parametrize("which", REACHED)
+def test_recovery_writes_nothing_in_a_dot_named_place_however_the_line_names_it(tmp_path: Path, which: str) -> None:
+    """A forged line that names a file in a place whose name begins with a dot, outside loom's own, in another spelling, through a link from an open place, or one the apps run a command from later, is left and said, and the file it reaches is neither made nor changed: recovery judges the file reached, never the path's spelling (R2-23, R2-24)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    named, reached, made = REACHED[which]
+    if which.startswith("another case") and not _case_blind(root):
+        pytest.skip("the file system tells the two spellings apart")
+    if named == "notes/cl/settings.json":
+        (root / "notes/cl").symlink_to("../.claude")
+    if named == "notes/m.json":
+        (root / "notes/m.json").symlink_to("../.mcp.json")
+    if made:
+        (root / named).parent.mkdir(parents=True, exist_ok=True)
+    was = None if made else (root / reached).read_bytes()
+    said, _ = _forged_move(root, named, made=made)
+    assert len(said) == 1 and said[0].startswith("left mv:e0e0e0e0e0e0e0e0: putting it back would write"), said
+    assert "in a place whose name begins with a dot" in said[0]
+    assert ((root / reached).read_bytes() if (root / reached).exists() else None) == was
+    assert (root / "notes.md").read_text() == "a note\n"
+    ((_, _, _, settles),) = writes.left(root, load_quilt(root).history_dir)
+    assert settles.startswith("Making ") and "the next act of the same kind" in settles
+
+
+@pytest.mark.parametrize(
+    "which",
+    [
+        "another case: .LOOM",
+        "a link into .loom from an open place",
+        "a link out of .loom to .claude",
+        "config.toml",
+        "a note",
+    ],
+)
+def test_loom_s_own_places_are_known_by_the_file_reached_and_the_person_s_open_files_are_put_back(
+    tmp_path: Path, which: str
+) -> None:
+    """Loom's own places are found by the same test of the file reached: `.LOOM/` where case is ignored and a link from an open place into `.loom/` are loom's, which recovery puts back, while a link out of `.loom/` to an app's folder is judged by where it leads and left. An open file of the person's, `config.toml` among them, is put back as any act's is: a shell that can write the journal can write it directly."""
+    from loom.paths import LOOM
+
+    root = _layered(tmp_path)
+    if which == "another case: .LOOM":
+        if not _case_blind(root):
+            pytest.skip("the file system tells the two spellings apart")
+        named, reached, made = ".LOOM/records/forged.json", f"{LOOM}/records/forged.json", True
+    elif which == "a link into .loom from an open place":
+        (root / "notes/lm").symlink_to("../.loom")
+        named, reached, made = "notes/lm/records/forged.json", f"{LOOM}/records/forged.json", True
+    elif which == "a link out of .loom to .claude":
+        (root / LOOM / "records/out").symlink_to("../../.claude")
+        named, reached, made = f"{LOOM}/records/out/settings.json", ".claude/settings.json", False
+    elif which == "config.toml":
+        named, reached, made = "config.toml", "config.toml", False
+    else:
+        named, reached, made = "notes/x.tex", "notes/x.tex", True
+    was = None if made else (root / reached).read_bytes()
+    said, forged = _forged_move(root, named, made=made)
+    if which == "a link out of .loom to .claude":
+        assert len(said) == 1 and said[0].startswith("left mv:"), said
+        assert (root / reached).read_bytes() == was
+        return
+    assert said == ["undid mv:e0e0e0e0e0e0e0e0"] and (root / reached).read_bytes() == forged
+
+
+def test_every_file_loom_writes_for_an_agent_app_lies_where_recovery_writes_nothing(tmp_path: Path) -> None:
+    """Every file loom writes for an app, from each app's entry (its MCP or settings file, its permission file and its skills), lies in a dot-named place, and a forged line that would put any of them back is left with the file as it was; only the root instruction files lie apart, open to recovery as any file of the person's is (R2-22, R2-23)."""
+    import shutil
+
+    from loom import writes
+    from loom.ai.clients import CLIENTS
+
+    (tmp_path / "made").mkdir()
+    layered = _layered(tmp_path / "made")
+    files = sorted(
+        {rel for c in CLIENTS for rel in (c.file, c.permissions) if rel and (layered / rel).is_file()}
+        | {p.relative_to(layered).as_posix() for c in CLIENTS if c.skills for p in (layered / c.skills).rglob("*") if p.is_file()}
+    )  # fmt: skip
+    assert len([rel for rel in files if "/skills/" in rel]) >= 2 and ".claude/settings.json" in files, files
+    assert [rel for rel in files if (writes._place(layered, rel) is not None)] == []
+    roots = {c.root_file for c in CLIENTS if c.root_file}
+    assert roots and all((writes._place(layered, rel) is not None) for rel in roots)
+    for i, rel in enumerate(files):
+        root = tmp_path / f"q{i}"
+        shutil.copytree(layered, root, symlinks=True)
+        was = (root / rel).read_bytes()
+        said, _ = _forged_move(root, rel)
+        assert len(said) == 1 and said[0].startswith("left mv:"), (rel, said)
+        assert (root / rel).read_bytes() == was, rel
+
+
+# ---- R2-26 and R2-27: nothing a line can write moves where recovery writes, and what is judged is what is written ----
+
+
+def _history_at(root: Path, place: str) -> None:
+    """Set the quilt's `[quilt] history` to `place`, as the person, or a line put back over `config.toml`, could."""
+    config = root / "config.toml"
+    config.write_text(config.read_text().replace("[quilt]\n", f'[quilt]\nhistory = "{place}"\n', 1))
+
+
+@pytest.mark.parametrize("history", [".claude", ".git", "a link to .claude", "outside the quilt"])
+def test_a_history_kept_where_recovery_writes_nothing_makes_no_place_loom_s_own(tmp_path: Path, history: str) -> None:
+    """Loom's own place for recovery is the real `.loom/` folder, and the history only where it lies inside the quilt under no dot-named folder but `.loom/`: a history set in `.claude` or `.git`, in a link to `.claude`, or outside the quilt widens nothing, and a line that would make `.claude/settings.local.json` or rewrite `.git/config` there is left with the file as it was (R2-26)."""
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    if history == "a link to .claude":
+        (root / "hist").symlink_to(".claude")
+        _history_at(root, "hist")
+    elif history == "outside the quilt":
+        _history_at(root, "../outside-history")
+    else:
+        _history_at(root, history)
+    named = ".git/config" if history == ".git" else ".claude/settings.local.json"
+    made = named != ".git/config"
+    was = None if made else (root / named).read_bytes()
+    if history == "outside the quilt":
+        named, made, was = "notes/x.tex", True, None
+    said, _ = _forged_move(root, named, made=made)
+    assert len(said) == 1 and said[0].startswith("left mv:"), said
+    assert ((root / named).read_bytes() if (root / named).exists() else None) == was
+    if history != "outside the quilt":
+        assert not (root / ".claude/settings.local.json").exists()
+    hist = load_quilt(root).history_dir
+    assert _history_place_of(root, hist) is None
+
+
+def _history_place_of(root: Path, hist: Path) -> tuple[str, ...] | None:
+    from loom import writes
+
+    return writes._history_place(root, hist)
+
+
+def test_two_forged_lines_that_move_the_history_and_then_write_in_it_write_nothing_there(tmp_path: Path) -> None:
+    """The review's two lines: the first, put back over `config.toml` as the accepted reach allows, sets the history in `.claude`; the second, its texts in this machine's store, would make `.claude/settings.local.json`, and is left with nothing made (R2-26)."""
+    from loom import writes
+    from loom.paths import LOCAL
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    hist = load_quilt(root).history_dir
+    now = (root / "config.toml").read_bytes()
+    moved = now.replace(b"[quilt]\n", b'[quilt]\nhistory = ".claude"\n', 1)
+    (root / "notes.md").write_text("a note\n")
+    _begun(root, "mv", {"config.toml": [writes.store(hist, moved), writes.store(hist, now)], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}, act="a1a1a1a1a1a1a1a1")  # fmt: skip
+    assert writes.recover(root, hist) == ["undid mv:a1a1a1a1a1a1a1a1"]
+    hist = load_quilt(root).history_dir
+    assert hist.name == ".claude"
+    here = root / LOCAL
+    _begun(root, "mv", {".claude/settings.local.json": [writes.store(here, b'{"hooks": {}}\n'), None], "notes.md": [writes.store(here, b"a note\n"), writes.store(here, b"after\n")]}, act="b2b2b2b2b2b2b2b2")  # fmt: skip
+    said = writes.recover(root, hist)
+    assert len(said) == 1 and said[0].startswith("left mv:b2b2b2b2b2b2b2b2:"), said
+    assert not (root / ".claude/settings.local.json").exists()
+
+
+@pytest.mark.parametrize("by", ["person", "agent"])
+def test_an_act_left_for_a_history_recovery_does_not_write_is_one_whose_settling_would_write_it(
+    tmp_path: Path, by: str
+) -> None:
+    """With the history outside the quilt, an act whose settling would write it, as a person's act's follow-up keeps the look's texts there, is left with words that say so, and that only settling by hand ends it; an agent's act on an open file, whose settling writes nothing there, is put back (R2-26)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    _history_at(root, "../outside-history")
+    hist = load_quilt(root).history_dir
+    (root / "notes.md").write_text("a note\n")
+    _begun(root, "mv", {"notes/x.tex": [writes.store(hist, b"x\n"), None], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}, by=by)  # fmt: skip
+    said = writes.recover(root, hist)
+    if by == "agent":
+        assert said == ["undid mv:e0e0e0e0e0e0e0e0"] and (root / "notes/x.tex").read_text() == "x\n"
+        return
+    assert len(said) == 1 and "settling it would write the history" in said[0], said
+    ((_, _, _, settles),) = writes.left(root, hist)
+    assert settles.startswith("Recovery writes nothing in a history kept there") and "settled by hand" in settles
+    assert not (root / "notes/x.tex").exists()
+
+
+#: The shapes of a put-back the swap is tried on: the path the line names under `notes/d`, and the line's before and after, from the bytes of `.claude/settings.json` (`C`).
+SWAPPED = ["a file made", "a file rewritten", "a made file removed"]
+
+
+def _swap_line(root: Path, which: str) -> None:
+    """A forged line whose putting back writes under `notes/d`, a real folder at judgment, in the shape `which`: making `settings.local.json`, rewriting `settings.json` that holds the same bytes as `.claude/settings.json`, or removing it as a file the act made."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    hist = load_quilt(root).history_dir
+    c = (root / ".claude/settings.json").read_bytes()
+    (root / "notes/d").mkdir(parents=True, exist_ok=True)
+    (root / "notes.md").write_text("a note\n")
+    note = [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]
+    if which == "a file made":
+        files = {"notes/d/settings.local.json": [writes.store(hist, b'{"hooks": {}}\n'), None]}
+    elif which == "a file rewritten":
+        (root / "notes/d/settings.json").write_bytes(c)
+        files = {"notes/d/settings.json": [writes.store(hist, b'{"forged": true}\n'), writes.store(hist, c)]}
+    else:
+        (root / "notes/d/settings.json").write_bytes(c)
+        files = {"notes/d/settings.json": [None, writes.digest(c)]}
+    _begun(root, "mv", {**files, "notes.md": note})
+
+
+def _swap(root: Path) -> None:
+    """Put a link to `.claude` where the folder `notes/d` was."""
+    os.rename(root / "notes/d", root / "notes/d-aside")
+    (root / "notes/d").symlink_to("../.claude")
+
+
+@pytest.mark.parametrize("which", SWAPPED)
+def test_a_folder_swapped_for_a_link_between_judgment_and_write_takes_no_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, which: str
+) -> None:
+    """Recovery writes through the folders it judged, each opened without following a link: `notes/d`, a real folder when the act is judged, swapped for a link to `.claude` before the write, makes the write refused every time, and `.claude` is as it was (R2-27)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    claude = (root / ".claude/settings.json").read_bytes()
+    _swap_line(root, which)
+    real = writes._judge
+
+    def judged_then_swapped(*args: object, **kwargs: object) -> object:
+        verdict = real(*args, **kwargs)  # type: ignore[arg-type]
+        if verdict.how == "undo":
+            _swap(root)
+        return verdict
+
+    monkeypatch.setattr(writes, "_judge", judged_then_swapped)
+    said = writes.recover(root, load_quilt(root).history_dir)
+    assert len(said) == 1 and said[0].startswith("left mv:") and "changed while recovery put the act back" in said[0], (
+        said
+    )
+    assert (root / ".claude/settings.json").read_bytes() == claude
+    assert not (root / ".claude/settings.local.json").exists()
+
+
+#: How many put-backs the racing thread is given to land in.
+ROUNDS = 400
+
+
+def test_a_folder_swapped_for_a_link_by_a_racing_thread_never_takes_a_write(tmp_path: Path) -> None:
+    """A thread swapping `notes/d` and a link to `.claude` as fast as it can, while recovery puts back a line that makes `notes/d/settings.local.json`, `ROUNDS` times: the file is made in the real folder or not at all, never in `.claude` (R2-27)."""
+    import sys
+    import threading
+
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+
+    root = _layered(tmp_path)
+    hist = load_quilt(root).history_dir
+    d = root / "notes/d"
+    d.mkdir(parents=True)
+    stop = threading.Event()
+    asides: list[Path] = []
+
+    def swapping() -> None:
+        n = 0
+        while not stop.is_set():
+            try:
+                if d.is_symlink():
+                    d.unlink()
+                    if asides:
+                        os.rename(asides.pop(), d)
+                elif d.is_dir():
+                    n += 1
+                    aside = root / f"notes/d-aside-{n}"
+                    os.rename(d, aside)
+                    asides.append(aside)
+                    d.symlink_to("../.claude")
+            except OSError:
+                continue
+
+    racer = threading.Thread(target=swapping, daemon=True)
+    switching = sys.getswitchinterval()
+    sys.setswitchinterval(
+        1e-6
+    )  # the two threads take turns as often as they can, so the swap lands inside recovery's put-back
+    racer.start()
+    try:
+        for i in range(ROUNDS):
+            if not writes.unsettled(root, hist):
+                for place in (root / "notes").glob("d*"):
+                    try:
+                        if place.is_dir() and not place.is_symlink():
+                            (place / "settings.local.json").unlink(missing_ok=True)
+                    except OSError:
+                        continue  # the racer is moving it; the next round clears it
+                (root / "notes.md").write_text("a note\n")
+                files = {"notes/d/settings.local.json": [writes.store(hist, b'{"hooks": {}}\n'), None], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]}  # fmt: skip
+                _begun(root, "mv", files, act=f"{i:016x}")
+            writes.recover(root, hist)
+            assert not (root / ".claude/settings.local.json").exists(), i
+    finally:
+        stop.set()
+        racer.join()
+        sys.setswitchinterval(switching)
+    assert not (root / ".claude/settings.local.json").exists()
+
+
+@pytest.mark.parametrize("after", [0, 1])
+def test_an_honest_move_into_a_dot_named_folder_cut_at_a_rename_leaves_no_temporary_of_loom_s(
+    q: Path, monkeypatch: pytest.MonkeyPatch, after: int
+) -> None:
+    """`loom mv` into `.drafts/`, cut short as it renames a file in, is put back, or left with words that, done, let recovery put it back, and loom's own temporary files are cleared once it is: a name of that form is loom's own, cleared wherever it lies, a dot-named folder among it (R2-27)."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.helpers import run
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    restore = dying_before_the_rename(monkeypatch, after=after)
+    with pytest.raises(Died):
+        run("mv", "drafting/main.tex", ".drafts/paper.tex", cwd=q)
+    restore()
+    hist = load_quilt(q).history_dir
+    said = writes.recover(q, hist)
+    assert len(said) == 1 and said[0].startswith(("undid mv:", "left mv:")), said
+    if said[0].startswith("left mv:"):
+        assert "putting it back would write .drafts/paper.tex" in said[0]
+        (q / ".drafts/paper.tex").unlink()  # what the words say: remove what the act made there
+        said = writes.recover(q, hist)
+        assert len(said) == 1 and said[0].startswith("undid mv:"), said
+    assert [p.name for p in q.rglob("*.loom-tmp") if ".loom" not in p.relative_to(q).parts] == []
+    assert (q / "drafting/main.tex").is_file() and not (q / ".drafts/paper.tex").exists()
 
 
 # ---- R-3 and R-4 ------------------------------------------------------------------------------------------------
@@ -862,7 +1255,7 @@ FORGERIES = {
 }  # fmt: skip
 
 
-@pytest.mark.parametrize("which", [*FORGERIES, "another reviewer's look", "an agent's act"])
+@pytest.mark.parametrize("which", [*FORGERIES, "another reviewer's look", "an agent's act", "a look that is a list"])
 def test_a_journal_line_whose_look_recovery_may_not_write_is_left_and_said_and_takes_nothing_in(
     tmp_path: Path, which: str
 ) -> None:
@@ -889,6 +1282,9 @@ def test_a_journal_line_whose_look_recovery_may_not_write_is_left_and_said_and_t
     elif which == "an agent's act":
         _forge(root, {"who": "Tester", "looked": {DOC: stored}}, (DOC,), by="agent")
         why = "an agent's act, which writes no look"
+    elif which == "a look that is a list":
+        _forge(root, [DOC, stored])  # type: ignore[arg-type]
+        why = "its look is not a look"
     else:
         make, keeps, why = FORGERIES[which]
         _forge(root, {"who": "Tester", **make(stored)}, keeps)
@@ -932,7 +1328,7 @@ def test_a_line_whose_look_passes_every_check_takes_in_only_what_its_keep_lines_
 
 
 def test_the_journal_is_denied_to_agents_by_the_rule_that_denies_them_the_records_and_the_look(tmp_path: Path) -> None:
-    """What keeps an agent from writing a journal line is the rule that keeps it from the records and the look: all sit in `.loom/`, which `agents.denied_by` denies an agent, and the permission file loom writes for Claude Code refuses its file tools each of their folders. That file refuses no shell command but `rm`, so an agent's shell is refused none of them, and another app is only told."""
+    """What keeps an agent from writing a journal line is the rule that keeps it from the records and the look: all sit in `.loom/`, which `agents.denied_by` denies an agent, and the permission file loom writes for Claude Code refuses its file tools each of their folders. Of the shell's commands that file names only `rm` and loom's own; Claude Code holds a redirect to its `Edit` denies, and every command only in its sandbox, which the person turns on; another app is only told."""
     from loom.agents import claude_denies, denied_by
     from loom.paths import EDIT_LOG, JOURNAL, JOURNAL_INDEX, LOCAL, LOOKED
     from loom.scan.quilt import load_quilt
@@ -964,3 +1360,172 @@ def test_a_keep_that_kept_nothing_because_every_change_was_refused_exits_as_a_re
     good = suggest(q, "--quote", "one or two points", "--with", "at most two points")
     data = json_of("changes", "--keep", old, "--keep", good, "--json", cwd=q)
     assert data["ok"] is False and data["exit"] == 0 and data["done"] == [good]
+
+
+# ---- R2-22: what recovery believes lies where agents are held out --------------------------------------------
+
+#: The files opened while recovery runs under `_listening`, or None while nothing listens.
+_OPENED: list[str] | None = None
+
+
+def _listen() -> None:
+    """Add, once in the process, an audit hook noting each file opened while `_OPENED` is a list; inert otherwise, since a hook cannot be taken out."""
+    import sys
+
+    if getattr(_listen, "added", False):
+        return
+
+    def hook(event: str, args: tuple) -> None:  # type: ignore[type-arg]
+        if _OPENED is not None and event == "open" and isinstance(args[0], (str, bytes, os.PathLike)):
+            _OPENED.append(os.fsdecode(args[0]))
+
+    sys.addaudithook(hook)
+    _listen.added = True  # type: ignore[attr-defined]
+
+
+def _names(rule: str, rel: str) -> bool:
+    """Whether a deny of loom's own in Claude Code's file (`/dir/**` or `/file`) names the quilt-relative `rel`."""
+    body = rule.removeprefix("/")
+    return rel.startswith(body.removesuffix("**")) if body.endswith("/**") else rel == body
+
+
+def _begun(
+    root: Path, kind: str, files: dict, look: dict | None = None, *, by: str = "person", act: str = "e0e0e0e0e0e0e0e0"
+) -> None:
+    """Append a `begin` line of `kind` on `files` (path: [before, after] digests), a person's unless `by` says otherwise, in the form the door writes one."""
+    from loom.paths import JOURNAL
+
+    line = {"event": "begin", "act": f"{kind}:{act}", "kind": kind, "actor": "Tester", "by": by, "when": "2026-11-24T00:00:00Z", "files": files, "edits": [], "records": []}  # fmt: skip
+    if look is not None:
+        line["look"] = look
+    (root / JOURNAL).parent.mkdir(parents=True, exist_ok=True)
+    with (root / JOURNAL).open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def _cut_short(root: Path, hist: Path, mp: pytest.MonkeyPatch, which: str) -> None:
+    """Leave the journal of the quilt `root` holding one act begun and not settled, of the shape `which` names, so recovery reaches each of its verdicts and the look's follow-ups."""
+    from loom import writes
+    from loom.looks import read_look
+    from loom.records.snapshots import read_raw, write_raw
+    from tests.helpers import run
+    from tests.unit.test_adopt import DOC
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    doc = root / DOC
+    if which == "a move put back":
+        (root / "notes.md").write_text("a note\n")
+        _begun(root, "mv", {DOC: [writes.store(hist, b"before\n"), writes.digest(doc.read_bytes())], "notes.md": [writes.digest(b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
+        writes.store(hist, doc.read_bytes())
+        writes.store(hist, b"a note\n")
+    elif which == "a person's act finished, the look following it":
+        seen = read_raw(root, read_look(root, "Tester").files[DOC], hist)  # type: ignore[union-attr]
+        _begun(
+            root, "restore-to", {DOC: [writes.store(hist, str(seen).encode()), writes.store(hist, doc.read_bytes())]}
+        )
+    elif which == "a Keep's look finished":
+        _forge(root, {"who": "Tester", "looked": {DOC: write_raw(root, doc.read_text(), hist)}}, (DOC,))
+    elif which == "a tick finished":
+        d = writes.store(hist, doc.read_bytes())
+        _begun(root, "tick", {DOC: [d, d]}, {"who": "Tester", "tick": {"path": DOC, "line": 0}})
+    elif which == "an act left for a text the history lacks":
+        _begun(root, "mv", {DOC: ["sha256:" + "1" * 64, writes.store(hist, b"not there\n")]})
+    elif which == "a Keep put back, its edit opened again":
+
+        def listed() -> set[str]:
+            return {c["id"] for c in json.loads(run("changes", "--json", cwd=root).stdout)["changes"]}
+
+        waiting = listed()
+        ok("suggest", "zk-0002", "--quote", "Second statement uses", "--with", "The second statement uses", "--as", "Referee Agent", cwd=root, env={"AI_AGENT": "1"})  # fmt: skip
+        (edit,) = listed() - waiting
+        was = doc.read_bytes()
+        real = writes._append_journal
+
+        def die(at: Path, entry: dict, *, full: bool = False) -> tuple[int, int]:
+            if entry.get("event") == "done" and str(entry.get("act", "")).startswith("keep:"):
+                raise Died
+            return real(at, entry, full=full)
+
+        mp.setattr(writes, "_append_journal", die)
+        with pytest.raises(Died):
+            run("changes", "--keep", edit, cwd=root)
+        mp.undo()
+        doc.write_bytes(was)
+    else:  # an agent app's file, whose texts this machine's store keeps
+        (root / ".mcp.json").write_text('{"mcpServers": {}}\n')
+        restore = dying_before_the_rename(mp, after=1)
+        with pytest.raises(Died):
+            with writes.act(root, hist, "agents") as w:
+                w.replace(".mcp.json", b'{"mcpServers": {"loom": {}}}\n')
+                w.replace("notes.md", b"# Notes\n")
+        restore()
+
+
+#: Each act cut short, and what recovery does with it.
+CUTS = {
+    "a move put back": "undid",
+    "a person's act finished, the look following it": "finished",
+    "a Keep's look finished": "finished",
+    "a tick finished": "finished",
+    "an act left for a text the history lacks": "left",
+    "a Keep put back, its edit opened again": "undid",
+    "an agent app's file, left rather than written": "left",
+}
+
+
+@pytest.mark.parametrize("history", ["by default", "elsewhere in the quilt"])
+@pytest.mark.parametrize("which", CUTS)
+def test_every_file_recovery_reads_in_the_quilt_is_held_from_agents_by_loom_and_by_claude_code_s_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, which: str, history: str
+) -> None:
+    """Whatever recovery believes lies where agents are held out: every file it opens in the quilt, the act's own files aside, which it only compares with the digests its line names, is one loom's commands deny every agent whatever the list says (`agents.always_denied`) and one a deny in the permission file loom writes for Claude Code names. The files are the ones recovery opens, noted by an audit hook over each of its verdicts, so a read added anywhere is checked without a list here to keep (R2-22)."""
+    import shutil
+    from pathlib import PurePosixPath
+
+    from loom import writes
+    from loom.agents import always_denied, claude_denies, denied_by
+    from loom.looks import take
+    from loom.paths import HISTORY, JOURNAL
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_adopt import DOC, TEXT, made
+
+    global _OPENED
+    _listen()
+    root = tmp_path / "q"
+    root.mkdir()
+    made(root, TEXT)
+    if history == "elsewhere in the quilt":
+        config = root / "config.toml"
+        config.write_text(config.read_text().replace("[quilt]\n", '[quilt]\nhistory = "hist"\n', 1))
+        shutil.move(root / HISTORY, root / "hist")
+    take(load_quilt(root), "Tester")
+    doc = root / DOC
+    doc.write_text(doc.read_text().replace("First statement.", "First statement, as an agent put it."))
+    hist = load_quilt(root).history_dir
+    _cut_short(root, hist, monkeypatch, which)
+    lines = [json.loads(line) for line in (root / JOURNAL).read_text().splitlines() if line.strip()]
+    own = {rel for e in lines if e.get("event") == "begin" for rel in e.get("files") or {}}
+    temps = tuple(str(PurePosixPath(rel).with_name(f".{PurePosixPath(rel).name}.")) for rel in own)
+    _OPENED = []
+    try:
+        said = writes.recover(root, hist)
+    finally:
+        opened, _OPENED = _OPENED, None
+    top = Path(os.path.realpath(root))
+    read = set()
+    for p in opened:
+        real = Path(os.path.realpath(p))
+        if real.is_relative_to(top) and not real.is_dir():
+            rel = real.relative_to(top).as_posix()
+            if rel not in own and not rel.startswith(temps):
+                read.add(rel)
+    assert said[0].startswith(f"{CUTS[which]} "), said
+    config = load_quilt(root).config
+    assert JOURNAL in read and (
+        CUTS[which] == "left" or any(rel.startswith(f"{config.history}/texts/") for rel in read)
+    )
+    rules = claude_denies(config)
+    for rel in sorted(read):
+        why = denied_by(config, rel)
+        assert why is not None and always_denied(config, why), (rel, why)
+        assert any(_names(rule, rel) for rule in rules), rel
