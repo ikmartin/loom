@@ -1,6 +1,6 @@
 // Every URL arras composes carries the base the bundle was built for, and every corpus URL the data root a host set. Under the suite's own empty base a composed path and a hard-coded one are the same string, so these run under a mocked non-empty base.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { artifactUrl, dataRoot, dataUrl, route, setDataRoot } from './paths';
+import { dataRoot, dataUrl, libraryPdfUrl, route, setDataRoot } from './paths';
 import { canonUrl, keyUrl, masterUrl, nodeUrl, readUrl, tagUrl, taxonUrl, threadUrl, workUrl } from './nav';
 import { itemFromPath, pathFor, type Item } from './workspace/item';
 import { indexesOf, readingAddress } from './shell/views';
@@ -59,7 +59,7 @@ describe('a route, under a base', () => {
 		const items: Item[] = [
 			{ kind: 'document', id: 'drafting/main.tex', anchor: 'sy-0003' },
 			{ kind: 'document', id: 'canon/widgets-v1.tex' },
-			{ kind: 'work', id: 'Kre99', view: 'info' },
+			{ kind: 'work', id: 'Kre99' },
 			{ kind: 'node', id: 'sy-0003', note: 'a-2026-09-16-ecnav2' },
 			{ kind: 'context', id: 'sy-0003' },
 			{ kind: 'session', id: 's-2026-09-16-p9z37z', view: 'did' }
@@ -67,7 +67,7 @@ describe('a route, under a base', () => {
 		expect(items.map((i) => pathFor(m, i))).toEqual([
 			'/sub/master/drafting/main#sy-0003',
 			'/sub/canon/widgets-v1',
-			'/sub/library/Kre99?view=info',
+			'/sub/library/Kre99',
 			'/sub/node/sy-0003?note=a-2026-09-16-ecnav2',
 			'/sub/context/sy-0003',
 			'/sub/session/s-2026-09-16-p9z37z?view=did'
@@ -87,13 +87,13 @@ describe('a corpus URL', () => {
 		expect(dataRoot()).toBe('/sub/build/');
 		expect(dataUrl('/fragments/sy-0003.html')).toBe('/sub/build/fragments/sy-0003.html');
 		expect(sourceUrl('sy-0003/proof')).toBe('/sub/build/source/sy-0003%2Fproof.tex');
-		expect(artifactUrl('/refs/Kre99/')).toBe('/sub/refs/Kre99/paper.pdf');
+		expect(libraryPdfUrl('sha256:41b7')).toBe('/sub/_api/library/pdf/41b7');
 	});
 
 	it('follows a data root a host sets, on another origin, while routes keep the base', () => {
 		setDataRoot('https://x.org/corpus/build/');
 		expect(dataUrl('manifest.json')).toBe('https://x.org/corpus/build/manifest.json');
-		expect(artifactUrl('refs/Kre99')).toBe('https://x.org/corpus/refs/Kre99/paper.pdf');
+		expect(libraryPdfUrl('41b7')).toBe('/sub/_api/library/pdf/41b7');
 		expect(route('/graph')).toBe('/sub/graph');
 		setDataRoot('');
 		expect(dataUrl('manifest.json')).toBe('/sub/build/manifest.json');

@@ -1,7 +1,6 @@
-// After a fragment is injected: references become routes, images point at the build directory, citations link to their targets, inclusions become links the viewer can expand.
-import { anchorId, masterUrl, workUrl, keyTarget, keyUrl, nodeUrl } from '$lib/nav';
+// After a fragment is injected: references become routes, images point at the build directory, inclusions become links the viewer can expand. A citation is left as the publisher drew it, plain text: nothing the manifest says names the work it cites.
+import { anchorId, masterUrl, keyTarget, keyUrl, nodeUrl } from '$lib/nav';
 import { dataUrl } from '$lib/paths';
-import { pageOf } from '$lib/worklink';
 import { taxonTone } from '$lib/taxonomy';
 import { toneClass } from '$lib/state';
 import type { Annotation, Manifest } from '$lib/manifest/types';
@@ -105,7 +104,7 @@ export function inert(mark: HTMLElement): boolean {
 }
 
 /**
- * Wire a fragment's markup: references, citations, tones, images, margins, comment placements, marks, heading links and inclusions.
+ * Wire a fragment's markup: references, tones, images, margins, comment placements, marks, heading links and inclusions.
  *
  * Every pass re-reads what the manifest decides (hrefs, tones, margin states, mark classes); listeners and inserted elements are added once, flagged on the element.
  */
@@ -136,20 +135,6 @@ export function wire(
 		const owner = region ? region.container : target;
 		const here = opts.master ? manifest?.nodes[owner]?.reached_by?.includes(opts.master) : false;
 		set(a, 'href', here ? '#' + anchorId(key) : keyUrl(manifest, owner) + (region ? '#' + anchorId(key) : ''));
-	}
-	// **A citation opens the paper, not the transcription of it.** `[1, Proposition 2.1]` means that proposition in that work, so the link goes where every link to the result goes (`keyUrl`): the work at the result's page where a copy is filed, else the digest node's page, loom's record of it. A citation with no digest node behind it opens the work at the page its postnote names, or at its front; a citekey the manifest does not know stays text.
-	for (const c of root.querySelectorAll<HTMLElement>('span.cite[data-citekey]')) {
-		if (c.querySelector('a')) continue;
-		const target = c.dataset.target;
-		const citekey = c.dataset.citekey ?? '';
-		const page = pageOf(c.dataset.postnote);
-		const href = target ? keyUrl(manifest, target) : manifest?.references[citekey] ? workUrl(citekey) + (page ? `?page=${page}` : '') : '';
-		if (!href) continue;
-		const a = document.createElement('a');
-		a.href = href;
-		a.className = target ? 'cite-link' : 'cite-link cite-work';
-		while (c.firstChild) a.appendChild(c.firstChild);
-		c.appendChild(a);
 	}
 	// One palette, two surfaces: the accent down an environment's edge and the node in the graph are the same colour
 	// because both ask `$lib/taxonomy` for it, rather than each keeping a list of taxon names.

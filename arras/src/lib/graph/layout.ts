@@ -3,7 +3,6 @@ import { displayNode } from '$lib/nodes/display';
 // The dependency graph as a layered drawing: ELK lays the results out in layers, what a result rests on above it. Edges keep their kind so the drawing can dash proof-edges and dot prose-edges.
 import { taxonTone } from "$lib/taxonomy";
 import type { Manifest, Node } from "$lib/manifest/types";
-import { bibText } from "$lib/works";
 
 export interface GNode {
   id: string;
@@ -20,7 +19,7 @@ export interface GNode {
   y: number;
   w: number;
   h: number;
-  /** A second line in the box: the section a result sits in, or `paper`. */
+  /** A second line in the box: the section a result sits in. */
   note?: string;
 }
 
@@ -29,8 +28,6 @@ export interface GEdge {
   to: string;
   kind: string;
   points: { x: number; y: number }[];
-  /** For an edge into a paper drawn as one node: how many of its results the edge stands for. */
-  count?: number;
 }
 
 export interface Layout {
@@ -46,15 +43,9 @@ export interface Filters {
   master?: string;
   taxon?: string;
   tag?: string;
-  /** Which cited results to draw. `reached` is the default: everything this corpus wrote, plus the external nodes it actually depends on. A digest holds a whole paper, so `all` is mostly other people's theorems. `papers` draws each cited work as one node instead of its results. */
-  external?: "reached" | "all" | "none" | "papers";
-  reached?: Set<string>;
 }
 
-/** The id a cited work is drawn under when results are contracted to papers; `paper:` cannot collide with a node id, which never holds a colon. */
-export const PAPER = "paper:";
-
-export function graphInput(m: Manifest, f: Filters): { nodes: Node[]; edges: { from: string; to: string; kind: string; count?: number }[] } {
+export function graphInput(m: Manifest, f: Filters): { nodes: Node[]; edges: { from: string; to: string; kind: string }[] } {
   const passes = (n: Node) => {
     // an agent document's nodes are drawn only when its own document is the scope: the whole quilt shows each of the person's nodes once
     if (!f.master && n.derived_of) return false;
@@ -62,14 +53,6 @@ export function graphInput(m: Manifest, f: Filters): { nodes: Node[]; edges: { f
       return false;
     if (f.taxon && n.taxon !== f.taxon) return false;
     if (f.tag && !n.tags.includes(f.tag)) return false;
-    if (n.external) {
-      if (f.external === "none" || f.external === "papers") return false;
-      if (
-        (f.external ?? "reached") === "reached" &&
-        !(f.reached?.has(n.id) ?? false)
-      )
-        return false;
-    }
     return true;
   };
   const stmtOf = (key: string) => m.keys[key]?.node ?? key;
@@ -94,90 +77,7 @@ export function graphInput(m: Manifest, f: Filters): { nodes: Node[]; edges: { f
     seen.add(k);
     return true;
   });
-  if (f.external !== "papers") return { nodes, edges: unique };
-  return contractToPapers(m, nodes, unique, stmtOf);
-}
-
-/** The citekey whose digest a node belongs to: its `digest` for a result, and the digest file it sits in for a section of that file, which the manifest does not mark external. */
-function sourceOf(m: Manifest): (id: string) => string | null {
-  const byFile = new Map<string, string>();
-  for (const r of Object.values(m.references)) if (r.digest?.file) byFile.set(r.digest.file, r.citekey);
-  return (id: string) => {
-    const n = m.nodes[id];
-    if (!n) return null;
-    if (n.external && n.digest) return n.digest;
-    return byFile.get(n.file) ?? null;
-  };
-}
-
-/**
- * The work graph: the corpus's own results as they are, and every cited work as one node.
- *
- * It is the result graph's quotient by source, taken over external nodes only. An edge runs from an own result to a paper when the result depends on any of the paper's digested results — counting how many — or cites the paper at all; an edge runs between two papers when a result in one digest depends on a result in another. A work cited but never digested appears too, from the references' `cited_by`, which the expanded graph cannot show. Nothing beyond the manifest is needed: a node's source is its `digest`.
- */
-function contractToPapers(
-  m: Manifest,
-  nodes: Node[],
-  own: { from: string; to: string; kind: string }[],
-  stmtOf: (key: string) => string,
-) {
-  const paperOf = sourceOf(m);
-  // a digest's own sections are part of the paper too, though not marked external, so they are contracted with it
-  nodes = nodes.filter((n) => !paperOf(n.id));
-  const shown = new Set(nodes.map((n) => n.id));
-  const agg = new Map<string, { from: string; to: string; kind: string; results: Set<string> }>();
-  const add = (from: string, to: string, kind: string, result: string) => {
-    const k = `${from}>${to}`;
-    const e = agg.get(k) ?? agg.set(k, { from, to, kind, results: new Set() }).get(k)!;
-    e.results.add(result);
-  };
-  for (const e of m.edges) {
-    const a = stmtOf(e.from);
-    const b = stmtOf(e.to);
-    const pa = paperOf(a);
-    const pb = paperOf(b);
-    if (!pa && pb && shown.has(a)) add(a, PAPER + pb, e.kind, b);
-    else if (pa && pb && pa !== pb) add(PAPER + pa, PAPER + pb, e.kind, b);
-  }
-  for (const r of Object.values(m.references)) {
-    for (const c of r.cited_by) {
-      const a = stmtOf(c);
-      if (shown.has(a) && !paperOf(a) && !agg.has(`${a}>${PAPER}${r.citekey}`)) add(a, PAPER + r.citekey, "cites", "");
-    }
-  }
-  const papers = new Set<string>();
-  for (const e of agg.values()) for (const end of [e.from, e.to]) if (end.startsWith(PAPER)) papers.add(end.slice(PAPER.length));
-  const paperNodes = [...papers].sort().map((ck) => {
-    const ref = m.references[ck];
-    const title = bibText(ref?.bib.title) || ck;
-    return {
-      id: PAPER + ck,
-      kind: "work",
-      taxon: "Paper",
-      style: "paper",
-      title: title.length > 30 ? title.slice(0, 29) + "…" : title,
-      aliases: [],
-      tags: [],
-      file: "",
-      src: [0, 0],
-      fragment: "",
-      numbers: {},
-      reached_by: [],
-      parent: {},
-      children: [],
-      proofs: [],
-      external: true,
-      digest: ref?.digest ? ck : null,
-      incomplete: [],
-      state: "",
-      derived: {},
-    } as Node;
-  });
-  const edges = [
-    ...own.filter((e) => shown.has(e.from) && shown.has(e.to)),
-    ...[...agg.values()].map((e) => ({ from: e.from, to: e.to, kind: e.kind, count: Math.max(1, [...e.results].filter(Boolean).length) })),
-  ];
-  return { nodes: [...nodes, ...paperNodes], edges };
+  return { nodes, edges: unique };
 }
 
 export function colorOf(m: Manifest, state: string): string {
@@ -248,7 +148,7 @@ export async function layout(m: Manifest, f: Filters): Promise<Layout> {
     if (!b) continue;
     out.nodes.push({
       id: n.id,
-      label: n.kind === "work" ? (n.title ?? n.id) : displayNode(m, n.id, master).name,
+      label: displayNode(m, n.id, master).name,
       taxon: n.taxon,
       state: n.state,
       color: colorOf(m, n.state),
@@ -256,7 +156,7 @@ export async function layout(m: Manifest, f: Filters): Promise<Layout> {
       style: n.style ?? "plain",
       external: n.external,
       section: false,
-      note: n.kind === "work" ? "paper" : displayNode(m, n.id, master).context,
+      note: displayNode(m, n.id, master).context,
       ...b,
     });
   }
@@ -270,7 +170,7 @@ export async function layout(m: Manifest, f: Filters): Promise<Layout> {
       const b = box.get(src.from);
       if (a && b) pts.push({ x: a.x + a.w / 2, y: a.y + a.h }, { x: b.x + b.w / 2, y: b.y });
     }
-    out.edges.push({ from: src.from, to: src.to, kind: src.kind, points: pts.reverse(), count: src.count });
+    out.edges.push({ from: src.from, to: src.to, kind: src.kind, points: pts.reverse() });
   }
   return out;
 }

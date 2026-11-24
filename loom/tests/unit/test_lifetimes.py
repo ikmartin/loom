@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import time
 from dataclasses import replace
 from pathlib import Path
@@ -85,7 +86,6 @@ def test_a_build_removes_what_it_does_not_name_keeps_what_it_does_and_touches_no
         "blocks/snippets/0123.html",
         "blocks/snippets/pictures/0123.svg",
         "blocks/previews/0123.html",
-        "blocks/spans/0123.json",
         f"{document_build('gone/paper.tex').removeprefix(CACHE + '/')}/paper.pdf",
         f"{document_build('gone/paper.tex').removeprefix(CACHE + '/')}/html/paper.html",
         "closures/no-such-key.tex",
@@ -93,8 +93,7 @@ def test_a_build_removes_what_it_does_not_name_keeps_what_it_does_and_touches_no
         "crops/0123456789abcdef-p1-0123456789abcdef.png",
         "marks/boxes/0123456789abcdef/0001.xml",
         "marks/refound/0123.json",
-        "library/boxes/doi/no-such-work/0001.xml",
-        "library/resolve/0123.json",
+        f"library/pages/{'0' * 64}/pages/0001.txt",
     ]
     long_ago = time.time() - (KEEP_DAYS + 1) * DAY
     for rel in unnamed:
@@ -663,17 +662,17 @@ def test_a_crop_is_kept_while_an_annotation_was_written_on_its_page_of_its_copy(
     assert kept.is_file() and anchored.is_file() and not other_page.exists() and not other_copy.exists()
 
 
-def test_a_stored_works_word_boxes_are_kept_while_the_work_is_in_the_store(tmp_path: Path) -> None:
-    from loom.paths import STORAGE
+def test_a_stored_pdfs_pages_are_kept_while_the_store_holds_the_pdf(tmp_path: Path) -> None:
+    from loom.paths import LIBRARY_DOCUMENTS
 
     q = demo(tmp_path)
     ok("build", cwd=q)
-    (q / STORAGE / "doi" / "10.1000_kept").mkdir(parents=True)
-    kept = _plant(q / CACHE / "library/boxes/doi/10.1000_kept/0001.xml")
-    source = _plant(q / CACHE / "library/boxes/doi/10.1000_kept/src/0001.xml")
-    gone = _plant(q / CACHE / "library/boxes/doi/10.1000_removed/0001.xml")
+    held = next((q / LIBRARY_DOCUMENTS).glob("*.pdf")).stem
+    text = _plant(q / CACHE / f"library/pages/{held}/pages/0001.txt")
+    boxes = _plant(q / CACHE / f"library/pages/{held}/boxes/0001.xml")
+    gone = _plant(q / CACHE / f"library/pages/{'0' * 64}/pages/0001.txt")
     sweep(q, scan(load_quilt(q)), index=on_disk(q))
-    assert kept.is_file() and source.is_file() and not gone.exists()
+    assert text.is_file() and boxes.is_file() and not gone.exists()
 
 
 def test_the_node_index_is_kept_while_the_library_has_nodes(tmp_path: Path) -> None:
@@ -684,26 +683,12 @@ def test_the_node_index_is_kept_while_the_library_has_nodes(tmp_path: Path) -> N
     ok("build", cwd=q)
     index = _plant(q / NODE_INDEX)
     journal = _plant(q / f"{NODE_INDEX}-journal")
-    (q / LIBRARY_NODES).mkdir(parents=True)
+    assert any((q / LIBRARY_NODES).iterdir())
     sweep(q, scan(load_quilt(q)), index=on_disk(q))
     assert index.is_file() and journal.is_file()
-    (q / LIBRARY_NODES).rmdir()
+    shutil.rmtree(q / LIBRARY_NODES)
     sweep(q, scan(load_quilt(q)), index=on_disk(q))
     assert not index.exists() and not journal.exists()
-
-
-def test_a_lookups_answer_is_kept_while_an_entry_of_the_library_asks_it(tmp_path: Path) -> None:
-    """Answers can be made again only online."""
-    from loom.refs.resolve import answer_names
-
-    q = demo(tmp_path)
-    ok("build", cwd=q)
-    result = scan(load_quilt(q))
-    entry = next(iter(result.bib.values()))
-    asked = [_plant(q / CACHE / "library/resolve" / name) for name in answer_names(entry, result.quilt.config.contact)]
-    other = _plant(q / CACHE / "library/resolve/0123456789abcdef01234567.json")
-    sweep(q, result, index=on_disk(q))
-    assert len(asked) == 2 and all(p.is_file() for p in asked) and not other.exists()
 
 
 def test_a_picture_is_kept_while_a_page_the_site_serves_or_keeps_names_it(tmp_path: Path) -> None:

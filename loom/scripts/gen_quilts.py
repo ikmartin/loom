@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import filecmp
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -20,7 +22,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from loom.paths import AI, ANNOTATION_LOG, BIBLIOGRAPHY, CACHE, COPIES, LOCAL, SCRATCH, STORAGE
+from loom.paths import AI, ANNOTATION_LOG, CACHE, COPIES, LIBRARY_DOCUMENTS, LOCAL, SCRATCH
 
 REPO = Path(__file__).resolve().parents[1]
 SOURCES = REPO / "tests" / "quilts" / "sources"
@@ -595,12 +597,9 @@ def build_demo(dest: Path) -> None:
     g.run("accept", "dm-0002", "--proofs", "--as", "The loom demo", "--force")
     g.run("stamp", "drafting/main.tex", "-m", "widgets-v1")
 
-    # The cited work, the showcase's way: an invented paper this repository compiles, so the demo has a real document behind its digest rather than prose about a paper nobody holds. Gathering reads the entry from the document's bibliography, the author adds the PDF, naming the work it is, since nothing is filed under a work on loom's guess, and the source beside it; the digest is extracted by the command that extracts one.
-    g.run("library", "update", "--only", "gather")
+    # The cited work, the showcase's way: an invented paper this repository compiles, so the demo holds a real document rather than prose about a paper nobody holds. The stamp gathered a reference for each entry of the document's bibliography; the author adds the PDF, naming the work it is, since nothing is filed under a work on loom's guess, and the source beside it.
     g.run("library", "add", str(DEMO_WORKS / "calloway-fixed-loci.pdf"), "--for", "Calloway14")
     g.run("library", "add", str(DEMO_WORKS / "calloway-fixed-loci.tex"), "--for", "Calloway14")
-    g.run("library", "update", "Calloway14", "--only", "map")
-    g.run("library", "update", "Calloway14", "--only", "extract", "--no-compile")
 
     g.at("2026-09-16T14:02:00Z")
     run_dir = g.run("session", "new", "--name", "referee-dm-0003").split()[0]
@@ -693,15 +692,15 @@ def _tiny_pdf(path: Path, text: str = "Notes on balanced quivers, for a reader i
     path.write_bytes(bytes(out))
 
 
-#: The invented cited works, compiled by `sources/showcase-works/build.sh` and committed beside their LaTeX. They are copied into the quilt's seed space and filed by `loom library update --only gather`, so that generating the showcase needs no TeX distribution and writes the same bytes on every machine.
+#: The invented cited works, compiled by `sources/showcase-works/build.sh` and committed beside their LaTeX, and added to the library by `loom library add`, so that generating the showcase needs no TeX distribution and writes the same bytes on every machine.
 WORKS = SOURCES / "showcase-works"
-#: The second arXiv version of Arden24, which adds a Section 5: filed by `library add` rather than gathered, so the showcase has a work with two documents.
+#: The second arXiv version of Arden24, which adds a Section 5: a work of its own in the library, with its source.
 ARDEN_V2 = WORKS / "arden-cycle-spaces-v2"
 DEMO_WORKS = SOURCES / "demo-works"
 #: The showcase's own PDFs, compiled by the same script: a handout, and its second copy with every word a line lower.
 SHOWCASE_FILES = SOURCES / "showcase-files"
-#: Where the store files Bellamy19, the work that is a PDF and nothing else.
-BELLAMY = f"{STORAGE}/doi/10.4171_showcase_19-2/paper.pdf"
+#: Bellamy19, the work that is a PDF and nothing else.
+BELLAMY = WORKS / "bellamy-median-orders.pdf"
 
 
 def build_showcase(dest: Path) -> None:
@@ -718,183 +717,56 @@ def build_showcase(dest: Path) -> None:
     g.at("2026-09-14T09:05:00Z")
     g.run("stamp", "drafting/main-atomic.tex", "-m", "flows-v1")
 
-    # ---- Loom's store. -------------------------------------------------------------------------------------
-    # Gathering reads the document's bibliography; the author adds the PDFs they hold, each naming the work it is, since nothing is filed under a work on loom's guess.
+    # ---- The library. ---------------------------------------------------------------------------------------
+    # Stamping the paper gathered a reference for each entry of its bibliography; the author adds the documents they hold, each naming the work it is, since nothing is filed under a work on loom's guess.
     g.at("2026-09-14T09:10:00Z")
-    g.run("library", "update", "--only", "gather")
     for pdf, work in (("arden-cycle-spaces.pdf", "Arden24"), ("bellamy-median-orders.pdf", "Bellamy19")):
         g.run("library", "add", str(WORKS / pdf), "--for", work)
     g.at("2026-09-14T09:15:00Z")
-    # The source goes into the store before the digest is made: a digest extracted from a file only this machine holds cites pages nobody else can open, which is the invariant extraction enforces (plan 0.13 §4).
     g.run("library", "add", str(WORKS / "arden-cycle-spaces.tex"), "--for", "Arden24")
-    g.run("library", "update", "Arden24", "--only", "extract", "--no-compile")
-    # A second document of Arden24, its arXiv v2, which states a theorem the version cited does not: filed beside the first as the version Arden24-v2, with its source, and extracted by name, since loom extracts a version only when it is cited or named. The paper cites that theorem as Arden24's, and the citation resolves through the version.
-    g.run("library", "add", str(ARDEN_V2.with_suffix(".pdf")), "--for", "Arden24")
-    g.run("library", "add", str(ARDEN_V2.with_suffix(".tex")), "--for", "Arden24-v2")
-    g.run("library", "update", "Arden24-v2", "--only", "extract", "--no-compile")
+    # Arden24's arXiv v2, which states a theorem the version cited does not: a work of its own, with its source beside its PDF.
+    said = g.run("library", "add", str(ARDEN_V2.with_suffix(".pdf")), "--new", "--json")
+    added = json.loads(said[said.index("{") :])
+    v2 = added["documents"][0]["ref"]
+    g.run("library", "add", str(ARDEN_V2.with_suffix(".tex")), "--for", v2)
     g.at("2026-09-14T09:20:00Z")
     g.run("ai", "init")
 
-    # ---- A run reads the work loom could not extract, and proposes its results. -------------------------
-    # Bellamy19 is a PDF and nothing else, so every result is read off a page and anchored to it. The run
-    # proposes; only the author may verify, which is the whole of DR-177 in two commands.
+    # ---- A run reads Bellamy19, the work that is a PDF and nothing else, and notes what it found on its pages. ----
     g.at("2026-09-15T10:00:00Z")
     survey = g.run("session", "new", "--name", "survey-bellamy").split()[0]
-    g.run(
-        "library",
-        "propose",
-        "Bellamy19",
-        "--local",
-        "thm-2.3",
-        "--page",
-        "2",
-        "--level",
-        "1",
-        "--as",
-        "Survey Agent",
-        "--session",
-        survey,
-        "--source-text",
-        "The median orders of a weighted digraph are in bijection with the vertices of a rational polytope M (D) "
-        "⊆ RA cut out by the exchange inequalities of Lemma 2.2, and M (D) is bounded.",
-        "--statement",
-        "The median orders of a weighted digraph are in bijection with the vertices of a rational polytope "
-        "$M(D) \\subseteq \\mathbb{R}^{A}$ cut out by the exchange inequalities of Lemma~2.2, and $M(D)$ is bounded.",
-    )
-    g.run(
-        "library",
-        "propose",
-        "Bellamy19",
-        "--local",
-        "thm-3.2",
-        "--page",
-        "2",
-        "--level",
-        "1",
-        "--as",
-        "Survey Agent",
-        "--session",
-        survey,
-        "--source-text",
-        "Let D be a weighted digraph whose weight function is balanced at every vertex. Then the counting function "
-        "of the median polytope of D agrees with a polynomial of degree equal to the dimension of that polytope for "
-        "every nonnegative integer dilation factor, and the leading coefficient of that polynomial is the relative "
-        "volume of the polytope.",
-        "--statement",
-        "Let $D$ be a weighted digraph whose weight function is balanced at every vertex. Then the counting function "
-        "of the median polytope of $D$ agrees with a polynomial of degree equal to the dimension of that polytope, "
-        "and the leading coefficient of that polynomial is the relative volume.",
-        agent=True,
-    )
-    g.run(
-        "library",
-        "propose",
-        "Bellamy19",
-        "--local",
-        "prop-3.1",
-        "--page",
-        "2",
-        "--as",
-        "Survey Agent",
-        "--session",
-        survey,
-        "--source-text",
-        "The function L is a quasi-polynomial in k of degree equal to the dimension of M (D), with a period dividing "
-        "the least common multiple of the denominators of the vertices of M (D).",
-        "--statement",
-        "The function $L$ is a quasi-polynomial in $k$ of degree equal to the dimension of $M(D)$, with a period "
-        "dividing the least common multiple of the denominators of the vertices of $M(D)$.",
-    )
-    g.run(
-        "library",
-        "propose",
-        "Bellamy19",
-        "--local",
-        "def-4.1",
-        "--page",
-        "2",
-        "--as",
-        "Survey Agent",
-        "--session",
-        survey,
-        "--source-text",
-        "The defect of a weighted digraph is the least common multiple of the denominators of the vertices of its "
-        "median polytope.",
-        "--statement",
-        "The \\emph{defect} of a weighted digraph is the least common multiple of the denominators of the vertices "
-        "of its median polytope.",
-        agent=True,
-    )
-    g.run(
-        "library",
-        "relate",
-        "Bellamy19-thm-3.2",
-        "Arden24-thm-3.1",
-        "--kind",
-        "depends-on",
-        "--why",
-        "Bellamy's counting theorem needs the polytope to be full-dimensional, and its dimension is Arden's rank.",
-        "--session",
-        survey,
-        "--as",
-        "Survey Agent",
-        agent=True,
-    )
-    g.run(
-        "library",
-        "relate",
-        "Bellamy19-thm-2.3",
-        "Bellamy19-thm-3.2",
-        "--kind",
-        "specialises",
-        "--why",
-        "2.3 is the polytope; 3.2 counts its lattice points. The second is the one this quilt cites.",
-        "--session",
-        survey,
-        "--as",
-        "Survey Agent",
-        agent=True,
-    )
+    for page, quote, note in (
+        (
+            "2",
+            "rational polytope M (D) ⊆ RA cut out by the exchange inequalities of Lemma 2.2",
+            "Theorem 2.3: the median orders are the vertices of a bounded rational polytope.",
+        ),
+        (
+            "2",
+            "whose weight function is balanced at every vertex",
+            "Theorem 3.2, the counting theorem: balance is its one hypothesis.",
+        ),
+    ):
+        g.run(
+            "annotate", "Bellamy19", note, "--page", page, "--quote", quote, "--type", "note",
+            "--as", "Survey Agent", agent=True,
+        )  # fmt: skip
     # The agent's account of the run, said in the chat (plan 0.14).
     g.run(
         "session",
         "say",
         "Asked: find in Bellamy19 whatever the counting argument of Section 3 could rest on. Did: read pages 1 to 3, "
-        "proposed four results, and asserted two links. Decided: nothing; the four proposals wait for the author. "
-        "Remains: the examples of Section 4 are not proposed, since the paper states no result there beyond the "
-        "definition of the defect.",
+        "and noted where its two theorems stand on page 2. Decided: nothing; the notes are for the author. "
+        "Remains: the examples of Section 4, which state no result.",
         "--session",
         survey,
         "--as",
         "Survey Agent",
         agent=True,
     )
-    _say_report(g, survey, "Survey Agent", "Mode: ingest, on Bellamy19.", _showcase_survey_report())
-    # the work's overview, ingest's understanding half (plan 0.21.3): a reading, written through loom and linking results by id
-    g.run("write", "Bellamy19", _showcase_bellamy_overview(), "--session", survey, "--as", "Survey Agent", agent=True)
-
-    # ---- The author decides on each proposal. ------------------------------------------------------------
-    # Verified, verified with the rendering corrected, left pending, and discarded with a reason: the four
-    # states 8.14 gives a proposal, all four visible in the digest view at once.
-    g.at("2026-09-16T09:00:00Z")
-    g.run("library", "verify", "Bellamy19-thm-2.3", "--yes")
-    g.run(
-        "library",
-        "verify",
-        "Bellamy19-thm-3.2",
-        "--yes",
-        "--statement",
-        "Let $D$ be a weighted digraph whose weight function is balanced at every vertex. Then the counting "
-        "function of the median polytope of $D$ agrees with a polynomial $L_{D}$ of degree $\\dim M(D)$ for every "
-        "$k \\geq 0$, and the leading coefficient of $L_{D}$ is the relative volume of $M(D)$.",
-    )
-    g.run(
-        "library",
-        "discard",
-        "Bellamy19-def-4.1",
-        "--why",
-        "The defect is defined in the sequel, not here; this paper only names it. Nothing in the quilt uses it.",
-    )
+    _say_report(g, survey, "Survey Agent", "Mode: question, on Bellamy19.", _showcase_survey_report())
+    # a reading of the paper as a whole, a note on the work
+    g.run("annotate", "Bellamy19", _showcase_bellamy_overview(), "--type", "note", "--as", "Survey Agent", agent=True)
 
     # ---- The author accepts what they are satisfied with. ------------------------------------------------
     # --force skips the compile check: the rows it writes do not depend on it, and the generator must write
@@ -1034,14 +906,11 @@ def build_showcase(dest: Path) -> None:
     )
     g.run(
         "annotate",
-        "Arden24-prop-2.1",
-        "The transcription drops Arden's hypothesis that the quiver is finite, which is in his standing assumptions "
-        "and not in the proposition. It is harmless here and would not be in a quilt that cited him for an infinite "
-        "quiver.",
+        "Arden24",
+        "Proposition 2.1 assumes the quiver finite, in Arden's standing assumptions and not in the proposition. It "
+        "is harmless here and would not be in a quilt that cited him for an infinite quiver.",
         "--type",
         "revision",
-        "--quote",
-        "whose underlying graph has $c$ connected components",
         "--as",
         "Referee (Agent)",
         agent=True,
@@ -1192,7 +1061,7 @@ def build_showcase(dest: Path) -> None:
         "--quote",
         "A quiver whose underlying graph is a forest",
     )
-    g.run("annotate", "sh-0003", "Read against the definition in Arden24-def-1.2; the two agree.", "--type", "note")
+    g.run("annotate", "sh-0003", "Read against Arden's Definition 1.2; the two agree.", "--type", "note")
 
     # A second person, so the viewer has two people commenting and not one.
     g.at("2026-09-17T09:00:00Z")
@@ -1243,20 +1112,19 @@ def build_showcase(dest: Path) -> None:
     reading = g.run("session", "new", "--name", "reading Bellamy 19").strip().splitlines()[0].split()[0]
     g.run(
         "annotate",
-        "Bellamy19-prop-3.1",
-        "This is the form we use; the balanced case is the one that matters here.",
+        "Bellamy19",
+        "Proposition 3.1 is the form we use; the balanced case is the one that matters here.",
         "--type",
         "note",
     )
     g.run(
         "annotate",
-        "Bellamy19-thm-3.2",
-        "Does this need the weights to be integral, or only bounded?",
+        "Bellamy19",
+        "Does Theorem 3.2 need the weights to be integral, or only bounded?",
         "--type",
         "question",
     )
-    # Notes on the page itself (plan 0.13 item 2): one anchored to text the reader selected, one to a box drawn
-    # around the display, both recorded against the work by its identifier.
+    # Notes on the page itself (plan 0.13 item 2): one anchored to text the reader selected, one to a box drawn around the display, both recorded against the work's reference.
     g.run(
         "annotate",
         "Bellamy19",
@@ -1316,8 +1184,8 @@ def build_showcase(dest: Path) -> None:
     )
     g.run(
         "annotate",
-        "Bellamy19-thm-3.2",
-        "Please verify the transcription of 3.2 against p.2: the digest says 'integral' where the page says 'bounded'.",
+        "Bellamy19",
+        "Theorem 3.2 on p.2 asks the weights to be balanced; sh-000C quotes it as asking them integral.",
         "--type",
         "suggestion",
         "--as",
@@ -1331,32 +1199,6 @@ def build_showcase(dest: Path) -> None:
     # ---- A handout among the quilt's own files, marked, then replaced by its second copy, whose words all stand a line lower: every mark is found again there.
     g.at("2026-09-17T11:14:00Z")
     _mark_handout(g)
-
-    # ---- An orphan document, healed by the store. ----------------------------------------------------------- A document filed for an entry the author then deletes: the store outlives the bibliography, and the next scan offers it back (plan 0.13 item 6, gathering's adoption).
-    g.at("2026-09-17T11:15:00Z")
-    bib = g.root / BIBLIOGRAPHY
-    text = bib.read_text(encoding="utf-8")
-    bib.write_text(
-        text + "\n@misc{Halloway26,\n  title = {Notes on balanced quivers},\n  year = {2026},\n}\n", encoding="utf-8"
-    )
-    with tempfile.TemporaryDirectory() as tmp:
-        pdf = Path(tmp) / "Halloway - 2026 - Notes on balanced quivers.pdf"
-        _tiny_pdf(pdf)
-        g.run("library", "add", str(pdf), "--for", "Halloway26", "--as", SHOWCASE)
-    bib.write_text(text, encoding="utf-8")
-    g.run(
-        "library", "update", "--only", "gather"
-    )  # adopted: the entry is back, from the ledger's record of how the document arrived
-
-    # ---- A work with no document to hold, declared rather than inferred. ----------------------------------
-    g.at("2026-09-17T11:20:00Z")
-    g.run(
-        "library",
-        "ignore",
-        "Stacks",
-        "--why",
-        "a living work with no fixed version; there is no document to file",
-    )
 
     # ---- A session closed when its work was done. ----------------------------------------------------------
     g.at("2026-09-17T11:30:00Z")
@@ -1501,13 +1343,19 @@ def _mark_bellamy(g: Gen) -> None:
             },
         ],
     )
-    paper = g.root / BELLAMY
-    held = paper.read_bytes()
+    held = BELLAMY.read_bytes()
+    paper = g.root / LIBRARY_DOCUMENTS / f"{hashlib.sha256(held).hexdigest()}.pdf"
+
+    def stored(data: bytes) -> None:
+        # a new file in the stored PDF's place, never a write through a link the store may share
+        paper.unlink()
+        paper.write_bytes(data)
+
     # boxed on a copy the reader re-saved, whose bytes differ and whose words do not: found again where it was drawn
-    paper.write_bytes(held + b"\n% saved again by the reader\n")
+    stored(held + b"\n% saved again by the reader\n")
     g.run(
         *on,
-        "The result the digest calls Bellamy19-thm-2.3.",
+        "Theorem 2.3, boxed.",
         "--page",
         "2",
         "--mark",
@@ -1518,7 +1366,7 @@ def _mark_bellamy(g: Gen) -> None:
         "note",
     )
     # circled on another file filed under this work by mistake, since replaced: its words are nowhere in this one, so it is detached
-    paper.write_bytes((SHOWCASE_FILES / "handout.pdf").read_bytes())
+    stored((SHOWCASE_FILES / "handout.pdf").read_bytes())
     g.run(
         *on,
         "Circled on the copy filed by mistake before this one.",
@@ -1531,7 +1379,7 @@ def _mark_bellamy(g: Gen) -> None:
         "--type",
         "note",
     )
-    paper.write_bytes(held)
+    stored(held)
 
 
 def _mark_handout(g: Gen) -> None:
@@ -1590,21 +1438,8 @@ Minor Revision for the rank theorem; the counting theorem needs the integrality 
 
 
 def _showcase_bellamy_overview() -> str:
-    """Bellamy19's overview, mode 1 in four blocks: what an agent writes for a reader before they open the paper."""
-    return """## [overview]
-Bellamy counts the lattice points of the median polytope $M(D)$ of a weighted digraph $D$. The main result, [](quilt:Bellamy19-thm-3.2), says the count $L(k)$ of points in $kM(D)$ is a polynomial in $k$ when $D$ is balanced; the hardest step is the integrality of the vertices of $M(D)$, [](quilt:Bellamy19-thm-2.3).
-
-## [proof-basics]
-- [](quilt:Bellamy19-thm-2.3): every vertex of $M(D)$ is integral, by total unimodularity of the incidence matrix (memory-grade: the paper's argument was read from its page 4).
-- [](quilt:Bellamy19-thm-3.2): Ehrhart's theorem applied to an integral polytope gives the polynomial.
-
-## [dependencies]
-- [](quilt:Bellamy19-thm-3.2) rests on [](quilt:Bellamy19-thm-2.3); balance is used only there.
-
-## [reconstruction-plan]
-1. Prove integrality of the vertices from total unimodularity.
-2. Apply Ehrhart's theorem.
-"""
+    """A reading of Bellamy19, what an agent writes for a reader before they open the paper: a note on the work."""
+    return """Bellamy counts the lattice points of the median polytope $M(D)$ of a weighted digraph $D$. The main result, Theorem 3.2, says the count $L(k)$ of points in $kM(D)$ is a polynomial in $k$ when $D$ is balanced; the hardest step is the integrality of the vertices of $M(D)$, Theorem 2.3, by total unimodularity of the incidence matrix. Theorem 3.2 then follows from Ehrhart's theorem, and balance is used only for integrality."""
 
 
 def _showcase_state() -> str:
@@ -1623,19 +1458,19 @@ def _showcase_state() -> str:
 def _showcase_survey_report() -> str:
     """The survey run's report, written the way `ai/rules.md` asks: named blocks."""
     return """## [summary]
-Bellamy19 is a PDF with no source, so every result here was read off a page and anchored to it. Four results proposed: the polytope theorem (2.3), the counting theorem (3.2), the quasi-polynomial proposition (3.1) and the definition of the defect (4.1). The two theorems are the paper's main results and are proposed at level 1.
+Bellamy19 is a PDF with no source, so everything here was read off its pages. Its two main results stand on page 2: the polytope theorem (2.3) and the counting theorem (3.2); a note on the page marks each.
 
 ## [notation]
 - $M(D)$ is the median polytope of the weighted digraph $D$; the paper writes it $M (D)$, which is the PDF's spacing and not a product.
 - $L(k)$ counts lattice points of the dilate $kM(D)$.
 
 ## [findings]
-- Theorem 3.2 is the one this quilt should cite. Theorem 2.3 is what makes its hypothesis checkable, and the two are linked `specialises`.
-- Proposition 3.1 is the quasi-polynomial version and is proposed without a level: it is the general statement, and the quilt uses only the balanced case.
+- Theorem 3.2 is the one this quilt should cite. Theorem 2.3 is what makes its hypothesis checkable.
+- Proposition 3.1 is the quasi-polynomial version: the general statement, of which the quilt uses only the balanced case.
 - Definition 4.1 is a forward reference to the sequel and carries nothing this quilt needs.
 
 ## [decision]
-Nothing verified here; four proposals wait for the author.
+Nothing decided here; the notes are for the author.
 """
 
 

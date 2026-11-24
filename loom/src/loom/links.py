@@ -108,6 +108,9 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
         if place:
             raise LinkError(f"{href}: a landmark is linked whole", "place")
         return Target("document", landmarks[key], href=href)
+    library = _library_node(root, href, key, place)
+    if library is not None:
+        return library
     try:
         canonical = resolve_key(result, key)
     except EnvError:
@@ -179,22 +182,42 @@ def _reached(result: Any, href: str, place: str, master: str) -> None:
         raise LinkError(f"{href}: {master} does not include {place}", "place")
 
 
+def _library_node(root: Path, href: str, key: str, place: str) -> Target | None:
+    """A node of the library by its id (`quilt:tq-00K3`), a place in it one of its anchors; None when `key` is no library node's id, so the quilt's own keys are tried. A library id and a draft's key are minted from one namespace and never equal (`nodes.md` §3)."""
+    from loom.library.ids import anchor_owner, parse_id
+    from loom.library.node import file_name
+    from loom.paths import LIBRARY_NODES
+
+    if parse_id(key) is None or not (root / LIBRARY_NODES / file_name(key)).is_file():
+        return None
+    if place and anchor_owner(place) != key:
+        raise LinkError(f"{href}: {place} is not a place in {key}", "place")
+    return Target("library", key, place, href)
+
+
+#: The schemes a `cited:` link names a work by, as a person writes them, to the scheme an entry's identifier carries.
+_CITED = {"doi": "doi", "arxiv": "arxiv", "mr": "mr", "zbl": "zbl", "zbmath": "zbl"}
+
+
 def _cited(result: Any, href: str) -> Target:
-    from loom.refs.identity import identify, parse
+    from loom.library.entries import matchable
+    from loom.library.intake import Library
 
     m = re.match(r"([^?#]*)(?:[?#](.*))?$", href[len("cited:") :], re.S)
     target, rest = (m.group(1), m.group(2) or "") if m else ("", "")
-    wid = parse(target)
-    if wid is None:
+    scheme, _, value = target.partition(":")
+    if scheme.lower() == "work":
+        raise LinkError(f"{href}: work:… names no work; link a work by its identifier, or as quilt:REF", "work")
+    if scheme.lower() not in _CITED or not value:
         raise LinkError(f"{href}: cited: takes a work's identifier, doi:…, arXiv:…, MR…, zbMATH…", "work")
-    for citekey, entry in result.bib.items():
-        if any((w.scheme, w.value.lower()) == (wid.scheme, wid.value.lower()) for w in identify(entry)):
-            keys = parse_qs(rest.replace("#", "&"))
-            page = (keys.get("page") or [""])[0]
-            if page and not (page.isdigit() and int(page) > 0):
-                raise LinkError(f"{href}: page must be a number from 1", "place")
-            return Target("work", citekey, f"page={page}" if page else "", href)
-    raise LinkError(f"{href}: no entry in the bibliography states {target}", "work")
+    held = Library.read(result.quilt.root).stating([matchable(f"{_CITED[scheme.lower()]}:{value}")])
+    if not held:
+        raise LinkError(f"{href}: no work in the library states {target}", "work")
+    keys = parse_qs(rest.replace("#", "&"))
+    page = (keys.get("page") or [""])[0]
+    if page and not (page.isdigit() and int(page) > 0):
+        raise LinkError(f"{href}: page must be a number from 1", "place")
+    return Target("work", held[0], f"page={page}" if page else "", href)
 
 
 def check(result: Any, root: Path, text: str) -> list[str]:

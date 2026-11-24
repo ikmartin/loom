@@ -6,7 +6,7 @@ Usage:
 
 Compared byte for byte, over the files git would commit (tracked, or untracked and not ignored):
 
-- `docs/specs/fixture/` and its vendored copies `loom/tests/fixture/` and `arras/tests/fixture/`, less `views/`: the samples of the views' reads and writes, which `scripts/regen views` writes into the source alone after the copies are made, and which the viewer's tests read from there, so no copy carries them;
+- `docs/specs/fixture/` and its vendored copies `loom/tests/fixture/` and `arras/tests/fixture/`, less `views/`: the samples of the views' reads and writes, which `scripts/regen views` and `views-library` write into the source alone and the viewer's tests read from there, so no copy carries them;
 - `demos/demo/`, `demos/synthetic/` and `demos/showcase/` and the quilts under `loom/tests/quilts/` that `demos/build.py` copies them from, less the `EXPECTED-LINT.txt` it drops from demo and showcase, and less `.loom/records/review-observations.json`, which loom rewrites whenever it scans a quilt, so serving a demo would change it under the check.
 
 Exit 0 when every copy agrees, 1 otherwise.
@@ -23,7 +23,7 @@ REFRESH = "sh docs/specs/tools/refresh-fixture.sh"
 DEMOS = "python demos/build.py --skip-papers"
 #: runtime state loom rewrites on every scan; a served demo changes it without anyone editing anything
 STATE = (".loom/records/review-observations.json",)
-#: the views' samples, generated into the fixture's source alone (`scripts/regen views`) and read from there by the viewer's tests; no copy carries them
+#: the views' samples, generated into the fixture's source alone (`scripts/regen views`, `views-library`) and read from there by the viewer's tests; no copy carries them
 VIEWS = ("views/",)
 
 # (source, copy, files the copy leaves out (a name ending in `/` a folder), the command that makes the copy again)

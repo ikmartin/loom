@@ -1,4 +1,4 @@
-"""Edges from references, \\uses, citations with postnotes, and nesting.
+"""Edges from references, \\uses and nesting, and the citations each region makes.
 
 An edge runs from a region (a statement, a proof, or prose) to a node; its kind is that of the region it occurs in. A reference to a labelled region inside a node targets the node that owns the region, which is the proof key when the region lies in a proof.
 """
@@ -66,16 +66,14 @@ class EdgeResult:
     refs_in: dict[str, list[str]] = field(default_factory=dict)  # key -> labels referenced by \ref family
     uses_in: dict[str, list[str]] = field(default_factory=dict)  # key -> labels listed in \uses
     diagnostics: list[Diagnostic] = field(default_factory=list)
-    #: `(citekey, postnote)` of each citation whose postnote names a result its work's digest does not hold, the ones `loom:unmatched-postnote` reports; the publisher marks each on the citation it draws
-    unmatched: set[tuple[str, str]] = field(default_factory=set)
 
 
 def _kind_of(kind: str) -> str:
     return {"environment": "statement", "proof": "proof"}.get(kind, "prose")
 
 
-def find_edges(asm: Assembly, files: dict[str, SourceFile], versions: dict[str, list[str]] | None = None) -> EdgeResult:
-    """Every edge of the assembled quilt, with the citations; `versions` is each citekey's other versions, for `postnote_edges`."""
+def find_edges(asm: Assembly, files: dict[str, SourceFile]) -> EdgeResult:
+    """Every edge of the assembled quilt, with the citations."""
     res = EdgeResult()
     for key, n in asm.nodes.items():
         src = files[n.file]
@@ -116,9 +114,6 @@ def find_edges(asm: Assembly, files: dict[str, SourceFile], versions: dict[str, 
                 skey = asm.key_of_env(path, env)
                 if pkey and skey:
                     res.edges.append(EdgeRec(pkey, skey, "proof", "nested", path, src.line_of(env.start)))
-    from loom.scan.postnote import postnote_edges
-
-    postnote_edges(asm, res, versions)
     return res
 
 
@@ -163,23 +158,4 @@ def _resolve(
         return
     if src_node is not None and src_node.kind == "proof" and src_node.of == to:
         return
-    to_node = asm.nodes.get(to)
-    if (
-        to_node is not None
-        and to_node.file.endswith(".proposed.tex")
-        and (src_node is None or src_node.file != to_node.file)
-    ):
-        # a proposal is never an edge target from outside its own file: nobody has vouched for it
-        res.diagnostics.append(
-            Diagnostic(
-                "warning",
-                "loom:cites-proposed-node",
-                f"\\{via}{{{label}}} names {to}, which is proposed and not yet verified",
-                [Location(file, line, column)],
-                [from_key],
-            )
-        )
-        return
-    res.edges.append(
-        EdgeRec(from_key, to, kind, "postnote" if via == "cite" else via, file, line, label, offset, column)
-    )
+    res.edges.append(EdgeRec(from_key, to, kind, via, file, line, label, offset, column))

@@ -6,6 +6,8 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
+
 from loom.version import __version__
 from tests.helpers import edit, json_of, ok, refused
 from tests.unit._quilts import demo
@@ -33,22 +35,18 @@ def test_a_long_text_given_as_dash_is_read_from_stdin(tmp_path: Path) -> None:
     first = ok("annotate", "dm-0002", "Which orbits?", "--type", "question", *AS, cwd=q).output.split()[0]
     ok("annotate", "--reply", first, "-", *AS, cwd=q, stdin=LATEX)
     assert bodies(q)[before:] == [LATEX, "Which orbits?", LATEX]
-    proposal = json_of(
-        "library", "propose", "Calloway14", "--local", "rem-9.1", "--level", "1", "--page", "1",
-        "--source-text", "An involution of a topological space fixes a subspace", "--statement", "-",
-        "--dry-run", "--json", *AS, cwd=q, stdin=LATEX,
-    )  # fmt: skip
-    assert LATEX in json.dumps(proposal, ensure_ascii=False).replace("\\\\", "\\")
+    ok("write", "state", "-", *AS, cwd=q, stdin=LATEX)
+    assert (q / "research-state.md").read_text(encoding="utf-8").rstrip("\n") == LATEX.rstrip("\n")
 
 
 def test_stdin_holds_one_text(tmp_path: Path) -> None:
     q = demo(tmp_path)
+    from loom.cli._common import from_stdin
+    from loom.errors import EnvError
+
     before = bodies(q)
-    refused(
-        "library", "propose", "Calloway14", "--local", "rem-9.1", "--level", "1", "--page", "1",
-        "--source-text", "-", "--statement", "-", *AS,
-        cwd=q, code=2, match="--source-text and --statement are both -", stdin=LATEX,
-    )  # fmt: skip
+    with pytest.raises(EnvError, match="--quote and --with are both -"):
+        from_stdin({"--quote": "-", "--with": "-"})
     refused("annotate", "-", "--batch", *AS, cwd=q, code=2, match="--batch reads its lines from stdin")
     assert bodies(q) == before
 
@@ -56,15 +54,7 @@ def test_stdin_holds_one_text(tmp_path: Path) -> None:
 def test_an_argument_that_names_nothing_exits_2(tmp_path: Path) -> None:
     """K3: an argument that names nothing, or names it ambiguously, is refused by name with exit 2 -- exit 1 is a run that found a problem in the quilt, which none of these is."""
     q = demo(tmp_path)
-    refused("library", "read", "Calloway14", "99", cwd=q, code=2, match="99 is past the end")
-    refused(
-        "library", "propose", "Calloway14", "--local", "rem-9.1", "--level", "1", "--page", "99",
-        "--source-text", "x", "--statement", "S", *AS, cwd=q, code=2, match="runs past the end",
-    )  # fmt: skip
-    refused(
-        "library", "propose", "Calloway14", "--local", "remark-nine", "--level", "1", "--page", "1",
-        "--source-text", "x", "--statement", "S", *AS, cwd=q, code=2, match="remark-nine",
-    )  # fmt: skip
+    refused("annotate", "Nobody99", "x", "--page", "1", "--quote", "x", *AS, cwd=q, code=2, match="Nobody99 names none")
     refused("annotate", "dm-0002", "x", "--quote", "not in its text", *AS, cwd=q, code=2, match="loom source dm-0002")
     refused("write", "state", "See [](quilt:dm-9999).", *AS, cwd=q, code=2, match="dm-9999")
 

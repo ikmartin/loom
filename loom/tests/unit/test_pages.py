@@ -1,12 +1,12 @@
-"""Pages (plan 0.21.3): the research state and a work's overview, written through `loom write` with the hash the reader was shown, recorded in the history, and published with who wrote them."""
+"""Pages (plan 0.21.3): the research state, written through `loom write` with the hash the reader was shown, recorded in the history, and published with who wrote it."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from tests.helpers import edit, json_of, ok, refused, said
-from tests.unit._quilts import demo, showcase
+from tests.helpers import edit, ok, refused
+from tests.unit._quilts import showcase
 
 AGENT = ("--as", "Test Agent")
 
@@ -59,32 +59,6 @@ def test_a_link_that_names_nothing_is_refused_and_nothing_is_written(tmp_path: P
     assert (q / "research-state.md").read_text() == before
 
 
-def test_a_works_overview_lives_in_its_store_directory_and_library_read_prints_it(tmp_path: Path) -> None:
-    q = showcase(tmp_path)
-    read = ok("library", "read", "Bellamy19", cwd=q)
-    assert read.stdout.startswith("## [overview]") and said("a reading, not the paper", read.stderr)
-    data = json_of("library", "read", "Bellamy19", "--json", cwd=q)
-    assert data["path"].endswith("/overview.md") and data["hash"] == hash_of(q, data["path"])
-    assert ok("library", "read", "Bellamy19", "--where", "overview", cwd=q).stdout.strip() == str(q / data["path"])
-    # a work with no overview prints its digest's opening, and says so, and that the agent reading it through writes one
-    opening = ok("library", "read", "Arden24", cwd=q)
-    assert said("an agent that reads it through writes one", opening.stderr) and said(
-        "the paper's own words", opening.stderr
-    )
-    # read to its last page, it says so again; a work with an overview does not
-    assert said(
-        "that is the last page, and Arden24 has no overview yet",
-        ok("library", "read", "Arden24", "1-999", cwd=q).stderr,
-    )
-    assert "no overview" not in ok("library", "read", "Bellamy19", "1-999", cwd=q).stderr
-    assert "no overview yet" not in ok("library", "read", "Arden24", "1", cwd=q).stderr
-    # the work's report says who wrote its overview, or that it has none yet
-    assert "overview: written by Survey Agent on 2026-09-15" in ok("library", "Bellamy19", cwd=q).stdout
-    assert json_of("library", "Bellamy19", "--json", cwd=q)["work"]["overview"]["by"] == "Survey Agent"
-    assert json_of("library", "Arden24", "--json", cwd=q)["work"]["overview"] is None
-    assert said("overview: none yet; an agent that reads it through writes one", ok("library", "Arden24", cwd=q).stdout)
-
-
 def test_the_manifest_publishes_each_page_with_who_wrote_it_and_its_links_that_moved_or_broke(tmp_path: Path) -> None:
     q = showcase(tmp_path)
     ok(
@@ -94,8 +68,6 @@ def test_the_manifest_publishes_each_page_with_who_wrote_it_and_its_links_that_m
     state = m["research_state"]
     assert state["by"] == {"kind": "agent", "id": "Referee (Agent)"} and state["edited_since"] is False
     assert state["links"] == {"broken": [], "moved": []} and "<h2>Goals</h2>" in state["body_html"]
-    overview = m["references"]["Bellamy19"]["overview"]
-    assert overview["by"]["id"] == "Survey Agent" and '<section data-block="overview">' in overview["body_html"]
     # a linked result changes, and the author adds a link to nothing by hand
     edit(q / "drafting" / "nodes" / "sh-0009.tex", "has $c$ connected components", "has $c$ components")
     with (q / "research-state.md").open("a") as fh:
@@ -121,16 +93,6 @@ def test_an_agent_may_not_edit_the_research_state_by_hand(tmp_path: Path) -> Non
 
     assert "Edit(/research-state.md)" in settings_deny_paths(QuiltConfig())
     assert "Edit(/notes/state.md)" in settings_deny_paths(QuiltConfig(research_state="notes/state.md"))
-
-
-def test_the_papers_opening_ends_at_its_first_heading_and_reads_plain(tmp_path: Path) -> None:
-    """T4: with no overview, `library read WORK` printed the extracted section raw and ran on into `\\paragraph{Notation and conventions.}`."""
-    q = demo(tmp_path)
-    digest = q / ".loom/library" / "Calloway14.tex"
-    edit(digest, "Section 2 fixes conventions.", "\\paragraph{Notation and conventions.} Section 2 fixes conventions.")
-    out = ok("library", "read", "Calloway14", cwd=q).stdout
-    assert out.startswith("Let $X$ be a topological space") and "The fixed locus $\\operatorname{Fix}(\\sigma)$" in out
-    assert "\\emph" not in out and "Notation" not in out and "Section 2" not in out, out
 
 
 def test_a_link_whose_result_is_gone_is_reported_broken_and_the_build_goes_on(tmp_path: Path) -> None:

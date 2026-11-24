@@ -12,21 +12,17 @@ from typing import Any
 import click
 import click.core
 
-from loom.ai.layout import ACTS, AGENT_COMMANDS, NETWORK, NOT_TOOLS
+from loom.ai.layout import ACTS, AGENT_COMMANDS, NOT_TOOLS
 
 #: Parameters the server supplies itself: the quilt it serves, and the name it was started with.
 SUPPLIED = ("--quilt", "--as", "--help")
 #: Options that read standard input, which a call never has: over MCP, each item is a call of its own.
 READS_STDIN = ("--batch",)
-#: A group that runs on its own takes one word, which its hidden command reads: `history KEY`, `library WORK`.
+#: A group that runs on its own takes one word, which its hidden command reads: `history KEY`.
 GROUP_WORDS = {
     "history": (
         "key",
         "A key, to list its recorded versions and whether its text now is one; with none, the history's steps.",
-    ),
-    "library": (
-        "work",
-        "A work, by citekey, its identifier (doi:…, arXiv:…), a fragment of a citekey or of its author or title, or one of its result ids, to report that one work; with none, the whole library.",
     ),
 }
 
@@ -90,7 +86,7 @@ class ToolSpec:
 
 
 def tool_name(path: str) -> str:
-    """The tool for a command path: `library propose` is `loom_library_propose`."""
+    """The tool for a command path: `ai orient` is `loom_ai_orient`."""
     return "loom_" + path.replace(" ", "_")
 
 
@@ -203,7 +199,7 @@ def hints(spec: ToolSpec) -> dict[str, bool]:
         "read_only_hint": act == "read",
         "destructive_hint": act == "replace",
         "idempotent_hint": act in ("read", "derive"),
-        "open_world_hint": spec.path in NETWORK,
+        "open_world_hint": False,
     }
 
 

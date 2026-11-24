@@ -115,6 +115,14 @@ describe('markOf', () => {
 		expect(markOf(ann({}, null))).toBeNull();
 	});
 
+	it('draws one anchored by its words where the publisher found them, and one that records its place where it records', () => {
+		const found = { page: 3, rects: [[10, 20, 30, 40]] };
+		expect(markOf(ann({ rects: null }), found)).toMatchObject({ page: 3, rects: [[10, 20, 30, 40]], kind: 'highlight' });
+		expect(markOf(ann({ rects: null }), null)).toBeNull();
+		expect(markOf(ann({ rects: null, detached: true }), found)).toBeNull();
+		expect(markOf(ann(), found)).toMatchObject({ page: 2, rects: [[1, 2, 3, 4]] });
+	});
+
 	it('reads the words of a body as published', () => {
 		expect(textOf('<p>one &lt; two</p>\n<p>three</p>')).toBe('one < two\nthree');
 	});

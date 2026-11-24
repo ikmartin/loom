@@ -18,7 +18,6 @@ const m = {
 	},
 	keys: {},
 	regions: {},
-	references: {},
 	annotations: {},
 	sessions: [],
 	threads: {},

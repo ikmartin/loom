@@ -5,13 +5,28 @@ A file is checked in three layers: reading it (`node.read_node`, checks 1 to 5),
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
 from loom.library import ids
-from loom.library.body import ARGUMENTS, entry_of, labels, macros_items, pointers, unknown
+from loom.library.body import (
+    ARGUMENTS,
+    Item,
+    Pointer,
+    Wrapper,
+    conditional,
+    entry_of,
+    is_conditional,
+    labels,
+    macros_items,
+    pointers,
+    unknown,
+    wrapped,
+    wrappers,
+)
 from loom.library.node import SUFFIX, Node, NodeUnreadable, Problem, body_start, read_node
 from loom.paths import LIBRARY_NODES
 from loom.scan.model import Diagnostic, Location
@@ -53,6 +68,14 @@ class StoreView(Protocol):
         """The references whose entry's key is `key`, compared ignoring case."""
         ...
 
+    def source(self, node_id: str) -> str | None:
+        """The node's `source`, or None when it has none or is not in the store."""
+        ...
+
+    def macros(self, ref: str) -> str:
+        """The body of the reference's macros node, '' when it has none."""
+        ...
+
 
 @dataclass
 class MemoryView:
@@ -86,14 +109,24 @@ class MemoryView:
     def keyed(self, key: str) -> frozenset[str]:
         return frozenset(self._keys.get(key.casefold(), ()))
 
+    def source(self, node_id: str) -> str | None:
+        node = self.nodes.get(node_id)
+        return node.source if node else None
 
-def node_problems(node: Node) -> list[Problem]:
+    def macros(self, ref: str) -> str:
+        node = self.nodes.get(ids.macros_of(ref))
+        return node.body if node else ""
+
+
+def node_problems(node: Node, given: dict[str, Wrapper] | None = None) -> list[Problem]:
     """What a readable node gets wrong about itself: its lists' order (7), what its body points at and defines (8), its entry (9), its macros (10), and what a stub or a pointer needs (11).
 
     Parameters
     ----------
     node : Node
         A node `read_node` made, or one about to be written.
+    given : dict of str to Wrapper, optional
+        Its work's own commands (`body.wrappers` of its macros node, `wrappers_of`): those that point or label read as check 8 reads `\\ref` and `\\cite`, through one another, and none of them refused as a pointer loom does not read; none by default.
 
     Returns
     -------
@@ -104,7 +137,7 @@ def node_problems(node: Node) -> list[Problem]:
     name = node.file_name
     if node.kind in (ids.STATEMENT, ids.PROOF):
         out += _lists(node, name)
-        out += _body_refs(node, name)
+        out += _body_refs(node, name, given or {})
     if node.kind == ids.REFERENCE:
         out += _entry(node, name)
     if node.kind == ids.MACROS:
@@ -150,17 +183,37 @@ def _lists(node: Node, name: str) -> list[Problem]:
     return out
 
 
-def _body_refs(node: Node, name: str) -> list[Problem]:
+def wrappers_of(node: Node, view: StoreView) -> dict[str, Wrapper]:
+    """The commands a statement's or a proof's work defines, with what each points at or labels (`body.wrappers`): its source's macros node's, a proof with no source taking its statement's. A command named like a pointer that is among them is read as its definition says, never refused as unread."""
+    if node.kind not in (ids.STATEMENT, ids.PROOF):
+        return {}
+    source = node.source or (view.source(node.parent) if node.kind == ids.PROOF and node.parent else None)
+    return wrappers(view.macros(source)) if source else {}
+
+
+def _pointing(node: Node, given: dict[str, Wrapper]) -> list[Pointer]:
+    """What the body points at, written plainly or through its work's own commands, `\\label` apart."""
+    return [*pointers(node.body), *(p for p in wrapped(node.body, given) if p.command != "label")]
+
+
+def _how(p: Pointer) -> str:
+    return f"\\{p.via} (its work's command for \\{p.command})" if p.via else f"\\{p.command}"
+
+
+def _body_refs(node: Node, name: str, given: dict[str, Wrapper]) -> list[Problem]:
     out: list[Problem] = []
     listed = set(node.uses) | set(node.mentions)
     exempt = {node.id} | ({node.parent} if node.kind == ids.PROOF and node.parent else set())
-    for p in pointers(node.body):
+    for p in _pointing(node, given):
         line = p.line
         if p.cites:
             if ids.kind_of(p.target) != ids.REFERENCE:
                 out.append(
                     Problem(
-                        8, f"{name} cites {p.target}, which is not a reference's id, as `tq-00B1-ref` is.", line, True
+                        8,
+                        f"{name} cites {p.target}{' through ' + _how(p) if p.via else ''}, which is not a reference's id, as `tq-00B1-ref` is.",
+                        line,
+                        True,
                     )
                 )
                 continue
@@ -171,7 +224,7 @@ def _body_refs(node: Node, name: str) -> list[Problem]:
                 out.append(
                     Problem(
                         8,
-                        f"{name} points at {p.target} with \\{p.command}, and that is neither a node's id nor an anchor.",
+                        f"{name} points at {p.target} with {_how(p)}, and that is neither a node's id nor an anchor.",
                         line,
                         True,
                     )
@@ -181,7 +234,19 @@ def _body_refs(node: Node, name: str) -> list[Problem]:
             out.append(
                 Problem(8, f"{name} points at {owner} and lists it in neither `uses` nor `mentions`.", line, True)
             )
+    for p in wrapped(node.body, given):
+        if p.command == "label":
+            out.append(
+                Problem(
+                    8,
+                    f"{name} defines a label through \\{p.via}, its work's command for \\label; write \\label{{{node.id}-eq00}} itself in the body, so the anchor is one loom reads.",
+                    p.line,
+                    True,
+                )
+            )
     for p in unknown(node.body):
+        if p.command in given:
+            continue
         out.append(
             Problem(
                 8,
@@ -233,9 +298,39 @@ def _entry(node: Node, name: str) -> list[Problem]:
 
 
 def _macros(node: Node, name: str) -> list[Problem]:
+    items = macros_items(node.body)
+    if not items:
+        return [Problem(10, f"{name} holds nothing; a work whose results need no macros has no macros node.")]
+    # a conditional `\\newif\\ifdraft` defines, and so may set, `\\drafttrue` and `\\draftfalse`
+    flags = {f"{n}{v}" for n in re.findall(r"\\newif\s*\\if([A-Za-z@]+)", node.body) for v in ("true", "false")}
+    return _items(name, node.body, items, flags)
+
+
+def _items(name: str, body: str, items: list[Item], flags: set[str]) -> list[Problem]:
+    """Check 10 on what a macros body holds at one level; `\\AtBeginDocument`'s group, and each branch of a conditional, is checked as a body of its own."""
     out: list[Problem] = []
-    for item in macros_items(node.body):
-        if item.command in ARGUMENTS:
+    for item in items:
+        if item.command == "AtBeginDocument":
+            group = body[item.start : item.end]
+            inner = group[group.find("{") + 1 : group.rfind("}")] if "{" in group else ""
+            out += [p._replace(line=item.line) for p in _items(name, inner, macros_items(inner), flags)]
+            continue
+        if is_conditional(item.command):
+            cond = conditional(body, item)
+            if cond is None:
+                out.append(
+                    Problem(
+                        10,
+                        f"{name} holds \\{item.command}, a conditional loom does not read whole: its condition tests what a macros node does not say, or no \\fi ends it.",
+                        item.line,
+                        True,
+                    )
+                )
+                continue
+            for branch in cond.branches:
+                out += [p._replace(line=item.line) for p in _items(name, branch, macros_items(branch), flags)]
+            continue
+        if item.command in ARGUMENTS or item.command in flags:
             continue
         line = item.line
         if item.command == "text":
@@ -315,7 +410,7 @@ def store_problems(node: Node, view: StoreView) -> list[Problem]:
                 )
     if node.kind in (ids.STATEMENT, ids.PROOF):
         own = frozenset(p.target for p in labels(node.body))
-        for p in pointers(node.body):
+        for p in _pointing(node, wrappers_of(node, view)):
             owner = ids.anchor_owner(p.target)
             if owner is None or p.cites:
                 continue
@@ -378,7 +473,8 @@ def check_file(name: str, data: bytes, view: StoreView | None = None) -> tuple[N
         node = read_node(data, name)
     except NodeUnreadable as exc:
         return None, diagnostics(name, None, exc.problems)
-    problems = node_problems(node) + (store_problems(node, view) if view is not None else [])
+    given = wrappers_of(node, view) if view is not None else {}
+    problems = node_problems(node, given) + (store_problems(node, view) if view is not None else [])
     return node, diagnostics(name, node, problems, body_start(data, node.body))
 
 
@@ -408,7 +504,7 @@ def check_store(files: Mapping[str, bytes]) -> list[Diagnostic]:
             out[name] = diagnostics(name, None, exc.problems)
     view = MemoryView.of(read.values())
     for name, node in read.items():
-        problems = node_problems(node) + store_problems(node, view)
+        problems = node_problems(node, wrappers_of(node, view)) + store_problems(node, view)
         out[name] = diagnostics(name, node, problems, body_start(files[name], node.body))
     return [d for name in sorted(out) for d in out[name]]
 

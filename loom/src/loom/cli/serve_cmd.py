@@ -34,10 +34,12 @@ def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, q
     """Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
     The viewer is at /, and what it reads at /build/. One server runs per quilt. At rest after a build, at most once an hour, it removes what loom keeps for no purpose any more, as a whole loom build does: from .loom/cache/ what its last build does not name and nothing has written in the last hour, expired scratch and old saved previews. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
+
+    A quilt an earlier loom made is served waiting: the viewer offers to bring it forward, as loom upgrade does, and nothing is built until it has.
     """
     from loom.arras_bundle import BundleEnvError
 
-    quilt = open_quilt(quilt_path)
+    quilt = open_quilt(quilt_path, older=True)
     try:
         bundle = Path(viewer).expanduser().resolve() if viewer else locate_bundle()
     except BundleEnvError as e:
@@ -64,7 +66,12 @@ def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, q
         where = f" ({exc.filename})" if exc.filename else ""
         raise EnvError(f"cannot start the server: {exc.strerror or exc}{where}") from exc
     # the URL first: a cold first build compiles every block the converter cannot translate, and a silent wait looks like a hang
-    note(f"loom serve: {session.url}  (build directory at {session.url.rstrip('/')}{BUILD_URL}; Ctrl-C to stop)")
+    said = (
+        "this quilt was made by an earlier loom: the viewer offers to bring it forward"
+        if session.older is not None
+        else f"build directory at {session.url.rstrip('/')}{BUILD_URL}"
+    )
+    note(f"loom serve: {session.url}  ({said}; Ctrl-C to stop)")
     if open_browser:
         webbrowser.open(session.url)
     # A terminal closed or a `kill` stops a server with SIGTERM, not Ctrl-C; either way it stops cleanly, so `.loom/local/serve.json` never tells a command that something is still listening.

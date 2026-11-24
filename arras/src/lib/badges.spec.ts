@@ -12,7 +12,7 @@ function key(k: string, node: string, state: string, extra: Partial<Key> = {}): 
 }
 
 function node(id: string, extra: Partial<Node> = {}): Node {
-	return { id, kind: 'environment', taxon: 'Lemma', aliases: [], tags: [], file: 'f', src: [0, 1], fragment: 'x', numbers: {}, reached_by: [], parent: {}, children: [], proofs: [], external: false, digest: null, incomplete: [], state: 'draft', derived: {}, ...extra };
+	return { id, kind: 'environment', taxon: 'Lemma', aliases: [], tags: [], file: 'f', src: [0, 1], fragment: 'x', numbers: {}, reached_by: [], parent: {}, children: [], proofs: [], external: false, incomplete: [], state: 'draft', derived: {}, ...extra };
 }
 
 const base = { states, keys: {}, nodes: {} } as unknown as Manifest;
@@ -50,17 +50,6 @@ describe('badge composition', () => {
 		expect(reviewRowBadge(m, key('a', 'a', 'accepted')).map((p) => p.text)).toEqual(['accepted', 'proved', 'settled']);
 		expect(reviewRowBadge(m, key('b', 'b', 'accepted')).map((p) => p.text)).toEqual(['accepted', 'proved']);
 		expect(reviewRowBadge(m, key('a/proof', 'a', 'accepted')).map((p) => p.text)).toEqual(['accepted']);
-	});
-});
-
-describe('an accepted external node', () => {
-	it('reads as a verified transcription, not as a settled claim', () => {
-		const m = { ...base, nodes: { 'Kre99-thm-2.1': node('Kre99-thm-2.1', { external: true }) } } as unknown as Manifest;
-		const k = key('Kre99-thm-2.1', 'Kre99-thm-2.1', 'accepted');
-		expect(stateBadge(m, k).map((p) => p.text)).toEqual(['transcription verified']);
-		// what the corpus wrote is unaffected: the manifest's own label still wins
-		const own = { ...base, nodes: { 'sy-0001': node('sy-0001') } } as unknown as Manifest;
-		expect(stateBadge(own, key('sy-0001', 'sy-0001', 'accepted')).map((p) => p.text)).toEqual(['accepted']);
 	});
 });
 

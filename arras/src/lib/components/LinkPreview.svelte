@@ -1,29 +1,30 @@
 <script lang="ts">
-	// Hover previews (plan 0.13.3 H1–H7): resting on a link shows what is behind it, so a reader can check what a result rests on, or what uses it, without following it. **A card renders an item**: the link is read as the item it names and the registry's small render draws it, so this component owns only the card — its timing, its place against the window, its dismissal and `open here` — and knows no kind of its own. A kind with no small render previews nothing. One line is the card's own: a citation of a result loom's reading of the paper lacks (`data-unmatched`) says so in a problem's colour, above what the card shows, or alone where it shows nothing.
+	// Hover previews (plan 0.13.3 H1–H7): resting on a link shows what is behind it, so a reader can check what a result rests on, or what uses it, without following it. **A card renders an item**: the link is read as the item it names and the registry's small render draws it, so this component owns only the card — its timing, its place against the window, its dismissal and `open here` — and knows no kind of its own. A kind with no small render previews nothing.
 	// The timing is the author's site generator's: 300ms before showing, so crossing a paragraph of links does not flicker; 200ms of grace to move into the card, which stays while the pointer is inside it; Escape, a press elsewhere or a scroll outside the card dismisses it. There is no preview on a device that cannot hover.
 	import { onMount, tick } from 'svelte';
 	import { page } from '$app/state';
 	import { store } from '$lib/manifest/client.svelte';
 	import { keyUrl } from '$lib/nav';
-	import { pageOf } from '$lib/worklink';
 	import { itemForHref, paneOfElement, previewOfHref, previewOfKey } from '$lib/workspace/links';
 	import { itemFromPath, itemKey, regionAt, type Item } from '$lib/workspace/item';
 	import { kinds } from '$lib/workspace/registry';
 	import { workspace } from '$lib/workspace/store.svelte';
+	import CiteCard from '$lib/views/docs/CiteCard.svelte';
+	import { docsState } from '$lib/views/docs/docs.svelte';
 
 	const SHOW_MS = 300;
 	const HIDE_MS = 200;
 
 	// raw, so the identity check after an await compares the object that was hovered rather than a proxy of it
 	let target = $state.raw<Item | null>(null);
-	/** The hovered citation's own line, that loom's reading of its paper lacks the result it names; drawn above the card where one also shows, alone where none does. */
-	let note = $state<string | null>(null);
 	let card: HTMLElement | undefined = $state();
 	let left = $state(0);
 	let top = $state(0);
 	let anchor: Element | null = null;
 	/** What the hovered link names and the pane it stands in, for the card's one action: opening it in that pane, the destination a click does not give (H6). */
 	let opens = $state.raw<{ item: Item; pane: number } | null>(null);
+	/** A citation of a library node (8c), which the library's card shows in place of an item's. */
+	let cited = $state.raw<{ node: string; pane: number } | null>(null);
 	let showTimer: ReturnType<typeof setTimeout> | undefined;
 	let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -33,28 +34,17 @@
 	/**
 	 * The item a hovered link names, if it is one a card can show.
 	 *
-	 * Read through the item codec, which strips the app's base path, so a link built with `route()` resolves under any base; what a key or a link previews is `previewOfKey`'s and `previewOfHref`'s. One decision is the hover's own and stays here: a citation to a work that names no page by URL may name one in its postnote, and one that names a place nobody can find previews nothing (H5).
+	 * Read through the item codec, which strips the app's base path, so a link built with `route()` resolves under any base; what a key or a link previews is `previewOfKey`'s and `previewOfHref`'s.
 	 */
 	function hoverItem(a: Element): Item | null {
 		if (!m || a.closest('.link-preview, [data-no-preview]')) return null;
-		const named = a.getAttribute('data-preview-key') ?? (a.matches('a.ref[data-target]') ? a.getAttribute('data-target') : a.closest<HTMLElement>('span.cite[data-target]')?.dataset.target);
+		const named = a.getAttribute('data-preview-key') ?? (a.matches('a.ref[data-target]') ? a.getAttribute('data-target') : null);
 		let item: Item | null = null;
 		if (named) item = previewOfKey(m, named);
 		else {
 			const href = a.getAttribute('href');
 			if (!href) return null;
 			item = previewOfHref(m, href);
-			if (item?.kind === 'work') {
-				// the page itself when a copy is filed; otherwise nothing to show
-				if (!m.references[item.id]?.artifacts?.pdf) return null;
-				// A citation carrying a postnote names a place, not a work. Where the postnote is a digest node, `named` above already previewed it; here the postnote is all there is to go on, and one that names no page is a place unknown, whose honest preview is none. A bare citation names the work, so its front page stands.
-				const postnote = a.closest<HTMLElement>('span.cite')?.dataset.postnote;
-				if (!item.place?.page && postnote) {
-					const at = pageOf(postnote);
-					if (!at) return null;
-					item = { ...item, place: { ...item.place, page: at } };
-				}
-			}
 		}
 		if (!item || !kinds[item.kind].preview) return null;
 		// what the link's own pane is already showing, or the current item for a link in no pane, previews nothing a reader cannot already see; a display in it is a place, which may be far from the link
@@ -64,20 +54,23 @@
 		return item;
 	}
 
-	/** What a hovered citation says of itself: that loom's reading of the paper has no result by the name it gives (`data-unmatched`), whatever its card shows. */
-	function noteOf(a: Element): string | null {
-		if (a.closest('.link-preview, [data-no-preview]')) return null;
-		const named = a.closest<HTMLElement>('span.cite[data-unmatched]')?.dataset.unmatched;
-		return named ? `loom's reading of this paper has no ${named}` : null;
-	}
-
 	function hide() {
 		clearTimeout(showTimer);
 		clearTimeout(hideTimer);
 		target = null;
-		note = null;
 		anchor = null;
 		opens = null;
+		cited = null;
+	}
+
+	/** What a hover is over: a link, or a citation naming a target, which the publisher draws as text with no link (`dialect.md`). */
+	const hovered = (el: Element | null): Element | null => el?.closest?.('a') ?? el?.closest?.('span.cite[data-target]') ?? null;
+
+	/** The library node a hovered citation names, where the library's reads are served and the manifest has no item by that name. */
+	function libraryCite(a: Element): string | null {
+		const named = a.closest<HTMLElement>('span.cite[data-target]')?.dataset.target;
+		if (!named || !m || !docsState.served || a.closest('.link-preview, [data-no-preview]')) return null;
+		return previewOfKey(m, named) ? null : named;
 	}
 
 	function hideSoon() {
@@ -112,11 +105,11 @@
 		top = y;
 	}
 
-	function show(a: Element, t: Item | null, n: string | null) {
+	function show(a: Element, t: Item | null, c: string | null = null) {
 		if (!m) return;
 		anchor = a;
 		target = t;
-		note = n;
+		cited = c ? { node: c, pane: paneOfElement(a) } : null;
 		if (!t) {
 			opens = null;
 			void place();
@@ -141,28 +134,27 @@
 				clearTimeout(hideTimer);
 				return;
 			}
-			// a citation that is no link still says what loom's reading lacks
-			const a = el?.closest?.('a') ?? el?.closest?.('span.cite[data-unmatched]') ?? null;
+			const a = hovered(el);
 			if (!a || a === pending) return;
 			if (a === anchor) {
 				clearTimeout(hideTimer);
 				return;
 			}
-			const t = hoverItem(a);
-			const n = noteOf(a);
-			if (!t && !n) return;
+			const c = libraryCite(a);
+			const t = c ? null : hoverItem(a);
+			if (!t && !c) return;
 			pending = a;
-			if (t && m) kinds[t.kind].prefetch?.(t, m);
+			if (m && t) kinds[t.kind].prefetch?.(t, m);
 			clearTimeout(showTimer);
 			showTimer = setTimeout(() => {
 				pending = null;
-				void show(a, t, n);
+				show(a, t, c);
 			}, SHOW_MS);
 		};
 		const out = (e: MouseEvent) => {
 			const from = e.target as Element | null;
 			const to = e.relatedTarget as Node | null;
-			const fromLink = from?.closest?.('a') ?? from?.closest?.('span.cite[data-unmatched]');
+			const fromLink = hovered(from);
 			if (pending && fromLink === pending && !(to && pending.contains(to))) {
 				clearTimeout(showTimer);
 				pending = null;
@@ -206,12 +198,12 @@
 	});
 </script>
 
-{#if m && (note || (target && kind?.preview))}
-	<div class="link-preview" class:bleeds={!!target && kind?.bleeds} class:only-note={!target} role="tooltip" bind:this={card} style="left: {left}px; top: {top}px" data-testid="link-preview">
-		{#if note}<p class="unmatched" data-testid="cite-unmatched">{note}</p>{/if}
+{#if m && (cited || (target && kind?.preview))}
+	<div class="link-preview" role="tooltip" bind:this={card} style="left: {left}px; top: {top}px" data-testid="link-preview">
+		{#if cited}<CiteCard node={cited.node} pane={cited.pane} doc={workspace.current?.kind === 'document' ? workspace.current.id : null} onsized={() => void place()} ondone={hide} />{/if}
 		{#if target && kind?.preview}
 			{@const Preview = kind.preview}
-			{#key itemKey(target) + (target.place?.page ?? '') + (target.place?.result ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
+			{#key itemKey(target) + (target.place?.page ?? '') + (target.anchor ?? '')}<Preview item={target} onresize={() => void place()} />{/key}
 		{/if}
 		{#if opens}
 			<!-- Drawn always, not revealed once the pointer is inside: a remedy most readers never find is no remedy (H6). A click opens the target in the other pane; this opens it in the link's own, or reveals it where it is already open. -->
@@ -231,24 +223,6 @@
 {/if}
 
 <style>
-	.unmatched {
-		margin: 0;
-		color: var(--state-incomplete);
-	}
-	/* above a card's own render, the line is set off from it */
-	.link-preview:not(.only-note) .unmatched {
-		margin: 0 0 var(--gap-tight);
-		padding: 0 0 var(--gap-hair);
-		border-bottom: 1px solid var(--rule);
-	}
-	.link-preview.bleeds .unmatched {
-		margin: 0;
-		padding: var(--gap-hair) var(--gap);
-		background: var(--leaf);
-	}
-	.link-preview.only-note {
-		min-width: 0;
-	}
 	.opens {
 		display: flex;
 		align-items: baseline;
@@ -256,12 +230,6 @@
 		margin: var(--gap-tight) 0 0;
 		padding: var(--gap-hair) 0 0;
 		border-top: 1px solid var(--rule);
-	}
-	/* a card with no padding of its own gives its line some */
-	.link-preview.bleeds .opens {
-		margin: 0;
-		padding: var(--gap-hair) var(--gap);
-		background: var(--leaf);
 	}
 	.link-preview {
 		position: fixed;
@@ -277,12 +245,6 @@
 		font-family: var(--sans);
 		font-size: 11px;
 		line-height: 1.5;
-	}
-	/* a card whose small render is its own frame — a page — has no padding and no border inside the card's own; the radius is inherited and clipped so the page takes the corners */
-	.link-preview.bleeds {
-		padding: 0;
-		overflow: hidden;
-		max-width: min(46.8rem, calc(100vw - 16px));
 	}
 	@media (hover: none) {
 		.link-preview {

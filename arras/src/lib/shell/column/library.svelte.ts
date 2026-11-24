@@ -1,2 +1,0 @@
-// What the column's Library shelf holds between drawings: whether it is open (folded until the reader opens it, since the works are many and the documents are what the column is for), what is typed in its filter, whether the publisher takes a work added by hand, and whether the dialog that adds one is open. Kept here and not in the shelf, which is taken down whenever the column folds or shows Review or a page's own panel; a reload starts it afresh.
-export const libraryShelf = $state({ open: false, filter: '', canAdd: false, adding: false });

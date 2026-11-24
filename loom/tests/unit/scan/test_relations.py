@@ -48,24 +48,18 @@ def test_directive_see_file_level_applies_to_all(tmp_path: Path) -> None:
     assert {(x.from_key, x.to_key) for x in r.relations} == {("ab-0002", "ab-0001"), ("ab-0003", "ab-0001")}
 
 
-def test_see_resolves_alias_and_digest_id(tmp_path: Path) -> None:
-    digest = (
-        "% !LOOM digest: Zz99\n"
-        "% !LOOM requires: amsthm\n"
-        "\\begin{theorem}[Theorem 1.1]\\label{Zz99-thm-1.1}\nTheirs.\n\\end{theorem}\n"
-    )
+def test_see_resolves_an_alias(tmp_path: Path) -> None:
     r = _quilt(
         tmp_path,
         {
             "drafting/nodes/ab-0001.tex": DEF,
-            ".loom/library/Zz99.tex": digest,
             "drafting/nodes/ab-0002.tex": (
-                "\\begin{lemma}\\label{ab-0002}\n% !LOOM see: def:widget, Zz99-thm-1.1\nA lemma.\n\\end{lemma}\n"
+                "\\begin{lemma}\\label{ab-0002}\n% !LOOM see: def:widget\nA lemma.\n\\end{lemma}\n"
             ),
         },
         inputs=["drafting/nodes/ab-0001.tex", "drafting/nodes/ab-0002.tex"],
     )
-    assert {x.to_key for x in r.relations} == {"ab-0001", "Zz99-thm-1.1"}  # an alias and a digest node id both resolve
+    assert {x.to_key for x in r.relations} == {"ab-0001"}  # an alias resolves to its node
 
 
 def test_see_dangling_link_with_location(tmp_path: Path) -> None:

@@ -1,8 +1,6 @@
-"""Page text and the section map for a cited work's PDF (plan 0.12 §4.2, build stage 1).
+"""Page text, the section map and word boxes of a work's PDF: derived from a stored PDF by its hash, under `.loom/cache/library/pages/<hex>/`, the first time something reads them (`mapped`).
 
-Deterministic and eager: no model, no judgement, nothing to review. This is tier 1 of §3, so it is recomputed whenever the artifact changes and never ranked, queued or asked about.
-
-**Plain text, not `-bbox-layout`.** Measured on this corpus: 2.2 KB a page plain against 59.7 KB with token geometry, which over a 600-page bibliography is 1.4 MB against 36.5 MB. The page text is committed so that a coauthor holding no PDF can still re-check an anchor (§4.2), and that only works if it is small. Geometry is written per page, on demand, the first time `loom refs locate` needs it.
+Deterministic: no model, no judgement, nothing to review. Plain text per page (`pages/NNNN.txt`) is what a quotation is checked against; the word boxes (`boxes/NNNN.xml`, `-bbox-layout`) are read a page at a time, on demand, since they are some thirty times larger.
 """
 
 from __future__ import annotations
@@ -15,9 +13,9 @@ import subprocess
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 
-from loom.paths import STORAGE, STORE_ADDRESS, STORE_BOXES
+from loom.paths import LIBRARY_PAGES
 
 # A numbered heading: "3", "3.1", "A.2". A bare single capital is deliberately NOT a number -- "C (F ) = Spec Sym(F )"
 # and "E = C x_D X" are lines from a real paper in this corpus, and a lone letter matches far more mathematics than
@@ -90,23 +88,43 @@ class PageMap:
         return found
 
 
-def storage_root(root: Path) -> Path:
-    """The quilt's document store."""
-    return root / STORAGE
+def pages_home(root: Path, pdf: str) -> Path:
+    """Where the stored PDF `pdf` (`sha256:<hex>`, or the hex alone) has its page text, section map and word boxes kept: `.loom/cache/library/pages/<hex>/`, written by `mapped`."""
+    return root / LIBRARY_PAGES / pdf.removeprefix("sha256:")
 
 
-def store_address(root: Path, home: Path) -> str:
-    """A work's directory in the store as the viewer addresses it, `digests/storage/<scheme>/<id>` under the viewer's root, wherever the store sits: the manifest's `artifacts.dir`."""
-    return f"{STORE_ADDRESS}/{home.relative_to(storage_root(root)).as_posix()}"
+def mapped(root: Path, pdf: str) -> Path | None:
+    """The folder of a stored PDF's page text and section map, written the first time it is asked for.
 
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    pdf : str
+        The PDF's hash as a reference names it, `sha256:<hex>`.
 
-def store_home(root: Path, address: str) -> Path:
-    """The directory on disk that `store_address` gave `address`."""
-    return storage_root(root) / address.removeprefix(f"{STORE_ADDRESS}/")
+    Returns
+    -------
+    Path or None
+        `pages_home`; None when the store holds no such PDF or poppler cannot read it.
+    """
+    from loom.library import documents
+
+    home = pages_home(root, pdf)
+    if read_map(home) is not None:
+        return home
+    stored = documents.path_of(root, pdf, "pdf")
+    if not stored.is_file():
+        return None
+    try:
+        write_map(home, stored)
+    except (MapRefused, OSError):
+        return None
+    return home
 
 
 def sha256_of(path: Path) -> str:
-    """The artifact's content hash, which is what an anchor names (digest contract §9.2)."""
+    """The PDF's content hash, which is what an anchor names."""
     h = hashlib.sha256()
     with path.open("rb") as fh:
         for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -202,28 +220,6 @@ def pdf_info(pdf: Path) -> dict[str, str]:
 
 
 _PAGE = re.compile(r'<page\s+width="([\d.]+)"\s+height="([\d.]+)"')
-_LINE = re.compile(r'<line xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</line>', re.S)
-_WORD = re.compile(r"<word[^>]*>(.*?)</word>", re.S)
-
-
-def sized_lines(pdf: Path, page: int = 1) -> list[tuple[str, float]]:
-    """Each line of one page with its height in points, top down, as `pdftotext -bbox-layout` sets it: how large its type is.
-
-    A line taller than it is wide is set sideways (arXiv's stamp in the margin) and is left out. [] when the page has no text or cannot be read; the fake toolchain of the unit tier answers so.
-    """
-    import html
-
-    try:
-        xml = _pdftotext(["-q", "-bbox-layout", "-f", str(page), "-l", str(page), str(pdf), "-"])
-    except MapRefused:
-        return []
-    found: list[tuple[float, str, float]] = []
-    for m in _LINE.finditer(xml):
-        x0, y0, x1, y1 = (float(m.group(i)) for i in range(1, 5))
-        words = [html.unescape(w) for w in _WORD.findall(m.group(5))]
-        if words and y1 - y0 <= x1 - x0:
-            found.append((y0, " ".join(words), round(y1 - y0, 2)))
-    return [(text, height) for _, text, height in sorted(found, key=lambda f: f[0])]
 
 
 def page_box(bbox_xml: str) -> tuple[float, float] | None:
@@ -238,7 +234,7 @@ def page_box(bbox_xml: str) -> tuple[float, float] | None:
 def token_boxes(pdf: Path, page: int, home: Path | None = None) -> str:
     """The `-bbox-layout` XML for one page, written per page on demand and never in bulk (§4.2).
 
-    With `home`, the work's directory in the store, the output is cached with what loom derives (`store_boxes`), never beside the page text, which travels with the quilt: 60 KB a page of derived geometry.
+    With `home`, the PDF's `pages_home`, the output is cached there (`store_boxes`).
     """
     if home is None:
         return _pdftotext(["-q", "-bbox-layout", "-f", str(page), "-l", str(page), str(pdf), "-"])
@@ -252,28 +248,8 @@ def token_boxes(pdf: Path, page: int, home: Path | None = None) -> str:
 
 
 def store_boxes(home: Path) -> Path:
-    """Where the word boxes of a folder in the store are cached, one file per page: the same place under `.loom/cache/library/boxes/`, with what loom derives.
-
-    Parameters
-    ----------
-    home : Path
-        A folder in the store: a work's (`<scheme>/<id>`), or one inside it, such as its source's.
-
-    Returns
-    -------
-    Path
-        The directory, which `token_boxes` and `document_boxes` both write.
-
-    Raises
-    ------
-    ValueError
-        When `home` is not in a quilt's store.
-    """
-    parts = PurePosixPath(STORAGE).parts
-    for store in home.parents:
-        if store.parts[-len(parts) :] == parts:
-            return store.parents[len(parts) - 1] / STORE_BOXES / home.relative_to(store)
-    raise ValueError(f"{home} is not in a quilt's store")
+    """Where the word boxes of a mapped PDF are cached, one file per page, inside its `pages_home`: `token_boxes`, `document_boxes` and `page_rotation` all write there."""
+    return home / "boxes"
 
 
 _PAGE_XML = re.compile(r"<page\b.*?</page>", re.S)
@@ -314,40 +290,6 @@ def document_boxes(pdf: Path, cache: Path | None = None) -> list[str]:
         except OSError:
             pass
     return pages
-
-
-def page_rotation(pdf: Path, page: int, home: Path | None = None) -> float:
-    """A page's rotation in degrees, from `pdfinfo`, cached beside the word boxes; 0.0 when it cannot be read.
-
-    The `-bbox-layout` output carries no rotation and its page box is already the rotated one, so a viewer drawing against that box needs nothing more; the value is published for one that does not. Read per page because a document may rotate one landscape figure page and no other. Failing soft: geometry is a convenience and a missing `pdfinfo` must not stop a build.
-    """
-    cache = None
-    if home is not None:
-        cache = store_boxes(home) / f"{page:04d}.rot"
-        if cache.is_file():
-            try:
-                return float(cache.read_text(encoding="utf-8").strip() or 0)
-            except ValueError:
-                pass
-    try:
-        proc = subprocess.run(
-            ["pdfinfo", "-f", str(page), "-l", str(page), str(pdf)],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            check=False,
-        )
-        m = re.search(r"^Page\s+(?:\d+\s+)?rot:\s*(-?\d+)", proc.stdout, re.M) if proc.returncode == 0 else None
-        rot = float(m.group(1)) if m else 0.0
-    except (OSError, subprocess.TimeoutExpired, ValueError):
-        rot = 0.0
-    if cache is not None:
-        try:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(f"{rot}\n", encoding="utf-8")
-        except OSError:
-            pass
-    return rot
 
 
 def _clean_title(raw: str) -> str:
@@ -461,7 +403,7 @@ def write_map(home: Path, pdf: Path, progress: Callable[[int, int], None] | None
     Parameters
     ----------
     home : Path
-        The work's directory under `refs/`.
+        The PDF's `pages_home`.
     pdf : Path
         The artifact to read.
     progress : callable, optional
@@ -518,12 +460,6 @@ def read_map(home: Path) -> PageMap | None:
         return None
 
 
-def is_current(home: Path, pdf: Path) -> bool:
-    """Whether the recorded map was made from the PDF that is there now; a changed artifact re-maps (§3's rule)."""
-    m = read_map(home)
-    return m is not None and bool(m.sha256) and m.sha256 == sha256_of(pdf)
-
-
 def read_page(home: Path, page: int) -> str | None:
     """One page's recorded text, or None when it was never written; this is what an anchor is checked against."""
     path = home / "pages" / f"{page:04d}.txt"
@@ -531,35 +467,3 @@ def read_page(home: Path, page: int) -> str | None:
         return path.read_text(encoding="utf-8")
     except OSError:
         return None
-
-
-_FOLIO = re.compile(r"\s*\d{1,4}\s*")
-
-
-def _drop_folio(rows: list[str], *, head: bool) -> list[str]:
-    """`rows` without a printed page number among the first (head) or last two non-blank lines."""
-    idx = [i for i, row in enumerate(rows) if row.strip()]
-    edge = idx[:2] if head else idx[-2:]
-    doomed = {i for i in edge if _FOLIO.fullmatch(rows[i])}
-    return [row for i, row in enumerate(rows) if i not in doomed]
-
-
-def read_pages(home: Path, first: int, last: int) -> str | None:
-    """The recorded text of pages `first`..`last` as one text, or None when any of them was never written.
-
-    At each join a line that is only a number, among the last two lines of a page or the first two of the next, is the book's printed folio and is dropped: a statement over a page break is quoted without it, and the study's quotation of Alper's Definition 7.5.5 matched only once the agent typed "345" into it. A lone number anywhere else on a page is content and stays; a single page comes back exactly as recorded.
-    """
-    texts = [read_page(home, n) for n in range(first, max(first, last) + 1)]
-    if any(t is None for t in texts):
-        return None
-    if len(texts) == 1:
-        return texts[0]
-    parts: list[str] = []
-    for i, text in enumerate(texts):
-        rows = (text or "").splitlines()
-        if i > 0:
-            rows = _drop_folio(rows, head=True)
-        if i < len(texts) - 1:
-            rows = _drop_folio(rows, head=False)
-        parts.append("\n".join(rows))
-    return "\n".join(parts)

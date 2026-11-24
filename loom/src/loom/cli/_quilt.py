@@ -13,7 +13,6 @@ import click
 from loom.errors import ContentError, EnvError, NotFoundError
 from loom.locks import locked
 from loom.paths import ID_LOCK
-from loom.scan.bib import BibEntry
 from loom.scan.quilt import NoQuiltError, Quilt, find_quilt
 from loom.scan.scan import ScanResult, scan
 
@@ -24,10 +23,10 @@ def quilt_option(f: Callable[..., Any]) -> Callable[..., Any]:
     )(f)
 
 
-def open_quilt(quilt_path: str | None) -> Quilt:
-    """The quilt at `--quilt`, else the nearest one above the current directory; outside one, the refusal says how to get into one."""
+def open_quilt(quilt_path: str | None, *, older: bool = False) -> Quilt:
+    """The quilt at `--quilt`, else the nearest one above the current directory; outside one, the refusal says how to get into one. `older` opens one in an earlier layout this loom brings forward, for `loom upgrade` and the publisher's waiting mode alone."""
     try:
-        return find_quilt(Path(quilt_path).expanduser() if quilt_path else None)
+        return find_quilt(Path(quilt_path).expanduser() if quilt_path else None, older=older)
     except NoQuiltError as exc:
         said = str(exc)
         if said.startswith("not inside a quilt"):
@@ -80,16 +79,6 @@ def draws_ids(command: Callable[..., Any]) -> Callable[..., Any]:
             return command(*args, **kwargs)
 
     return holding
-
-
-def open_bib(quilt_path: str | None) -> tuple[Quilt, dict[str, BibEntry]]:
-    """The quilt and its bibliography, read without a scan: for a command that needs a work's entry and nothing the documents say."""
-    from loom.scan.bib import BIBLIOGRAPHY, parse_bib
-    from loom.scan.source import read_source
-
-    quilt = open_quilt(quilt_path)
-    bib = parse_bib(read_source(quilt.root, BIBLIOGRAPHY).text) if (quilt.root / BIBLIOGRAPHY).is_file() else {}
-    return quilt, bib
 
 
 def resolve_key(result: ScanResult, key: str) -> str:

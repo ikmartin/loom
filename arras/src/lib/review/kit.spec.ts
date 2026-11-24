@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import type { Manifest } from '$lib/manifest/types';
 import { placeUrl } from '$lib/nav';
-import { keepRow, ledgerRows, needsYou, problemsOf } from '$lib/library';
-import { reachedExternal } from '$lib/reached';
 import { fileHref } from '$lib/shell/files';
 
 const fixture = JSON.parse(readFileSync('tests/fixture/manifest.json', 'utf8')) as Manifest;
@@ -18,11 +16,11 @@ describe('Review opens a thing where it lives (plan 0.25.1)', () => {
 		expect(placeUrl(fixture, 'drafting/main.tex', 'a-2')).toBe('/master/drafting/main?note=a-2');
 	});
 
-	it("opens a result of an agent's copy in the copy, and sends a cited work's result where it always went", () => {
+	it("opens a result of an agent's copy in the copy, and a key no document reads at its own page", () => {
 		expect(placeUrl(fixture, 'sy-0002-ai')).toBe(`/master/${fixture.masters.find((x) => x.copy_of)!.path.replace(/\.tex$/, '')}#sy-0002-ai`);
 		// the person's own document is preferred where both read a result
 		expect(placeUrl(fixture, 'sy-0001')).toBe('/master/drafting/main#sy-0001');
-		expect(placeUrl(fixture, 'Kre99-sec-1')).not.toContain('/master/');
+		expect(placeUrl(fixture, 'sy-9999')).toBe('/node/sy-9999');
 	});
 
 	it('opens a project file the way the tree does', () => {
@@ -30,13 +28,5 @@ describe('Review opens a thing where it lives (plan 0.25.1)', () => {
 		expect(at('drafting/main.tex')).toBe('/master/drafting/main');
 		expect(at('research-state.md')).toBe('/page/state');
 		expect(at('README.md')).toContain('README.md');
-	});
-});
-
-describe("Library's count is its page's \"needs you\"", () => {
-	it('counts the works the page shows under needs you, from what stands on disk', () => {
-		const rows = ledgerRows(fixture, reachedExternal(fixture));
-		const page = rows.filter((r) => keepRow(r, problemsOf(fixture, fixture.references[r.citekey]), 'needs-you')).length;
-		expect(needsYou(fixture)).toBe(page);
 	});
 });

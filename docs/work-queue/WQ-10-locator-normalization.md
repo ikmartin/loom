@@ -4,7 +4,7 @@
 
 ## Trigger
 
-A digest whose locators do not match its citations — `loom:unmatched-postnote` firing on a reference paper in another language.
+A citation's locator in another language (`\cite[Satz 2.1]{…}`) that the postnote matcher (`loom/src/loom/scan/postnote.py`) does not match to the result it names, once something reads a citation's locator against a work's results; nothing calls the matcher yet.
 
 ## Why deferred
 
@@ -16,8 +16,8 @@ Extend the locator table with the abbreviations used in French, German, Italian 
 
 ## Blast radius
 
-`loom/src/loom/digest/` locator matching, one digest fixture in the new language.
+The abbreviation table in `loom/src/loom/scan/postnote.py`, and a test of a locator in the new language.
 
 ## Related
 
-; `loom:unmatched-postnote` (DR-66).
+DR-66, which built the matcher for digests, now deleted with them; `scan/postnote.py` keeps the matching.

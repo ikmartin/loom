@@ -25,7 +25,7 @@ def _linted(q: Path) -> list[dict]:  # type: ignore[type-arg]
 FAULTS = {
     "a missing file": ("[the next lesson](lesson-3.md)", "loom:link-target-missing", "latex", "course/lesson-3.md does not exist", "[the next lesson](lesson-2.md)"),
     "a missing anchor": ("[part two](lesson-2.md#part-3)", "loom:link-place-missing", "latex", "course/lesson-2.md has no heading part-3", "[part two](lesson-2.md#part-two)"),
-    "an unknown cited work": ("[the book](cited:work:deadbeef?page=4)", "loom:link-work-unknown", "model", "no entry in the bibliography states work:deadbeef", "[the book](cited:doi:10.4171/demo/14-1?page=4)"),
+    "an unknown cited work": ("[the book](cited:work:deadbeef?page=4)", "loom:link-work-unknown", "model", "work:… names no work", "[the book](cited:doi:10.4171/demo/14-1?page=4)"),
 }  # fmt: skip
 
 
@@ -44,8 +44,8 @@ def test_a_link_that_goes_nowhere_is_reported_on_the_line_that_wrote_it(tmp_path
     assert _linted(q) == []
 
 
-def test_a_person_is_shown_a_missing_file_or_place_and_an_agent_a_work_loom_renamed() -> None:
-    """A file or a heading that is not there is something a person sees in their own text and puts right by hand, so its class is `latex`, which Problems shows; a `cited:work:` id that moved is loom's naming, mended by an agent with `loom link`, so it is `model`."""
+def test_a_person_is_shown_a_missing_file_or_place_and_an_agent_a_work_not_held() -> None:
+    """A file or a heading that is not there is something a person sees in their own text and puts right by hand, so its class is `latex`, which Problems shows; a `cited:` link naming no work the library holds is mended by an agent with `loom link`, so it is `model`."""
     from loom.scan.diagnostics import registered
 
     assert [(c, registered(c).cls) for c in CODES] == [  # type: ignore[union-attr]
@@ -64,7 +64,6 @@ AS_SEEN = [
     ("a quilt: link to a heading", "[t](quilt:course/lesson-2.md#nope)", "course/lesson-2.md has no heading nope"),
     ("a quilt: link to a key", "[](quilt:dm-9999)", "nothing in the quilt is named dm-9999"),
     ("a quilt: link to a key in a result", "[](quilt:dm-0003#dm-9999)", "nothing in the quilt is named dm-9999"),
-    ("a quilt: link to a place in a key with a dot", "[](quilt:Calloway14-prop-3.2#nope)", "nothing in the quilt is named nope"),
     ("an image", "![f](plot.png)", "course/plot.png does not exist"),
     ("an href in raw HTML", '<a href="lesson-2.md#nope">t</a>', "course/lesson-2.md has no heading nope"),
     ("a src in raw HTML", '<img src="plot.png">', "course/plot.png does not exist"),
@@ -100,15 +99,6 @@ def test_what_a_person_is_shown_says_what_is_not_there(tmp_path: Path) -> None:
         said.append((what, d["message"]))
     assert said == [(what, f"a link goes nowhere: {words}") for what, _, words in AS_SEEN]
     assert not any("loom " in m or " key" in m or "id is made" in m for _, m in said)
-
-
-def test_a_work_named_by_a_hash_of_its_details_is_said_to_change_with_them(tmp_path: Path) -> None:
-    """QF-22: a work that states no identifier is named by its authors, title and year, so correcting them leaves a `cited:work:` link pointing at nothing; lint says why and how to link it as it is named now."""
-    q = demo(tmp_path)
-    (q / "lesson.md").write_text(LESSON.format(link="[](cited:work:0badf00d)"), encoding="utf-8")
-    (found,) = _linted(q)
-    assert "authors, title and year" in found["message"]
-    assert [f["command"] for f in found["fixes"]] == ["loom link CITEKEY"]
 
 
 def test_lint_disable_silences_a_link_code(tmp_path: Path) -> None:
@@ -152,8 +142,8 @@ def _ids(body: str) -> set[str]:
 
 def _viewer_reaches(m: dict, site: Path, path: str, href: str) -> bool | None:  # type: ignore[type-arg]
     """Whether the viewer reaches what `href`, as drawn on the page of `path`, names, worked out from the published manifest and pages alone; None for another site's address, which the browser opens."""
-    from loom.refs.identity import identify
-    from loom.scan.bib import parse_bib
+    from loom.library.entries import matchable
+    from loom.library.intake import Library
 
     files = {f["path"]: f for f in m["files"]}
 
@@ -179,9 +169,8 @@ def _viewer_reaches(m: dict, site: Path, path: str, href: str) -> bool | None:  
         lines = (site.parents[2] / key).read_text(encoding="utf-8").split("\n")
         return f["kind"] == "text" and re.fullmatch(r"L(\d+)", place) is not None and int(place[1:]) <= len(lines)
     if href.startswith("cited:"):
-        wanted = href[len("cited:") :].split("?", 1)[0].lower()
-        bib = parse_bib((site.parents[2] / ".loom/library/bibliography.bib").read_text(encoding="utf-8"))
-        return any(f"{w.scheme}:{w.value}".lower() == wanted for e in bib.values() for w in identify(e))
+        wanted = href[len("cited:") :].split("?", 1)[0]
+        return bool(Library.read(site.parents[2]).stating([matchable(wanted)]))
     if re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", href):
         return None
     return False  # a relative address the page left as written: the viewer finds no item for it

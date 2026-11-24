@@ -43,7 +43,7 @@
 		!row
 			? key?.acceptance?.fresh
 				? `Accepted by ${key.acceptance.author}, ${shortDate(key.acceptance.date)}.`
-				: 'Not waiting in Your Changes.'
+				: 'Not waiting to be accepted.'
 			: row.cause === 'never-accepted'
 				? 'Never accepted.'
 				: row.cause === 'earlier-change'
@@ -79,7 +79,7 @@
 	{#if row?.refusal}<p class="cannot" data-testid="review-panel-refusal">Can't be accepted yet: {lower(row.refusal)}</p>
 	{:else if row && served && m.reviewer?.name}<button class="btn primary" disabled={busy} onclick={() => void accept()} data-testid="review-panel-accept">{busy ? 'Accepting…' : 'Accept'}</button>{/if}
 	{#if said}<Said text={said.text} refused={said.refused} testid="review-panel-said" />{/if}
-	<p><a href={reviewUrl(master, reviewKey)} data-testid="review-panel-back">Back to Your Changes</a></p>
+	<p><a href={reviewUrl(master, reviewKey)} data-testid="review-panel-back">Back to Review</a></p>
 </div>
 
 <style>

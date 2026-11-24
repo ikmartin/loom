@@ -65,13 +65,8 @@ def test_a_statements_closure_covers_the_proof_it_prints(tmp_path: Path) -> None
 def test_source_on_an_equation_label_prints_what_holds_it(tmp_path: Path) -> None:
     """An equation's label names a region, not a node, so `source` prints the node the equation sits inside."""
     d = demo(tmp_path)
-    digest = d / ".loom/library" / "Calloway14.tex"
-    digest.write_text(
-        digest.read_text()
-        + "\n\\section*{Overview}\nWe prove\n\\begin{equation}\\label{Calloway14-eqx}x=y\\end{equation}\n"
-    )
-    r = ok("source", "Calloway14-eqx", cwd=d)
-    assert "inside" in r.output and "x=y" in r.output, r.output
+    r = ok("source", "eq:fix", cwd=d)
+    assert "inside" in r.output and "dm-0001" in r.output and "\\Fix(\\sigma)" in r.output, r.output
 
 
 def test_a_closure_is_called_a_closure(tmp_path: Path) -> None:

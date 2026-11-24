@@ -54,7 +54,7 @@
 				<div class="column">
 					<!-- `margins` so Show ids puts the id and state in the gutter, as in a document -->
 					<FragmentNotes notes={held.notes} fallback={key}>
-						<Fragment path={node.fragment} macroSet={node.draft_macros ?? node.digest ?? ''} isolatedMacros={!!node.draft_macros} margins comments={slots} annotations={held.notes} anchor={item.anchor ?? ''} jump={item.seq} note={item.note} arrival={held.arrival} />
+						<Fragment path={node.fragment} macroSet={node.draft_macros ?? ''} isolatedMacros={!!node.draft_macros} margins comments={slots} annotations={held.notes} anchor={item.anchor ?? ''} jump={item.seq} note={item.note} arrival={held.arrival} />
 					</FragmentNotes>
 					{#if missingProof}<p class="muted absent" data-testid="missing-proof">No proof is attached. <a href={reviewUrl(node.reached_by[0], key)}>See this block in Review</a>.</p>{/if}
 					{#if node.children.length}

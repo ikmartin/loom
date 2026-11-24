@@ -14,7 +14,6 @@ EQ_ENVS = ("equation", "align", "gather", "multline", "eqnarray", "flalign", "al
 
 def count(root: Path) -> dict:
     result = scan(load_quilt(root))
-    slugs = result.assembly.citeslugs
     c = Counter()
     for key, n in result.nodes.items():
         if n.external or n.file.startswith(".loom"):

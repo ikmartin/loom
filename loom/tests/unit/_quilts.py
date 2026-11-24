@@ -1,14 +1,11 @@
-"""Quilts the unit tests share: the demo, a fresh session in one, the demo with one work of hand-written page text, and a copy of the showcase."""
+"""Quilts the unit tests share: the demo, a fresh session in one, and a copy of the showcase."""
 
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
-from click.testing import Result
-
-from tests.helpers import exits, ok, refused
+from tests.helpers import ok
 
 REPO = Path(__file__).resolve().parents[2]
 SHOWCASE = REPO / "tests" / "quilts" / "showcase"
@@ -42,71 +39,8 @@ def open_session(root: Path) -> str:
     return have[0].id if have else create(root, "test sitting", "tester").id
 
 
-def work_home(q: Path, ck: str = "Vir12") -> Path:
-    """Where the store keeps one cited work; named rather than globbed, because the demo ships a work of its own."""
-    from loom.refs.fetch import work_dir
-    from loom.scan.quilt import load_quilt
-    from loom.scan.scan import scan
-
-    return work_dir(q, scan(load_quilt(q)).bib[ck])
-
-
-def mapped(tmp_path: Path) -> tuple[Path, str]:
-    """The demo with an uncited work `Vir12` whose page text (pp.1 and 12 of 12) is written by hand, with no PDF behind it.
-
-    The section map's hash is a placeholder: nothing here reads a PDF, so nothing compares it.
-    """
-    q = demo(tmp_path)
-    ck = "Vir12"  # not Calloway14: the demo already ships a digest under that key
-    with (q / ".loom/library" / "bibliography.bib").open("a") as fh:
-        fh.write("\n@article{Vir12, title={Virtual pull-backs}, author={Manolache, C.}, year={2012}}\n")
-    home = work_home(q, ck)
-    pages = home / "pages"
-    pages.mkdir(parents=True, exist_ok=True)
-    (pages / "0001.txt").write_text(
-        "1 Introduction\nLet $f$ be a DM-type morphism with a perfect obstruction theory.\n"
-    )
-    (pages / "0012.txt").write_text("Theorem 4.1. Every widget is a gadget when the theory is perfect.\n")
-    sections = {
-        "sha256": "0" * 64,
-        "pages": 12,
-        "chars": 120,
-        "sections": [{"n": "1", "title": "Introduction", "page": 1}],
-    }
-    (home / "sections.json").write_text(json.dumps(sections))
-    return q, ck
-
-
-def propose(
-    q: Path,
-    citekey: str,
-    local: str,
-    page: int | str,
-    source: str,
-    statement: str,
-    level: str = "1",
-    *,
-    code: int = 0,
-    match: str | None = None,
-    **kw: str,
-) -> Result:
-    """Run `library propose` and assert its exit `code`; with `match`, assert a refusal naming it.
-
-    `kw` become `--key value` options, so `code` and `match` are the only names a caller cannot pass through.
-    """
-    args = [
-        "library", "propose", citekey, "--local", local, "--page", str(page), "--level", level,
-        "--source-text", source, "--statement", statement,
-    ]  # fmt: skip
-    for k, v in kw.items():
-        args += [f"--{k.replace('_', '-')}", v]
-    if match is not None:
-        return refused(*args, code=code, match=match, cwd=q)
-    return exits(code, *args, cwd=q)
-
-
 def showcase(tmp_path: Path) -> Path:
-    """A copy of the showcase, the one test quilt that carries real PDFs; a copy because reading a page caches its word boxes inside it."""
+    """A copy of the showcase, the one test quilt whose works hold real PDFs; a copy because reading a page caches its text and word boxes inside it."""
     q = tmp_path / "showcase"
     shutil.copytree(SHOWCASE, q)
     return q

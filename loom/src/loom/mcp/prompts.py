@@ -10,7 +10,7 @@ from pathlib import Path
 
 #: The one argument every prompt takes. Claude Code splits a prompt's arguments on whitespace, so it is one word, and the rest of a request is said in the conversation.
 TARGET = "target"
-TARGET_SAID = "What to work on, as one word: a key, a document's path, or a cited work's citekey or identifier; with none, what the conversation names."
+TARGET_SAID = "What to work on, as one word: a key, a document's path, or a work's reference; with none, what the conversation names."
 
 
 @dataclass(frozen=True)

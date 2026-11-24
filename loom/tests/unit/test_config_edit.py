@@ -46,12 +46,11 @@ def test_a_template_line_becomes_the_setting_with_its_comment(tmp_path: Path) ->
 
 
 def test_a_new_key_goes_after_its_table_s_last_key(tmp_path: Path) -> None:
-    root = _quilt(tmp_path)
-    set_values(load_quilt(root), {"library.contact": "me@example.org"})
+    root = _quilt(tmp_path, '[quilt]\nname = "ring"\nprefix = "r"  # ids\n\n[lint]\ndisable = []\n')
+    set_values(load_quilt(root), {"quilt.home": "notes/start.md"})
     text = _config(root)
-    assert "# online = true" in text
-    assert text.index("# online = true") < text.index('contact = "me@example.org"') < text.index("[lint]")
-    assert tomllib.loads(text)["library"]["contact"] == "me@example.org"
+    assert text.index('prefix = "r"  # ids') < text.index('home = "notes/start.md"') < text.index("[lint]")
+    assert tomllib.loads(text)["quilt"]["home"] == "notes/start.md"
 
 
 def test_a_missing_table_is_added_at_the_end(tmp_path: Path) -> None:
@@ -130,7 +129,7 @@ def test_check_refuses(key: str, value: object, why: str) -> None:
 def test_check_normalises() -> None:
     assert check("quilt.main", "", masters={"paper/main.tex"}) is None
     assert check("quilt.home", "/README.md", shown=lambda rel: rel == "README.md") == "README.md"
-    assert check("library.contact", "  ") is None
+    assert check("quilt.home", "  ") is None
     assert check("agents.deny", [" paper/ ", "paper/", ""]) == ["paper/"]
 
 
