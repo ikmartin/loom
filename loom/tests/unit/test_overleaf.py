@@ -11,8 +11,11 @@ from typing import Any
 import pytest
 
 import loom.overleaf as overleaf
+from loom.history.ledger import load_history
 from loom.overleaf import LinkRefused, MirrorError, address, here, pair, paired, prepare, run, store_token
+from loom.scan.owntext import own_text
 from loom.scan.quilt import Quilt, load_quilt
+from loom.scan.scan import scan
 from loom.sync import SyncState
 from tests.helpers import json_of, ok
 from tests.unit import _mirror as mirror
@@ -351,11 +354,8 @@ def moves(root: Path) -> list[dict[str, Any]]:
     return [x for x in lines if x["action"] == "move"]
 
 
-def take_pull(root: Path) -> None:
-    from loom import sync
-
-    q = load_quilt(root)
-    sync.incorporate(q, sync.fetch(q, SyncState.read(root)))
+def take_pull(root: Path) -> dict[str, Any]:
+    return overleaf.update(load_quilt(root))
 
 
 def test_a_colleague_s_exact_rename_is_recorded_when_the_pull_is_taken_in(tmp_path: Path) -> None:
@@ -363,9 +363,7 @@ def test_a_colleague_s_exact_rename_is_recorded_when_the_pull_is_taken_in(tmp_pa
     mirror.run(other, "mv", "main.tex", "paper.tex")
     mirror.run(other, "commit", "-q", "-m", "rename")
     mirror.run(other, "push", "-q", "origin", "HEAD:main")
-    from loom import sync
-
-    sync.fetch(load_quilt(root), SyncState.read(root))
+    overleaf.fetch(load_quilt(root))
     assert moves(root) == []  # never on fetch
     take_pull(root)
     assert [{k: m[k] for k in ("from", "to", "moved", "via")} for m in moves(root)] == [
@@ -435,3 +433,163 @@ def test_no_command_reaches_overleaf_and_no_git_call_of_loom_s_pushes() -> None:
         for node in ast.walk(ast.parse((src / module).read_text(encoding="utf-8"))):
             if isinstance(node, ast.Constant) and node.value in ("push", "send-pack"):
                 raise AssertionError(f"{module} names git's {node.value!r} at line {node.lineno}")
+
+
+# ---- updating --------------------------------------------------------------------------------------------------------
+
+TWO = (
+    mirror.PREAMBLE
+    + "\\begin{document}\n"
+    + "\\begin{lemma}Every finite tree with two vertices has a leaf.\\end{lemma}\n"
+    + "\\begin{lemma}The complete graph on five vertices is not planar.\\end{lemma}\n"
+    + "\\end{document}\n"
+)
+
+
+def two_lemmas(tmp_path: Path) -> tuple[Path, Path]:
+    """A mirroring quilt whose paper holds two lemmas keyed by their place, as a pilot's paper is; with the project."""
+    return mirror.paired(tmp_path, {"main.tex": TWO, "loom.sty": "% local support\n"})
+
+
+def listed(root: Path) -> dict[str, list[str]]:
+    """The blocks a pull's review origins list, with who else's commits touched each."""
+    from loom.review_origins import read
+
+    return {key: row.get("by", []) for key, row in read(root).items() if row["source"].startswith("pull:")}
+
+
+def acts(root: Path) -> list[str]:
+    return [e["kind"] for e in journal(root) if "kind" in e]
+
+
+def test_an_update_with_nothing_new_writes_nothing(tmp_path: Path) -> None:
+    root, _ = two_lemmas(tmp_path)
+    before = acts(root)
+    assert overleaf.update(load_quilt(root)) == {"state": "up-to-date"}
+    assert acts(root) == before
+
+
+def test_a_colleague_s_edit_arrives_as_overleaf_holds_it_and_is_listed_by_name(tmp_path: Path) -> None:
+    root, bare = two_lemmas(tmp_path)
+    edited = TWO.replace("has a leaf", "has at least two leaves")
+    mirror.edit(mirror.colleague(tmp_path, bare), "sharper", {"main.tex": edited})
+    said = overleaf.update(load_quilt(root))
+    assert said == {"state": "updated", "files": 1, "by": ["Colleague"], "own": 0, "overwritten": []}
+    assert (root / "drafting/main.tex").read_text() == edited
+    assert list(listed(root).values()) == [["Colleague"]]
+    assert acts(root).count("pull") == 2  # the pairing and the update, each one act
+
+
+def test_the_person_s_own_commit_is_left_out_of_review_and_said(tmp_path: Path) -> None:
+    root, bare = two_lemmas(tmp_path)
+    mine = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+    mirror.edit(mine, "my edit", {"main.tex": TWO.replace("has a leaf", "has two leaves")}, who=mirror.PERSON)
+    said = overleaf.update(load_quilt(root))
+    assert (said["by"], said["own"]) == ([], 1)
+    assert listed(root) == {}
+
+
+def test_of_two_commits_only_the_colleague_s_blocks_are_listed(tmp_path: Path) -> None:
+    root, bare = two_lemmas(tmp_path)
+    mine = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+    first = TWO.replace("has a leaf", "has two leaves")
+    mirror.edit(mine, "mine", {"main.tex": first}, who=mirror.PERSON)
+    mirror.edit(mirror.colleague(tmp_path, bare), "theirs", {"main.tex": first.replace("not planar", "never planar")})
+    said = overleaf.update(load_quilt(root))
+    assert (said["by"], said["own"]) == (["Colleague"], 1)
+    (key,) = listed(root)
+    result = scan(load_quilt(root))
+    assert "never planar" in own_text(result, result.nodes[key])
+
+
+def test_a_block_both_touched_is_listed_and_a_change_that_only_removed_lines_is_too(tmp_path: Path) -> None:
+    root, bare = mirror.paired(tmp_path, {"main.tex": TWO.replace("has a leaf.", "has a leaf.\nIt is easy.\nReally.")})
+    q = load_quilt(root)
+    mine = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+    text = (root / "drafting/main.tex").read_text()
+    mirror.edit(mine, "mine", {"main.tex": text.replace("It is easy.", "It is quite easy.")}, who=mirror.PERSON)
+    mirror.edit(
+        mirror.colleague(tmp_path, bare),
+        "cut",
+        {"main.tex": text.replace("It is easy.", "It is quite easy.").replace("\nReally.", "")},
+    )
+    said = overleaf.update(q)
+    assert (said["by"], said["own"]) == (["Colleague"], 0)
+    assert list(listed(root).values()) == [["Colleague"]]
+
+
+def test_with_no_address_of_the_person_s_every_change_is_listed(tmp_path: Path) -> None:
+    root = mirror.quilt_at(tmp_path)
+    bare = mirror.overleaf(tmp_path, {"main.tex": TWO, "loom.sty": "% local support\n"})
+    pair(load_quilt(root), str(bare), "drafting", "main.tex", [])
+    mine = mirror.colleague(tmp_path, bare, "mine", who=mirror.PERSON)
+    mirror.edit(mine, "mine", {"main.tex": TWO.replace("has a leaf", "has two leaves")}, who=mirror.PERSON)
+    assert overleaf.update(load_quilt(root))["by"] == [mirror.PERSON[0]]
+
+
+def test_a_change_made_here_is_written_over_said_and_kept_in_the_version_before(tmp_path: Path) -> None:
+    root, bare = two_lemmas(tmp_path)
+    stray = TWO.replace("not planar", "not planar, typed here by mistake")
+    (root / "drafting/main.tex").write_text(stray)
+    (root / "drafting/mine.tex").write_text("only here\n")
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    said = overleaf.update(load_quilt(root))
+    assert said["overwritten"] == ["drafting/main.tex"]
+    assert (root / "drafting/main.tex").read_text() == TWO.replace("has a leaf", "has leaves")
+    assert (root / "drafting/mine.tex").read_text() == "only here\n"
+    history = load_history(load_quilt(root).history_dir)
+    kept = [
+        history.landmark_path(e).read_text() for e in history.landmarks() if "before-update" in str(e.get("landmark"))
+    ]
+    assert kept == [stray]
+
+
+def test_a_file_overleaf_removes_is_removed_and_one_it_adds_arrives(tmp_path: Path) -> None:
+    root, bare = mirror.paired(tmp_path, {"main.tex": mirror.SOURCE, "loom.sty": "% s\n", "old.tex": "old\n"})
+    other = mirror.colleague(tmp_path, bare)
+    mirror.run(other, "rm", "-q", "old.tex", who=mirror.COLLEAGUE)
+    mirror.edit(other, "swap", {"new.tex": "new\n"})
+    assert overleaf.update(load_quilt(root))["files"] == 2
+    assert not (root / "drafting/old.tex").exists() and (root / "drafting/new.tex").read_text() == "new\n"
+
+
+def test_a_note_keeps_its_words_when_a_colleague_puts_a_lemma_above_its_block(tmp_path: Path) -> None:
+    from loom.records.store import Records
+
+    root, bare = two_lemmas(tmp_path)
+    result = scan(load_quilt(root))
+    (key,) = [k for k, n in result.nodes.items() if n.kind == "environment" and "not planar" in own_text(result, n)]
+    ok("annotate", key, "Which embedding?", "--quote", "not planar", "--as", "Pat", cwd=root)
+    above = TWO.replace(
+        "\\begin{lemma}Every", "\\begin{lemma}A new lemma a colleague added.\\end{lemma}\n\\begin{lemma}Every"
+    )
+    mirror.edit(mirror.colleague(tmp_path, bare), "a lemma above", {"main.tex": above})
+    overleaf.update(load_quilt(root))
+    result = scan(load_quilt(root))
+    (note,) = Records(root, load_quilt(root).history_dir).resolved(result)
+    assert not note.detached and "not planar" in own_text(result, result.nodes[note.target])
+
+
+def test_what_reaching_overleaf_could_not_do_stays_on_this_machine_until_a_fetch_succeeds(tmp_path: Path) -> None:
+    root, bare = two_lemmas(tmp_path)
+    hidden = bare.with_name("moved.git")
+    bare.rename(hidden)
+    with pytest.raises(MirrorError):
+        overleaf.update(load_quilt(root))
+    assert here(root)["problem"] in ("no-git-access", "failed", "offline")
+    assert "problem" not in (root / ".loom/records/source-sync.json").read_text()
+    hidden.rename(bare)
+    assert overleaf.update(load_quilt(root)) == {"state": "up-to-date"} and here(root)["problem"] is None
+
+
+def test_an_update_through_overleaf_s_password_keeps_the_token_out_of_the_quilt(server: Server, tmp_path: Path) -> None:
+    q = new_quilt(tmp_path)
+    store_token(server.url(ID), TOKEN)
+    pair(q, server.url(ID), "paper", "main.tex", [])
+    clone = tmp_path / "cleo"
+    git(tmp_path, "clone", "-q", str(server.root / ID), str(clone))
+    (clone / "main.tex").write_text(MAIN.replace("Hello.", "Hello, world."))
+    git(clone, "commit", "-q", "-am", "edit", who=CLEO)
+    git(clone, "push", "-q", "origin", "main", who=CLEO)
+    assert overleaf.update(load_quilt(q.root))["files"] == 1
+    assert not [p for p in q.root.rglob("*") if p.is_file() and TOKEN.encode() in p.read_bytes()]

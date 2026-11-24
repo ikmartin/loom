@@ -1,4 +1,4 @@
-"""The cases of the endpoints for a pull and for an agent's copy."""
+"""The cases of the endpoints for an agent's copy."""
 
 from __future__ import annotations
 
@@ -21,76 +21,6 @@ from tests.unit.render.write_api._cases import (
 
 def git(root: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
-
-
-def pulled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A quilt mirroring a local Overleaf stand-in, a colleague's edit to `main.tex` fetched and awaiting incorporation."""
-    import loom.sync as sync
-    from loom.scan.quilt import load_quilt
-    from tests.unit._mirror import SOURCE, colleague, edit, paired
-
-    root, bare = paired(tmp_path)
-    edit(colleague(tmp_path, bare), "edit statement", {"main.tex": SOURCE.replace("zk-0001}A", "zk-0001}B")})
-    sync.fetch(load_quilt(root), sync.SyncState.read(root))
-    return root
-
-
-@case("sync-incorporate")
-def _sync_incorporate(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from loom.sync import SyncState
-
-    (tmp_path / "unsynced").mkdir()
-    s = serve(demo(tmp_path / "unsynced"))
-    refuses(
-        s,
-        "sync-incorporate",
-        {"incoming": "0" * 40, "base": "0" * 40},
-        409,
-        "sync-refused",
-        "mirrors no Overleaf project",
-    )
-    root = pulled(tmp_path, monkeypatch)
-    s = serve(root)
-    state = SyncState.read(root)
-    before = (root / "drafting" / "main.tex").read_bytes()
-    # pinned to the revision the page displayed: a different one changes nothing
-    refuses(
-        s,
-        "sync-incorporate",
-        {"incoming": "0" * 40, "base": state.integrated},
-        400,
-        "revision-changed",
-        "reload Review",
-    )
-    assert (root / "drafting" / "main.tex").read_bytes() == before
-    said = succeeds(s, "sync-incorporate", {"incoming": state.incoming, "base": state.integrated})
-    assert said["result"]["integrated"] == state.incoming
-    assert b"zk-0001}B" in (root / "drafting" / "main.tex").read_bytes()
-    assert said["result"]["paths"] == ["drafting/main.tex"]
-    assert said["result"]["landmarks"] == [f"main-before-pull-{state.incoming[:12]}"]
-    assert not (root / ".git").exists()  # nothing is committed: the quilt need not be a repository
-
-
-@case("sync-preview")
-def _sync_preview(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from loom.records.store import Records
-    from loom.scan.quilt import load_quilt, save_author
-    from loom.sync import SyncState
-
-    save_author(WHO)
-    root = pulled(tmp_path, monkeypatch)
-    s = serve(root)
-    state = SyncState.read(root)
-    body = {"incoming": state.incoming, "base": state.integrated, "reviewer": WHO}
-    before = (root / "drafting/main.tex").read_bytes()
-    refuses(s, "sync-preview", {**body, "reviewer": "Other"}, 409, "reviewer-changed", "reload Review")
-    view = succeeds(s, "sync-preview", body)["result"]
-    assert (root / "drafting/main.tex").read_bytes() == before
-    assert [r["key"] for r in view["items"]] == ["zk-0001"]
-    monkeypatch.setattr("loom.cli.review._master_compiles", lambda *_: (True, ""))
-    answer = succeeds(s, "sync-incorporate", {**body, "review_token": view["token"], "accept": ["zk-0001"]})["result"]
-    assert answer["accepted"] == ["zk-0001"]
-    assert Records(root, load_quilt(root).history_dir).latest["zk-0001"].author == WHO
 
 
 @case("adopt-decision")

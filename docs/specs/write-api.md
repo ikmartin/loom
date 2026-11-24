@@ -1,6 +1,6 @@
 # Write API
 
-The write API is the HTTP form of the publisher's local commands, so that a browser can request record writes and explicit document-workspace steps. It is served by the publisher (loom's `serve`), never by the viewer. Its author-file writes are explicit local incorporation actions: `sync-incorporate` and `adopt-finish`.
+The write API is the HTTP form of the publisher's local commands, so that a browser can request record writes and the person's own acts on their files. It is served by the publisher (loom's `serve`), never by the viewer.
 
 **[decided]** The commands it wraps are library functions with the same signatures, and a viewer detects it rather than assuming it.
 
@@ -104,7 +104,6 @@ The write API is the HTTP form of the publisher's local commands, so that a brow
 
 | method | path | body | effect |
 |---|---|---|---|
-| `POST` | `/_api/sync-incorporate` | `{incoming, base, reviewer?, review_token?, accept?: string[]}` | verifies the displayed revision and base, checks its exact patch applies, stamps each selected document it reaches, then writes its files and the sync record; commits nothing |
 | `POST` | `/_api/adopt-close` | `{copy, reviewer, confirmed?}` | reports unapplied changes for explicit confirmation, then preserves a frozen readable copy and releases its scope |
 | `POST` | `/_api/adopt-reopen` | `{copy, reviewer}` | restores a retained draft to active use if its source, identities and scope are still available |
 | `POST` | `/_api/adopt-refresh` | `{copy, reviewer}` | merges current paper changes into a draft while retaining proposals; advances saved context only without conflicts |
@@ -168,11 +167,10 @@ The `adopt-decision` body optionally accepts `kept: string[]` beside `keys` and 
 
 ### Mathematical decisions during incorporation (DR-316-luisa)
 
-| `POST` | `/_api/sync-preview` | `{incoming, base, reviewer}` | prepares the pinned whole pull without applying it and returns a mathematical review preview, saved as `.loom/local/incorporation-review/<token>.json` with its rendered sides under `.loom/cache/site/incorporation-review/`: removed when it is applied, or fourteen days after it was written, and the sides with it |
 
-`sync-preview` returns `{ok, result: {token, reviewer, items}}`. `adopt-preview` adds the same object as `result.review` for the selected agent document's changes. Each mathematical item has `{key, name, reason, local, proposed, unavailable}`; local and proposed hold `{path, macros}` for isolated renderings, local may be null for new blocks, and unavailable explains why acceptance is disabled. Items include unchanged dependent proofs and exclude structural sections and prose. Preview preparation changes no acceptance records or author source.
+`adopt-preview` returns, as `result.review`, a review preview `{token, reviewer, items}` for the selected agent document's changes. Each mathematical item has `{key, name, reason, local, proposed, unavailable}`; local and proposed hold `{path, macros}` for isolated renderings, local may be null for new blocks, and unavailable explains why acceptance is disabled. Items include unchanged dependent proofs and exclude structural sections and prose. Preview preparation changes no acceptance records or author source.
 
-`sync-incorporate` and `adopt-finish` optionally take `review_token` and `accept: string[]` with the effective `reviewer`. Omitting accept accepts nothing. Tokens bind the exact source, proposed patch and reviewer; foreign keys, repeated keys, changed source and stale selections are refused before application. After incorporation the selected blocks' fingerprints are checked again, applicable masters must compile and stale mathematical support must be included in the acceptance batch. The result adds `accepted` and `pending` lists. All unselected preview items remain explicitly pending. If incorporation succeeded but acceptance validation failed, the success result includes `acceptance_error` and pending mathematics; the UI reports both outcomes without suggesting that source application failed. The final server rebuild publishes the resulting review states. Prose has no acceptance action.
+`adopt-finish` optionally takes `review_token` and `accept: string[]` with the effective `reviewer`. Omitting accept accepts nothing. Tokens bind the exact source, proposed patch and reviewer; foreign keys, repeated keys, changed source and stale selections are refused before application. After incorporation the selected blocks' fingerprints are checked again, applicable masters must compile and stale mathematical support must be included in the acceptance batch. The result adds `accepted` and `pending` lists. All unselected preview items remain explicitly pending. If incorporation succeeded but acceptance validation failed, the success result includes `acceptance_error` and pending mathematics; the UI reports both outcomes without suggesting that source application failed. The final server rebuild publishes the resulting review states. Prose has no acceptance action.
 
 ## Section drafts and responsive choices (DR-323-luisa)
 

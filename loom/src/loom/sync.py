@@ -5,18 +5,15 @@ Loom runs git only in its clone (`.loom/local/overleaf/`, `loom.overleaf` makes 
 
 from __future__ import annotations
 
+import hashlib
 import json
-import os
-import re
 import shutil
 import subprocess
-import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loom.clock import stamp
 from loom.paths import SOURCE_SYNC, document_dir, under
 from loom.reshape.importer import closure_of
 from loom.scan.quilt import Quilt
@@ -54,6 +51,7 @@ class SyncState:
     review_changed: dict[str, bool] = field(default_factory=dict)
     review_baselines: dict[str, str] = field(default_factory=dict)
     review_local_changed: dict[str, bool] = field(default_factory=dict)
+    review_by: dict[str, list[str]] = field(default_factory=dict)
     documents: list[str] = field(default_factory=list)
 
     @classmethod
@@ -70,6 +68,7 @@ class SyncState:
             state.review_changed = {}
             state.review_baselines = {}
             state.review_local_changed = {}
+            state.review_by = {}
             for key, row in read(root).items():
                 if row["source"].startswith("pull:"):
                     state.review_origins[key] = row["source"].removeprefix("pull:")
@@ -77,6 +76,7 @@ class SyncState:
                     if row.get("baseline"):
                         state.review_baselines[key] = row["baseline"]
                     state.review_local_changed[key] = row["local_before"]
+                    state.review_by[key] = list(row.get("by") or [])
             if not state.documents:
                 state.documents = [state.master]
             elif state.master not in state.documents:
@@ -105,6 +105,7 @@ class SyncState:
                 "baseline": self.review_baselines.get(key),
                 "local_before": self.review_local_changed.get(key, False),
                 "label": f"Taken in from {source_label(self.url)}",
+                "by": self.review_by.get(key, []),
             }
         if origins or self.last_pull:
             write(root, origins)
@@ -258,19 +259,6 @@ def local_path(state: SyncState, main: str, remote: str) -> str:
     return main if remote == state.published_main else under(document_dir(main), remote)
 
 
-def fetch(quilt: Quilt, state: SyncState) -> SyncState:
-    clone = workspace(quilt.root)
-    git(clone, "fetch", "--quiet", "--no-tags", state.remote, state.branch)
-    new = revision(clone, "FETCH_HEAD")
-    # Keep a ref to the reviewed object even when a later fetch moves FETCH_HEAD.
-    git(clone, "update-ref", f"refs/loom/incoming/{new}", new)
-    if new != state.incoming:
-        state.incoming = new
-        state.observed = stamp()
-    state.write(quilt.root)
-    return state
-
-
 def changed_files(cwd: Path, before: str, after: str) -> list[dict[str, str]]:
     if before == after:
         return []
@@ -311,137 +299,6 @@ def tree_files(cwd: Path, commit: str) -> dict[str, bytes]:
     return {name.decode("utf-8"): git(cwd, "show", f"{commit}:{name.decode('utf-8')}") for name in names if name}
 
 
-def incoming_patch(quilt: Quilt, state: SyncState, main: str | None = None) -> bytes:
-    """The pinned pull as a Git patch against local paths: Overleaf's main is rewritten to `main`, default `local_main`."""
-    if not state.incoming or state.incoming == state.integrated:
-        return b""
-    # The remote is source-only, and collaborators may add a new input that
-    # cannot yet be in the local master closure.
-    main = main or local_main(quilt, state)
-    base = document_dir(main)
-    # every workspace path is the main document's directory's: the prefixes put the patch's paths there (P12)
-    prefixes = (f"--src-prefix=a/{base}/", f"--dst-prefix=b/{base}/") if base else ()
-    patch = git(workspace(quilt.root), "diff", "--binary", "--no-renames", *prefixes, state.integrated, state.incoming)
-    if under(base, state.published_main) != main:
-        old = under(base, state.published_main).encode()
-        new = main.encode()
-        rewritten = []
-        for line in patch.splitlines(keepends=True):
-            if line.startswith((b"diff --git ", b"--- ", b"+++ ")):
-                line = line.replace(b"a/" + old, b"a/" + new).replace(b"b/" + old, b"b/" + new)
-            rewritten.append(line)
-        patch = b"".join(rewritten)
-    return patch
-
-
-def _incoming_paths(quilt: Quilt, state: SyncState, main: str) -> list[str]:
-    paths = [
-        local_path(state, main, row["path"])
-        for row in changed_files(workspace(quilt.root), state.integrated, state.incoming)
-    ]
-    if len(paths) != len(set(paths)) or any(Path(p).is_absolute() or ".." in Path(p).parts for p in paths):
-        raise SyncError("incoming source contains an unsafe or duplicate path")
-    return paths
-
-
-def pull_files(
-    quilt: Quilt, state: SyncState, read: Callable[[str], bytes | None] | None = None
-) -> dict[str, bytes | None]:
-    """The pinned pull applied to the quilt's current files in a scratch directory: each path it touches and what that path would then hold, None for a removal.
-
-    Every check incorporation makes is made here and nothing in the quilt is written; `incorporate` writes exactly this, and the write API's `sync-preview` reads it. The patch applies hunk by hunk, so an author's edit elsewhere in a file the pull touches survives.
-
-    Parameters
-    ----------
-    quilt : Quilt
-        The paired quilt.
-    state : SyncState
-        The sync record, with a fetched revision not yet incorporated.
-    read : callable, optional
-        How a file's current bytes are read (None for one that is not there); default from disk. `incorporate` reads through its act, so what the pull is applied to is what the act replaces.
-
-    Returns
-    -------
-    dict of str to bytes or None
-        Quilt-relative path to its content after the pull.
-    """
-    root = quilt.root
-    if not state.incoming or state.incoming == state.integrated:
-        raise SyncError("there is no incoming revision to incorporate")
-    main = local_main(quilt, state)
-    paths = _incoming_paths(quilt, state, main)
-    if not paths:
-        raise SyncError("the incoming revision changes no files")
-    for row in changed_files(workspace(root), state.integrated, state.incoming):
-        path = local_path(state, main, row["path"])
-        if row["status"].startswith("A") and (root / path).exists():
-            raise SourceError(f"{path} already exists locally; rename or remove it, then incorporate again")
-    for path in paths:
-        target = root / path
-        if target.is_symlink() or not target.resolve().is_relative_to(root.resolve()):
-            raise SourceError(f"unsafe source path: {path}")
-    patch = incoming_patch(quilt, state, main)
-    with tempfile.TemporaryDirectory(prefix="loom-pull-") as temporary:
-        stage = Path(temporary) / "quilt"
-        stage.mkdir()
-        for path in paths:
-            data = read(path) if read is not None else ((root / path).read_bytes() if (root / path).is_file() else None)
-            if data is not None:
-                (stage / path).parent.mkdir(parents=True, exist_ok=True)
-                (stage / path).write_bytes(data)
-        # outside any repository, so `git apply` patches these files and nothing else
-        env = {**os.environ, "GIT_CEILING_DIRECTORIES": temporary}
-        try:
-            git(stage, "apply", "--whitespace=nowarn", "-", env=env, input=patch)
-        except SyncError as exc:
-            # git's own words name its temporary paths; what the author needs is the file and line (T3)
-            at = sorted(set(re.findall(r"patch failed: ([^:\s]+:\d+)", str(exc))))
-            where = f" at {', '.join(at)}" if at else ""
-            raise SourceError(
-                f"the pull does not apply to your current files{where}. "
-                "Bring those files in line, then take the pull in again"
-            ) from exc
-        return {path: (stage / path).read_bytes() if (stage / path).is_file() else None for path in paths}
-
-
-def _review(quilt: Quilt, state: SyncState, result: ScanResult) -> dict[str, Any]:
-    """What the pull asks to be reviewed, read from the incoming review a build publishes: changed and affected keys, collaborator renames, and which keys the author had edited since the last pull."""
-    from loom.render.build import build
-    from loom.review_queue import fingerprint
-
-    main = current_selection(state, result)[0]
-    incoming_review = build(quilt).manifest.get("incoming") or {}
-    if incoming_review.get("commit") != state.incoming:
-        raise SyncError("the incoming review changed; fetch and review it again")
-    changed_keys = [c["key"] for c in incoming_review.get("changes", []) if c.get("category") != "prose"]
-    review_keys = sorted(
-        set(changed_keys)
-        | set(incoming_review.get("affected", []))
-        | {d["key"] for c in incoming_review.get("changes", []) for d in c.get("affected", [])}
-    )
-    # a live document deleted and an identical document added is a collaborator's rename, recorded only once the pull is incorporated and the new file is live (`_record_moves`)
-    moves = [
-        {
-            "from": local_path(state, main, gone),
-            "to": local_path(state, main, came),
-            "remote": came,
-            "main": gone == state.published_main,
-        }
-        for gone, came in exact_renames(workspace(quilt.root), state.integrated, state.incoming)
-        if local_path(state, main, gone) in result.masters and came.endswith(".tex")
-    ]
-    local_before = {
-        key: state.review_local_changed.get(key, False)
-        or (
-            key in state.review_baselines
-            and key in result.nodes
-            and fingerprint(result, key) != state.review_baselines[key]
-        )
-        for key in review_keys
-    }
-    return {"changed_keys": changed_keys, "review_keys": review_keys, "moves": moves, "local_before": local_before}
-
-
 def _reaching(root: Path, documents: list[str], paths: set[str]) -> list[str]:
     """The documents among `documents` whose source closure includes one of `paths`: the ones a publish or a pull stamps."""
     out = []
@@ -476,45 +333,45 @@ def _stamp(
     return landmarks
 
 
-def incorporate(quilt: Quilt, state: SyncState, actor: str | None = None) -> dict[str, Any]:
-    """Apply the fetched pull to the quilt's files, stamping first each selected document it reaches.
+def incorporate(quilt: Quilt, state: SyncState, me: list[str], actor: str | None = None) -> dict[str, Any]:
+    """Take the fetched revision into the mirrored folder as Overleaf holds it, stamping first each document it reaches, as one act through the door.
 
-    The landmark keeps each document as it was, uncommitted edits included, so nothing here needs a clean tree and nothing is committed. Mathematics is left for review; acceptance is a separate act.
+    Each file is written with Overleaf's bytes (`theirs`), so a change made here never stops an update: it is written over, its bytes kept in the version stamped first and in the act's journal, and named in the answer. Nothing is committed and no mathematics is accepted.
 
     Parameters
     ----------
     quilt : Quilt
-        The paired quilt.
+        The mirroring quilt.
     state : SyncState
-        The sync record, with a fetched revision not yet incorporated; updated and written.
+        The record, with a fetched revision not yet taken in; updated and written.
+    me : list of str
+        The addresses the person goes by on Overleaf: a block only their commits touched is not listed for Review.
     actor : str, optional
-        Who the stamps are recorded as; default the quilt's author.
+        Who the act and its stamps are recorded as; default the quilt's author.
 
     Returns
     -------
     dict
-        `integrated` (the revision now incorporated), `paths` (the files written) and `landmarks` (one per stamped document).
-
-    See Also
-    --------
-    pull_files : The same checks and result, writing nothing.
+        `integrated`, the revision now taken in; `paths`, the files written; `landmarks`, one per stamped document; `by`, the names of the others whose changes Review lists; `own`, how many changed blocks it leaves out as the person's alone; `overwritten`, the files that held a change made here.
     """
     from loom import writes
     from loom.history.ledger import actor_for
 
     root = quilt.root
+    if not state.folder:
+        raise SyncError("this quilt mirrors no Overleaf project")
     if not state.incoming or state.incoming == state.integrated:
         # refused before the door is opened, so a refusal leaves nothing behind, not even the lock's file
-        raise SyncError("there is no incoming revision to incorporate")
+        raise SyncError("there is nothing new to take in")
     who = actor if actor is not None else actor_for(root)
     try:
-        # one act through the door: the files the pull changes, the landmarks that keep each document as it was, the records of what moved and the sync record are written together or not at all, and a crash is finished or put back whole by recovery (`docs/design/writes.md`)
+        # one act through the door: the files, the versions that keep each document as it was, the records of what moved and the record of the pairing, written together or not at all, and a crash finished or put back whole by recovery (`docs/design/writes.md`)
         with writes.act(root, quilt.history_dir, "pull", who) as w, writes.staging(w):
-            # the record read again under the lock: a pull another process took in since leaves nothing to take
+            # the record read again under the lock: an update another process took in since leaves nothing to take
             now = SyncState.read(root)
             if now.incoming != state.incoming or now.incoming == now.integrated:
-                raise SyncError("there is no incoming revision to incorporate; it was taken in already")
-            said = _incorporate(quilt, now, w, who)
+                raise SyncError("there is nothing new to take in; it was taken in already")
+            said = _incorporate(quilt, now, w, who, me)
             state.__dict__.update(now.__dict__)
             return said
     except ValueError as exc:
@@ -523,25 +380,30 @@ def incorporate(quilt: Quilt, state: SyncState, actor: str | None = None) -> dic
         raise SyncError(str(exc)) from exc
 
 
-def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None) -> dict[str, Any]:
-    """`incorporate` under the door's lock, staged into the act `w`, which stages loom's records (`writes.staging`): the pull applied to the files as read through the act, so what it replaces is what the patch was applied to."""
+def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None, me: list[str]) -> dict[str, Any]:
+    """`incorporate` under the door's lock, staged into the act `w`, which stages loom's records (`writes.staging`): Overleaf's bytes against the files as read through the act, so what is written over is what the act replaces."""
     from loom.review_queue import fingerprint
     from loom.scan.scan import scan
     from loom.scan.source import decode
 
     root = quilt.root
-    after = pull_files(quilt, state, read=w.read)
+    clone = workspace(root)
+    after, overwritten = theirs(clone, state, w.read)
     result = scan(quilt)
-    review = _review(quilt, state, result)
+    main = current_selection(state, result)[0]
+    moves = [
+        {
+            "from": local_path(state, main, gone),
+            "to": local_path(state, main, came),
+            "remote": came,
+            "main": gone == state.published_main,
+        }
+        for gone, came in exact_renames(clone, state.integrated, state.incoming)
+        if local_path(state, main, gone) in result.masters and came.endswith(".tex")
+    ]
     documents = _reaching(root, current_selection(state, result)[1], set(after))
-    label = source_label(state.url)
     landmarks = _stamp(
-        quilt,
-        result,
-        documents,
-        f"before pull {state.incoming[:12]}",
-        f"Before taking a pull from {label}",
-        who,
+        quilt, result, documents, "before update from Overleaf", f"Before an update from {source_label(state.url)}", who
     )
     for path, data in after.items():
         w.replace(path, data)
@@ -549,22 +411,144 @@ def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None) -> dic
     incorporated = scan(
         quilt, overlay={path: None if data is None else decode(data)[0] for path, data in after.items()}
     )
-    _record_moves(quilt, state, review["moves"], incorporated)
+    _record_moves(quilt, state, moves, incorporated)
+    listed, own = _changed_blocks(clone, state, result, incorporated, after, me)
+    by = sorted({name for names in listed.values() for name in names})
     state.last_pull = {
         "commit": state.incoming,
         "observed": state.observed,
-        "keys": review["review_keys"],
-        "changed": review["changed_keys"],
+        "files": len(after),
+        "by": by,
+        "own": own,
+        "overwritten": overwritten,
     }
-    for key in review["review_keys"]:
+    for key, names in listed.items():
         state.review_origins[key] = state.incoming
-        state.review_changed[key] = key in review["changed_keys"]
-        if key in incorporated.nodes:
-            state.review_baselines[key] = fingerprint(incorporated, key)
-        state.review_local_changed[key] = review["local_before"].get(key, False)
+        state.review_changed[key] = True
+        state.review_baselines[key] = fingerprint(incorporated, key)
+        state.review_local_changed[key] = False
+        state.review_by[key] = names
     state.integrated = state.incoming
     state.write(root)
-    return {"integrated": state.integrated, "paths": sorted(after), "landmarks": landmarks}
+    return {
+        "integrated": state.integrated,
+        "paths": sorted(after),
+        "landmarks": landmarks,
+        "by": by,
+        "own": own,
+        "overwritten": overwritten,
+    }
+
+
+def blobs(cwd: Path, rev: str) -> dict[str, tuple[str, bytes]]:
+    """Every file of `rev`, by path: its blob's id and its bytes, read in one pass (`git cat-file --batch`) rather than one git run a file."""
+    listed = git(cwd, "ls-tree", "-r", "-z", rev).split(b"\0")
+    entries: list[tuple[str, str]] = []
+    for line in listed:
+        if not line:
+            continue
+        meta, _, path = line.partition(b"\t")
+        kind, oid = meta.split()[1:3]
+        if kind == b"blob":
+            entries.append((path.decode("utf-8"), oid.decode()))
+    out = git(cwd, "cat-file", "--batch", input=b"".join(oid.encode() + b"\n" for _, oid in entries))
+    files: dict[str, tuple[str, bytes]] = {}
+    at = 0
+    for name, blob in entries:
+        head_end = out.index(b"\n", at)
+        size = int(out[at:head_end].split()[2])
+        files[name] = (blob, out[head_end + 1 : head_end + 1 + size])
+        at = head_end + 1 + size + 1
+    return files
+
+
+def blob_id(data: bytes) -> str:
+    """The id git gives `data` as a blob."""
+    return hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).hexdigest()
+
+
+def theirs(
+    clone: Path, state: SyncState, read: Callable[[str], bytes | None]
+) -> tuple[dict[str, bytes | None], list[str]]:
+    """What taking the fetched revision in writes: each file Overleaf holds, as Overleaf holds it, where the folder holds anything else, and None for each file it no longer holds that the folder still does; a file only here is left. With it, the files here that held anything but what the last update left, which are written over.
+
+    `read` is how a file's bytes are read now (None for one that is not there): through the act, so what is written over is what the act replaces.
+    """
+    now = blobs(clone, state.incoming)
+    before = {name: blob for name, (blob, _) in blobs(clone, state.integrated).items()}
+    after: dict[str, bytes | None] = {}
+    over: list[str] = []
+    for remote in sorted(set(now) | set(before)):
+        local = under(state.folder, remote)
+        here = read(local)
+        want = now[remote][1] if remote in now else None
+        if here == want or (want is None and here is None):
+            continue
+        after[local] = want
+        if here is not None and blob_id(here) != before.get(remote):
+            over.append(local)
+    return after, over
+
+
+def _authors(clone: Path, state: SyncState, remote: str, first: int, last: int) -> list[tuple[str, str]]:
+    """(name, address) of each commit of the update that touched lines `first` to `last` of `remote`, read with `git blame`; where none did, as when a change only removed lines, every commit of the update that touched the file."""
+    said = git(
+        clone, "blame", "--porcelain", "-L", f"{first},{last}", f"{state.integrated}..{state.incoming}", "--", remote
+    )
+    commits: dict[str, dict[str, Any]] = {}
+    current = ""
+    for raw in said.decode("utf-8", errors="replace").splitlines():
+        if raw.startswith("\t"):
+            continue
+        word, _, rest = raw.partition(" ")
+        if len(word) == 40 and all(c in "0123456789abcdef" for c in word):
+            current = word
+            commits.setdefault(current, {"boundary": False, "name": "", "email": ""})
+        elif word == "author" and current:
+            commits[current]["name"] = rest
+        elif word == "author-mail" and current:
+            commits[current]["email"] = rest.strip("<>")
+        elif word == "boundary" and current:
+            commits[current]["boundary"] = True
+    touched = [(c["name"], c["email"]) for c in commits.values() if not c["boundary"]]
+    if touched:
+        return touched
+    log = git(clone, "log", "--format=%aN%x00%aE", f"{state.integrated}..{state.incoming}", "--", remote)
+    return [tuple(line.split("\0", 1)) for line in log.decode("utf-8", errors="replace").splitlines() if "\0" in line]  # type: ignore[misc]
+
+
+def _changed_blocks(
+    clone: Path,
+    state: SyncState,
+    before: ScanResult,
+    after: ScanResult,
+    written: dict[str, bytes | None],
+    me: list[str],
+) -> tuple[dict[str, list[str]], int]:
+    """The blocks the update changed that Review lists, each with the names of whoever else's commits touched it, and how many it left out because every commit that touched them is the person's alone (`me`)."""
+    from loom.review_queue import fingerprint
+    from loom.scan.source import decode
+
+    mine = {m.lower() for m in me}
+    listed: dict[str, list[str]] = {}
+    own = 0
+    texts = {path: decode(data)[0] for path, data in written.items() if data is not None}
+    for key, node in after.nodes.items():
+        if node.kind in ("master", "file", "conflict") or node.file not in texts:
+            continue
+        if key in before.nodes and fingerprint(before, key) == fingerprint(after, key):
+            continue
+        text = texts[node.file]
+        first, last = text.count("\n", 0, node.start) + 1, text.count("\n", 0, max(node.start, node.end - 1)) + 1
+        who = _authors(clone, state, node.file[len(state.folder) + 1 :], first, last)
+        if not who:
+            continue
+        others = sorted({name for name, email in who if email.lower() not in mine})
+        if others:
+            listed[key] = others
+        else:
+            own += 1
+    return listed, own
 
 
 def _record_moves(quilt: Quilt, state: SyncState, moves: list[dict[str, Any]], incorporated: ScanResult) -> None:

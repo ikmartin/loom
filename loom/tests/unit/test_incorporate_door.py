@@ -11,9 +11,10 @@ import loom.sync as sync
 from loom import writes
 from loom.adopt import incorporate, prepare
 from loom.history.ledger import append_entry, load_history
+from loom.overleaf import fetch
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
-from loom.sync import SyncError, SyncState, fetch
+from loom.sync import SyncError, SyncState
 from tests.unit._mirror import SOURCE, colleague, edit, paired, renamed_pair, run
 from tests.unit.test_adopt import COPY, DOC, TEXT, made
 from tests.unit.test_adopt import edit as edit_copy
@@ -373,12 +374,12 @@ def pulled(tmp_path: Path):  # type: ignore[no-untyped-def]
     root, bare = paired(tmp_path)
     edit(colleague(tmp_path, bare), "edit", {"main.tex": SOURCE.replace("zk-0001}A", "zk-0001}B")})
     q = load_quilt(root)
-    return q, fetch(q, SyncState.read(root))
+    return q, fetch(q)
 
 
 def test_a_pull_is_one_act(tmp_path: Path) -> None:
     q, state = pulled(tmp_path)
-    sync.incorporate(q, state)
+    sync.incorporate(q, state, [])
     pairing, act = [e for e in begun(q.root) if e["kind"] == "pull"]  # pairing is a pull of the whole project
     assert "drafting/main.tex" in act["files"] and ".loom/records/source-sync.json" in act["files"]
     assert [json.loads(r["line"])["action"] for r in act["records"]] == ["stamp"]
@@ -391,11 +392,11 @@ def test_a_second_pull_of_one_revision_is_refused_as_taken_in_and_writes_nothing
     """Both read the record before either took the lock: the second reads it again under the lock and finds the revision taken in, rather than advising the person to remove what the first brought (D-7)."""
     q, state = pulled(tmp_path)
     stale = SyncState(**state.__dict__)
-    sync.incorporate(q, state)
+    sync.incorporate(q, state, [])
     text = (q.root / "drafting/main.tex").read_bytes()
     ledger = (q.history_dir / "ledger.jsonl").read_bytes()
     with pytest.raises(SyncError, match="taken in already"):
-        sync.incorporate(q, stale)
+        sync.incorporate(q, stale, [])
     assert (q.root / "drafting/main.tex").read_bytes() == text
     assert (q.history_dir / "ledger.jsonl").read_bytes() == ledger
 
@@ -408,7 +409,7 @@ def test_a_pull_that_moves_the_main_document_changes_the_config_in_the_same_act(
     run(other, "commit", "-q", "-m", "rename")
     run(other, "push", "-q", "origin", "HEAD:main")
     q = load_quilt(root)
-    sync.incorporate(q, fetch(q, SyncState.read(root)))
+    sync.incorporate(q, fetch(q), [])
     kinds = [e["kind"] for e in begun(root)]
     assert kinds.count("pull") == 2 and "settings" not in kinds, kinds  # the pairing, then the pull
     act = [e for e in begun(root) if e["kind"] == "pull"][-1]
@@ -426,7 +427,7 @@ def test_a_pull_cut_short_between_its_files_is_put_back_whole(
     landmarks = len(load_history(q.history_dir).landmarks())
     restore = dying_before_the_rename(monkeypatch, after=1)
     with pytest.raises(Died):
-        sync.incorporate(q, state)
+        sync.incorporate(q, state, [])
     restore()
     said = recovered(q)
     assert said and said[0].startswith("undid pull:")
@@ -570,7 +571,7 @@ def test_a_pull_the_person_takes_in_is_not_listed_back_and_cannot_be_discarded_b
 
     q, state = pulled(tmp_path)
     who = looked_by_the_person(q, monkeypatch)
-    sync.incorporate(q, state)
+    sync.incorporate(q, state, [])
     assert [p.path for p in in_place(scan(q), who)] == []
 
 

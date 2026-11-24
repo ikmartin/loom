@@ -644,9 +644,6 @@ def _build(
 
     _attach_spans(result.quilt.root, manifest, files)
     attach_comparisons(result, records, renderer, manifest, files)
-    from loom.render.incoming import attach_incoming
-
-    attach_incoming(result, renderer, manifest, files)
     from loom.render.incoming import attach_adoptions
 
     attach_adoptions(result, renderer, manifest, files)

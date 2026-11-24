@@ -379,3 +379,72 @@ def pair(
         ).write(root)
     _keep_here(root, me=sorted({m.strip() for m in me if m.strip()}), problem=None)
     return {"folder": folder, "main": local_main}
+
+
+# ---- fetching and updating -------------------------------------------------------------------------------------------
+
+
+def fetch(quilt: Quilt) -> SyncState:
+    """Fetch what Overleaf holds into loom's clone and record it as waiting, writing nothing of the person's; what could not be done is kept as this machine's `problem` (`here`), and cleared once a fetch succeeds.
+
+    The clone is made again where a copied quilt lacks it. Raises MirrorError `not-paired`, or what reaching Overleaf failed on.
+    """
+    from loom.clock import stamp
+    from loom.sync import git, revision
+
+    root = quilt.root
+    state = paired(root)
+    if state is None:
+        raise MirrorError("not-paired", "This quilt mirrors no Overleaf project.")
+    clone = root / OVERLEAF_CLONE
+    try:
+        if (clone / ".git").is_dir():
+            run(clone, "fetch", "--quiet", "--no-tags", "origin", state.branch)
+        else:
+            _clone(root, state.url)
+        new = revision(clone, f"refs/remotes/origin/{state.branch}")
+    except MirrorError as exc:
+        _keep_here(root, problem=exc.code)
+        raise
+    # a ref of loom's own keeps the fetched revision whatever later fetches do
+    git(clone, "update-ref", f"refs/loom/incoming/{new}", new)
+    _keep_here(root, problem=None)
+    if new != state.incoming:
+        state.incoming, state.observed = new, stamp()
+        state.write(root)
+    return state
+
+
+def update(quilt: Quilt, actor: str | None = None) -> dict[str, Any]:
+    """Fetch, and take what Overleaf holds into the mirrored folder as one act through the door (`sync.incorporate`).
+
+    Parameters
+    ----------
+    quilt : Quilt
+        The mirroring quilt.
+    actor : str, optional
+        Who the act is recorded as; default the quilt's author.
+
+    Returns
+    -------
+    dict
+        `state`: `up-to-date` when Overleaf holds nothing new, else `updated`, with `files`, how many were written, `by`, the names of the others whose changes Review lists, `own`, how many changed blocks are left out of Review because only the person's own commits touched them, and `overwritten`, the files here that held a change made here and were written over.
+
+    Raises
+    ------
+    MirrorError
+        `not-paired`, or what reaching Overleaf failed on.
+    """
+    from loom import sync
+
+    state = fetch(quilt)
+    if state.incoming == state.integrated:
+        return {"state": "up-to-date"}
+    said = sync.incorporate(quilt, state, here(quilt.root)["me"], actor)
+    return {
+        "state": "updated",
+        "files": len(said["paths"]),
+        "by": said["by"],
+        "own": said["own"],
+        "overwritten": said["overwritten"],
+    }
