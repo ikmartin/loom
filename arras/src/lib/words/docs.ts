@@ -21,6 +21,11 @@ export const docs = {
 		const e = error.replace(/^!\s*/, '').trim();
 		return TEX.find(([re]) => re.test(e))?.[1] ?? e.replace(/\.$/, '');
 	},
+	work: {
+		/** A work's tab in Docs, where its short name is not known: the library no longer holds it, or the works list is being read. */
+		deleted: 'a deleted work',
+		unread: 'a work'
+	},
 	files: {
 		/** The head over the project's files in Docs' column, which folds and opens them. */
 		head: 'Files',
