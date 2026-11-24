@@ -9,7 +9,7 @@ from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
 from loom.render.endpoints.review import _as, _person
 
 #: The status each refusal of an act answers with; any other is 409.
-_STATUS = {"author-only": 403, "agent-only": 403, "no-such-result": 404, "no-such-node": 404, "no-such-proposal": 404, "refused": 400}  # fmt: skip
+_STATUS = {"author-only": 403, "agent-only": 403, "no-such-result": 404, "no-such-node": 404, "no-such-proposal": 404, "no-such-citation": 404, "refused": 400}  # fmt: skip
 
 
 def refusal(exc: Any) -> ApiError:

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from loom.evidence.web import Web
     from loom.library.node import Node
+    from loom.scan.scan import ScanResult
 
 
 class ActRefused(ValueError):
@@ -75,6 +76,61 @@ def document_of(root: Path, found: Node) -> dict[str, Any] | None:
     if held is None:
         return None
     return {"ref": work.id, **held, **({"pages": found.pages} if found.pages else {})}
+
+
+def bare_citation(result: ScanResult, key: str, citekey: str) -> int | None:
+    """Which of the citations in the block at `key` is the first that cites `citekey` and names no result of it, counted from 0 among the block's citations; None where it makes none now."""
+    from loom.evidence.web import DraftWeb, citations_in
+    from loom.scan.source import blank_comments
+
+    node = result.nodes.get(key)
+    if node is None:
+        return None
+    found = citations_in(blank_comments(DraftWeb(result).text(node)))
+    return next((i for i, (k, locator) in enumerate(found) if k.casefold() == citekey.casefold() and not locator), None)  # fmt: skip
+
+
+def mention(root: Path, result: ScanResult, key: str, ref: str, by: Who, *, undo: bool = False) -> Record:
+    """The person's word that a citation of the work `ref` in the block at `key`, which names no result of it, is only a mention and rests on nothing (`mention`); `undo` takes an earlier word back.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+    result : ScanResult
+        The quilt as scanned now, in which the block is found and by which it is found again (`records.locate.context_of`).
+    key : str
+        The citing block.
+    ref : str
+        The work cited, by its reference's id.
+    by : Who
+        A person.
+    undo : bool, default False
+        Take the word back.
+
+    Returns
+    -------
+    Record
+        The `mention` record: the block by its key, its hash and its context, and the reference.
+
+    Raises
+    ------
+    ActRefused
+        `author-only`; `no-such-citation` where the block does not now cite that work without naming a result of it.
+    """
+    from loom.library.entries import read_entry
+    from loom.library.store import read
+    from loom.records.locate import block_hash, context_of
+
+    _only(by, "person")
+    work = read(root, ref)
+    entry = read_entry(work.body) if work is not None else None
+    node = result.nodes.get(key)
+    if node is None or entry is None or bare_citation(result, key, entry.key) is None:
+        raise ActRefused("no-such-citation", "that block does not cite that work without naming a result now; reload")
+    with _held(root):
+        block = {"key": key, "hash": block_hash(result, key), "context": context_of(result, node)}
+        return _write(root, "mention", by, block=block, cites=ref, undo=undo)
 
 
 def unreadable(root: Path, node: str) -> str | None:

@@ -112,3 +112,24 @@ def _library_correction_decline(serve: Serve, tmp_path: Path, _: pytest.MonkeyPa
     assert succeeds(s, "library-correction-decline", {"correction": proposal})["result"] == "declined the correction"
     assert _hash(root, "tq-00A4") == before and replay(root).declined(proposal) is not None
     refuses(s, "library-correction-decline", {"correction": proposal}, 409, "closed", "")
+
+
+@case("library-mention")
+def _library_mention(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.evidence.log import replay
+
+    s, root = _library(serve, tmp_path)
+    lemma = root / "drafting" / "nodes" / "sy-0002.tex"
+    lemma.write_text(lemma.read_text(encoding="utf-8").replace("Every orbit", "Every orbit, as in \\cite{Smi24},", 1), encoding="utf-8")  # fmt: skip
+    s.rebuild()  # type: ignore[attr-defined]
+    [row] = [r for g in succeeds(s, "review-list", {"kind": "cited"})["groups"] for r in g["rows"]]
+    body = {"citation": row["citation"]}
+    refuses(s, "library-mention", {**body, "author": AGENT}, 403, "author-only", "this is the person's")
+    refuses(s, "library-mention", {"citation": "tq-00A1-ref"}, 400, "bad-field", "REF@KEY")
+    refuses(s, "library-mention", {"citation": "tq-00B1-ref@" + row["key"]}, 404, "no-such-citation", "does not cite")
+    refuses(s, "library-mention", {**body, "undo": "yes"}, 400, "bad-field", "undo")
+    assert succeeds(s, "library-mention", body)["result"] == "only a mention"
+    [said] = replay(root).of_kind("mention")
+    assert said.get("cites") == "tq-00A1-ref" and said.get("block")["key"] == row["key"] and said.get("undo") is False
+    assert succeeds(s, "review-list", {"kind": "cited"})["groups"] == []
+    assert succeeds(s, "library-mention", {**body, "undo": True})["result"] == "cites it again"

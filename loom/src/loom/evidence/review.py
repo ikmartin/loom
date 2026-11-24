@@ -321,6 +321,41 @@ def _check(
     return out + corrections
 
 
+def _cited(
+    root: Path, drafts: DraftWeb, manifest: dict[str, Any], evidence: Evidence, library: LibraryWeb
+) -> list[Row]:
+    """Cited results to digest (library-views.md §4.3, `cited`): each citation, in a block of the person's documents, of a library work that names no result of it, while no `mention` of it holds; its body the citing block and which of its citations it is. A stub a draft rests on is listed once citations resolve to results."""
+    from loom.evidence.acts import bare_citation
+    from loom.evidence.asks import mention_holds
+    from loom.evidence.web import citations_in
+    from loom.library.index import NodeIndex
+    from loom.library.store import folder
+    from loom.scan.source import blank_comments
+
+    result = drafts.result
+    if not folder(root).is_dir():
+        return []
+    out: list[Row] = []
+    with NodeIndex.open(root) as index:
+        for node in sorted(drafts.blocks, key=lambda n: n.key):
+            docs = [d for d in node.reached_by if result.document_role(d) == "person"]
+            if not docs:
+                continue
+            seen: set[str] = set()
+            for citekey, locator in citations_in(blank_comments(drafts.text(node))):
+                found = index.reference(citekey) if not locator else None
+                if found is None or found.id in seen or mention_holds(evidence, node.key, found.id):
+                    continue
+                seen.add(found.id)
+                where = _name(manifest, node.key, docs[0])
+                cite = {"doc": docs[0], "key": node.key, "where": where, "fragment": manifest.get("nodes", {}).get(node.key, {}).get("fragment"), "nth": bare_citation(result, node.key, citekey)}  # fmt: skip
+                fields = {"citation": f"{found.id}@{node.key}", "doc": docs[0], "key": node.key, "where": where, "ref": found.id, "short": library.short(found.id), "citekey": citekey}  # fmt: skip
+                out.append(
+                    Row(f"cited:{found.id}@{node.key}", "cited", tuple(docs), fields=fields, body={"cite": cite})
+                )
+    return out
+
+
 def _correction(evidence: Evidence, library: LibraryWeb, node: str, held: Any, proposal: str) -> Row:
     """An open correction as a `check` row: whose it is, and as its body when the person compared the text it would replace and the word diff of the two bodies (`runs`, `=` kept, `-` the person's words, `+` the agent's)."""
     from loom.library.node import NodeUnreadable, read_node
@@ -599,7 +634,7 @@ def gather(
     gathered.rows = {
         "questions": _questions(asks, asks_log.replay(root).asks),
         "fetch": _fetch(asks),
-        "cited": [],
+        "cited": _cited(root, drafts, manifest, evidence, library),
         "check": _check(root, evidence, web, library, lean_now),
         "attest": _attest(
             results, _library_results(evidence, web, lean_now), manifest, evidence, web, library, lean_now

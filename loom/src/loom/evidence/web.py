@@ -318,6 +318,16 @@ def macro_hash(macro: Macro) -> str:
     return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
 
 
+def citations_in(clean: str) -> list[tuple[str, str]]:
+    """Each citation in comment-blanked text, in order, as `(KEY, LOCATOR)`: the key cited and the last optional argument, `''` where it names no result of the work; one `\\cite` of several keys is one citation of each."""
+    out: list[tuple[str, str]] = []
+    for m in _CITE.finditer(clean):
+        given = re.findall(r"\[([^\]]*)\]", m.group(1))
+        locator = given[-1].strip() if given else ""
+        out += [(key.strip(), locator) for key in m.group(2).split(",") if key.strip()]
+    return out
+
+
 def used_rows(texts: list[str], defs: dict[str, tuple[str, str]]) -> dict[str, str]:
     """Each definition of `defs` that comment-blanked `texts` use, a command or an environment as `{name}`, and each those definitions use in turn, by its hash; loom's own commands are not rows."""
     used = {m.group(1) for t in texts for m in _COMMAND.finditer(t)} - LOOM_MACROS
@@ -597,14 +607,7 @@ class DraftWeb:
         """Each citation in the statement or a text of its closure, which no node answers for until citations resolve to nodes: `KEY LOCATOR` for one result of a work, `KEY` for a work with no result named, which a `mention` will let go once it can name the work."""
         from loom.scan.source import blank_comments
 
-        out: list[str] = []
-        for text in self._texts_of(here):
-            for m in _CITE.finditer(blank_comments(text)):
-                given = re.findall(r"\[([^\]]*)\]", m.group(1))
-                locator = given[-1].strip() if given else ""
-                for key in m.group(2).split(","):
-                    if key.strip():
-                        out.append(f"{key.strip()} {locator}".strip())
+        out = [f"{key} {locator}".strip() for text in self._texts_of(here) for key, locator in citations_in(blank_comments(text))]  # fmt: skip
         return list(dict.fromkeys(out))
 
     def texts(self, key: tuple[str, str]) -> set[str]:

@@ -482,6 +482,37 @@ def test_digested_results_to_check_are_a_row_a_work_and_a_correction_a_row_with_
     assert [r["kind"] for r in rows() if "correction" in r] == []
 
 
+def test_a_citation_of_a_library_work_naming_no_result_is_listed_until_the_person_calls_it_a_mention(
+    root: Path,
+) -> None:
+    """`cited`: `\\cite{Smi24}` in a lemma names no result of Smith 2024, so it is a row; `\\cite[Theorem 2]{Jon19}` names one and a key no work has is no row; the person's `mention` lets it go, and taking it back lists it again."""
+    from loom.evidence import acts
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    _edit(
+        root,
+        "on a tree vanishes",
+        "on a tree vanishes \\cite{Smi24}, as in \\cite[Theorem 2]{Jon19} and \\cite{Nobody99}",
+    )
+    key = _key(root, "lem:balanced")
+    rows = lambda: [r.to_dict() for r in _gather(root).of("cited")]  # noqa: E731
+    [row] = rows()
+    assert (row["ref"], row["short"], row["citekey"], row["key"], row["doc"]) == ("tq-00A1-ref", "Smith 2024", "Smi24", key, DOC)  # fmt: skip
+    assert row["citation"] == f"tq-00A1-ref@{key}"
+    [cited] = _gather(root).of("cited")
+    assert review.body_of(cited, {})["cite"]["nth"] == 0
+    acts.mention(root, scan(load_quilt(root)), key, "tq-00A1-ref", PERSON)
+    assert rows() == []
+    acts.mention(root, scan(load_quilt(root)), key, "tq-00A1-ref", PERSON, undo=True)
+    assert [r["citekey"] for r in rows()] == ["Smi24"]
+    with pytest.raises(acts.ActRefused, match="does not cite"):
+        acts.mention(root, scan(load_quilt(root)), key, "tq-00B1-ref", PERSON)
+
+
 def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(root: Path) -> None:
     from loom.evidence import acts
     from loom.evidence.web import LibraryWeb
