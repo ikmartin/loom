@@ -614,7 +614,7 @@ class DocumentHtml:
                 figure.kids = [El("pre", {}, [tex])]
 
     def _cite(self, el: El, kids: list[El | str]) -> El:
-        """A citation with its key and its note, read from the `\\cite` the block it stands in has for that key, at or after the block's line."""
+        """A citation with its key, its note and its target (`library.citations`), read from the `\\cite` the block it stands in has for that key, at or after the block's line."""
         key = next((k.attrs.get("data-citekey", "") for k in _walk(el) if "cite-label" in k.classes), "")
         attrs = {"class": "cite", "data-citekey": key}
         m = self._command(key, _CITES, lambda m: [k.strip() for k in m.group(2).split(",")]) if key else None
@@ -629,6 +629,8 @@ class DocumentHtml:
                 attrs["data-at"] = str(m.start())  # the command's offset, by which a quote takes it once
             if note:
                 attrs["data-postnote"] = note
+            if (target := self.r.cite_target(key, note)) is not None:
+                attrs["data-target"] = target
         else:
             attrs["data-tex"] = f"\\cite{{{key}}}"
         return El("span", attrs, _unwrap(kids, "cite-label"))

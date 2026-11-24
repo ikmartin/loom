@@ -109,7 +109,7 @@ A node's taxon and its id agree:
 
 **A statement** has a bare stem for its id. Its body is the statement.
 
-**A stub** is a statement whose body is empty: a result known to stand at a place in a work, whose text has not been read. It has a `taxon`, a `source`, and whatever of `number`, `title` and `pages` is known. A stub becomes an ordinary statement when its body is written; its id does not change.
+**A stub** is a statement whose body is empty: a result known to stand at a place in a work, whose text has not been read. It has a `taxon`, a `source`, and whatever of `number`, `title` and `pages` is known. A stub becomes an ordinary statement when its body is written; its id does not change. Loom makes one at every build, before the build draws its fragments, for each result a draft cites by number (`\cite[Lemma 2.1]{Smi24}`) in a work the library holds that holds no statement printed with that number (`library/stubs.py`); a citation of the work alone, a page or a part of it makes none.
 
 **[decided]** **A proof** is a node of its own, and a statement may have several. Its id is its statement's with `-proof` and two digits, and the statement's file exists. It has a `source`, may have `pages`, `uses` and `mentions`, and has no `number`, `title` or `label`. Its `source` need not be its statement's: a second proof may come from another work.
 

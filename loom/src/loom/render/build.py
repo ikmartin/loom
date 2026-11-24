@@ -93,7 +93,7 @@ def fragment_path(result: ScanResult, key: str) -> str:
 def _input_hash(
     result: ScanResult, key: str, aux: bytes, texts: dict[str, str] | None = None, pages: dict[str, Any] | None = None
 ) -> str:
-    """The cache key of a node or master fragment: loom's version and code, the text of every file it draws on (its own, its claimants', and every file a section's span runs through), `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
+    """The cache key of a node or master fragment: loom's version and code, the text of every file it draws on (its own, its claimants', and every file a section's span runs through) and what each of its citations reaches in the library (`library.citations`), `aux` from `keys.aux_bytes`, and the digest of each page as TeX made it that the fragment may be cut from.
 
     `texts` holds each file's text hash, filled as files are met, so a file many nodes draw on is hashed once per scan rather than once per node; `pages` maps each document to its current page, or None.
     """
@@ -116,7 +116,13 @@ def _input_hash(
             files.update(seg.file for seg in expansion.segments if seg.exp_start < b and seg.exp_end > a)
     for f in sorted(files):
         if f not in texts:
-            texts[f] = hashlib.sha256(result.files[f].text.encode("utf-8", errors="replace")).hexdigest()
+            # a stub made since, or a node digested, changes what a citation's `data-target` names though the text has not
+            reached = sorted(
+                (c.offset, c.citekey, c.postnote or "", c.target or "") for c in result.edges.cites if c.file == f
+            )
+            texts[f] = hashlib.sha256(
+                result.files[f].text.encode("utf-8", errors="replace") + repr(reached).encode()
+            ).hexdigest()
         h.update(f.encode())
         h.update(texts[f].encode())
     h.update(aux)
@@ -325,6 +331,12 @@ def _build(
 
         # a version kept since (a keep's, a recorded one) adds a landmark and nothing else the scan reads
         result.canon_files = landmark_documents(quilt)
+    # the references the drafts' entries want and the stubs their citations want, made before any fragment is drawn, so each citation's target is what this build publishes
+    from loom.library.gather import gather
+    from loom.library.stubs import make as make_stubs
+
+    gathered = gather(result)
+    make_stubs(result)
     records = records or Records(root, quilt.history_dir)
     # the one moment loom can still see both the text an annotation was written against and the text that replaced it
     freeze_moved(result, records.records)
@@ -485,7 +497,7 @@ def _build(
     attach_versions(result, records, renderer, manifest, files, gone)
     # what the other parts of loom publish, each by its own function (`render/attach.py`)
     for attach in ATTACH:
-        attach(Attaching(result, records, renderer, manifest, files))
+        attach(Attaching(result, records, renderer, manifest, files, gathered))
     # every preview asked for above, made by TeX together, one batch per preamble
     renderer.previews.make()
     from loom.review_queue import rows_for

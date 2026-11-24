@@ -51,12 +51,21 @@ class EdgeRec:
 
 @dataclass
 class CiteRec:
+    """A citation in a block: its key and postnote as the source writes them, and what loom resolves it to (`library.citations.resolve`).
+
+    `ref` is the reference the key names, `results` each result the postnote names as (taxon, printed number), `nodes` that work's node for each, `None` where the store holds none yet, and `target` the one node a citation of one result reaches, else its reference, else None.
+    """
+
     src: str
     citekey: str
     postnote: str | None
     file: str
     line: int
     offset: int
+    ref: str | None = None
+    results: tuple[tuple[str, str], ...] = ()
+    nodes: tuple[str | None, ...] = ()
+    target: str | None = None
 
 
 @dataclass

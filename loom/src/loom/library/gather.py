@@ -214,7 +214,7 @@ def _held(root: Path) -> tuple[dict[str, str], dict[str, str]]:
 
 
 @contextmanager
-def _writing(root: Path) -> Iterator[None]:
+def writing(root: Path) -> Iterator[None]:
     """The id lock and then the library's lock, as every writer that mints a stem takes them."""
     with locked(root / ID_LOCK), locked(root / LIBRARY_LOCK):
         yield
@@ -248,7 +248,7 @@ def gather(result: ScanResult, *, write: bool = True) -> Gathered:
     if not write or not (looked.made or looked.followed):
         return looked
     out = Gathered(conflicts=looked.conflicts, missing=looked.missing)
-    with _writing(root):
+    with writing(root):
         _settle(result, found, out, write=True)
     if out.made or out.followed:
         from loom.library.references import entries

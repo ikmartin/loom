@@ -34,7 +34,8 @@ def _web_group(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
         alone = succeeds(s, "web-group", {"scope": "all", "group": doc})
         assert (groups[doc]["n"], groups[doc]["rows"]) == (alone["n"], alone["rows"])
         assert {"sy-0002", "sy-0008"} <= {r["result"] for r in alone["rows"]}
-    assert listed["count"] == sum(g["n"] for g in groups.values()) - 2
+    # the library's section counts too: the build made stubs of the two results the synthetic paper cites of Kre99
+    assert listed["count"] == sum(g["n"] for sec in listed["sections"] for g in sec["groups"]) - 2
     refuses(s, "web-group", {"scope": "everything", "group": DOC}, 400, "bad-field", "scope is one of")
 
 

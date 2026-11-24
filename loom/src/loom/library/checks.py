@@ -151,7 +151,9 @@ def node_problems(node: Node, given: dict[str, Wrapper] | None = None) -> list[P
             )
         )
     if node.empty and node.kind == ids.PROOF and not node.pages:
-        out.append(Problem(11, f"{name} is a pointer, a proof with no text, and has no `pages`: it says where the proof is."))
+        out.append(
+            Problem(11, f"{name} is a pointer, a proof with no text, and has no `pages`: it says where the proof is.")
+        )
     return out
 
 

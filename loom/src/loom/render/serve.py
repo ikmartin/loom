@@ -25,7 +25,7 @@ from urllib.parse import unquote
 from loom import layout
 from loom.arras_bundle import find_bundle
 from loom.files import FILES_URL, Shown
-from loom.paths import COMPILES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
+from loom.paths import COMPILES, LIBRARY_NODES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
 from loom.presence import Watch
 from loom.render.build import BuildReport, build
 from loom.render.watch import Watcher, scan_unread, snapshot
@@ -1243,6 +1243,10 @@ class ServeSession:
             self._sweep_due = True
             self.last_report = report = report.kept()
             self.builds += 1
+            # the references and stubs the build itself wrote are no change to build again for
+            nodes = root / LIBRARY_NODES
+            if nodes.is_dir():
+                seen = {**seen, **{p: p.stat().st_mtime for p in nodes.glob("*.node")}}
             self.published = seen
             if self.watcher is not None:
                 self.watcher.rebaseline(seen)
