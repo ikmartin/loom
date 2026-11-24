@@ -227,7 +227,11 @@ export const library = {
 		/** A work with no document, in place of the reader. */
 		noDocument: "Loom has this work's entry and no document. Drop its PDF anywhere to add it.",
 		/** The chip's accessible name beside a result on the page. */
-		chip: (name: string) => name
+		chip: (name: string) => name,
+		/** Over the Comments list beside a work, where loom could not learn where its notes on words stand. */
+		unread: (n: number) => (n === 1 ? 'Loom could not learn where a note on words stands on the paper, so it is listed here and drawn on no page.' : `Loom could not learn where ${n} notes on words stand on the paper, so they are listed here and drawn on no page.`),
+		/** On a note's card where loom found its words on no page. */
+		unfound: 'Its words were not found on the paper, so it is drawn on no page.'
 	},
 	side: {
 		/** The close button of the result beside the page. */

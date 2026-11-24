@@ -46,3 +46,19 @@ describe('what the desk writes', () => {
 		expect(calls[0][1]).toEqual({ target: 'Bellamy19', page: 3, rects: [[5, 5, 50, 20]], look: { style: 'strike' } });
 	});
 });
+
+describe('the notes on words drawn on no page', () => {
+	const note = (id: string, extra: Record<string, unknown> = {}) => ({ id, target: { work: 'Bellamy19', page: 2, key: '' }, quote: 'incidence matrix', status: 'open', author: { id: 'me' }, created: '2026-11-24T10:00:00Z', type: 'note', body_html: '', ...extra });
+	const on = (s: Record<string, unknown>) => new MarkDesk(() => ({ on: 'Bellamy19', owns: () => true, url: '', name: 'Bellamy19.pdf', ...s }));
+
+	it('are said unread while where they stand cannot be learned, and unfound where loom finds their words on no page; a detached one and one with its own place are neither', async () => {
+		const { store } = await import('$lib/manifest/client.svelte');
+		(store.manifest as { annotations: Record<string, unknown> }).annotations = { 'a-words': note('a-words'), 'a-gone': note('a-gone', { detached: true }), 'a-boxed': note('a-boxed', { rects: [[1, 2, 30, 40]] }) };
+		expect(on({ stands: () => null, unread: true }).nowhere).toEqual({ unread: ['a-words'], unfound: [] });
+		expect(on({ unread: true }).nowhere).toEqual({ unread: ['a-words'], unfound: [] });
+		expect(on({ stands: () => null }).nowhere).toEqual({ unread: [], unfound: ['a-words'] });
+		expect(on({ stands: (id: string) => (id === 'a-words' ? { page: 2, rects: [[1, 1, 20, 10]] } : null) }).nowhere).toEqual({ unread: [], unfound: [] });
+		// one whose place is not yet known is neither drawn nor listed, and so not said
+		expect(on({ stands: () => undefined }).nowhere).toEqual({ unread: [], unfound: [] });
+	});
+});
