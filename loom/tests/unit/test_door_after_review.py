@@ -495,14 +495,16 @@ REACHED = {
 
 @pytest.mark.parametrize("which", REACHED)
 def test_recovery_writes_nothing_in_a_dot_named_place_however_the_line_names_it(tmp_path: Path, which: str) -> None:
-    """A forged line that names a file in a place whose name begins with a dot, outside loom's own, in another spelling, through a link from an open place, or one the apps run a command from later, is left and said, and the file it reaches is neither made nor changed: recovery judges the file reached, never the path's spelling (R2-23, R2-24)."""
+    """A forged line that names a file in a place whose name begins with a dot, outside loom's own, in another spelling, through a link from an open place, or one the apps run a command from later, is left and said, and the file it reaches is neither made nor changed: recovery judges the file reached, never the path's spelling (R2-23, R2-24). Where the file system tells case apart, another spelling is a dot-named folder of its own, and a line making a file there is left the same."""
     from loom import writes
     from loom.scan.quilt import load_quilt
 
     root = _layered(tmp_path)
     named, reached, made = REACHED[which]
+    claude = (root / ".claude/settings.json").read_bytes()
     if which.startswith("another case") and not _case_blind(root):
-        pytest.skip("the file system tells the two spellings apart")
+        # where case is told apart the other spelling is a dot-named folder of its own: a line making a file there is left, and makes nothing
+        reached, made = named, True
     if named == "notes/cl/settings.json":
         (root / "notes/cl").symlink_to("../.claude")
     if named == "notes/m.json":
@@ -514,7 +516,7 @@ def test_recovery_writes_nothing_in_a_dot_named_place_however_the_line_names_it(
     assert len(said) == 1 and said[0].startswith("left mv:e0e0e0e0e0e0e0e0: putting it back would write"), said
     assert "in a place whose name begins with a dot" in said[0]
     assert ((root / reached).read_bytes() if (root / reached).exists() else None) == was
-    assert (root / "notes.md").read_text() == "a note\n"
+    assert (root / "notes.md").read_text() == "a note\n" and (root / ".claude/settings.json").read_bytes() == claude
     ((_, _, _, settles),) = writes.left(root, load_quilt(root).history_dir)
     assert settles.startswith("Making ") and "the next act of the same kind" in settles
 
@@ -532,14 +534,18 @@ def test_recovery_writes_nothing_in_a_dot_named_place_however_the_line_names_it(
 def test_loom_s_own_places_are_known_by_the_file_reached_and_the_person_s_open_files_are_put_back(
     tmp_path: Path, which: str
 ) -> None:
-    """Loom's own places are found by the same test of the file reached: `.LOOM/` where case is ignored and a link from an open place into `.loom/` are loom's, which recovery puts back, while a link out of `.loom/` to an app's folder is judged by where it leads and left. An open file of the person's, `config.toml` among them, is put back as any act's is: a shell that can write the journal can write it directly."""
+    """Loom's own places are found by the same test of the file reached: `.LOOM/` where case is ignored (and where it is not, a dot-named folder that is not loom's, which recovery leaves) and a link from an open place into `.loom/` are loom's, which recovery puts back, while a link out of `.loom/` to an app's folder is judged by where it leads and left. An open file of the person's, `config.toml` among them, is put back as any act's is: a shell that can write the journal can write it directly."""
     from loom.paths import LOOM
 
     root = _layered(tmp_path)
     if which == "another case: .LOOM":
-        if not _case_blind(root):
-            pytest.skip("the file system tells the two spellings apart")
         named, reached, made = ".LOOM/records/forged.json", f"{LOOM}/records/forged.json", True
+        if not _case_blind(root):
+            # where case is told apart `.LOOM/` is a dot-named folder of its own, not loom's: the line is left, and makes nothing
+            said, _ = _forged_move(root, named, made=True)
+            assert len(said) == 1 and said[0].startswith("left mv:"), said
+            assert not (root / named).exists() and not (root / reached).exists()
+            return
     elif which == "a link into .loom from an open place":
         (root / "notes/lm").symlink_to("../.loom")
         named, reached, made = "notes/lm/records/forged.json", f"{LOOM}/records/forged.json", True
