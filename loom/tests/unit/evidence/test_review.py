@@ -450,6 +450,38 @@ def test_a_row_to_attest_opens_on_the_lean_its_notation_and_what_it_uses_that_wa
     assert body["supporting"] == [] and "body" not in row.to_dict()
 
 
+def test_digested_results_to_check_are_a_row_a_work_and_a_correction_a_row_with_its_word_diff(root: Path) -> None:
+    """`check`: the statements with a text not compared on their text now, by work, a stub never; one compared leaves; an agent's correction of a compared text is a row of its own, its body the word diff, gone once taken."""
+    from loom.evidence import acts
+    from loom.evidence.web import LibraryWeb
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    rows = lambda: [r.to_dict() for r in _gather(root).of("check")]  # noqa: E731
+    [work] = rows()
+    assert (work["ref"], work["short"], work["pdf"]) == ("tq-00A1-ref", "Smith 2024", "sha256:41b7c0a9e3f2d5681c94ab07e6d3f81290ce5b47a8d1036f2e9c7b54a0d8e163")  # fmt: skip
+    assert [(n["node"], n["number"], n["title"], n["rests"]) for n in work["nodes"]][:2] == [("tq-00A4", "2.1", "Widget", {"docs": []}), ("tq-00K3", "3.2", "Test lemma", {"docs": []})]  # fmt: skip
+    assert "tq-00B7" not in [n["node"] for n in work["nodes"]], "a stub is read before it is checked"
+    shown = LibraryWeb(root).subject(Here("node", "tq-00A4"))
+    assert shown is not None
+    acts.check(root, "tq-00A4", shown.hash, PERSON)
+    [work] = rows()
+    assert "tq-00A4" not in [n["node"] for n in work["nodes"]]
+    data = (folder(root) / "tq-00A4.node").read_bytes()
+    _said, proposal = acts.propose(root, "tq-00A4", data.replace(b"compact set", b"closed set", 1), AGENT, "page 4")
+    [_, correction] = [r for r in _gather(root).of("check")]
+    said = correction.to_dict()
+    assert (said["correction"], said["node"], said["short"], said["by"]) == (proposal.id, "tq-00A4", "Smith 2024", "Probe Agent")  # fmt: skip
+    body = review.body_of(correction, {})
+    assert body["compared_at"] is not None and ["-", "compact"] in [[k, w.strip()] for k, w in body["runs"]] and ["+", "closed"] in [[k, w.strip()] for k, w in body["runs"]]  # fmt: skip
+    assert "".join(w for k, w in body["runs"] if k != "+") == data.decode().split("+++")[2].lstrip("\n")
+    acts.take(root, proposal.id, PERSON)
+    assert [r["kind"] for r in rows() if "correction" in r] == []
+
+
 def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(root: Path) -> None:
     from loom.evidence import acts
     from loom.evidence.web import LibraryWeb
