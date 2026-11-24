@@ -13,6 +13,8 @@
 	import Empty from '$lib/review/Empty.svelte';
 	import ReviewHeading from '$lib/review/ReviewHeading.svelte';
 	import Said from '$lib/review/Said.svelte';
+	import { rv } from '$lib/views/review/state.svelte';
+	import { review as reviewWords } from '$lib/words/review';
 
 	const m = $derived(store.manifest!);
 	const SEVERITIES = ['error', 'warning', 'info'] as const;
@@ -120,7 +122,7 @@
 	{#if parts.copy.length}
 		<details class="part" open={isOpen('copy', false)} ontoggle={toggled('copy')} data-testid="problems-copy">
 			<summary><h2>In an agent's copy <span class="n">{parts.copy.length}</span></h2></summary>
-			<p class="whose">The agent's to put right, or to leave out when you take the copy back in <a href={route('/review/proposed')}>Proposed Changes</a>.</p>
+			<p class="whose">The agent's to put right, or to leave out when you take the copy back in {#if rv.served}<a href={route('/review')} onclick={() => rv.choose('edits')} data-testid="problems-copy-link">{reviewWords.kinds.edits.name}</a>{:else}<a href={route('/review/proposed')} data-testid="problems-copy-link">Proposed Changes</a>{/if}.</p>
 			{@render groups(parts.copy, 'copy')}
 		</details>
 	{/if}
