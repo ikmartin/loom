@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import click
 
 from loom.cli._quilt import open_quilt, quilt_option
@@ -15,7 +17,7 @@ from loom.identity import is_agent
     "as_name",
     required=True,
     metavar="NAME",
-    help="The agent this server serves, with Agent or AI in the name; every write is recorded under it.",
+    help="The agent this server serves, a name ending in Agent; every write is recorded under it.",
 )
 @quilt_option
 def mcp_command(as_name: str, quilt_path: str | None) -> None:
@@ -25,8 +27,10 @@ def mcp_command(as_name: str, quilt_path: str | None) -> None:
     """
     if not is_agent(as_name):
         raise EnvError(
-            f"{as_name} does not say it is an agent; give a name with Agent or AI in it, such as --as 'Claude Agent'"
+            f"{as_name} does not say it is an agent; give a name ending in Agent, such as --as 'Claude Code Agent'"
         )
+    root = open_quilt(quilt_path).root
+    _refuse_another_quilt(root, quilt_path)
     from loom.mcp.sdk import has_sdk, reinstall_hint
 
     if not has_sdk():
@@ -35,4 +39,21 @@ def mcp_command(as_name: str, quilt_path: str | None) -> None:
         )
     from loom.mcp.server import serve
 
-    serve(open_quilt(quilt_path).root, as_name)
+    serve(root, as_name)
+
+
+def _refuse_another_quilt(root: Path, quilt_path: str | None) -> None:
+    """Refuse a server whose `--quilt` names a quilt other than the one its app was started in: an app's server file names its quilt's path, so a quilt copied whole carries a file that would start loom on the original, and every write of the agent's would land there."""
+    if quilt_path is None:
+        return
+    from loom.scan.quilt import NoQuiltError, find_quilt
+
+    try:
+        here = find_quilt(Path.cwd()).root
+    except NoQuiltError:
+        return  # started outside any quilt: the path it names is all there is to go by
+    if here.resolve() != root.resolve():
+        raise EnvError(
+            f"this agent's app was started in the quilt {here}, but its server file names {root}, as one a copied quilt brings with it does; "
+            "nothing was served. `loom ai init` in this quilt writes the file for it."
+        )

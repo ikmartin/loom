@@ -19,7 +19,7 @@ export interface Suite {
 
 export const ARRAS = fileURLToPath(new URL('..', import.meta.url));
 export const LOOM = join(ARRAS, '../loom/.venv/bin/loom');
-/** The variables by which loom tells an agent's shell (`loom/cli/_common.AGENT_MARKERS`). */
+/** The variables by which loom tells an agent's shell (`loom.identity.AGENT_MARKERS`). */
 const AGENT_MARKERS = ['AI_AGENT', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_SANDBOX', 'CURSOR_AGENT', 'GEMINI_CLI'];
 
 export type Entry = Record<string, unknown>;

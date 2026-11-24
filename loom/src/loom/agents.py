@@ -6,8 +6,9 @@ One boundary, read two ways: `denied_by` is the predicate loom's own commands as
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 from loom.paths import (
@@ -40,7 +41,7 @@ from loom.paths import (
 )
 
 if TYPE_CHECKING:
-    from loom.scan.quilt import QuiltConfig
+    from loom.scan.quilt import Quilt, QuiltConfig
 
 CONFIG = "config.toml"
 #: Where an agent always writes, whatever the list says: the sessions, its copies and its scratch.
@@ -79,11 +80,14 @@ class Pattern:
 
 
 def _glob(body: str) -> str:
-    """A gitignore glob as a regex: `*` and `?` stop at `/`, `**` crosses directories, `[...]` is a class."""
+    """A gitignore glob as a regex: `*` and `?` stop at `/`, `**` crosses directories, `[...]` is a class, and a backslash takes the character after it as itself."""
     out, i = [], 0
     while i < len(body):
         c = body[i]
-        if body.startswith("**/", i):
+        if c == "\\" and i + 1 < len(body):
+            out.append(re.escape(body[i + 1]))
+            i += 2
+        elif body.startswith("**/", i):
             out.append("(?:.*/)?")
             i += 3
         elif body.startswith("**", i):
@@ -163,6 +167,116 @@ def denied_by(config: QuiltConfig, rel: str) -> str | None:
     if rel in (CONFIG, config.research_state):
         return rel
     return next((p.text for p in deny_list(config.agents_deny)[0] if p.matches(rel)), None)
+
+
+def places_to_deny(config: QuiltConfig, paths: Iterable[str]) -> list[str]:
+    """The `[agents] deny` entries that would protect each of the person's files `paths` (quilt-relative) nothing protects yet: a file's directory, or the file itself at the quilt's top, shallowest first, so one entry covering another's files leaves the second out; each anchored at the quilt's top (`/main/`) and escaped (`_literal`)."""
+    import dataclasses
+
+    added: list[str] = []
+    for rel in sorted(set(paths), key=lambda r: (r.count("/"), r)):
+        if denied_by(dataclasses.replace(config, agents_deny=[*config.agents_deny, *added]), rel) is not None:
+            continue
+        parent = PurePosixPath(rel).parent.as_posix()
+        # anchored at the quilt's top and every glob character escaped, so the entry names that place and no other
+        added.append(f"/{_literal(rel)}" if parent == "." else f"/{_literal(parent)}/")
+    return added
+
+
+def how_far_deny_holds(root: Path) -> str:
+    """One sentence, in the person's words, of how far the places agents are denied hold for the apps the quilt at `root` is set up for (`ai.clients.chosen`): an app is refused an edit there only where the file loom wrote for it holds the list as it stands now (`ai.layout.holds_deny_now`), and every other app, any app loom does not know among them, is only asked not to, a change of theirs there going unlisted, since the look leaves the person's own places alone (`looks.watching`). '' where the quilt has no agent layer."""
+    from loom.ai.clients import PROJECT, chosen
+    from loom.ai.layout import holds_deny_now
+    from loom.scan.quilt import load_quilt
+
+    if not (root / AI).is_dir():
+        return ""
+    config = load_quilt(root).config
+    keys = chosen(root, None)
+    apps = [c for c in PROJECT if c.key in keys]
+    held = [c.label for c in apps if holds_deny_now(root, config, c)]
+    return deny_sentence(held, [c.label for c in apps if c.label not in held])
+
+
+def deny_sentence(held: list[str], told: list[str]) -> str:
+    """`how_far_deny_holds`'s sentence for the apps `held` to the deny by their file now and those only `told` it, by name, any other app among the told.
+
+    A held app's file refuses the app's own edits there; what its shell may write is another matter. Claude Code's file refuses a redirect into a denied place and the files of a command it knows, not a script that opens a file itself, and its sandbox, where the person turns it on, holds every command to the denies; so the sentence says only that it depends, naming no setting and no file.
+    """
+
+    def names(labels: list[str]) -> str:
+        return labels[0] if len(labels) == 1 else f"{', '.join(labels[:-1])} and {labels[-1]}"
+
+    told = [*told, "any other app" if held or told else "any app"]
+    one = len(told) == 1
+    parts = []
+    if held:
+        parts.append(
+            f"{names(held)} {'is' if len(held) == 1 else 'are'} refused an edit, though whether a command {'it runs' if len(held) == 1 else 'one of them runs'} in a shell is held back as well depends on the command and on how you have set {'it' if len(held) == 1 else 'them'} up"
+        )
+    parts.append(
+        f"{names(told)} {'is' if one else 'are'} only asked not to edit, and a change {'it' if one else 'one of them'} makes there anyway is not listed in Your Changes"
+    )
+    return f"In the places agents are denied, {'; '.join(parts)}."
+
+
+def _literal(path: str) -> str:
+    """`path` as a deny pattern that matches it alone: each character a glob reads (`*`, `?`, `[`, `]`, a backslash) escaped."""
+    return re.sub(r"([*?\[\]\\])", r"\\\1", path)
+
+
+def deny_documents(quilt: Quilt, paths: Iterable[str]) -> list[str]:
+    """Add to `[agents] deny` what `places_to_deny` gives for the person's files `paths`, as `loom import` and `loom init --from` do for the paper they bring in.
+
+    The config is read as the act staging on this thread holds it, if one does, so a `main` set in the same act stands; the person's entries are kept as written, a refused one among them. The permission files are not written here: the caller writes them once its act is done (`write_denies`), since recovery writes nothing in the dot-named places where the apps keep their files, and one written inside the act would leave that act, cut short, half made. Returns the entries added: none when everything is covered, or when the config is laid out in a way loom cannot edit (`ConfigRefused`).
+    """
+    import tomllib
+
+    from loom.config_edit import ConfigRefused, set_values
+    from loom.scan.quilt import QuiltConfig
+    from loom.writes import staged
+
+    path = quilt.root / CONFIG
+    held, data = staged(path)
+    text = data.decode("utf-8") if held and data is not None else path.read_text(encoding="utf-8")
+    table = tomllib.loads(text).get("agents", {})
+    written = table.get("deny", []) if isinstance(table, dict) else []
+    added = places_to_deny(QuiltConfig.from_dict(tomllib.loads(text)), paths)
+    if not added or not isinstance(written, list):
+        return []
+    try:
+        set_values(quilt, {"agents.deny": [*written, *added]})
+    except ConfigRefused:
+        return []
+    return added
+
+
+def write_denies(root: Path) -> list[str]:
+    """Write the quilt's permission files from its config as it stands, each in an act of its own, so an app reading one refuses an agent's own edit in the places `[agents] deny` names.
+
+    Call it once the act that changed the list is done, never inside it: recovery writes nothing in the dot-named places where the apps keep their files (`writes._judge`).
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+
+    Returns
+    -------
+    list of str
+        The files written, quilt-relative: none where the quilt has no agent layer, where each was current, or where one cannot be written, which stays as it was and `loom lint` says lags.
+    """
+    if not (root / AI).is_dir():
+        return []
+    from loom.ai.layout import SHELL, variant, write_permissions
+    from loom.scan.quilt import load_quilt
+    from loom.writes import WriteRefused
+
+    try:
+        written, _ = write_permissions(root, load_quilt(root).config, shell=variant(root) == SHELL)
+    except WriteRefused:
+        return []
+    return list(written)
 
 
 def always_denied(config: QuiltConfig, why: str) -> bool:

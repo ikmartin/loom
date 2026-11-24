@@ -42,7 +42,7 @@ def _who(quilt_path: str | None, declared: str | None) -> tuple[object, str]:
 
 
 AS_OPTION = click.option(
-    "--as", "declared", default=None, metavar="NAME", help="Who acts; an agent names itself, including Agent or AI."
+    "--as", "declared", default=None, metavar="NAME", help="Who acts; an agent's name ends in Agent."
 )
 DRY_RUN = click.option("--dry-run", is_flag=True, help="Say what would change and write nothing.")
 
@@ -336,7 +336,7 @@ def _mail(quilt_path: str | None, which: str | None, declared: str | None):  # t
 @session.command(name="say")
 @click.argument("text", required=False, default="")
 @click.option("--session", "which", default=None, envvar="LOOM_SESSION", help="The session to speak in.")
-@click.option("--as", "declared", default=None, help="Who is speaking. An agent names itself, including Agent or AI.")
+@click.option("--as", "declared", default=None, help="Who is speaking. An agent's name ends in Agent.")
 @DRY_RUN
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option

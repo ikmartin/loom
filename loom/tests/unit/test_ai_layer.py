@@ -11,13 +11,13 @@ import pytest
 
 from loom.ai.layout import MODES
 from tests.helpers import exits, flat, json_of, ok, refused
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, opened
 
 FIXED = {"LOOM_FIXED_TIME": "2026-09-16T14:02:00Z"}
 
 
 def bare(tmp_path: Path, *flags: str) -> Path:
-    """The demo without its AI layer, annotations or sessions, then `loom ai init FLAGS`: the layer these tests read is the one they made, and the sessions they count are their own."""
+    """The demo without its AI layer, annotations, sessions or deny list, then `loom ai init FLAGS`: the layer these tests read is the one they made, and the sessions they count are their own."""
     from loom.ai.clients import PROJECT_FILES
     from loom.ai.layout import ROOT_FILES
 
@@ -31,6 +31,7 @@ def bare(tmp_path: Path, *flags: str) -> Path:
         q / ".loom/records/annotations", ignore_errors=True
     )  # the log lives at the quilt root, not under .loom/agents/instructions/
     shutil.rmtree(q / ".loom" / "agents" / "sessions", ignore_errors=True)
+    opened(q)  # a fresh quilt's layer: the demo's deny on its paper is not one
     ok("ai", "init", *flags, cwd=q)
     return q
 
@@ -770,3 +771,69 @@ def test_an_old_instruction_line_is_replaced_where_it_stands(tmp_path: Path) -> 
         (tmp_path / "CLAUDE.md").write_text(f"{old}\n", encoding="utf-8")
         ensure_root_line(tmp_path)
         assert (tmp_path / "CLAUDE.md").read_text(encoding="utf-8") == f"{MCP_LINE}\n"
+
+
+def test_how_far_a_deny_holds_names_an_app_refused_only_where_its_file_holds_the_list_now(tmp_path: Path) -> None:
+    """The sentence Settings and Review show calls an app refused only where the file loom wrote for it holds the list as it stands now, by the permission writers' own table (`layout.PERMISSION_WRITERS`), whose check reads the file: an entry added by hand holds Claude Code to nothing until the file is rewritten, and neither does a file loom leaves alone; every other app, any app loom does not know among them, is only asked (R2-15)."""
+    import re
+
+    from loom.agents import deny_sentence, how_far_deny_holds
+    from loom.ai.clients import PROJECT, chosen
+    from loom.ai.layout import PERMISSION_WRITERS, holds_deny
+    from loom.scan.quilt import QuiltConfig
+
+    config = QuiltConfig(agents_deny=["/kept-from-agents/"])
+    for rel, (write, check) in PERMISSION_WRITERS.items():
+        assert ("kept-from-agents" in write(config, False)) is (check is not None), rel
+    q = bare(tmp_path)
+    keys = chosen(q, None)
+
+    def sides() -> tuple[str, str]:
+        held, _, told = how_far_deny_holds(q).partition(";")
+        return (held, told) if told else ("", held)
+
+    held, told = sides()
+    assert (
+        "is refused an edit" in held
+        and "held back as well depends on the command and on how you have set it up" in held
+    ), held
+    assert "any other app are only asked not to edit" in told and "not listed in Your Changes" in told, told
+    for c in PROJECT:
+        if c.key in keys:
+            assert c.label in (held if holds_deny(c) else told), (c.label, held, told)
+    # a deny entry added by hand: Claude Code's file does not hold it until it is rewritten
+    cfg = q / "config.toml"
+    cfg.write_text(re.sub(r"(?m)^deny = \[.*\]$", 'deny = ["/notes/"]', cfg.read_text()), encoding="utf-8")
+    held, told = sides()
+    assert held == "" and "Claude Code" in told, (held, told)
+    ok("upgrade", cwd=q)
+    held, told = sides()
+    assert "Claude Code is refused an edit" in held, held
+    # a settings file loom leaves alone holds Claude Code to nothing
+    (q / ".claude/settings.json").write_text("not the JSON loom writes\n", encoding="utf-8")
+    held, told = sides()
+    assert held == "" and "Claude Code" in told, (held, told)
+    assert deny_sentence(["A"], []).startswith("In the places agents are denied, A is refused an edit, though")
+    assert "; any other app is only asked not to edit, and a change it makes" in deny_sentence(["A"], [])
+    assert deny_sentence([], []) == (
+        "In the places agents are denied, any app is only asked not to edit, and a change it makes there anyway is not listed in Your Changes."
+    )
+
+
+def test_a_settings_save_of_the_deny_list_holds_claude_code_to_nothing_until_its_file_is_updated(
+    tmp_path: Path,
+) -> None:
+    """A Settings save writes the list into `config.toml` and no permission file: Claude Code's waits for Settings' Update Claude Code (`agents-update`), so until then it is stale and the sentence calls Claude Code only asked, as `agents.md` says."""
+    from loom.agents import how_far_deny_holds
+    from loom.ai.layout import permissions_stale
+    from loom.render.api import handle
+    from loom.scan.quilt import load_quilt
+
+    q = bare(tmp_path)
+    assert "Claude Code is refused an edit" in how_far_deny_holds(q)
+    handle(q, "settings-save", {"changes": {"agents.deny": ["/notes/"]}})
+    assert permissions_stale(q, load_quilt(q).config)
+    assert "Claude Code is refused" not in how_far_deny_holds(q)
+    handle(q, "agents-update", {})
+    assert not permissions_stale(q, load_quilt(q).config)
+    assert "Claude Code is refused an edit" in how_far_deny_holds(q)

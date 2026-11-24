@@ -9,7 +9,7 @@ from typing import Any
 import pytest
 
 from tests.helpers import edit, json_of, ok
-from tests.unit._quilts import demo, track_edits
+from tests.unit._quilts import demo, opened
 
 LEMMA = "drafting/nodes/dm-0002.tex"
 WHO = "Tester"
@@ -17,11 +17,12 @@ WHO = "Tester"
 
 @pytest.fixture
 def q(tmp_path: Path) -> Path:
-    from loom.scan.quilt import save_author
+    from loom.looks import take
+    from loom.scan.quilt import load_quilt, save_author
 
     save_author(WHO)
-    root = track_edits(demo(tmp_path))
-    ok("changes", "--keep-all", cwd=root)
+    root = opened(demo(tmp_path))  # the paper open to agents, so an edit in it is listed
+    take(load_quilt(root), WHO)  # the first look, the demo's suggested edit left open
     return root
 
 

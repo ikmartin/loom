@@ -18,7 +18,7 @@ from loom.errors import ContentError, EnvError
 #: The variable the MCP server sets on each command it runs for a conversation, naming that conversation's session; a command line has no option for it.
 BOUND_SESSION = "LOOM_MCP_SESSION"
 AS_OPTION = click.option(
-    "--as", "declared", default=None, metavar="NAME", help="Who acts; an agent names itself, including Agent or AI."
+    "--as", "declared", default=None, metavar="NAME", help="Who acts; an agent's name ends in Agent."
 )
 JSON_OPTION = click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 
@@ -31,7 +31,7 @@ def _agent(root: Path, declared: str | None) -> Any:
     name, kind = writer(root, declared)
     if kind != "agent":
         raise EnvError(
-            f"{name or 'nobody'} is not an agent's name; a person acts in the viewer. Name yourself with --as, including Agent or AI."
+            f"{name or 'nobody'} is not an agent's name; a person acts in the viewer. Name yourself with --as, a name ending in Agent."
         )
     return Who("agent", name)
 

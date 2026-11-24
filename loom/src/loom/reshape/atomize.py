@@ -301,39 +301,29 @@ def _offset_mapper(original: str, moves: list[Move]):  # type: ignore[no-untyped
     return mapper
 
 
-def write_atomize(result: ScanResult, plan: AtomizePlan, force: bool = False) -> list[str]:
+def _write_new(result: ScanResult, files: dict[str, str]) -> list[str]:
+    """Write new files as one act through the door, refusing (FileExistsError) before writing anything when one is there already; returns them in order."""
+    from loom import writes
+    from loom.history.ledger import actor_for
+
     root = result.quilt.root
-    dest = root / plan.dest
-    if dest.exists():
-        raise FileExistsError(str(plan.dest))
-    for m in plan.moves:
-        if (root / m.target).exists():
-            raise FileExistsError(m.target)
-    written: list[str] = []
-    for m in plan.moves:
-        p = root / m.target
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(m.text, encoding="utf-8")
-        written.append(m.target)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(plan.spine, encoding="utf-8")
-    written.append(plan.dest)
-    return written
+    with writes.act(root, result.quilt.history_dir, "atomize", actor_for(root)) as w:
+        for rel in files:
+            if w.read(rel) is not None:
+                raise FileExistsError(rel)
+        for rel, text in files.items():
+            w.replace(rel, text.encode("utf-8"))
+    return list(files)
+
+
+def write_atomize(result: ScanResult, plan: AtomizePlan, force: bool = False) -> list[str]:
+    """Write a plan's node files and its spine, as one act through the door, refusing before writing anything if one exists."""
+    return _write_new(result, {**{m.target: m.text for m in plan.moves}, plan.dest: plan.spine})
 
 
 def write_moves(result: ScanResult, plan: AtomizePlan) -> list[str]:
-    """Write a plan's node files, refusing before writing anything if one exists. The source file is the author's to change."""
-    root = result.quilt.root
-    for m in plan.moves:
-        if (root / m.target).exists():
-            raise FileExistsError(m.target)
-    written: list[str] = []
-    for m in plan.moves:
-        path = root / m.target
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(m.text, encoding="utf-8")
-        written.append(m.target)
-    return written
+    """Write a plan's node files, as one act through the door, refusing before writing anything if one exists. The source file is the author's to change."""
+    return _write_new(result, {m.target: m.text for m in plan.moves})
 
 
 def verify_plan(result: ScanResult, plan: AtomizePlan) -> str | None:

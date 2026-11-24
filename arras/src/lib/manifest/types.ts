@@ -627,9 +627,9 @@ export interface QuiltSettings {
     stale: boolean;
     command: string;
     clients: AgentClient[];
+    /** How far the deny list holds for the apps set up here, one sentence: which cannot edit there, which are only asked; '' without an agent layer. */
+    holds?: string;
   };
-  /** `track_edits`: whether edits in place since the person's look wait in Your Changes, beside suggestions. */
-  review?: { track_edits: boolean };
   sync: { paired: true; directory: string; workspace: string; branch: string; documents: string[] } | { paired: false; command: string };
   warnings: string[];
 }
@@ -677,7 +677,8 @@ export interface Manifest {
   files?: ProjectFile[];
   /** Every pending change, edits since the reviewer's look and open suggested edits, in each file's order; absent before a first look. */
   changes?: PendingChange[];
-  changes_since?: { who: string; when: string };
+  /** The reviewer's look: when it was taken, whose it was carried over from when their name had none, and the places it leaves to the person (the config and each `[agents] deny` entry), where a change is never listed, and how far that holds for the apps set up here. */
+  changes_since?: { who: string; when: string; carried?: string; unwatched?: string[]; holds?: string };
   /** The quilt's configuration, for Settings; absent from an older publisher. */
   config?: QuiltSettings;
   macros: { default: Macro[]; sets: Record<string, Macro[]> };

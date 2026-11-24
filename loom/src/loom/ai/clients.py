@@ -270,7 +270,9 @@ def write_clients(
             if text is not None:
                 rep.removed.append(c.file)
                 if write:
-                    p.unlink()
+                    from loom.writes import put
+
+                    put(root, None, c.file, None, kind="agents", expect=text.encode("utf-8"))
             continue
         want = render(c, root)
         if text == want:
@@ -278,5 +280,5 @@ def write_clients(
             continue
         rep.written.append(c.file)
         if write:
-            _write(root, c.file, want)
+            _write(root, c.file, want, expect=text)
     return rep

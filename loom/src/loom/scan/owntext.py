@@ -26,9 +26,14 @@ def _provided_by(result: ScanResult, file: str) -> list[str]:
     return out
 
 
+def _marker(result: ScanResult, key: str) -> str:
+    """The marker a child stands as in its parent's own text: by its place where a label keys it (`NodeRec.marker`), so its parent's hash is the one it had before the label did."""
+    return child_marker(result.nodes[key].marker or key)
+
+
 def _cuts(result: ScanResult, node: NodeRec) -> list[tuple[int, int, str]]:
     """(start, end, marker) for every child of `node` that its own text stands in for: a claimant cut out of the region, and an inclusion of a file whose nodes are children just the same."""
-    cuts = [(result.nodes[k].start, result.nodes[k].end, child_marker(k)) for k in node.claimants]
+    cuts = [(result.nodes[k].start, result.nodes[k].end, _marker(result, k)) for k in node.claimants]
     seen: set[int] = set()
     for expansion in result.expansions.values():
         for inc in expansion.inclusions:
@@ -41,7 +46,7 @@ def _cuts(result: ScanResult, node: NodeRec) -> list[tuple[int, int, str]]:
             keys = _provided_by(result, inc.child)
             if keys:
                 seen.add(inc.site_start)
-                cuts.append((inc.site_start, inc.site_end, "".join(child_marker(k) for k in keys)))
+                cuts.append((inc.site_start, inc.site_end, "".join(_marker(result, k) for k in keys)))
     return sorted(cuts, key=lambda c: c[0])
 
 
