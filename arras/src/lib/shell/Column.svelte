@@ -460,6 +460,7 @@
 		font-size: 12.5px;
 	}
 	.primary a {
+		white-space: nowrap;
 		padding: 4px 0 6px;
 		color: var(--ink-soft);
 		margin-bottom: -1px;

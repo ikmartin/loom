@@ -1,6 +1,7 @@
 // Review on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/review6.ts`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 4 to 12): the column's kinds, counts and drafts; the list by who is waiting; answering a question, keeping an edit, withdrawing a task; and the rules that hold everywhere: no control but the four view names changes view, and no id is drawn. Where Review's reads are not served, today's Review stands, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
 import { serve } from '../manifest';
+import { wideFont } from '../fonts';
 
 async function open(page: Page): Promise<void> {
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -364,6 +365,17 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	await open(page);
 	const label = page.getByTestId('review-kind-accepted-changed');
 	expect((await label.boundingBox())!.height).toBeLessThanOrEqual(30);
+	// and in a wider font than this Mac's, as on a runner with other fonts: every label of the column on one line, its count in view
+	await wideFont(page);
+	for (const b of await page.getByTestId('review-column').locator('nav button').all()) {
+		const box = (await b.boundingBox())!;
+		expect(box.height, await b.innerText()).toBeLessThanOrEqual(30);
+		const n = b.locator('.n');
+		if (await n.count()) {
+			const nb = (await n.boundingBox())!;
+			expect(nb.x + nb.width, await b.innerText()).toBeLessThanOrEqual(box.x + box.width + 0.5);
+		}
+	}
 	await expect(page.getByTestId('review-kind-incoming')).toHaveAttribute('aria-description', /collaborator's changes/);
 	await page.getByTestId('review-kind-check').click();
 	await expect(page.getByTestId('review-row').filter({ hasText: 'Arden 2024 · Lemmas' })).toContainText('Arden 2024 · Lemmas 5.7 and 5.9');
@@ -424,6 +436,25 @@ test('in Review a block, its note, Read, a change card\'s place and a To do item
 	await expect(page).toHaveURL(/\/review(\?|$)/);
 });
 
+test('see it keeps the block in view while the document above it settles, as a draft drawn as its source does, until the reader scrolls', async ({ page }) => {
+	await open(page);
+	await page.getByTestId('review-kind-edits').click();
+	await page.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]').getByTestId('change-where').getByTestId('change-see').click();
+	const doc = page.getByTestId('review-over-doc');
+	const at = doc.locator('#sy-0004');
+	const offset = () => at.evaluate((e) => Math.round(e.getBoundingClientRect().top - e.closest('[data-testid="review-over-doc"]')!.getBoundingClientRect().top));
+	await expect.poll(offset).toBe(0);
+	// what is drawn above the block grows after it mounted, as source blocks and mathematics settle: the block stays where it landed, the browser's own scroll anchoring off so the pane's landing is what is tested
+	await doc.evaluate((d) => ((d as HTMLElement).style.overflowAnchor = 'none'));
+	await doc.evaluate((d) => d.querySelector('.fragment')!.prepend(Object.assign(document.createElement('div'), { style: 'height: 1500px' })));
+	await expect.poll(offset).toBe(0);
+	// once the reader scrolls by their own hand, it is theirs
+	await doc.hover();
+	await page.mouse.wheel(0, -300);
+	await doc.evaluate((d) => d.querySelector('.fragment')!.prepend(Object.assign(document.createElement('div'), { style: 'height: 800px' })));
+	await expect.poll(offset).toBeGreaterThan(700);
+});
+
 test("Proposed edits says once what it watches and what it leaves to the person, and the accepted results say once that git gave the reviewer's name", async ({ page }) => {
 	let unwatched = ['config.toml', '/drafting/'];
 	await serve(page, (m) => {
@@ -451,6 +482,23 @@ test("Proposed edits says once what it watches and what it leaves to the person,
 	await open(page);
 	await page.getByTestId('review-kind-edits').click();
 	await expect(watched).toContainText('config.toml, /drafting/, /notes/.');
+});
+
+test('before any draft has compiled, no block in Review is named by its id: an unnumbered one by its title, else its kind and section', async ({ page }) => {
+	// no compile yet: the manifest numbers nothing
+	await serve(page, (m) => {
+		for (const n of Object.values(m.nodes) as { numbers: Record<string, unknown> }[]) n.numbers = {};
+	});
+	await open(page);
+	await page.getByTestId('review-kind-accepted-changed').click();
+	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
+	await accept.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
+	const names = await accept.locator('[data-testid="review-row"] .name').allInnerTexts();
+	expect(names.length).toBeGreaterThan(10);
+	for (const name of names) expect(name).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
+	expect(names).toContain('Main Theorem in Appendix: an incomplete argument');
+	await page.getByTestId('review-kind-edits').click();
+	for (const place of await page.getByTestId('change-where').allInnerTexts()) expect(place).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
 });
 
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {

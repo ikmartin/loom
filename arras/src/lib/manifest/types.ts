@@ -309,8 +309,12 @@ export interface UnresolvedReview {
   changed_text: boolean;
   /** Null means an older sync record has no post-pull baseline. */
   local_changed?: boolean | null;
-  /** Why loom cannot accept it, in the person's words; '' when it can. */
+  /** Why loom cannot accept it, as an agent reads it, naming a directive and keys; '' when it can. The viewer words `refusal_code` instead. */
   refusal: string;
+  /** The same reason as a code, '' when it can be accepted; absent from an older publisher. */
+  refusal_code?: '' | 'not-yours' | 'incomplete' | 'open-claim' | 'unclassified' | 'unidentified';
+  /** The person's own notes on a block marked incomplete, in their TeX; absent from an older publisher. */
+  incomplete?: string[];
 }
 
 export interface Acceptance {

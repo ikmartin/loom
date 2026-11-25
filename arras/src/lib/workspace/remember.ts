@@ -1,6 +1,7 @@
-// The workspace's address remembered across visits, per corpus, so `/` reopens what was open as it was left: a reload, or the next day, as well as a return from Review. In this browser only, as the display preferences are; a browser that cannot store it just starts at the default document.
+// The workspace's address remembered across visits, per quilt (keyed by `keptUnder`), so `/` reopens what was open as it was left: a reload, or the next day, as well as a return from Review. In this browser only, as the display preferences are; a browser that cannot store it just starts at the default document.
 
 import type { Manifest } from '$lib/manifest/types';
+import { keptUnder } from '$lib/manifest/kept.svelte';
 import { itemFromPath } from './item';
 
 const KEY = 'arras.workspace';
@@ -15,18 +16,20 @@ function read(): Record<string, string> {
 	}
 }
 
-/** The address last open in this corpus, or `''`. */
-export function remembered(corpus: string): string {
-	const at = read()[corpus];
+/** The address last open in the quilt kept under `key`, or `''`. */
+export function remembered(key: string): string {
+	const at = key ? read()[key] : undefined;
 	return typeof at === 'string' ? at : '';
 }
 
-/** Keep the address now open in this corpus. */
-export function remember(corpus: string, address: string): void {
+/** Keep the address now open in quilt `name`; nothing until `/_api` has said which quilt it is. */
+export function remember(name: string, address: string): void {
+	const key = keptUnder(name);
+	if (!key) return;
 	try {
 		const all = read();
-		if (all[corpus] === address) return;
-		all[corpus] = address;
+		if (all[key] === address) return;
+		all[key] = address;
 		globalThis.localStorage?.setItem(KEY, JSON.stringify(all));
 	} catch {
 		// a browser that cannot store it still has the address for this visit, in the workspace
@@ -35,7 +38,7 @@ export function remember(corpus: string, address: string): void {
 
 /** The address remembered for this corpus, when what its first pane opens is still in it; `''` otherwise, so a deleted draft falls through to the default, as a work does, which nothing the manifest says confirms. */
 export function rememberedIn(m: Manifest): string {
-	const at = remembered(m.corpus.name);
+	const at = remembered(keptUnder(m.corpus.name));
 	const it = at ? itemFromPath(m, at) : null;
 	if (!it) return '';
 	const there =

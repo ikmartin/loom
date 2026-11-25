@@ -27,6 +27,7 @@
 	import Said from '$lib/review/Said.svelte';
 	import Copies from '$lib/views/review/Copies.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
+	import Cannot from './Cannot.svelte';
 	import SaidOnce from './SaidOnce.svelte';
 	import { acceptSections, blockDocuments, changeGroups, type AcceptSection, type Part } from '$lib/views/review/yours';
 	import { review as reviewWords } from '$lib/words/review';
@@ -218,7 +219,7 @@
 				{#if acts && r && !r.refusal}<button class="btn small primary" disabled={!!busy} onclick={() => void accept([b.key], b.key)} data-testid="review-accept">{busy === b.key ? 'Accepting…' : 'Accept'}</button>{/if}
 			</span>
 		</div>
-		{#if r?.refusal}<p class="cannot" data-testid="review-refusal">Can't be accepted yet: {lower(r.refusal)}</p>{/if}
+		{#if r?.refusal}<Cannot row={r} testid="review-refusal" />{/if}
 		{#if said?.at === b.key}<Said text={said.text} refused={said.refused} testid="review-said" />{/if}
 	</li>
 {/snippet}
@@ -521,11 +522,6 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 6px;
-	}
-	.cannot {
-		margin: 4px 0 0;
-		font-size: 12.5px;
-		color: var(--ink-soft);
 	}
 	.muted {
 		color: var(--ink-soft);

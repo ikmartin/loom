@@ -1,7 +1,8 @@
 // The frame at each width the layout defines: the column open beside two panes; the column folded to its strip below 1200px; one pane below the workspace's two-pane width. At each, what must stay in reach does, every pane draws its toolbar, and nothing scrolls sideways; and the column's message, which goes by itself however the last one was ended.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane } from '../workspace';
-import { PDF } from '../manifest';
+import { PDF, serve } from '../manifest';
+import { wideFont } from '../fonts';
 
 async function open(page: Page, width: number): Promise<void> {
 	await page.route('**/_files/drafting/figures/fig.pdf', (route) => route.fulfill({ body: PDF, contentType: 'application/pdf' }));
@@ -196,4 +197,38 @@ test("a quilt an earlier loom made: the frame's head, one sentence and one butto
 	await button.click();
 	await expect(old).toHaveCount(0);
 	await expect(page.getByTestId('primary-docs')).toBeVisible();
+});
+
+test("in a wider font than this Mac's, every label in the four views' columns and the frame's head is one line, each count in view", async ({ page }) => {
+	// a pull, so Review's column holds its longest label too
+	await serve(page, (m) => {
+		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [], changes: [] };
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	for (const [at, column] of [['/master/drafting/main', 'docs-part'], ['/library?fixture=round6', 'library-column'], ['/web?fixture=round6', 'web-column'], ['/review?fixture=round6', 'review-column']]) {
+		await page.goto(at);
+		await expect(page.getByTestId('quilt-name')).toBeVisible();
+		await expect(page.getByTestId(column).locator('button, a, label').first()).toBeVisible();
+		await wideFont(page);
+		// each run of words in a label is one line: an outline's headings are the document's own and may wrap
+		const wrapped = await page.evaluate(() => {
+			const out: string[] = [];
+			const roots = [...document.querySelectorAll('[data-testid$="-column"], [data-testid="docs-part"], [data-testid="column"] .head, [data-testid="column"] nav.primary')];
+			for (const r of roots)
+				for (const el of r.querySelectorAll('button, a, label, .name')) {
+					if (el.closest('[data-testid="outline"]')) continue;
+					for (const t of el.childNodes) {
+						if (t.nodeType !== 3 || !t.textContent?.trim()) continue;
+						const range = document.createRange();
+						range.selectNodeContents(t);
+						const tops = new Set([...range.getClientRects()].filter((c) => c.width > 0).map((c) => Math.round(c.top)));
+						if (tops.size > 1) out.push(el.textContent!.trim());
+					}
+					const n = el.querySelector(':scope > .n');
+					if (n && n.getBoundingClientRect().right > el.getBoundingClientRect().right + 0.5) out.push(`${el.textContent!.trim()}: its count out of view`);
+				}
+			return out;
+		});
+		expect(wrapped, at).toEqual([]);
+	}
 });

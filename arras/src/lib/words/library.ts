@@ -161,6 +161,9 @@ export const library = {
 		asks: (name: string, stated: string, works: string[]) => (works.length === 1 ? `${name} states ${stated}, as ${works[0]} in your library does. Is it that work?` : `${name} states ${stated}, as ${works.length} works in your library do. Is it one of them?`),
 		/** The question where the file states nothing a work states: it was dropped on that work's row. */
 		asksOn: (name: string, short: string) => `Is ${name} ${short}, the work you dropped it on?`,
+		/** The question where every work it named has since been deleted: only whether the file is a work of its own. */
+		asksGone: (name: string, stated: string) => (stated ? `${name} states ${stated}, as a work since deleted from your library did. Add it as a work of its own?` : `The work ${name} was dropped on has since been deleted from your library. Add it as a work of its own?`),
+		ownWork: 'yes, a work of its own',
 		/** The answers: that it is the one work asked about, that it is a work of its own beside one or several. */
 		isIt: 'yes',
 		notIt: 'no, a work of its own',

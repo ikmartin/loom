@@ -736,10 +736,12 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('open-pdf')).toHaveAttribute('title', 'No PDF of this work is open');
 	});
 
-	test("a work the library no longer holds says so, its toolbar holding view and the pane's own line alone", async ({ page }) => {
+	test("a work the library no longer holds says so, its tab naming it a deleted work and its toolbar holding view and the pane's own line alone", async ({ page }) => {
 		await serveWork(page, 'sy-0098-ref');
 		await page.goto('/library/sy-0099-ref');
 		await expect(pane(page, 0).getByTestId('work-unread')).toHaveText('This work is no longer in the library.');
+		// its tab says what it is, where the library no longer gives it a name
+		await expect(pane(page, 0).getByTestId('item-tab').getByRole('tab')).toHaveText('a deleted work');
 		const bar = pane(page, 0).getByTestId('item-controls');
 		await expect(bar.getByTestId('zoom-fit')).toHaveCount(0);
 		await expect(bar.getByRole('button')).toHaveText(['view']);

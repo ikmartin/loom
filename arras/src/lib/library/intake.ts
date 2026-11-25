@@ -22,7 +22,7 @@ function tell(rows: api.TakeRow[], refused: string[]): void {
 		if (r.state === 'added') return message.post(words.add.added(r.title ?? r.name, r.short ?? '', words.add.foundBy[r.found_by ?? 'none'] ?? '', !!r.tex), undo);
 		if (r.state === 'here') return message.post(words.add.here(r.name, r.short ?? ''));
 		if (r.state === 'cannot') return message.post(words.add.cannot(r.name, whyNot(r)));
-		if (r.state === 'question') return ask(r);
+		if (r.state === 'question') return void ask(r, true);
 	}
 	const others = [
 		...rows.flatMap((r) => (r.state === 'here' ? [words.add.hereShort(r.name, r.short ?? '')] : r.state === 'cannot' ? [words.add.cannotShort(r.name, whyNot(r))] : r.state === 'question' ? [words.add.question(r.name)] : [])),
@@ -33,6 +33,8 @@ function tell(rows: api.TakeRow[], refused: string[]): void {
 
 /** The intake's questions this page knows of and has not settled, by id; and those closed unanswered, which wait in the manifest until a reload asks them again. */
 const waiting = new Map<string, api.TakeRow>();
+/** The questions whose works are being read before they are asked. */
+const reading = new Set<string>();
 const putOff = new Set<string>();
 
 type Candidate = NonNullable<api.TakeRow['candidates']>[number];
@@ -43,11 +45,18 @@ export function candidate(c: Candidate, all: readonly Candidate[]): string {
 	return c.title && c.title !== name && all.some((o) => o !== c && (o.short || o.title) === name) ? words.add.candidate(name, c.title) : name;
 }
 
-/** Asks a drop's question in the column: each work it may be, and a work of its own. */
-function ask(r: api.TakeRow): void {
+/** Asks a drop's question in the column: each work it may be that the library still holds, read afresh since a question waits across deletes, and a work of its own; with none left, only whether it is a work of its own. */
+async function ask(r: api.TakeRow, now = false): Promise<void> {
 	const id = r.question!;
-	const works = r.candidates ?? [];
-	const stated = works.find((c) => c.how)?.how ?? r.document?.identifiers[0];
+	if (reading.has(id)) return;
+	reading.add(id);
+	const held = await api.works();
+	reading.delete(id);
+	// while the works were read, the question was answered or closed, or, asked as the column fell quiet, something else was said
+	if (!waiting.has(id) || putOff.has(id) || (!now && message.said)) return;
+	const works = held.ok ? (r.candidates ?? []).filter((c) => held.value.works.some((w) => w.ref === c.ref)) : (r.candidates ?? []);
+	const stated = (r.candidates ?? []).find((c) => c.how)?.how ?? r.document?.identifiers[0];
+	if (!works.length) return message.post(words.add.asksGone(r.name, stated ? words.works.identifier(stated) : ''), undefined, { choices: [{ label: words.add.ownWork, act: () => settle(r, null) }], ondismiss: () => putOff.add(id) });
 	const text = stated ? words.add.asks(r.name, words.works.identifier(stated), works.map((c) => c.short)) : words.add.asksOn(r.name, works[0]?.short ?? '');
 	const choices =
 		works.length === 1
@@ -82,7 +91,7 @@ export function askWaiting(arriving?: api.TakeRow[]): void {
 	for (const r of arriving ?? []) if (r.state === 'question' && r.question && !waiting.has(r.question) && !putOff.has(r.question)) waiting.set(r.question, r);
 	if (message.said) return;
 	const next = [...waiting.values()].find((r) => !putOff.has(r.question!));
-	if (next) ask(next);
+	if (next) void ask(next);
 }
 
 /** Takes back every work one drop added, the last first; says the first that could not be. */
