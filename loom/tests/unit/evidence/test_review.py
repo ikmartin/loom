@@ -544,6 +544,39 @@ def test_a_citation_of_a_library_work_naming_no_result_is_listed_until_the_perso
         acts.mention(root, scan(load_quilt(root)), key, "tq-00B1-ref", PERSON)
 
 
+def test_a_mention_on_a_place_key_holds_once_a_label_keys_the_block_and_the_act_reads_a_key_as_the_records_do(
+    root: Path,
+) -> None:
+    """The one resolver (`evidence.web.blocks_named`) in the `cited` rows and the `mention` act: a mention made on a lemma's place key still lets its row go once a label keys the lemma; the act takes a place key and records the block's key now; a label two copies of the draft carry is refused `ambiguous`, naming each."""
+    from loom.evidence import acts
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    lemma = "\\begin{lemma}%s\nEvery widget is bounded, as in \\cite{Smi24}.\n\\end{lemma}\n\\end{document}"
+    text = (root / DOC).read_text(encoding="utf-8")
+    (root / DOC).write_text(text.replace("\\end{document}", lemma % ""), encoding="utf-8")
+    [row] = [r.to_dict() for r in _gather(root).of("cited")]
+    place = row["key"]
+    assert "#" in place, "a lemma with no label is keyed by its place"
+    acts.mention(root, scan(load_quilt(root)), place, "tq-00A1-ref", PERSON)
+    assert _gather(root).of("cited") == []
+    (root / DOC).write_text(text.replace("\\end{document}", lemma % "\\label{lem:widget}"), encoding="utf-8")
+    assert _gather(root).of("cited") == [], "the mention on its place key holds for the labelled lemma"
+    # the act takes the place key too, and records the block's key now
+    made = acts.mention(root, scan(load_quilt(root)), place, "tq-00A1-ref", PERSON, undo=True)
+    assert made.get("block")["key"] == "lem:widget"
+    assert [r.to_dict()["key"] for r in _gather(root).of("cited")] == ["lem:widget"]
+    # a copied draft defines the label again: the label names both, and the act wants one by its place
+    copy = root / "drafting" / "copy.tex"
+    copy.write_text((root / DOC).read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(acts.ActRefused) as caught:
+        acts.mention(root, scan(load_quilt(root)), "lem:widget", "tq-00A1-ref", PERSON)
+    assert caught.value.code == "ambiguous" and "drafting/copy.tex#" in str(caught.value)
+
+
 def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(root: Path) -> None:
     from loom.evidence import acts
     from loom.evidence.web import LibraryWeb

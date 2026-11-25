@@ -93,6 +93,7 @@ export const frame = {
 	},
 	/** What a refusal of loom's says, by its code: never loom's own message, which may name a setting, a field or an id. A code with none here says `errors.failed`. */
 	refused: {
+		ambiguous: 'That label is on a result in more than one copy of your draft, so loom cannot tell which you mean.',
 		'author-only': 'Only a person can do this; loom does not take it from an agent.',
 		'bad-entry': 'That is not a BibTeX entry loom can keep for this work.',
 		changed: 'It has changed since, so loom left it as it is.',

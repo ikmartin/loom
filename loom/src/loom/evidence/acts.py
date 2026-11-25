@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 class ActRefused(ValueError):
-    """An act loom will not record, and why: `code` is the write API's (`author-only`, `agent-only`, `no-such-node`, `no-such-result`, `changed`, `stub`, `no-document`, `no-such-proposal`, `closed`, `no-lean`, `unchecked`, `refused`), `diagnostics` the store's checks' where a node would not be written."""
+    """An act loom will not record, and why: `code` is the write API's (`author-only`, `agent-only`, `no-such-node`, `no-such-result`, `changed`, `stub`, `no-document`, `no-such-proposal`, `no-such-citation`, `ambiguous`, `closed`, `no-lean`, `unchecked`, `refused`), `diagnostics` the store's checks' where a node would not be written."""
 
     def __init__(self, code: str, message: str, diagnostics: list[Any] | None = None) -> None:
         super().__init__(message)
@@ -87,13 +87,14 @@ def document_of(root: Path, found: Node) -> dict[str, Any] | None:
 
 
 def bare_citation(result: ScanResult, key: str, citekey: str) -> int | None:
-    """Which of the citations in the block at `key` is the first that cites `citekey` and names no result of it, counted from 0 among the block's citations; None where it makes none now."""
-    from loom.evidence.web import DraftWeb, citations_in
+    """Which of the citations in the block `key` names now (`web.blocks_named`, as the records read a key) is the first that cites `citekey` and names no result of it, counted from 0 among the block's citations; None where it makes none now, or where the key names no one block."""
+    from loom.evidence.web import DraftWeb, blocks_named, citations_in
     from loom.scan.source import blank_comments
 
-    node = result.nodes.get(key)
-    if node is None:
+    named = blocks_named(result, key)
+    if len(named) != 1:
         return None
+    node = named[0]
     found = citations_in(blank_comments(DraftWeb(result).text(node)))
     return next((i for i, (k, locator) in enumerate(found) if k.casefold() == citekey.casefold() and not locator), None)  # fmt: skip
 
@@ -108,7 +109,7 @@ def mention(root: Path, result: ScanResult, key: str, ref: str, by: Who, *, undo
     result : ScanResult
         The quilt as scanned now, in which the block is found and by which it is found again (`records.locate.context_of`).
     key : str
-        The citing block.
+        The citing block, by its key as the records read one: its label key or its place key.
     ref : str
         The work cited, by its reference's id.
     by : Who
@@ -124,8 +125,9 @@ def mention(root: Path, result: ScanResult, key: str, ref: str, by: Who, *, undo
     Raises
     ------
     ActRefused
-        `author-only`; `no-such-citation` where the block does not now cite that work without naming a result of it.
+        `author-only`; `no-such-citation` where the block does not now cite that work without naming a result of it; `ambiguous` where the key is a label two copies of a draft carry, naming each by its place.
     """
+    from loom.evidence.web import blocks_named
     from loom.library.entries import read_entry
     from loom.library.store import read
     from loom.records.locate import block_hash, context_of
@@ -133,9 +135,14 @@ def mention(root: Path, result: ScanResult, key: str, ref: str, by: Who, *, undo
     _only(by, "person")
     work = read(root, ref)
     entry = read_entry(work.body) if work is not None else None
-    node = result.nodes.get(key)
-    if node is None or entry is None or bare_citation(result, key, entry.key) is None:
+    # the block as the records read a key: its place key once a label keys it, and a label two copies carry names neither alone
+    named = blocks_named(result, key)
+    if len(named) > 1:
+        raise ActRefused("ambiguous", f"{key} names {len(named)} blocks, one in each copy of its label; name one by its place: {', '.join(sorted(n.key for n in named))}")  # fmt: skip
+    node = named[0] if named else None
+    if node is None or entry is None or bare_citation(result, node.key, entry.key) is None:
         raise ActRefused("no-such-citation", "that block does not cite that work without naming a result now; reload")
+    key = node.key
     with _held(root):
         block = {"key": key, "hash": block_hash(result, key), "context": context_of(result, node)}
         return _write(root, "mention", by, block=block, cites=ref, undo=undo)

@@ -344,7 +344,8 @@ def _cited(
             seen: set[str] = set()
             for citekey, locator in citations_in(blank_comments(drafts.text(node))):
                 found = index.reference(citekey) if not locator else None
-                if found is None or found.id in seen or mention_holds(evidence, node.key, found.id):
+                # a mention's stored key read as the records read one, so one written on a place key holds once a label keys the block
+                if found is None or found.id in seen or mention_holds(evidence, node.key, found.id, drafts.named):
                     continue
                 seen.add(found.id)
                 where = _name(manifest, node.key, docs[0])
