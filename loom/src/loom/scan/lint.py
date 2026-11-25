@@ -195,20 +195,24 @@ def _person_pages(result: ScanResult) -> bool:
 
 
 def _writes_left(result: ScanResult) -> list[Diagnostic]:
-    """`loom:write-left`: a write the journal records on the person's files that recovery could neither finish nor undo, one per act at its first file, saying only what was checked and what makes it go, in plain words; a record recovery cannot trust is said with no file."""
-    from loom.writes import left
+    """`loom:write-left`: a write the journal records on the person's files that recovery could neither finish nor undo, one per act at its first file, saying only what was checked and what makes it go, in plain words; a record recovery cannot trust is said with no file.
+
+    Each carries the fix that settles it as it stands (`settling`): `act` the endpoint a viewer offers as its control, after showing `write-settle-preview`'s words, and the command an agent or installer reads; the act's id is in those alone, never in the words.
+    """
+    from loom.writes import left_acts
 
     out = []
-    for kind, files, why, settles in left(result.quilt.root, result.quilt.history_dir):
+    for act_id, kind, files, why, settles in left_acts(result.quilt.root, result.quilt.history_dir):
+        fix = [
+            Fix(
+                "settle it as it stands",
+                f"loom doctor --settle {act_id}",
+                {"endpoint": "write-settle", "body": {"act": act_id}},
+            )
+        ]
         if not files:
             out.append(
-                Diagnostic(
-                    "warning",
-                    "loom:write-left",
-                    f"{why[0].upper()}{why[1:]}.",
-                    [],
-                    owner="person",
-                )
+                Diagnostic("warning", "loom:write-left", f"{why[0].upper()}{why[1:]}.", [], fixes=fix, owner="person")
             )
             continue
         # the wording is the author's to judge (handover): no command, no id; what settles it is the verdict's own (`writes._judge`)
@@ -221,6 +225,7 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
                 "loom:write-left",
                 f"The journal records {kind} on {', '.join(files)} that loom could neither finish nor undo: {why}. {goes}",
                 [Location(files[0], 1)],
+                fixes=fix,
                 owner="person",
             )
         )

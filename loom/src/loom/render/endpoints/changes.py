@@ -191,6 +191,32 @@ def _compare(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         raise ApiError("unknown-item", str(exc), status=404) from exc
 
 
+def _settling(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """`write-settle-preview` and `write-settle`: what settling one write the door left as it stands does, in the person's words (`settling.Plan.said`), and the person's act that does it (`settling.settle`); `act` is the id the `loom:write-left` problem carries in its fix's `act`. Settling is the author's, refused to a declared agent."""
+    from loom import settling, writes
+    from loom.identity import is_agent
+    from loom.scan.quilt import load_quilt, reviewer_identity
+
+    act_id = _str(body, "act", required=True) or ""
+    history = load_quilt(root).history_dir
+    try:
+        if endpoint == "write-settle-preview":
+            return {"ok": True, **settling.preview(root, history, act_id).to_dict()}
+        who = reviewer_identity(root)[0]
+        if is_agent(_str(body, "author") or who):
+            raise ApiError(
+                "author-only",
+                "Settling a write is the author's; an agent says what it found in an annotation",
+                status=403,
+            )
+        plan = settling.settle(root, history, act_id, who)
+    except settling.SettleRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
+    except writes.WriteRefused as exc:
+        raise ApiError(exc.code, exc.message, status=exc.status) from exc
+    return {"ok": True, "result": f"settled {plan.kind} as it stands", **plan.to_dict()}
+
+
 HANDLERS: dict[str, Handler] = {
     "change-keep": _change,
     "change-discard": _change,
@@ -198,9 +224,11 @@ HANDLERS: dict[str, Handler] = {
     "history-record": _history,
     "history-restore": _history,
     "compare": plain(_compare),
+    "write-settle-preview": _settling,
+    "write-settle": _settling,
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
-READS: tuple[str, ...] = ("compare",)
+READS: tuple[str, ...] = ("compare", "write-settle-preview")
 #: The ones the publisher does not rebuild after.
 NO_REBUILD: tuple[str, ...] = READS
 #: The ones that change records alone, or keep a version, so the publication builds from the last scan.
