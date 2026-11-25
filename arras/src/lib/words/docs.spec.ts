@@ -5,7 +5,8 @@ describe("a draft that has not compiled since it changed", () => {
 	it("says TeX's messages it knows in the person's words, and any other as TeX said it", () => {
 		expect(docs.texError('Undefined control sequence.')).toBe('a command it uses is not defined');
 		expect(docs.texError('! Missing $ inserted.')).toBe('a formula is not closed, or mathematics stands outside one');
-		expect(docs.texError('LaTeX Error: File `widgets.sty\' not found.')).toBe('a file it reads is missing');
+		expect(docs.texError('LaTeX Error: File `widgets.sty\' not found.')).toBe('widgets.sty, a file it reads, is missing');
+		expect(docs.texError('! LaTeX Error: File `no-such-file-anywhere.tex\' not found.')).toBe('no-such-file-anywhere.tex, a file it reads, is missing');
 		expect(docs.texError('Paragraph ended before \\@caption was complete.')).toBe('Paragraph ended before \\@caption was complete');
 		expect(docs.texError('')).toBe('');
 	});

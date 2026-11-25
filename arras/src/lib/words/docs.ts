@@ -19,6 +19,9 @@ export const docs = {
 	/** TeX's message in the person's words where the viewer knows it, else as TeX said it; '' for none. */
 	texError: (error: string): string => {
 		const e = error.replace(/^!\s*/, '').trim();
+		// a file TeX could not find is named, being the person's own to put right
+		const file = /^(?:LaTeX Error: )?File [`'"‘]([^`'"’]+)['"’] not found/i.exec(e)?.[1];
+		if (file) return `${file}, a file it reads, is missing`;
 		return TEX.find(([re]) => re.test(e))?.[1] ?? e.replace(/\.$/, '');
 	},
 	work: {
