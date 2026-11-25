@@ -134,6 +134,50 @@ def _library_node(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     refuses(s, "library-node", {}, 400, "missing-field", "node is required")
 
 
+@case("library-digest")
+def _library_digest(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
+    from loom.evidence.asks import replay
+    from loom.library.jobs import jobs_of
+
+    s = serve(showcase(tmp_path))
+    q = s.quilt.root
+    done = succeeds(s, "library-digest", {"refs": [ARDEN], "scope": "all"})
+    assert done["made"] >= 8 and done["tasks"] == [] and "job" not in done and isinstance(done["gen"], int), done
+    assert succeeds(s, "library-digest", {"refs": [ARDEN], "scope": "all"})["made"] == 0, "nothing left to digest"
+    refuses(s, "library-digest", {"refs": [BELLAMY], "scope": "all"}, 409, "no-reviewer", "reviewer name")
+    from loom.scan.quilt import save_author
+
+    save_author("A. Author")
+    asked = succeeds(s, "library-digest", {"refs": [BELLAMY], "scope": "all"})
+    task = replay(q).asks[asked["tasks"][0]]
+    assert (len(asked["tasks"]), task.what, task.by.kind, asked["made"]) == (1, "digest", "person", 0), (
+        "the person's ask"
+    )
+    refuses(s, "library-digest", {"refs": [CORTEZ], "scope": "all"}, 409, "no-document", "neither")
+    # a source with no PDF to confirm its numbers by: the compile is the person's own act, run as a job
+    import io
+
+    from loom.library.intake import receive
+
+    source = b"\\documentclass{article}\n\\newtheorem{theorem}{Theorem}\n\\title{Gadget towers}\n\\begin{document}\n\\begin{theorem}\\label{thm:t}Every tower is finite.\\end{theorem}\n\\end{document}\n"
+    drop = receive(q, "gadget-towers.tex", io.BytesIO(source), len(source))["incoming"]
+    towers = succeeds(s, "library-take", {"items": [{"incoming": drop}], "online": False})["rows"][0]["ref"]
+    started = succeeds(s, "library-digest", {"refs": [towers], "scope": "all"})
+    assert started["job"] and started["made"] == 0 and jobs_of(q).idle(120), started
+    refuses(
+        s,
+        "library-digest",
+        {"refs": [ARDEN], "scope": "all", "author": "Claude Code Agent"},
+        403,
+        "author-only",
+        "only the author",
+    )
+    refuses(s, "library-digest", {"refs": [ARDEN], "scope": "some"}, 400, "bad-field", "scope is one of")
+    refuses(s, "library-digest", {"refs": [ARDEN], "scope": "chosen"}, 400, "bad-field", "chosen names")
+    refuses(s, "library-digest", {"scope": "all"}, 400, "missing-field", "refs is")
+    refuses(s, "library-digest", {"refs": ["sh-0ZZZ-ref"], "scope": "all"}, 404, "no-such-ref", "no work")
+
+
 @case("library-find")
 def _library_find(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
     s = serve(showcase(tmp_path))

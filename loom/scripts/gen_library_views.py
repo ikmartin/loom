@@ -9,7 +9,7 @@ How they are made:
 - Through the publisher's own handlers, in process: `render.api.handle` for every JSON endpoint, as `loom serve` calls it, and for `library-receive`, whose body is a file's bytes and not JSON, `endpoints.library.receive_stream` with the bytes as a stream, as the server calls it. A receive's `request` records what the server is sent beside the bytes: `{"name", "size"}`, the `?name=` of its query and its `Content-Length`.
 - With no network: every take, answer and look-up runs on a quilt whose network is off or unasked, the one look-up allowed the network is refused before it asks (its work states no identifier), and any attempt to resolve a name or open a connection ends the script.
 - With no TeX, and so no compile: `library-works` with `doc` answers `cited_as` null throughout, since a document's cite labels come from its compile; a work's outline is its source's survey as the unasked path makes it, numbered by its stored PDF's text, which poppler reads.
-- A work's results digested from its source by the library's own function, after the reads of a work as it was, so the reads of its nodes have nodes to read.
+- A work's results digested by `library-digest`, after the reads of a work as it was, so the reads of its nodes have nodes to read; the quilt names no reviewer here, so a digest that must ask an agent is refused (`no-reviewer`).
 - The reads first, on the quilt as it is, then the writes, each after the ones it needs, since a write changes what a read would answer.
 
 Under the fixed clock loom answers alike on every run: the works list's `gen` is the fixed time, and the ids the intake and the acts answer with (`x-…` acts, `q-…` questions, `u-…` undos) are drawn from one fixed sequence (`loom.records.ids`).
@@ -234,8 +234,11 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     call("library-node.item", "library-node", {"ref": ARDEN, "item": "lem:saturated"})
     call("library-find", "library-find", {"ref": BELLAMY, "q": "median order"})
     call("library-find.no-document", "library-find", {"ref": CORTEZ, "q": "Theorem"})
-    # Arden 2024 digested, then its nodes read beside their pages
-    lemma = _digest(root, ARDEN, "lem:saturated")
+    # Arden 2024 digested by the person, then its nodes read beside their pages
+    call("library-digest", "library-digest", {"refs": [ARDEN], "scope": "all"})
+    call("library-digest.no-reviewer", "library-digest", {"refs": [BELLAMY], "scope": "all"})
+    call("library-digest.no-document", "library-digest", {"refs": [CORTEZ], "scope": "all"})
+    lemma = _labelled(root, ARDEN, "lem:saturated")
     call("library-work.digested", "library-work", {"ref": ARDEN})
     call("library-node", "library-node", {"node": lemma})
     call("library-node.brief", "library-node", {"node": lemma, "brief": True})
@@ -306,20 +309,10 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     return out
 
 
-def _digest(root: Path, ref: str, label: str) -> str:
-    """Digest a work's every result from its source by the library's own function; the id of the result its source labels `label`."""
-    from loom.library.digest import digest, of_work
-    from loom.library.reads import surveyed
-    from loom.library.store import read
-    from loom.scan.quilt import load_quilt
-    from loom.scan.scan import scan
+def _labelled(root: Path, ref: str, label: str) -> str:
+    """The id of the node of a work digested from the result its source labels `label`."""
+    from loom.library.digest import of_work
 
-    work = read(root, ref)
-    assert work is not None
-    s = surveyed(root, work)
-    assert s is not None and s.state == "ready", f"{ref}'s survey is {s and s.state}"
-    done = digest(scan(load_quilt(root)), ref, [i.item for i in s.items], s)
-    assert not done.waiting, done.waiting
     return next(n.id for n in of_work(root, ref) if n.label == label)
 
 

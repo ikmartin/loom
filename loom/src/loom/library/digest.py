@@ -9,6 +9,7 @@ import re
 from collections.abc import Iterable, Iterator
 from contextlib import nullcontext
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,7 @@ from loom.scan.tokenize import match_group, read_mandatory, read_optional, skip_
 
 if TYPE_CHECKING:
     from loom.evidence.log import Evidence
+    from loom.evidence.subjects import Who
     from loom.library.intake import Library
     from loom.scan.scan import ScanResult
 
@@ -34,7 +36,7 @@ _HEADINGS = frozenset({"part", "chapter", "section", "subsection", "subsubsectio
 
 
 class DigestRefused(ValueError):
-    """A digest loom will not run: `code` is `no-such-ref`, `no-source` (the work holds no TeX source) or `reading` (its survey is not ready)."""
+    """A digest loom will not run: `code` is `no-such-ref`, `no-source` (the work holds no TeX source), `reading` (its survey is not ready), `no-document` (a work named holds neither document) or `no-reviewer` (an ask with no name to record)."""
 
     def __init__(self, code: str, message: str) -> None:
         super().__init__(message)
@@ -141,6 +143,179 @@ def digest(
         raise DigestRefused("reading", f"the survey of {ref}'s source is {s.state}")
     with writing(root) if write else nullcontext():
         return _Run(result, work, s, write, closure).run(list(dict.fromkeys(items)))
+
+
+#: What a digest takes of a work (`library-digest`'s `scope`).
+SCOPES = ("used", "marked", "chosen", "all")
+#: Each scope as the asks log words it (`evidence.asks.SCOPES`).
+_ASKED = {"used": "uses", "marked": "marked", "chosen": "chosen", "all": "all"}
+
+
+@dataclass
+class Asked:
+    """What the person's digest did: `made` the nodes written now, `tasks` the asks made of an agent for works held only as a PDF, `job` the job compiling a source first where one was started, and `waiting` each work's results that wait, with why."""
+
+    made: int = 0
+    tasks: list[str] = field(default_factory=list)
+    job: str | None = None
+    waiting: dict[str, dict[str, str]] = field(default_factory=dict)
+
+
+def digest_works(
+    result: ScanResult, refs: list[str] | None, scope: str, chosen: list[str] | None, *, by: Who | None, online: bool
+) -> Asked:
+    """`library-digest`: the person digests works by a scope, each as what it holds allows.
+
+    From a TeX source loom writes the nodes now, from its survey (`digest`); where the work holds no PDF to confirm its numbers by and no compile has judged it, the compile is started first as a job, the person's own act (`survey.complete`), and the nodes are written when it is done. A work held only as a PDF gets one ask of an agent, which waits in Review.
+
+    Parameters
+    ----------
+    result : ScanResult
+        The quilt's scan, its citations resolved.
+    refs : list of str or None
+        The works; None for every work holding a document, those the drafts cite for `used`.
+    scope : str
+        One of `SCOPES`: what the drafts cite (with what their statements use in the same work), the person's marks, the results `chosen` names, or all.
+    chosen : list of str or None
+        For `chosen`: survey items, and nodes for stubs the survey does not hold, which stay as they are.
+    by : Who or None
+        The person, by the name an ask records; None where the quilt names none, which only an ask needs.
+    online : bool
+        Whether a compile may fetch what the source's text names and loom's TeX lacks.
+
+    Returns
+    -------
+    Asked
+
+    Raises
+    ------
+    DigestRefused
+        `no-such-ref`; `no-document` for a work named that holds neither document; `no-reviewer` where an agent must be asked and the person has no name to ask by.
+    """
+    from loom.evidence.asks import ask
+    from loom.library.jobs import jobs_of
+    from loom.library.reads import surveyed
+    from loom.library.store import read
+
+    root = result.quilt.root
+    out = Asked()
+    if refs is None:
+        cited = {c.ref for c in result.edges.cites if c.ref}
+        held = [n.id for n in (read(root, r) for r in _references(root)) if n is not None and (n.tex or n.pdf)]
+        refs = [r for r in held if scope != "used" or r in cited]
+        named = False
+    else:
+        named = True
+    for ref in refs:
+        work = read(root, ref) if ids.kind_of(ref) == ids.REFERENCE else None
+        if work is None:
+            raise DigestRefused("no-such-ref", f"the library has no work {ref[:80]}")
+        if not work.tex and not work.pdf:
+            if named:
+                raise DigestRefused("no-document", f"{ref} holds neither a PDF nor a TeX source to digest from")
+            continue
+        if work.tex:
+            s = surveyed(root, work)
+            if s is None or s.state != "ready":
+                out.waiting[ref] = {"": f"its source's survey is {s.state if s else 'missing'}: {s.why if s else ''}"}
+                continue
+            if s.why == "no-pdf" and not s.compiled:
+                out.job = jobs_of(root).submit(partial(_compiled, root, ref, scope, chosen, online))
+                continue
+            done = digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used")
+            out.made += len(done.made) + len(done.filled) + len(done.rewritten)
+            if done.waiting:
+                out.waiting[ref] = done.waiting
+            continue
+        fields = _for_reader(result, ref, scope, chosen)
+        if fields is not None:
+            if by is None:
+                raise DigestRefused("no-reviewer", "an ask records who asks: choose your reviewer name in Settings")
+            out.tasks.append(ask(root, by, "digest", "agent", {"ref": ref}, ref=ref, scope=_ASKED[scope], **fields).id)
+    return out
+
+
+def _references(root: Path) -> list[str]:
+    from loom.library.store import node_ids
+
+    return [i for i in node_ids(root) if ids.kind_of(i) == ids.REFERENCE]
+
+
+def scoped(result: ScanResult, ref: str, s: Survey, scope: str, chosen: list[str] | None) -> list[str]:
+    """The survey's items a scope takes of a work: what the drafts cite (`used`), every item no node holds with its text (`all`), the items `chosen` names and those of the stubs it names, or the items the person's marks to digest are on (`marked`): a mark naming a stub, that stub's item; one naming none, the item on its page whose opening words it holds."""
+    from loom.refs.search import _loose
+
+    root = result.quilt.root
+    if scope == "used":
+        return used(result, ref, s)
+    if scope == "all":
+        return undigested(root, ref, s)
+    held = matched(s, [n for n in of_work(root, ref) if n.kind == ids.STATEMENT])
+    of_node = {n.id: item for item, n in held.items()}
+    if scope == "chosen":
+        return [c for c in chosen or [] if s.item(c) is not None] + [of_node[c] for c in chosen or [] if c in of_node]
+    from loom.library.reads import _to_digest
+
+    out: list[str] = []
+    for ra in _to_digest(result, ref):
+        a = ra.annotation
+        if a.node:
+            out += [of_node[a.node]] if a.node in of_node else []
+            continue
+        page = ra.page or a.page or (a.anchor.page if a.anchor is not None else None)
+        words = _loose(a.selector.exact).lower() if a.selector is not None else ""
+        out += [i.item for i in s.items if i.page == page and i.opening and i.opening.lower()[:24] in words]
+    return list(dict.fromkeys(out))
+
+
+def _for_reader(result: ScanResult, ref: str, scope: str, chosen: list[str] | None) -> dict[str, Any] | None:
+    """What an ask of an agent to digest a work held only as a PDF names: the stubs the drafts cite (`used`), the marks (`marked`), the nodes `chosen` names, or nothing for `all`; None where the scope takes nothing."""
+    from loom.library.reads import marks
+
+    root = result.quilt.root
+    if scope == "all":
+        return {}
+    if scope == "marked":
+        named = [m["mark"] for m in marks(result, ref)]
+        return {"marks": named} if named else None
+    if scope == "chosen":
+        nodes = [c for c in chosen or [] if c in {n.id for n in of_work(root, ref)}]
+        return {"nodes": nodes} if nodes else None
+    stubs = sorted({n for c in result.edges.cites if c.ref == ref for n in c.nodes if n})
+    stubs = [n for n in stubs if (got := _read(root, n)) is not None and got.empty]
+    return {"nodes": stubs} if stubs else None
+
+
+def _read(root: Path, node: str) -> Node | None:
+    from loom.library.store import read
+
+    return read(root, node)
+
+
+def _compiled(root: Path, ref: str, scope: str, chosen: list[str] | None, online: bool) -> None:
+    """The job a digest starts for a work whose numbers nothing confirms: its source compiled, the person's own act, and then the scope digested from that survey, on a scan made under the id lock."""
+    from loom.library import documents, survey
+    from loom.library.citations import resolve
+    from loom.library.gather import writing
+    from loom.library.store import read
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+
+    work = read(root, ref)
+    if work is None or not work.tex:
+        return
+    src = documents.source_dir(root, work.tex)
+    main = documents.main_file(src)
+    if main is None:
+        return
+    pdf = documents.path_of(root, work.pdf, "pdf") if work.pdf else None
+    s = survey.complete(root, work.tex, src, main.relative_to(src).as_posix(), work.pdf, pdf, online=online)
+    if s.state != "ready":
+        return
+    with writing(root):
+        result = scan(load_quilt(root))
+        resolve(result)
+        digest(result, ref, scoped(result, ref, s, scope, chosen), s, closure=scope == "used")
 
 
 def used(result: ScanResult, ref: str, s: Survey) -> list[str]:

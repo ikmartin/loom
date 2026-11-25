@@ -318,7 +318,15 @@ def test_a_write_larger_than_the_publisher_reads_is_refused_before_it_is_read(se
 
 
 #: The endpoints whose cases read a stored PDF's text or word boxes, which the real poppler gives.
-POPPLER = ("locate", "library-places", "library-work", "library-digest-scopes", "library-node", "library-find")
+POPPLER = (
+    "locate",
+    "library-places",
+    "library-work",
+    "library-digest-scopes",
+    "library-node",
+    "library-find",
+    "library-digest",
+)
 
 
 @pytest.mark.parametrize(

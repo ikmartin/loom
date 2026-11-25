@@ -210,6 +210,48 @@ def _library_find(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     return _read(find, _scan(root), _str(body, "ref", required=True) or "", q)
 
 
+def _library_digest(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+    """`library-digest` (library-views.md §3.2): the person digests works by a scope, from a TeX source now or after the compile its numbers need, which is then their job, and from a work held only as a PDF by asking an agent; the author's."""
+    from loom.evidence.subjects import Who
+    from loom.library.digest import SCOPES, DigestRefused, digest_works
+    from loom.scan.quilt import load_quilt
+
+    who = _author(root, body)
+    refs = body.get("refs")
+    if refs != "all" and not (isinstance(refs, list) and refs and all(isinstance(r, str) and r for r in refs)):
+        raise ApiError("missing-field" if refs is None else "bad-field", "refs is a list of works, or all")
+    scope = _str(body, "scope", required=True) or ""
+    if scope not in SCOPES:
+        raise ApiError("bad-field", f"scope is one of {', '.join(SCOPES)}")
+    chosen = body.get("chosen")
+    if scope == "chosen" and not (isinstance(chosen, list) and chosen and all(isinstance(c, str) for c in chosen)):
+        raise ApiError("bad-field", "chosen names the results chosen, a list of items and nodes")
+    config = load_quilt(root).config
+    try:
+        done = digest_works(
+            _scan(root),
+            None if refs == "all" else list(refs),
+            scope,
+            chosen if scope == "chosen" else None,
+            by=Who("person", who) if who else None,
+            online=bool(config.online_asked and config.online),
+        )
+    except DigestRefused as exc:
+        raise ApiError(exc.code, str(exc), status=404 if exc.code == "no-such-ref" else 409) from exc
+    said = (
+        f"digested {done.made}"
+        + (f", asked {len(done.tasks)}" if done.tasks else "")
+        + (", compiling first" if done.job else "")
+    )
+    return {
+        "ok": True,
+        "result": said,
+        "made": done.made,
+        "tasks": done.tasks,
+        **({"job": done.job} if done.job else {}),
+    }
+
+
 def _library_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     """The person's acts on one work (library-views.md §3.1, §7): `library-look-up`, `library-entry`, `library-delete` and `library-restore`; the author's."""
     from loom.library.acts import ActRefused, delete, edit_entry, look_up, restore
@@ -384,6 +426,7 @@ HANDLERS: dict[str, Handler] = {
     "library-digest-scopes": plain(_library_digest_scopes),
     "library-node": plain(_library_node),
     "library-find": plain(_library_find),
+    "library-digest": plain(_library_digest),
     "library-receive": plain(_library_receive),
     "library-take": _intake,
     "library-answer": _intake,
