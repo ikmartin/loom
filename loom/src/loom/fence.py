@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import functools
 import os
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -69,7 +70,7 @@ def _tried() -> str | None:
     return None
 
 
-def fenced(argv: list[str], *, stage: Path, out: Path) -> list[str]:
+def fenced(argv: list[str], *, stage: Path, out: Path, var: Path | None = None) -> list[str]:
     """`argv` run inside the fence where it is up (`state`), and `argv` itself where it is not.
 
     Parameters
@@ -80,28 +81,93 @@ def fenced(argv: list[str], *, stage: Path, out: Path) -> list[str]:
         The folder of staged sources the run reads, and may write.
     out : Path
         The folder the run writes its output into.
+    var : Path, optional
+        The run's own TeX cache (`run_var`), which it reads and writes; default loom's seed (`texmf_var`), for a run of loom's own.
 
     Returns
     -------
     list of str
         The command to start: `sandbox-exec` with the profile and its parameters, then `argv`; or `argv` unchanged.
     """
-    return argv if state() is not None else _argv(argv, stage, out)
+    return argv if state() is not None else _argv(argv, stage, out, var)
 
 
-def _argv(argv: list[str], stage: Path, out: Path) -> list[str]:
+def _argv(argv: list[str], stage: Path, out: Path, var: Path | None = None) -> list[str]:
     """`sandbox-exec` running `argv` under the profile, each place a `-D` parameter, resolved: a path is never written into the profile's text."""
     places = {"STAGE": os.path.realpath(stage), "OUT": os.path.realpath(out), **_machine()}
+    if var is not None:
+        places["TEXMFVAR"] = os.path.realpath(var)
     return [SANDBOX, "-f", str(PROFILE), *(x for name, at in places.items() for x in ("-D", f"{name}={at}")), *argv]
 
 
 def texmf_var() -> Path:
-    """Loom's own TeX cache for fenced runs, which they read and write as their `TEXMFVAR`: the fonts METAFONT draws and LuaTeX's font database, kept between runs and apart from the person's own cache, which a fenced run never writes."""
+    """Loom's own seed of the TeX cache fenced runs start from, kept between runs and apart from the person's own cache: LuaTeX's font database, which only loom writes (`_fill`). A document's run is given a clone of it (`run_var`) and never writes it, so no compile leaves anything here for another to read."""
     from loom.machine import data_dir
 
     p = data_dir() / "fenced-texmf-var"
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+#: LuaTeX's font database in a TeX cache, by which a run's rescan of the fonts is seen (`after_run`).
+NAMES = "luatex-cache/generic/names/luaotfload-names.luc.gz"
+
+
+def run_var(folder: Path, *, lua: bool) -> Path:
+    """A TeX cache of a fenced run's own, `folder`/texmf-var, for its `TEXMFVAR`: a copy-on-write clone of loom's seed (`texmf_var`), so what the run writes there goes with it.
+
+    For a LuaTeX run the seed's font database is made first where it has none (`_fill`), about 10 s once, which an empty cache would cost every run; with it, a font the seed lacks costs a run a fraction of a second. Where no clone can be made the seed is copied, and where no copy either the cache starts empty, and the run is only slower; a later pass of the same run in the same `folder` keeps its own.
+    """
+    from loom.locks import locked
+
+    seed, clone = texmf_var(), folder / "texmf-var"
+    if clone.is_dir():
+        return clone  # a later pass of the same run keeps the cache it began with
+    with locked(seed.parent / "fenced-texmf-var.lock"):
+        if lua and not (seed / NAMES).is_file():
+            _fill(seed)
+        cloned = subprocess.run(["/bin/cp", "-c", "-R", str(seed), str(clone)], capture_output=True, check=False)
+        if cloned.returncode != 0:
+            # a folder on another volume takes no clone: a plain copy of the seed, which is small
+            try:
+                shutil.copytree(seed, clone, dirs_exist_ok=True)
+            except OSError:
+                clone.mkdir(parents=True, exist_ok=True)
+    return clone
+
+
+def after_run(clone: Path) -> None:
+    """Once a fenced LuaTeX run is over: where the font database in its cache differs from the seed's, as when the run rescanned the fonts for one installed since, loom makes the seed's again itself (`_fill`), never taking the run's, so the next run finds the font without rescanning."""
+    from loom.locks import locked
+
+    seed = texmf_var()
+    theirs, ours = clone / NAMES, seed / NAMES
+    try:
+        if not theirs.is_file() or (ours.is_file() and ours.read_bytes() == theirs.read_bytes()):
+            return
+    except OSError:
+        return
+    with locked(seed.parent / "fenced-texmf-var.lock"):
+        _fill(seed)
+
+
+def _fill(seed: Path) -> None:
+    """Make the seed's LuaTeX font database with `luaotfload-tool --update`, loom's own command, which reads the fonts and no document; inside the fence where it is up, with only the seed to write, so it finds the fonts a fenced run can read. Call holding the seed's lock."""
+    from loom.tex.runner import tex_env
+
+    env = tex_env()
+    tool = shutil.which("luaotfload-tool", path=env.get("PATH"))
+    if tool is None:
+        return
+    with tempfile.TemporaryDirectory(prefix="loom-fill-") as tmp:
+        argv = [tool, "--update"]
+        if state() is None:
+            argv = _argv(argv, Path(tmp), Path(tmp), seed)
+        env = {**env, "TEXMFVAR": str(seed), "TMPDIR": tmp, "PWD": tmp}
+        try:
+            subprocess.run(argv, cwd=tmp, env=env, capture_output=True, timeout=600, check=False)
+        except subprocess.TimeoutExpired:
+            return
 
 
 def _machine() -> dict[str, str]:
