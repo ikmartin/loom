@@ -317,9 +317,13 @@ def test_a_write_larger_than_the_publisher_reads_is_refused_before_it_is_read(se
     assert status == 413 and said["error"]["code"] == "too-large"
 
 
+#: The endpoints whose cases read a stored PDF's text or word boxes, which the real poppler gives.
+POPPLER = ("locate", "library-places", "library-work", "library-digest-scopes", "library-node", "library-find")
+
+
 @pytest.mark.parametrize(
     "endpoint",
-    [pytest.param(e, marks=pytest.mark.poppler) if e == "locate" else e for e in sorted(CASES)],
+    [pytest.param(e, marks=pytest.mark.poppler) if e in POPPLER else e for e in sorted(CASES)],
 )
 def test_each_endpoint_writes_and_refuses_over_the_wire(
     endpoint: str, serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

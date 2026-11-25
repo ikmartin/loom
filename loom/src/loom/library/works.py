@@ -89,6 +89,15 @@ def _words(body: str) -> tuple[str, str, str, list[str], str, str | None, str | 
     )
 
 
+def described(body: str) -> dict[str, Any] | None:
+    """A reference's entry as a read names its work: `short`, `title`, `authors`, `year` and `link`; None for a body holding no entry."""
+    words = _words(body)
+    if words is None:
+        return None
+    _key, named, titled, authors, when, page, _version, _stated = words
+    return {"short": named, "title": titled, "authors": list(authors), "year": when, "link": page}
+
+
 def works(result: ScanResult, *, doc: str | None = None) -> list[dict[str, Any]]:
     """Every work in the library as a row of the works list.
 

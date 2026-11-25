@@ -1,4 +1,4 @@
-"""Write docs/specs/fixture/views/library-*.json: for each read and write of the Library view that the publisher serves (docs/specs/write-api.md §2 and §6, library-views.md §3.1 and §3.5), a sample request and the answer loom gives it, one file each. The viewer's unit tests read these files, so its client and its sample data cannot drift from what loom sends.
+"""Write docs/specs/fixture/views/library-*.json: for each read and write of the Library view that the publisher serves (docs/specs/write-api.md §2 and §6, library-views.md §3.1 to §3.5 and §6.2), a sample request and the answer loom gives it, one file each. The viewer's unit tests read these files, so its client and its sample data cannot drift from what loom sends.
 
 Each file is `{"endpoint", "request", "answer"}`, named for its endpoint and, where there are several, for what it shows (`library-take.question.json`). `answer` is the JSON the publisher serves, its `ok` and `result` included; a refusal's is the publisher's `{"error": {"code", "message"}}` with `status`, the HTTP status, beside it. Nothing is written but these files, and none another step writes: the folder is shared with the evidence lane's samples.
 
@@ -8,7 +8,8 @@ How they are made:
 - Under an empty home and a fixed clock, with no agent's marker in the environment, so the person who acts is the one the quilt's `[author]` names.
 - Through the publisher's own handlers, in process: `render.api.handle` for every JSON endpoint, as `loom serve` calls it, and for `library-receive`, whose body is a file's bytes and not JSON, `endpoints.library.receive_stream` with the bytes as a stream, as the server calls it. A receive's `request` records what the server is sent beside the bytes: `{"name", "size"}`, the `?name=` of its query and its `Content-Length`.
 - With no network: every take, answer and look-up runs on a quilt whose network is off or unasked, the one look-up allowed the network is refused before it asks (its work states no identifier), and any attempt to resolve a name or open a connection ends the script.
-- With no TeX, and so no compile: `library-works` with `doc` answers `cited_as` null throughout, since a document's cite labels come from its compile.
+- With no TeX, and so no compile: `library-works` with `doc` answers `cited_as` null throughout, since a document's cite labels come from its compile; a work's outline is its source's survey as the unasked path makes it, numbered by its stored PDF's text, which poppler reads.
+- A work's results digested from its source by the library's own function, after the reads of a work as it was, so the reads of its nodes have nodes to read.
 - The reads first, on the quilt as it is, then the writes, each after the ones it needs, since a write changes what a read would answer.
 
 Under the fixed clock loom answers alike on every run: the works list's `gen` is the fixed time, and the ids the intake and the acts answer with (`x-…` acts, `q-…` questions, `u-…` undos) are drawn from one fixed sequence (`loom.records.ids`).
@@ -223,6 +224,24 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     call("library-places.page", "library-places", {"ref": BELLAMY, "pages": [2]})
     call("library-places.unchanged", "library-places", {"ref": BELLAMY, "since": placed["gen"]})
     call("library-places.no-document", "library-places", {"ref": CORTEZ})
+    # a work's tab: its outline, before anything of it is digested; held as a PDF alone; held as neither
+    call("library-work", "library-work", {"ref": ARDEN})
+    call("library-work.pdf", "library-work", {"ref": BELLAMY})
+    call("library-work.no-document", "library-work", {"ref": CORTEZ})
+    call("library-digest-scopes", "library-digest-scopes", {"ref": ARDEN})
+    call("library-digest-scopes.pdf", "library-digest-scopes", {"ref": BELLAMY})
+    call("library-digest-scopes.all", "library-digest-scopes", {"all": True})
+    call("library-node.item", "library-node", {"ref": ARDEN, "item": "lem:saturated"})
+    call("library-find", "library-find", {"ref": BELLAMY, "q": "median order"})
+    call("library-find.no-document", "library-find", {"ref": CORTEZ, "q": "Theorem"})
+    # Arden 2024 digested, then its nodes read beside their pages
+    lemma = _digest(root, ARDEN, "lem:saturated")
+    call("library-work.digested", "library-work", {"ref": ARDEN})
+    call("library-node", "library-node", {"node": lemma})
+    call("library-node.brief", "library-node", {"node": lemma, "brief": True})
+    call("library-node.no-such-node", "library-node", {"node": "sh-0ZZZ"})
+    call("library-places.nodes", "library-places", {"ref": ARDEN, "pages": [1, 2]})
+    call("library-places.node", "library-places", {"node": lemma})
 
     # -- a drop on the quilt that has not said whether loom may use the network (library-views.md Open 36): received, refused, taken again with `online: false`, and undone; and a look-up there
     paper = receive("library-receive", "2209.01234v2.pdf", _pdf("2209.01234v2"), on=unasked)
@@ -285,6 +304,23 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     gone = call("library-delete", "library-delete", {"ref": ARDEN})
     call("library-restore", "library-restore", {"undo": gone["undo"]})
     return out
+
+
+def _digest(root: Path, ref: str, label: str) -> str:
+    """Digest a work's every result from its source by the library's own function; the id of the result its source labels `label`."""
+    from loom.library.digest import digest, of_work
+    from loom.library.reads import surveyed
+    from loom.library.store import read
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+
+    work = read(root, ref)
+    assert work is not None
+    s = surveyed(root, work)
+    assert s is not None and s.state == "ready", f"{ref}'s survey is {s and s.state}"
+    done = digest(scan(load_quilt(root)), ref, [i.item for i in s.items], s)
+    assert not done.waiting, done.waiting
+    return next(n.id for n in of_work(root, ref) if n.label == label)
 
 
 def _stored_pdf(root: Path, ref: str) -> bytes:
