@@ -75,6 +75,21 @@ def test_a_paper_closes_when_its_work_holds_the_document_wanted(root: Path) -> N
     assert not _standing(root, p, Library(held={("tq-00B1-ref", "pdf")})).open
 
 
+def test_a_paper_closes_once_the_librarys_own_reference_holds_the_document(root: Path) -> None:
+    """Over the library's web (`LibraryWeb.holds`): open while the work is an entry alone, closed once its reference names the PDF the intake filed."""
+    from loom.evidence.web import LibraryWeb
+    from loom.library.node import Node, node_bytes
+    from loom.library.store import folder
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    entry = "@article{B,\n  title = {B},\n}\n"
+    (folder(root) / "tq-00B1-ref.node").write_bytes(node_bytes(Node(id="tq-00B1-ref", taxon="reference", body=entry)))
+    p = ask(root, AGENT, "paper", "person", {"ref": "tq-00B1-ref"}, ref="tq-00B1-ref", link="https://doi.org/10.1000/x.17", want="pdf")  # fmt: skip
+    assert _standing(root, p, LibraryWeb(root)).open
+    (folder(root) / "tq-00B1-ref.node").write_bytes(node_bytes(Node(id="tq-00B1-ref", taxon="reference", pdf="sha256:" + "4" * 64, body=entry)))  # fmt: skip
+    assert not _standing(root, p, LibraryWeb(root)).open
+
+
 def _lean(root: Path, target: Subject, statement: str, ok: bool = True) -> None:
     write(
         root,

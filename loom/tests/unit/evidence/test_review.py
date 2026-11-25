@@ -480,6 +480,103 @@ def test_a_row_to_attest_opens_on_the_lean_its_notation_and_what_it_uses_that_wa
     assert body["supporting"] == [] and "body" not in row.to_dict()
 
 
+def test_digested_results_to_check_are_a_row_a_work_and_a_correction_a_row_with_its_word_diff(root: Path) -> None:
+    """`check`: the statements with a text not compared on their text now, by work, a stub never; one compared leaves; an agent's correction of a compared text is a row of its own, its body the word diff, gone once taken."""
+    from loom.evidence import acts
+    from loom.evidence.web import LibraryWeb
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    rows = lambda: [r.to_dict() for r in _gather(root).of("check")]  # noqa: E731
+    [work] = rows()
+    assert (work["ref"], work["short"], work["pdf"]) == ("tq-00A1-ref", "Smith 2024", "sha256:41b7c0a9e3f2d5681c94ab07e6d3f81290ce5b47a8d1036f2e9c7b54a0d8e163")  # fmt: skip
+    assert [(n["node"], n["number"], n["title"], n["rests"]) for n in work["nodes"]][:2] == [("tq-00A4", "2.1", "Widget", {"docs": []}), ("tq-00K3", "3.2", "Test lemma", {"docs": []})]  # fmt: skip
+    assert "tq-00B7" not in [n["node"] for n in work["nodes"]], "a stub is read before it is checked"
+    shown = LibraryWeb(root).subject(Here("node", "tq-00A4"))
+    assert shown is not None
+    acts.check(root, "tq-00A4", shown.hash, PERSON)
+    [work] = rows()
+    assert "tq-00A4" not in [n["node"] for n in work["nodes"]]
+    data = (folder(root) / "tq-00A4.node").read_bytes()
+    _said, proposal = acts.propose(root, "tq-00A4", data.replace(b"compact set", b"closed set", 1), AGENT, "page 4")
+    [_, correction] = [r for r in _gather(root).of("check")]
+    said = correction.to_dict()
+    assert (said["correction"], said["node"], said["short"], said["by"]) == (proposal.id, "tq-00A4", "Smith 2024", "Probe Agent")  # fmt: skip
+    body = review.body_of(correction, {})
+    assert body["compared_at"] is not None and ["-", "compact"] in [[k, w.strip()] for k, w in body["runs"]] and ["+", "closed"] in [[k, w.strip()] for k, w in body["runs"]]  # fmt: skip
+    assert "".join(w for k, w in body["runs"] if k != "+") == data.decode().split("+++")[2].lstrip("\n")
+    assert said["refusal"] is None, "the take is offered"
+    acts.take(root, proposal.id, PERSON)
+    assert [r["kind"] for r in rows() if "correction" in r] == []
+
+
+def test_a_citation_of_a_library_work_naming_no_result_is_listed_until_the_person_calls_it_a_mention(
+    root: Path,
+) -> None:
+    """`cited`: `\\cite{Smi24}` in a lemma names no result of Smith 2024, so it is a row; `\\cite[Theorem 2]{Jon19}` names one and a key no work has is no row; the person's `mention` lets it go, and taking it back lists it again."""
+    from loom.evidence import acts
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    _edit(
+        root,
+        "on a tree vanishes",
+        "on a tree vanishes \\cite{Smi24}, as in \\cite[Theorem 2]{Jon19} and \\cite{Nobody99}",
+    )
+    key = _key(root, "lem:balanced")
+    rows = lambda: [r.to_dict() for r in _gather(root).of("cited")]  # noqa: E731
+    [row] = rows()
+    assert (row["ref"], row["short"], row["citekey"], row["key"], row["doc"]) == ("tq-00A1-ref", "Smith 2024", "Smi24", key, DOC)  # fmt: skip
+    assert row["citation"] == f"tq-00A1-ref@{key}"
+    [cited] = _gather(root).of("cited")
+    assert review.body_of(cited, {})["cite"]["nth"] == 0
+    acts.mention(root, scan(load_quilt(root)), key, "tq-00A1-ref", PERSON)
+    assert rows() == []
+    acts.mention(root, scan(load_quilt(root)), key, "tq-00A1-ref", PERSON, undo=True)
+    assert [r["citekey"] for r in rows()] == ["Smi24"]
+    with pytest.raises(acts.ActRefused, match="does not cite"):
+        acts.mention(root, scan(load_quilt(root)), key, "tq-00B1-ref", PERSON)
+
+
+def test_a_mention_on_a_place_key_holds_once_a_label_keys_the_block_and_the_act_reads_a_key_as_the_records_do(
+    root: Path,
+) -> None:
+    """The one resolver (`evidence.web.blocks_named`) in the `cited` rows and the `mention` act: a mention made on a lemma's place key still lets its row go once a label keys the lemma; the act takes a place key and records the block's key now; a label two copies of the draft carry is refused `ambiguous`, naming each."""
+    from loom.evidence import acts
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    lemma = "\\begin{lemma}%s\nEvery widget is bounded, as in \\cite{Smi24}.\n\\end{lemma}\n\\end{document}"
+    text = (root / DOC).read_text(encoding="utf-8")
+    (root / DOC).write_text(text.replace("\\end{document}", lemma % ""), encoding="utf-8")
+    [row] = [r.to_dict() for r in _gather(root).of("cited")]
+    place = row["key"]
+    assert "#" in place, "a lemma with no label is keyed by its place"
+    acts.mention(root, scan(load_quilt(root)), place, "tq-00A1-ref", PERSON)
+    assert _gather(root).of("cited") == []
+    (root / DOC).write_text(text.replace("\\end{document}", lemma % "\\label{lem:widget}"), encoding="utf-8")
+    assert _gather(root).of("cited") == [], "the mention on its place key holds for the labelled lemma"
+    # the act takes the place key too, and records the block's key now
+    made = acts.mention(root, scan(load_quilt(root)), place, "tq-00A1-ref", PERSON, undo=True)
+    assert made.get("block")["key"] == "lem:widget"
+    assert [r.to_dict()["key"] for r in _gather(root).of("cited")] == ["lem:widget"]
+    # a copied draft defines the label again: the label names both, and the act wants one by its place
+    copy = root / "drafting" / "copy.tex"
+    copy.write_text((root / DOC).read_text(encoding="utf-8"), encoding="utf-8")
+    with pytest.raises(acts.ActRefused) as caught:
+        acts.mention(root, scan(load_quilt(root)), "lem:widget", "tq-00A1-ref", PERSON)
+    assert caught.value.code == "ambiguous" and "drafting/copy.tex#" in str(caught.value)
+
+
 def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(root: Path) -> None:
     from loom.evidence import acts
     from loom.evidence.web import LibraryWeb
@@ -503,7 +600,9 @@ def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(r
     [row] = listed()
     said = row.to_dict()
     assert said["what"] == "statement only" and said["paper"] == "matches" and said["docs"] == []
-    assert said["name"] == "lemma 3.2" and said["source"] == {"ref": "tq-00A1-ref", "short": None}
+    assert said["name"] == "lemma 3.2" and said["source"] == {"ref": "tq-00A1-ref", "short": "Smith 2024"}
     body = review.body_of(row, {})
     assert body["observation"] == lean.id and body["statement"]["body"].startswith("Let $W$ be a widget")
-    assert body["notation"] is None, "its work's macros are not read yet"
+    # its notation, its work's macros node's rows its text uses, each not yet attested in its definition
+    assert [(n["part"], n["from"], n["attested"]) for n in body["notation"]] == [("Wid", "macros", False), ("diam", "macros", False)]  # fmt: skip
+    assert body["statement"]["macros"]["node"] == "tq-00A1-macros" and "\\Wid" in body["statement"]["macros"]["body"]

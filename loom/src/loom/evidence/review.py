@@ -281,6 +281,111 @@ def _library_results(evidence: Evidence, web: Web, lean_now: Callable[[Record], 
     return out
 
 
+def _check(
+    root: Path, evidence: Evidence, web: Web, library: LibraryWeb, lean_now: Callable[[Record], bool]
+) -> list[Row]:
+    """Digested results to check (library-views.md §4.3, `check`): a row a work, its statements with a text not compared with their paper on their text now; and a row for each open correction an agent proposed, with the word diff of the two bodies.
+
+    No draft rests on a library result until citations resolve to results, so `rests` names no document yet and the rows are in the order of their works.
+    """
+    from loom.evidence.subjects import is_node
+    from loom.library.store import node_ids, read
+
+    by_work: dict[str, list[dict[str, Any]]] = {}
+    corrections: list[Row] = []
+    for node in node_ids(root):
+        if not is_node(node, "statement"):
+            continue
+        found = status(evidence, web, Here("node", node), lean_now=lean_now)
+        held = library.file(node)
+        if found.subject is None or held is None:
+            continue
+        ref = held[1].source or ""
+        if found.reading == "unchecked":
+            by_work.setdefault(ref, []).append(
+                {
+                    "node": node,
+                    "name": node_name(held[1]),
+                    "number": held[1].number,
+                    "title": held[1].title,
+                    "rests": {"docs": []},
+                    "how": found.how,
+                }  # fmt: skip
+            )
+        if found.proposal is not None:
+            corrections.append(_correction(root, evidence, library, node, held[1], found.proposal))
+    out = []
+    for ref, nodes in sorted(by_work.items()):
+        work = read(root, ref) if ref else None
+        out.append(Row(f"check:{ref or 'none'}", "check", (), fields={"ref": ref or None, "short": library.short(ref), "pdf": work.pdf if work is not None else None, "nodes": nodes}))  # fmt: skip
+    return out + corrections
+
+
+def _cited(
+    root: Path, drafts: DraftWeb, manifest: dict[str, Any], evidence: Evidence, library: LibraryWeb
+) -> list[Row]:
+    """Cited results to digest (library-views.md §4.3, `cited`): each citation, in a block of the person's documents, of a library work that names no result of it, while no `mention` of it holds; its body the citing block and which of its citations it is. A stub a draft rests on is listed once citations resolve to results."""
+    from loom.evidence.acts import bare_citation
+    from loom.evidence.asks import mention_holds
+    from loom.evidence.web import citations_in
+    from loom.library.index import NodeIndex
+    from loom.library.store import folder
+    from loom.scan.source import blank_comments
+
+    result = drafts.result
+    if not folder(root).is_dir():
+        return []
+    out: list[Row] = []
+    with NodeIndex.open(root) as index:
+        for node in sorted(drafts.blocks, key=lambda n: n.key):
+            docs = [d for d in node.reached_by if result.document_role(d) == "person"]
+            if not docs:
+                continue
+            seen: set[str] = set()
+            for citekey, locator in citations_in(blank_comments(drafts.text(node))):
+                found = index.reference(citekey) if not locator else None
+                # a mention's stored key read as the records read one, so one written on a place key holds once a label keys the block
+                if found is None or found.id in seen or mention_holds(evidence, node.key, found.id, drafts.named):
+                    continue
+                seen.add(found.id)
+                where = _name(manifest, node.key, docs[0])
+                cite = {"doc": docs[0], "key": node.key, "where": where, "fragment": manifest.get("nodes", {}).get(node.key, {}).get("fragment"), "nth": bare_citation(result, node.key, citekey)}  # fmt: skip
+                fields = {"citation": f"{found.id}@{node.key}", "doc": docs[0], "key": node.key, "where": where, "ref": found.id, "short": library.short(found.id), "citekey": citekey}  # fmt: skip
+                out.append(
+                    Row(f"cited:{found.id}@{node.key}", "cited", tuple(docs), fields=fields, body={"cite": cite})
+                )
+    return out
+
+
+def _correction(root: Path, evidence: Evidence, library: LibraryWeb, node: str, held: Any, proposal: str) -> Row:
+    """An open correction as a `check` row: whose it is, why taking it would be refused now (`refusal`, by take's own check, `acts.take_refusal`; null where it would be taken, the take offered only then), and as its body when the person compared the text it would replace and the word diff of the two bodies (`runs`, `=` kept, `-` the person's words, `+` the agent's)."""
+    from loom.evidence.acts import take_refusal
+    from loom.library.node import NodeUnreadable, read_node
+    from loom.pending import cut
+
+    found = evidence.by_id(proposal)
+    assert found is not None and found.on is not None
+    try:
+        new = read_node(str(found.get("bytes")).encode("utf-8"), f"{node}.node").body
+    except NodeUnreadable:
+        new = ""
+    old = held.body
+    runs: list[list[str]] = []
+    at = 0
+    for o0, o1, n0, n1 in cut(old, new):
+        runs += [["=", old[at:o0]]] if o0 > at else []
+        runs += [["-", old[o0:o1]]] if o1 > o0 else []
+        runs += [["+", new[n0:n1]]] if n1 > n0 else []
+        at = o1
+    runs += [["=", old[at:]]] if at < len(old) else []
+    compared = [
+        r.at for r in evidence.about("node", node, of="compared") if r.on is not None and r.on.hash == found.on.hash
+    ]
+    refused = take_refusal(root, proposal)
+    fields = {"correction": proposal, "node": node, "name": node_name(held), "ref": held.source, "short": library.short(held.source), "by": found.by.name, "refusal": str(refused) if refused else None}  # fmt: skip
+    return Row(f"check:{proposal}", "check", (), since=found.at, fields=fields, body={"compared_at": compared[-1] if compared else None, "runs": runs})  # fmt: skip
+
+
 def _attested_changed(results: list[_Result], manifest: dict[str, Any], evidence: Evidence) -> list[Row]:
     """A result whose attestation no longer holds, each keyed by its result (its first block), so one label on two texts is two rows.
 
@@ -394,7 +499,10 @@ def _attest(
                 fields={
                     "result": node,
                     "name": node_name(held[1]) if held else node,
-                    "source": {"ref": held[1].source if held else None, "short": None},
+                    "source": {
+                        "ref": held[1].source if held else None,
+                        "short": library.short(held[1].source) if held else None,
+                    },  # fmt: skip
                     "what": "statement only",
                     "paper": found.reading,
                     "record": found.lean_record,
@@ -422,7 +530,7 @@ def _attest_body(
         statement: dict[str, Any] = {"fragment": manifest.get("nodes", {}).get(here.name, {}).get("fragment")}
     else:
         held = library.file(here.name)
-        statement = {"body": held[1].body if held else None, "macros": None}
+        statement = {"body": held[1].body if held else None, "macros": library.macros(held[1].source) if held else None}
     rows = web.notation(here)
     notation = (
         None
@@ -529,8 +637,8 @@ def gather(
     gathered.rows = {
         "questions": _questions(asks, asks_log.replay(root).asks),
         "fetch": _fetch(asks),
-        "cited": [],
-        "check": [],
+        "cited": _cited(root, drafts, manifest, evidence, library),
+        "check": _check(root, evidence, web, library, lean_now),
         "attest": _attest(
             results, _library_results(evidence, web, lean_now), manifest, evidence, web, library, lean_now
         ),

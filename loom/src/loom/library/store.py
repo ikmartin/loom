@@ -199,6 +199,13 @@ def write_node(root: Path, node: Node, *, new: bool = False) -> str:
     return write_nodes(root, [node], new=new)[0]
 
 
+def check_against(root: Path, node: Node) -> list[Diagnostic]:
+    """What the library's checks find in `node`'s file against the library as it stands now, as `write_nodes` checks each file it writes (`check_file` over the index with the node laid over it), writing nothing: for an act that must know a write would be taken before it records anything."""
+    with NodeIndex.open(root) as index:
+        _n, found = check_file(file_name(node.id), node_bytes(node), _Batch(index, {node.id: node}))
+    return found
+
+
 def write_nodes(root: Path, nodes: Iterable[Node], *, new: bool = False) -> list[str]:
     """Write several nodes' files as one act, checked together: each against itself, the others and the library, so results that point at each other go in at once.
 

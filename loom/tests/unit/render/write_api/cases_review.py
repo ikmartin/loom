@@ -77,6 +77,7 @@ def _review_counts(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 def _review_list(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     s, _root, question = _asked(serve, tmp_path)
     listed = succeeds(s, "review-list", {"kind": "questions"})
+    assert isinstance(listed["gen"], int)
     [group] = listed["groups"]
     assert group["kind"] == "questions" and group["rows"][0]["question"] == question
     agents = succeeds(s, "review-list", {"kind": "agents"})

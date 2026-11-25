@@ -16,6 +16,7 @@ from typing import Any
 
 from loom.clock import stamp
 from loom.evidence.subjects import HASH, Subject, Who, is_node, is_work, name_problem
+from loom.library.node import pages_problem
 from loom.locks import locked
 from loom.paths import EVIDENCE_LOG
 from loom.records.ids import EVIDENCE, draw
@@ -310,7 +311,10 @@ def _document(value: Any, what: str, *, pages: bool) -> None:
         raise ValueError(f"{what}'s ref is not a reference's id")
     _hash(value[held[0]], f"{what}'s {held[0]}")
     if "pages" in value:
-        _text(value["pages"], f"{what}'s pages", empty=False, most=40)
+        # a node's pages as its file gives them, by the store's own rule
+        said = pages_problem(value["pages"])
+        if said:
+            raise ValueError(f"{what}'s pages {said}")
 
 
 def _digested(raw: dict[str, Any], by: Who) -> Subject:
@@ -514,21 +518,50 @@ def write(root: Path, kind: str, by: Who, *, on: Subject | None = None, **fields
     EvidenceRefused
         When the record is not of its kind's shape; nothing was written.
     """
-    at = stamp()
-    line: dict[str, Any] = {"kind": kind, "at": at, "by": by.to_dict(), **fields}
-    if on is not None:
-        line["on"] = on.to_dict()
+    line = _line(kind, by, on, fields)
+    at = line["at"]
     path = log_path(root)
     # checked before the lock too, since taking it makes the log's file: a refusal writes nothing at all
-    try:
-        parse({**line, "id": f"ev-{at[:10]}-0"})
-    except ValueError as exc:
-        raise EvidenceRefused(str(exc)) from None
     with locked(path):
         line["id"] = draw(f"ev-{at[:10]}-", replay(root).ids())
         record = parse(line)
         append_line(path, json.dumps(line, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
     return record
+
+
+def check(kind: str, by: Who, *, on: Subject | None = None, **fields: Any) -> None:
+    """Whether `write` would take this record, writing nothing: an act that writes a file checks each record it will make first, so a record the log would refuse leaves the file as it was.
+
+    Parameters
+    ----------
+    kind : str
+        One of `KINDS`.
+    by : Who
+        Who acts.
+    on : Subject, optional
+        The text it is about.
+    **fields
+        The kind's own fields.
+
+    Raises
+    ------
+    EvidenceRefused
+        As `write` would, for a record not of its kind's shape.
+    """
+    _line(kind, by, on, fields)
+
+
+def _line(kind: str, by: Who, on: Subject | None, fields: dict[str, Any]) -> dict[str, Any]:
+    """A record's line as `write` appends it, its id still to draw, checked by its kind's rules (`parse`)."""
+    at = stamp()
+    line: dict[str, Any] = {"kind": kind, "at": at, "by": by.to_dict(), **fields}
+    if on is not None:
+        line["on"] = on.to_dict()
+    try:
+        parse({**line, "id": f"ev-{at[:10]}-0"})
+    except ValueError as exc:
+        raise EvidenceRefused(str(exc)) from None
+    return line
 
 
 def append_line(path: Path, text: str) -> None:
