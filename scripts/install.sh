@@ -90,11 +90,11 @@ for i in data["items"]:
         print(f"loom: {i['name']}: {i['detail']}" + (f" ({i['remedy']})" if i["remedy"] else ""))
 sys.exit(1 if items["tex"]["status"] == "fail" else 0)
 EOF
-# 5. Loom in Applications, which opens the home page; then the home page itself
+# 5. loom's app in Applications, which opens the home page (it says its name: Loom, or another where an app is called Loom); then the home page itself
 if [ "$(uname -s)" = Darwin ]; then
-  "$LOOM" app --install >/dev/null || fail "could not write Loom.app in ~/Applications"
-  say "Loom is in your Applications folder: open it to see your quilts"
+  installed=$("$LOOM" app --install) || fail "could not write loom's app in ~/Applications"
+  printf '%s\n' "$installed" | while IFS= read -r line; do say "$line"; done
 fi
 "$LOOM" app --open >/dev/null || fail "loom's home page did not start"
 say "loom's home page is open in your browser; a quilt already open there restarts with this loom by itself"
-[ -z "${tex_failed:-}" ] || fail "TeX is not ready: open Loom and choose Repair TeX"
+[ -z "${tex_failed:-}" ] || fail "TeX is not ready: choose Repair TeX on loom's home page"

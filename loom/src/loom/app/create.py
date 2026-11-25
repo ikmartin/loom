@@ -1,16 +1,20 @@
 """A new quilt from what the person drops on the home page: the files kept where they wait, an archive opened, the paper's main file found, the quilt made and the paper brought in through the door's one `import` act, then served.
 
 Dropped files wait in `app/incoming/<drop>/files/` in loom's folder for the machine: outside every quilt and never under a cache, so nothing loom sweeps can take them before they are used. A drop goes once its quilt is made, or `KEEP_DAYS` after it was last added to.
+
+A quilt comes into being whole or not at all: it is made in a hidden folder beside its place (`.loom-making-<key>/<name>`) and moved into its place by one rename at the end. A record in `app/making/` names that folder while the create runs, so the home's next start clears whatever a create cut short left (`recover`).
 """
 
 from __future__ import annotations
 
 import gzip
 import json
+import os
 import re
 import secrets
 import shutil
 import tarfile
+import threading
 import time
 import zipfile
 from collections.abc import Callable
@@ -30,6 +34,8 @@ KEEP_DAYS = 14
 #: Where a new quilt goes unless the person chooses another place: outside the folders macOS asks before a program reads.
 PLACE = "Quilts"
 _DROP = re.compile(r"[0-9a-f]{16}")
+#: The hidden folder beside a new quilt's place that it is made in, before it is moved into its place.
+_NEST = re.compile(r"\.loom-making-[0-9a-f]{16}")
 _COMMENT = re.compile(r"(?<!\\)%.*")
 
 
@@ -40,6 +46,43 @@ class _Reads(Protocol):
 def incoming() -> Path:
     """The folder each drop waits in, one folder a drop."""
     return folder() / "incoming"
+
+
+def making() -> Path:
+    """The records of the quilts being made, one a create, which the home's next start reads to clear what a create cut short left."""
+    return folder() / "making"
+
+
+class Makings:
+    """The quilts a home is making: one create at a time a folder, and none moved into its place once the home is stopping."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        #: Each folder a create runs for, resolved, with the hidden folder it is being made in once there is one.
+        self.running: dict[Path, Path | None] = {}
+        self.closed = False
+
+    def claim(self, where: Path) -> None:
+        """Hold `where` for one create; ApiError `exists` while another create is making a quilt there."""
+        with self.lock:
+            if self.closed:
+                raise ApiError("stopping", "loom's home is stopping", status=503)
+            if where.resolve() in self.running:
+                raise ApiError("exists", "a quilt of that name is being made there already", status=409)
+            self.running[where.resolve()] = None
+
+    def release(self, where: Path) -> None:
+        """Let go of `where` once its create has ended, whichever way."""
+        with self.lock:
+            self.running.pop(where.resolve(), None)
+
+    def close(self) -> None:
+        """End every create running, as the home stops: what each has made so far is removed and none is moved into its place after; the records stay, so the next start clears anything made after this."""
+        with self.lock:
+            self.closed = True
+            for nest in self.running.values():
+                if nest is not None:
+                    shutil.rmtree(nest, ignore_errors=True)
 
 
 def _drop_dir(drop: str) -> Path:
@@ -191,9 +234,12 @@ def mains(src: Path) -> list[str]:
     found = []
     for p in sorted(src.rglob("*.tex")):
         rel = p.relative_to(src)
-        if any(part.startswith(".") or part == "__MACOSX" for part in rel.parts):
+        if any(part.startswith(".") or part == "__MACOSX" for part in rel.parts) or not p.is_file():
             continue
-        text = _COMMENT.sub("", p.read_text(encoding="utf-8", errors="replace"))
+        try:
+            text = _COMMENT.sub("", p.read_text(encoding="utf-8", errors="replace"))
+        except OSError:
+            continue
         if "\\documentclass" in text and "\\begin{document}" in text:
             found.append(rel.as_posix())
     return found
@@ -231,9 +277,15 @@ def paper(drop: str, main: str | None) -> Path | list[str]:
 
 
 def make(
-    where: Path, main: Path | None, step: Callable[[str], None], start: Callable[[Entry], dict[str, Any]]
+    where: Path,
+    main: Path | None,
+    step: Callable[[str], None],
+    start: Callable[[Entry], dict[str, Any]],
+    makings: Makings | None = None,
 ) -> dict[str, Any]:
     """Make the quilt at `where`, bring in the paper at `main` when there is one, put it on the list as open and serve it.
+
+    The quilt is made beside `where` and moved there in one rename once it is whole; whatever stops the create first leaves nothing in `where`.
 
     Parameters
     ----------
@@ -245,6 +297,8 @@ def make(
         Told each step as it begins: `making`, `importing`, `starting`.
     start : callable
         Serves the quilt's entry and answers its state.
+    makings : Makings, optional
+        The home's creates, which hold the move back once the home is stopping; default one of its own.
 
     Returns
     -------
@@ -252,52 +306,109 @@ def make(
         `{quilt, folder, tex, state, url?}`, and with a paper `{document, typeset, untypeset, differs}`: `differs` when the drafted document does not typeset as the paper did, which is then brought in all the same and nothing reads as checked.
     """
     from loom.cli.paper import Differs, run_import
-    from loom.cli.quilt import undo_minimal_quilt, write_minimal_quilt
+    from loom.cli.quilt import write_minimal_quilt
     from loom.config_edit import set_values
     from loom.errors import ContentError, EnvError
     from loom.looks import first
     from loom.scan.quilt import load_quilt
     from loom.tex import private
 
-    existed = where.exists()
-    step("making")
-    made = write_minimal_quilt(where, "q", readme=False)
+    makings = makings if makings is not None else Makings()
+    key = secrets.token_hex(8)
+    nest = where.parent / f".loom-making-{key}"
+    staged = nest / where.name
+    record = making() / f"{key}.json"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(json.dumps({"nest": str(nest), "where": str(where)}) + "\n", encoding="utf-8")
     done: dict[str, Any] = {"folder": str(where)}
-    if main is not None:
-        step("importing")
-        try:
+    try:
+        with makings.lock:
+            if makings.closed:
+                raise ApiError("stopping", "loom's home is stopping", status=503)
+            makings.running[where.resolve()] = nest
+        step("making")
+        nest.mkdir(parents=True)
+        write_minimal_quilt(staged, "q", readme=False)
+        if main is not None:
+            step("importing")
             try:
-                brought = run_import(load_quilt(where), main, True, fix_anchors=True)
-                done["differs"] = False
-            except Differs:
-                brought = run_import(load_quilt(where), main, True, check=False, fix_anchors=True)
-                done["differs"] = True
-        except Exception as exc:
-            # whatever stopped it, no half-made quilt is left to refuse the next try as "inside a quilt"
-            undo_minimal_quilt(where, existed, made)
-            if isinstance(exc, (ContentError, EnvError, OSError)):
+                try:
+                    brought = run_import(load_quilt(staged), main, True, fix_anchors=True)
+                    done["differs"] = False
+                except Differs:
+                    brought = run_import(load_quilt(staged), main, True, check=False, fix_anchors=True)
+                    done["differs"] = True
+            except (ContentError, EnvError, OSError) as exc:
                 said = str(exc).splitlines()[0] if str(exc) else type(exc).__name__
                 raise ApiError("cannot-import", said, 409) from exc
-            raise
-        document = brought.data["document"]
-        # the quilt opens on the paper, not on a page about loom
-        set_values(load_quilt(where), {"quilt.home": document})
-        done.update(document=document, typeset=brought.data["typeset"], untypeset=brought.data["untypeset"])
-    first(load_quilt(where))
+            document = brought.data["document"]
+            # the quilt opens on the paper, not on a page about loom
+            set_values(load_quilt(staged), {"quilt.home": document})
+            done.update(document=document, typeset=brought.data["typeset"], untypeset=brought.data["untypeset"])
+        first(load_quilt(staged))
+        with makings.lock:
+            if makings.closed:
+                raise ApiError("stopping", "loom's home is stopping", status=503)
+            try:
+                os.rename(staged, where)  # the one step: the quilt is whole in its place, or not there
+            except OSError as exc:
+                raise ApiError("exists", "a folder of that name is there already", status=409) from exc
+            makings.running[where.resolve()] = None  # in its place: nothing of it is the stop's to remove
+    except BaseException:
+        shutil.rmtree(nest, ignore_errors=True)
+        if not nest.exists():
+            record.unlink(missing_ok=True)
+        raise
+    # the quilt is in its place: were the home stopped now, its next start would put it on the list (`recover`)
     entry = registry.remember(where)
     registry.set_open(entry.id, True)
     entry.open = True
+    nest.rmdir()
+    record.unlink()
     step("starting")
     return {**done, "quilt": entry.id, "tex": private.active(year=False).kind, **start(entry)}
 
 
-def sweep() -> None:
-    """Remove every drop last added to more than `KEEP_DAYS` ago."""
-    cutoff = time.time() - KEEP_DAYS * 86400
-    if not incoming().is_dir():
+def recover() -> None:
+    """Clear what each create cut short left, as the home starts: the hidden folder it was making the quilt in is removed, and a quilt it had moved into its place already is put on the list as open."""
+    from loom.scan.quilt import is_quilt_root
+
+    try:
+        records = sorted(making().glob("*.json"))
+    except OSError:
         return
-    for d in incoming().iterdir():
-        newest = max((p.stat().st_mtime for p in d.rglob("*")), default=d.stat().st_mtime)
+    for record in records:
+        try:
+            said = json.loads(record.read_text(encoding="utf-8"))
+            nest, where = Path(said["nest"]), Path(said["where"])
+        except (OSError, ValueError, KeyError, TypeError):
+            record.unlink(missing_ok=True)
+            continue
+        if not _NEST.fullmatch(nest.name):
+            record.unlink(missing_ok=True)  # a record names nothing but a create's own folder
+            continue
+        try:
+            if not (nest / where.name).exists() and is_quilt_root(where):
+                registry.set_open(registry.remember(where).id, True)
+        except registry.Unreadable:
+            continue  # kept for a start that can read the list
+        shutil.rmtree(nest, ignore_errors=True)
+        if not nest.exists():
+            record.unlink(missing_ok=True)
+
+
+def sweep() -> None:
+    """Remove every drop last added to more than `KEEP_DAYS` ago. Nothing a drop holds can stop it: each file's own time is read, never through a link, and a drop that cannot be read is old."""
+    cutoff = time.time() - KEEP_DAYS * 86400
+    try:
+        drops = list(incoming().iterdir())
+    except OSError:
+        return
+    for d in drops:
+        try:
+            newest = max((p.lstat().st_mtime for p in d.rglob("*")), default=d.lstat().st_mtime)
+        except OSError:
+            newest = 0.0
         if newest < cutoff:
             shutil.rmtree(d, ignore_errors=True)
 

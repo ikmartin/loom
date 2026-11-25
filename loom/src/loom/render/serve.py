@@ -859,6 +859,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     **discovery(),
                     "token": self.token,
                     **({"quilt": self.quilt_id} if self.quilt_id else {}),
+                    # the home stops a server it found at the pid the server gives here, never at one a file names
+                    "pid": os.getpid(),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,

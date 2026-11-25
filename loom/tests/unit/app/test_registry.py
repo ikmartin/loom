@@ -1,4 +1,4 @@
-"""The home's list of quilts (`loom.app.registry`): each quilt keeps one port for good, no port passes to another quilt, a copy is another quilt, and `loom serve` takes the port its quilt keeps.
+"""The home's list of quilts (`loom.app.registry`): each quilt keeps one port for good, no port passes to another quilt, a copy is another quilt, a list that cannot be read is kept and gives nothing, a port another program holds on any address is passed over, and `loom serve` takes the port its quilt keeps.
 
 Every test runs under the suite's own HOME and XDG folders (`conftest.isolated_env`), so the list is a temporary one.
 """
@@ -65,6 +65,38 @@ def test_a_port_something_else_holds_is_passed_over(tmp_path: Path, monkeypatch:
         taken = held.getsockname()[1]
         monkeypatch.setattr(registry, "FIRST_PORT", taken)
         assert registry.remember(quilt(tmp_path / "q")).port != taken
+
+
+@pytest.mark.parametrize(
+    ("family", "host"), [(socket.AF_INET, "0.0.0.0"), (socket.AF_INET6, "::1")], ids=["every address", "IPv6 loopback"]
+)
+def test_a_port_another_program_holds_on_every_address_or_the_ipv6_loopback_is_not_free(
+    family: socket.AddressFamily, host: str
+) -> None:
+    """A quilt's server binds 127.0.0.1, which the system allows beside such a listener: two programs would answer on one port."""
+    with socket.socket(family, socket.SOCK_STREAM) as held:
+        held.bind((host, 0))
+        held.listen()
+        assert not registry.free(held.getsockname()[1])
+
+
+def test_a_list_that_cannot_be_read_is_kept_and_no_port_is_given(tmp_path: Path) -> None:
+    """Begun again from nothing, it would give the first port again, to a quilt whose viewer then reads another quilt's layout."""
+    first = registry.remember(quilt(tmp_path / "q"))
+    listed = registry.folder() / "quilts.json"
+    torn = listed.read_text()[:20]
+    listed.write_text(torn)
+    for change in (
+        lambda: registry.remember(quilt(tmp_path / "other")),
+        lambda: registry.readdress(first.id),
+        lambda: registry.set_open(first.id, True),
+        lambda: registry.forget(first.id),
+        registry.entries,
+    ):
+        with pytest.raises(registry.Unreadable):
+            change()
+    assert listed.read_text() == torn
+    assert registry.port_of(tmp_path / "q") is None  # loom serve still starts
 
 
 def test_another_port_is_given_on_asking_and_the_old_one_is_kept_from_others(tmp_path: Path) -> None:

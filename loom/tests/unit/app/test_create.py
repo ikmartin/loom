@@ -1,4 +1,4 @@
-"""A new quilt from what is dropped on the home page (`loom.app.create`): a `.tex`, a folder, a `.tar.gz`, a `.zip` and a lone gzip each make a quilt whose document is drafted; an archive that reaches outside is refused and writes nothing outside; a paper that cannot typeset, or whose draft typesets differently, still comes in; several candidates make a question; and the drop is gone once the quilt is made.
+"""A new quilt from what is dropped on the home page (`loom.app.create`): a `.tex`, a folder, a `.tar.gz`, a `.zip` and a lone gzip each make a quilt whose document is drafted; an archive that reaches outside is refused and writes nothing outside; a paper that cannot typeset, or whose draft typesets differently, still comes in; several candidates make a question; the drop is gone once the quilt is made; a quilt comes into being whole or not at all, whatever stops its create; two creates of one name make one quilt; and nothing a drop holds stops the home starting.
 
 Each test runs under the suite's own HOME and XDG folders, with the fake TeX on PATH.
 """
@@ -8,9 +8,15 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import os
+import signal
+import subprocess
+import sys
 import tarfile
+import threading
+import time
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +26,7 @@ from loom.app import create, registry
 from loom.app.registry import Entry
 from loom.app.server import Home
 from loom.render.endpoints.base import ApiError
+from tests.helpers import PATIENCE
 from tests.unit.app.conftest import until
 from tests.unit.render._serve import post
 
@@ -100,6 +107,14 @@ def test_each_form_of_a_paper_makes_a_quilt_whose_document_is_drafted(tmp_path: 
     assert done["typeset"] is True and done["differs"] is False and done["state"] == "running"
     assert [e.root for e in registry.entries()] == [str(q.resolve())] and registry.entries()[0].open
     assert list(create.incoming().iterdir()) == []
+
+
+@pytest.fixture
+def place(tmp_path: Path) -> Path:
+    """An empty folder of the person's that new quilts go in, apart from the test's home folder."""
+    p = tmp_path / "place"
+    p.mkdir()
+    return p
 
 
 def test_a_new_quilt_goes_in_quilts_in_the_home_folder_by_default(home: Path) -> None:
@@ -231,7 +246,7 @@ def test_a_file_dropped_where_a_folder_was_dropped_is_refused() -> None:
     assert refused.value.code == "bad-path" and [p.name for p in (create.incoming() / key / "files").iterdir()] == ["a"]
 
 
-def test_an_import_stopped_by_anything_leaves_no_folder_behind(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_an_import_stopped_by_anything_leaves_no_folder_behind(place: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     from loom.cli import paper
 
     def stopped(*a: object, **k: object) -> None:
@@ -242,5 +257,144 @@ def test_an_import_stopped_by_anything_leaves_no_folder_behind(tmp_path: Path, m
     main = create.paper(key, None)
     assert isinstance(main, Path)
     with pytest.raises(RuntimeError):
-        create.make(create.target("Gone", str(tmp_path)), main, lambda step: None, served)
-    assert not (tmp_path / "Gone").exists() and registry.entries() == []
+        create.make(create.target("Gone", str(place)), main, lambda step: None, served)
+    assert list(place.iterdir()) == [] and registry.entries() == []
+    assert list(create.making().iterdir()) == []
+
+
+#: A create whose process is killed outright as its import begins, as a crash, a forced quit or a power cut ends one.
+CUT = """
+import io, os, signal, sys
+from loom.app import create
+from loom.cli import paper
+
+text = sys.argv[2].encode()
+main = create.paper(create.receive(None, "paper.tex", io.BytesIO(text), len(text))["drop"], None)
+paper.run_import = lambda *a, **k: os.kill(os.getpid(), signal.SIGKILL)
+create.make(create.target("Cut", sys.argv[1]), main, lambda step: None, lambda entry: {})
+"""
+
+
+def test_a_create_cut_short_leaves_nothing_in_its_place_and_the_next_start_clears_what_it_left(place: Path) -> None:
+    cut = subprocess.run([sys.executable, "-c", CUT, str(place), PAPER.decode()], check=False)
+    assert cut.returncode == -signal.SIGKILL
+    assert not (place / "Cut").exists()  # so a create of the same name is not refused for ever
+    assert [p.name.startswith(".loom-making-") for p in place.iterdir()] == [True]
+    create.recover()  # what the home's start does
+    assert list(place.iterdir()) == [] and list(create.making().iterdir()) == []
+    assert made(place, {"paper.tex": PAPER}, name="Cut")["document"] == "paper/paper.tex"
+
+
+def test_a_quilt_moved_into_its_place_before_its_create_was_cut_is_put_on_the_list_at_the_next_start(
+    place: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def cut(*a: object) -> registry.Entry:
+        raise KeyboardInterrupt  # stands in for the process ending between the move and the list
+
+    monkeypatch.setattr(registry, "remember", cut)
+    key = drop({"paper.tex": PAPER})
+    main = create.paper(key, None)
+    assert isinstance(main, Path)
+    with pytest.raises(KeyboardInterrupt):
+        create.make(create.target("Moved", str(place)), main, lambda step: None, served)
+    monkeypatch.undo()
+    create.recover()
+    assert [e.root for e in registry.entries()] == [str((place / "Moved").resolve())] and registry.entries()[0].open
+    assert [p.name for p in place.iterdir()] == ["Moved"] and list(create.making().iterdir()) == []
+
+
+@pytest.fixture
+def held_import(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[threading.Event, threading.Event]]:
+    """The import waits, once begun, until the test lets it go: (begun, go)."""
+    from loom.cli import paper
+
+    begun, go = threading.Event(), threading.Event()
+    real = paper.run_import
+
+    def held(*a: Any, **k: Any) -> Any:
+        begun.set()
+        go.wait(PATIENCE)
+        return real(*a, **k)
+
+    monkeypatch.setattr(paper, "run_import", held)
+    yield begun, go
+    go.set()
+
+
+def create_job(home: Home, name: str, place: Path, key: str) -> Callable[[], dict[str, Any]]:
+    status, said = post(home.url + "_api/quilt-create", {"name": name, "place": str(place), "drop": key})
+    assert status == 200, said
+    return lambda: home.jobs[said["job"]]
+
+
+def test_the_home_stopping_ends_a_create_and_leaves_nothing_of_it(
+    bundle: Path, ports: None, place: Path, held_import: tuple[threading.Event, threading.Event]
+) -> None:
+    begun, go = held_import
+    h = Home(bundle, port=0, extra=("--no-compile",))
+    h.listen()
+    job = create_job(h, "Stopped", place, drop({"paper.tex": PAPER}))
+    until(begun.is_set, "the import begun")
+    h.stop()
+    go.set()
+    until(lambda: job()["state"] != "running", "the create ended")
+    assert job()["state"] == "failed" and list(place.iterdir()) == [] and registry.entries() == []
+
+
+def test_the_home_restarts_after_an_update_only_once_no_quilt_is_being_made(
+    home_server: Home, place: Path, held_import: tuple[threading.Event, threading.Event]
+) -> None:
+    begun, go = held_import
+    job = create_job(home_server, "Waited", place, drop({"paper.tex": PAPER}))
+    until(begun.is_set, "the import begun")
+    home_server.code = (0, 0)  # loom's code moved under the home long ago
+    home_server.supervisor.still_since = time.monotonic() - 3600
+    restarted = threading.Event()
+
+    def reexec() -> None:
+        restarted.set()
+        home_server.stopping.set()
+
+    threading.Thread(target=home_server.run, args=(reexec,), daemon=True).start()
+    time.sleep(2.5)
+    assert not restarted.is_set()
+    go.set()
+    until(restarted.is_set, "the restart once the quilt was made")
+    assert job()["state"] == "done" and (place / "Waited" / "config.toml").is_file()
+
+
+def test_two_creates_of_one_name_at_once_make_one_quilt_and_refuse_the_other(
+    home_server: Home, place: Path, held_import: tuple[threading.Event, threading.Event]
+) -> None:
+    """A double click sends the same drop twice."""
+    begun, go = held_import
+    key = drop({"paper.tex": PAPER})
+    job = create_job(home_server, "Twice", place, key)
+    status, said = post(home_server.url + "_api/quilt-create", {"name": "Twice", "place": str(place), "drop": key})
+    assert status == 409 and said["error"]["code"] == "exists"
+    go.set()
+    until(lambda: job()["state"] != "running", "the quilt made")
+    assert job()["state"] == "done" and len(registry.entries()) == 1
+
+
+def test_a_drop_holding_a_link_to_nothing_cannot_stop_the_home_starting(bundle: Path, ports: None) -> None:
+    out = io.BytesIO()
+    with tarfile.open(fileobj=out, mode="w:gz") as t:
+        notes = tarfile.TarInfo("notes.txt")
+        notes.size = 1
+        t.addfile(notes, io.BytesIO(b"x"))
+        link = tarfile.TarInfo("figs")
+        link.type, link.linkname = tarfile.SYMTYPE, "figures-not-shipped"
+        t.addfile(link)
+    key = drop({"paper.tar.gz": out.getvalue()})
+    with pytest.raises(ApiError) as refused:
+        create.paper(key, None)
+    assert refused.value.code == "no-paper" and (create.incoming() / key / "unpacked" / "figs").is_symlink()
+    h = Home(bundle, port=0, extra=("--no-compile",))
+    h.listen()
+    h.stop()
+    old = time.time() - (create.KEEP_DAYS + 1) * 86400
+    for p in [create.incoming() / key, *(create.incoming() / key).rglob("*")]:
+        os.utime(p, (old, old), follow_symlinks=False)
+    create.sweep()
+    assert not (create.incoming() / key).exists()

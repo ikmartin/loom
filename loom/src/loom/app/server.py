@@ -1,10 +1,11 @@
 """The home server (`loom app`): the viewer's home page and its `quilt-` endpoints, on the home's own port, behind the guards every quilt's server keeps (specs/write-api.md, "The home server").
 
-It holds no quilt. It serves the viewer it started with (`render.serve.HeldBundle`), answers `GET /_api` with `home: true` so the viewer draws the home page, and keeps the person's quilts served through its `Supervisor`.
+It holds no quilt. It serves the viewer it started with (`render.serve.HeldBundle`), answers `GET /_api` with `home: true` so the viewer draws the home page, and keeps the person's quilts served through its `Supervisor`. One home runs on a machine: it holds `app/home.lock` while it runs, and a second finds the first and leaves it to run (`HomeRunning`).
 """
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import secrets
@@ -12,6 +13,7 @@ import subprocess
 import threading
 import time
 import tomllib
+import traceback
 from collections.abc import Callable
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer
@@ -30,6 +32,10 @@ from loom.version import code_stamp
 MAX_BODY = 1024 * 1024
 #: How many finished and running jobs `quilt-list` keeps.
 KEPT_JOBS = 20
+
+
+class HomeRunning(Exception):
+    """Another home runs on this machine already: it holds the home's lock."""
 
 
 def choose_folder(prompt: str) -> Path | None:
@@ -70,13 +76,18 @@ def _list(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     from loom.scan.quilt import reviewer_identity
     from loom.tex import private
 
+    try:
+        listed, unreadable = registry.entries(), False
+    except registry.Unreadable:
+        listed, unreadable = [], True
     quilts = [
         {"quilt": e.id, "name": _name(e), "folder": e.root, "port": e.port, "open": e.open, **home.supervisor.state(e)}
-        for e in registry.entries()
+        for e in listed
     ]
     name, source = reviewer_identity(Path.home())
     return {
         "quilts": quilts,
+        **({"list": "unreadable"} if unreadable else {}),
         "name": {"name": name, "source": source},
         "tex": private.active(year=False).kind,
         "jobs": home.jobs_listing(),
@@ -86,27 +97,30 @@ def _list(home: Home, body: dict[str, Any]) -> dict[str, Any]:
 def _open(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     """`quilt-open`: serve the quilt on its port, or with `move` on a port never given before; left open for the home's next start."""
     entry = _entry(body)
-    if body.get("move") is True:
-        home.supervisor.stop(entry)
-        entry = registry.readdress(entry.id)
-    registry.set_open(entry.id, True)
-    entry.open = True
-    return {"quilt": entry.id, **home.supervisor.open(entry)}
+    with home.supervisor.lock:
+        if body.get("move") is True:
+            home.supervisor.stop(entry)
+            entry = registry.readdress(entry.id)
+        registry.set_open(entry.id, True)
+        entry.open = True
+        return {"quilt": entry.id, **home.supervisor.open(entry)}
 
 
 def _stop(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     """`quilt-stop`: stop the quilt's server; the home's next start leaves it stopped."""
     entry = _entry(body)
-    registry.set_open(entry.id, False)
-    home.supervisor.stop(entry)
-    return {"quilt": entry.id, **home.supervisor.state(entry)}
+    with home.supervisor.lock:
+        registry.set_open(entry.id, False)
+        home.supervisor.stop(entry)
+        return {"quilt": entry.id, **home.supervisor.state(entry)}
 
 
 def _forget(home: Home, body: dict[str, Any]) -> dict[str, Any]:
-    """`quilt-forget`: stop the quilt's server and take it off the list; its folder is untouched."""
+    """`quilt-forget`: take the quilt off the list and stop its server, which stays stopped; its folder is untouched."""
     entry = _entry(body)
-    home.supervisor.stop(entry)
-    registry.forget(entry.id)
+    with home.supervisor.lock:
+        registry.forget(entry.id)
+        home.supervisor.stop(entry)
     return {"quilt": entry.id, "forgotten": True}
 
 
@@ -165,12 +179,21 @@ def _create(home: Home, body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(name, str) or not all(v is None or isinstance(v, str) for v in (place, drop, main)):
         raise ApiError("bad-field", "name, and place, drop and main where given, are strings")
     where = create.target(name, place)
-    paper = create.paper(drop, main) if drop else None
+    home.makings.claim(where)
+    try:
+        paper = create.paper(drop, main) if drop else None
+    except BaseException:
+        home.makings.release(where)
+        raise
     if isinstance(paper, list):
+        home.makings.release(where)
         return {"question": {"choices": paper}}
 
     def work(step: Callable[[str], None]) -> dict[str, Any]:
-        done = create.make(where, paper, step, home.supervisor.open)
+        try:
+            done = create.make(where, paper, step, home.supervisor.open, home.makings)
+        finally:
+            home.makings.release(where)
         if drop:
             create.let_go(drop)
         return done
@@ -232,6 +255,7 @@ class HomeHandler(LoomHandler):
                 HTTPStatus.OK,
                 {
                     "home": True,
+                    "pid": os.getpid(),
                     "token": self.token,
                     "capabilities": sorted(HANDLERS),
                     **({"viewer": held.version, "stale": held.stale()} if held else {}),
@@ -278,6 +302,8 @@ class HomeHandler(LoomHandler):
             self._json(HTTPStatus.OK, handler(self.home, body))
         except ApiError as exc:
             self._json(exc.status, exc.answer())
+        except registry.Unreadable as exc:
+            self._json(HTTPStatus.CONFLICT, {"error": {"code": "list-unreadable", "message": exc.message}})
         except Exception as exc:  # noqa: BLE001
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": {"code": "failed", "message": str(exc)}})
 
@@ -321,9 +347,13 @@ class Home:
     """
 
     def __init__(self, bundle: Path, port: int = HOME_PORT, extra: tuple[str, ...] = ()) -> None:
+        from loom.app.create import Makings
+
         self.bundle = bundle
         self.port = port
         self.supervisor = Supervisor(extra)
+        self.makings = Makings()
+        self.claimed = contextlib.ExitStack()
         self.token = secrets.token_urlsafe(24)
         self.code = code_stamp()
         self.httpd: ThreadingHTTPServer | None = None
@@ -358,10 +388,20 @@ class Home:
         return key
 
     def listen(self) -> None:
-        """Bind the port, record the home's address in loom's folder for the machine, and start answering."""
-        from loom.app.create import sweep
+        """Take the home's lock, clear what a create cut short and old drops left, bind the port, record the home's address in loom's folder for the machine, and start answering; `HomeRunning` when another home holds the lock."""
+        from loom.app.create import recover, sweep
+        from loom.errors import EnvError
+        from loom.locks import locked
 
-        sweep()
+        try:
+            self.claimed.enter_context(locked(registry.folder() / "home.lock", wait=0))
+        except EnvError as exc:
+            raise HomeRunning from exc
+        for clear in (recover, sweep):
+            try:
+                clear()
+            except Exception:  # noqa: BLE001 -- nothing left in loom's folder may stop the home starting
+                traceback.print_exc()
         self.held = HeldBundle(self.bundle)
         handler = type(
             "Handler",
@@ -384,12 +424,20 @@ class Home:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}/"
 
+    def beat(self) -> None:
+        """One turn of the home's loop (`Supervisor.tick`); whatever goes wrong in it is written to the home's output, and the loop goes on."""
+        try:
+            self.supervisor.tick()
+        except Exception:  # noqa: BLE001 -- the home and every other quilt stay up
+            traceback.print_exc()
+
     def run(self, reexec: Callable[[], None] | None = None) -> None:
-        """Keep the quilts the person left open served, once a second, until `stop`; once loom's own code has moved and been still for `SETTLE`, call `reexec`."""
+        """Keep the quilts the person left open served, once a second, until `stop`; once loom's own code has moved and been still for `SETTLE`, and no quilt is being made, call `reexec`."""
         while not self.stopping.wait(1.0):
-            self.supervisor.tick(registry.entries())
+            self.beat()
             sup = self.supervisor
-            if reexec is not None and sup.stamp != self.code and time.monotonic() - sup.still_since >= SETTLE:
+            moved = sup.stamp != self.code and time.monotonic() - sup.still_since >= SETTLE
+            if reexec is not None and moved and not self.makings.running:
                 self.close()
                 reexec()
 
@@ -407,9 +455,11 @@ class Home:
         if self.held is not None:
             self.held.close()
             self.held = None
+        self.claimed.close()
 
     def stop(self) -> None:
-        """Stop the home and every quilt's server it runs; what the person left open stays so on the list."""
+        """Stop the home and every quilt's server it runs, ending first each quilt being made, of which nothing is left; what the person left open stays so on the list."""
         self.stopping.set()
-        self.supervisor.stop_all(registry.entries())
+        self.makings.close()
+        self.supervisor.stop_all()
         self.close()

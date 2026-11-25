@@ -1,4 +1,4 @@
-"""The home server (`loom app`, `loom.app.server`): its guards, its endpoints for opening, stopping, forgetting and choosing quilts and for the person's name, and the home page's address in every quilt server's `/_api`.
+"""The home server (`loom app`, `loom.app.server`): its guards, its endpoints for opening, stopping, forgetting and choosing quilts and for the person's name, the home page's address in every quilt server's `/_api`, a list it cannot read said and left alone, and a loop that goes on past any fault.
 
 Each test runs a home in this process and real `loom serve` processes, with no compiles and a stand-in viewer, under the suite's own HOME and XDG folders.
 """
@@ -6,12 +6,15 @@ Each test runs a home in this process and real `loom serve` processes, with no c
 from __future__ import annotations
 
 import json
+import os
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
 
-from loom.app import registry, server
+from loom.app import registry, server, supervise
 from loom.app.server import Home
 from tests.unit.app.conftest import until
 from tests.unit.render._serve import get, post
@@ -39,7 +42,7 @@ def call(home: Home, endpoint: str, body: dict[str, object] | None = None) -> tu
 def test_the_home_names_itself_and_gives_its_token_only_to_its_own_pages(home: Home) -> None:
     status, _, raw = get(home.url + "_api")
     said = json.loads(raw)
-    assert status == 200 and said["home"] is True and said["token"] == home.token
+    assert status == 200 and said["home"] is True and said["token"] == home.token and said["pid"] == os.getpid()
     assert "quilt-open" in said["capabilities"] and said["viewer"] == "1" and said["stale"] is False
     assert get(home.url + "_api", {"Origin": "http://evil.test"})[0] == 403
     assert get(home.url + "_api", {"Host": f"evil.test:{home.port}"})[0] == 403
@@ -146,3 +149,49 @@ def test_the_agents_server_says_once_loom_was_updated_under_it(monkeypatch: pyte
     monkeypatch.setattr(mcp_server, "code_stamp", lambda: (started[0], started[1] + 1))
     said = mcp_server.updated(started)
     assert "updated" in said and "restart" in said and "loom " not in said.replace("loom in", "")
+
+
+def test_a_forgotten_quilt_stays_stopped(home: Home, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A turn of the home's loop that waits for the lock while Forget stops the server must not start it again once the stop lets go: off the list, nothing could stop it."""
+    entry = quilt(tmp_path / "q")
+    call(home, "quilt-open", {"quilt": entry.id})
+    until(lambda: home.supervisor.state(entry)["state"] == "running", "the quilt served")
+    turns: list[threading.Thread] = []
+    stop = home.supervisor.stop
+
+    def stopping(e: registry.Entry) -> bool:
+        with home.supervisor.lock:
+            turn = threading.Thread(target=home.beat)
+            turn.start()
+            turns.append(turn)
+            time.sleep(0.3)  # the turn is waiting for the lock the stop holds
+            return stop(e)
+
+    monkeypatch.setattr(home.supervisor, "stop", stopping)
+    assert call(home, "quilt-forget", {"quilt": entry.id})[1]["forgotten"] is True
+    for turn in turns:
+        turn.join()
+    home.beat()
+    assert entry.id not in home.supervisor.children and supervise.ask(entry) is None
+
+
+def test_a_list_the_home_cannot_read_is_said_and_left_as_it_is(home: Home, tmp_path: Path) -> None:
+    entry = quilt(tmp_path / "q")
+    listed = registry.folder() / "quilts.json"
+    listed.write_text("{")
+    said = call(home, "quilt-list")[1]
+    assert said["list"] == "unreadable" and said["quilts"] == []
+    status, refused = call(home, "quilt-open", {"quilt": entry.id})
+    assert status == 409 and refused["error"]["code"] == "list-unreadable"  # type: ignore[index]
+    assert not any(c in refused["error"]["message"] for c in ("`", "--", "/"))  # type: ignore[index]  # words, no command or path
+    home.beat()
+    assert listed.read_text() == "{"
+
+
+def test_the_homes_loop_goes_on_past_any_fault(home: Home, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fault() -> None:
+        raise RuntimeError("anything")
+
+    monkeypatch.setattr(home.supervisor, "tick", fault)
+    home.beat()
+    assert get(home.url + "_api")[0] == 200

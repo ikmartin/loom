@@ -45,7 +45,11 @@ def ports(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
         s.bind(("127.0.0.1", 0))
         monkeypatch.setattr(registry, "FIRST_PORT", s.getsockname()[1])
     yield
-    for entry in registry.entries():
+    try:
+        listed = registry.entries()
+    except registry.Unreadable:
+        listed = []  # a test of a list that cannot be read runs no server
+    for entry in listed:
         pid = read_serve_json(Path(entry.root)).get("pid")
         if isinstance(pid, int) and supervise.ask(entry) is not None:
             os.kill(pid, signal.SIGKILL)

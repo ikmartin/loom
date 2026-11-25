@@ -1,6 +1,6 @@
 """The quilts this machine's home lists, each with the port it keeps: `app/quilts.json` in loom's folder for the machine (`machine.data_dir`).
 
-One file, read and written whole under its lock. A quilt is known by where it lies (`machine.quilt_id`), so a copied folder is another quilt with a port of its own. A port once given is never given to another quilt: a viewer keeps its preferences per port and its layout per port and quilt name, so a port that passed to another quilt would hand it the first one's.
+One file, read and written whole under its lock. A quilt is known by where it lies (`machine.quilt_id`), so a copied folder is another quilt with a port of its own. A port once given is never given to another quilt: a viewer keeps its preferences per port and its layout per port and quilt name, so a port that passed to another quilt would hand it the first one's. So a list that is there but cannot be read is never started again from nothing: it is kept as it is, and nothing is given or changed until it can be read (`Unreadable`).
 """
 
 from __future__ import annotations
@@ -8,16 +8,28 @@ from __future__ import annotations
 import json
 import os
 import socket
+import urllib.request
 from contextlib import AbstractContextManager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from loom.errors import EnvError
 from loom.machine import data_dir, quilt_id
 
 #: The home page's own port (`loom app`), beside the 8791 that `loom serve` takes by default.
 HOME_PORT = 8790
 #: Where the ports given to quilts start; the next is always one no quilt was given before.
 FIRST_PORT = 8800
+
+
+class Unreadable(EnvError):
+    """The list of quilts is there and cannot be read: it is kept as it is, and no port is given out and nothing on it changes until it can be read."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "loom could not read its list of quilts, so it shows none and gives no quilt an address until it can; "
+            "the list is kept as it was"
+        )
 
 
 @dataclass
@@ -45,36 +57,50 @@ def address() -> Path:
 
 
 def home_url() -> str:
-    """The home page's address while a home runs on this machine, else ''."""
+    """The home page's address while a home runs on this machine, else '': the address `home.json` records, once the home there answers `/_api` with the pid it records, so an address a home killed outright left behind is not trusted on its pid alone."""
     try:
         data = json.loads(address().read_text(encoding="utf-8"))
         pid, url = data["pid"], data["url"]
-        os.kill(pid, 0)
     except (OSError, ValueError, KeyError, TypeError):
         return ""
-    return url if isinstance(url, str) else ""
+    if not isinstance(pid, int) or not isinstance(url, str) or not url.startswith("http://127.0.0.1:"):
+        return ""
+    try:
+        with urllib.request.urlopen(f"{url}_api", timeout=2) as resp:
+            said = json.loads(resp.read())
+    except (OSError, ValueError):
+        return ""
+    return url if isinstance(said, dict) and said.get("home") is True and said.get("pid") == pid else ""
 
 
 def _read() -> tuple[dict[str, Entry], set[int]]:
-    """The list and every port ever given; both empty when there is no list or it cannot be read."""
+    """The list and every port ever given; both empty when there is no list yet, and `Unreadable` when there is one that cannot be read."""
     try:
-        data = json.loads(_path().read_text(encoding="utf-8"))
-        entries = {e["id"]: Entry(**e) for e in data.get("quilts", [])}
-        given = {int(p) for p in data.get("given", [])}
-    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        text = _path().read_text(encoding="utf-8")
+    except FileNotFoundError:
         return {}, set()
+    except (OSError, ValueError) as exc:
+        raise Unreadable from exc
+    try:
+        data = json.loads(text)
+        entries = {e["id"]: Entry(**e) for e in data["quilts"]}
+        given = {int(p) for p in data["given"]}
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        raise Unreadable from exc
     return entries, given | {e.port for e in entries.values()}
 
 
 def _write(entries: dict[str, Entry], given: set[int]) -> None:
-    """Write the list whole, through a temporary file renamed into place."""
+    """Write the list whole, through a temporary file flushed to the disk and renamed into place."""
     p = _path()
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(f".{p.name}.{os.getpid()}")
-    tmp.write_text(
-        json.dumps({"quilts": [asdict(e) for e in entries.values()], "given": sorted(given)}, indent=1) + "\n",
-        encoding="utf-8",
-    )
+    with open(tmp, "w", encoding="utf-8") as out:
+        out.write(
+            json.dumps({"quilts": [asdict(e) for e in entries.values()], "given": sorted(given)}, indent=1) + "\n"
+        )
+        out.flush()
+        os.fsync(out.fileno())
     tmp.replace(p)
 
 
@@ -85,13 +111,21 @@ def _locked() -> AbstractContextManager[None]:
 
 
 def free(port: int) -> bool:
-    """Whether nothing listens on `port` at 127.0.0.1, by binding it for a moment as a server binds it: past the closed connections a stopped server leaves waiting."""
+    """Whether a quilt's server would have `port` to itself: it can be bound at 127.0.0.1 as the server binds it, past the closed connections a stopped server leaves waiting, and nothing answers there or on the IPv6 loopback, as a program listening on every address does beside such a bind."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
             s.bind(("127.0.0.1", port))
         except OSError:
             return False
+    for family, host in ((socket.AF_INET, "127.0.0.1"), (socket.AF_INET6, "::1")):
+        try:
+            with socket.socket(family, socket.SOCK_STREAM) as probe:
+                probe.settimeout(0.5)
+                if probe.connect_ex((host, port)) == 0:
+                    return False
+        except OSError:
+            pass  # no IPv6 here
     return True
 
 
@@ -103,7 +137,7 @@ def _next_port(given: set[int]) -> int:
 
 
 def entries() -> list[Entry]:
-    """Every quilt on the list, in the order they were added."""
+    """Every quilt on the list, in the order they were added; `Unreadable` when the list cannot be read."""
     return list(_read()[0].values())
 
 
@@ -113,8 +147,11 @@ def find(key: str) -> Entry | None:
 
 
 def port_of(root: Path) -> int | None:
-    """The port the quilt at `root` keeps, or None when it is not on the list."""
-    found = find(quilt_id(root))
+    """The port the quilt at `root` keeps, or None when it is not on the list or the list cannot be read."""
+    try:
+        found = find(quilt_id(root))
+    except Unreadable:
+        return None
     return found.port if found else None
 
 

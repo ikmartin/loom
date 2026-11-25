@@ -1,4 +1,4 @@
-"""The home's servers (`loom.app.supervise`): each quilt served on the port it keeps, found again by a home that starts again, started again after a crash, left failed after a refusal or when its port is held, restarted when loom changed under it, and stopped with the home while staying on the list as open.
+"""The home's servers (`loom.app.supervise`): each quilt served on the port it keeps, found again by a home that starts again, started again after a crash, left failed after a refusal or when its port is held, restarted when loom changed under it, stopped with the home while staying on the list as open, stopped only at the pid it gives itself, and one quilt's fault kept to that quilt.
 
 Each test runs real `loom serve` processes, with no compiles and a stand-in viewer, under the suite's own HOME and XDG folders.
 """
@@ -9,6 +9,7 @@ import json
 import os
 import signal
 import socket
+import subprocess
 from collections.abc import Callable, Iterator
 from pathlib import Path
 
@@ -17,6 +18,7 @@ import pytest
 from loom.app import registry, supervise
 from loom.app.registry import Entry
 from loom.app.supervise import Supervisor
+from loom.paths import SERVE_JSON
 from loom.render.serve import read_serve_json
 from tests.unit.app.conftest import until
 
@@ -77,13 +79,13 @@ def test_a_server_killed_outright_is_started_again_on_its_port(
     entry = quilt(tmp_path / "q")
     registry.set_open(entry.id, True)
     sup = home(sups)
-    sup.tick(registry.entries())
+    sup.tick()
     until(running(sup, entry), "the server")
     pid = pid_of(entry)
     os.kill(pid, signal.SIGKILL)
 
     def back() -> bool:
-        sup.tick(registry.entries())
+        sup.tick()
         return sup.state(entry)["state"] == "running" and pid_of(entry) != pid
 
     until(back, "the server started again")
@@ -107,7 +109,7 @@ def test_a_server_that_refuses_to_start_is_not_started_again(tmp_path: Path, sup
     sup = home(sups)
 
     def failed() -> bool:
-        sup.tick(registry.entries())
+        sup.tick()
         return sup.state(entry)["state"] == "failed"
 
     until(failed, "the refusal")
@@ -124,14 +126,14 @@ def test_a_server_loom_changed_under_is_restarted_on_its_port(
     entry = quilt(tmp_path / "q")
     registry.set_open(entry.id, True)
     sup = home(sups)
-    sup.tick(registry.entries())
+    sup.tick()
     until(running(sup, entry), "the server")
     pid = pid_of(entry)
     (bundle / "_app" / "version.json").write_text(json.dumps({"version": "2"}))
     assert (supervise.ask(entry) or {}).get("stale") is True
 
     def restarted() -> bool:
-        sup.tick(registry.entries())
+        sup.tick()
         said = supervise.ask(entry)
         return said is not None and not said.get("stale") and pid_of(entry) != pid
 
@@ -145,11 +147,55 @@ def test_a_home_stopping_stops_its_servers_and_what_was_left_open_comes_back(
     entry = quilt(tmp_path / "q")
     registry.set_open(entry.id, True)
     sup = home(sups)
-    sup.tick(registry.entries())
+    sup.tick()
     until(running(sup, entry), "the server")
-    sup.stop_all(registry.entries())
+    sup.stop_all()
     assert supervise.ask(entry) is None and read_serve_json(Path(entry.root)) == {}
     assert registry.find(entry.id).open is True  # type: ignore[union-attr]
     after = home(sups)
-    after.tick(registry.entries())
+    after.tick()
     until(running(after, entry), "the server started by the next home")
+
+
+def test_a_server_found_running_is_stopped_at_the_pid_it_gives_and_never_at_one_its_quilt_names(
+    tmp_path: Path, sups: list[Supervisor]
+) -> None:
+    """`serve.json` travels with a copied quilt, so the pid in it may be any program of the person's."""
+    entry = quilt(tmp_path / "q")
+    first = home(sups)
+    first.open(entry)
+    until(running(first, entry), "the server")
+    sleeper = subprocess.Popen(["sleep", "60"])
+    try:
+        said = read_serve_json(Path(entry.root))
+        (Path(entry.root) / SERVE_JSON).write_text(json.dumps({**said, "pid": sleeper.pid}))
+        again = home(sups)
+        assert again.open(entry)["state"] == "running" and again.children[entry.id].proc is None
+        assert again.stop(entry) is True
+        assert supervise.ask(entry) is None and sleeper.poll() is None
+    finally:
+        sleeper.kill()
+        sleeper.wait()
+
+
+def test_one_quilts_fault_is_that_quilts_and_the_others_stay_served(
+    tmp_path: Path, sups: list[Supervisor], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(supervise, "RETRIES", (0.0,))
+    broken, fine = quilt(tmp_path / "broken"), quilt(tmp_path / "fine")
+    for entry in (broken, fine):
+        registry.set_open(entry.id, True)
+    sup = home(sups)
+    sup.tick()
+    until(lambda: running(sup, broken)() and running(sup, fine)(), "both servers")
+    log = supervise.log_path(broken)
+    log.unlink()
+    log.mkdir()  # its log cannot be written, so it cannot be started again
+    os.kill(pid_of(broken), signal.SIGKILL)
+
+    def failed() -> bool:
+        sup.tick()
+        return sup.state(broken)["state"] == "failed"
+
+    until(failed, "the broken quilt's could not start")
+    assert sup.state(broken)["why"] == "cannot-start" and sup.state(fine)["state"] == "running"

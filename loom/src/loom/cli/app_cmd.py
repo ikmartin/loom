@@ -28,7 +28,9 @@ from loom.errors import EnvError
     help="Open the home page in the browser, starting the home first when it is not running, and return.",
 )
 @click.option(
-    "--install", is_flag=True, help="Write Loom.app in ~/Applications, which opens the home page, and return."
+    "--install",
+    is_flag=True,
+    help="Write loom's app in ~/Applications, which opens the home page, say where, and return.",
 )
 @click.option(
     "--no-compile", is_flag=True, hidden=True, help="Serve every quilt with no compiles, as loom serve --no-compile."
@@ -36,18 +38,22 @@ from loom.errors import EnvError
 def app_command(port: int, open_page: bool, install: bool, no_compile: bool) -> None:
     """Run loom's home page until interrupted: the quilts on this machine, each served on a port it keeps, and the ones left open served again when it starts.
 
-    A home already running is left to run, and its address is printed. Once loom is updated, the home restarts each quilt's server and then itself.
+    One home runs on a machine: a home already running is left to run, and its address is printed. Once loom is updated, the home restarts each quilt's server and then itself.
     """
     from loom.app.registry import home_url
-    from loom.app.server import Home
+    from loom.app.server import Home, HomeRunning
     from loom.render.serve import locate_bundle
 
     if install:
-        from loom.app.launcher import write_launcher
+        from loom.app.launcher import NAME, write_launcher
 
         if sys.platform != "darwin":
-            raise EnvError("Loom.app is written on macOS only; run loom app --open instead")
-        note(f"loom app: wrote {write_launcher()}")
+            raise EnvError("loom's app is written on macOS only; run loom app --open instead")
+        app = write_launcher()
+        name = app.name.removesuffix(".app")
+        if name != NAME:
+            click.echo(f"Another app is called {NAME}, so loom's is {name}, in your Applications folder")
+        click.echo(f"{name} is in your Applications folder: open it to see your quilts")
         return
     if open_page:
         _open(port)
@@ -63,7 +69,11 @@ def app_command(port: int, open_page: bool, install: bool, no_compile: bool) -> 
         )
     extra = ("--no-compile",) if no_compile else ()
     home = Home(bundle, port, extra)
-    home.listen()
+    try:
+        home.listen()
+    except HomeRunning:
+        note(f"loom app: {_running()}")
+        return
     note(f"loom app: {home.url}  (Ctrl-C to stop it and the quilts it serves)")
 
     def again() -> None:
@@ -83,6 +93,21 @@ def app_command(port: int, open_page: bool, install: bool, no_compile: bool) -> 
         note("loom app: stopping")
     finally:
         home.stop()
+
+
+def _running() -> str:
+    """The address of the home another `loom app` runs, once it answers: it may hold the home's lock a moment before it listens."""
+    import time
+
+    from loom.app.registry import home_url
+
+    end = time.monotonic() + 30
+    while time.monotonic() < end:
+        url = home_url()
+        if url:
+            return url
+        time.sleep(0.1)
+    raise EnvError("another loom app holds this machine's home and has not answered for 30 seconds")
 
 
 def _open(port: int) -> None:
