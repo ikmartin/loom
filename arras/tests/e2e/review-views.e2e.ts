@@ -442,7 +442,7 @@ test('see it keeps the block in view while the document above it settles, as a d
 	await page.locator('[data-testid="change-card"][data-change="e-2026-09-16-r2hw0m"]').getByTestId('change-where').getByTestId('change-see').click();
 	const doc = page.getByTestId('review-over-doc');
 	const at = doc.locator('#sy-0004');
-	const offset = () => at.evaluate((e) => Math.round(e.getBoundingClientRect().top - e.closest('[data-testid="review-over-doc"]')!.getBoundingClientRect().top));
+	const offset = () => at.evaluate((e) => Math.round(e.getBoundingClientRect().top - e.closest('[data-testid="review-over-doc"]')!.getBoundingClientRect().top) + 0); // + 0: a top a hair above the pane rounds to -0, which toBe(0) tells from 0
 	await expect.poll(offset).toBe(0);
 	// what is drawn above the block grows after it mounted, as source blocks and mathematics settle: the block stays where it landed, the browser's own scroll anchoring off so the pane's landing is what is tested
 	await doc.evaluate((d) => ((d as HTMLElement).style.overflowAnchor = 'none'));
