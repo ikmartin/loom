@@ -48,11 +48,15 @@ BAD_RECORD = "This quilt's record of its Overleaf project is not one loom can us
 
 
 def plain_folder(folder: object) -> bool:
-    """Whether `folder` is spelt as a folder of the person's can be: quilt-relative, normal, no part dot-named, empty or read as an option. Where it really lies is `checked_folder`'s."""
+    """Whether `folder` is spelt as a folder of the person's can be: quilt-relative, normal, at least one part, none dot-named, empty or read as an option, so `.` and every other spelling of the quilt itself are not. Where it really lies is `checked_folder`'s."""
     if not isinstance(folder, str) or not folder or "\\" in folder or folder.startswith(("/", "-")):
         return False
     parts = PurePosixPath(folder).parts
-    return PurePosixPath(*parts).as_posix() == folder and not any(p.startswith(".") or p in ("", "..") for p in parts)
+    return (
+        bool(parts)
+        and PurePosixPath(*parts).as_posix() == folder
+        and not any(p.startswith(".") or p in ("", "..") for p in parts)
+    )
 
 
 def checked_folder(root: Path, history: Path, folder: str) -> str:

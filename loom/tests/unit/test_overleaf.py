@@ -1176,3 +1176,20 @@ def test_an_update_cut_short_after_a_dot_named_file_is_settled_by_the_next(
         assert writes.left(q, history) == [], k
         settled += 1
     assert settled >= 1
+
+
+@pytest.mark.parametrize("folder", [".", "./", "", "x/..", "./drafting", "drafting/."])
+def test_a_record_naming_the_quilt_itself_mirrors_nothing_and_stops_no_write(tmp_path: Path, folder: str) -> None:
+    """Safe's reading: a record whose folder spells the quilt itself is not one loom reads, so it neither stops a write nor is written by an update."""
+    from loom import writes
+    from loom.overleaf import mirrored
+
+    root, _ = two_lemmas(tmp_path)
+    edit_record(root, folder=folder)
+    assert not mirrored(root, "notes.tex") and not mirrored(root, "drafting/main.tex")
+    with writes.act(root, load_quilt(root).history_dir, "keep") as w:
+        w.replace("notes.tex", b"mine\n")
+    assert (root / "notes.tex").read_text() == "mine\n"
+    with pytest.raises(MirrorError) as refused:
+        overleaf.update(load_quilt(root))
+    assert refused.value.code == "bad-record"
