@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit._quilts import track_edits
+from tests.unit._quilts import opened
 from tests.unit.render._serve import get
 from tests.unit.render.write_api._cases import (
     WHO,
@@ -67,9 +67,9 @@ def _change_keep(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None:
 
     s, q, _sid = on_demo(serve, tmp_path)
     save_author(WHO)
-    track_edits(q)
-    # before a first look, keeping all takes one
-    assert succeeds(s, "change-keep", {"all": True})["result"] == "took your first look"
+    opened(q)  # the paper open to agents, so an edit in it is listed
+    # before a first look, keeping all takes one, then keeps what waits: the demo's suggested edit
+    assert succeeds(s, "change-keep", {"all": True})["result"].startswith("took your first look; kept 1 change")
     lemma = q / "drafting" / "nodes" / "dm-0002.tex"
     lemma.write_text(lemma.read_text().replace("Every orbit", "Each orbit"))
     edit = filed(q, "--quote", "one or two points", "--with", "at most two points")
@@ -93,7 +93,7 @@ def _change_discard(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> None
 
     s, q, _sid = on_demo(serve, tmp_path)
     save_author(WHO)
-    track_edits(q)
+    opened(q)  # the paper open to agents, so an edit in it is listed
     succeeds(s, "change-keep", {"all": True})
     lemma = q / "drafting" / "nodes" / "dm-0002.tex"
     lemma.write_text(lemma.read_text().replace("Every orbit", "Each orbit"))
@@ -160,7 +160,6 @@ def _history_restore(serve: Serve, tmp_path: Path, _: pytest.MonkeyPatch) -> Non
 
     save_author("Tester")
     s, q, _ = on_demo(serve, tmp_path)
-    track_edits(q)
     main = q / "drafting" / "main.tex"
     before = main.read_text()
     succeeds(s, "history-record", {"document": "drafting/main.tex", "name": "First"})

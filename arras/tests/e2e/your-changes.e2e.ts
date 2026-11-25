@@ -145,7 +145,7 @@ test('the blocks waiting to be accepted are listed one document at a time', asyn
 test('with no change waiting it says so, and a static host offers no acts', async ({ page }) => {
 	await serve(page, (m) => (m.changes = []));
 	await page.goto('/review');
-	await expect(page.getByTestId('changes-empty')).toContainText('No changes wait in your text.');
+	await expect(page.getByTestId('changes-empty')).toContainText('No changes wait in the places agents may edit.');
 	await page.unrouteAll();
 	await withChanges(page);
 	await page.goto('/review');

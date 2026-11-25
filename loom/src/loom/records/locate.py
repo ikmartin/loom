@@ -49,6 +49,37 @@ def named_by_place(result: ScanResult, key: str, node: NodeRec | None) -> bool:
     return node is None or key.split("#", 1)[1] not in node.labels
 
 
+#: A key a label gives a statement, or one of its proofs: `LABEL`, `LABEL/proof`, `LABEL/proof/N`.
+_BY_LABEL = re.compile(r"(?P<label>[^#/]+)(?:/proof(?:/(?P<n>\d+))?)?")
+
+
+def given_by_label(result: ScanResult, key: str) -> str:
+    """The label `key` is a key by, as a label keys a statement (`LABEL`) and its proofs (`LABEL/proof/N`); '' for any other key: an id's, a place's, a region's, a document's."""
+    from loom.scan.nodes import label_shaped
+
+    m = _BY_LABEL.fullmatch(key)
+    return m["label"] if m and label_shaped(m["label"]) else ""
+
+
+def shared_label(result: ScanResult, key: str) -> list[NodeRec] | None:
+    """For a key a label gives (`given_by_label`) whose label two or more statements now carry, the block it names in each: the statement, or its proof by its place among the statement's proofs; None when one statement or none carries it."""
+    m = _BY_LABEL.fullmatch(key)
+    statements = result.shared_labels.get(m["label"]) if m else None
+    if not statements or m is None:
+        return None
+    if key == m["label"]:
+        return list(statements)
+    found = [_proof_at(result, s, key) for s in statements]
+    return [n for n in found if n is not None]
+
+
+def _proof_at(result: ScanResult, statement: NodeRec, key: str) -> NodeRec | None:
+    """The proof of `statement` that `key` (`…/proof`, `…/proof/N`) names by its place among the statement's proofs; None when it has fewer."""
+    m = _BY_LABEL.fullmatch(key)
+    i = int(m["n"] or 1) - 1 if m else 0
+    return result.nodes.get(statement.proofs[i]) if len(statement.proofs) > i else None
+
+
 def line_before(result: ScanResult, node: NodeRec) -> str:
     """The last line with words above `node` in its file: what a suggested edit on a key named by place records beside the block's text (`near`), to tell the block from another that reads the same."""
     source = result.files.get(node.file)
@@ -117,10 +148,11 @@ def follow(
     named_by_place : which keys a block put in before them renumbers.
     """
     if not want:
-        return node
+        return node if node is not None else result.node_named(key)
     head = _container_key(result, key, node)
     if head:
-        container: NodeRec | None = result.nodes.get(head)
+        # a place's key names the block now there, whatever key a label or an id has given it since (`ScanResult.named`)
+        container: NodeRec | None = result.node_named(head)
         if not context and container is not None and block_hash(result, container.key) == want:
             # unchanged, a region with no context is read in its block as loom always read it
             return container
@@ -128,7 +160,7 @@ def follow(
         return follow(
             result,
             head,
-            result.nodes.get(head),
+            container,
             want,
             edit=edit,
             near=near,
@@ -136,10 +168,35 @@ def follow(
             quote=quote,
             context=context,
         )
+    if node is None:
+        node = result.node_named(key)
+    if node is None and (label := given_by_label(result, key)):
+        shared = shared_label(result, key)
+        if shared is not None:
+            # a label two statements carry, a draft copied to a new file: a record about a place is the one in the document it was written in, else on none
+            documents = {result.current_document(d) or d for d in (context or {}).get("documents") or []}
+            mine = [n for n in shared if documents & set(n.reached_by)]
+            if len(mine) > 1:
+                # the document holds it twice (LaTeX warns of it): the one its recorded neighbours stand by most, more holding than saying it is not, and where two tie, the one holding the record's very text
+                score = {id(n): (lambda s: s[0] - s[1])(_sides(result, n, context or {})) for n in mine}
+                best = max(score.values())
+                top = [n for n in mine if score[id(n)] == best]
+                mine = top if len(top) == 1 else [n for n in top if block_hash(result, n.key) == want]
+            return mine[0] if len(mine) == 1 else None
+        holder = result.nodes.get(result.assembly.labels.get(label, ""))
+        if holder is not None and holder.kind == "environment":
+            # the label stays on its statement, which an id now keys: the key names that statement, or its proof at the same place
+            node = holder if key == label else _proof_at(result, holder, key)
+            if node is None:
+                # the label went to a statement with no proof there: the proof's record goes with its text
+                return _by_place(result, key, None, want, edit=edit, near=near, quote=quote, context=context or {})
+        else:
+            # the label renamed or deleted: the record goes with its text, as a place's does
+            return _by_place(result, key, None, want, edit=edit, near=near, quote=quote, context=context or {})
     # a document's own text is named by its file's path, which a rename takes away as it does a key named by place
     gone_document = node is None and key.endswith(".tex") and not key.startswith("prose:")
     if not named_by_place(result, key, node) and not gone_document:
-        return _stable(result, key, node, want, quote, context or {})
+        return _stable(result, key, node, want, quote, context or {}, edit=edit, near=near)
     return _by_place(result, key, node, want, edit=edit, near=near, quote=quote, context=context or {})
 
 
@@ -149,7 +206,15 @@ def rewritten(result: ScanResult, node: NodeRec, want: str, quote: str = "") -> 
 
 
 def _stable(
-    result: ScanResult, key: str, node: NodeRec | None, want: str, quote: str, context: dict[str, Any]
+    result: ScanResult,
+    key: str,
+    node: NodeRec | None,
+    want: str,
+    quote: str,
+    context: dict[str, Any],
+    *,
+    edit: bool = False,
+    near: str = "",
 ) -> NodeRec | None:
     """A stable key's record: on the block that carries its id or label, unless that label moved, or, for an id's proof (`ID/proof`, numbered by its place among the proofs), unless the proof at the key no longer holds its text and stands apart from its recorded neighbours.
 
@@ -172,12 +237,17 @@ def _stable(
         and _PROOF_OF_ID.match(key)
         and _sides(result, node, context)[1]
     ):
-        # an id's proofs are numbered by their place among its proofs: a proof standing apart from the record's neighbours is another one, which took the key of one deleted
+        # an id's proofs are numbered by their place among its proofs: a proof standing apart from the record's neighbours is another one, which took the key of one deleted; a label's goes with its text, as a place's does
+        if given_by_label(result, key):
+            return _by_place(result, key, None, want, edit=edit, near=near, quote=quote, context=context)
         return None
     if context and block_hash(result, node.key) != want:
         moved = _moved(result, want, node, documents, context, quote)
         if moved is not None:
             return moved
+    if not still and context and given_by_label(result, key) and _sides(result, node, context)[0] < 2:
+        # an author reuses a label for another result, where loom never reuses an id: a block that no longer reads like the record keeps it only where it stands between both its recorded neighbours, and otherwise the record goes with its text
+        return _by_place(result, key, None, want, edit=edit, near=near, quote=quote, context=context)
     return node if still or not VERIFY else None
 
 

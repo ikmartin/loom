@@ -9,6 +9,3 @@ online = false
 
 [lint]
 disable = []
-
-[review]
-track_edits = true

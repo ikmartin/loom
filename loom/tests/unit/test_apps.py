@@ -400,10 +400,10 @@ def test_the_record_names_loom_s_rules_in_the_file_whichever_write_fails(
     settings = q / ".claude/settings.json"
     real = layout._write
 
-    def write(root: Path, rel: str, text: str) -> None:
+    def write(root: Path, rel: str, text: str, **kw: object) -> None:
         if rel.endswith(layout.RULES_FILE) and "private" in settings.read_text():
             raise WriteRefused("not-writable", "loom could not write the record (No space left on device)")
-        real(root, rel, text)
+        real(root, rel, text, **kw)  # type: ignore[arg-type]
 
     with monkeypatch.context() as patched:
         patched.setattr(layout, "_write", write)

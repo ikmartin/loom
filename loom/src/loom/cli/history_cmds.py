@@ -86,7 +86,7 @@ def _history(result: ScanResult) -> History:
     "declared",
     default=None,
     metavar="NAME",
-    help="Who drafts it; an agent names itself, including Agent or AI.",
+    help="Who drafts it; an agent's name ends in Agent.",
 )
 @click.option("--section", metavar="ID", help="Copy only this section or subsection and its descendants.")
 @click.option("--dry-run", is_flag=True, help="Say what would be written, and write nothing.")
@@ -414,21 +414,31 @@ def fork(
     elif dry_run:
         verdict = f"would fork {plan.node_id} as {plan.new_id} for {plan.doc}{where}, with this patch for {plan.doc}"
     else:
-        if target is not None:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(plan.node_text, encoding="utf-8")
-        append_entry(
-            result.quilt.history_dir,
-            "fork",
-            {
-                "new": plan.new_id,
-                "from": {"id": plan.node_id, "step": plan.step, "hash": plan.hash},
-                "in": plan.doc,
-                "to": plan.node_file or plan.doc,
-                "patched": plan.doc,
-            },
-            actor_for(root),
-        )
+        from loom import writes
+
+        # one act through the door: the forked node's file and the history's line of it, together or not at all
+        with writes.act(root, result.quilt.history_dir, "fork", actor_for(root)) as w, writes.staging(w):
+            if target is not None:
+                writes.save(
+                    result.quilt.root,
+                    result.quilt.history_dir,
+                    target,
+                    plan.node_text.encode("utf-8"),
+                    kind="fork",
+                    actor=actor_for(result.quilt.root),
+                )
+            append_entry(
+                result.quilt.history_dir,
+                "fork",
+                {
+                    "new": plan.new_id,
+                    "from": {"id": plan.node_id, "step": plan.step, "hash": plan.hash},
+                    "in": plan.doc,
+                    "to": plan.node_file or plan.doc,
+                    "patched": plan.doc,
+                },
+                actor_for(root),
+            )
         verdict = f"forked {plan.node_id} as {plan.new_id} for {plan.doc}{where}; apply this patch to {plan.doc}, which loom never edits"
     report = Report(
         verdict,
@@ -654,11 +664,14 @@ def mv(old: str, new: str, dry_run: bool, as_json: bool, quilt_path: str | None)
         main_moved = follows and main != new_rel
         data: dict[str, Any] = {"action": "move", **record}
     else:
-        if moved:
-            (root / new_rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.move(str(root / old_rel), str(root / new_rel))
-        entry = append_entry(result.quilt.history_dir, "move", record, actor_for(root))
-        main_moved = follows and set_main_forced(result.quilt, new_rel)
+        from loom import writes
+
+        # one act through the door: the document moved, the history's line of it and the config's main, together
+        with writes.act(root, result.quilt.history_dir, "mv", actor_for(root)) as w, writes.staging(w):
+            if moved:
+                w.move(old_rel, new_rel)
+            entry = append_entry(result.quilt.history_dir, "move", record, actor_for(root))
+            main_moved = follows and set_main_forced(result.quilt, new_rel)
         data = {**entry.to_dict(), "line": entry.line}
     if dry_run:
         said = (
@@ -830,9 +843,7 @@ def _linearize(
             groups=groups,
             data={"action": "linearize", **record},
         )
-    dest = root / to_rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_text(text, encoding="utf-8")
+
     checked = (
         "not compared with it, as --no-check asked"
         if no_check
@@ -840,20 +851,32 @@ def _linearize(
     )
     if not no_check and spine_rel in result.masters:
         progress.next_stage(f"identity test: compiling {spine_rel} and {to_rel}")
+        # the flat copy is compiled as it would be written, before anything is
         with tempfile.TemporaryDirectory(prefix="loom-identity-") as tmp:
             ident = identity_test(
-                root, spine_rel, root, to_rel, Path(tmp), engine_for(result, spine_rel), base=result.base_of(spine_rel)
+                root,
+                spine_rel,
+                root,
+                to_rel,
+                Path(tmp),
+                engine_for(result, spine_rel),
+                base=result.base_of(spine_rel),
+                after_overlay={to_rel: text.encode("utf-8")},
             )
         if not ident.passed and not ident.skipped:
-            dest.unlink(missing_ok=True)
             diffs = "\n".join(f"  {i.text}" + (f"  {i.key}" if i.key else "") for i in identity_group(ident)[0].items)
             raise ContentError(
-                f"the flat copy does not typeset as {spine_rel}; {to_rel} was removed and nothing was recorded. Pass --no-check to write it anyway.\n"
+                f"the flat copy does not typeset as {spine_rel}; nothing was written. Pass --no-check to write it anyway.\n"
                 + diffs
             )
         checked = identity_said(ident, "it", spine_rel)
-    entry = append_entry(result.quilt.history_dir, "linearize", record, actor_for(root))
-    main_moved = main in superseded and set_main_forced(result.quilt, to_rel)
+    from loom import writes
+
+    # one act through the door: the flat copy, the history's line of it and the config's main, together or not at all
+    with writes.act(root, result.quilt.history_dir, "linearize", actor_for(root)) as w, writes.staging(w):
+        w.replace(to_rel, text.encode("utf-8"))
+        entry = append_entry(result.quilt.history_dir, "linearize", record, actor_for(root))
+        main_moved = main in superseded and set_main_forced(result.quilt, to_rel)
     progress.next_stage(f"scanning with {to_rel}")
     # what a linearize refuses to bring in is by code (`gates`), so a regrade never lets through what it refused
     had = {(d.code, d.message) for d in result.lint if gates(d)}
@@ -1087,9 +1110,14 @@ def _restore(name: str, to: str, dry_run: bool, as_json: bool, quilt_path: str |
         after = scan(quilt, overlay={dest_rel: plan.text})
         data: dict[str, Any] = {"action": "restore", **record}
     else:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(plan.text, encoding="utf-8")
-        entry = append_entry(quilt.history_dir, "restore", record, actor_for(root))
+        from loom import writes
+
+        # one act through the door: the document restored and the history's line of it, together or not at all
+        with writes.act(root, quilt.history_dir, "restore-to", actor_for(root)) as w, writes.staging(w):
+            if w.read(dest_rel) is not None:
+                raise writes.WriteRefused("exists", f"{dest_rel} exists already; nothing was written", status=409)
+            w.replace(dest_rel, plan.text.encode("utf-8"))
+            entry = append_entry(quilt.history_dir, "restore", record, actor_for(root))
         after = scan(load_quilt(root))
         data = {**entry.to_dict(), "line": entry.line}
     twice = sorted(k for k, n in after.nodes.items() if n.kind == "conflict" and dest_rel in n.conflict)

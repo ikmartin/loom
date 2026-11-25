@@ -78,8 +78,9 @@ def adopt(
             Report(answer["message"], data=answer).emit(as_json)
             return
         if target is not None:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(preview["patch"], encoding="utf-8")
+            from loom.writes import save
+
+            save(result.quilt.root, result.quilt.history_dir, target, preview["patch"].encode("utf-8"), kind="patch")
         if as_json or not preview["patch"] or target is not None:
             Report(_previewed(preview, output), data=preview).emit(as_json)
             return

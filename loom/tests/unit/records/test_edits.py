@@ -496,8 +496,8 @@ def test_compile_with_an_edit_substitutes_its_text(tmp_path: Path) -> None:
     assert "at most two points" in region and "one or two points" not in region
 
 
-def test_keep_all_keeps_the_suggested_edits_where_edits_in_place_are_not_tracked(tmp_path: Path) -> None:
-    """With no look and no tracking, Keep all has no look to take first: it keeps what waits."""
+def test_keep_all_with_no_look_takes_the_first_and_keeps_the_suggested_edits(tmp_path: Path) -> None:
+    """With no look nothing in place waits: Keep all takes the first look, then keeps the suggestions that do."""
     from loom.render.api import handle
     from loom.scan.quilt import save_author
 
@@ -505,7 +505,9 @@ def test_keep_all_keeps_the_suggested_edits_where_edits_in_place_are_not_tracked
     q = demo(tmp_path)
     a = suggest(q, "--quote", "one or two points", "--with", "at most two points")
     said = handle(q, "change-keep", {"all": True, "author": "Tom"})
-    assert a in said["done"] and "first look" not in said["result"]
+    assert a in said["done"] and said["result"].startswith(
+        "took your first look; kept 2 changes"
+    )  # the demo's own as well
     assert "at most two points" in (q / LEMMA).read_text()
 
 
@@ -581,7 +583,7 @@ def test_words_that_reach_a_blocks_begin_or_end_are_no_place_for_an_edit(tmp_pat
     with pytest.raises(Unplaced, match="reach the block's"):
         place(*placed(q, old))
     before = (q / LEMMA).read_text()
-    said = ok("changes", "--keep", old, cwd=q).stdout
+    said = refused("changes", "--keep", old, cwd=q, code=1, match="kept nothing").stdout
     assert said.startswith("kept nothing") and "reach the block's" in flat(said)
     assert (q / LEMMA).read_text() == before and placed(q, old)[1].status == "open"
 
@@ -716,7 +718,7 @@ def test_an_insertion_is_placed_only_while_the_words_beside_its_place_stand(tmp_
         place(*placed(q, head))
     # Keep writes nothing for one unplaced
     text = (q / LEMMA).read_text()
-    ok("changes", "--keep", after, cwd=q)
+    refused("changes", "--keep", after, cwd=q, code=1, match="kept nothing")
     assert (q / LEMMA).read_text() == text and find(q, after).status == "open"  # type: ignore[union-attr]
 
 
@@ -741,7 +743,7 @@ def test_an_insertion_beside_a_quote_that_ends_or_starts_its_blocks_text_holds_t
     with pytest.raises(Unplaced, match="right before the text"):
         place(*placed(q, before))
     text = (q / SHEET).read_text()
-    ok("changes", "--keep", after, cwd=q)
+    refused("changes", "--keep", after, cwd=q, code=1, match="kept nothing")
     assert (q / SHEET).read_text() == text
     # typed in exactly as suggested, it is taken where it stands
     exact = suggest(q, "--quote", "Zebra remark, reworded by hand.", "--with", "Zebra coda.", "--after", key=two)
@@ -790,7 +792,7 @@ def test_a_replacement_whose_quote_was_rewritten_goes_nowhere_though_it_reads_li
     with pytest.raises(Unplaced, match="no longer stands"):
         place(*placed(q, a))
     text = (q / LEMMA).read_text()
-    ok("changes", "--keep", a, cwd=q)
+    refused("changes", "--keep", a, cwd=q, code=1, match="kept nothing")
     assert (q / LEMMA).read_text() == text and "the one-point orbits." in text
 
 

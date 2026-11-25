@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import cached_property
 from pathlib import Path, PurePosixPath
@@ -19,7 +20,7 @@ from loom.scan.expand import Expansion, expand_master
 from loom.scan.graph import Graph
 from loom.scan.memo import reading
 from loom.scan.model import Diagnostic, Fix, Location, SourceFile, Taxon
-from loom.scan.nodes import Assembly, assemble
+from loom.scan.nodes import Assembly, NodeRec, assemble
 from loom.scan.preamble import PreambleClosure, build_closure, taxa_conflicts, taxa_union
 from loom.scan.quilt import Quilt
 from loom.scan.relations import RelationRec, find_relations
@@ -70,6 +71,53 @@ class ScanResult:
     @property
     def nodes(self):  # type: ignore[no-untyped-def]
         return self.assembly.nodes
+
+    def named(self, key: str) -> str | None:
+        """The key of the block or region `key` names now: itself, or the one its place names.
+
+        A statement's place key (`FILE#ENV:N`), its proofs' (`.../proof`) and its regions' (`...#LABEL`) still name it once a label or an id keys it, so a record or a link written on the place finds the block: a label added later to a statement that had none must not lose the notes already on it (`Assembly.places`).
+
+        Parameters
+        ----------
+        key : str
+            A key as a record, a link or a command names it.
+
+        Returns
+        -------
+        str or None
+            A key of `nodes` or of the regions; None when `key` names neither, now or by its place.
+
+        See Also
+        --------
+        node_named : the block itself.
+        """
+        regions, places = self.assembly.regions, self.assembly.places
+        if key in self.nodes or key in regions:
+            return key
+        if key in places:
+            return places[key]
+        head, sep, label = key.rpartition("#")
+        if sep and head in places and f"{places[head]}#{label}" in regions:
+            return f"{places[head]}#{label}"
+        return None
+
+    @cached_property
+    def shared_labels(self) -> dict[str, list[NodeRec]]:
+        """Each label two or more statements of files a document reads carry, with those statements in file order: a label a draft copied to a new document defines again, which keys neither (`nodes._keyable_labels`); a statement in a file no document reads is no record's, as everywhere (`docs/design/writes.md`)."""
+        out: dict[str, list[NodeRec]] = {}
+        for n in sorted(self.assembly.nodes.values(), key=lambda n: (n.file, n.start)):
+            if n.kind == "environment" and n.reached_by:
+                for label in set(n.labels):
+                    out.setdefault(label, []).append(n)
+        return {label: found for label, found in out.items() if len(found) > 1}
+
+    def node_named(self, key: str) -> NodeRec | None:
+        """The block `key` names now, by its key or its place (`named`); a region's is the block it is in; None for neither."""
+        found = self.named(key)
+        if found is None:
+            return None
+        region = self.assembly.regions.get(found)
+        return self.assembly.nodes.get(region.container if region is not None else found)
 
     @cached_property
     def external_reach(self) -> dict[str, frozenset[str]]:
@@ -237,9 +285,13 @@ def landmark_documents(quilt: Quilt) -> list[str]:
 
 
 def scan(
-    quilt: Quilt, overlay: dict[str, str] | None = None, *, bases: dict[str, str] | None = None, copy: bool = False
+    quilt: Quilt,
+    overlay: Mapping[str, str | None] | None = None,
+    *,
+    bases: dict[str, str] | None = None,
+    copy: bool = False,
 ) -> ScanResult:
-    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`). `copy` says `quilt` is a copy made of another (a temporary directory, a saved context).
+    """Scan a quilt. `overlay` maps quilt-relative paths to the text of unsaved editor buffers, which stand in for what is on disk; a path the quilt does not contain is added, so a new file is scanned before it is first saved, and None stands for a file that is not there, so a write planned to remove one is scanned before it is made. `bases` states the directory a document compiles from where the quilt's own history cannot (`ScanResult.base_of`). `copy` says `quilt` is a copy made of another (a temporary directory, a saved context).
 
     A scan is a `memo.reading`: when it ends, unless a build or another reading that began before it is still open, what the scanner remembers of a text it did not read is forgotten. A scan of a copy keeps instead: it forgets only what it made, so the quilt it was made from keeps its entries.
     """
@@ -247,14 +299,14 @@ def scan(
         return _scan(quilt, overlay, bases)
 
 
-def _scan(quilt: Quilt, overlay: dict[str, str] | None, bases: dict[str, str] | None) -> ScanResult:
+def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[str, str] | None) -> ScanResult:
     root = quilt.root
     result = ScanResult(quilt=quilt, base_overrides=dict(bases or {}))
     overlay = overlay or {}
     skip = skipped_dirs(quilt)
-    paths = list(discover_files(root, skip))
+    paths = [rel for rel in discover_files(root, skip) if not (rel in overlay and overlay[rel] is None)]
     for extra in sorted(overlay):
-        if extra not in paths and not extra.startswith(tuple(f"{d}/" for d in skip)):
+        if overlay[extra] is not None and extra not in paths and not extra.startswith(tuple(f"{d}/" for d in skip)):
             paths.append(extra)
     result.canon_files = landmark_documents(quilt)
     for rel in paths:

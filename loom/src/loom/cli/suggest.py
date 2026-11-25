@@ -39,7 +39,7 @@ from loom.records.edits import EditRefused, find, replay
     "author",
     default=None,
     metavar="NAME",
-    help="Who suggests it; an agent names itself, with Agent or AI in the name.",
+    help="Who suggests it; an agent's name ends in Agent.",
 )
 @click.option(
     "--withdraw", default=None, metavar="EDIT", help="Withdraw suggested edit EDIT, one of yours still open, instead."

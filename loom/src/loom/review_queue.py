@@ -94,12 +94,15 @@ def rows_for(result: ScanResult, manifest: dict[str, Any]) -> list[dict[str, Any
     from loom.cli.review import _owned
 
     root = result.quilt.root
+    # a row written on a statement's place key is the block's still once a label or an id keys it (`ScanResult.named`)
     kept = {
-        key for key, row in _read(root, manifest.get("reviewer", {}).get("name")).items() if row.get("explicit_pending")
+        result.named(key) or key
+        for key, row in _read(root, manifest.get("reviewer", {}).get("name")).items()
+        if row.get("explicit_pending")
     }
     from loom.review_origins import read
 
-    shared = read(root)
+    shared = {result.named(key) or key: row for key, row in read(root).items()}
     origins = {key: row["source"] for key, row in shared.items()}
     changed_by_pull = {key: row["changed"] for key, row in shared.items()}
     baselines = {key: row["baseline"] for key, row in shared.items()}

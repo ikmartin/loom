@@ -170,6 +170,7 @@ def set_main(quilt: Quilt, master_rel: str) -> bool:
 def set_main_forced(quilt: Quilt, master_rel: str) -> bool:
     """Point `[quilt] main` at `master_rel` whatever it says now; used when a conversion supersedes the default master, which would otherwise leave the quilt without one."""
     from loom.config_edit import ConfigRefused, set_values
+    from loom.writes import staged
 
     cfg = quilt.root / "config.toml"
     text = cfg.read_text(encoding="utf-8")
@@ -177,4 +178,7 @@ def set_main_forced(quilt: Quilt, master_rel: str) -> bool:
         set_values(quilt, {"quilt.main": master_rel})
     except ConfigRefused:
         return False  # a layout loom cannot edit keeps its main, and the scan says which document it uses instead
-    return cfg.read_text(encoding="utf-8") != text
+    # inside an act that stages, the new config is the act's until it commits
+    held, data = staged(cfg)
+    now = data.decode("utf-8") if held and data is not None else cfg.read_text(encoding="utf-8")
+    return now != text

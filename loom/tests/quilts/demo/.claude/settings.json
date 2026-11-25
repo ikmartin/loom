@@ -79,6 +79,7 @@
       "Edit(/.loom/agents/sessions/index.jsonl)",
       "Edit(/config.toml)",
       "Edit(/research-state.md)",
+      "Edit(/drafting/**)",
       "Bash(loom accept*)",
       "Bash(loom adopt*)",
       "Bash(loom ai close*)",
