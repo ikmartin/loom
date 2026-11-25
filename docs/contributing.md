@@ -74,6 +74,7 @@ To try a generator's change on a branch, run `scripts/regen` there and leave wha
 Each of these has a place of its own, so that two changes made at once do not touch the same lines.
 
 - **An endpoint of the write API** is a handler in its family's module under `loom/src/loom/render/endpoints/` and an entry in that module's `HANDLERS` (and in its `READS`, `NO_REBUILD` or `RECORD_WRITES` where it is one); a case in `loom/tests/unit/render/write_api/cases_<family>.py`; and a row in `docs/specs/write-api.md`. `render/api.py` gathers the families and is not edited.
+- **An endpoint of the home server** (`loom app`) is a handler in `loom/src/loom/app/server.py`'s `HANDLERS`, a test under `loom/tests/unit/app/`, and a row in `docs/specs/write-api.md` §7.
 - **A part of the manifest** is a function in `ATTACH` (`loom/src/loom/render/attach.py`), given the scan, the records, the renderer and the manifest being made. `build()` is not edited.
 - **Something the viewer's column draws** is in the child that draws it, under `arras/src/lib/shell/column/`: the files' shelf, the list of documents, the Library's shelf and its dialog, Review's sections, the foot. `Column.svelte` is the frame they stand in. What a child must remember while it is off screen (a shelf open, a filter typed) is kept in a module beside it, since the column takes its children down when it folds. A file dropped on the window is `arras/src/lib/components/DropZone.svelte`'s to take in.
 

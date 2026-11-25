@@ -6,6 +6,7 @@ import click
 
 from loom.cli.adopt import adopt
 from loom.cli.ai import ai
+from loom.cli.app_cmd import app_command
 from loom.cli.build_cmd import build_command
 from loom.cli.build_cmds import check, compile, source
 from loom.cli.changes_cmd import changes_command
@@ -74,6 +75,7 @@ main.add_command(compile)
 main.add_command(check)
 main.add_command(source)
 main.add_command(serve)
+main.add_command(app_command)
 main.add_command(accept)
 main.add_command(annotate)
 main.add_command(suggest_command)

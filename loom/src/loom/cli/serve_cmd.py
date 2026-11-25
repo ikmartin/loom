@@ -15,7 +15,12 @@ from loom.render.serve import BUILD_URL, DEFAULT_PORT, CannotBind, ServeSession,
 
 
 @click.command()
-@click.option("--port", default=DEFAULT_PORT, show_default=True, help="Port to listen on; fails if busy.")
+@click.option(
+    "--port",
+    type=int,
+    default=None,
+    help=f"Port to listen on; fails if busy. Default: the one this quilt keeps on loom's home, else {DEFAULT_PORT}.",
+)
 @click.option("--open", "open_browser", is_flag=True, help="Open the browser.")
 @click.option(
     "--no-compile",
@@ -30,7 +35,7 @@ from loom.render.serve import BUILD_URL, DEFAULT_PORT, CannotBind, ServeSession,
     help="Serve the built viewer at PATH from where it lies, read on every request, so a rebuild of it shows on a reload: for trying a change to the viewer.",
 )
 @quilt_option
-def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, quilt_path: str | None) -> None:
+def serve(port: int | None, open_browser: bool, no_compile: bool, viewer: str | None, quilt_path: str | None) -> None:
     """Serve the viewer for this quilt and keep it current: it republishes on every change until interrupted.
 
     The viewer is at /, and what it reads at /build/. One server runs per quilt. At rest after a build, at most once an hour, it removes what loom keeps for no purpose any more, as a whole loom build does: from .loom/cache/ what its last build does not name and nothing has written in the last hour, expired scratch and old saved previews. Every document a change reaches compiles in the background, the one being read first, as does on starting each one never compiled or edited since; a compile that makes no PDF leaves the last good one, and `loom status` lists it.
@@ -38,6 +43,11 @@ def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, q
     from loom.arras_bundle import BundleEnvError
 
     quilt = open_quilt(quilt_path)
+    if port is None:
+        from loom.app.registry import port_of
+
+        # the port the home keeps for this quilt: its viewer's preferences and layout are kept per port
+        port = port_of(quilt.root) or DEFAULT_PORT
     try:
         bundle = Path(viewer).expanduser().resolve() if viewer else locate_bundle()
     except BundleEnvError as e:
@@ -74,8 +84,9 @@ def serve(port: int, open_browser: bool, no_compile: bool, viewer: str | None, q
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, _term)
-    session.start()
     try:
+        # inside: a stop that comes during the first build, as the home's can, is a clean stop too
+        session.start()
         while True:
             time.sleep(1)
     except KeyboardInterrupt:

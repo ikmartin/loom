@@ -59,6 +59,7 @@ MODULES = {
     "sessions.py": "loom's records of agents' sessions",
     "presence.py": "`.loom/local/`",
     "machine.py": "the machine's own place",
+    "app/": "the home's own places in the machine's (its list, its address and lock, the servers' logs, the drops waiting, the records of quilts being made) and loom's app; a new quilt is made in a hidden folder beside its place and renamed into it whole, its skeleton `cli/quilt.py`'s and its paper brought in through the import's act",
     "looks.py": "the person's look, a record",
     "review_queue.py": "loom's records",
     "mcp/server.py": "an agent's scratch and the server's log",
@@ -68,6 +69,7 @@ MODULES = {
 #: Functions of mixed modules that write only loom's own places, by `module:qualname`, with why.
 FUNCTIONS = {
     "adopt.py:_flat_shape_made": "a temporary tree",
+    "cli/app_cmd.py:_open": "the home's own log, in the machine's place",
     "adopt.py:_merge": "a temporary tree",
     "adopt.py:prepare": "the saved preview, `.loom/local/`",
     "adopt.py:decide": "the saved choices, a record",

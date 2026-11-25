@@ -32,6 +32,7 @@ from loom.render.watch import Watcher, scan_unread, snapshot
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult
 from loom.tex.runner import CompileResult, compile_document, normalise_engine
+from loom.version import code_stamp
 
 DEFAULT_PORT = 8791
 ASSET_SUFFIXES = {
@@ -232,14 +233,6 @@ def viewer_version(bundle: Path) -> str:
         return str(json.loads((bundle / "_app" / "version.json").read_text(encoding="utf-8")).get("version", ""))
     except (OSError, ValueError, AttributeError):
         return ""
-
-
-def code_stamp() -> tuple[int, int]:
-    """loom's Python as it stands on disk: how many modules, and the newest one's mtime, which an edit, a merge or an install moves."""
-    import loom
-
-    times = [p.stat().st_mtime_ns for p in Path(loom.__file__).parent.rglob("*.py")]
-    return len(times), max(times, default=0)
 
 
 class CannotBind(Exception):
@@ -856,16 +849,23 @@ class LoomHandler(SimpleHTTPRequestHandler):
             connected = (
                 {"connected": json.loads(self.publications.connected_state)} if self.publications is not None else {}
             )
+            from loom.app.registry import home_url
+
+            # the home page, so a page whose server stopped can send the person back to it
+            home = home_url()
             self._json(
                 HTTPStatus.OK,
                 {
                     **discovery(),
                     "token": self.token,
                     **({"quilt": self.quilt_id} if self.quilt_id else {}),
+                    # the home stops a server it found at the pid the server gives here, never at one a file names
+                    "pid": os.getpid(),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,
                     **served,
+                    **({"home": home} if home else {}),
                 },
             )
             return
