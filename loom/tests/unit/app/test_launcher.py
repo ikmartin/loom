@@ -113,6 +113,23 @@ def test_another_app_called_loom_is_never_touched_and_looms_takes_another_name(
     assert ok("app", "--install").output == said  # an update writes its own again, beside the other
 
 
+@mac
+@pytest.mark.parametrize("to", ["nothing", "a bundle of loom's elsewhere"])
+def test_a_link_called_loom_is_not_looms_own_and_is_left_as_it_is(home: Path, to: str) -> None:
+    there = home / "elsewhere" / "Loom.app"
+    if to != "nothing":
+        (there / "Contents").mkdir(parents=True)
+        (there / "Contents" / "Info.plist").write_bytes(plistlib.dumps({"CFBundleIdentifier": launcher.IDENTIFIER}))
+    link = home / "Applications" / "Loom.app"
+    link.parent.mkdir()
+    link.symlink_to(there)
+    said = ok("app", "--install").output
+    assert link.is_symlink() and os.readlink(link) == str(there)
+    assert not (there / "Contents" / "MacOS").exists()
+    assert (home / "Applications" / f"{launcher.OTHER_NAME}.app" / "Contents" / "MacOS" / "Loom").is_file()
+    assert f"loom's is {launcher.OTHER_NAME}" in said
+
+
 def test_a_second_home_finds_the_first_and_leaves_it_to_run(homes: None, tmp_path: Path) -> None:
     """Two started at once, as a double click on the app does."""
     procs = [

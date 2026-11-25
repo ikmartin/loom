@@ -5,6 +5,7 @@ The bundle holds a shell script, not a program, and loom writes it on the person
 
 from __future__ import annotations
 
+import os
 import plistlib
 import shlex
 import sys
@@ -24,7 +25,9 @@ SYSTEM = Path("/Applications")
 
 
 def _ours(app: Path) -> bool:
-    """Whether the bundle at `app` is loom's own, by the identifier in its `Info.plist`."""
+    """Whether the bundle at `app` is loom's own, by the identifier in its `Info.plist`; a link never is, since loom writes a folder."""
+    if app.is_symlink():
+        return False
     try:
         info = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
     except (OSError, ValueError, plistlib.InvalidFileException):
@@ -36,7 +39,7 @@ def app_path() -> Path:
     """Where loom's app is written: `NAME` in the person's own Applications folder, which needs no password, or `OTHER_NAME` where another app has that name there or in the system's; EnvError when other apps have both."""
     for name in (NAME, OTHER_NAME):
         mine = Path.home() / "Applications" / f"{name}.app"
-        if all(not p.exists() or _ours(p) for p in (mine, SYSTEM / f"{name}.app")):
+        if all(not os.path.lexists(p) or _ours(p) for p in (mine, SYSTEM / f"{name}.app")):
             return mine
     raise EnvError(f"other apps are called {NAME} and {OTHER_NAME}, so loom wrote no app of its own")
 
