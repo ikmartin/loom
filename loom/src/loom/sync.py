@@ -593,6 +593,16 @@ def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None, me: li
     folder = checked_folder(root, quilt.history_dir, state.folder)
     clone = workspace(root, state.project)
     after, overwritten = theirs(clone, state, folder, w.read)
+    # an update left by a crash, with a file it wrote where recovery writes nothing (`.latexmkrc`), is settled once a later update has written each such file again: one that already holds Overleaf's text is confirmed (`Act.confirm`), not written
+    tip = tree_files(clone, state.incoming)
+    for _, left in w.journal.begun.values():
+        if left.get("kind") != "pull" or not isinstance(left.get("files"), dict):
+            continue
+        for rel in left["files"]:
+            if isinstance(rel, str) and rel not in after and rel.startswith(f"{folder}/"):
+                want = tip.get(rel[len(folder) + 1 :])
+                if w.read(rel) == want:
+                    w.confirm(rel, want)
     result = scan(quilt)
     moves = [
         {"from": under(folder, gone), "to": under(folder, came), "remote": came}

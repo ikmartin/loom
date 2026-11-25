@@ -1134,3 +1134,45 @@ def test_a_path_the_file_system_cannot_resolve_is_not_trusted_to_lie_outside_the
     with pytest.raises(writes.WriteRefused) as refused, writes.act(root, load_quilt(root).history_dir, "keep") as w:
         w.replace("renaming/notes.tex", b"x\n")
     assert refused.value.code == "mirrored" and not (root / "renaming").exists()
+
+
+# ---- O-4's settling, and a record naming the quilt itself ------------------------------------------------------------
+
+
+def test_an_update_cut_short_after_a_dot_named_file_is_settled_by_the_next(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O-4: an update killed after writing `.latexmkrc` is left, since recovery writes no dot-named file; the next update, finding `.latexmkrc` as Overleaf holds it already, confirms it (`Act.confirm`) and the left one is settled."""
+    from loom import writes
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root, bare = mirror.paired(tmp_path, {"main.tex": TWO, "loom.sty": "% s\n", ".latexmkrc": "$pdf_mode = 1;\n"})
+    theirs = TWO.replace("not planar", "never planar")
+    mirror.edit(mirror.colleague(tmp_path, bare), "both", {"main.tex": theirs, ".latexmkrc": "$pdf_mode = 4;\n"})
+    overleaf.fetch(load_quilt(root))
+    settled = 0
+    for k in range(12):
+        q = tmp_path / f"cut-{k}"
+        shutil.copytree(root, q, symlinks=True)
+        overleaf.fetch(load_quilt(q))  # a copy's clone is not one this machine made for it, so it is made again
+        restore = dying_before_the_rename(monkeypatch, after=k)
+        try:
+            overleaf.update(load_quilt(q))
+        except Died:
+            pass
+        else:
+            restore()
+            break
+        restore()
+        history = load_quilt(q).history_dir
+        writes.recover(q, history)
+        left = writes.left(q, history)
+        if not left or (q / "drafting/.latexmkrc").read_text() != "$pdf_mode = 4;\n":
+            continue
+        assert [kind for kind, *_ in left] == ["a pull"]
+        assert overleaf.update(load_quilt(q))["state"] == "updated"
+        assert (q / "drafting/main.tex").read_text() == theirs
+        writes.recover(q, history)
+        assert writes.left(q, history) == [], k
+        settled += 1
+    assert settled >= 1
