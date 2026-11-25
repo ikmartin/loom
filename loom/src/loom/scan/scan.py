@@ -24,7 +24,7 @@ from loom.scan.nodes import Assembly, NodeRec, assemble
 from loom.scan.preamble import PreambleClosure, build_closure, taxa_conflicts, taxa_union
 from loom.scan.quilt import Quilt
 from loom.scan.relations import RelationRec, find_relations
-from loom.scan.source import SKIP_DIRS, discover_files, read_source
+from loom.scan.source import SKIP_DIRS, discover_files, lake_project, read_source
 
 _DOCCLASS = re.compile(r"\\documentclass\b")
 
@@ -252,12 +252,12 @@ def unread_dir(quilt: Quilt, rel: str) -> str | None:
     Returns
     -------
     str or None
-        The tool or loom directory `discover_files` skips, or the `skipped_dirs` entry, that `rel` sits in; None when the scan reads it.
+        The tool or loom directory `discover_files` skips, the Lake project root (`lake_project`) or the `skipped_dirs` entry that `rel` sits in; None when the scan reads it.
     """
     for part in Path(rel).parts[:-1]:
         if part in SKIP_DIRS:
             return part
-    return next((d for d in skipped_dirs(quilt) if rel.startswith(f"{d}/")), None)
+    return lake_project(quilt.root, rel) or next((d for d in skipped_dirs(quilt) if rel.startswith(f"{d}/")), None)
 
 
 def landmark_bases(quilt: Quilt) -> dict[str, str]:
@@ -306,7 +306,12 @@ def _scan(quilt: Quilt, overlay: Mapping[str, str | None] | None, bases: dict[st
     skip = skipped_dirs(quilt)
     paths = [rel for rel in discover_files(root, skip) if not (rel in overlay and overlay[rel] is None)]
     for extra in sorted(overlay):
-        if overlay[extra] is not None and extra not in paths and not extra.startswith(tuple(f"{d}/" for d in skip)):
+        if (
+            overlay[extra] is not None
+            and extra not in paths
+            and not extra.startswith(tuple(f"{d}/" for d in skip))
+            and lake_project(root, extra) is None
+        ):
             paths.append(extra)
     result.canon_files = landmark_documents(quilt)
     for rel in paths:

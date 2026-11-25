@@ -1249,7 +1249,7 @@ FORGERIES = {
     "a hash the store does not hold": (lambda h: {"looked": {"drafting/main.tex": "sha256:" + "0" * 64}}, ("drafting/main.tex",), "a text the history does not hold"),
     "a hash that is not a hash": (lambda h: {"looked": {"drafting/main.tex": "not a hash"}}, ("drafting/main.tex",), "a text the history does not hold"),
     "a file it drops that is there": (lambda h: {"looked": {"drafting/main.tex": None}}, ("drafting/main.tex",), "drops drafting/main.tex, which is there"),
-    "a file agents are denied": (lambda h: {"looked": {"config.toml": h}}, ("config.toml",), "in a place agents are denied"),
+    "a file agents are denied": (lambda h: {"looked": {"config.toml": h}}, ("config.toml",), "which your look leaves alone: a place agents are denied"),
     "places in a file the act does not write": (lambda h: {"spans": {"drafting/main.tex": [[0, 10**6]]}}, (), "a file the act does not write"),
     "a tick in a file the act does not write": (lambda h: {"tick": {"path": "drafting/main.tex", "line": 0}}, (), "tick is not a line of a file the act writes"),
 }  # fmt: skip
