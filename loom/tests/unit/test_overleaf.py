@@ -691,17 +691,20 @@ def test_done_in_overleaf_keeps_the_edit_once_an_update_brings_its_text_and_writ
 
 
 def test_no_act_but_an_update_moves_a_file_in_or_out_of_the_mirrored_folder(tmp_path: Path) -> None:
+    """`Drafting/` is the mirrored folder where the file system ignores case, as a Mac's does, and is refused as it is; where case is told apart, as on Linux, it is another folder, and the move into it is the person's to make."""
     from tests.helpers import refused
 
     root, _ = two_lemmas(tmp_path)
     (root / "notes.tex").write_text("\\documentclass{article}\n\\begin{document}\nMine.\n\\end{document}\n")
-    for old, new in (
-        ("drafting/main.tex", "elsewhere.tex"),
-        ("notes.tex", "drafting/notes.tex"),
-        ("notes.tex", "Drafting/notes.tex"),
-    ):
+    for old, new in (("drafting/main.tex", "elsewhere.tex"), ("notes.tex", "drafting/notes.tex")):
         refused("mv", old, new, cwd=root, code=1, match="mirrors Overleaf")
     assert (root / "drafting/main.tex").is_file() and (root / "notes.tex").is_file()
+    if (root / "DRAFTING").exists():
+        refused("mv", "notes.tex", "Drafting/notes.tex", cwd=root, code=1, match="mirrors Overleaf")
+        assert (root / "notes.tex").is_file()
+    else:
+        ok("mv", "notes.tex", "Drafting/notes.tex", cwd=root)
+        assert (root / "Drafting/notes.tex").is_file() and not (root / "drafting/notes.tex").exists()
 
 
 def test_a_link_into_the_mirrored_folder_or_another_spelling_of_it_is_the_folder(tmp_path: Path) -> None:
