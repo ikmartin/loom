@@ -27,6 +27,7 @@
 	import Said from '$lib/review/Said.svelte';
 	import Copies from '$lib/views/review/Copies.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
+	import SaidOnce from './SaidOnce.svelte';
 	import { acceptSections, blockDocuments, changeGroups, type AcceptSection, type Part } from '$lib/views/review/yours';
 	import { review as reviewWords } from '$lib/words/review';
 
@@ -336,6 +337,9 @@
 {#if part}
 	<section class="yours" data-testid="your-changes" data-part={part}>
 		{@render bar()}
+		<!-- said once: what Proposed edits watches, with the places it leaves to the person; and, by the name the bar shows, that git gave it -->
+		{#if part === 'changes' && m.changes_since}<SaidOnce text={reviewWords.once.watched(m.changes_since.when.slice(0, 16).replace('T', ' '), m.changes_since.carried ?? '', unwatched, m.changes_since.holds ?? '')} testid="review-watched" />{/if}
+		{#if part === 'accept' && reviewer && m.reviewer?.source === 'git config user.name'}<SaidOnce text={reviewWords.once.nameFromGit(reviewer)} testid="review-name-from-git" />{/if}
 		{#if part === 'accept'}{@render accepting()}{:else}{@render keeping()}{/if}
 	</section>
 {:else}
