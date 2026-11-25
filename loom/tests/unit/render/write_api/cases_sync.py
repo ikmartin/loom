@@ -90,8 +90,8 @@ def _overleaf_update(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPat
     root, bare = mirror.paired(tmp_path)
     mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": mirror.SOURCE.replace("}A", "}B")})
     s = serve(root)
-    # the server fetches once as it starts, writes nothing of the person's, and says Overleaf has changes
-    for _ in range(100):
+    # the server fetches once as it starts, writes nothing of the person's, and says Overleaf has changes; the fetch runs in the background beside the first build, so a busy machine takes its time
+    for _ in range(600):
         if published(root)["waiting"]:
             break
         time.sleep(0.05)
@@ -125,7 +125,8 @@ def _overleaf_me(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     root, _ = mirror.paired(tmp_path)
     shutil.rmtree(root / ".loom/local")
     s = serve(root)
-    for _ in range(100):
+    # the fetch runs in the background beside the first build, so a busy machine takes its time
+    for _ in range(600):
         if published(root).get("ask_me"):
             break
         time.sleep(0.05)
