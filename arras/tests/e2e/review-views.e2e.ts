@@ -472,6 +472,23 @@ test("Proposed edits says once what it watches and what it leaves to the person,
 	await expect(watched).toContainText('config.toml, /drafting/, /notes/.');
 });
 
+test('before any draft has compiled, no block in Review is named by its id: an unnumbered one by its title, else its kind and section', async ({ page }) => {
+	// no compile yet: the manifest numbers nothing
+	await serve(page, (m) => {
+		for (const n of Object.values(m.nodes) as { numbers: Record<string, unknown> }[]) n.numbers = {};
+	});
+	await open(page);
+	await page.getByTestId('review-kind-accepted-changed').click();
+	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
+	await accept.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
+	const names = await accept.locator('[data-testid="review-row"] .name').allInnerTexts();
+	expect(names.length).toBeGreaterThan(10);
+	for (const name of names) expect(name).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
+	expect(names).toContain('Main Theorem in Appendix: an incomplete argument');
+	await page.getByTestId('review-kind-edits').click();
+	for (const place of await page.getByTestId('change-where').allInnerTexts()) expect(place).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
+});
+
 test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
