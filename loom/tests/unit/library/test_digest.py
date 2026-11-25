@@ -57,7 +57,7 @@ By Section~\ref{sec:w} and \eqref{eq:bound}, every widget is bounded.
 Lemma~\ref{lem:bound}.
 \end{proof}
 \begin{lemma}\label{lem:far}
-Uses \eqref{eq:outside}.
+This lemma uses \eqref{eq:outside} as its only display.
 \end{lemma}
 \begin{equation}\label{eq:outside} y = 2 \end{equation}
 \bibliography{refs}
@@ -72,7 +72,7 @@ PDF = [
     "1 Widgets\nDefinition 1.1 (Widget). A widget is a compact set.\nLemma 1.2. Every widget W (Definition 1.1) satisfies\n"
     "|x| ≤ 1 .\n(1.1)\nProof. By (1.1) and [2, Lemma 2.1]; see [1].\n",
     "2 Bounds\nTheorem 2.1 (Main). By Section 1 and (1.1), every widget is bounded.\nProof. Lemma 1.2.\n"
-    "Lemma 2.2. Uses (2.1).\ny = 2\n(2.1)\n",
+    "Lemma 2.2. This lemma uses (2.1) as its only display.\ny = 2\n(2.1)\n",
 ]
 ME = Who("person", "A. Author")
 
@@ -160,7 +160,9 @@ def test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten(
     assert main is not None and main.body == f"By Section~1 and \\eqref{{{lemma}-eq00}}, every widget is bounded.\n"
     assert main.uses == (lemma,), "a heading is no node: its number as the work prints it"
     far = read(root, stub(root, smith, "2.2"))
-    assert far is not None and far.body == "Uses (2.1).\n", "a display outside every result, its number as printed"
+    assert far is not None and far.body == "This lemma uses (2.1) as its only display.\n", (
+        "a display outside every result, its number as printed"
+    )
     made = {r.on.name: r.get("from") for r in records(root, "digested")}  # type: ignore[attr-defined]
     assert set(made) == {widget, lemma, f"{lemma}-proof00", theorem, f"{theorem}-proof00", far.id}
     assert all(m == {"ref": smith, "tex": read(root, smith).tex} for m in made.values()), "what each was read from"  # type: ignore[union-attr]

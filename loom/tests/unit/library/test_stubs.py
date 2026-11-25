@@ -77,21 +77,20 @@ def test_a_second_build_makes_no_stub_and_takes_no_lock(tmp_path: Path, monkeypa
     assert targets(again)[("Smi24", "Lemma 2.1")] == made[0], "the next scan reaches the stub"
 
 
-def test_a_cited_result_the_store_holds_is_reached_by_its_printed_number_its_taxon_breaking_a_tie(
-    tmp_path: Path,
-) -> None:
-    """The source's taxon wins: a draft's "Lemma 2.1" reaches the work's Proposition 2.1, unless the work also prints a Lemma 2.1."""
+def test_a_cited_result_reaches_a_held_node_of_its_kind_and_number_and_no_other(tmp_path: Path) -> None:
+    """The review's D-20, ruled: a draft's "Lemma 2.1" never reaches the work's Proposition 2.1; it gets a stub of its own, and the kind it names is not corrected."""
     root = quilt(tmp_path)
     result = gathered(root)
     smith = result.refs["Smi24"]
     write_node(root, Node(id="tq-00P1", taxon="proposition", number="2.1", source=smith, body="A proposition.\n"))
     made = [read(root, i) for i in make(gathered(root))]
-    assert [(n.number, n.source) for n in made if n] == [("3", result.refs["Jon19"]), ("2.4", result.refs["Jon19"])], (
-        "Jones's two, and none for Smith's 2.1"
-    )
-    assert targets(gathered(root))[("Smi24", "Lemma 2.1")] == "tq-00P1"
-    write_node(root, Node(id="tq-00Z1", taxon="lemma", number="2.1", source=smith, body="A lemma.\n"))
-    assert targets(gathered(root))[("Smi24", "Lemma 2.1")] == "tq-00Z1"
+    assert [(n.taxon, n.number, n.source == smith) for n in made if n] == [
+        ("lemma", "2.1", True),
+        ("theorem", "3", False),
+        ("lemma", "2.4", False),
+    ], "Smith's Lemma 2.1 is no proposition"
+    reached = targets(gathered(root))[("Smi24", "Lemma 2.1")]
+    assert reached != "tq-00P1" and read(root, reached).taxon == "lemma"  # type: ignore[arg-type, union-attr]
 
 
 def test_writing_nothing_says_what_would_be_made(tmp_path: Path) -> None:
@@ -116,3 +115,36 @@ def test_a_fragment_is_made_again_when_what_its_citations_reach_changes(tmp_path
     make(first)
     after = _input_hash(gathered(root), key, b"")
     assert before != after and _input_hash(gathered(root), key, b"") == after
+
+
+#: The review's D-20: a kind the work holds no result of at that number, two kinds numbered apart, and one note over two works.
+KINDS = r"""\documentclass{article}
+\begin{document}
+As \cite[Corollary 2.1]{Smi24} and \cite[Remark 2.1]{Smi24} say, beside \cite[Lemma 2.1]{Smi24}.
+In a work numbering its kinds apart, \cite[Lemma 1]{Jon19} and \cite[Theorem 1]{Jon19}.
+One note over two works: \cite[Lemma 7]{Jon19,Smi24}.
+\bibliography{refs}
+\end{document}
+"""
+
+
+def test_a_citation_reaches_only_a_result_of_its_own_kind_and_number(tmp_path: Path) -> None:
+    root = quilt(tmp_path)
+    (root / "main.tex").write_text(KINDS)
+    result = gathered(root)
+    smith, jones = result.refs["Smi24"], result.refs["Jon19"]
+    write_node(
+        root, Node(id="tq-00L1", taxon="lemma", number="2.1", source=smith, body="Every widget is bounded.\n"), new=True
+    )
+    made = [read(root, i) for i in make(result)]
+    assert sorted((n.source == smith, n.taxon, n.number) for n in made if n) == [
+        (False, "lemma", "1"),
+        (False, "theorem", "1"),
+        (True, "corollary", "2.1"),
+        (True, "remark", "2.1"),
+    ], "a stub by work, kind and number; none for a note over two works; the held lemma is no corollary's or remark's"
+    got = targets(result)
+    assert got[("Smi24", "Lemma 2.1")] == "tq-00L1"
+    assert "tq-00L1" not in (got[("Smi24", "Corollary 2.1")], got[("Smi24", "Remark 2.1")]), "loom corrects no kind"
+    assert (got[("Jon19", "Lemma 7")], got[("Smi24", "Lemma 7")]) == (jones, smith), "naming no single result"
+    assert len(make(result)) == 0, "made once"

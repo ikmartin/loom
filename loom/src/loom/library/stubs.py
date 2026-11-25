@@ -14,15 +14,15 @@ if TYPE_CHECKING:
 
 
 def due(result: ScanResult) -> list[tuple[str, str, str]]:
-    """The stubs the drafts' citations want and the store lacks, as (reference, taxon, printed number), each once, in the order cited."""
-    out: dict[tuple[str, str], tuple[str, str, str]] = {}
+    """The stubs the drafts' citations want and the store lacks, as (reference, taxon, printed number), each once by all three, in the order cited."""
+    out: dict[tuple[str, str, str], None] = {}
     for c in result.edges.cites:
         if c.ref is None:
             continue
         for (taxon, number), node in zip(c.results, c.nodes, strict=True):
             if node is None:
-                out.setdefault((c.ref, number), (c.ref, taxon, number))
-    return list(out.values())
+                out.setdefault((c.ref, taxon, number), None)
+    return list(out)
 
 
 def make(result: ScanResult, *, write: bool = True) -> list[str]:

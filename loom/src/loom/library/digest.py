@@ -319,7 +319,7 @@ def _compiled(root: Path, ref: str, scope: str, chosen: list[str] | None, online
 
 
 def used(result: ScanResult, ref: str, s: Survey) -> list[str]:
-    """The items of a work's survey the drafts cite by number (scope `used`), in the survey's order: each whose confirmed number a citation of the work locates, the taxon breaking a tie.
+    """The items of a work's survey the drafts cite by number (scope `used`), in the survey's order: each whose kind and confirmed number a citation of the work locates.
 
     Parameters
     ----------
@@ -338,8 +338,7 @@ def used(result: ScanResult, ref: str, s: Survey) -> list[str]:
     wanted = {(t, n) for c in result.edges.cites if c.ref == ref for t, n in c.results}
     out: list[str] = []
     for taxon, number in wanted:
-        same = [i for i in s.items if i.number == number]
-        hit = next((i for i in same if i.taxon == taxon), same[0] if same else None)
+        hit = next((i for i in s.items if i.number == number and i.taxon == taxon), None)
         if hit is not None:
             out.append(hit.item)
     order = {i.item: k for k, i in enumerate(s.items)}
@@ -389,7 +388,7 @@ def of_work(root: Path, ref: str) -> list[Node]:
 
 
 def matched(s: Survey, statements: list[Node]) -> dict[str, Node]:
-    """Each item of the survey a statement of its work holds (`library-views.md` Open 8): by the source's label; else a node with text by its printed number and taxon, a stub by its printed number, the taxon breaking a tie; each node once, never by guess.
+    """Each item of the survey a statement of its work holds (`library-views.md` Open 8): by the source's label; else by its kind and printed number both, a stub as a node with text; each node once, never by guess, and never across kinds.
 
     Parameters
     ----------
@@ -409,11 +408,17 @@ def matched(s: Survey, statements: list[Node]) -> dict[str, Node]:
     for item in s.items:
         node = by_label.get(item.label) if item.label else None
         if node is None and item.number is not None:
-            same = [
-                n for n in statements if n.number == item.number and n.id not in taken and n.label in (None, item.label)
-            ]
-            node = next((n for n in same if n.taxon == item.taxon), None)
-            node = node or next((n for n in same if n.empty), None)
+            node = next(
+                (
+                    n
+                    for n in statements
+                    if n.number == item.number
+                    and n.taxon == item.taxon
+                    and n.id not in taken
+                    and n.label in (None, item.label)
+                ),
+                None,
+            )
         if node is not None and node.id not in taken:
             out[item.item] = node
             taken.add(node.id)
@@ -1003,17 +1008,18 @@ class _Run:
         if any(i.numbered and i.number is None and i.emulated is None for i in self.s.items):
             # a result whose number loom reads no way may be any stub's
             return
-        printed = {i.number for i in self.s.items if i.number} | {
-            i.emulated for i in self.s.items if i.emulated and i.item in self.s.unconfirmed
+        printed = {(i.taxon, i.number) for i in self.s.items if i.number} | {
+            (i.taxon, i.emulated) for i in self.s.items if i.emulated and i.item in self.s.unconfirmed
         }
         holding = {n.id for n in self.held.values()}
         for node in sorted(self.nodes.values(), key=lambda n: n.id):
             if (
                 node.kind != ids.STATEMENT
+                or node.source != self.ref
                 or not node.empty
                 or not node.number
                 or node.id in holding
-                or node.number in printed
+                or (node.taxon, node.number) in printed
             ):
                 continue
             digest_ = node_hash(node_bytes(node))

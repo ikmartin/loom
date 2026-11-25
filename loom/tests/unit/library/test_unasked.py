@@ -124,13 +124,15 @@ def test_online_arxiv_s_pdf_and_source_are_fetched_and_filed_under_the_work_its_
     arden = refs["Arx24"]
     asked: list[str] = []
 
-    def pdf(ident: str, dest: Path) -> Path:
+    def pdf(ident: str, dest: Path, *, attempts: int) -> Path:
+        assert attempts == 1, "one request, never repeated"
         asked.append(f"pdf {ident}")
         return a_pdf(dest / f"{ident}.pdf")
 
-    def source(ident: str, dest: Path) -> Path:
+    def source(ident: str, dest: Path, *, attempts: int) -> Path:
         import gzip
 
+        assert attempts == 1, "one request, never repeated"
         asked.append(f"source {ident}")
         dest.mkdir(parents=True, exist_ok=True)
         got = dest / f"{ident}.gz"
@@ -173,3 +175,25 @@ def test_a_work_is_tried_again_once_a_draft_cites_another_of_its_results(tmp_pat
     (root / "main.tex").write_text(MAIN.replace("By ", "By \\cite[Lemma 9.9]{Smi24}, "))
     make(scan(load_quilt(root)))
     assert smith in due(root), "a stub of it it was not tried for"
+
+
+def test_a_refused_fetch_is_asked_once_recorded_and_not_tried_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's D-22, ruled: one request for each document of a work and no retry; a refusal is recorded and shown, and tried again only when what the work holds changes or the person asks."""
+    from loom.refs import fetch
+
+    root, refs = quilt(tmp_path)
+    arden = refs["Arx24"]
+    asked: list[str] = []
+
+    def refused(ident: str, dest: Path, *, attempts: int) -> Path:
+        asked.append(f"{ident} {attempts}")
+        raise fetch.FetchRefused(f"arxiv.org/pdf/{ident}: HTTP 503 Service Unavailable")
+
+    monkeypatch.setattr(fetch, "arxiv_pdf", refused)
+    monkeypatch.setattr(fetch, "arxiv_source", refused)
+    done = attempt(root, arden, online=True)
+    assert done is not None and done.outcome == "failed" and "503" in (done.why or "")
+    assert asked == ["2401.01234 1"], "the PDF asked once; the source never, the work's fetch having failed"
+    assert [a["outcome"] for a in tried(root, arden)] == ["failed"] and arden not in due(root)

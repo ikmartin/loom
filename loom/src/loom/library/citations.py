@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -18,7 +19,7 @@ Numbered = dict[str, list[tuple[str, str, str]]]
 def resolve(result: ScanResult) -> None:
     """Resolve every citation the scan found, as the store holds the library now.
 
-    Each `CiteRec` gets its reference (`references.named`), the results its postnote locates, the node of its work holding each by printed number, the taxon breaking a tie, and its target: the node where it locates one result the store holds, else its reference.
+    Each `CiteRec` gets its reference (`references.named`), the results its postnote locates, the node of its work holding each by kind and printed number both, and its target: the node where it locates one result the store holds, else its reference. A citation naming several works locates nothing, since one note can name a result of only one of them: it reads as naming no single result.
 
     Parameters
     ----------
@@ -28,9 +29,11 @@ def resolve(result: ScanResult) -> None:
     from loom.library.references import named
 
     cites = result.edges.cites
+    together = Counter((c.src, c.file, c.offset) for c in cites)
     for c in cites:
         c.ref = named(result, c.citekey)
-        c.results = tuple(located(c.postnote)) if c.postnote else ()
+        alone = together[(c.src, c.file, c.offset)] == 1
+        c.results = tuple(located(c.postnote)) if c.postnote and alone else ()
     works = numbered(result.quilt.root, {c.ref for c in cites if c.ref and c.results})
     for c in cites:
         c.nodes = tuple(node_of(works, c.ref, taxon, number) for taxon, number in c.results) if c.ref else ()
@@ -59,6 +62,5 @@ def numbered(root: Path, refs: set[str]) -> Numbered:
 
 
 def node_of(works: Numbered, ref: str, taxon: str, number: str) -> str | None:
-    """The statement of `ref` printed with `number`, the one of `taxon` where two share it; None where it holds none."""
-    same = [(t, n, i) for t, n, i in works.get(ref, []) if n == number]
-    return next((i for t, _n, i in same if t == taxon), same[0][2] if same else None)
+    """The statement of `ref` of kind `taxon` printed with `number`; None where it holds none, a result of another kind with that number among them: loom never corrects the kind a citation names."""
+    return next((i for t, n, i in works.get(ref, []) if n == number and t == taxon), None)

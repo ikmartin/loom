@@ -610,7 +610,7 @@ def test_a_stored_pdf_numbers_each_heading_and_result_at_the_start_of_its_own_li
         ("def:widget", "1.1", 1),
         ("i2", "1.2", 1),
         ("thm:main", "2.3", 1),
-        ("claim:star", None, None),
+        ("claim:star", None, 1),
         ("not:hom", "7.1", 2),
         ("thm:app", "A.1", 2),
     ], "the number the PDF prints, a notation of too few words among them"
@@ -624,8 +624,8 @@ def test_a_stored_pdf_numbers_each_heading_and_result_at_the_start_of_its_own_li
     assert wrong.item("thm:main").number == "2.3", "whatever the compile says"  # type: ignore[union-attr]
     assert survey.place(s, survey.Pages(PDF)) == {
         **{x.section: (x.number, x.page) for x in done.sections if x.number},
-        **{i.item: (i.number, i.page) for i in done.items if i.number},
-    }, "and with no compile at all"
+        **{i.item: (i.number, i.page) for i in done.items if i.page},
+    }, "and with no compile at all; the unnumbered claim by its page alone"
 
 
 #: The fixture as its published version prints it, numbered otherwise: sections 11, 12 and 17 where the source has 1, 2 and 7.
@@ -644,17 +644,19 @@ def test_a_stored_pdf_that_numbers_otherwise_governs_and_a_longer_number_is_neve
         ("def:widget", "11.1", 1),
         ("i2", "11.2", 1),
         ("thm:main", "12.1", 1),
-        ("claim:star", None, None),
-        ("not:hom", None, None),
+        ("claim:star", None, 1),
+        ("not:hom", "17.1", 2),
         ("thm:app", "A.1", 2),
-    ], "a notation of too few words to witness it, printed otherwise than loom reads it, is left"
+    ], (
+        "a notation of too few words to witness it is found by its place between two results found by theirs, the PDF's own number read there"
+    )
     assert [x.number for x in done.sections] == ["11", "12", None, "17", "A"], "12 is never read as the 2 it ends in"
     labels = {k: v.number for k, v in done.labels.items()}
     assert (labels["def:widget"], labels["thm:alias"], labels["sec:intro"]) == ("11.1", "12.1", "11")
     assert labels["eq:bound"] is None, (
         "the PDF numbers the display (11.1), so neither loom's (1) nor the compile's is its number"
     )
-    assert done.unconfirmed == ["not:hom"]
+    assert done.unconfirmed == []
     unnumbered = [RENUMBERED[0].replace("Lemma 11.2.", "Lemma."), RENUMBERED[1]]
     bare = survey.confirm(s, _aux(), survey.Pages(unnumbered))
     assert bare.item("i2").number is None and "i2" in bare.unconfirmed, "shown under no number loom can read"  # type: ignore[union-attr]
@@ -686,7 +688,7 @@ def test_a_token_before_a_mark_is_never_read_as_its_number(tmp_path: Path, befor
             .replace("Lemma 1.2. Every", f"{tail}Lemma. Every")
         )
         got = survey.place(s, survey.Pages([page, PDF[1]]))
-        assert "s2" not in got and "i2" not in got, (tail, got)
+        assert "s2" not in got and got.get("i2", (None, None))[0] is None, (tail, got)
         assert got["thm:main"] == ("2.3", 1), "the marks after are read as before"
 
 
@@ -831,7 +833,9 @@ def test_a_compile_numbers_each_result_as_confirmed_and_pages_it_only_from_the_s
     held = survey.complete(tmp_path / "quilt", TEX, src, "main.tex", pdf="sha256:" + "ef" * 32, pdf_path=pdf)
     assert held.compiled, "the person's own act compiles, whatever the unasked path kept"
     assert [(i.item, i.number) for i in held.items] == numbers
-    assert [i.page for i in held.items] == [1, 1, 1, None, 2, 2], "found on the stored PDF's own pages"
+    assert [i.page for i in held.items] == [1, 1, 1, 1, 2, 2], (
+        "found on the stored PDF's own pages, the unnumbered claim's too"
+    )
     assert held.labels["eq:bound"].number == "1" and held.labels["sec:proofs"].number == "A"
     assert _bytes(src) == before and survey.kept(tmp_path / "quilt", TEX) == alone
     assert survey.kept(tmp_path / "quilt", TEX, "sha256:" + "ef" * 32) == held
@@ -1104,3 +1108,104 @@ def test_a_display_s_number_is_kept_where_the_stored_pdf_shows_it_in_order(
     assert kept == {"e:a", "e:b", "e:two"}, (
         "once one is not where loom counts it, none is kept until the counter starts again"
     )
+
+
+#: Two lemmas with a corollary between, and a second section: the source the review's variant PDFs print otherwise (D-16 to D-19).
+CYCLES = r"""\documentclass{article}
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{corollary}[lemma]{Corollary}
+\begin{document}
+\section{Cycles}
+\begin{lemma}\label{l:a}
+Every cycle of a finite quiver is a sum of simple cycles.
+\end{lemma}
+\begin{corollary}\label{c:mid}
+The cycle space is spanned by simple cycles alone.
+\end{corollary}
+\begin{lemma}\label{l:b}
+Every simple cycle closes after finitely many arrows.
+\end{lemma}
+\section{Paths}
+Paths are read the same way.
+\end{document}
+"""
+L_A = "Every cycle of a finite quiver is a sum of simple cycles."
+MID = "The cycle space is spanned by simple cycles alone."
+L_B = "Every simple cycle closes after finitely many arrows."
+
+
+def _cycles(tmp_path: Path, *pages: str) -> dict[str, tuple[str | None, int]]:
+    here = tmp_path / f"v{len(list(tmp_path.iterdir()))}"
+    here.mkdir()
+    s = survey.read(_one_file(here, CYCLES), "main.tex", TEX)
+    return survey.place(s, survey.Pages(list(pages)))
+
+
+@pytest.mark.parametrize(
+    ("variant", "pages", "kept"),
+    [
+        (
+            "as printed",
+            [f"1 Cycles\nLemma 1.1. {L_A}\nCorollary 1.2. {MID}\nLemma 1.3. {L_B}\n2 Paths\n"],
+            {"l:a": ("1.1", 1), "c:mid": ("1.2", 1), "l:b": ("1.3", 1)},
+        ),
+        (
+            "a lemma inserted before l:a",
+            [
+                f"1 Cycles\nLemma 1.1. An inserted lemma on gadgets and widgets.\nLemma 1.2. {L_A}\nCorollary 1.3. {MID}\nLemma 1.4. {L_B}\n"
+            ],
+            {"l:a": ("1.2", 1), "c:mid": ("1.3", 1), "l:b": ("1.4", 1)},
+        ),
+        (
+            "l:a and l:b swapped",
+            [f"1 Cycles\nLemma 1.1. {L_B}\nCorollary 1.2. {MID}\nLemma 1.3. {L_A}\n"],
+            {"l:a": ("1.3", 1), "c:mid": ("1.2", 1), "l:b": ("1.1", 1)},
+        ),
+        (
+            "l:a missing",
+            [f"1 Cycles\nCorollary 1.1. {MID}\nLemma 1.2. {L_B}\n"],
+            {"c:mid": ("1.1", 1), "l:b": ("1.2", 1)},
+        ),
+        (
+            "a forward mention opening a line",
+            [
+                f"1 Cycles\nLemma 1.1. {L_A}\nCorollary 1.2. {MID}\nLemma 1.3. It closes cycles, as we show below.\n",
+                f"Lemma 1.3. {L_B}\n",
+            ],
+            {"l:a": ("1.1", 1), "c:mid": ("1.2", 1), "l:b": ("1.3", 2)},
+        ),
+        (
+            "the published case: an extra lemma just before",
+            [
+                f"11 Cycles\nLemma 11.1. An extra lemma here too.\nLemma 11.2. {L_A}\nCorollary 11.3. {MID}\nLemma 11.4. {L_B}\n"
+            ],
+            {"l:a": ("11.2", 1), "c:mid": ("11.3", 1), "l:b": ("11.4", 1)},
+        ),
+    ],
+)
+def test_a_result_s_line_is_found_by_its_kind_and_its_own_words_never_by_its_number(
+    tmp_path: Path, variant: str, pages: list[str], kept: dict[str, tuple[str, int]]
+) -> None:
+    """The review's D-16 and D-17: the number is read from the line the words identify, whatever loom reads; a line its words do not follow, before the next result's line, is no result's."""
+    got = _cycles(tmp_path, *pages)
+    assert {k: v for k, v in got.items() if k in ("l:a", "c:mid", "l:b")} == kept, variant
+
+
+def test_a_lone_token_before_an_unnumbered_heading_continues_no_sequence(tmp_path: Path) -> None:
+    """The review's D-18: a display holding only `X`, alone opening a block, and the title of a heading the PDF prints unnumbered after it."""
+    got = _cycles(tmp_path, f"Some words before it.\n\nX\nCycles\nLemma 1.1. {L_A}\n\n2\nPaths\n")
+    assert "s1" not in got, (
+        "X continues nothing: no heading was found at its level before it, and it is not where one begins"
+    )
+    assert "s2" not in got and got["l:a"] == ("1.1", 1), "nor does 2, with no heading found before it at its level"
+    numbered = _cycles(tmp_path, f"Some words before it.\n\n1\nCycles\nLemma 1.1. {L_A}\n\n2\nPaths\n")
+    assert (numbered["s1"], numbered["s2"]) == (("1", 1), ("2", 1)), (
+        "where the sequence begins and goes on, each is kept"
+    )
+
+
+def test_article_s_contents_page_holds_no_place(tmp_path: Path) -> None:
+    """The review's D-19: `pdftotext` writes article's entries with their page numbers on later lines, and the body's heading as its number alone and its title."""
+    contents = "Contents\n1 Cycles\n2 Paths\n2\n2\n"
+    got = _cycles(tmp_path, contents, f"1\nCycles\nLemma 1.1. {L_A}\n\n2\nPaths\n")
+    assert (got["s1"], got["s2"]) == (("1", 2), ("2", 2)), "on the page the heading stands, never the contents'"

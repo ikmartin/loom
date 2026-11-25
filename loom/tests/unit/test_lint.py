@@ -256,3 +256,16 @@ def test_the_manifest_and_lint_agree_whose_each_diagnostic_is(tmp_path: Path) ->
         key(d): d["owner"] for d in published if key(d) in {key(x) for x in linted}
     }
     assert _rows(q, "dangling-link")[0]["owner"] == "person"
+
+
+def test_a_library_result_of_no_work_put_there_by_hand_is_said(tmp_path: Path) -> None:
+    """The review's D-23: no write lets a statement or a proof with no `source` into the store (check 11); one a person puts there by hand is an error lint says."""
+    from loom.paths import LIBRARY_NODES
+
+    q = demo(tmp_path)
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
+    (q / LIBRARY_NODES / "dm-0Z01.node").write_text(
+        '+++\nschema = 1\nid = "dm-0Z01"\ntaxon = "lemma"\n+++\nA lemma of no work.\n'
+    )
+    rows = _rows(q, "loom:node-incomplete")
+    assert [d["locations"][0]["file"] for d in rows] == [f"{LIBRARY_NODES}/dm-0Z01.node"], rows

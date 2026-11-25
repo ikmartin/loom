@@ -1,6 +1,6 @@
 """Loom's own work on the works a draft cites, unasked (`docs/design/library.md`, "Loom alone"): each work the library's stubs name is tried once for what it holds, one at a time, by a worker of the server's after each build. It compiles nothing.
 
-A try fetches, under `online`, arXiv's PDF for a work whose entry states an arXiv number and that holds no PDF, and its source too where it holds neither, one request at a time naming loom and its version, each filed under the work its entry names (`references.attach`). Then a work that holds a source is surveyed and numbered from its PDF alone (`survey.confirmed`) and the results the drafts cite of it are digested (`digest`, scope `used`); a work that holds only a PDF waits for a reader, since an ask is a person's to make (`evidence.asks`); a work that holds neither waits for a document. Each try is recorded in the library's log (`tried`), keyed by what the work holds, its arXiv number and the numbers of its stubs, so a work is tried again only once those change; a try the network being off held back records nothing.
+A try fetches, under `online`, arXiv's PDF for a work whose entry states an arXiv number and that holds no PDF, and its source too where it holds neither, one request for each document, never repeated, naming loom and its version, each filed under the work its entry names (`references.attach`); a refused or failed fetch is recorded, and tried again only when what the work holds changes or the person asks. Then a work that holds a source is surveyed and numbered from its PDF alone (`survey.confirmed`) and the results the drafts cite of it are digested (`digest`, scope `used`); a work that holds only a PDF waits for a reader, since an ask is a person's to make (`evidence.asks`); a work that holds neither waits for a document. Each try is recorded in the library's log (`tried`), keyed by what the work holds, its arXiv number and the numbers of its stubs, so a work is tried again only once those change; a try the network being off held back records nothing.
 """
 
 from __future__ import annotations
@@ -147,10 +147,11 @@ def _fetched(root: Path, ref: str, ident: str, *, want_source: bool) -> Node:
     from loom.refs import fetch
 
     with tempfile.TemporaryDirectory(prefix="loom-fetch-") as tmp:
-        pdf = documents.put_pdf(root, fetch.arxiv_pdf(ident, Path(tmp) / "pdf"))
+        # one request for each document, and none again: a refusal is recorded and waits for the person
+        pdf = documents.put_pdf(root, fetch.arxiv_pdf(ident, Path(tmp) / "pdf", attempts=1))
         node = attach(root, ref, "pdf", pdf, **LOOM, source=f"arXiv {ident}")
         if want_source:
-            got = fetch.arxiv_source(ident, Path(tmp) / "tex")
+            got = fetch.arxiv_source(ident, Path(tmp) / "tex", attempts=1)
             if got.suffix != ".pdf":
                 tex = documents.put_source(root, got, name=got.name)
                 node = attach(root, ref, "tex", tex, **LOOM, source=f"arXiv {ident}")
