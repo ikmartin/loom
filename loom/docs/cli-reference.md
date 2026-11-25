@@ -1128,7 +1128,7 @@ One tool per agent command, named for it (`loom status` is `loom_status`), its o
 
 ## Publish
 
-Build the site and the PDFs, and serve them.
+Build the site and the PDFs, and serve them and the home page.
 
 ### `loom build`
 
@@ -1158,11 +1158,26 @@ The viewer is at /, and what it reads at /build/. One server runs per quilt. At 
 
 | option | description |
 |---|---|
-| `--port` | Port to listen on; fails if busy. |
+| `--port` | Port to listen on; fails if busy. Default: the one this quilt keeps on loom's home, else 8791. |
 | `--open` | Open the browser. |
 | `--no-compile` | Run no TeX: compile nothing, neither after a change nor on starting, and make no snippets. |
 | `--viewer` `PATH` | Serve the built viewer at PATH from where it lies, read on every request, so a rebuild of it shows on a reload: for trying a change to the viewer. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom app`
+
+`loom app [OPTIONS]`
+
+Run loom's home page until interrupted: the quilts on this machine, each served on a port it keeps, and the ones left open served again when it starts.
+
+One home runs on a machine: a home already running is left to run, and its address is printed. Once loom is updated, the home restarts each quilt's server and then itself.
+
+| option | description |
+|---|---|
+| `--port` | Port to listen on; when 8790 is held, any free one. |
+| `--open` | Open the home page in the browser, starting the home first when it is not running, and return. |
+| `--install` | Write loom's app in ~/Applications, which opens the home page, say where, and return. |
+| `--no-compile` | Serve every quilt with no compiles, as loom serve --no-compile. |
 
 ### `loom compile`
 
