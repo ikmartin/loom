@@ -437,14 +437,16 @@ def paired(root: Path) -> SyncState | None:
 def mirrored(root: Path, rel: str) -> bool:
     """Whether the real file `rel` reaches lies in the folder a mirror keeps its project in, which only an update writes.
 
-    Judged as recovery judges a place (`writes._place`, `writes._loom_named`): the path's links resolved to the real file, and each folder it lies in compared with the mirrored folder by the file system's identity, never by spelling, so a link into the folder, or the folder named in another case where case is ignored, is the folder. A path the file system cannot resolve is taken as in it, since it cannot be shown to lie outside; a record loom cannot use mirrors nothing.
+    Judged as recovery judges a place (`writes._place`, `writes._loom_named`): the path's links resolved to the real file, and each folder it lies in compared with the mirrored folder by the file system's identity, never by spelling, so a link into the folder, or the folder named in another case where case is ignored, is the folder. A path the file system cannot resolve is taken as in it, since it cannot be shown to lie outside; a record loom cannot use, or whose folder is not one the mirror may write (`checked_folder`), the quilt itself among them, mirrors nothing.
     """
+    from loom.scan.quilt import NoQuiltError, load_quilt
     from loom.writes import _real
 
     try:
         state = SyncState.read(root)
-        own = os.stat(root / state.folder)
-    except (SyncError, OSError):
+        folder = checked_folder(root, load_quilt(root).history_dir, state.folder)
+        own = os.stat(root / folder)
+    except (SyncError, NoQuiltError, OSError, ValueError):
         return False
     top, real = _real(root), _real(root / rel)
     if top is None or real is None:

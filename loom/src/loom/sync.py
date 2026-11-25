@@ -48,11 +48,15 @@ BAD_RECORD = "This quilt's record of its Overleaf project is not one loom can us
 
 
 def plain_folder(folder: object) -> bool:
-    """Whether `folder` is spelt as a folder of the person's can be: quilt-relative, normal, no part dot-named, empty or read as an option. Where it really lies is `checked_folder`'s."""
+    """Whether `folder` is spelt as a folder of the person's can be: quilt-relative, normal, at least one part, none dot-named, empty or read as an option, so `.` and every other spelling of the quilt itself are not. Where it really lies is `checked_folder`'s."""
     if not isinstance(folder, str) or not folder or "\\" in folder or folder.startswith(("/", "-")):
         return False
     parts = PurePosixPath(folder).parts
-    return PurePosixPath(*parts).as_posix() == folder and not any(p.startswith(".") or p in ("", "..") for p in parts)
+    return (
+        bool(parts)
+        and PurePosixPath(*parts).as_posix() == folder
+        and not any(p.startswith(".") or p in ("", "..") for p in parts)
+    )
 
 
 def checked_folder(root: Path, history: Path, folder: str) -> str:
@@ -593,6 +597,16 @@ def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None, me: li
     folder = checked_folder(root, quilt.history_dir, state.folder)
     clone = workspace(root, state.project)
     after, overwritten = theirs(clone, state, folder, w.read)
+    # an update left by a crash, with a file it wrote where recovery writes nothing (`.latexmkrc`), is settled once a later update has written each such file again: one that already holds Overleaf's text is confirmed (`Act.confirm`), not written
+    tip = tree_files(clone, state.incoming)
+    for _, left in w.journal.begun.values():
+        if left.get("kind") != "pull" or not isinstance(left.get("files"), dict):
+            continue
+        for rel in left["files"]:
+            if isinstance(rel, str) and rel not in after and rel.startswith(f"{folder}/"):
+                want = tip.get(rel[len(folder) + 1 :])
+                if w.read(rel) == want:
+                    w.confirm(rel, want)
     result = scan(quilt)
     moves = [
         {"from": under(folder, gone), "to": under(folder, came), "remote": came}
