@@ -673,7 +673,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "8a25ec7bdb6d9cf95f5b79cf0dfc594c7364128255999075d936b5c8be1690d5",
+   "hash": "0a2e0427abbe9310c22653d3f5e6d52c437f4ee4412e0ab8a79cd6c200900974",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -688,7 +688,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "1876b728c2351a1c3157f8a941aad3f9a04f817527d48272e1d543c91b42b69d",
+   "hash": "c1cb9bda852a4ef38eff7463afe1f68eb8a0cb79d4a03bcdd6c8cb53bc6b88b9",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -703,7 +703,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "1aa7eb436d1dafc8c11c451b06ab671afb57df405789a8e77fe7f5c5ba7a5cac",
+   "hash": "076eae09f6fed7fcb04990769a3bb12f475a0183f3183cea6c726852bc37be4f",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -992,7 +992,6 @@
    "quilt.research_state"
   ],
   "sync": {
-   "command": "loom sync init DIR",
    "paired": false
   },
   "warnings": []
@@ -7710,6 +7709,9 @@
    "taxon": "Definition",
    "title": "Orbit pair"
   }
+ },
+ "overleaf": {
+  "paired": false
  },
  "publisher": {
   "name": "loom",
