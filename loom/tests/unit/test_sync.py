@@ -751,3 +751,58 @@ def test_documents_published_together_sit_under_the_main_document_s_directory(tm
     state = configure(load_quilt(root), str(cloned(tmp_path, overleaf(tmp_path))), "main.tex")
     with pytest.raises(SyncError, match="outside drafting/, the directory of drafting/main.tex"):
         update_documents(load_quilt(root), state, "add", "talks/talk.tex")
+
+
+def _files_of(root: Path) -> dict[str, bytes]:
+    """Every file of the quilt outside `.loom/`, by its path, with its bytes."""
+    return {
+        p.relative_to(root).as_posix(): p.read_bytes()
+        for p in root.rglob("*")
+        if p.is_file() and p.relative_to(root).parts[0] != ".loom"
+    }
+
+
+def test_a_pull_cut_short_on_a_dot_named_file_is_left_with_true_words_and_settled_by_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, compiled: list[str]
+) -> None:
+    """A pull whose workspace changed `.gitignore` and a file under `.github/` writes them into the paper's folder as dot-named files, which recovery never writes. Cut short at each rename of its own with one of them written and another file not, it is left, saying so and what settles it; doing what the words say, removing what it made there, lets the next recovery put the rest back, and the quilt is as before the pull (R2-26's question)."""
+    import shutil
+
+    import loom.sync as sync
+    from loom import writes
+    from tests.unit.test_write_safety import Died, dying_before_the_rename
+
+    root, bare = paired(tmp_path)
+    edit(colleague(tmp_path, bare), "dot files", {"main.tex": SOURCE.replace("zk-0001}A", "zk-0001}B"), ".gitignore": "*.aux\n", ".github/workflows/build.yml": "on: push\n"})  # fmt: skip
+    fetch(load_quilt(root), SyncState.read(root))
+    before = _files_of(root)
+    made = ["drafting/.gitignore", "drafting/.github/workflows/build.yml"]
+    left = 0
+    for k in range(12):
+        q = tmp_path / f"cut-{k}"
+        shutil.copytree(root, q, symlinks=True)
+        restore = dying_before_the_rename(monkeypatch, after=k)
+        try:
+            sync.incorporate(load_quilt(q), SyncState.read(q))
+        except Died:
+            pass
+        else:
+            restore()
+            assert all((q / rel).is_file() for rel in made)
+            break
+        restore()
+        hist = load_quilt(q).history_dir
+        said = writes.recover(q, hist)
+        if said and said[0].startswith("left pull:"):
+            left += 1
+            assert "in a place whose name begins with a dot" in said[0], said
+            ((kind, _, _, settles),) = writes.left(q, hist)
+            assert kind == "a pull" and settles.startswith("Making drafting/.git"), settles
+            for rel in made:
+                (q / rel).unlink(missing_ok=True)
+            said = writes.recover(q, hist)
+        if said:
+            assert said == [said[0]] and said[0].startswith(("undid pull:", "finished pull:")), said
+        if said and said[0].startswith("undid pull:"):
+            assert {rel: b for rel, b in _files_of(q).items() if not rel.startswith("drafting/.github")} == before
+    assert left >= 1

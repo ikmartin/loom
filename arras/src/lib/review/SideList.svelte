@@ -1,5 +1,5 @@
 <script lang="ts">
-	// The list beside a text. **Comments**: every annotation and pending change here in reading order, a card each, which opens it at its mark: an annotation's with its colour, author, quoted words and comment (a PDF's mark not found again on the changed file says so, having none), a change's with its words out and in and Keep and Discard (`ChangeCard`). Where the text has changes, All, Annotations and Changes choose what is listed, and with annotations alone the text shows what the person has kept. To do keeps the changes and the open annotations of types that stay open, from others than the reader; the filter leaves out people, an edit made in the file being its own, and shows or hides the resolved. **Notes**: the annotations here whose type is listed in Notes, in reading order, each a link to where it was left. In a document, both end with the notes written in it that are on no block now (`APART`), each by its own words, opening its popup beside its card. Both are built from the manifest; nobody edits them.
+	// The list beside a text. **Comments**: every annotation and pending change here in reading order, a card each, which opens it at its mark: an annotation's with its colour, author, quoted words and comment (a PDF's mark not found again on the changed file says so, having none, as does a note on words whose words loom found on no page; where loom could not learn where notes on words stand, the list says so once over the cards), a change's with its words out and in and Keep and Discard (`ChangeCard`). Where the text has changes, All, Annotations and Changes choose what is listed, and with annotations alone the text shows what the person has kept. To do keeps the changes and the open annotations of types that stay open, from others than the reader; the filter leaves out people, an edit made in the file being its own, and shows or hides the resolved. **Notes**: the annotations here whose type is listed in Notes, in reading order, each a link to where it was left. In a document, both end with the notes written in it that are on no block now (`APART`), each by its own words, opening its popup beside its card. Both are built from the manifest; nobody edits them.
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -13,6 +13,7 @@
 	import { authorOf, changeById } from './changes';
 	import { dotVars } from '$lib/fragments/gutter';
 	import ChangeCard from './ChangeCard.svelte';
+	import { library as libraryWords } from '$lib/words/library';
 
 	let { notes }: { notes: Annotating } = $props();
 
@@ -119,6 +120,7 @@
 			{/if}
 		</div>
 		<div class="cards" bind:this={list}>
+			{#if notes.nowhere.unread.length}<p class="nsub" data-testid="side-unread">{libraryWords.reader.unread(notes.nowhere.unread.length)}</p>{/if}
 			{#each seq as e (e.id)}
 				{#if e.c}
 					<ChangeCard c={e.c} on={notes.open === e.id} onopen={() => open(e.id)} />
@@ -129,7 +131,7 @@
 					<div class="ch"><span class="dot2" style={dotVars(a)}></span><span class="who">{a.author.label ?? a.author.id}</span><span>{typeLine(a)}</span></div>
 					{#if a.quote}<div class="q"><TexProse text={a.quote} /></div>{/if}
 					{#if plain(a.body_html)}<div class="ct"><Prose html={a.body_html} /></div>{:else}<div class="ct none">No comment</div>{/if}
-					{#if a.detached && a.target.page}<div class="ct none" data-testid="card-detached">Not found again on the changed PDF, so drawn on no page.</div>{/if}
+					{#if a.detached && a.target.page}<div class="ct none" data-testid="card-detached">Not found again on the changed PDF, so drawn on no page.</div>{:else if notes.nowhere.unfound.includes(a.id)}<div class="ct none" data-testid="card-unfound">{libraryWords.reader.unfound}</div>{/if}
 					{#if staysOpen(m, a) || replies}
 						<div class="cf">
 							{#if staysOpen(m, a)}<span class="stat" class:done={a.status !== 'open'}>{a.status === 'open' ? 'Open' : 'Resolved'}</span>{/if}

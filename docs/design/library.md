@@ -41,11 +41,11 @@ Everything in the library is a **node**: one file, named by its id, with a small
 
 A draft changes daily, and the library is for what is stable. So a draft's results are read live from the draft, as loom reads them today, and are not copied into node files. They are not shown in the Library. Where a draft's results and the library's are seen together is the Web ([below](#the-views)), in which a draft's result has the shape of a node, the draft as its source, and no file. When a paper is finished and the author gives its source to the library on purpose, it is digested like any other work.
 
-A draft's result still needs a name that lasts, because a Lean declaration and the author's attestation point at it. That name is its label in the source. This is the question anchoring calls label keys, and the answer here is yes.
+A draft's result still needs a name that lasts, because a Lean declaration and the author's attestation point at it. That name is its label in the source: a statement with no id is keyed by its first label where that label is defined once in the quilt and shaped as a key (`docs/specs/source-contract.md` §2), and its place keeps naming it.
 
 A draft's edges into the library come from what it cites. `\cite[Lemma 2.1]{Jon19}` in a proof is a use of one result of one work; if that result has no node yet it gets a stub. This is how the library grows by loom's own hand: only what a draft depends on, one step out (P14). Everything further is the author's choice, made in the Library view: digest this paper, read this result, check this transcription.
 
-A label names its result across the whole quilt, not in one file, so a draft copied to a new file keeps what was said of the results it did not change (decided with the author, 2026-11-20).
+A label names its result across the whole quilt, not in one file, so a draft copied to a new file keeps what was said of the results it did not change (decided with the author, 2026-11-20). Once both files carry the label it keys neither, and what was said is read by its kind (`writes.md`, "Where a record goes"): an acceptance holds for each copy that still reads as accepted, and a note stays in the document it was written in.
 
 A statement of a draft with no label has no lasting name. Anchoring finds it again by the text beside it, and loom writes no label for it (decided with the author, 2026-11-20): where an act needs the name, as asking to formalize a result does, loom says that the result needs a label first, and the author adds it to his source by hand.
 

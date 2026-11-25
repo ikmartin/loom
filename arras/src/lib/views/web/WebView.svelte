@@ -15,13 +15,13 @@
 		const r = wb.at;
 		const w = wb.where;
 		void gen.gen;
-		if (r) void wb.focus.load(`${w.scope}:${w.doc}:${r}`, (s) => api.webFocus(w, r, false, s));
+		if (r && wb.named) void wb.focus.load(`${w.scope}:${w.doc}:${r}`, (s) => api.webFocus(w, r, false, s));
 	});
 	$effect(() => {
 		const r = wb.at;
 		const w = wb.where;
 		void gen.gen;
-		if (r && wb.form === 'graph') void wb.graph.load(`${w.scope}:${w.doc}:${r}`, (s) => api.webGraph(w, r, s));
+		if (r && wb.named && wb.form === 'graph') void wb.graph.load(`${w.scope}:${w.doc}:${r}`, (s) => api.webGraph(w, r, s));
 	});
 	const focus = $derived(wb.focus.value?.row.result === wb.at ? wb.focus.value : null);
 </script>

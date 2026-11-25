@@ -345,12 +345,16 @@ class Compiles:
 
 
 def served(root: Path) -> dict[str, Any] | None:
-    """How the compiles of the server running on `root` stand, as the stream says it; None when no server runs or its record cannot be read."""
+    """How the compiles of the server running on `root` stand, as the stream says it; None when no server runs on this quilt or its record cannot be read.
+
+    A server's record outlives it and travels with a copied quilt, so it counts only while its process lives and it names this quilt (`serve.open_url`).
+    """
     import json
 
-    from loom.paths import COMPILES, SERVE_JSON
+    from loom.paths import COMPILES
+    from loom.render.serve import open_url
 
-    if not (root / SERVE_JSON).exists():
+    if not open_url(root):
         return None
     try:
         state = json.loads((root / COMPILES).read_text(encoding="utf-8"))

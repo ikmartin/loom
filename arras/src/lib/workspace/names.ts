@@ -1,5 +1,7 @@
 // Names as a reader refers to things in a tab or a list: a result by its taxon and number, a document by its file, a link by what it names.
 
+import { placeName } from '$lib/nodes/display';
+
 /** What `nodeName` and `keyName` read of the manifest. */
 interface Named {
 	masters: { path: string; default?: boolean }[];
@@ -9,7 +11,7 @@ interface Named {
 }
 
 /**
- * A result as a reader refers to it in a list: its taxon and number where the default document numbers it, or else the document holding it, else its taxon and title, else its id.
+ * A result as a reader refers to it in a list: its taxon and number where the default document numbers it, or else the document holding it, else its taxon and title, else its place where loom knows it by that alone (`placeName`), else its id.
  *
  * A proof is named for the result it proves.
  */
@@ -22,7 +24,7 @@ export function nodeName(m: Named, id: string): string {
 	const main = m.masters.find((x) => x.default)?.path;
 	const number = (main ? n.numbers[main]?.number : undefined) ?? Object.values(n.numbers).find((x) => x?.number)?.number;
 	if (number) return `${n.taxon} ${number}`;
-	return n.title ? `${n.taxon} · ${n.title}` : id;
+	return n.title ? `${n.taxon} · ${n.title}` : (placeName(m, id) ?? id);
 }
 
 /** A document as its author types it: its file name, or its path when another document has that file name too, since documents are named by path and may share one across directories. */
@@ -60,7 +62,7 @@ export function keyName(m: Named, key: string): string {
 	if (region) return `${region.number} in ${region.within}`;
 	const owner = m.keys?.[key]?.node;
 	if (owner && owner !== key) return `proof of ${nodeName(m, owner)}`;
-	return key;
+	return placeName(m, key) ?? key;
 }
 
 /**

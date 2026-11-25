@@ -2,6 +2,8 @@
 
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import * as api from '$lib/library/api';
+import { store } from '$lib/manifest/client.svelte';
+import { mainDraft } from '$lib/manifest/documents';
 import { Read } from '$lib/library/read.svelte';
 import type { Row, WebFocus, WebGraph, WebList, WebScope } from '$lib/library/types';
 
@@ -10,8 +12,8 @@ const TRAIL = 6;
 
 class WebState {
 	scope = $state<WebScope>('deps');
-	/** The draft a scope of one draft names. */
-	doc = $state('drafting/main.tex');
+	/** The draft the person chose for a scope of one draft. */
+	#chosen = $state<string | null>(null);
 	form = $state<'list' | 'graph'>('list');
 	sort = $state<'document' | 'status'>('document');
 	q = $state('');
@@ -33,13 +35,31 @@ class WebState {
 
 	#asked = false;
 
+	/** The draft a scope of one draft names: the one chosen, else the quilt's main draft; null where the quilt names none. */
+	get doc(): string | null {
+		return this.#chosen ?? mainDraft(store.manifest);
+	}
+	set doc(path: string | null) {
+		this.#chosen = path;
+	}
+
+	/** Whether the reads may be asked: a scope of one draft has a draft to name. */
+	get named(): boolean {
+		return (this.scope !== 'draft' && this.scope !== 'deps') || !!this.doc;
+	}
+
+	/** Whether the scope names a draft and the quilt has none to name: no main draft, and none chosen. */
+	get draftless(): boolean {
+		return !this.named && !!store.manifest;
+	}
+
 	get at(): string | null {
 		return this.trail.at(-1)?.result ?? null;
 	}
 
 	/** Where every read looks. */
 	get where(): api.InScope {
-		return { scope: this.scope, doc: this.doc };
+		return { scope: this.scope, ...(this.doc ? { doc: this.doc } : {}) };
 	}
 
 	ask(): void {

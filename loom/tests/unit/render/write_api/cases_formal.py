@@ -102,8 +102,8 @@ def _before(found: dict[str, Any]) -> list[tuple[str, str, list[Any]]]:
     return [(g["why"], g["when"], [r.get("result") or r.get("label") for r in g["results"]]) for g in found["before"]]
 
 
-#: A lemma in a file both of the synthetic quilt's documents read, and the lemma its proof uses, with a text in each.
-BOUNDED = "drafting/nodes/bounded.tex#lemma:1"
+#: A lemma in a file both of the synthetic quilt's documents read, keyed by its label, which no other block carries, and the lemma its proof uses, with a text in each.
+BOUNDED = "thm:t"
 
 
 def _two_texts(s: Any, root: Path) -> None:

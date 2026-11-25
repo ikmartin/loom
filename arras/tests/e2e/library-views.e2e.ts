@@ -270,9 +270,9 @@ test("a file stating an arXiv number a work states is asked about in the column,
 	await choose('2000.01000v3.pdf');
 	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
 	await expect(page.getByTestId('work-row')).toHaveCount(301);
-	// closed unanswered: not asked again on this page, and nothing written
+	// closed unanswered: not asked again on this page, and nothing written; the work of its own just added states the number too, so two are asked about
 	await choose('2000.01000v4.pdf');
-	await expect(msg).toContainText('Is it that work?');
+	await expect(msg).toContainText('Is it one of them?');
 	await page.getByTestId('column-message-dismiss').click();
 	await expect(msg).toHaveCount(0);
 	await page.getByTestId('add-work').click();
@@ -282,6 +282,32 @@ test("a file stating an arXiv number a work states is asked about in the column,
 	await page.getByTestId('column-message-dismiss').click();
 	await expect(msg).toHaveCount(0);
 	await expect(page.getByTestId('work-row')).toHaveCount(302);
+});
+
+test('the question names each work so its row can be told apart, two works stating one arXiv number by the file each came in as', async ({ page }) => {
+	await open(page);
+	const msg = page.getByTestId('column-message');
+	const choose = async (name: string) => {
+		await page.getByTestId('add-work').click();
+		await page.getByTestId('choose-files-input').setInputFiles([{ name, mimeType: 'application/pdf', buffer: PAPER }]);
+	};
+	// two files stating Arden 2024's number, each a work of its own taken without the network: both rows read the number, each with the file it came in as
+	await choose('2000.01000v3.pdf');
+	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
+	await expect(page.getByTestId('work-row')).toHaveCount(301);
+	await choose('2000.01000v3 (1).pdf');
+	await expect(msg).toContainText('as 2 works in your library do. Is it one of them?');
+	await msg.getByTestId('column-message-choice').filter({ hasText: 'none of them' }).click();
+	await expect(page.getByTestId('work-row')).toHaveCount(302);
+	const alike = page.getByTestId('work-row').filter({ hasText: 'arXiv 2000.01000v3' });
+	await expect(alike).toHaveCount(2);
+	await expect(alike.getByTestId('work-came-as')).toHaveCount(2);
+	expect((await alike.getByTestId('work-came-as').allInnerTexts()).sort()).toEqual(['2000.01000v3 (1).pdf', '2000.01000v3.pdf']);
+	// a third asks about all three: each button names its work as the row tells it from the others
+	await choose('2000.01000v3 (2).pdf');
+	const answers = msg.getByTestId('column-message-choice');
+	await expect(answers).toHaveText(['Arden 2024', '2000.01000v3.pdf', '2000.01000v3 (1).pdf', 'none of them: a work of its own']);
+	for (const name of ['2000.01000v3.pdf', '2000.01000v3 (1).pdf']) await expect(page.getByTestId('work-came-as').filter({ hasText: new RegExp(`^${name.replace(/[.()]/g, '\\$&')}$`) })).toHaveCount(1);
 });
 
 test('on a quilt that has not said whether loom may use the network, a work added by an identifier asks in its row to be looked up this once', async ({ page }) => {

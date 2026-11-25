@@ -787,6 +787,7 @@ def test_status_filters_and_never_fails(tmp_path: Path) -> None:
     envelope = {"verdict", "ok", "exit", "groups", "notes"}
     assert set(j) - envelope == {
         "summary", "keys", "agent_documents", "retired", "reading", "unplaced",
+        "reviewer",
     }  # fmt: skip
     assert j["summary"]["incomplete"] == 1
 
@@ -1596,9 +1597,12 @@ def test_a_reply_and_an_edit_are_checked_as_a_new_annotation_is(tmp_path: Path) 
 
 def test_status_lists_a_document_the_server_last_compiled_into_no_pdf(tmp_path: Path) -> None:
     """While `loom serve` runs, `status` names a document its last compile left without a PDF, with the line TeX stopped at and the command that shows the whole log, and `--json` carries how every compile stands; with no server it says nothing of compiles (plan 0.29.1)."""
+    import shutil
+
+    from loom.render.serve import write_serve_json
+
     d = demo(tmp_path)
-    (d / ".loom/local").mkdir(parents=True, exist_ok=True)
-    (d / ".loom/local/serve.json").write_text("{}", encoding="utf-8")
+    write_serve_json(d, 8823)
     last = {
         "result": "failed",
         "ended": "2026-11-10T12:00:00Z",
@@ -1612,5 +1616,8 @@ def test_status_lists_a_document_the_server_last_compiled_into_no_pdf(tmp_path: 
     assert "did not compile cleanly" in out, out
     assert "no PDF, the last good one kept: ! Undefined control sequence. at l.12 \\hlind" in flat(out), out
     assert "fix: loom compile paper" in out, out
+    # a copied quilt carries the record, which names the quilt it was written in
+    shutil.copytree(d, tmp_path / "copy")
+    assert "compiles" not in status_json(tmp_path / "copy")
     (d / ".loom/local/serve.json").unlink()
     assert "compiles" not in status_json(d)

@@ -1,0 +1,41 @@
+{
+ "answer": {
+  "body": {
+   "difference": null,
+   "notation": [],
+   "observation": "ev-2026-09-16-t7q6g3",
+   "parts": null,
+   "statement": {
+    "fragment": "fragments/nodes/sy-0202.html"
+   },
+   "supporting": [],
+   "uses_attested": []
+  },
+  "ok": true,
+  "row": {
+   "docs": [
+    "drafting/main.tex"
+   ],
+   "kind": "attest",
+   "lean": {
+    "lean": "unattested",
+    "role": "proved",
+    "waiting_on": []
+   },
+   "name": "Lemma 2.5",
+   "paper": null,
+   "reading": null,
+   "record": "ev-2026-09-16-t7q6g3",
+   "result": "sy-0202",
+   "row": "attest:sy-0202",
+   "source": {
+    "doc": "drafting/main.tex"
+   },
+   "what": "statement and proof"
+  }
+ },
+ "endpoint": "review-row",
+ "request": {
+  "row": "attest:sy-0202"
+ }
+}

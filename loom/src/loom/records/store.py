@@ -105,6 +105,18 @@ def is_document_path(result: ScanResult, path: str) -> bool:
 _PLACED: tuple[ScanResult, tuple[int, int], dict[str, str | None]] | None = None
 
 
+def _keys_now(result: ScanResult, held: dict[str, str]) -> dict[str, str]:
+    """`held`, an acceptance's dependencies by the keys they had, by the keys their blocks have now.
+
+    A dependency's place key names it still once a label or an id keys it (`ScanResult.named`), so the acceptance reads it as neither removed nor added.
+    """
+    texts = result.dependencies.texts
+    out: dict[str, str] = {}
+    for key, digest in held.items():
+        out.setdefault(key if key in texts else (result.named(key) or key), digest)
+    return out
+
+
 def placed_key(result: ScanResult, ann: Annotation) -> str | None:
     """The key of the block `ann` is shown on now, as `Records.resolved` places it, which may not be the key it was written on; None for one on no block. What a listing names a note by.
 
@@ -133,8 +145,7 @@ def placed_key(result: ScanResult, ann: Annotation) -> str | None:
 
 def _why_unplaced(result: ScanResult, key: str) -> str:
     """Why a note on `key` is on no block, as a sentence a viewer shows as it is: its key names nothing, or a block in a file no document reads now, or a block that no longer holds its text."""
-    owner = result.assembly.regions[key].container if key in result.assembly.regions else key
-    node = result.nodes.get(owner)
+    node = result.node_named(key)
     if node is None:
         return "The block it was written on is gone, and nothing says where its words went."
     if node.kind not in ("master", "file") and not node.reached_by:
@@ -156,8 +167,7 @@ def written_in(result: ScanResult, ann: Annotation) -> str:
     key = ann.target_key
     if key in result.masters:
         return key
-    owner = result.assembly.regions[key].container if key in result.assembly.regions else key
-    node = result.nodes.get(owner)
+    node = result.node_named(key)
     for path in node.reached_by if node is not None else []:
         if path in result.masters:
             return str(path)
@@ -181,14 +191,12 @@ class Records:
         # the history wherever `[quilt] history` puts it, read from the quilt's config when the caller has not
         self.history_dir = history_dir if history_dir is not None else load_quilt(root).history_dir
         self.rows = read_ledger(root)
-        from loom.scan.quilt import reviewer_identity
+        from loom.scan.quilt import FROM_GIT, reviewer_identity
 
         local, source = reviewer_identity(root)
         self.reviewer = local if reviewer is None else reviewer
         self.reviewer_source = (
-            (source if source in ("", "git config user.name") else "local user configuration")
-            if reviewer is None
-            else "--as"
+            (source if source in ("", FROM_GIT) else "local user configuration") if reviewer is None else "--as"
         )
         self.latest = latest_rows(self.rows, self.reviewer)
         self.shared_latest = latest_rows(self.rows)
@@ -302,10 +310,18 @@ class Records:
     def placed(self, result: ScanResult) -> dict[str, AcceptRow]:
         """The reviewer's latest rows by the key of the block each is on now: a row is a claim about exact text, so it goes with that text as a record does (`records.locate.follow`, with the row's `context`), and is on no block where nothing says which; a row written before `context` was recorded stays on a stable key's block.
 
-        Two rows that land on one block leave it to the one whose text it holds, or whose key it is; neither, and the block has none.
+        Two rows that land on one block leave it to the one whose text it holds, or whose key it is; neither, and the block has none. A row on a key a label gave, whose label two statements now carry (a draft copied to a new file), is a claim about a text and holds for each of them that holds its very text.
         """
+        from loom.records.locate import shared_label
+
         claims: dict[str, list[AcceptRow]] = {}
         for key, row in self.latest.items():
+            shared = shared_label(result, key) if key not in result.nodes else None
+            if shared is not None:
+                for n in shared:
+                    if block_hash(result, n.key) == row.text:
+                        claims.setdefault(n.key, []).append(row)
+                continue
             found = follow(result, key, result.nodes.get(key), row.text, context=row.context)
             if found is not None:
                 claims.setdefault(found.key, []).append(row)
@@ -350,7 +366,7 @@ class Records:
                 if row.basis and n.kind == "environment" and row.basis != n.basis:
                     ks.causes.append(Cause("basis-changed", before=row.basis, after=n.basis, when=_when(result, n)))
                 direct_now = {d: closure_now[d] for d in self.direct_keys(result, key) if d in closure_now}
-                accepted_direct = row.direct
+                accepted_direct = _keys_now(result, row.direct)
                 for dep, h in accepted_direct.items():
                     if dep in result.dependencies.texts and result.dependencies.texts[dep] is None:
                         ks.causes.append(Cause("dependency-scope-unavailable", id=dep))
@@ -397,10 +413,11 @@ class Records:
             visiting.add(key)
             ks = states[key]
             if ks.row and result.graph:
+                closure = _keys_now(result, ks.row.closure)
                 for dep in self.direct_keys(result, key):
-                    if dep not in result.dependencies.texts or dep not in ks.row.closure:
+                    if dep not in result.dependencies.texts or dep not in closure:
                         continue
-                    if not self.same_mathematics(result, dep, ks.row.closure[dep], current_hashes.get(dep)):
+                    if not self.same_mathematics(result, dep, closure[dep], current_hashes.get(dep)):
                         continue  # the direct dependency already has its own cause
                     upstream = states.get(dep)
                     if upstream and upstream.row:
@@ -411,13 +428,13 @@ class Records:
                             ancestor
                             for ancestor in result.dependencies.closure(dep)
                             if ancestor != dep
-                            and ancestor in ks.row.closure
+                            and ancestor in closure
                             and not self.same_mathematics(
-                                result, ancestor, ks.row.closure[ancestor], current_hashes.get(ancestor)
+                                result, ancestor, closure[ancestor], current_hashes.get(ancestor)
                             )
                         ]
                         labels = result.dependencies.references.get(dep, set())
-                        for prior, digest in ks.row.closure.items():
+                        for prior, digest in closure.items():
                             if prior in result.dependencies.texts:
                                 continue
                             old = self.snapshot(digest) or ""
@@ -432,7 +449,7 @@ class Records:
                                 "dependency-changed" if origin in result.dependencies.texts else "dependency-removed",
                                 id=origin,
                                 via=dep,
-                                before=ks.row.closure.get(origin),
+                                before=closure.get(origin),
                                 after=current_hashes.get(origin),
                                 when=_when(result, result.nodes[result.dependencies.owners[origin]])
                                 if origin in result.dependencies.owners
@@ -596,10 +613,8 @@ class Records:
                 target = a.target_key
                 if target not in result.nodes and is_document_path(result, target):
                     target = result.current_document(target) or target
-                n = result.nodes.get(target)
-                if n is None:
-                    region = result.assembly.regions.get(target)
-                    n = result.nodes.get(region.container) if region else None
+                # a region's is the block it is in; a place's key, the block now at the place, whatever key it has since (`ScanResult.named`)
+                n = result.node_named(target)
                 # a key named by place goes with the text it was written on, and is never read on the block that took its place
                 found = follow(
                     result,
@@ -618,6 +633,12 @@ class Records:
                     continue
                 if found is not None and found is not n:
                     n, target = found, found.key
+                    # a region's record goes where its block goes, and is on the same region there when it stands
+                    label = a.target_key.rpartition("#")[2]
+                    if "#" in a.target_key and f"{found.key}#{label}" in result.assembly.regions:
+                        target = f"{found.key}#{label}"
+                elif found is not None:
+                    target = result.named(target) or target  # on the block its place names: by the key it has now
                 if n is None:
                     out.append(
                         ResolvedAnnotation(

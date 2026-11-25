@@ -1,6 +1,7 @@
 // The list of works as the person narrows it: by a filter of the column, by words in a title or an author's name, and in the order of the column they sorted by, the title breaking ties. The viewer holds all of the library's rows (300 at the sizes in use), so this is done here and asks the publisher nothing.
 
 import type { Work } from '$lib/library/types';
+import { library as words } from '$lib/words/library';
 import type { Column, Filter } from './state.svelte';
 
 /** Whether a work passes a filter of the column. */
@@ -40,4 +41,10 @@ export function shown(works: readonly Work[], o: { filter: Filter; q: string; so
 		const y = key(b, o.sort.key);
 		return (x < y ? -1 : x > y ? 1 : 0) * o.sort.dir || a.title.localeCompare(b.title);
 	});
+}
+
+/** What an unconfirmed work's row says beside its identifier: the name it came in under (its title, a file's name where nothing was looked up), where that is not the identifier itself; '' otherwise. Two works stating one identifier are told apart by it, as the intake's question names them. */
+export function cameAs(w: Pick<Work, 'title' | 'lookup'>): string {
+	if (!w.lookup || !w.title) return '';
+	return w.title === words.works.identifier(w.lookup.identifier) ? '' : w.title;
 }

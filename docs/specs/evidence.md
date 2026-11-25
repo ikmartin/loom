@@ -114,7 +114,7 @@ Only a person. Two forms.
 
 ### 3.7 `mention`: a citation that names no result is only a mention
 
-The person's word that a citation of a work with no result named in it is a mention and rests on nothing. `block`, the citing block as a note names its block: its `key`, the `hash` of its text and its `context` (`records.locate.context_of`), found again by `records.locate.follow`; `cites`, the reference; `undo`, true to take an earlier one back. Only a person. It holds while that block still cites the work with no locator.
+The person's word that a citation of a work with no result named in it is a mention and rests on nothing. `block`, the citing block as a note names its block: its `key`, the `hash` of its text and its `context` (`records.locate.context_of`), its key read as the records read a stored key (`evidence.web.blocks_named`, over `ScanResult.node_named` and `records.locate.shared_label`), so a mention written on a statement's place key holds once a label keys it, and one on a label a copied draft defines again holds for each copy; `cites`, the reference; `undo`, true to take an earlier one back. Only a person. It holds while that block still cites the work with no locator.
 
 ```json
 {"at":"2026-11-21T18:30:00Z","block":{"context":{"after":{"gap":1,"hash":"sha256:511c96ceb7174affc0b103d8fbbb33384196d849f1eeb3c2e9da6145053ae9d3"},"before":{"gap":1,"hash":"sha256:8f9d61fac39402898f831bfec31c774438bb77be6a0cbd47c83cf53d31858372"},"copies":1,"documents":["drafting/main.tex"],"kind":"proof","twin":false},"hash":"sha256:b5a45e5f4685d21700a0c4f00c2d7a11872c7f5f4a22a6cdf9525d36c2a66a90","key":"thm:main/proof"},"by":{"kind":"person","name":"A. Author"},"cites":"tq-00B1-ref","id":"ev-2026-11-21-m1nt0b","kind":"mention","undo":false}
@@ -186,7 +186,7 @@ An ask is open until what it asked for exists, whoever made it; an agent's `done
 | `ask`, `question` | it is answered |
 | `correct` | a `digested` or a `proposed` on the node is written after it |
 | `restate` | loom observes the target's Lean after it, standing (§5.1), with statements other than the person's last attestation's |
-| `which-result` | the person says only a mention (§3.7) of that block and work, or an agent files a suggested edit on that block after it |
+| `which-result` | the person says only a mention (§3.7) of that block and work, or an agent files a suggested edit on that block after it; the block's key, the mention's and the edit's each read as the records read a stored key (§3.7), so one block under its place key and its label key is one |
 | `formalize` | loom observes the target's Lean after it, standing, and Lean accepts it |
 | `paper` | the work holds the document wanted, read from the store |
 
@@ -198,7 +198,7 @@ Nothing here matches a dropped file to a request. The intake files a dropped fil
 
 ### 4.5 An agent's commands
 
-Each is also its MCP tool, as every agent command is. An agent names itself with `--as`, a name with Agent or AI in it; a person acts in the viewer, and no command here does a person's act.
+Each is also its MCP tool, as every agent command is. An agent names itself with `--as`, a name ending in Agent; a person acts in the viewer, and no command here does a person's act.
 
 | command | does |
 | --- | --- |
@@ -281,7 +281,7 @@ What waits for the person, each kind a rule saying what puts a row in and what t
 | `attest` | a draft's result whose `lean` is `unattested` (§5.2), or a library node's whose paper `matches` besides, since nothing is attested on a node nobody checked, and that may be attested now: no node of its closure unread or uncompared, and no citation of a work's result in its statement or its closure that no node answers for (§5.1, its citations); what it assumes in Lean does not hold it back here, only from reading formalized | attested, or Lean restated | `result`, `name`, `source`, `what` (`statement and proof` for a proved theorem, else `statement only`, as a library node always is), `paper` (null for a draft's result, a node's reading of its paper), `record` (the current Lean record's id), `reading`, `lean`. A node's `source` is `{ref, short}`, `short` null until the node store's references give it, and its `docs` are empty until a draft's citations resolve to nodes |
 | `accepted-changed` | a result of the person's whose acceptance went stale, as the build publishes the ledger through its own resolver (`manifest.md`, `unresolved` with cause `earlier-change`) | accepted again, or its text back as accepted | `key`, `name`, `doc`, `reading`, `lean` |
 | `attested-changed` | a draft's result whose `lean` is `changed`, one row for each result, its id made from the result's block (`attested-changed:KEY`), so a label two documents bear with two texts is two rows | attested again on the text now, or restated | `result`, `name`, `doc`, `changed` (`statement` when its own text or a notation row changed, else `used`), `causes`, `attestation`, `attested_at` (when that attestation was made), `reading`, `lean`, `resting` (the results nested under it, each `{result, name}`; empty where none) |
-| `edits` | each change waiting on the person as Review lists it today (`pending.pending`): an agent's suggested edits, and in a quilt that tracks edits, the in-place changes since the person's look | kept, discarded or undone | `change`, `type` (`suggested` or `edit`), `doc`, `key`, `where`, `by`, `state`, `broke` (null until a compile's line is read, the views spec's Open 26) |
+| `edits` | each change waiting on the person as Review lists it today (`pending.pending`): an agent's suggested edits, and the in-place changes since the person's look in the places agents may edit | kept, discarded or undone | `change`, `type` (`suggested` or `edit`), `doc`, `key`, `where`, `by`, `state`, `broke` (null until a compile's line is read, the views spec's Open 26) |
 | `agents` | an open ask to an agent | it produces what it asked for (§4.3), or is withdrawn | `task`, `what` (the ask's `what`), `on`, `working` (`{by}`, the agent whose live session took it last, else null), `asked_at`, and the ask's own fields, none of which replaces one of these |
 
 **How a result stands, in a row.** A row about a result carries how it stands as §5.2 gives it, never a bare word: `reading`, the reading of its paper (null for a draft's result), and `lean`, `{lean, role, waiting_on}`, the Lean word with its role and what keeps it from reading formalized (`status.brief`). So an assumed result reads as assumed, and one that waits on the person says on what. A result no record names stands `{lean: "none", role: null, waiting_on: []}`.

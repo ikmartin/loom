@@ -140,5 +140,7 @@ def tick(quilt: Quilt, who: str, path: str, task: str, done: bool) -> bool:
         w.log(*ledger_line(quilt.history_dir, TICK, entry, who or None))
         if who:
             line = got.line
+            # what the follow-up does to the look, for recovery to do if a crash comes first (`writes._relook`)
+            w.look = {"who": who, "tick": {"path": path, "line": line}}
             w.then(lambda: take_line(quilt, who, path, text, after, line))
     return True

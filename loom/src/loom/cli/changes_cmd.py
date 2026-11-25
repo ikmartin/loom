@@ -1,4 +1,4 @@
-"""`loom changes`: what waits on the person, suggested edits and, where the quilt tracks edits, in-place edits since their look, by document; one change's patch; and the two verbs on a change, keep and discard."""
+"""`loom changes`: what waits on the person, suggested edits and in-place edits since their look, by document; one change's patch; and the two verbs on a change, keep and discard."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import click
 
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.report import Group, Item, Report, counted, table
-from loom.errors import EnvError, NotFoundError
+from loom.errors import EXIT_CONTENT, EnvError, NotFoundError
 from loom.identity import refuse_under_agent
 
 
@@ -37,7 +37,7 @@ def _short(text: str | None, n: int = 40) -> str:
 @click.option(
     "--keep-all",
     is_flag=True,
-    help="Keep every change; where the quilt tracks edits and you have no look yet, take it.",
+    help="Keep every change; with no look of yours yet, take it first.",
 )
 @click.option("--discard-all", is_flag=True, help="Discard every change.")
 @click.option("--why", default=None, help="With a discard, why, which the agent that suggested an edit reads.")
@@ -56,9 +56,9 @@ def changes_command(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """List what waits on you, by document: each open suggested edit and, where the quilt tracks edits (`[review] track_edits`), each in-place edit to an open file since your last look, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
+    """List what waits on you, by document: each open suggested edit and each in-place edit since your last look to an open file agents may edit, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
 
-    The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds each one's text as you last saw it, and `loom serve` takes your first when it starts. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
+    The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds the text of each one agents may edit as you last saw it, and `loom serve` takes your first when it starts. A place agents are denied is yours, and an edit there is never listed, whoever made it. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
     """
     from loom.cli.review import _annotator
     from loom.looks import keep_all as take_all
@@ -80,10 +80,11 @@ def changes_command(
         refuse_under_agent(
             "Keeping and discarding a change", "Keep and discard in a terminal of your own, or in the viewer."
         )
-        if keep_all and result.quilt.config.track_edits and who and read_look(root, who) is None:
+        first = ""
+        if keep_all and who and read_look(root, who) is None:
+            # with no look nothing in place waits, so what Keep all keeps after taking it is the suggestions
             take_all(result.quilt, who)
-            Report("took your first look at the open files", data={"done": [], "refused": []}).emit(as_json)
-            return
+            first = "took your first look at the open files"
         listed = pending(result, who)
         named = keeping or discarding
         ids = [c.id for c in listed] if keep_all or discard_all else _ids(listed, named)
@@ -99,8 +100,12 @@ def changes_command(
             ) from None
         verb = "kept" if keeping or keep_all else "discarded"
         said = f"{verb} {counted(len(done), 'change')}" if done else f"{verb} nothing"
+        if first:
+            said = f"{first}; {said}" if ids else first
         lines = [f"  {r['id']} not {verb}: {r['why']}" for r in refused]
-        Report(said, ok=not refused, lines=lines, data={"done": done, "refused": refused}).emit(as_json)
+        # every change it named refused is a refusal, and exits as one; some done and some refused is a success that leaves work undone
+        out = EXIT_CONTENT if refused and not done else 0
+        Report(said, ok=not refused, exit=out, lines=lines, data={"done": done, "refused": refused}).emit(as_json)
         return
     listed = pending(result, who)
     if change is not None:
@@ -121,14 +126,13 @@ def changes_command(
         return
     if document is not None:
         listed = [c for c in listed if document in c.documents]
-    tracked = result.quilt.config.track_edits
-    look = read_look(root, who) if who and tracked else None
+    look = read_look(root, who) if who else None
     since = (
-        f"since your look ({look.when[:16].replace('T', ' ')})"
+        f"since your look ({look.when[:16].replace('T', ' ')}"
+        + (f", carried over from {look.carried}'s" if look.carried else "")
+        + ")"
         if look
         else "before your first look"
-        if tracked
-        else "suggested edits; edits in place are not tracked"
     )
     verdict = f"{since}: " + (counted(len(listed), "change") if listed else "nothing waits on you")
     groups = []
@@ -147,9 +151,15 @@ def changes_command(
             for c in mine
         ]
         groups.append(Group(doc or "in no document", [Item(line) for line in table(cells)], limit=None))
+    from loom.looks import unwatched
+
+    # what the look leaves to the person, so a short list is not read as "nothing changed" there
+    left_to_you = unwatched(result.quilt.config)
+    watched = f"watching the places agents may edit; your own, never listed: {', '.join(left_to_you)}"
     data: dict[str, Any] = {"look": look.to_json() | {"files": len(look.files)} if look else None}
     data["changes"] = [c.to_dict() for c in listed]
-    Report(verdict, groups=groups, data=data).emit(as_json)
+    data["unwatched"] = left_to_you
+    Report(verdict, groups=groups, data=data, lines=[watched]).emit(as_json)
 
 
 def _ids(listed: list[Any], named: tuple[str, ...]) -> list[str]:

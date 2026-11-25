@@ -15,7 +15,7 @@ from loom.evidence.web import DraftWeb, Here
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
-from tests.unit._quilts import track_edits
+from tests.unit._quilts import opened
 
 PERSON = Who("person", "A. Author")
 AGENT = Who("agent", "Probe Agent")
@@ -45,9 +45,7 @@ def root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("LOOM_FIXED_TIME", "2026-11-21T10:00:00Z")
     root = tmp_path / "q"
     ok("init", str(root), "--demo", cwd=tmp_path)
-    # the draft is rewritten here, which a quilt tracking edits would list as changes waiting on the person
-    track_edits(root, on=False)
-    # and the demo ships a suggested edit of its own
+    # the demo ships a suggested edit of its own
     (root / ".loom/records/edits/log.jsonl").unlink()
     (root / DOC).write_text(MAIN, encoding="utf-8")
     (root / "lean").mkdir()
@@ -258,7 +256,7 @@ def test_a_read_under_the_same_scan_and_files_answers_from_the_last(
     from loom.scan.quilt import save_author
 
     save_author("A. Author")
-    track_edits(root)
+    opened(root)  # the paper open to agents, so an edit in it is listed
     take(load_quilt(root), "A. Author")
     _edit(root, "on a tree vanishes", "on a forest vanishes")
     held, calls = _served(root, monkeypatch)
@@ -322,7 +320,7 @@ def test_the_proposed_edits_are_the_changes_a_publication_lists_and_differ_only_
     from loom.scan.quilt import save_author
 
     save_author("A. Author")
-    track_edits(root)
+    opened(root)  # the paper open to agents, so an edit in it is listed
     take(load_quilt(root), "A. Author")
     _edit(root, "on a tree vanishes", "on a forest vanishes")
     ok("suggest", _key(root, "def:connected"), "--with", "Every quiver", "--quote", "A quiver", "--as", "Probe Agent", cwd=root)  # fmt: skip
@@ -335,6 +333,38 @@ def test_the_proposed_edits_are_the_changes_a_publication_lists_and_differ_only_
     assert len(_rows(_gather(root, report.manifest), "edits")) == len(listed) + 1
     report = build(load_quilt(root))
     assert [r["change"] for r in _rows(review.gather(root, report.result, report.manifest), "edits")] == [c["id"] for c in report.manifest["changes"]]  # fmt: skip
+
+
+def test_the_proposed_edits_list_exactly_what_the_look_lists(root: Path) -> None:
+    """On `wave-c`'s look, kept for every quilt and watching only what agents may edit: a save in the demo's paper, denied to agents, is never listed; opened to them, an agent's change there is; the person's keep of an agent's suggestion goes through the door, which follows the look, so the words loom wrote are no change of anyone's; and the rows are the publication's `changes` throughout."""
+    from loom.looks import take
+    from loom.pending import keep
+    from loom.render.build import build
+    from loom.scan.quilt import save_author
+
+    save_author("A. Author")
+    take(load_quilt(root), "A. Author")
+
+    def both() -> tuple[list[str], list[str]]:
+        report = build(load_quilt(root))
+        return [r["change"] for r in _rows(review.gather(root, report.result, report.manifest), "edits")], [c["id"] for c in report.manifest["changes"]]  # fmt: skip
+
+    _edit(root, "on a tree vanishes", "on a forest vanishes")
+    assert both() == ([], []), "the paper is denied to agents, so a save there is the person's and never listed"
+    opened(root)
+    take(load_quilt(root), "A. Author")
+    _edit(root, "is the kernel", "is the cokernel")
+    rows, changes = both()
+    assert rows == changes and len(rows) == 1
+    ok("suggest", _key(root, "def:connected"), "--with", "Every quiver", "--quote", "A quiver", "--as", "Probe Agent", cwd=root)  # fmt: skip
+    rows, changes = both()
+    assert rows == changes and len(rows) == 2
+    suggestion = rows[1]  # the in-place changes come first, then the suggestions
+    keep(scan(load_quilt(root)), "A. Author", [suggestion], ("person", "A. Author"))
+    rows, changes = both()
+    assert rows == changes and suggestion not in rows and len(rows) == 1, (
+        "the kept suggestion is not listed again as an in-place change"
+    )
 
 
 def test_a_rows_kind_is_its_kind_and_no_field_of_its_own_overwrites_it(root: Path) -> None:

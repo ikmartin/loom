@@ -293,6 +293,25 @@ class Joined:
     def texts(self, key: tuple[str, str]) -> set[str]:
         return (self.library if key[0] == "node" else self.draft).texts(key)
 
+    def named(self, key: str) -> list[str]:
+        """The drafts' blocks a stored or requested key names now (`blocks_named`)."""
+        named = getattr(self.draft, "named", None)
+        return named(key) if named is not None else [key]
+
+
+def blocks_named(result: ScanResult, key: str) -> list[NodeRec]:
+    """The blocks a key names now, as the records resolve one, for a key a record, an ask or a request holds: a label two or more statements of the documents now carry names each of them (`records.locate.shared_label`); any other key the block it names itself or by the place it was written at (`ScanResult.node_named`); none where nothing is named so.
+
+    So a record written on a statement's place key is found once a label keys it, a place key is taken wherever a label key is, and a label a copied draft defines again names both texts, as an acceptance holds for both.
+    """
+    from loom.records.locate import shared_label
+
+    shared = shared_label(result, key) if key not in result.nodes else None
+    if shared is not None:
+        return list(shared)
+    found = result.node_named(key)
+    return [found] if found is not None and found.kind not in ("master", "file") else []
+
 
 def fold(text: str) -> str:
     """`text` with every run of whitespace one space and none at either end: what a hash reads, so a line broken or indented anew changes nothing."""
@@ -609,6 +628,10 @@ class DraftWeb:
 
         out = [f"{key} {locator}".strip() for text in self._texts_of(here) for key, locator in citations_in(blank_comments(text))]  # fmt: skip
         return list(dict.fromkeys(out))
+
+    def named(self, key: str) -> list[str]:
+        """The keys of the blocks a stored or requested key names now (`blocks_named`)."""
+        return [n.key for n in blocks_named(self.result, key)]
 
     def texts(self, key: tuple[str, str]) -> set[str]:
         """The hash of each block bearing a label now, in any document; empty for anything but a label."""

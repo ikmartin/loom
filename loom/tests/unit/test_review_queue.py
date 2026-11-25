@@ -107,9 +107,8 @@ def test_accepting_a_block_keeps_its_edit_and_keeping_one_accepts_nothing(root: 
     from loom.looks import changes, take
     from loom.pending import in_place, keep
     from loom.scan.scan import scan
-    from tests.unit._quilts import track_edits
 
-    quilt = load_quilt(track_edits(root))
+    quilt = load_quilt(root)
     take(quilt, REVIEWER)
     _edit(root)
     assert [c.path for c in changes(quilt, REVIEWER)] == ["drafting/main.tex"]

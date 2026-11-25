@@ -83,6 +83,10 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     dict
         `{"ok": True, "result": <what the CLI would have printed>}`.
     """
+    from loom.identity import at_the_viewer
+
     if endpoint not in discovery()["capabilities"]:
         raise ApiError("unknown-endpoint", f"no endpoint {endpoint}", status=404)
-    return HANDLERS[endpoint](root, endpoint, body)
+    # a write over HTTP is the person at the viewer, whichever shell started the server
+    with at_the_viewer():
+        return HANDLERS[endpoint](root, endpoint, body)

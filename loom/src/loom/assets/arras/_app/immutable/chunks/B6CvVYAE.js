@@ -1,0 +1,1 @@
+function e(e){return!!e?.copy_of}function t(t){return t?.masters.find(t=>t.default&&!e(t))?.path??null}export{t as n,e as t};

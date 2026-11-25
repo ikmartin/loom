@@ -267,7 +267,7 @@ export function formalPlan(refs: Record<string, string>, targets: string[], assu
 	const state = ids.filter((i) => tag[i] === 'state');
 	const prove = [...(targets.length > 1 ? targets : []), ...mine('prove'), ...mine('assume')];
 	const stops = [...targets, ...state, ...prove].filter((i, k, a) => W[i].nolabel && a.indexOf(i) === k);
-	const group = (why: string, list: string[]) => (list.length ? [{ why, results: list.map(row) }] : []);
+	const group = (why: string, list: string[]) => (list.length ? [{ why, when: 'now', results: list.map((k) => ({ ...row(k), for: [...targets] })) }] : []);
 	const attest = ids.filter((i) => tag[i] === 'attest');
 	return {
 		targets: targets.map((t) => ({ key: t, name: W[t].name, ...(W[t].title ? { title: W[t].title } : {}), doc: W[t].src, statement: { fragment: `fixture/web/${t}.html` } })),
@@ -276,6 +276,14 @@ export function formalPlan(refs: Record<string, string>, targets: string[], assu
 		assume: lib.map((k) => ({ ...row(k), why: tag[k] === 'not-read' ? 'not-read' : tag[k] === 'not-checked' ? 'not-checked' : null })),
 		formalized: ids.filter((i) => tag[i] === 'formalized').map(row),
 		stops: stops.map(row),
-		before: [...group('not-read', lib.filter((i) => tag[i] === 'not-read')), ...group('not-checked', lib.filter((i) => tag[i] === 'not-checked')), ...group('attest', attest.filter((i) => !['def:connected', 'cor:cycle'].includes(i))), ...group('attested-changed', attest.filter((i) => ['def:connected', 'cor:cycle'].includes(i)))]
+		// the person's now, then the targets' own Lean, which waits for the person's word once the agent writes it, then Theorem 3.4's citation of Okafor 2022 that names no result (round six's), which nobody settles yet
+		before: [
+			...group('not-read', lib.filter((i) => tag[i] === 'not-read')),
+			...group('not-checked', lib.filter((i) => tag[i] === 'not-checked')),
+			...group('attest', attest.filter((i) => !['def:connected', 'cor:cycle'].includes(i))),
+			...group('attested-changed', attest.filter((i) => ['def:connected', 'cor:cycle'].includes(i))),
+			...(targets.some((t) => W[t].st !== 'formal') ? [{ why: 'attest', when: 'after', results: targets.filter((t) => W[t].st !== 'formal').map((t) => ({ ...row(t), for: [t] })) }] : []),
+			...(targets.includes('thm:count') ? [{ why: 'cite', when: 'waiting', results: [{ cite: 'Oka22', for: ['thm:count'] }] }] : [])
+		]
 	};
 }
