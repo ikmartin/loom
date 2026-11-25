@@ -527,9 +527,16 @@ def contained(root: Path, rel: str) -> str:
 
 
 def _target(root: Path, rel: str) -> Path:
-    """The file a write to `rel` lands in: a symlink's target, so the link stays a link."""
+    """The file a write to `rel` lands in: a symlink's target, so the link stays a link. WriteRefused (`changed`) where the file system cannot follow the link, as while a folder on the way is being renamed (`_real`)."""
     p = root / rel
-    return Path(os.path.realpath(p)) if p.is_symlink() else p
+    if not p.is_symlink():
+        return p
+    real = _real(p)
+    if real is None:
+        raise WriteRefused(
+            "changed", f"{rel} could not be followed to the file it names just now; nothing was written to it"
+        )
+    return real
 
 
 def _read(root: Path, rel: str) -> bytes | None:
@@ -640,9 +647,12 @@ def _prune(root: Path, history: Path, rels: list[str]) -> None:
     """Remove the folders left empty under `.loom/` or the history directory once the files an act made in them are taken out again: a history step's folder with nothing in it would read as a step interrupted before its line (`history.steps.refuse_interrupted`). A folder of the person's is never removed."""
     from loom.paths import LOOM
 
-    tops = [Path(os.path.realpath(d)) for d in (root / LOOM, history)]
+    tops = [top for top in (_real(d) for d in (root / LOOM, history)) if top is not None]
     for rel in rels:
-        d = Path(os.path.realpath(root / rel)).parent
+        real = _real(root / rel)
+        if real is None:
+            continue  # a path the file system cannot resolve just now: its folders are left, never removed blind
+        d = real.parent
         while any(d != top and d.is_relative_to(top) for top in tops):
             try:
                 d.rmdir()
@@ -672,7 +682,10 @@ def _remove_folders(root: Path, folders: list[str]) -> None:
 
 
 def _temps(root: Path, rel: str) -> list[Path]:
-    t = _target(root, rel)
+    try:
+        t = _target(root, rel)
+    except WriteRefused:
+        return []  # a link the file system cannot follow just now: no temporary of loom's is found beside it
     return list(t.parent.glob(f".{t.name}.*{TEMP}")) if t.parent.is_dir() else []
 
 

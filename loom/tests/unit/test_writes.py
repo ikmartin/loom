@@ -678,3 +678,64 @@ def test_recovery_removes_a_temporary_text_a_crash_left_and_not_one_being_writte
     assert writes.recover(root, history) == ["removed 1 temporary file a crash left in the history's texts/"]
     assert not left.exists() and young.is_file() and other.is_file()
     assert len([p for p in texts.iterdir() if p.suffix == ".md"]) == 1
+
+
+def _unresolvable(monkeypatch: pytest.MonkeyPatch, part: str) -> list[bool]:
+    """`os.path.realpath` raising for any path holding `part` once the returned switch is set, as Python before 3.13 raises while a folder on the way is being renamed."""
+    real, on = os.path.realpath, [False]
+
+    def realpath(p: Any, *args: Any, **kwargs: Any) -> str:
+        if on[0] and part in str(p):
+            raise OSError("a folder on the way is being renamed")
+        return real(p, *args, **kwargs)
+
+    monkeypatch.setattr(writes.os.path, "realpath", realpath)
+    return on
+
+
+def test_a_commit_put_back_while_a_link_cannot_be_followed_raises_its_own_failure_and_leaves_the_act(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit that fails puts back what it wrote; where the file system cannot follow a link it wrote through just then, the put-back, its temporaries and its empty folders take the path as one they cannot judge, and the commit's own failure is raised, the act left for recovery, rather than the race's."""
+    root, history = q
+    (root / "real.md").write_text("before\n", encoding="utf-8")
+    (root / "link.md").symlink_to("real.md")
+    on = _unresolvable(monkeypatch, "link.md")
+    real_rename, calls = writes._rename, [0]
+
+    def rename(tmp: Path, target: Path) -> None:
+        calls[0] += 1
+        if calls[0] == 2:
+            on[0] = True
+            raise RuntimeError("the disk is full")
+        real_rename(tmp, target)
+
+    monkeypatch.setattr(writes, "_rename", rename)
+    with pytest.raises(RuntimeError, match="the disk is full"), writes.act(root, history, "restore") as w:
+        w.replace("link.md", b"after\n")
+        w.replace("made/new.md", b"new\n")
+    assert [e["kind"] for e in writes.unsettled(root, history)] == ["restore"]
+    on[0] = False
+    monkeypatch.setattr(writes, "_rename", real_rename)
+    (said,) = writes.recover(root, history)
+    assert said.startswith("undid restore:"), said
+    assert (root / "real.md").read_text(encoding="utf-8") == "before\n" and (root / "link.md").is_symlink()
+
+
+def test_a_link_that_cannot_be_followed_is_written_through_by_no_act(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Where the file system cannot follow a link just then, the act writing through it is refused (`changed`) and writes nothing, and the folders an act made are left rather than judged blind."""
+    root, history = q
+    (root / "real.md").write_text("before\n", encoding="utf-8")
+    (root / "link.md").symlink_to("real.md")
+    on = _unresolvable(monkeypatch, "link.md")
+    on[0] = True
+    with pytest.raises(WriteRefused, match="could not be followed"), writes.act(root, history, "restore") as w:
+        w.replace("link.md", b"after\n")
+    assert (root / "real.md").read_text(encoding="utf-8") == "before\n"
+    (root / ".loom/kept/a").mkdir(parents=True)
+    on2 = _unresolvable(monkeypatch, "kept")
+    on2[0] = True
+    writes._prune(root, history, [".loom/kept/a/x.md"])
+    assert (root / ".loom/kept/a").is_dir()
