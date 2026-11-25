@@ -529,7 +529,7 @@ def _pass(
 ) -> tuple[int, str]:
     """One make4ht pass over `name` in `cwd`, writing into `out`, with `home` its own, formulas in `math` mode: its exit code and what it said; 124 when it ran past `timeout` and was killed with everything it started.
 
-    Where the fence is up (`loom.fence`) make4ht runs inside it, reading and writing the one folder that holds `cwd`, `out` and `home`, with its temporary files in `home`; a fenced pass that fails is never run again unfenced.
+    Where the fence is up (`loom.fence`) make4ht runs inside it, reading and writing the one folder that holds `cwd`, `out` and `home`, with its temporary files and a TeX cache of its own in `home` (`fence.run_var`); a fenced pass that fails is never run again unfenced.
     """
     from loom import fence
 
@@ -548,9 +548,9 @@ def _pass(
             "TMPDIR": str(home / "tmp"),
             "PAR_GLOBAL_TMPDIR": str(home / "tmp"),
             "PWD": str(cwd),
-            "TEXMFVAR": str(fence.texmf_var()),
+            "TEXMFVAR": str(fence.run_var(home, lua=engine == "lualatex")),
         }
-        cmd = fence.fenced(cmd, stage=run, out=out)
+        cmd = fence.fenced(cmd, stage=run, out=out, var=Path(env["TEXMFVAR"]))
     proc = subprocess.Popen(
         cmd,
         cwd=cwd,
@@ -569,6 +569,8 @@ def _pass(
         stop_run(proc)
         proc.communicate()
         return 124, ""
+    if engine == "lualatex" and fence.state() is None:
+        fence.after_run(home / "texmf-var")
     return proc.returncode, said
 
 
