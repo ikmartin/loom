@@ -1,6 +1,7 @@
 // Review on round six's fixture (`?fixture=round6`, `src/lib/library/fixtures/review6.ts`), as the author settled it (`docs/design/mockups/library-round-6/`, screens 4 to 12): the column's kinds, counts and drafts; the list by who is waiting; answering a question, keeping an edit, withdrawing a task; and the rules that hold everywhere: no control but the four view names changes view, and no id is drawn. Where Review's reads are not served, today's Review stands, which its own specs hold.
 import { expect, test, type Page } from '@playwright/test';
 import { serve } from '../manifest';
+import { wideFont } from '../fonts';
 
 async function open(page: Page): Promise<void> {
 	await page.setViewportSize({ width: 1440, height: 900 });
@@ -364,6 +365,17 @@ test("the review's round: a task deleted comes back on undo, results are named i
 	await open(page);
 	const label = page.getByTestId('review-kind-accepted-changed');
 	expect((await label.boundingBox())!.height).toBeLessThanOrEqual(30);
+	// and in a wider font than this Mac's, as on a runner with other fonts: every label of the column on one line, its count in view
+	await wideFont(page);
+	for (const b of await page.getByTestId('review-column').locator('nav button').all()) {
+		const box = (await b.boundingBox())!;
+		expect(box.height, await b.innerText()).toBeLessThanOrEqual(30);
+		const n = b.locator('.n');
+		if (await n.count()) {
+			const nb = (await n.boundingBox())!;
+			expect(nb.x + nb.width, await b.innerText()).toBeLessThanOrEqual(box.x + box.width + 0.5);
+		}
+	}
 	await expect(page.getByTestId('review-kind-incoming')).toHaveAttribute('aria-description', /collaborator's changes/);
 	await page.getByTestId('review-kind-check').click();
 	await expect(page.getByTestId('review-row').filter({ hasText: 'Arden 2024 · Lemmas' })).toContainText('Arden 2024 · Lemmas 5.7 and 5.9');
