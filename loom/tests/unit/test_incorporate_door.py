@@ -234,7 +234,7 @@ def test_an_act_whose_history_lines_landed_and_were_followed_is_left_not_put_bac
     assert said and said[0].startswith("left adopt:") and "another step was recorded after them" in said[0]
     assert all((q.history_dir / e.dir).is_dir() for e in load_history(q.history_dir).entries if e.dir)
     ((_, _, _, settles),) = writes.left(q.root, q.history_dir)
-    assert "settled by hand" in settles and "texts the history lacks" not in settles
+    assert "settle it as it stands" in settles and "texts the history lacks" not in settles
 
 
 def test_a_history_line_loom_writes_after_a_crash_settles_the_act_first(

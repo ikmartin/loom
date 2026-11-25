@@ -30,6 +30,8 @@ from loom.paths import JOURNAL, JOURNAL_INDEX, LOCAL, WRITES_LOCK
 TEMP = ".loom-tmp"
 #: A digest as the store names its texts: anything else is never made into a path.
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
+#: An act's id as `Act` makes one: its kind and 16 hex digits.
+ACT_ID = re.compile(r"[a-z-]+:[0-9a-f]{16}")
 
 
 class WriteRefused(ContentError):
@@ -713,6 +715,12 @@ class Journal:
             self.crossed.pop(act, None)
             self.again.pop(act, None)
             if begun is not None:
+                ended = begun[1].get("settles")
+                if isinstance(ended, str) and ended in self.begun and self.begun[ended][0] < begun[0]:
+                    # the person settled that act as it stands (`settling`): it ends with this one, as an `aborted` line ends one
+                    self.begun.pop(ended)
+                    self.crossed.pop(ended, None)
+                    self.again.pop(ended, None)
                 for gen in begun[1].get("edits") or []:
                     self.wrote[str(gen)] = begun[0]
                 files = begun[1].get("files")
@@ -1021,6 +1029,15 @@ def _put_back_at(root: Path, parts: tuple[str, ...], before: bytes | None, after
         return False
 
 
+def _remove_own(root: Path, rel: str, before: bytes | None) -> None:
+    """`Act.remove_own`'s removal at the commit: only where `rel`'s real path under the quilt's real root is `rel` itself, in loom's own place (`_place`), and while the file holds `before`; WriteRefused (`changed`) otherwise, with nothing removed."""
+    parts = _place(root, rel)
+    if parts is None or parts != PurePosixPath(rel).parts or before is None:
+        raise WriteRefused("changed", f"{rel} is not where loom left it; nothing was removed")
+    if not _remove_made_at(root, parts, str(digest(before))):
+        raise WriteRefused("changed", f"{rel} changed since loom read it; nothing was removed")
+
+
 def _remove_made_at(root: Path, parts: tuple[str, ...], made: str) -> bool:
     """Recovery's removal of a file an act made, at the place it judged, while it holds the bytes it was made with (`_unkept`), through folders opened without following a link; False, with nothing removed, otherwise."""
     try:
@@ -1142,10 +1159,12 @@ def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
 
     A journal travels with a copied quilt, so nothing in it is taken on trust: every file must be a path in the quilt that stays in it (`_in_quilt`), every digest a digest, every record line a JSON object bound for one of loom's own logs (`_log_ok`), any look one recovery may write (`_look_untrusted`), and the act must name a file, or carry a look: the one act the door journals that writes no file is one whose only write is the person's look and its records, as a Keep of in-place changes.
     """
-    files, look = entry.get("files"), entry.get("look")
+    files, look, settles = entry.get("files"), entry.get("look"), entry.get("settles")
     if files == {} and look is not None and not isinstance(look, dict):
         return "its look is not a look"
-    if not isinstance(files, dict) or (not files and not isinstance(look, dict)):
+    if settles is not None and not (isinstance(settles, str) and ACT_ID.fullmatch(settles)):
+        return "the act it settles is not an act"
+    if not isinstance(files, dict) or (not files and not isinstance(look, dict) and settles is None):
         return "it names no file"
     for rel, ab in files.items():
         if not _in_quilt(root, rel):
@@ -1365,7 +1384,7 @@ class _Verdict:
 
 
 #: What settles an act nothing but a person's hand can: said where recovery leaves such an act.
-BY_HAND = "it stays until it is settled by hand, which loom does not yet do"
+BY_HAND = "it stays until you settle it as it stands"
 
 
 def _judge(
@@ -1502,6 +1521,9 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             _append_records(root, e.get("records") or [], unless_there=True)
             j.append(root, {"event": "done", "act": act_id, "when": stamp(), "recovered": True})
             said.append(f"finished {act_id}")
+            if e.get("kind") == "settle":
+                # a settling removed a version never recorded: its emptied folders go too, as its own follow-up takes them
+                _prune_at(root, history, [rel for rel, ab in _written(e).items() if ab[1] is None])
             said += _relook(root, act_id, e)
             if not e.get("look"):
                 from loom.identity import agents_act
@@ -1561,6 +1583,7 @@ KINDS = {
     "id": "a copy with ids",
     "deloom": "a copy without loom",
     "agents": "the agent layer's files",
+    "settle": "a settling",
 }
 
 
@@ -1581,9 +1604,15 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, str]]:
 
     See Also
     --------
+    left_acts : the same, each with the id the person's settling names it by (`settling`).
     recover : what settles the rest, and says these as it starts.
     """
-    out: list[tuple[str, list[str], str, str]] = []
+    return [(kind, files, why, settles) for _, kind, files, why, settles in left_acts(root, history)]
+
+
+def left_acts(root: Path, history: Path) -> list[tuple[str, str, list[str], str, str]]:
+    """`left`, each act with its id first: what the control that settles it as it stands (`settling.settle`) and `loom doctor --settle` take, carried as data and never shown."""
+    out: list[tuple[str, str, list[str], str, str]] = []
     j = read_journal(root)
     for act_id, (_, e) in j.begun.items():
         v = _judge(root, history, e, j.crossing(act_id), j.again.get(act_id, ()))
@@ -1596,9 +1625,9 @@ def left(root: Path, history: Path) -> list[tuple[str, list[str], str, str]]:
                 if linked
                 else "the journal holds a record of a write that loom cannot trust, perhaps one that came with a copied folder, so loom changed nothing for it"
             )
-            out.append(("a write", [], why, ""))
+            out.append((act_id, "a write", [], why, ""))
         else:
-            out.append((KINDS.get(str(e.get("kind")), "a write"), sorted(v.holds), v.why, v.settles))
+            out.append((act_id, KINDS.get(str(e.get("kind")), "a write"), sorted(v.holds), v.why, v.settles))
     return out
 
 
@@ -1875,6 +1904,8 @@ class Act:
         self.after: dict[str, bytes | None] = {}
         #: the files this act leaves as they are, each holding already what it would write (`confirm`)
         self.confirmed: dict[str, bytes | None] = {}
+        #: the files of loom's own it removes through folders opened without following a link (`remove_own`)
+        self.own: set[str] = set()
         self.splices: dict[str, list[dict[str, Any]]] = {}
         self.modes: dict[str, int] = {}
         self.edits: list[str] = []
@@ -1884,6 +1915,8 @@ class Act:
         self.follow: list[Callable[[], None]] = []
         #: whether loom's own records are staged into this act (`staging`), and a nested act joins it
         self.staging = False
+        #: the act this one settles as it stands (`settling`), which ends with this one's `done`
+        self.settles: str | None = None
 
     # what the caller reads
 
@@ -1979,6 +2012,15 @@ class Act:
             )
         self.confirmed[rel] = data
 
+    def remove_own(self, rel: str) -> None:
+        """Stage removing `rel`, a file of loom's own in the real `.loom/` or the history, through folders opened from the quilt's root without following a link, as recovery removes one (`_remove_made_at`), while it holds what this act read of it; journalled as any removal, so its text is kept in the store. The commit refuses (`changed`) one whose real path is not its own, a link on the way, or that changed since it was read."""
+        rel = contained(self.root, rel)
+        if rel in self.confirmed:
+            raise WriteRefused("staged", f"{rel} is left as it is by this act, so it cannot also be written")
+        self.read(rel)
+        self.after[rel] = None
+        self.own.add(rel)
+
     def wrote(self, gen: str) -> None:
         """Name a suggested edit's `<edit>:<generation>` as one this act writes."""
         self.edits.append(gen)
@@ -2016,7 +2058,7 @@ class Act:
         from loom.clock import stamp
 
         changed = {rel: data for rel, data in self.after.items() if data != self.before.get(rel)}
-        if not changed and not self.look and not self.confirmed:
+        if not changed and not self.look and not self.confirmed and not self.settles:
             _append_records(self.root, self.records)
             self._follow()
             return
@@ -2067,6 +2109,8 @@ class Act:
             begin["undid"] = self.undone
         if self.look:
             begin["look"] = self.look
+        if self.settles:
+            begin["settles"] = self.settles
         from loom.identity import agents_act
 
         # whose act this is, as it is asked for: recovery reads it here, never from the shell it runs in
@@ -2076,7 +2120,10 @@ class Act:
         guarded = [r for r in self.records if "at" in r]
         try:
             for rel, data in changed.items():
-                _install(self.root, rel, data, self.before.get(rel), self.modes.get(rel))
+                if rel in self.own:
+                    _remove_own(self.root, rel, self.before.get(rel))
+                else:
+                    _install(self.root, rel, data, self.before.get(rel), self.modes.get(rel))
                 done.append(rel)
             # a guarded line refused (another writer moved its log on) puts the whole act back, files with it
             _append_guarded(self.root, guarded)
@@ -2132,7 +2179,7 @@ def act(root: Path, history: Path, kind: str, actor: str | None = None) -> Itera
     history : Path
         The quilt's history directory (`[quilt] history`): the text store is there; the lock and the journal are in `.loom/local/`.
     kind : str
-        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`, `adopt`, `pull`, `mv`, `atomize`, `linearize`, `import`, `restore-to`, `fork`, `new`, `page`, `pdf-save`, `patch`, `id`, `deloom`, `agents` (`KINDS` names each as a person does).
+        What the act is: `keep`, `undo`, `discard`, `restore`, `put-back`, `tick`, `settings`, `adopt`, `pull`, `mv`, `atomize`, `linearize`, `import`, `restore-to`, `fork`, `new`, `page`, `pdf-save`, `patch`, `id`, `deloom`, `agents`, `settle` (`KINDS` names each as a person does).
     actor : str, optional
         Who asked for it, for the journal.
 
