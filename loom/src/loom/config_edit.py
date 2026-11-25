@@ -413,7 +413,7 @@ def published(result: ScanResult) -> dict[str, Any]:
     from loom.ai.layout import SHELL, permissions_stale, variant
     from loom.paths import AI
     from loom.scan.diagnostics import LOOM, can_disable
-    from loom.sync import SyncError, SyncState, source_label
+    from loom.sync import SyncError, SyncState
 
     quilt = result.quilt
     root = quilt.root
@@ -437,13 +437,13 @@ def published(result: ScanResult) -> dict[str, Any]:
         state = SyncState.read(root)
         sync: dict[str, Any] = {
             "paired": True,
-            "directory": state.directory,
-            "workspace": source_label(state.url) if state.url else "",
-            "branch": state.branch,
-            "documents": list(state.documents),
+            "directory": state.folder,
+            "workspace": "Overleaf",
+            "branch": "",
+            "documents": [state.master],
         }
     except SyncError:
-        sync = {"paired": False, "command": "loom sync init DIR"}
+        sync = {"paired": False}
     return {
         "editable": list(EDITABLE),
         "read_only": list(READ_ONLY),

@@ -1,11 +1,11 @@
-"""The cases of the endpoints for a pull and for an agent's copy."""
+"""The cases of the endpoints for an agent's copy."""
 
 from __future__ import annotations
 
 import json
 import subprocess
 from pathlib import Path
-from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -24,96 +24,130 @@ def git(root: Path, *args: str) -> str:
     return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
 
 
-def pulled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A quilt with no repository paired with a local Overleaf stand-in, a collaborator's edit to `main.tex` fetched and awaiting incorporation."""
-    import loom.sync as sync
-    from loom.scan.quilt import load_quilt
-
-    root = tmp_path / "quilt"
-    (root / "drafting").mkdir(parents=True)
-    (root / "config.toml").write_text(
-        '[quilt]\nname = "test"\nmain = "drafting/main.tex"\nprefix = "zk"\nengine = "pdflatex"\n',
-        encoding="utf-8",
-    )
-    source = (
-        "\\documentclass{article}\n\\usepackage{loom}\n\\newtheorem{lemma}{Lemma}\n"
-        "\\begin{document}\n\\begin{lemma}\\label{zk-0001}A\\end{lemma}\n\\end{document}\n"
-    )
-    (root / "drafting" / "main.tex").write_text(source, encoding="utf-8")
-    (root / "loom.sty").write_text("% local support\n", encoding="utf-8")
-    bare = tmp_path / "overleaf.git"
-    subprocess.check_call(["git", "init", "-q", "--bare", "-b", "master", str(bare)])
-    other = tmp_path / "collaborator"
-    subprocess.check_call(["git", "clone", "-q", str(bare), str(other)], stderr=subprocess.DEVNULL)
-    git(other, "config", "user.name", "Colleague")
-    git(other, "config", "user.email", "colleague@example.org")
-    (other / "main.tex").write_text("\\documentclass{article}\n", encoding="utf-8")
-    git(other, "add", ".")
-    git(other, "commit", "-q", "-m", "new project")
-    git(other, "push", "-q", "origin", "HEAD:master")
-    project = tmp_path / "project"
-    subprocess.check_call(["git", "clone", "-q", str(bare), str(project)], stderr=subprocess.DEVNULL)
-    quilt = load_quilt(root)
-    state = sync.configure(quilt, str(project), "main.tex")
-    monkeypatch.setattr(sync, "compile_document", lambda *_a, **_k: SimpleNamespace(ok=True))
-    sync.push_publication(quilt, state, sync.publish(quilt, state).commit)
-    git(other, "pull", "-q", "--ff-only")
-    (other / "main.tex").write_text(source.replace("zk-0001}A", "zk-0001}B"), encoding="utf-8")
-    git(other, "commit", "-q", "-am", "edit statement")
-    git(other, "push", "-q", "origin", "HEAD:master")
-    sync.fetch(quilt, sync.SyncState.read(root))
-    return root
+# ---- the Overleaf mirror ---------------------------------------------------------------------------------------------
 
 
-@case("sync-incorporate")
-def _sync_incorporate(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from loom.sync import SyncState
+def published(root: Path) -> dict[str, Any]:
+    """The manifest's `overleaf`, as the server last published it."""
+    from loom.paths import MANIFEST
 
-    (tmp_path / "unsynced").mkdir()
-    s = serve(demo(tmp_path / "unsynced"))
-    refuses(s, "sync-incorporate", {"incoming": "0" * 40, "base": "0" * 40}, 409, "sync-refused", "not configured")
-    root = pulled(tmp_path, monkeypatch)
+    return json.loads((root / MANIFEST).read_text())["overleaf"]  # type: ignore[no-any-return]
+
+
+#: A link to the stand-in project, whose address leads where the test suite's isolation keeps it (`overleaf.BASE`).
+LINK = "https://www.overleaf.com/project/5f1e0c2a9b3d4e6f7a8b9c0d"
+
+
+@case("overleaf-pair")
+def _overleaf_pair(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.unit import _mirror as mirror
+
+    root = mirror.quilt_at(tmp_path)
+    mirror.overleaf(tmp_path)
+    link = LINK
     s = serve(root)
-    state = SyncState.read(root)
-    before = (root / "drafting" / "main.tex").read_bytes()
-    # pinned to the revision the page displayed: a different one changes nothing
-    refuses(
-        s,
-        "sync-incorporate",
-        {"incoming": "0" * 40, "base": state.integrated},
-        400,
-        "revision-changed",
-        "reload Review",
+    refuses(s, "overleaf-pair", {"link": "https://www.overleaf.com/read/abcdefghijkl"}, 409, "sharing-link", "sharing")
+    refuses(s, "overleaf-pair", {"link": link, "author": "Claude Agent"}, 403, "author-only", "author's")
+    asked = succeeds(s, "overleaf-pair", {"link": link})["result"]["choose"]
+    assert (asked["folder"], asked["mains"], asked["main"]) == ("paper", ["main.tex"], "main.tex")
+    assert [a["name"] for a in asked["authors"]] == [mirror.PERSON[0]]
+    done = succeeds(
+        s, "overleaf-pair", {"link": link, "folder": "drafting", "main": "main.tex", "me": [mirror.PERSON[1]]}
     )
-    assert (root / "drafting" / "main.tex").read_bytes() == before
-    said = succeeds(s, "sync-incorporate", {"incoming": state.incoming, "base": state.integrated})
-    assert said["result"]["integrated"] == state.incoming
-    assert b"zk-0001}B" in (root / "drafting" / "main.tex").read_bytes()
-    assert said["result"]["paths"] == ["drafting/main.tex"]
-    assert said["result"]["landmarks"] == [f"main-before-pull-{state.incoming[:12]}"]
-    assert not (root / ".git").exists()  # nothing is committed: the quilt need not be a repository
+    assert done["result"]["paired"] == {"folder": "drafting", "main": "drafting/main.tex"}
+    assert (root / "drafting/main.tex").read_text() == mirror.SOURCE
+    shown = published(root)
+    assert (shown["paired"], shown["folder"], shown["waiting"], shown["problem"]) == (True, "drafting", False, None)
+    assert shown["link"] == LINK
 
 
-@case("sync-preview")
-def _sync_preview(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from loom.records.store import Records
-    from loom.scan.quilt import load_quilt, save_author
-    from loom.sync import SyncState
+@case("overleaf-token")
+def _overleaf_token(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.unit._mirror import quilt_at
+    from tests.unit._overleaf_server import TOKEN, serving
 
-    save_author(WHO)
-    root = pulled(tmp_path, monkeypatch)
+    root = quilt_at(tmp_path)
+    (tmp_path / "srv").mkdir()
+    with serving(tmp_path / "srv") as server:
+        import loom.overleaf as overleaf
+
+        monkeypatch.setattr(overleaf, "BASE", server.url("").rstrip("/"))
+        link = LINK
+        s = serve(root)
+        refuses(s, "overleaf-token", {"link": link, "token": "two words"}, 400, "bad-token", "not a git token")
+        assert succeeds(s, "overleaf-token", {"link": link, "token": TOKEN})["result"] == {"stored": True}
+    assert TOKEN in (tmp_path / "keychain-stand-in").read_text()
+
+
+@case("overleaf-update")
+def _overleaf_update(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    from tests.unit import _mirror as mirror
+
+    (tmp_path / "plain").mkdir()
+    refuses(serve(demo(tmp_path / "plain")), "overleaf-update", {}, 409, "not-paired", "mirrors no Overleaf project")
+    root, bare = mirror.paired(tmp_path)
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": mirror.SOURCE.replace("}A", "}B")})
     s = serve(root)
-    state = SyncState.read(root)
-    body = {"incoming": state.incoming, "base": state.integrated, "reviewer": WHO}
-    before = (root / "drafting/main.tex").read_bytes()
-    refuses(s, "sync-preview", {**body, "reviewer": "Other"}, 409, "reviewer-changed", "reload Review")
-    view = succeeds(s, "sync-preview", body)["result"]
-    assert (root / "drafting/main.tex").read_bytes() == before
-    assert [r["key"] for r in view["items"]] == ["zk-0001"]
-    monkeypatch.setattr("loom.cli.review._master_compiles", lambda *_: (True, ""))
-    answer = succeeds(s, "sync-incorporate", {**body, "review_token": view["token"], "accept": ["zk-0001"]})["result"]
-    assert answer["accepted"] == ["zk-0001"]
-    assert Records(root, load_quilt(root).history_dir).latest["zk-0001"].author == WHO
+    # the server fetches once as it starts, writes nothing of the person's, and says Overleaf has changes
+    for _ in range(100):
+        if published(root)["waiting"]:
+            break
+        time.sleep(0.05)
+    assert published(root)["waiting"] is True and (root / "drafting/main.tex").read_text() == mirror.SOURCE
+    said = succeeds(s, "overleaf-update", {})["result"]
+    assert said == {
+        "state": "updated",
+        "files": 1,
+        "by": ["Colleague"],
+        "own": 0,
+        "places": [],
+        "here": [],
+        "overwritten": [],
+    }
+    assert "}B" in (root / "drafting/main.tex").read_text()
+    shown = published(root)
+    assert shown["waiting"] is False and shown["last"]["by"] == ["Colleague"] and shown["last"]["files"] == 1
+    assert succeeds(s, "overleaf-update", {})["result"] == {"state": "up-to-date"}
+
+
+@case("overleaf-me")
+def _overleaf_me(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A quilt that came without its `.loom/local/` knows no one on this machine: the server's fetch says to ask, the history's authors are given, and the answer is kept."""
+    import shutil
+    import time
+
+    from tests.unit import _mirror as mirror
+
+    (tmp_path / "plain").mkdir()
+    refuses(serve(demo(tmp_path / "plain")), "overleaf-me", {}, 409, "not-paired", "mirrors no Overleaf project")
+    root, _ = mirror.paired(tmp_path)
+    shutil.rmtree(root / ".loom/local")
+    s = serve(root)
+    for _ in range(100):
+        if published(root).get("ask_me"):
+            break
+        time.sleep(0.05)
+    assert published(root)["ask_me"] is True
+    asked = succeeds(s, "overleaf-me", {})["result"]["authors"]
+    assert asked == [{"name": mirror.PERSON[0], "email": mirror.PERSON[1]}]
+    refuses(s, "overleaf-me", {"me": "pat"}, 400, "bad-field", "list of addresses")
+    assert succeeds(s, "overleaf-me", {"me": [mirror.PERSON[1]]})["result"] == {"me": [mirror.PERSON[1]]}
+    assert published(root)["ask_me"] is False
+
+
+@case("overleaf-unpair")
+def _overleaf_unpair(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.unit import _mirror as mirror
+
+    root, _ = mirror.paired(tmp_path)
+    s = serve(root)
+    assert succeeds(s, "overleaf-unpair", {})["result"] == {"paired": False}
+    assert (root / "drafting/main.tex").read_text() == mirror.SOURCE
+    assert not (root / ".loom/records/source-sync.json").exists() and not (root / ".loom/local/overleaf").exists()
+    assert published(root) == {"paired": False}
+    refuses(s, "overleaf-unpair", {}, 409, "not-paired", "mirrors no Overleaf project")
 
 
 @case("adopt-decision")

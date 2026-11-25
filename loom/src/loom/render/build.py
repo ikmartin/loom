@@ -644,9 +644,6 @@ def _build(
 
     _attach_spans(result.quilt.root, manifest, files)
     attach_comparisons(result, records, renderer, manifest, files)
-    from loom.render.incoming import attach_incoming
-
-    attach_incoming(result, renderer, manifest, files)
     from loom.render.incoming import attach_adoptions
 
     attach_adoptions(result, renderer, manifest, files)
@@ -679,6 +676,9 @@ def _build(
     from loom.config_edit import published as published_config
 
     manifest["config"] = published_config(result)
+    from loom.overleaf import published as published_overleaf
+
+    manifest["overleaf"] = published_overleaf(result.quilt.root)
     # every diagnostic, lint's, the renderer's and the records', whole and with whose it is to fix
     from loom.scan.owners import stamped
 

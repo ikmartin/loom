@@ -39,9 +39,9 @@ Some acts make a claim only a person can make (*I checked this*, *I accept this 
 
 - `loom accept`, the author's claim that a key's mathematics is right;
 - `loom library verify`, `discard`, `ignore`, `add`, `import` and `drop`;
-- `loom adopt` and `loom sync incorporate`, which write the author's files (P7);
+- `loom adopt`, which writes the author's files (P7);
 - `loom changes --keep` and `--discard`, keeping or discarding a pending change (a suggested edit, or a change to an open file since the author's look), a discard writing the file back with its text before kept ([invariant](invariants.md#undo-writes-a-persons-file-only-on-their-act-with-what-it-replaces-kept-first));
-- `loom history restore`, `loom session delete --purge`, `loom ai delete`, `loom sync publish --push`;
+- `loom history restore`, `loom session delete --purge`, `loom ai delete`;
 - saving the quilt's settings to `config.toml` in the viewer, and rewriting the permission files to a changed deny list there (`settings-save`, `agents-update`), since an agent never moves its own boundary;
 - starting a library run in the viewer (`library-update`), which may use the network for that run on the person's word, as `--online` does;
 - adding a work to the library, filing a dropped PDF, and deleting a work from it (`library-take`, `library-answer`, `library-undo`, `library-unfile`, `library-receive`; the Add dialog's `library-add`, `library-upload`, `library-file`; `library-delete`), and any lookup that asks for the network (`library-lookup` with `online`);

@@ -36,7 +36,6 @@ from loom.cli.serve_cmd import serve
 from loom.cli.session import session
 from loom.cli.since_cmd import since_command
 from loom.cli.suggest import suggest_command
-from loom.cli.sync import sync
 from loom.cli.upgrade import upgrade
 from loom.version import __version__
 
@@ -95,6 +94,5 @@ main.add_command(here_command)
 main.add_command(since_command)
 main.add_command(changes_command)
 main.add_command(mcp_command)
-main.add_command(sync)
 
 __all__ = ["main"]

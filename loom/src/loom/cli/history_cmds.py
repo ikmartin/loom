@@ -595,7 +595,7 @@ def _named_documents(result: ScanResult) -> set[str]:
             named.update(p for p in (a.in_doc, a.target_key) if p)
     try:
         state = SyncState.read(root)
-        named.update([state.master, *state.documents])
+        named.add(state.master)
     except SyncError:
         pass
     for e in _history(result).entries:

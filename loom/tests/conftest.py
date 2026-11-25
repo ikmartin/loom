@@ -151,6 +151,11 @@ def isolated_env(request: pytest.FixtureRequest, tmp_path: Path, fake_bin: Path,
     monkeypatch.setenv("FAKE_TEX_LOG", str(tmp_path / "fake-tex.log"))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig-none"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    # the Overleaf mirror's credential helper: a file in the test's own folder stands in for the macOS Keychain, which no test reaches
+    monkeypatch.setattr("loom.overleaf.HELPER", f"store --file={tmp_path / 'keychain-stand-in'}")
+    # Overleaf's git stands in as a folder of bare repositories, one a project id, which a test's server may serve instead
+    monkeypatch.setattr("loom.overleaf.BASE", str(tmp_path / "overleaf-projects"))
+    monkeypatch.setattr("loom.overleaf.PROTOCOLS", ("https", "http", "file"))
     if not request.node.get_closest_marker("network"):
         monkeypatch.setattr(socket.socket, "connect", _loopback_only(socket.socket.connect))
     # a fresh shim's first run waits on macOS for the system's check of a new executable, which a parallel suite can make longer than doctor's timeout; the hang test sets its own
