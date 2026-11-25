@@ -843,7 +843,7 @@ def _holds(root: Path, rel: str, want: str | None) -> bool:
 
 
 def _written(entry: dict[str, Any]) -> dict[str, Any]:
-    """The files a `begin` line says its act writes: every one it names but those it left as they are (`Act.confirm`), whose before and after are one digest, which recovery never writes and judges nothing by; `Journal` still counts them, as files a later act names."""
+    """The files a `begin` line says its act writes: every one it names but those it left as they are (`Act.confirm`), whose before and after are one digest, which recovery never writes and asks only to hold that digest still before it finishes the act (`_judge`); `Journal` still counts them, as files a later act names."""
     files = entry.get("files")
     if not isinstance(files, dict):
         return {}
@@ -1362,7 +1362,7 @@ def _judge(
 ) -> _Verdict:
     """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`).
 
-    Putting an act back writes only where recovery may (`_place`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again or found it as it would write it (`Act.confirm`; `again`, `Journal.again`). A file an act left as it is (`Act.confirm`) is never written and nothing is judged by it (`_written`). An act whose settling would write the history is left while the history lies where recovery writes nothing (`_history_place`).
+    Putting an act back writes only where recovery may (`_place`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again or found it as it would write it (`Act.confirm`; `again`, `Journal.again`). A file an act left as it is (`Act.confirm`) is never written, and the act is judged by the files it writes (`_written`), but finished only while each such file still holds what the line says it found. An act whose settling would write the history is left while the history lies where recovery writes nothing (`_history_place`).
     """
     why = untrusted(root, history, entry)
     if why:
@@ -1380,7 +1380,19 @@ def _judge(
     guards = _guards(entry.get("records") or [])
     guards_hold = all(_guard_holds(root, log, at, lines) for log, (at, lines) in guards.items())
     if all(after for _, after in holds.values()) and guards_hold:
-        return _Verdict("finish", holds=holds)
+        # finishing an act says it found each file it left as it is (`Act.confirm`) as it would write it, so each must still read so; a line that says so of a file holding anything else is left, as an act whose file changed since is
+        found = {rel: ab[0] for rel, ab in (entry.get("files") or {}).items() if rel not in files}
+        moved = sorted(rel for rel, d in found.items() if not _holds(root, rel, d))
+        if not moved:
+            return _Verdict("finish", holds=holds)
+        one = len(moved) == 1
+        every = holds | {rel: (False, False) for rel in moved}
+        return _Verdict(
+            "left",
+            f"it found {_named(moved)} as it would write {'it' if one else 'them'}, and {'it has' if one else 'they have'} changed since, so recovery changed nothing: {_where(every)}",
+            every,
+            settles=f"This stays until {_named(moved)} {'reads' if one else 'read'} again as the act found {'it' if one else 'them'}.",
+        )
     if not guards_hold and any(_tangled(root, log, at, lines) for log, (at, lines) in guards.items()):
         return _Verdict(
             "left",
@@ -1940,7 +1952,7 @@ class Act:
     def confirm(self, rel: str, data: bytes | None) -> None:
         """Name `rel` as a file this act leaves as it is, because it holds `data`, the bytes the act would write there, already; None for a file the act would remove that is not there.
 
-        It is journalled with the act, its before and after one digest, and never written, so an act of this kind recovery left that names it counts it as written again once this act is done (`Journal.again`); recovery, which writes nothing for it, judges this act by the files it writes alone. The file is read here, under the lock, and again just before the act is journalled: WriteRefused (`changed`) when it holds anything else, and (`staged`) when this act also writes it.
+        It is journalled with the act, its before and after one digest, and never written, so an act of this kind recovery left that names it counts it as written again once this act is done (`Journal.again`); recovery, which writes nothing for it, judges this act by the files it writes, and finishes it only while the file still holds `data`. The file is read here, under the lock, and again just before the act is journalled: WriteRefused (`changed`) when it holds anything else, and (`staged`) when this act also writes it.
         """
         rel = contained(self.root, rel)
         if rel in self.after:

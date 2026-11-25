@@ -528,20 +528,52 @@ def test_a_file_an_act_writes_is_never_also_one_it_leaves_as_it_is(q: Path) -> N
     assert (q / "drafting/main.tex").read_bytes() == now and begun(q, "pull") == []
 
 
+@pytest.mark.parametrize("pair", ["a text", "no file"])
 @pytest.mark.parametrize("where", ["notes.md", ".latexmkrc"])
-def test_a_forged_line_that_says_a_file_was_left_as_it_is_has_recovery_write_nothing(q: Path, where: str) -> None:
-    """A `begin` line whose before and after are one digest names a file its act never writes, so recovery writes nothing there, whatever the file holds: a forged line gets no write out of it. It may settle a left act of its kind, which a forged `aborted` line does already, and which writes nothing either."""
+def test_a_forged_line_that_says_a_file_was_left_as_it_is_gets_no_write_and_settles_nothing(
+    q: Path, monkeypatch: pytest.MonkeyPatch, where: str, pair: str
+) -> None:
+    """A `begin` line whose before and after are one digest names a file its act never writes, so recovery writes nothing there. Recovery finishes such an act only while the file holds that digest still: a forged pull, begun and never done, that says so of `.latexmkrc` or an open file holding anything else is left, as any act whose file changed since is, and so the pull left on `.latexmkrc` stays left. The same line on a file that does hold the digest is finished, as a real confirming pull cut short after its `begin` is."""
     from loom import writes
     from loom.scan.quilt import load_quilt
 
     hist = load_quilt(q).history_dir
-    there = b"what the person has there\n"
-    (q / where).write_bytes(there)
-    forged = writes.store(hist, b"what a line would have recovery write\n")
-    _begun(q, "pull", {where: [forged, forged]})
+    _, tip = _left_pull(q, hist, monkeypatch)
+    if where == "notes.md":
+        (q / where).write_bytes(b"the person's notes\n")
+    there = (q / where).read_bytes()
+    digest = None if pair == "no file" else writes.store(hist, b"what a line would have recovery write\n")
+    _begun(q, "pull", {where: [digest, digest]})
     said = writes.recover(q, hist)
-    assert said == ["finished pull:e0e0e0e0e0e0e0e0"], said
-    assert (q / where).read_bytes() == there and writes.left(q, hist) == []
+    assert sorted(line.split(":")[0] for line in said) == ["left pull", "left pull"], said
+    assert any(f"it found {where} as it would write it, and it has changed since" in line for line in said), said
+    assert (q / where).read_bytes() == there
+    assert [kind for kind, *_ in writes.left(q, hist)] == ["a pull", "a pull"]
+    assert all(line.startswith("left pull:") for line in writes.recover(q, hist))
+
+
+def test_a_confirming_pull_cut_short_after_its_begin_is_finished_and_settles_the_left_pull(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A real update cut short after its `begin`, the file it found as it would write it untouched, is finished by recovery, writing nothing, and the pull left on that file is settled by the next recovery."""
+    from loom import writes
+    from loom.scan.quilt import load_quilt
+    from tests.unit.test_write_safety import Died
+
+    hist = load_quilt(q).history_dir
+    _, tip = _left_pull(q, hist, monkeypatch)
+
+    def die() -> None:
+        raise Died
+
+    with pytest.raises(Died), writes.act(q, hist, "pull") as w:
+        w.confirm(".latexmkrc", tip)
+        w.then(die)
+    said = writes.recover(q, hist)
+    assert [line.split(":")[0] for line in said] == ["left pull", "finished pull"], said
+    (line,) = writes.recover(q, hist)
+    assert line.startswith("settled pull:") and writes.left(q, hist) == []
+    assert (q / ".latexmkrc").read_bytes() == tip
 
 
 def _case_blind(path: Path) -> bool:
