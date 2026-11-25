@@ -1118,3 +1118,19 @@ def test_a_record_switched_to_another_project_is_refused_with_its_code(tmp_path:
     with pytest.raises(MirrorError) as refused:
         overleaf.update(load_quilt(root))
     assert refused.value.code == "bad-record" and (root / "drafting/main.tex").read_text() == TWO
+
+
+def test_a_path_the_file_system_cannot_resolve_is_not_trusted_to_lie_outside_the_mirror(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """As recovery's place rule takes such a path on trust no more than one that leads out (`writes._real`), the door refuses a write to one in a mirroring quilt."""
+    from loom import writes
+    from loom.overleaf import mirrored
+
+    root, _ = two_lemmas(tmp_path)
+    real = writes._real
+    monkeypatch.setattr(writes, "_real", lambda p: None if "renaming" in str(p) else real(p))
+    assert mirrored(root, "renaming/notes.tex") and not mirrored(root, "notes.tex")
+    with pytest.raises(writes.WriteRefused) as refused, writes.act(root, load_quilt(root).history_dir, "keep") as w:
+        w.replace("renaming/notes.tex", b"x\n")
+    assert refused.value.code == "mirrored" and not (root / "renaming").exists()

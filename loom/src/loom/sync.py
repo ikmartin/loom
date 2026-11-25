@@ -60,7 +60,7 @@ def checked_folder(root: Path, history: Path, folder: str) -> str:
 
     Asked at every use, so a record that came with the quilt names no place the mirror writes until it is judged here. Raises MirrorError `bad-record`.
     """
-    from loom.writes import _place
+    from loom.writes import _place, _real
 
     if not plain_folder(folder) or _place(root, folder) is None:
         raise MirrorError("bad-record", BAD_RECORD)
@@ -76,10 +76,10 @@ def checked_folder(root: Path, history: Path, folder: str) -> str:
                 raise MirrorError("bad-record", BAD_RECORD)
             break
         parent = parent / part
-    real = Path(os.path.realpath(root / folder))
+    real = _real(root / folder)
     for own in (root / LOOM, history):
-        mine = Path(os.path.realpath(own))
-        if real == mine or real.is_relative_to(mine) or mine.is_relative_to(real):
+        mine = _real(own)
+        if real is None or mine is None or real == mine or real.is_relative_to(mine) or mine.is_relative_to(real):
             raise MirrorError("bad-record", BAD_RECORD)
     return folder
 
