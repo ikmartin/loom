@@ -247,7 +247,7 @@ def test_a_link_into_a_dot_named_folder_of_the_quilt_is_left_out_of_a_fenced_sta
 def test_a_lualatex_document_compiles_fenced_with_a_cache_of_loom_s_own(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """LuaTeX's font loader needs a cache it can write: a fenced run is given loom's own (`fence.texmf_var`), apart from the person's TeX cache, and a lualatex document compiles to the same aux fenced and unfenced (R2-33)."""
+    """LuaTeX's font loader needs a cache it can write: a fenced run is given one of its own, cloned from loom's seed, whose font database loom made first (`fence.run_var`), apart from the person's TeX cache, and a lualatex document compiles to the same aux fenced and unfenced (R2-33)."""
     q = tmp_path / "q"
     q.mkdir()
     (q / "main.tex").write_text(
@@ -261,6 +261,27 @@ def test_a_lualatex_document_compiles_fenced_with_a_cache_of_loom_s_own(
         return res.aux.read_bytes()
 
     fenced = aux(tmp_path / "fenced")
-    assert any(fence.texmf_var().rglob("*")), "the fenced run kept LuaTeX's cache in loom's own folder"
+    assert (fence.texmf_var() / fence.NAMES).is_file(), "loom made the seed's font database before the fenced run"
     monkeypatch.setenv(fence.OFF, "off")
     assert aux(tmp_path / "unfenced") == fenced
+
+
+def test_what_a_fenced_run_writes_in_its_tex_cache_reaches_neither_loom_s_seed_nor_a_later_run(tmp_path: Path) -> None:
+    """A fenced run's TeX cache is a clone of loom's seed in the run's own folder (`fence.run_var`), so a file a document plants there, as compiled Lua a later LuaTeX would load, goes with the run: the seed, which only loom writes, never holds it, and the next fenced run does not find it (R2-33's remark)."""
+    q = tmp_path / "q"
+    q.mkdir()
+    planted = "os.getenv('TEXMFVAR') .. '/luatex-cache/planted.lua'"
+    plant = f"local f = io.open({planted}, 'w') if f then f:write('return 1') f:close() texio.write_nl('PLANTED') end"
+    look = f"if io.open({planted}) then texio.write_nl('SEEN') else texio.write_nl('UNSEEN') end"
+
+    def log(name: str, lua: str) -> str:
+        (q / f"{name}.tex").write_text(
+            f"\\documentclass{{article}}\\begin{{document}}x\\directlua{{{lua}}}\\end{{document}}\n", encoding="utf-8"
+        )
+        res = compile_document(q, "", f"{name}.tex", tmp_path / name, engine="lualatex", halt_on_error=False)
+        assert res.log is not None, res.first_error
+        return res.log.read_text(encoding="utf-8", errors="replace")
+
+    assert "PLANTED" in log("plant", plant), "the document could write its own cache, or the test proves nothing"
+    assert not [p for p in fence.texmf_var().rglob("planted.lua")]
+    assert "UNSEEN" in log("look", look)

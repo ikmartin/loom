@@ -63,3 +63,29 @@ def test_xr_s_external_aux_is_read_only_from_the_quilt(tmp_path: Path) -> None:
     text = f"\\externaldocument{{other}}\\externaldocument{{{out}/x}}\\externaldocument{{../../outside/x}}"
     _, lines = external_labels(text, q / "a", q)
     assert any("{inside}" in line for line in lines) and not any("secret" in line for line in lines), lines
+
+
+@pytest.mark.parametrize("clones", [True, False])
+def test_a_run_s_tex_cache_is_its_own_copy_of_loom_s_seed_and_kept_across_its_passes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, clones: bool
+) -> None:
+    """A fenced run's `TEXMFVAR` is its own copy of loom's seed in its folder: a clone, or a plain copy where none can be made, as on another volume. What it writes there leaves the seed as it was, and a later pass in the same folder keeps the cache it began with."""
+    from loom import fence
+
+    seed = fence.texmf_var()
+    (seed / "luatex-cache").mkdir(parents=True)
+    (seed / "luatex-cache" / "kept.lua").write_text("seed\n", encoding="utf-8")
+    if not clones:
+        real = fence.subprocess.run
+
+        def run(argv: list[str], *args: object, **kwargs: object) -> object:
+            if argv[:2] == ["/bin/cp", "-c"]:
+                return fence.subprocess.CompletedProcess(argv, 1, b"", b"cp: clonefile failed")
+            return real(argv, *args, **kwargs)  # type: ignore[call-overload]
+
+        monkeypatch.setattr(fence.subprocess, "run", run)
+    var = fence.run_var(tmp_path / "run", lua=False)
+    assert var == tmp_path / "run" / "texmf-var" and (var / "luatex-cache" / "kept.lua").read_text() == "seed\n"
+    (var / "luatex-cache" / "planted.lua").write_text("run\n", encoding="utf-8")
+    assert not (seed / "luatex-cache" / "planted.lua").exists()
+    assert fence.run_var(tmp_path / "run", lua=False) == var and (var / "luatex-cache" / "planted.lua").is_file()
