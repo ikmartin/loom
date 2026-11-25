@@ -160,7 +160,8 @@ def test_record_failure_restores_source_and_history(quilt, monkeypatch):
         incorporate(scan(quilt), COPY, preview["token"])
     assert (quilt.root / DOC).read_text() == TEXT
     assert (quilt.history_dir / "ledger.jsonl").read_bytes() == ledger
-    assert sorted(p.name for p in quilt.history_dir.iterdir()) == entries
+    # the text store is written ahead, as every act's is, and holds only what was read; no step was made
+    assert sorted(p.name for p in quilt.history_dir.iterdir() if p.name != "texts") == entries
     assert not (quilt.root / ".loom/records/review-origins.json").exists()
     monkeypatch.setattr(origins, "write", original_write)
     incorporate(scan(quilt), COPY, preview["token"])
@@ -827,3 +828,48 @@ def test_a_side_of_a_comparison_is_shaped_once_and_again_when_any_input_changes(
     assert again == _flat_shape(result, text, base)
     # no setting changes a shape today, but the scan reads the config, so it is made again
     assert again != first or changed == "the config"
+
+
+def test_a_saved_choice_survives_a_save_elsewhere_and_falls_with_any_of_its_inputs(quilt):
+    """A choice saved in Review is bound to the comparison's own inputs: a save to a file the document does not read, or to the config's other lines, keeps it; a save to the copy, a file of the document, its preamble, the id prefix or the copy's history drops it."""
+    from loom.adopt import decide, decisions
+    from loom.history.ledger import append_entry
+
+    edit(quilt, "First statement.", "Proposal.")
+    edit(quilt, "Second statement uses", "Another proposal uses")
+    data = comparison(scan(quilt), COPY)
+    decide(scan(quilt), COPY, ["zk-0001"], False, data["fingerprint"], "Tester")
+    saved = decisions(scan(quilt), COPY, "Tester")
+    assert saved["keys"] == ["zk-0001"]
+
+    def fresh():
+        return scan(load_quilt(quilt.root))
+
+    # elsewhere: another document, and a comment in the config
+    (quilt.root / "drafting/notes.tex").write_text(
+        "\\documentclass{article}\n\\begin{document}\nNotes.\n\\end{document}\n"
+    )
+    cfg = quilt.root / "config.toml"
+    cfg.write_text(cfg.read_text() + "# a note of the person's\n")
+    assert comparison(fresh(), COPY)["fingerprint"] == data["fingerprint"]
+    assert decisions(fresh(), COPY, "Tester") == saved
+
+    def drops(path, change):
+        before = path.read_bytes()
+        change()
+        assert comparison(fresh(), COPY)["fingerprint"] != data["fingerprint"], path
+        path.write_bytes(before)
+        assert comparison(fresh(), COPY)["fingerprint"] == data["fingerprint"], path
+
+    doc, copy = quilt.root / DOC, quilt.root / COPY
+    drops(doc, lambda: doc.write_text(doc.read_text().replace("Original introduction.", "A new introduction.")))
+    drops(
+        doc,
+        lambda: doc.write_text(
+            doc.read_text().replace("\\begin{document}", "\\usepackage{amsmath}\n\\begin{document}")
+        ),
+    )
+    drops(copy, lambda: edit(quilt, "Another proposal uses", "A third proposal uses"))
+    drops(cfg, lambda: cfg.write_text(cfg.read_text().replace('prefix="zk"', 'prefix="zz"')))
+    ledger = quilt.history_dir / "ledger.jsonl"
+    drops(ledger, lambda: append_entry(quilt.history_dir, "adopt", {"copy": COPY, "note": "taken in once"}, "Tester"))

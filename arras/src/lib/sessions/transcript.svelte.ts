@@ -129,9 +129,10 @@ export class Transcript {
 	}
 }
 
-/** Whether a speaker declared themselves an agent: the word `Agent`, `AI`, `bot` or `assistant` in their name, as loom decides it. */
+/** Whether a speaker declared themselves an agent: a name whose last word is `Agent`, however punctuated (`Referee (Agent)`), as loom decides it (`identity.is_agent`); a word elsewhere in a name says nothing, so `Ai Tanaka` is a person. */
 export function isAgent(who: string): boolean {
-	return /\b(agent|ai|bot|assistant)\b/i.test(who);
+	const words = who.toLowerCase().match(/[a-z0-9]+/g);
+	return !!words && words[words.length - 1] === 'agent';
 }
 
 /** What a message carried, as one line of counts: kinds in the order they first appear, replies counted apart (`carried 2 questions, 1 note, 1 reply`). Never the annotations themselves, which are read where they stand. */

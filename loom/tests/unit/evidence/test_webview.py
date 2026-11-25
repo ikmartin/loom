@@ -17,7 +17,6 @@ from loom.render.endpoints.web import _drafts
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
-from tests.unit._quilts import track_edits
 
 MAIN = r"""\documentclass{article}
 \newtheorem{lemma}{Lemma}
@@ -56,7 +55,6 @@ DOC, OTHER_DOC = "drafting/main.tex", "drafting/other.tex"
 def root(tmp_path: Path) -> Path:
     root = tmp_path / "q"
     ok("init", str(root), "--demo", cwd=tmp_path)
-    track_edits(root, on=False)
     (root / DOC).write_text(MAIN, encoding="utf-8")
     (root / OTHER_DOC).write_text(OTHER, encoding="utf-8")
     return root
@@ -224,7 +222,6 @@ def two(tmp_path: Path) -> Path:
     """Two drafts that both input a file holding a definition with a display and a lemma citing it."""
     root = tmp_path / "q"
     ok("init", str(root), "--demo", cwd=tmp_path)
-    track_edits(root, on=False)
     (root / "drafting/shared.tex").write_text(SHARED, encoding="utf-8")
     (root / DOC).write_text(TWO_MAIN, encoding="utf-8")
     (root / BOUNDS_DOC).write_text(TWO_BOUNDS, encoding="utf-8")

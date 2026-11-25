@@ -18,7 +18,7 @@ from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
 from loom.clock import stamp
-from loom.paths import LOOM, REVIEW_ORIGINS, SOURCE_SYNC, document_dir, under
+from loom.paths import LOOM, SOURCE_SYNC, document_dir, under
 from loom.reshape.importer import closure_of
 from loom.scan.quilt import Quilt
 from loom.tex.runner import compile_document
@@ -97,6 +97,7 @@ class SyncState:
         path.parent.mkdir(parents=True, exist_ok=True)
         temporary = path.with_suffix(".tmp")
         from loom.review_origins import read, write
+        from loom.writes import stage
 
         origins = read(root)
         for key, commit in self.review_origins.items():
@@ -113,7 +114,11 @@ class SyncState:
         if origins or self.last_pull:
             write(root, origins)
         data = {key: value for key, value in vars(self).items() if not key.startswith("review_")}
-        temporary.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        text = json.dumps(data, indent=2, sort_keys=True) + "\n"
+        # inside a pull's act the sync record goes with the files it took in (`writes.staging`)
+        if stage(path, text.encode("utf-8")):
+            return
+        temporary.write_text(text, encoding="utf-8")
         temporary.replace(path)
 
 
@@ -634,7 +639,9 @@ def _incoming_paths(quilt: Quilt, state: SyncState, main: str) -> list[str]:
     return paths
 
 
-def pull_files(quilt: Quilt, state: SyncState) -> dict[str, bytes | None]:
+def pull_files(
+    quilt: Quilt, state: SyncState, read: Callable[[str], bytes | None] | None = None
+) -> dict[str, bytes | None]:
     """The pinned pull applied to the quilt's current files in a scratch directory: each path it touches and what that path would then hold, None for a removal.
 
     Every check incorporation makes is made here and nothing in the quilt is written; `incorporate` writes exactly this, and the write API's `sync-preview` reads it. The patch applies hunk by hunk, so an author's edit elsewhere in a file the pull touches survives.
@@ -645,6 +652,8 @@ def pull_files(quilt: Quilt, state: SyncState) -> dict[str, bytes | None]:
         The paired quilt.
     state : SyncState
         The sync record, with a fetched revision not yet incorporated.
+    read : callable, optional
+        How a file's current bytes are read (None for one that is not there); default from disk. `incorporate` reads through its act, so what the pull is applied to is what the act replaces.
 
     Returns
     -------
@@ -671,9 +680,10 @@ def pull_files(quilt: Quilt, state: SyncState) -> dict[str, bytes | None]:
         stage = Path(temporary) / "quilt"
         stage.mkdir()
         for path in paths:
-            if (root / path).is_file():
+            data = read(path) if read is not None else ((root / path).read_bytes() if (root / path).is_file() else None)
+            if data is not None:
                 (stage / path).parent.mkdir(parents=True, exist_ok=True)
-                (stage / path).write_bytes((root / path).read_bytes())
+                (stage / path).write_bytes(data)
         # outside any repository, so `git apply` patches these files and nothing else
         env = {**os.environ, "GIT_CEILING_DIRECTORIES": temporary}
         try:
@@ -784,71 +794,71 @@ def incorporate(quilt: Quilt, state: SyncState, actor: str | None = None) -> dic
     --------
     pull_files : The same checks and result, writing nothing.
     """
+    from loom import writes
     from loom.history.ledger import actor_for
-    from loom.review_queue import fingerprint
-    from loom.scan.scan import scan
 
     root = quilt.root
-    after = pull_files(quilt, state)
+    if not state.incoming or state.incoming == state.integrated:
+        # refused before the door is opened, so a refusal leaves nothing behind, not even the lock's file
+        raise SyncError("there is no incoming revision to incorporate")
+    who = actor if actor is not None else actor_for(root)
+    try:
+        # one act through the door: the files the pull changes, the landmarks that keep each document as it was, the records of what moved and the sync record are written together or not at all, and a crash is finished or put back whole by recovery (`docs/design/writes.md`)
+        with writes.act(root, quilt.history_dir, "pull", who) as w, writes.staging(w):
+            # the record read again under the lock: a pull another process took in since leaves nothing to take
+            now = SyncState.read(root)
+            if now.incoming != state.incoming or now.incoming == now.integrated:
+                raise SyncError("there is no incoming revision to incorporate; it was taken in already")
+            said = _incorporate(quilt, now, w, who)
+            state.__dict__.update(now.__dict__)
+            return said
+    except ValueError as exc:
+        if isinstance(exc, SyncError):
+            raise
+        raise SyncError(str(exc)) from exc
+
+
+def _incorporate(quilt: Quilt, state: SyncState, w: Any, who: str | None) -> dict[str, Any]:
+    """`incorporate` under the door's lock, staged into the act `w`, which stages loom's records (`writes.staging`): the pull applied to the files as read through the act, so what it replaces is what the patch was applied to."""
+    from loom.review_queue import fingerprint
+    from loom.scan.scan import scan
+    from loom.scan.source import decode
+
+    root = quilt.root
+    after = pull_files(quilt, state, read=w.read)
     result = scan(quilt)
     review = _review(quilt, state, result)
-    who = actor if actor is not None else actor_for(root)
     documents = _reaching(root, current_selection(state, result)[1], set(after))
-    history_dir = quilt.history_dir
-    touched = [
-        root / REVIEW_ORIGINS,
-        root / SOURCE_SYNC,
-        root / "config.toml",
-        history_dir / "ledger.jsonl",
-        *(root / path for path in after),
-    ]
-    snapshots = {p: p.read_bytes() if p.is_file() else None for p in touched}
-    kept = {e.name for e in history_dir.iterdir()} if history_dir.is_dir() else set()
     label = source_label(state.url)
-    try:
-        landmarks = _stamp(
-            quilt,
-            result,
-            documents,
-            f"before pull {state.incoming[:12]}",
-            f"Before taking a pull from {label}",
-            who,
-        )
-        for path, data in after.items():
-            target = root / path
-            if data is None:
-                target.unlink(missing_ok=True)
-            else:
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(data)
-        incorporated = scan(quilt)
-        _record_moves(quilt, state, review["moves"], incorporated)
-        state.last_pull = {
-            "commit": state.incoming,
-            "observed": state.observed,
-            "keys": review["review_keys"],
-            "changed": review["changed_keys"],
-        }
-        for key in review["review_keys"]:
-            state.review_origins[key] = state.incoming
-            state.review_changed[key] = key in review["changed_keys"]
-            if key in incorporated.nodes:
-                state.review_baselines[key] = fingerprint(incorporated, key)
-            state.review_local_changed[key] = review["local_before"].get(key, False)
-        state.integrated = state.incoming
-        state.write(root)
-    except Exception as exc:
-        for file, content in snapshots.items():
-            if content is None:
-                file.unlink(missing_ok=True)
-            else:
-                file.write_bytes(content)
-        if history_dir.is_dir():
-            for made in (e for e in history_dir.iterdir() if e.name not in kept and e.is_dir()):
-                shutil.rmtree(made)
-        if isinstance(exc, ValueError):
-            raise SyncError(str(exc)) from exc
-        raise
+    landmarks = _stamp(
+        quilt,
+        result,
+        documents,
+        f"before pull {state.incoming[:12]}",
+        f"Before taking a pull from {label}",
+        who,
+    )
+    for path, data in after.items():
+        w.replace(path, data)
+    # the quilt as the act will leave it, scanned before anything is written so the records go with the files
+    incorporated = scan(
+        quilt, overlay={path: None if data is None else decode(data)[0] for path, data in after.items()}
+    )
+    _record_moves(quilt, state, review["moves"], incorporated)
+    state.last_pull = {
+        "commit": state.incoming,
+        "observed": state.observed,
+        "keys": review["review_keys"],
+        "changed": review["changed_keys"],
+    }
+    for key in review["review_keys"]:
+        state.review_origins[key] = state.incoming
+        state.review_changed[key] = key in review["changed_keys"]
+        if key in incorporated.nodes:
+            state.review_baselines[key] = fingerprint(incorporated, key)
+        state.review_local_changed[key] = review["local_before"].get(key, False)
+    state.integrated = state.incoming
+    state.write(root)
     return {"integrated": state.integrated, "paths": sorted(after), "landmarks": landmarks}
 
 

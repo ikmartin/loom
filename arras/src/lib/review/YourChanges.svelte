@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and, where the quilt tracks edits (`[review] track_edits`), edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar. On a served quilt Review draws it in two parts (`part`): Waiting to be accepted under Accepted results that changed, every document's blocks by document with no choice of document, each block once (`acceptSections`); Changes to keep with the agents' copies under Proposed edits; each narrowed to the draft the column chooses (`views/review/yours.ts`).
+	// Review › Your Changes: the mathematics first, then what waits to be kept. One document at a time, the blocks waiting to be accepted (changed since accepted, or taken in from a copy or a pull): Accept records the person's reading, for one block or a selection; what loom cannot accept says why in its row. Never accepted and accepted blocks are folded beneath, uncounted. Then every change waiting in the person's text, quilt-wide, a card each (`ChangeCard`) grouped by the document that lists it: suggestions not yet kept or discarded and edits made in their files since their look. Keep and Discard act as they do in the document, one change or all of a document's at once, and the last keep or discard of a suggestion is undone from the bar; neither says whether the mathematics is right. To do adds, beside each document's changes, the open annotations from others, each linking to its place. Each answer is said in its row while the row stands, else in the bar. On a served quilt Review draws it in two parts (`part`): Waiting to be accepted under Accepted results that changed, every document's blocks by document with no choice of document, each block once (`acceptSections`); Changes to keep with the agents' copies under Proposed edits; each narrowed to the draft the column chooses (`views/review/yours.ts`).
 	import { barShown } from '$lib/shell/scrollbars';
 	import '$lib/review/review.css';
 	import { onMount, tick } from 'svelte';
@@ -28,6 +28,7 @@
 	import Copies from '$lib/views/review/Copies.svelte';
 	import { rv } from '$lib/views/review/state.svelte';
 	import Cannot from './Cannot.svelte';
+	import SaidOnce from './SaidOnce.svelte';
 	import { acceptSections, blockDocuments, changeGroups, type AcceptSection, type Part } from '$lib/views/review/yours';
 	import { review as reviewWords } from '$lib/words/review';
 
@@ -68,9 +69,9 @@
 	// the document each drawn block is listed under, which names it
 	const home = $derived(new Map(sections.flatMap((s) => [...s.a.changed, ...s.a.taken.flatMap((t) => t.rows), ...s.a.never, ...s.a.accepted].map((b) => [b.key, s.path] as const))));
 	const reviewer = $derived(m.reviewer?.name ?? '');
-	const since = $derived(m.changes_since ? m.changes_since.when.slice(0, 16).replace('T', ' ') : '');
-	// whether edits in place since the person's look wait here too, as well as suggestions
-	const tracked = $derived(m.config?.review?.track_edits === true);
+	const since = $derived(m.changes_since ? m.changes_since.when.slice(0, 16).replace('T', ' ') + (m.changes_since.carried ? `, carried over from ${m.changes_since.carried}'s` : '') : '');
+	/** The places the look leaves to the person, where a change is never listed, named so an empty list is not read as nothing changed. */
+	const unwatched = $derived(m.changes_since?.unwatched ?? []);
 
 	let served = $state(false);
 	let writes = $state({ keep: false, discard: false });
@@ -319,7 +320,7 @@
 				{/if}
 			</section>
 		{:else}
-			<Empty text="No changes wait in your text." testid="changes-empty" />
+			<Empty text="No changes wait in the places agents may edit." testid="changes-empty" />
 		{/each}
 		{#if part}<Copies doc={draft} />{/if}
 		{#if todoOn}
@@ -337,13 +338,18 @@
 {#if part}
 	<section class="yours" data-testid="your-changes" data-part={part}>
 		{@render bar()}
+		<!-- said once: what Proposed edits watches, with the places it leaves to the person; and, by the name the bar shows, that git gave it -->
+		{#if part === 'changes' && m.changes_since}<SaidOnce text={reviewWords.once.watched(m.changes_since.when.slice(0, 16).replace('T', ' '), m.changes_since.carried ?? '', unwatched, m.changes_since.holds ?? '')} testid="review-watched" />{/if}
+		{#if part === 'accept' && reviewer && m.reviewer?.source === 'git config user.name'}<SaidOnce text={reviewWords.once.nameFromGit(reviewer)} testid="review-name-from-git" />{/if}
 		{#if part === 'accept'}{@render accepting()}{:else}{@render keeping()}{/if}
 	</section>
 {:else}
 	<main class="page review-page" use:barShown data-testid="your-changes">
 		<ReviewHeading title="Your Changes">{#snippet aside()}<HelpDot label="what the Your Changes page shows" topic="review" />{/snippet}</ReviewHeading>
 		{@render bar()}
-		<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: {tracked ? `suggestions not yet kept or discarded, and every edit made in your files since your look${since ? ` of ${since}` : ''}` : 'suggestions not yet kept or discarded'}. <b>Keep</b> one to take it into your text, or <b>Discard</b> it {tracked ? 'to put your words back or drop the suggestion' : 'to drop it'}; neither says whether the mathematics is right.</p>
+		<p class="lead">The mathematics first: the blocks of your documents changed since you accepted them, or taken in from a copy or a pull, and <b>Accept</b> records that you have read one and vouch for it. Then what waits to be kept: suggestions not yet kept or discarded, and every edit made since your look{since ? ` of ${since}` : ''} in the places agents may edit.{#if unwatched.length}<span data-testid="unwatched"> Your own places are not watched, so an edit there is never listed: {unwatched.join(', ')}.</span>{/if}{#if m.changes_since?.holds}<span data-testid="deny-holds"> {m.changes_since.holds}</span>{/if} <b>Keep</b> one to take it into your text, or <b>Discard</b> it to put your words back or drop the suggestion; neither says whether the mathematics is right.</p>
+
+		{#if reviewer && m.reviewer?.source === 'git config user.name'}<p class="muted" data-testid="review-name-from-git">You review as <b>{reviewer}</b>, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.</p>{/if}
 
 		<h2 class="part">Waiting to be accepted</h2>
 		{@render accepting()}

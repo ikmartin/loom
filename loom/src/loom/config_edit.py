@@ -33,7 +33,6 @@ EDITABLE = (
     "library.online",
     "lint.disable",
     "agents.deny",
-    "review.track_edits",
 )
 
 #: Keys shown and never written: each names where files already are, so changing it alone would lose them.
@@ -343,7 +342,7 @@ def check(
         if home and shown is not None and not shown(home):
             raise ValueError(f"{home} is not a file the viewer shows")
         return home or None
-    if key in ("library.online", "review.track_edits"):
+    if key == "library.online":
         if not isinstance(value, bool):
             raise ValueError("must be true or false")
         return value
@@ -406,7 +405,7 @@ def published(result: ScanResult) -> dict[str, Any]:
 
     Commands a person runs reach the viewer here as data (`command`), since the viewer names none of its own. Called once per build.
     """
-    from loom.agents import always_protected
+    from loom.agents import always_protected, how_far_deny_holds
     from loom.ai.clients import PROJECT, names_loom
     from loom.ai.layout import SHELL, permissions_stale, variant
     from loom.paths import AI
@@ -464,8 +463,9 @@ def published(result: ScanResult) -> dict[str, Any]:
             "stale": permissions_stale(root, cfg),
             "command": "" if layer else "loom ai init",
             "clients": clients,
+            # how far the list holds for the apps set up here, in one sentence: which cannot edit there, which are only asked
+            "holds": how_far_deny_holds(root),
         },
-        "review": {"track_edits": cfg.track_edits},
         "sync": sync,
         "warnings": list(cfg.warnings),
     }

@@ -48,7 +48,13 @@ def read_version(history: History, key: str, ref: str) -> tuple[Version, str]:
         if history.resolve_step(ref) is None:
             raise LookupError(f"no step {ref} in the history")
         raise LookupError(f"{key} has no version at step {ref}")
+    from loom.writes import staged
+
     p = version_path(history, v)
+    held, data = staged(p)
+    if held and data is not None:
+        # a version an act staging loom's records has made and not yet written (`writes.staging`)
+        return v, data.decode("utf-8")
     if not p.is_file():
         raise LookupError(f"the record for {key}@{v.step} is missing: {_shown(p)}")
     return v, p.read_text(encoding="utf-8")
@@ -67,7 +73,8 @@ def materialize(text: str, result: ScanResult) -> str:
 
     def repl(m: re.Match[str]) -> str:
         key = m.group(1)
-        n = result.nodes.get(key)
+        # a child keyed by a label stands as its place's key (`NodeRec.marker`)
+        n = result.nodes.get(result.named(key) or key)
         if n is None:
             raise LookupError(f"the version stands for {key}, which the quilt no longer has")
         src = result.files[n.file]

@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
-from loom.render.endpoints.review import _as, _person
+from loom.render.endpoints.review import _as, _person, one_block
 
 #: The status each refusal of an act answers with; any other is 409.
 _STATUS = {"author-only": 403, "agent-only": 403, "no-such-result": 404, "no-such-node": 404, "no-such-proposal": 404, "refused": 400}  # fmt: skip
@@ -26,15 +26,13 @@ def webs(root: Path) -> tuple[Any, Any]:
 
 
 def here_of(drafts: Any, result: str) -> Any:
-    """Where a result is, by what a row names it with: a draft's block by its key, which is asked first since it has the shape of a node's id, else a node by its id; `no-such-result` (404) otherwise."""
+    """Where a result is, by what a row names it with: a draft's block by its key, as the records resolve one, its place key too (`review.one_block`), which is asked first since it has the shape of a node's id, else a node by its id; `no-such-result` (404) otherwise, `ambiguous` (409) for a label naming several blocks."""
     from loom.evidence.subjects import is_node
-    from loom.evidence.web import Here
+    from loom.evidence.web import Here, blocks_named
 
-    if any(n.key == result for n in drafts.blocks):
-        return Here("block", result)
-    if is_node(result):
-        return Here("node", result)
-    raise ApiError("no-such-result", f"{result} is no result of this quilt; reload", status=404)
+    if blocks_named(drafts.result, result) or not is_node(result):
+        return Here("block", one_block(drafts.result, result).key)
+    return Here("node", result)
 
 
 def _formal_attest(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -188,12 +186,18 @@ def _results(body: dict[str, Any], name: str, *, required: bool) -> list[str]:
 def _planned(root: Path, body: dict[str, Any]) -> tuple[_Planner, list[str], list[str]]:
     """The planner for one read, the targets and the results chosen assumed for now; a target that is no result of the person's documents is `no-such-result` (404)."""
     planner = _Planner(root)
-    targets = _results(body, "targets", required=True)
-    assume = _results(body, "assume", required=False)
+    # each key as the records resolve one, a place key as well as a label key
+    targets = [_drafts_key(planner, k) for k in _results(body, "targets", required=True)]
+    assume = [_drafts_key(planner, k) if not planner.drafts.is_library(k) else k for k in _results(body, "assume", required=False)]  # fmt: skip
     for key in targets:
         if planner.drafts.node(key) is None:
             raise ApiError("no-such-result", f"{key} is no result of your documents; reload", status=404)
-    return planner, targets, assume
+    return planner, list(dict.fromkeys(targets)), list(dict.fromkeys(assume))
+
+
+def _drafts_key(planner: _Planner, key: str) -> str:
+    """A requested result's key now, as the records resolve one (`review.one_block`); `no-such-result`, `ambiguous` as it refuses."""
+    return str(one_block(planner.drafts.result, key).key)
 
 
 def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:

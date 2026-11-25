@@ -354,6 +354,22 @@ export const review = {
 		/** In place of a statement whose rendering could not be read. */
 		missing: 'This text could not be read.'
 	},
+	/** Notes said once over a section (`SaidOnce`). */
+	once: {
+		/** Its close button. */
+		close: 'Close this note',
+		/** Over Proposed edits: what the list holds, since when, the places it never watches, and how far a deny holds for the apps set up here (`holds`, loom's sentence in the person's words, as Settings › Agents says it). */
+		watched: (when: string, carried: string, unwatched: string[], holds: string) =>
+			[
+				`Here wait agents' suggestions, and every edit made in the places agents may edit since your look${when ? ` of ${when}` : ''}${carried ? `, carried over from ${carried}'s` : ''}.`,
+				unwatched.length ? `Your own places are not watched, so an edit there is never listed: ${unwatched.join(', ')}.` : '',
+				holds
+			]
+				.filter(Boolean)
+				.join(' '),
+		/** Under the bar that names the reviewer, where the name is git's. */
+		nameFromGit: (name: string) => `You review as ${name}, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.`
+	},
 	seeIt: {
 		/** Under a row's text: lays its document over Review, at the result. */
 		link: (doc: string) => `see it in ${file(doc)}`,

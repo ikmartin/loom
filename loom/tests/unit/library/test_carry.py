@@ -6,6 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from loom.identity import is_agent
 from loom.library import documents, log
 from loom.library.carry import BIBLIOGRAPHY, LINKS, OVERVIEW_AUTHOR, STORAGE, STORE_LEDGER, UNREADABLE, Carried, carry
@@ -239,3 +241,47 @@ def test_a_key_a_reference_holds_in_another_case_is_held_as_check_9_folds_it(tmp
     held = read(root, "tq-00A1-ref")
     assert held is not None and held.pdf == "sha256:" + hashlib.sha256(streets).hexdigest()
     assert [p.name for p in (root / LIBRARY_NODES).glob("*-ref.node")] == ["tq-00A1-ref.node"]
+
+
+@pytest.mark.parametrize("why", ["a link that names nothing", "a byte that is not text"])
+def test_a_research_state_the_door_refuses_stops_the_carry_with_everything_kept(tmp_path: Path, why: str) -> None:
+    """The research state is the person's file, and only the door writes it: where the door refuses the rewritten state, the carry stops there and says why, the state is as it was, the old library and the quilt's layout are kept, and once the state is mended an upgrade carries the rest."""
+    from loom import layout
+    from loom.errors import ContentError
+    from loom.upgrade import upgrade
+
+    root = old_quilt(tmp_path)
+    state = root / "research-state.md"
+    good = state.read_bytes()
+    bad = good + (b"See [](quilt:tq-9999).\n" if why == "a link that names nothing" else b"A stray \xff byte.\n")
+    state.write_bytes(bad)
+    with pytest.raises(ContentError, match="the carry stopped at research-state.md"):
+        upgrade(root)
+    assert state.read_bytes() == bad and (root / BIBLIOGRAPHY).is_file() and layout.carriable(root)
+    state.write_bytes(good)
+    upgrade(root)
+    assert "quilt:" in state.read_text() and not (root / BIBLIOGRAPHY).exists() and not layout.carriable(root)
+    journal = [json.loads(line) for line in (root / LOCAL / "writes.jsonl").read_text().splitlines()]
+    assert any(e["event"] == "begin" and "research-state.md" in e["files"] for e in journal)
+
+
+def test_the_carry_takes_the_door_s_lock_before_the_id_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The carry writes the research state through the door, so it takes the door's lock first and the id and library locks after it, the order every command keeps, and two commands never wait on each other's lock."""
+    from contextlib import contextmanager
+
+    from loom.library import carry as carrying
+    from loom.paths import ID_LOCK, LIBRARY_LOCK, WRITES_LOCK
+
+    root = old_quilt(tmp_path)
+    order: list[str] = []
+    real = carrying.locked
+
+    @contextmanager
+    def noted(path: Path, *args: object, **kwargs: object):  # type: ignore[no-untyped-def]
+        order.append(path.relative_to(root).as_posix())
+        with real(path, *args, **kwargs):  # type: ignore[arg-type]
+            yield
+
+    monkeypatch.setattr(carrying, "locked", noted)
+    run(root)
+    assert order[:3] == [WRITES_LOCK, ID_LOCK, LIBRARY_LOCK], order

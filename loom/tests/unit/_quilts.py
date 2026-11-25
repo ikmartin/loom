@@ -1,4 +1,4 @@
-"""Quilts the unit tests share: the demo, a fresh session in one, and a copy of the showcase."""
+"""Quilts the unit tests share: the demo, the demo with its deny list set or its paper opened to agents, a fresh session in one, and a copy of the showcase."""
 
 from __future__ import annotations
 
@@ -17,13 +17,21 @@ def demo(tmp_path: Path) -> Path:
     return tmp_path / "q"
 
 
-def track_edits(q: Path, on: bool = True) -> Path:
-    """Set `[review] track_edits` in `q`'s `config.toml`, so in-place edits since the look wait as changes; returns `q`."""
+def denying(q: Path, *entries: str) -> Path:
+    """`q` with its `[agents] deny` list set to `entries`, through the config's own writer, whatever table its config holds already."""
     from loom.config_edit import set_values
     from loom.scan.quilt import load_quilt
 
-    set_values(load_quilt(q), {"review.track_edits": on})
+    set_values(load_quilt(q), {"agents.deny": list(entries)})
     return q
+
+
+def opened(q: Path) -> Path:
+    """`q` with its `[agents] deny` list emptied, as a person who opens their paper to agents' edits in place does.
+
+    The demo denies its paper to agents, as a quilt made from a paper does, so its look does not watch it; a test of an in-place change in the paper opens it before the look is taken.
+    """
+    return denying(q)
 
 
 def new_session(q: Path, title: str = "a sitting", author: str = "A. Author") -> str:

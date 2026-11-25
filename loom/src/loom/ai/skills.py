@@ -127,7 +127,8 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
         rep.written.append(rel)
         record[rel] = sha(text)
         if write:
-            _write(root, rel, text)
+            # written only while the file still reads as it was read here, so a save made since is never written over
+            _write(root, rel, text, expect=current)
     for d in sorted(mine):
         if not _plain(root, d, folder=True) or not (root / d).is_dir():
             continue
@@ -138,12 +139,15 @@ def write_skills(root: Path, apps: list[str], *, write: bool = True) -> SkillRep
             p = root / rel
             if not _plain(root, rel) or not p.is_file():
                 continue
-            if recorded[rel] != sha(p.read_text(encoding="utf-8", errors="replace")):
+            held = p.read_bytes()
+            if recorded[rel] != sha(held.decode("utf-8", errors="replace")):
                 rep.theirs.append(rel)
                 continue
             rep.removed.append(rel)
             if write:
-                p.unlink()
+                from loom.writes import put
+
+                put(root, None, rel, None, kind="agents", expect=held)
                 try:
                     p.parent.rmdir()
                 except OSError:

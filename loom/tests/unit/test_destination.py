@@ -9,7 +9,7 @@ import pytest
 from loom.cli._common import destination
 from loom.errors import EnvError
 from loom.scan.quilt import load_quilt
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, denying
 
 
 def test_a_working_document_goes_anywhere_loom_reads_and_nothing_else_among_the_sources(tmp_path: Path) -> None:
@@ -58,8 +58,7 @@ def test_an_agent_is_refused_what_the_quilt_protects_and_a_person_is_not(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = demo(tmp_path)
-    config = root / "config.toml"
-    config.write_text(config.read_text(encoding="utf-8") + '\n[agents]\ndeny = ["drafting/"]\n', encoding="utf-8")
+    denying(root, "drafting/")
     q = load_quilt(root)
     assert destination(q, "drafting/flat.tex", document=True).name == "flat.tex"
     monkeypatch.setenv("AI_AGENT", "1")

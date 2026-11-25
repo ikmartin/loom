@@ -19,7 +19,7 @@ from loom.errors import EnvError
 from loom.locks import locked
 from loom.paths import ID_LOCK
 from tests.helpers import ok
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, opened
 
 HOLDER = """
 import pathlib, sys, time
@@ -211,6 +211,6 @@ def test_only_the_locks_module_says_how_a_platform_locks() -> None:
 )
 def test_a_command_that_draws_nothing_takes_no_lock(tmp_path: Path, args: list[str], made: bool) -> None:
     """A dry run touches nothing, the lock's file included."""
-    q = demo(tmp_path)
+    q = opened(demo(tmp_path))  # agents may write beside the demo's paper here
     ok(*args, "--as", "X Agent", cwd=q)
     assert (q / ID_LOCK).exists() is made

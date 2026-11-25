@@ -227,7 +227,6 @@ def test_a_change_under_a_lake_project_s_build_wakes_no_rebuild(
     lake = q / "lean" / ".lake" / "packages" / "mathlib"
     lake.mkdir(parents=True)
     (q / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
-    (q / "lean" / "lakefile.toml").write_text('name = "proof"\n', encoding="utf-8")
     (q / "main.tex").write_text("x", encoding="utf-8")
     (lake / "notes.tex").write_text("x", encoding="utf-8")
     listed: list[str] = []
@@ -247,6 +246,33 @@ def test_a_change_under_a_lake_project_s_build_wakes_no_rebuild(
     (lake / "notes.tex").write_text("changed", encoding="utf-8")
     (lake / "lean.sty").write_text("new", encoding="utf-8")
     assert snapshot(q, shown) == before
+
+
+def test_the_watcher_never_walks_a_lake_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A Lake project is the agents' own and the scan reads none of it (`scan.source.lake_root`), so the one-second poll prunes its root: a `.tex` the skills' linters copy there and the project's `.toml` and `.json` wake no build; what of it the viewer shows is watched for the file tree alone."""
+    from loom.render import watch
+    from loom.render.watch import snapshot
+
+    q = tmp_path / "q"
+    (q / "lean" / "source").mkdir(parents=True)
+    (q / "config.toml").write_text('[quilt]\nname = "q"\n', encoding="utf-8")
+    (q / "main.tex").write_text("x", encoding="utf-8")
+    (q / "lean" / "lakefile.toml").write_text('name = "proof"\n', encoding="utf-8")
+    (q / "lean" / "lake-manifest.json").write_text("{}", encoding="utf-8")
+    (q / "lean" / "source" / "n.tex").write_text("x", encoding="utf-8")
+    listed: list[str] = []
+    walk = os.walk
+
+    def recorded(top: Path):  # type: ignore[no-untyped-def]
+        for here, dirs, files in walk(top):
+            listed.append(Path(here).relative_to(q).as_posix())
+            yield here, dirs, files
+
+    monkeypatch.setattr(watch.os, "walk", recorded)
+    before = snapshot(q)
+    assert q / "main.tex" in before
+    assert not [p for p in before if p.is_relative_to(q / "lean")], before
+    assert not [d for d in listed if d == "lean" or d.startswith("lean/")], listed
 
 
 def test_a_delete_changes_records_alone_and_a_saved_preview_changes_nothing_the_watcher_sees(tmp_path: Path) -> None:

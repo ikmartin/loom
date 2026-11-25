@@ -123,6 +123,20 @@ test('with no reviewer name nothing can be accepted, and the page says where to 
 	await expect(page.getByTestId('review-accept')).toHaveCount(0);
 });
 
+test('a reviewer name that git gives is said, with where to set one', async ({ page }) => {
+	await serve(page, (m) => {
+		m.reviewer = { name: 'Ada', source: 'git config user.name' };
+	});
+	await page.goto('/review');
+	await expect(page.getByTestId('review-name-from-git')).toHaveText('You review as Ada, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.');
+});
+
+test('a reviewer name from the person\'s own configuration says nothing of where it comes from', async ({ page }) => {
+	await page.goto('/review');
+	await expect(page.getByTestId('review-no-reviewer')).toHaveCount(0);
+	await expect(page.getByTestId('review-name-from-git')).toHaveCount(0);
+});
+
 test('a document whose every block is accepted says so', async ({ page }) => {
 	await serve(page, (m) => {
 		m.unresolved = [];
