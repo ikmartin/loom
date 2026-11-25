@@ -527,9 +527,16 @@ def contained(root: Path, rel: str) -> str:
 
 
 def _target(root: Path, rel: str) -> Path:
-    """The file a write to `rel` lands in: a symlink's target, so the link stays a link."""
+    """The file a write to `rel` lands in: a symlink's target, so the link stays a link. WriteRefused (`changed`) where the file system cannot follow the link, as while a folder on the way is being renamed (`_real`)."""
     p = root / rel
-    return Path(os.path.realpath(p)) if p.is_symlink() else p
+    if not p.is_symlink():
+        return p
+    real = _real(p)
+    if real is None:
+        raise WriteRefused(
+            "changed", f"{rel} could not be followed to the file it names just now; nothing was written to it"
+        )
+    return real
 
 
 def _read(root: Path, rel: str) -> bytes | None:
@@ -640,9 +647,12 @@ def _prune(root: Path, history: Path, rels: list[str]) -> None:
     """Remove the folders left empty under `.loom/` or the history directory once the files an act made in them are taken out again: a history step's folder with nothing in it would read as a step interrupted before its line (`history.steps.refuse_interrupted`). A folder of the person's is never removed."""
     from loom.paths import LOOM
 
-    tops = [Path(os.path.realpath(d)) for d in (root / LOOM, history)]
+    tops = [top for top in (_real(d) for d in (root / LOOM, history)) if top is not None]
     for rel in rels:
-        d = Path(os.path.realpath(root / rel)).parent
+        real = _real(root / rel)
+        if real is None:
+            continue  # a path the file system cannot resolve just now: its folders are left, never removed blind
+        d = real.parent
         while any(d != top and d.is_relative_to(top) for top in tops):
             try:
                 d.rmdir()
@@ -672,7 +682,10 @@ def _remove_folders(root: Path, folders: list[str]) -> None:
 
 
 def _temps(root: Path, rel: str) -> list[Path]:
-    t = _target(root, rel)
+    try:
+        t = _target(root, rel)
+    except WriteRefused:
+        return []  # a link the file system cannot follow just now: no temporary of loom's is found beside it
     return list(t.parent.glob(f".{t.name}.*{TEMP}")) if t.parent.is_dir() else []
 
 
@@ -681,7 +694,7 @@ def _temps(root: Path, rel: str) -> list[Path]:
 
 @dataclass
 class Journal:
-    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled), and of those, the ones a later act of its own kind wrote (`again`), which settle an act left for a file in a dot-named place (`_judge`)."""
+    """The journal as read so far: where reading stopped, the acts begun and not settled (by id: the offset of their `begin` and the line), each `<edit>:<generation>` a done act wrote, with the offset of its `begin`, and for an act not settled, the files of it a later act done since also wrote (`crossed`; `crossing` adds a later act not settled), and of those, the ones a later act of its own kind wrote or found as it would write them (`again`, `Act.confirm`), which settle an act left for a file in a dot-named place (`_judge`). A done act's files are all it names, those it left as they are among them."""
 
     offset: int = 0
     begun: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)
@@ -842,8 +855,24 @@ def _holds(root: Path, rel: str, want: str | None) -> bool:
         return False
 
 
+def _written(entry: dict[str, Any]) -> dict[str, Any]:
+    """The files a `begin` line says its act writes: every one it names but those it left as they are (`Act.confirm`), whose before and after are one digest, which recovery never writes and asks only to hold that digest still before it finishes the act (`_judge`); `Journal` still counts them, as files a later act names."""
+    files = entry.get("files")
+    if not isinstance(files, dict):
+        return {}
+    return {rel: ab for rel, ab in files.items() if not (isinstance(ab, list) and len(ab) == 2 and ab[0] == ab[1])}
+
+
 def _all_after(root: Path, entry: dict[str, Any]) -> bool:
-    return all(_holds(root, rel, ab[1]) for rel, ab in (entry.get("files") or {}).items())
+    return all(_holds(root, rel, ab[1]) for rel, ab in _written(entry).items())
+
+
+def _real(p: Path | str) -> Path | None:
+    """`p` with every link resolved, or None where the file system cannot say, as while a folder on the way is being renamed: Python before 3.13 raises then rather than answer, and recovery takes a path it cannot resolve on trust no more than one that leads out."""
+    try:
+        return Path(os.path.realpath(p))
+    except OSError:
+        return None
 
 
 def _in_quilt(root: Path, rel: Any) -> bool:
@@ -856,7 +885,8 @@ def _in_quilt(root: Path, rel: Any) -> bool:
     except (WriteRefused, OSError):
         # a path the file system cannot even look at, as while a folder on it is being renamed, is not taken on trust
         return False
-    return Path(os.path.realpath(root / rel)).is_relative_to(os.path.realpath(root))
+    real = _real(root / rel)
+    return real is not None and real.is_relative_to(os.path.realpath(root))
 
 
 #: How recovery opens each folder on its way to a file it writes on a journal line's word: as a folder, never through a link.
@@ -888,8 +918,8 @@ def _place(root: Path, rel: str) -> tuple[str, ...] | None:
     It may write in the real `.loom/` folder, which is loom's own, and elsewhere only where no part of the real path begins with a dot. Nothing a line or the config says moves loom's own place: the history is written only where it lies in one of those (`_history_place`). The parts are the judgment, and `_folder_at` opens them one at a time without following a link, so what is judged is what is written.
     """
     top_path = os.path.realpath(root)
-    real = Path(os.path.realpath(root / rel))
-    if not real.is_relative_to(top_path) or real == Path(top_path):
+    real = _real(root / rel)
+    if real is None or not real.is_relative_to(top_path) or real == Path(top_path):
         return None
     parts = real.relative_to(top_path).parts
     try:
@@ -905,8 +935,8 @@ def _place(root: Path, rel: str) -> tuple[str, ...] | None:
 def _history_place(root: Path, history: Path) -> tuple[str, ...] | None:
     """The parts of the history's real path under the quilt's real root where recovery may write it: in the real `.loom/` under no further folder whose name begins with a dot, or under no such folder at all; None anywhere else, outside the quilt among it, whatever `[quilt] history` says."""
     top_path = os.path.realpath(root)
-    real = Path(os.path.realpath(history))
-    if not real.is_relative_to(top_path) or real == Path(top_path):
+    real = _real(history)
+    if real is None or not real.is_relative_to(top_path) or real == Path(top_path):
         return None
     parts = real.relative_to(top_path).parts
     try:
@@ -1006,8 +1036,10 @@ def _remove_made_at(root: Path, parts: tuple[str, ...], made: str) -> bool:
 
 def _clear_temps_at(root: Path, rel: str) -> None:
     """Remove the temporary files a write of the journal's path `rel` left beside the file it reaches, `.<name>.<token>.loom-tmp`, wherever that is in the quilt, a dot-named folder among it: a regular file of that name is loom's own litter, which no app reads, so removing one reaches nothing of an app's. Through folders opened without following a link."""
-    real = Path(os.path.realpath(root / rel))
+    real = _real(root / rel)
     top = os.path.realpath(root)
+    if real is None:
+        return
     if not real.is_relative_to(top) or real == Path(top):
         return
     parts = real.relative_to(top).parts
@@ -1076,7 +1108,8 @@ def _needs_history(root: Path, history: Path, entry: dict[str, Any]) -> bool:
     if not agent:
         return True
     real = os.path.realpath(history)
-    return any(Path(os.path.realpath(root / rel)).is_relative_to(real) for rel in entry.get("files") or {})
+    # a file the file system cannot resolve is taken to lie in the history, so the act is left rather than settled blind
+    return any((at := _real(root / rel)) is None or at.is_relative_to(real) for rel in _written(entry))
 
 
 def _logs(root: Path, history: Path) -> dict[str, Path]:
@@ -1100,8 +1133,8 @@ def _log_ok(root: Path, history: Path, name: Any) -> bool:
     p = _logs(root, history).get(name) if isinstance(name, str) else None
     if p is None:
         return False
-    real = Path(os.path.realpath(p))
-    return any(real.is_relative_to(os.path.realpath(d)) for d in (root / LOOM, history))
+    real = _real(p)
+    return real is not None and any(real.is_relative_to(os.path.realpath(d)) for d in (root / LOOM, history))
 
 
 def untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
@@ -1165,7 +1198,7 @@ def _look_untrusted(root: Path, history: Path, entry: dict[str, Any]) -> str:
     looked, spans, tick = look.get("looked"), look.get("spans"), look.get("tick")
     if looked is None and spans is None and tick is None:
         return "its look names nothing to write"
-    files = entry.get("files") or {}
+    files = _written(entry)
     if looked is not None:
         if not isinstance(looked, dict):
             return "its look's files are not a list of files"
@@ -1344,12 +1377,12 @@ def _judge(
 ) -> _Verdict:
     """Recovery's judgement of one begun act, by its files' bytes now, the store, and `crossed`, the files of it a later act names too, done since or itself cut short (`Journal.crossing`): one of those still holding this act's bytes may hold the later act's, so the act is left rather than put back over it. Reads, never writes. A left act's verdict says what settles it (`settles`).
 
-    Putting an act back writes only where recovery may (`_place`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again (`again`, `Journal.again`). An act whose settling would write the history is left while the history lies where recovery writes nothing (`_history_place`).
+    Putting an act back writes only where recovery may (`_place`): an act that would write, make or remove a file in a place whose name begins with a dot, outside loom's own, is left and said, and `settled` once a later act of its kind has written each such file again or found it as it would write it (`Act.confirm`; `again`, `Journal.again`). A file an act left as it is (`Act.confirm`) is never written, and the act is judged by the files it writes (`_written`), but finished only while each such file still holds what the line says it found. An act whose settling would write the history is left while the history lies where recovery writes nothing (`_history_place`).
     """
     why = untrusted(root, history, entry)
     if why:
         return _Verdict("left", f"{why}; recovery changed nothing", trusted=False)
-    files: dict[str, list[str | None]] = entry.get("files") or {}
+    files: dict[str, list[str | None]] = _written(entry)
     holds = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
     if _history_place(root, history) is None and _needs_history(root, history, entry):
         return _Verdict(
@@ -1362,7 +1395,19 @@ def _judge(
     guards = _guards(entry.get("records") or [])
     guards_hold = all(_guard_holds(root, log, at, lines) for log, (at, lines) in guards.items())
     if all(after for _, after in holds.values()) and guards_hold:
-        return _Verdict("finish", holds=holds)
+        # finishing an act says it found each file it left as it is (`Act.confirm`) as it would write it, so each must still read so; a line that says so of a file holding anything else is left, as an act whose file changed since is
+        found = {rel: ab[0] for rel, ab in (entry.get("files") or {}).items() if rel not in files}
+        moved = sorted(rel for rel, d in found.items() if not _holds(root, rel, d))
+        if not moved:
+            return _Verdict("finish", holds=holds)
+        one = len(moved) == 1
+        every = holds | {rel: (False, False) for rel in moved}
+        return _Verdict(
+            "left",
+            f"it found {_named(moved)} as it would write {'it' if one else 'them'}, and {'it has' if one else 'they have'} changed since, so recovery changed nothing: {_where(every)}",
+            every,
+            settles=f"This stays until {_named(moved)} {'reads' if one else 'read'} again as the act found {'it' if one else 'them'}.",
+        )
     if not guards_hold and any(_tangled(root, log, at, lines) for log, (at, lines) in guards.items()):
         return _Verdict(
             "left",
@@ -1373,14 +1418,18 @@ def _judge(
     placed = {rel: _place(root, rel) for rel in files if not holds[rel][0]}
     held = sorted(rel for rel, at in placed.items() if at is None)
     if held:
-        if set(held) <= set(again):
-            return _Verdict("settled", f"a later act of its kind wrote {_named(held)} again", holds)
         one = len(held) == 1
+        if set(held) <= set(again):
+            return _Verdict(
+                "settled",
+                f"a later act of its kind wrote {_named(held)} again, or found {'it' if one else 'them'} as it would write {'it' if one else 'them'}",
+                holds,
+            )
         return _Verdict(
             "left",
             f"putting it back would write {_named(held)}, in a place whose name begins with a dot, where recovery writes nothing but loom's own, so it changed nothing: {_where(holds)}",
             holds,
-            settles=f"Making {_named(held)} read as {'it' if one else 'they'} did before the act, which removing {'it' if one else 'each'} does where the act made {'it' if one else 'one'}, lets recovery put the rest back at once, your own files among it; the next act of the same kind that writes {'it' if one else 'them'} again settles this too.",
+            settles=f"Making {_named(held)} read as {'it' if one else 'they'} did before the act, which removing {'it' if one else 'each'} does where the act made {'it' if one else 'one'}, lets recovery put the rest back at once, your own files among it; the next act of the same kind that writes {'it' if one else 'them'} again, or finds {'it' if one else 'them'} as it would write {'it' if one else 'them'}, settles this too.",
         )
     over = [rel for rel in crossed if rel in holds and holds[rel][1]]
     if over:
@@ -1458,8 +1507,7 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
                 from loom.identity import agents_act
 
                 texts = {
-                    rel: tuple(_fetch(root, history, d) if d else None for d in ab)
-                    for rel, ab in (e.get("files") or {}).items()
+                    rel: tuple(_fetch(root, history, d) if d else None for d in ab) for rel, ab in _written(e).items()
                 }
                 # whose act it was is the line's, never the shell recovery runs in
                 agent = e["by"] == "agent" if e.get("by") in ("agent", "person") else agents_act(e.get("actor"))
@@ -1475,11 +1523,11 @@ def _settle(root: Path, history: Path, j: Journal) -> list[str]:
             )
         ]
         if failed:
-            files: dict[str, list[str | None]] = e.get("files") or {}
+            files: dict[str, list[str | None]] = _written(e)
             now = {rel: (_holds(root, rel, ab[0]), _holds(root, rel, ab[1])) for rel, ab in files.items()}
             said.append(f"left {act_id}: a file changed while recovery put the act back: {_where(now, kept=True)}")
             continue
-        _prune_at(root, history, [rel for rel, ab in (e.get("files") or {}).items() if ab[0] is None])
+        _prune_at(root, history, [rel for rel, ab in _written(e).items() if ab[0] is None])
         _unfollow(root, history, e)
         made_folders = [_place(root, str(d)) for d in e.get("folders") or [] if _in_quilt(root, d)]
         for parts in sorted((at for at in made_folders if at is not None), key=lambda at: -len(at)):
@@ -1718,7 +1766,7 @@ def _unfollow(root: Path, history: Path, entry: dict[str, Any]) -> None:
         return
     files = {
         rel: (_fetch(root, history, ab[1]) if ab[1] else None, _fetch(root, history, ab[0]) if ab[0] else None)
-        for rel, ab in (entry.get("files") or {}).items()
+        for rel, ab in _written(entry).items()
     }
     _look_follows(root, history, files)
     kept = []
@@ -1825,6 +1873,8 @@ class Act:
         self.journal = journal
         self.before: dict[str, bytes | None] = {}
         self.after: dict[str, bytes | None] = {}
+        #: the files this act leaves as they are, each holding already what it would write (`confirm`)
+        self.confirmed: dict[str, bytes | None] = {}
         self.splices: dict[str, list[dict[str, Any]]] = {}
         self.modes: dict[str, int] = {}
         self.edits: list[str] = []
@@ -1878,6 +1928,15 @@ class Act:
         """The edits named by acts recovery could not settle: loom may have written them, and cannot tell."""
         return {str(g) for _, e in self.journal.begun.values() for g in e.get("edits") or []}
 
+    def unsettled_files(self) -> set[str]:
+        """The files named by acts of this act's own kind recovery could not settle: those a `confirm` here settles once this act is done, where the file holds what this act would write."""
+        out: set[str] = set()
+        for _, e in self.journal.begun.values():
+            files = e.get("files")
+            if e.get("kind") == self.kind and isinstance(files, dict):
+                out |= {str(rel) for rel in files}
+        return out
+
     # what the caller stages
 
     def replace(
@@ -1885,6 +1944,8 @@ class Act:
     ) -> None:
         """Stage `data` as the file's new bytes (None removes it); `splices` say what replaced what, for an undo; `mode` is a file this makes, as a move carries its source's (an existing file keeps its own)."""
         rel = contained(self.root, rel)
+        if rel in self.confirmed:
+            raise WriteRefused("staged", f"{rel} is left as it is by this act, so it cannot also be written")
         if rel not in self.before:
             self.read(rel)
         self.after[rel] = data
@@ -1902,6 +1963,21 @@ class Act:
             raise WriteRefused("exists", f"{new} exists already; nothing was moved", status=409)
         self.replace(new, data, mode=os.stat(_target(self.root, contained(self.root, old))).st_mode & 0o7777)
         self.replace(old, None)
+
+    def confirm(self, rel: str, data: bytes | None) -> None:
+        """Name `rel` as a file this act leaves as it is, because it holds `data`, the bytes the act would write there, already; None for a file the act would remove that is not there.
+
+        It is journalled with the act, its before and after one digest, and never written, so an act of this kind recovery left that names it counts it as written again once this act is done (`Journal.again`); recovery, which writes nothing for it, judges this act by the files it writes, and finishes it only while the file still holds `data`. The file is read here, under the lock, and again just before the act is journalled: WriteRefused (`changed`) when it holds anything else, and (`staged`) when this act also writes it.
+        """
+        rel = contained(self.root, rel)
+        if rel in self.after:
+            raise WriteRefused("staged", f"{rel} is written by this act, so it cannot also be left as it is")
+        if self.read(rel) != data:
+            raise WriteRefused(
+                "changed",
+                f"{rel} does not hold what loom would write there, so it is not recorded as written; nothing was written",
+            )
+        self.confirmed[rel] = data
 
     def wrote(self, gen: str) -> None:
         """Name a suggested edit's `<edit>:<generation>` as one this act writes."""
@@ -1940,10 +2016,20 @@ class Act:
         from loom.clock import stamp
 
         changed = {rel: data for rel, data in self.after.items() if data != self.before.get(rel)}
-        if not changed and not self.look:
+        if not changed and not self.look and not self.confirmed:
             _append_records(self.root, self.records)
             self._follow()
             return
+        if self.kind != "pull":
+            from loom.overleaf import mirrored
+
+            # the real file each change reaches, judged under the lock as the act is about to write it: a folder that mirrors Overleaf is written by an update alone
+            for rel in changed:
+                if mirrored(self.root, rel):
+                    raise WriteRefused(
+                        "mirrored",
+                        f"{rel} mirrors Overleaf, and only an update from Overleaf writes it; make the change in Overleaf",
+                    )
         # an act with a look to write and no file, as a Keep of in-place changes, is journalled all the same, so recovery finishes it, records and look together
         files: dict[str, list[str | None]] = {}
         for rel, data in changed.items():
@@ -1953,6 +2039,14 @@ class Act:
                 store(keep, b) if b is not None else None,
                 None if data is None else digest(data) if b is None and _unkept(data) else store(keep, data),
             ]
+        for rel, data in self.confirmed.items():
+            # read again at the last moment before the journal says so: a file saved since the confirm is no longer what the act would write
+            if _read(self.root, rel) != data:
+                raise WriteRefused(
+                    "changed", f"{rel} changed since loom read it; nothing was written, look at it again"
+                )
+            # one digest for before and after, and no text kept: recovery writes nothing for a file the act left as it is
+            files[rel] = [digest(data), digest(data)]
         begin = {
             "event": "begin",
             "act": self.id,

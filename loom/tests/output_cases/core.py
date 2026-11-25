@@ -42,6 +42,7 @@ KIND: dict[str, str] = {
     "changes": "report",
     "build": "report",
     "check": "report",
+    "app": "running",
     "compile": "report",
     "deps": "report",
     "doctor": "report",

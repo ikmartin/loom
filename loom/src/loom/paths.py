@@ -116,6 +116,10 @@ JOURNAL_INDEX = f"{LOCAL}/writes-index.json"
 WRITES_LOCK = f"{LOCAL}/writes.lock"
 #: What a command locks while it draws a node id (`loom.locks`), since those are read from the whole quilt and no one file holds them.
 ID_LOCK = f"{LOCAL}/ids.lock"
+#: The Overleaf mirror's clone of its project, loom's own and without a checkout (`loom.overleaf`).
+OVERLEAF_CLONE = f"{LOCAL}/overleaf"
+#: Who the person is on Overleaf, and what the last reach of Overleaf could not do (`loom.overleaf`).
+OVERLEAF_HERE = f"{LOCAL}/overleaf.json"
 #: The lock every writer of the library's bibliography and store holds, across processes.
 LIBRARY_LOCK = f"{LOCAL}/library.lock"
 #: The annotation log as it stood before the last delete.

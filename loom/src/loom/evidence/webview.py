@@ -168,10 +168,11 @@ class Drafts:
         return sum(1 for w in self.works if w not in read)
 
     def statement(self, key: str) -> dict[str, Any]:
-        """A result's statement as a card draws it: a draft's fragment, or a library result's body with what each id and anchor it points at draws as (`points`), `macros` null until its work's macros are read."""
+        """A result's statement as a card draws it: a draft's fragment, or a library result's body with its work's macros node (`LibraryWeb.macros`, null for a work with none) and what each id and anchor it points at draws as (`points`)."""
         if not self.is_library(key):
             return {"fragment": self.manifest.get("nodes", {}).get(key, {}).get("fragment")}
-        return {"body": self.nodes[key].body, "macros": None, "points": self.points(key)}
+        macros = self.library.macros(self.nodes[key].source) if self.library is not None else None
+        return {"body": self.nodes[key].body, "macros": macros, "points": self.points(key)}
 
     def points(self, key: str) -> dict[str, dict[str, Any]]:
         """What each id and anchor a library result's body points at draws as: a result its name, its number and its reading of its paper; an anchor the number its source prints."""
@@ -229,7 +230,7 @@ class Drafts:
         Its document is `doc` where that reads it, else the first of its `homes`; its number is the one the build published for that document. A library result's row is `node_row`'s.
         """
         if self.is_library(key):
-            return node_row(key, self.standing(key), self.nodes[key])
+            return node_row(key, self.standing(key), self.nodes[key], self.library)
         node = self._keys[key]
         published = self.manifest.get("nodes", {}).get(key, {})
         taxon = str(published.get("taxon") or node.taxon or "")
@@ -337,7 +338,7 @@ class Drafts:
         return self._words[key]
 
 
-def node_row(node: str, found: Status, held: Any) -> dict[str, Any]:
+def node_row(node: str, found: Status, held: Any, library: LibraryWeb | None = None) -> dict[str, Any]:
     """A library node as a list sends it (`ROW`): its id, its name as its source prints it, its title, its taxon's word, its work, `short` null until the node store's references give it, and how it stands, `paper` its reading of its paper."""
     from loom.evidence.review import node_name
 
@@ -346,7 +347,10 @@ def node_row(node: str, found: Status, held: Any) -> dict[str, Any]:
         "name": node_name(held) if held is not None else node,
         "title": held.title if held is not None else None,
         "taxon": str(held.taxon).lower() if held is not None else "",
-        "source": {"ref": held.source if held is not None else None, "short": None},
+        "source": {
+            "ref": held.source if held is not None else None,
+            "short": library.short(held.source) if library is not None and held is not None else None,
+        },  # fmt: skip
         "paper": found.reading,
         "reading": found.reading,
         "lean": brief(found),
@@ -444,13 +448,14 @@ def _groups(d: Drafts, keys: list[str], opened: list[str], *, open_all: bool) ->
 
 
 def _works(d: Drafts, keys: list[str], opened: list[str]) -> list[dict[str, Any]]:
-    """The library's keys in a group for each work, folded unless opened: `short` and `title` null until the node store's references give them."""
+    """The library's keys in a group for each work, folded unless opened, with the work's `short` name and `title` from its reference (null where it gives none)."""
     by_work: dict[str, list[str]] = {}
     for k in keys:
         by_work.setdefault(d.nodes[k].source or "", []).append(k)
     out = []
     for work in sorted(by_work):
-        group: dict[str, Any] = {"group": work, "short": None, "title": None, "n": len(by_work[work])}
+        lib = d.library
+        group: dict[str, Any] = {"group": work, "short": lib.short(work) if lib else None, "title": lib.title(work) if lib else None, "n": len(by_work[work])}  # fmt: skip
         if work in opened:
             group["rows"] = [d.row(k) for k in by_work[work]]
         out.append(group)
@@ -613,7 +618,11 @@ def _more(d: Drafts, key: str, doc: str | None) -> dict[str, Any]:
         held = d.nodes[key]
         proofs = [
             {
-                "where": {"ref": proof.source or held.source, "short": None, "pages": proof.pages},
+                "where": {
+                    "ref": proof.source or held.source,
+                    "short": d.library.short(proof.source or held.source) if d.library else None,
+                    "pages": proof.pages,
+                },  # fmt: skip
                 "uses": [d.row(t) for t in proof.uses if t in d.nodes and t != key],
             }
             for proof in d._proofs.get(key, [])

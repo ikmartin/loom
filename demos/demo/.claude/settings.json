@@ -86,6 +86,7 @@
       "Bash(loom ai delete*)",
       "Bash(loom ai init*)",
       "Bash(loom ai reopen*)",
+      "Bash(loom app*)",
       "Bash(loom atomize*)",
       "Bash(loom deloom*)",
       "Bash(loom fork*)",
@@ -101,12 +102,6 @@
       "Bash(loom session delete*)",
       "Bash(loom session use*)",
       "Bash(loom stamp*)",
-      "Bash(loom sync documents*)",
-      "Bash(loom sync fetch*)",
-      "Bash(loom sync incorporate*)",
-      "Bash(loom sync init*)",
-      "Bash(loom sync publish*)",
-      "Bash(loom sync status*)",
       "Bash(loom upgrade*)",
       "Bash(rm *)"
     ]

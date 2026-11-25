@@ -326,6 +326,17 @@ export const review = {
 		accepted: 'Accepted.'
 	},
 	yours: {
+		/** Under a block waiting to be accepted that cannot be yet, why, by loom's code (`refusal_code`); an older publisher sends none. */
+		cannot: (code?: string) =>
+			({
+				'not-yours': "Can't be accepted: it is not in your documents.",
+				incomplete: "Can't be accepted yet: it is marked incomplete.",
+				'open-claim': "Can't be accepted: it is a conjecture or a question, which is not accepted.",
+				unclassified: "Can't be accepted yet: loom cannot tell whether it is proved here, cited, or assumed.",
+				unidentified: "Can't be accepted yet: something it rests on cannot be identified."
+			})[code ?? ''] ?? "Can't be accepted yet.",
+		/** The same for a block marked incomplete with notes, before the person's own notes on it. */
+		cannotNoted: "Can't be accepted yet: it is marked incomplete:",
 		/** Under Proposed edits, the tag on an agent's copy waiting to be taken in. */
 		copy: "an agent's copy",
 		/** Beside a copy's name: the draft it would change. */

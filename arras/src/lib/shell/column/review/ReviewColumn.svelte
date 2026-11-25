@@ -58,27 +58,27 @@
 	<p class="rl">{words.column.waiting}</p>
 	<nav class="navl" aria-label={words.column.nav}>
 		<button type="button" class:on={on('all')} aria-current={on('all') ? 'true' : undefined} data-testid="review-kind-all" use:hovercard={{ text: words.column.everythingHover, place: 'beside' }} onclick={() => pick('all')}
-			>{words.column.everything}<span class="n">{rv.doc ? (draft ? draftCount(draft) : '') : (everything ?? '')}</span></button
+			><span class="t">{words.column.everything}</span><span class="n">{rv.doc ? (draft ? draftCount(draft) : '') : (everything ?? '')}</span></button
 		>
 		{#each kinds as k (k)}
 			<button type="button" class:on={on(k)} aria-current={on(k) ? 'true' : undefined} data-testid="review-kind-{k}" use:hovercard={{ text: words.kinds[k].hover, place: 'beside' }} onclick={() => pick(k)}
-				>{words.kinds[k].name}<span class="n">{rv.doc ? '' : kindCount(k)}</span></button
+				><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
 			>
 		{/each}
 		<div class="rule"></div>
 		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
-			>{words.kinds.agents.name}<span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
+			><span class="t">{words.kinds.agents.name}</span><span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
 		>
 		<div class="rule"></div>
 		{#if m?.incoming}
-			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}>{pullLabel(m)}</button>
+			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}><span class="t">{pullLabel(m)}</span></button>
 		{/if}
 	</nav>
 	{#if counts?.drafts.length}
 		<p class="rl"><span use:hovercard={{ text: words.column.draftsHover, place: 'beside' }}>{words.column.drafts}</span></p>
 		<nav class="navl" aria-label={words.column.drafts}>
 			{#each counts.drafts as d (d.doc)}
-				<button type="button" class:on={inList && rv.doc === d.doc} aria-pressed={rv.doc === d.doc} data-testid="review-draft" onclick={() => narrow(d.doc)}>{words.file(d.doc)}<span class="n">{draftCount(d)}</span></button>
+				<button type="button" class:on={inList && rv.doc === d.doc} aria-pressed={rv.doc === d.doc} data-testid="review-draft" onclick={() => narrow(d.doc)}><span class="t">{words.file(d.doc)}</span><span class="n">{draftCount(d)}</span></button>
 			{/each}
 		</nav>
 	{/if}
@@ -130,7 +130,19 @@
 		background: var(--ann-neutral-wash);
 		font-weight: 500;
 	}
+	/* a label is one line whatever the font and the column's width: its words end in an ellipsis before they wrap, its count stays whole, and its hover says it in full */
+	.navl button {
+		min-width: 0;
+	}
+	.t {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.n {
+		flex: none;
 		margin-left: auto;
 		font-size: 12px;
 		color: var(--ink-faint);

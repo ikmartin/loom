@@ -30,12 +30,13 @@ def _scope(body: dict[str, Any]) -> tuple[str, str | None]:
     return _str(body, "scope") or "all", _str(body, "doc")
 
 
-def _answer(read: Any) -> dict[str, Any]:
-    """Run a read, its refusals as the write API answers them: a scope it does not know or one wanting a draft is `bad-field`, a result it does not hold `no-such-result`."""
+def _answer(root: Path, read: Any) -> dict[str, Any]:
+    """Run a read, with the library's generation it answers at (`library-views.md` §2), its refusals as the write API answers them: a scope it does not know or one wanting a draft is `bad-field`, a result it does not hold `no-such-result`."""
     from loom.evidence.webview import ScopeError
+    from loom.library.generation import generation
 
     try:
-        return {"ok": True, **read()}
+        return {"ok": True, **read(), "gen": generation(_scan(root))}
     except ScopeError as exc:
         raise ApiError("bad-field", str(exc)) from exc
     except KeyError as exc:
@@ -54,7 +55,7 @@ def _web_list(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(offset, int) or isinstance(offset, bool) or offset < 0:
         raise ApiError("bad-field", "offset is a number of rows")
     d = _drafts(root)
-    return _answer(lambda: listing(d, scope, doc, sort=sort, opened=opened, offset=offset))
+    return _answer(root, lambda: listing(d, scope, doc, sort=sort, opened=opened, offset=offset))
 
 
 def _web_group(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -63,7 +64,7 @@ def _web_group(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     scope, doc = _scope(body)
     home = _str(body, "group", required=True) or ""
     d = _drafts(root)
-    return _answer(lambda: group(d, scope, doc, home))
+    return _answer(root, lambda: group(d, scope, doc, home))
 
 
 def _web_search(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -74,7 +75,7 @@ def _web_search(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 200:
         raise ApiError("bad-field", "limit is a number of hits from 1 to 200")
     d = _drafts(root)
-    return _answer(lambda: search(d, scope, doc, _str(body, "q") or "", limit=limit))
+    return _answer(root, lambda: search(d, scope, doc, _str(body, "q") or "", limit=limit))
 
 
 def _web_focus(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -83,7 +84,7 @@ def _web_focus(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     scope, doc = _scope(body)
     key = _str(body, "result", required=True) or ""
     d = _drafts(root)
-    return _answer(lambda: focus(d, scope, doc, key, more=bool(body.get("more"))))
+    return _answer(root, lambda: focus(d, scope, doc, key, more=bool(body.get("more"))))
 
 
 def _web_graph(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -92,7 +93,7 @@ def _web_graph(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     scope, doc = _scope(body)
     key = _str(body, "result", required=True) or ""
     d = _drafts(root)
-    return _answer(lambda: graph(d, scope, doc, key))
+    return _answer(root, lambda: graph(d, scope, doc, key))
 
 
 HANDLERS: dict[str, Handler] = {

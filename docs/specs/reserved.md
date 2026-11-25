@@ -14,7 +14,7 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 |---|---|---|
 | `.loom/library/suggested.jsonl` | the works an agent suggested | the library |
 
-Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the list of recent quilts, the switch that turns formalization on for this machine) are their owner's alone.
+Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the switch that turns formalization on for this machine) are their owner's alone.
 
 ## Write operations
 
@@ -67,7 +67,6 @@ None is registered, so help, the command reference and the agent's tools are unc
 | `loom library suggest REF --why`, an agent's command and tool | the library |
 | `loom formal record KEY …`, an agent's command and tool | formalization |
 | `loom formal attest KEY`, the author's | formalization |
-| `loom app` | install and launch |
 | the mode `formalize` | formalization |
 
 ## Diagnostics and doctor

@@ -54,6 +54,8 @@ class Node:
     id: str
     text: int
     stub: bool
+    #: Whether it names its work; one that names none cannot be compared with any paper (`acts.unreadable`).
+    source: bool = True
 
 
 @dataclass
@@ -67,6 +69,10 @@ class World:
     blocks: dict[str, Block] = field(default_factory=dict)
     nodes: dict[str, Node] = field(default_factory=dict)
     macros: dict[tuple[str, str], int] = field(default_factory=dict)
+    #: Nodes deleted from the library, which a text may still use; one may be put back.
+    gone: dict[str, Node] = field(default_factory=dict)
+    #: Whether a library node's notation is known, empty as for a work with no macros node; unknown otherwise, as for a work whose macros cannot be read.
+    known: bool = False
 
     def rng(self, *parts: object) -> random.Random:
         return random.Random("|".join(map(str, (self.seed, *parts))))
@@ -93,7 +99,7 @@ class World:
     def node_file(self, n: Node) -> bytes:
         """The node's file as the store holds it: its header, with what it uses, and its text, none for a stub."""
         uses = self.node_uses(n)
-        head = ["schema = 1", f'id = "{n.id}"', 'taxon = "lemma"', 'source = "tq-00R1-ref"']
+        head = ["schema = 1", f'id = "{n.id}"', 'taxon = "lemma"', *(['source = "tq-00R1-ref"'] if n.source else [])]
         if uses:
             head.append("uses = [" + ", ".join(f'"{u}"' for u in uses) + "]")
         body = "" if n.stub else f"Lemma, in its text {n.text}.\n"
@@ -166,12 +172,15 @@ class FakeWeb:
             todo.extend(self._direct(step))
         return out
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
-        out: dict[tuple[str, str], str] = {}
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
+        """What the statement uses, all the way down; a node the library no longer holds carried with no text (E-45)."""
+        out: dict[tuple[str, str], str | None] = {}
         for step in self._walk(here):
             s = self.subject(step)
             if s is not None:
                 out.setdefault(s.key, s.hash)
+            elif step.kind == "node":
+                out.setdefault(("node", step.name), None)
         return out
 
     def _texts(self, here: Here) -> list[Block]:
@@ -179,9 +188,11 @@ class FakeWeb:
         return [b, *(x for x in (self._block(s) for s in self._walk(here)) if x is not None)] if b else []
 
     def notation(self, here: Here) -> dict[str, str] | None:
-        """A block's commands, by document; unknown for a node and for a block whose closure holds one, since a node's work's macros are not read yet."""
-        if here.kind == "node" or any(step.kind == "node" for step in self._walk(here)):
+        """A block's commands, by document; for a node, and a block whose closure holds one, unknown until its work's macros are read, or with `known` none, as for a work with no macros."""
+        if not self.w.known and (here.kind == "node" or any(step.kind == "node" for step in self._walk(here))):
             return None
+        if here.kind == "node":
+            return {} if here.name in self.w.nodes else None
         b = self._block(here)
         if b is None:
             return {}
@@ -274,14 +285,15 @@ class History:
         self.lines.append(line)
 
 
-def history(seed: int) -> History:
-    """Edits to a world interleaved with records written as the acts write them, and some odd but well-formed ones."""
+def history(seed: int, known: bool = False) -> History:
+    """Edits to a world interleaved with records written as the acts write them, and some odd but well-formed ones; with `known`, a library node's notation is known and empty."""
     rng = random.Random(seed)
     w = World(
         seed,
         [f"l:{i}" for i in range(rng.randint(1, 4))],
         [f"tq-{i:04d}" for i in range(rng.randint(0, 3))],
         [m for m in ("A", "B", "C") if rng.random() < 0.6],
+        known=known,
     )
     docs = ["a.tex", "b.tex"]
     k = 0
@@ -293,7 +305,7 @@ def history(seed: int) -> History:
         k += 1
         w.blocks[f"k{k}"] = Block(f"k{k}", None, frozenset(["a.tex"]), 0)
     for nid in w.node_ids:
-        w.nodes[nid] = Node(nid, rng.randint(0, 3), rng.random() < 0.2)
+        w.nodes[nid] = Node(nid, rng.randint(0, 3), rng.random() < 0.2, rng.random() < 0.9)
     for doc in docs:
         for m in w.macro_names:
             w.macros[(doc, m)] = rng.randint(0, 2)
@@ -321,7 +333,7 @@ def history(seed: int) -> History:
                 if leans and rng.random() < 0.9
                 else dict(rng.choice(STATEMENTS))
             )
-            closure = [{kk[0]: kk[1], "hash": v} for kk, v in sorted(web.closure(here).items())]
+            closure = [{kk[0]: kk[1], "hash": v} for kk, v in sorted(web.closure(here).items()) if v is not None]
             for line in leans:
                 closure += [u for u in line["uses"] if u not in closure]
             if closure and rng.random() < 0.1:
@@ -331,7 +343,9 @@ def history(seed: int) -> History:
                 if rng.random() < 0.9:
                     out.add({"kind": "attested", "by": PERSON, "on": {"macro": name, "hash": digest}})
         elif subject.kind == "node":
-            out.add({"kind": "compared", "by": PERSON, "on": subject.to_dict(), "with": {"ref": "tq-00A1-ref", "pdf": h(9)}})  # fmt: skip
+            # `check` compares only a node that names its work
+            if w.nodes[here.name].source:
+                out.add({"kind": "compared", "by": PERSON, "on": subject.to_dict(), "with": {"ref": "tq-00A1-ref", "pdf": h(9)}})  # fmt: skip
         else:
             notation = web.notation(here)
             if notation:
@@ -344,12 +358,25 @@ def _edit(w: World, rng: random.Random, docs: list[str]) -> None:
     what = rng.random()
     if what < 0.5 and w.blocks:
         rng.choice(list(w.blocks.values())).text = rng.randint(0, 4)
-    elif what < 0.7 and w.nodes:
+    elif what < 0.7 and (w.nodes or w.gone):
+        if w.gone and rng.random() < 0.3:
+            # a deleted node put back, as the library's undo puts it
+            back = w.gone.pop(rng.choice(sorted(w.gone)))
+            w.nodes[back.id] = back
+            return
+        if not w.nodes:
+            return
         n = rng.choice(list(w.nodes.values()))
-        if rng.random() < 0.5:
+        r = rng.random()
+        if r < 0.4:
             n.text = rng.randint(0, 4)
-        else:
+        elif r < 0.7:
             n.stub = not n.stub
+        elif r < 0.85:
+            n.source = not n.source
+        else:
+            # deleted, as deleting its work deletes it: never refused, and what used it now uses nothing (E-45)
+            w.gone[n.id] = w.nodes.pop(n.id)
     elif what < 0.85 and w.macros:
         w.macros[rng.choice(list(w.macros))] = rng.randint(0, 3)
     elif w.blocks:
@@ -372,9 +399,11 @@ def _later(ev: Evidence, s: Subject, of: str) -> list[Record]:
 
 
 def _compared_now(ev: Evidence, web: FakeWeb, node: str) -> bool:
+    """A node the library holds, that names its work, with a text, compared on its text now; a node gone or naming no work never is (E-45, and the ruling on a node with no source)."""
     s = web.subject(Here("node", node))
     return (
         s is not None
+        and web.w.nodes[node].source
         and web.stub(Here("node", node)) is False
         and any(r.on is not None and r.on.hash == s.hash for r in ev.about("node", node, of="compared"))
     )
@@ -478,6 +507,13 @@ def said(s: Status) -> tuple[object, ...]:
 CHUNKS = [range(0, 200), range(200, 400), range(400, 600), range(600, 800)]
 
 
+class Unknown(LibraryWeb):
+    """The library's web that cannot say a node's notation, as for a work whose macros are not read, so that status's handling of notation unknown stays tried."""
+
+    def notation(self, here: Here) -> dict[str, str] | None:
+        return None
+
+
 def stored(w: World, root: Path) -> Joined:
     """The world's nodes as files of a node store under `root`, and the web status reads: the model's drafts beside the store's library."""
     nodes = folder(root)
@@ -485,15 +521,19 @@ def stored(w: World, root: Path) -> Joined:
     nodes.mkdir(parents=True)
     for n in w.nodes.values():
         (nodes / f"{n.id}.node").write_bytes(w.node_file(n))
-    return Joined(FakeWeb(w), LibraryWeb(root))
+    # the store holds no macros node for the world's work, so a node's notation reads known and empty, as the model's `known`
+    return Joined(FakeWeb(w), LibraryWeb(root) if w.known else Unknown(root))
 
 
 def statuses(
-    seeds: range, where: Path, lines: Callable[[History, random.Random], list[dict[str, Any]]] | None = None
+    seeds: range,
+    where: Path,
+    lines: Callable[[History, random.Random], list[dict[str, Any]]] | None = None,
+    known: bool = False,
 ) -> Iterator[tuple[str, Evidence, FakeWeb, Here, Callable[[Record], bool], Status, Status | None]]:
-    """For each history and each result in it: where, the evidence, the model's web, `lean_now`, its status read over the node store at `where`, and with `lines` its status over those lines instead."""
+    """For each history and each result in it: where, the evidence, the model's web, `lean_now`, its status read over the node store at `where`, and with `lines` its status over those lines instead; with `known`, a node's notation known and empty."""
     for seed in seeds:
-        made = history(seed)
+        made = history(seed, known)
         model = FakeWeb(made.world)
         web = stored(made.world, where)
         ev = evidence_of(made.lines)
@@ -506,9 +546,10 @@ def statuses(
                 yield f"seed {seed} at {here.name}", ev, model, here, lean_now, s, again
 
 
+@pytest.mark.parametrize("known", [False, True], ids=["notation-unknown", "notation-known"])
 @pytest.mark.parametrize("seeds", CHUNKS, ids=str)
-def test_formalized_and_matches_are_earned(seeds: range, tmp_path: Path) -> None:
-    for where, ev, web, here, lean_now, s, _ in statuses(seeds, tmp_path):
+def test_formalized_and_matches_are_earned(seeds: range, known: bool, tmp_path: Path) -> None:
+    for where, ev, web, here, lean_now, s, _ in statuses(seeds, tmp_path, known=known):
         if s.lean == "formalized":
             assert earned(ev, web, here, lean_now) == [], where
         if s.reading == "matches":

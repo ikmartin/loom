@@ -98,8 +98,10 @@ def _review_list(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     kind = _str(body, "kind") or "all"
     if kind not in (*KINDS, AGENTS, "all"):
         raise ApiError("bad-field", f"kind is all, agents or one of {', '.join(KINDS)}")
-    _result, _manifest, gathered = _gathered(root)
-    return {"ok": True, "groups": listed(gathered, kind, _str(body, "doc"))}
+    from loom.library.generation import generation
+
+    result, _manifest, gathered = _gathered(root)
+    return {"ok": True, "groups": listed(gathered, kind, _str(body, "doc")), "gen": generation(result)}
 
 
 def _review_row(root: Path, body: dict[str, Any]) -> dict[str, Any]:

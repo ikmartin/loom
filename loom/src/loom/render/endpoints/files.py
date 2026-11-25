@@ -46,7 +46,8 @@ def _pdf_save(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     except WriteRefused as exc:
         if exc.code == "exists":
             raise ApiError("exists", f"{rel} already exists; a saved PDF never replaces a file", status=409) from None
-        raise
+        # every other refusal of the door's, `mirrored` among them, answers with its code and words
+        raise ApiError(exc.code, str(exc), status=exc.status) from exc
     return {"ok": True, "result": f"saved {rel}", "path": rel, "bytes": len(raw)}
 
 

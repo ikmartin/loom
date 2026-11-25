@@ -1,6 +1,34 @@
 // Docs' words: its column, the picker, a work beside a draft, the notes tab, the Lean marks and the formalize panel. Every sentence the viewer says is written in this folder (`frame.ts` says how); a component holds none.
 
+/** TeX's messages the viewer says in the person's words, by how each begins; any other is said as TeX said it. */
+const TEX: [RegExp, string][] = [
+	[/^Undefined control sequence/i, 'a command it uses is not defined'],
+	[/^Environment .* undefined/i, 'an environment it uses is not defined'],
+	[/^Missing \$ inserted/i, 'a formula is not closed, or mathematics stands outside one'],
+	[/^(Missing \} inserted|Extra \}|Too many \}'s|Missing \{ inserted)/i, 'a brace is not matched'],
+	[/^\\begin\{.*\} (on input line \d+ )?ended by \\end/i, 'an environment is ended by the wrong \\end'],
+	[/^(LaTeX Error: )?File .* not found/i, 'a file it reads is missing'],
+	[/^Emergency stop/i, 'TeX stopped before the end']
+];
+
 export const docs = {
+	/** Over a draft whose last compile, after a change, made no PDF: its file, why (`texError`), and the line TeX stopped at, '' where unknown. */
+	notCompiled: (file: string, why: string, line: string) => `${file} has not compiled since it last changed${why ? `: ${why}` : ''}${line ? ` (line ${line})` : ''}. The PDF is the one from before.`,
+	/** A compile's error and its line, as a title or a line under the paper says them. */
+	compileError: (why: string, line: string) => `${why}${line ? ` (line ${line})` : ''}`,
+	/** TeX's message in the person's words where the viewer knows it, else as TeX said it; '' for none. */
+	texError: (error: string): string => {
+		const e = error.replace(/^!\s*/, '').trim();
+		// a file TeX could not find is named, being the person's own to put right
+		const file = /^(?:LaTeX Error: )?File [`'"‘]([^`'"’]+)['"’] not found/i.exec(e)?.[1];
+		if (file) return `${file}, a file it reads, is missing`;
+		return TEX.find(([re]) => re.test(e))?.[1] ?? e.replace(/\.$/, '');
+	},
+	work: {
+		/** A work's tab in Docs, where its short name is not known: the library no longer holds it, or the works list is being read. */
+		deleted: 'a deleted work',
+		unread: 'a work'
+	},
 	files: {
 		/** The head over the project's files in Docs' column, which folds and opens them. */
 		head: 'Files',

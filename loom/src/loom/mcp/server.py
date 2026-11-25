@@ -24,6 +24,7 @@ from loom.mcp.resources import listed as resources_listed
 from loom.mcp.tools import CallRefused, ToolSpec, argv, hints, schema, tools
 from loom.paths import scratch
 from loom.sessions import ID as SESSION_ID
+from loom.version import code_stamp
 
 #: A result longer than this many characters goes to a file the agent reads with its own tools: about ten thousand tokens, where Claude Code starts warning, and well under every client's own limit.
 LARGE = 40_000
@@ -72,6 +73,8 @@ def serve(root: Path, name: str) -> None:
         for s in specs.values()
     ]
     lock = anyio.Lock()
+    # each call runs the loom on disk, while this server, its tools and its instructions are the one it started as
+    started = code_stamp()
 
     async def on_list_tools(ctx: Any, params: Any) -> types.ListToolsResult:
         return types.ListToolsResult(tools=listed)
@@ -89,7 +92,7 @@ def serve(root: Path, name: str) -> None:
             here.bound(found.id)
         return found.id
 
-    async def on_call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
+    async def call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
         spec = specs.get(params.name)
         if spec is None:
             raise MCPError(code=types.INVALID_PARAMS, message=f"no tool {params.name}; tools/list names them")
@@ -127,6 +130,13 @@ def serve(root: Path, name: str) -> None:
             return _result(root, spec, {**arguments, "session": session}, command, done)
         except Exception as exc:  # the SDK turns anything uncaught into a protocol error, which says nothing useful
             return _error(f"loom could not run {command}: {exc}", command)
+
+    async def on_call_tool(ctx: Any, params: types.CallToolRequestParams) -> types.CallToolResult:
+        result = await call_tool(ctx, params)
+        said = updated(started)
+        if said:
+            result.content.append(types.TextContent(type="text", text=said))
+        return result
 
     async def read(words: list[str], why: str) -> tuple[str, str, int]:
         """Run a reading command for a prompt or a resource and log it with `why`; (stdout, stderr, exit), or MCPError when it refused or failed."""
@@ -308,6 +318,18 @@ async def _run(root: Path, words: list[str], session: str | None = None) -> subp
     return await anyio.run_process(
         [sys.executable, "-P", "-m", "loom", *words], cwd=root, env=env, check=False, stdin=subprocess.DEVNULL
     )
+
+
+#: What every answer carries once loom has been updated under this server.
+UPDATED = (
+    "Loom was updated since this connection to it started, so the tools and instructions you have are the earlier "
+    "version's. Ask the person to restart loom in their agent app, or to start a new conversation."
+)
+
+
+def updated(started: tuple[int, int]) -> str:
+    """`UPDATED` once loom's code on disk is not what this server started as (`version.code_stamp`), else ''."""
+    return UPDATED if code_stamp() != started else ""
 
 
 def _result(

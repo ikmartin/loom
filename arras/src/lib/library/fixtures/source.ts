@@ -203,8 +203,7 @@ export function fixtureSource(onChange: (gen: number) => void = () => {}, o: { n
 			changed();
 			return ok({});
 		},
-		// a question no drop here asks; an answer of a work of its own adds it, as the intake does
-		// the person's answer: the file filed under the work they named, or a work of its own
+		// the person's answer to a drop's question: the file filed under the work they named, or a work of its own added, as the intake does
 		'library-answer': (b) => {
 			const q = f.questions[String(b.question)];
 			if (!q) return no('no-such-question');

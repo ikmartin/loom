@@ -1,0 +1,290 @@
+"""Each quilt's server as the home runs it: the unchanged `loom serve --port P --quilt ROOT`, one process a quilt in a session of its own, started, found again, stopped, started again after a crash, and restarted after an update.
+
+A server is known to be a quilt's by its port answering `/_api` with that quilt's id, never by a pid alone, which a restart of the Mac can give to another program. So a home that starts again adopts the servers still running and starts no second one, and a server it adopted is signalled only at the pid it gave on its own port, never at the pid a quilt's `serve.json` names, since that file travels with a copied quilt.
+"""
+
+from __future__ import annotations
+
+import contextlib
+import json
+import os
+import signal
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.request
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from loom.app import registry
+from loom.app.registry import Entry, folder, free
+
+#: Seconds before each start again of a server that died unasked; after the last, it is shown as could not start.
+RETRIES = (2.0, 10.0, 60.0)
+#: Seconds a server runs before a crash counts as a first one again.
+STEADY = 60.0
+#: Seconds loom's code must be still before a stale server is restarted, so an install half done is not what the new server runs.
+SETTLE = 30.0
+#: How often a running server is asked whether loom changed under it.
+ASK_EVERY = 10.0
+#: Seconds a stop waits after SIGTERM before SIGKILL.
+STOP_WAIT = 10.0
+#: A server's log is begun again at start once it is larger than this.
+LOG_CAP = 1_000_000
+#: A server that refuses to start exits 2, as every loom command refusing does (`loom.errors`): no start again changes that.
+REFUSED = 2
+#: Why a quilt's server could not start, as `state` gives it: its port is another program's, it refused, it died unasked `len(RETRIES) + 1` times, or the home could not start it (its `said` the reason).
+WHY = ("port-taken", "refused", "exited", "cannot-start")
+
+
+def log_path(entry: Entry) -> Path:
+    """The file the quilt's server writes what it says to."""
+    return folder() / "logs" / f"{entry.id}.log"
+
+
+def tail(entry: Entry, lines: int = 5) -> str:
+    """The last non-empty lines the quilt's server wrote, for "could not start" and Copy details."""
+    try:
+        said = log_path(entry).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return ""
+    return "\n".join([line for line in said if line.strip()][-lines:])
+
+
+def ask(entry: Entry) -> dict[str, Any] | None:
+    """What the server on the quilt's port says at `/_api`, when it is this quilt's server; None otherwise."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{entry.port}/_api", timeout=2) as resp:
+            body = json.loads(resp.read())
+    except (OSError, ValueError, urllib.error.URLError):
+        return None
+    return body if isinstance(body, dict) and body.get("quilt") == entry.id else None
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+@dataclass
+class Child:
+    """A server the home started or adopted: its quilt, its process (None when adopted), when it started, its starts again so far, and when the next is due."""
+
+    entry: Entry
+    proc: subprocess.Popen[bytes] | None
+    started: float
+    tries: int = 0
+    again_at: float | None = None
+    asked: float = 0.0
+
+
+class Supervisor:
+    """The quilts' servers the home runs.
+
+    Parameters
+    ----------
+    extra : sequence of str, default ()
+        Options added to every `loom serve` it starts (`--no-compile` in tests).
+    """
+
+    def __init__(self, extra: Sequence[str] = ()) -> None:
+        from loom.version import code_stamp
+
+        self.extra = tuple(extra)
+        self.children: dict[str, Child] = {}
+        #: Quilts whose server could not start: (why, what it said last), why one of `WHY`.
+        self.failed: dict[str, tuple[str, str]] = {}
+        #: Held by every change to what runs, the list's included, so a quilt stopped or forgotten is not started again by a turn that read the list before.
+        self.lock = threading.RLock()
+        self.stamp: tuple[int, int] | None = code_stamp()
+        self.still_since = time.monotonic()
+        self.stamp_asked = 0.0
+
+    def state(self, entry: Entry) -> dict[str, Any]:
+        """The quilt's state for the home page.
+
+        Returns
+        -------
+        dict
+            `state`: `missing` (its folder is gone), `failed` (with `why` and `said`), `running` (with `url`), `starting` or `stopped`.
+        """
+        with self.lock:
+            if not Path(entry.root).is_dir():
+                return {"state": "missing"}
+            if entry.id in self.failed:
+                why, said = self.failed[entry.id]
+                return {"state": "failed", "why": why, "said": said}
+            if ask(entry) is not None:
+                return {"state": "running", "url": f"http://127.0.0.1:{entry.port}/"}
+            child = self.children.get(entry.id)
+            if child is not None and (child.again_at is not None or (child.proc and child.proc.poll() is None)):
+                return {"state": "starting"}
+            return {"state": "stopped"}
+
+    def open(self, entry: Entry) -> dict[str, Any]:
+        """Start the quilt's server on its port, or adopt the one already answering there; its state after (`state`)."""
+        with self.lock:
+            self.failed.pop(entry.id, None)
+            child = self.children.get(entry.id)
+            if child is not None and child.proc is not None and child.proc.poll() is not None:
+                self.children.pop(entry.id)  # one that ended, waiting to be started again: started now
+            if Path(entry.root).is_dir() and entry.id not in self.children:
+                if ask(entry) is not None:
+                    self.children[entry.id] = Child(entry, None, time.monotonic())
+                elif not free(entry.port):
+                    self.failed[entry.id] = ("port-taken", "")
+                else:
+                    self._start(entry, 0)
+            return self.state(entry)
+
+    def _start(self, entry: Entry, tries: int) -> None:
+        """Start the quilt's server; one that cannot be started (its log cannot be written, say) is `cannot-start` with the reason."""
+        try:
+            proc = self._spawn(entry)
+        except OSError as exc:
+            self.children.pop(entry.id, None)
+            self.failed[entry.id] = ("cannot-start", str(exc))
+            return
+        self.children[entry.id] = Child(entry, proc, time.monotonic(), tries)
+
+    def _spawn(self, entry: Entry) -> subprocess.Popen[bytes]:
+        log = log_path(entry)
+        log.parent.mkdir(parents=True, exist_ok=True)
+        if log.exists() and log.stat().st_size > LOG_CAP:
+            log.unlink()
+        with open(log, "ab") as out:
+            # -P: the quilt is no place to import loom from; a `loom.py` an agent wrote there would run in its place
+            return subprocess.Popen(
+                [
+                    sys.executable,
+                    "-P",
+                    "-m",
+                    "loom",
+                    "serve",
+                    "--port",
+                    str(entry.port),
+                    "--quilt",
+                    entry.root,
+                    *self.extra,
+                ],
+                cwd=folder(),
+                env={**os.environ, "PYTHONSAFEPATH": "1"},
+                stdin=subprocess.DEVNULL,
+                stdout=out,
+                stderr=subprocess.STDOUT,
+                start_new_session=True,
+            )
+
+    def stop(self, entry: Entry) -> bool:
+        """Stop the quilt's server, whether the home started it or found it: SIGTERM, its own clean stop, then SIGKILL after `STOP_WAIT`.
+
+        A server the home found is signalled at the pid it gives on its own port, where it answers with this quilt's id; one that gives none is left running and signalled nothing. Returns whether no server of the quilt's runs after.
+        """
+        with self.lock:
+            child = self.children.pop(entry.id, None)
+            self.failed.pop(entry.id, None)
+            if child is not None and child.proc is not None and child.proc.poll() is None:
+                pid = child.proc.pid
+            else:
+                said = ask(entry)
+                if said is None:
+                    return True
+                found = said.get("pid")
+                if not isinstance(found, int) or isinstance(found, bool) or found <= 1:
+                    return False
+                pid = found
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGTERM)
+            end = time.monotonic() + STOP_WAIT
+            while time.monotonic() < end:
+                if child is not None and child.proc is not None and child.proc.poll() is not None:
+                    return True
+                if (child is None or child.proc is None) and not _alive(pid):
+                    return True
+                time.sleep(0.05)
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+            if child is not None and child.proc is not None:
+                child.proc.wait()
+            return True
+
+    def stop_all(self) -> None:
+        """Stop every server the home runs, as it stops itself, whether or not its quilt is still on the list; what the person left open stays so on the list."""
+        with self.lock:
+            for child in list(self.children.values()):
+                self.stop(child.entry)
+
+    def tick(self) -> None:
+        """Keep each quilt the person left open served: start one not running, start again one that died after its wait, and restart one that is stale once loom's code has been still for `SETTLE`.
+
+        The list is read under the lock, so a quilt stopped or forgotten while a turn waited is not started again. Whatever goes wrong with one quilt makes that quilt `cannot-start`, and the others are kept served.
+        """
+        from loom.version import code_stamp
+
+        now = time.monotonic()
+        if now - self.stamp_asked >= ASK_EVERY:
+            self.stamp_asked = now
+            try:
+                stamp: tuple[int, int] | None = code_stamp()
+            except OSError:
+                stamp = None  # loom's files are being replaced as it counts them: not still
+            if stamp != self.stamp:
+                self.stamp, self.still_since = stamp, now
+        with self.lock:
+            try:
+                listed = registry.entries()
+            except registry.Unreadable:
+                return
+            for entry in listed:
+                try:
+                    self._keep(entry, now)
+                except Exception as exc:  # noqa: BLE001 -- one quilt's fault is that quilt's, and the loop goes on
+                    self.failed[entry.id] = ("cannot-start", str(exc) or type(exc).__name__)
+
+    def _keep(self, entry: Entry, now: float) -> None:
+        """One quilt's part of `tick`."""
+        if not entry.open or entry.id in self.failed or not Path(entry.root).is_dir():
+            return
+        child = self.children.get(entry.id)
+        if child is None:
+            self.open(entry)
+            return
+        if child.proc is not None and child.proc.poll() is not None:
+            self._died(entry, child, now)
+        elif now - child.asked >= ASK_EVERY:
+            child.asked = now
+            said = ask(entry)
+            if said is None:
+                if child.proc is None:
+                    # an adopted server stopped by something else: started as if it had died
+                    self.children.pop(entry.id)
+                    self.open(entry)
+                return
+            if now - child.started >= STEADY:
+                child.tries = 0
+            if said.get("stale") and now - self.still_since >= SETTLE and self.stop(entry):
+                self._start(entry, 0)
+
+    def _died(self, entry: Entry, child: Child, now: float) -> None:
+        """A server that exited unasked: a refusal stays failed at once; a crash starts again after its wait, until `RETRIES` run out."""
+        assert child.proc is not None
+        if child.proc.returncode == REFUSED:
+            self.children.pop(entry.id)
+            self.failed[entry.id] = ("refused", tail(entry))
+        elif child.again_at is None:
+            if child.tries >= len(RETRIES):
+                self.children.pop(entry.id)
+                self.failed[entry.id] = ("exited", tail(entry))
+            else:
+                child.again_at = now + RETRIES[child.tries]
+        elif now >= child.again_at:
+            self._start(entry, child.tries + 1)

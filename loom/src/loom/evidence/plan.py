@@ -24,9 +24,20 @@ Own = tuple[str, Status, bool, "Callable[[], Unattestable | None]"]
 
 #: The kinds of result that are stated in Lean, never proved: a definition, a notation, a convention, a construction.
 STATED = frozenset({"definition", "notation", "convention", "construction"})
-#: Why something stands before the targets read formalized, in the order the panel lists them: a library result not read, or not compared with its paper on its text now; a label two texts answer to near the targets; a label or a library result nothing answers to; a citation that names no result a node answers for; a Lean statement to attest; one attested and changed since; a Lean that comes round, through what it rests on, to a result already asked of.
-WHY = ("not-read", "not-checked", "ambiguous", "missing", "cite", "attest", "attested-changed", "cycle")
-#: When it can be done: by the person now; only once the agent has done its work (and, for a library result, once its work's macros can be shown); or by nobody yet, as a citation waits until loom resolves citations to results.
+#: Why something stands before the targets read formalized, in the order the panel lists them: a library result not read, or not compared with its paper on its text now; one whose work holds no document to read or compare it with; a label two texts answer to near the targets; a label or a library result nothing answers to; a library result that names no work; a citation that names no result a node answers for; a Lean statement to attest; one attested and changed since; a Lean that comes round, through what it rests on, to a result already asked of.
+WHY = (
+    "not-read",
+    "not-checked",
+    "no-document",
+    "ambiguous",
+    "missing",
+    "no-source",
+    "cite",
+    "attest",
+    "attested-changed",
+    "cycle",
+)
+#: When it can be done: by the person now; only once the agent has done its work; or by nobody yet, as a citation waits until loom resolves citations to results.
 WHEN = ("now", "after", "waiting")
 #: What a `Need`'s key names: a result, by its key; a citation (`KEY LOCATOR`); a label no one text answers to; a library node by an id the library holds no result by.
 OF = ("result", "cite", "label", "node")
@@ -187,10 +198,11 @@ def needed(
     leaves: list[Waiting],
     own: Callable[[tuple[str, str]], Own | None],
     texts: Callable[[tuple[str, str]], set[str]],
+    paper: Callable[[str], str | None],
 ) -> list[Need]:
     """Each thing the gate asks (`status.needs`) as the person reads it, with when it can be done: every leaf an entry, and a leaf of a reason this does not say refused (`ValueError`).
 
-    `now`, what loom takes now: a node not read or not compared; a label that two texts answer to near the targets (`ambiguous`, by `texts`), or a label or node nothing answers to (`missing`); a Lean statement Lean accepted on its result's text now that waits for the person's word (`attest`, `attested-changed` where they gave it before something it uses changed), offered only where `formal-attest` would take it, else what stands in its way. `after`: a Lean statement with no Lean on its text now that elaborated, which the agent writes or loom runs again, or whose notation cannot be shown yet; one attested and still asked of, whose Lean comes round to a result already asked of (`cycle`). `waiting`: a citation, until loom resolves citations to results. `own` gives what the plan reads of a result (`Own`); None where no row can say of it.
+    `now`, what loom takes now: a node not read or not compared, or, where its work holds no document to read or compare it with (`paper`, `acts.unreadable`), that document to add (`no-document`); a label that two texts answer to near the targets (`ambiguous`, by `texts`), or a label or node nothing answers to (`missing`); a Lean statement Lean accepted on its result's text now that waits for the person's word (`attest`, `attested-changed` where they gave it before something it uses changed), offered only where `formal-attest` would take it, else what stands in its way. `after`: a Lean statement with no Lean on its text now that elaborated, which the agent writes or loom runs again, or whose notation cannot be shown yet; one attested and still asked of, whose Lean comes round to a result already asked of (`cycle`). `waiting`: a citation, until loom resolves citations to results; a node that names no work, until it is given one (`no-source`). `own` gives what the plan reads of a result (`Own`); None where no row can say of it.
     """
     out: list[Need] = []
     for w in leaves:
@@ -198,15 +210,23 @@ def needed(
         if kind == "cite":
             found = [Need(name, "cite", "waiting", "cite")]
         elif w.why in ("stub", "unchecked"):
-            found = [Need(name, "not-read" if w.why == "stub" else "not-checked", "now")]
+            found = [_reading(name, "not-read" if w.why == "stub" else "not-checked", paper)]
         elif w.why == "unknown":
             found = [_unknown(w.key, texts)]
         elif w.why == "unattested":
-            found = _to_attest(name, kind, own(w.key), texts)
+            found = _to_attest(name, kind, own(w.key), texts, paper)
         else:
             raise ValueError(f"the panel has no entry for the gate's {w.why!r}")
         out += [n for n in found if n not in out]
     return out
+
+
+def _reading(node: str, why: str, paper: Callable[[str], str | None]) -> Need:
+    """A node to read or compare against its paper: `why` now, or, where nothing can be read against, why not: its work's document to add now, or no work named, which waits."""
+    cannot = paper(node)
+    if cannot == "no-source":
+        return Need(node, "no-source", "waiting")
+    return Need(node, cannot or why, "now")
 
 
 def _unknown(key: tuple[str, str], texts: Callable[[tuple[str, str]], set[str]]) -> Need:
@@ -214,7 +234,13 @@ def _unknown(key: tuple[str, str], texts: Callable[[tuple[str, str]], set[str]])
     return Need(key[1], "ambiguous" if key[0] == "label" and texts(key) else "missing", "now", key[0])
 
 
-def _to_attest(name: str, kind: str, found: Own | None, texts: Callable[[tuple[str, str]], set[str]]) -> list[Need]:
+def _to_attest(
+    name: str,
+    kind: str,
+    found: Own | None,
+    texts: Callable[[tuple[str, str]], set[str]],
+    paper: Callable[[str], str | None],
+) -> list[Need]:
     """What a Lean statement the gate asks to be attested needs, by how its result stands (`needed`).
 
     Attested, holding and elaborated, and still asked of, it is asked only where its Lean comes round to a result already asked of (`status.assumption_needs`), which attesting cannot settle.
@@ -224,12 +250,16 @@ def _to_attest(name: str, kind: str, found: Own | None, texts: Callable[[tuple[s
     key, standing, elaborated, refused = found
     if standing.lean_record is None or not elaborated or standing.lean == "rerun":
         return [Need(key, "attest", "after")]
-    wanted = _wanted(key, standing, refused, texts)
+    wanted = _wanted(key, standing, refused, texts, paper)
     return wanted if wanted is not None else [Need(key, "cycle", "after")]
 
 
 def _wanted(
-    key: str, standing: Status, refused: Callable[[], Unattestable | None], texts: Callable[[tuple[str, str]], set[str]]
+    key: str,
+    standing: Status,
+    refused: Callable[[], Unattestable | None],
+    texts: Callable[[tuple[str, str]], set[str]],
+    paper: Callable[[str], str | None],
 ) -> list[Need] | None:
     """The person's word a Lean that elaborated waits for: `attested-changed` or `attest` now where `formal-attest` would take it, else what stands in its way; `attest` after where it holds but its notation cannot be shown yet; None where none is wanted."""
     if standing.lean == "changed":
@@ -247,8 +277,8 @@ def _wanted(
         return [Need(key, "attest", "after")]
     return [
         *(_unknown(member, texts) for member in blocked.gone),
-        *(Need(n, "not-read", "now") for n in blocked.unread),
-        *(Need(n, "not-checked", "now") for n in blocked.unchecked),
+        *(_reading(n, "not-read", paper) for n in blocked.unread),
+        *(_reading(n, "not-checked", paper) for n in blocked.unchecked),
         *(Need(c, "cite", "waiting", "cite") for c in blocked.cites),
     ]
 
@@ -259,13 +289,14 @@ def target_need(
     elaborated: bool,
     refused: Callable[[], Unattestable | None],
     texts: Callable[[tuple[str, str]], set[str]],
+    paper: Callable[[str], str | None],
 ) -> list[Need]:
     """What a target's own Lean still needs: attested after the agent states it, where it has no Lean that elaborated; the person's word now where `formal-attest` would take it, else what stands in its way (`_wanted`); attested after where its notation cannot be shown yet; nothing where it is formalized, or attested and waiting only on what the rest of the list names."""
     if standing.lean == "formalized":
         return []
     if standing.lean_record is None or not elaborated or standing.lean in ("rerun", "failed"):
         return [Need(key, "attest", "after")]
-    return _wanted(key, standing, refused, texts) or []
+    return _wanted(key, standing, refused, texts, paper) or []
 
 
 def elaborated(evidence: Evidence, standing: Status, lean_now: Callable[[Record], bool]) -> bool:

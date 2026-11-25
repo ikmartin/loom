@@ -1,4 +1,4 @@
-"""Text that arrives from elsewhere: a collaborator's pull reviewed and incorporated, and an agent's copy compared, chosen from and taken into the person's document."""
+"""Text that arrives from elsewhere: an Overleaf project paired, its token given and its text taken in by update, and an agent's copy compared, chosen from and taken into the person's document."""
 
 from __future__ import annotations
 
@@ -16,50 +16,57 @@ def _accept_keys(body: dict[str, Any]) -> list[str]:
     return keys
 
 
-def _sync(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
-    """`sync-preview` and `sync-incorporate`: a fetched pull prepared for review without being applied, then incorporated, with the blocks the reviewer accepted in the same act; incorporating is the author's, refused to a declared agent."""
+def _overleaf(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The `overleaf-*` endpoints: pair the quilt with a project from a pasted link, give the git token once, say again who the person is on Overleaf, update from Overleaf, and end the pairing; the person's acts, refused to a declared agent.
+
+    Every refusal loom knows answers with its code and its words (409, or 400 for a token that is not one): a failure to reach Overleaf (`MirrorError`), a link that names no project, and the door's own refusals inside an update. The token goes from the request to the credential helper and nowhere else.
+    """
+    from loom import overleaf
     from loom.identity import is_agent
-    from loom.incorporation_review import finish, preview, validate
-
-    if endpoint == "sync-incorporate" and is_agent(_str(body, "author") or ""):
-        raise ApiError("author-only", "Incorporating a collaborator's changes is the author's", status=403)
     from loom.scan.quilt import load_quilt, reviewer_identity
-    from loom.scan.scan import scan
-    from loom.sync import SyncError, SyncState, pull_files
-    from loom.sync import incorporate as incorporate_pull
+    from loom.sync import SyncError
+    from loom.writes import WriteRefused
 
+    if is_agent(_str(body, "author") or ""):
+        raise ApiError("author-only", "Pairing with Overleaf and updating from it are the author's", status=403)
+    quilt = load_quilt(root)
+    reviewer = reviewer_identity(root)[0] or None
     try:
-        quilt = load_quilt(root)
-        state = SyncState.read(root)
-        incoming = _str(body, "incoming", required=True)
-        base = _str(body, "base", required=True)
-        if incoming != state.incoming:
-            raise ApiError("revision-changed", "the fetched revision changed; reload Review")
-        if base != state.integrated and state.integrated != state.incoming:
-            raise ApiError("revision-changed", "the incorporated base changed; reload Review")
-        binding = {"kind": "sync", "incoming": incoming or "", "base": base or ""}
-        reviewer, _ = reviewer_identity(root)
-        if endpoint == "sync-preview" or body.get("review_token") or body.get("accept"):
-            if not reviewer or _str(body, "reviewer") != reviewer:
-                raise ApiError("reviewer-changed", "Choose your reviewer name and reload Review", status=409)
-            before = scan(quilt)
-            if endpoint == "sync-preview":
-                overlay = {
-                    p: data.decode("utf-8") if data is not None else ""
-                    for p, data in pull_files(quilt, state).items()
-                    if p.endswith((".tex", ".sty", ".cls", ".bib"))
-                }
-                return {"ok": True, "result": preview(before, overlay, binding, reviewer)}
-            accepted = _accept_keys(body)
-            saved = validate(before, _str(body, "review_token", required=True) or "", binding, reviewer, accepted)
-        else:
-            saved = None
-        sync_result = incorporate_pull(quilt, state, reviewer or None)
-        if saved is not None:
-            sync_result.update(finish(scan(load_quilt(root)), saved, accepted, reviewer or ""))
+        if endpoint == "overleaf-update":
+            return {"ok": True, "result": overleaf.update(quilt, reviewer)}
+        if endpoint == "overleaf-unpair":
+            overleaf.unpair(quilt)
+            return {"ok": True, "result": {"paired": False}}
+        if endpoint == "overleaf-me":
+            me = body.get("me")
+            if me is None:
+                return {"ok": True, "result": {"authors": overleaf.who(quilt)}}
+            if not isinstance(me, list) or not all(isinstance(m, str) for m in me):
+                raise ApiError("bad-field", "me must be a list of addresses")
+            overleaf.set_me(quilt, me)
+            return {"ok": True, "result": {"me": overleaf.here(root)["me"]}}
+        state = overleaf.paired(root)
+        link = _str(body, "link", required=endpoint == "overleaf-pair" or state is None) or ""
+        project = overleaf.project_of(link) if link else state.project if state is not None else ""
+        if endpoint == "overleaf-token":
+            overleaf.store_token(overleaf.git_address(project), _str(body, "token", required=True) or "")
+            return {"ok": True, "result": {"stored": True}}
+        folder, main, me = body.get("folder"), body.get("main"), body.get("me")
+        if folder is None or main is None or me is None:
+            return {"ok": True, "result": {"choose": overleaf.prepare(quilt, project)}}
+        if not isinstance(folder, str) or not isinstance(main, str):
+            raise ApiError("bad-field", "folder and main must be strings")
+        if not isinstance(me, list) or not all(isinstance(m, str) for m in me):
+            raise ApiError("bad-field", "me must be a list of addresses")
+        return {"ok": True, "result": {"paired": overleaf.pair(quilt, project, folder, main, me, reviewer)}}
+    except overleaf.LinkRefused as exc:
+        raise ApiError(exc.code, str(exc), status=409) from exc
+    except overleaf.MirrorError as exc:
+        raise ApiError(exc.code, str(exc), status=400 if exc.code == "bad-token" else 409) from exc
+    except WriteRefused as exc:
+        raise ApiError(exc.code, str(exc), status=exc.status) from exc
     except SyncError as exc:
-        raise ApiError("sync-refused", str(exc), status=409) from exc
-    return {"ok": True, "result": sync_result}
+        raise ApiError("refused", str(exc), status=409) from exc
 
 
 def _adopt(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
@@ -181,8 +188,11 @@ def _adopt(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
 
 
 HANDLERS: dict[str, Handler] = {
-    "sync-incorporate": _sync,
-    "sync-preview": _sync,
+    "overleaf-pair": _overleaf,
+    "overleaf-token": _overleaf,
+    "overleaf-update": _overleaf,
+    "overleaf-me": _overleaf,
+    "overleaf-unpair": _overleaf,
     "adopt-close": _adopt,
     "adopt-reopen": _adopt,
     "adopt-refresh": _adopt,
@@ -192,8 +202,10 @@ HANDLERS: dict[str, Handler] = {
     "adopt-finish": _adopt,
 }
 #: Of these, the ones that answer and change nothing the manifest shows.
-READS: tuple[str, ...] = ("adopt-preview", "sync-preview", "adopt-paper")
+READS: tuple[str, ...] = ("adopt-preview", "adopt-paper")
 #: The ones the publisher does not rebuild after: the reads, and the decision, which publishes the queue's metadata itself without rendering documents.
-NO_REBUILD: tuple[str, ...] = (*READS, "adopt-decision")
+NO_REBUILD: tuple[str, ...] = (*READS, "adopt-decision", "overleaf-token")
 #: The ones that change records alone, so the publication builds from the last scan.
 RECORD_WRITES: tuple[str, ...] = ("adopt-decision",)
+#: The ones that wait on Overleaf over the network and take the door's lock only to write, so the publisher runs them outside the publication's lock.
+OWN_LOCK: tuple[str, ...] = ("overleaf-pair", "overleaf-token", "overleaf-update", "overleaf-me")

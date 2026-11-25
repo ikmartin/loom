@@ -55,6 +55,8 @@ def _web_search(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 def _web_focus(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     s, _root = synthetic(serve, tmp_path, watch=False)
     card = succeeds(s, "web-focus", {"scope": "all", "result": "sy-0001", "more": True})
+    # the library's generation it answers at, as every read of these pages does
+    assert isinstance(card["gen"], int)
     assert card["row"]["result"] == "sy-0001" and card["statement"]["fragment"] and "proofs" in card["more"]
     refuses(s, "web-focus", {"scope": "all", "result": "sy-9999"}, 404, "no-such-result", "sy-9999")
 

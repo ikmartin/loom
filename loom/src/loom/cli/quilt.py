@@ -143,8 +143,8 @@ def _user_history() -> str:
     return str(uq.get("history", HISTORY)).strip("/") or HISTORY
 
 
-def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
-    """Write a quilt's three entries into `target`: `config.toml`, the tutorial `README.md`, and `.loom/` with its layout's number, its ignore file and an empty history.
+def write_minimal_quilt(target: Path, prefix: str, *, readme: bool = True) -> list[Path]:
+    """Write a quilt's three entries into `target`: `config.toml`, the tutorial `README.md` (unless `readme` is False, as for a quilt made on the home page, whose first page is the paper), and `.loom/` with its layout's number, its ignore file and an empty history.
 
     `config.toml` and `README.md` are written only where there is none: in a folder of the person's (`init --from` a paper inside it) a README of theirs stays, and `init` refuses a `config.toml` that is not a quilt's before calling this. Returns the paths it created, deepest first, so `init --from` can undo them when the import that follows fails; paths that were already there are not listed and so are never removed.
     """
@@ -183,9 +183,11 @@ def write_minimal_quilt(target: Path, prefix: str) -> list[Path]:
     mkdir((target / ANNOTATION_TYPES).parent)
     write(target / ANNOTATION_TYPES, default_text())
     # the tutorial is written with this quilt's own id prefix, so no example in it is one the person has to translate
-    write(
-        target / "README.md", (ASSETS / "init" / "readme.md").read_text(encoding="utf-8").replace("q-0", f"{prefix}-0")
-    )
+    if readme:
+        write(
+            target / "README.md",
+            (ASSETS / "init" / "readme.md").read_text(encoding="utf-8").replace("q-0", f"{prefix}-0"),
+        )
     return sorted(made, key=lambda q: len(q.parts), reverse=True)
 
 

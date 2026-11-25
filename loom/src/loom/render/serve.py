@@ -32,6 +32,7 @@ from loom.render.watch import Watcher, scan_unread, snapshot
 from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult
 from loom.tex.runner import CompileResult, compile_document, normalise_engine
+from loom.version import code_stamp
 
 DEFAULT_PORT = 8791
 ASSET_SUFFIXES = {
@@ -245,14 +246,6 @@ def viewer_version(bundle: Path) -> str:
         return str(json.loads((bundle / "_app" / "version.json").read_text(encoding="utf-8")).get("version", ""))
     except (OSError, ValueError, AttributeError):
         return ""
-
-
-def code_stamp() -> tuple[int, int]:
-    """loom's Python as it stands on disk: how many modules, and the newest one's mtime, which an edit, a merge or an install moves."""
-    import loom
-
-    times = [p.stat().st_mtime_ns for p in Path(loom.__file__).parent.rglob("*.py")]
-    return len(times), max(times, default=0)
 
 
 class CannotBind(Exception):
@@ -918,6 +911,10 @@ class LoomHandler(SimpleHTTPRequestHandler):
             # the layout the quilt is in and the one this loom reads: a waiting server serves `library-upgrade` alone
             found = self.older if self.older is not None else layout.NUMBER
             served_api = discovery() if self.older is None else {**discovery(), "capabilities": [UPGRADE]}
+            from loom.app.registry import home_url
+
+            # the home page, so a page whose server stopped can send the person back to it
+            home = home_url()
             self._json(
                 HTTPStatus.OK,
                 {
@@ -925,10 +922,13 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     "format": {"found": found, "reads": layout.NUMBER},
                     "token": self.token,
                     **({"quilt": self.quilt_id} if self.quilt_id else {}),
+                    # the home stops a server it found at the pid the server gives here, never at one a file names
+                    "pid": os.getpid(),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,
                     **served,
+                    **({"home": home} if home else {}),
                 },
             )
             return
@@ -1479,6 +1479,7 @@ class ServeSession:
             print(f"loom serve: {said}", file=sys.stderr)
         self.first_look()
         self.first_build()
+        self.fetch_overleaf()
         with self._starting:
             if self._stopping:
                 return
@@ -1517,6 +1518,26 @@ class ServeSession:
             self.older = self._handler.older = None
         print(f"loom serve: the quilt is in format {layout.NUMBER} now; building it", file=sys.stderr, flush=True)
         threading.Thread(target=self._begin, name="loom-start", daemon=True).start()
+
+    def fetch_overleaf(self) -> None:
+        """Fetch from Overleaf once, in the background, when the quilt mirrors a project, and publish what it found: the viewer then says when Overleaf has changes, or why it could not be reached. Nothing of the person's is written; only the Update control takes the text in (`loom.overleaf`)."""
+        from loom.overleaf import fetch, paired
+        from loom.sync import SyncError
+
+        try:
+            if paired(self.quilt.root) is None:
+                return
+        except SyncError:
+            return  # a record loom cannot use, which the manifest says
+
+        def run() -> None:
+            try:
+                fetch(self.quilt)
+            except SyncError:
+                pass  # kept as this machine's problem, which the manifest shows
+            self.rebuild(records=True)
+
+        threading.Thread(target=run, name="loom-overleaf-fetch", daemon=True).start()
 
     def first_look(self) -> None:
         """Take the reviewer's first look at the open files when they have none, so an agent's first edits show in Review's Your Changes; nothing without a reviewer name."""

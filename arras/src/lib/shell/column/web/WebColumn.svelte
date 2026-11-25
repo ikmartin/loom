@@ -15,7 +15,7 @@
 	<p class="rl">{words.column.scope}</p>
 	<div class="scope" role="radiogroup" aria-label={words.column.scope}>
 		{#each SCOPES as s (s)}
-			<label class:on={wb.scope === s}><input type="radio" name="web-scope" checked={wb.scope === s} onchange={() => wb.choose(s)} data-testid="web-scope-{s}" />{words.column.scopes[s]}</label>
+			<label class:on={wb.scope === s} title={words.column.scopes[s]}><input type="radio" name="web-scope" checked={wb.scope === s} onchange={() => wb.choose(s)} data-testid="web-scope-{s}" /><span class="t">{words.column.scopes[s]}</span></label>
 			{#if wb.scope === s && (s === 'draft' || s === 'deps')}
 				<select class="draft" aria-label={words.column.draft} value={wb.doc ?? ''} onchange={(e) => (wb.doc = e.currentTarget.value || null)} data-testid="web-draft">
 					{#if !wb.doc}<option value="" disabled>{words.column.choose}</option>{/if}
@@ -59,6 +59,19 @@
 		padding: 4px 6px;
 		border-radius: 6px;
 		cursor: pointer;
+	}
+	/* a scope is one line whatever the font and the column's width, its words ending in an ellipsis before they wrap, its hover saying them in full */
+	label {
+		min-width: 0;
+	}
+	label input {
+		flex: none;
+	}
+	.t {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	label:hover,
 	label.on {
