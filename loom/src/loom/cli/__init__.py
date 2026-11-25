@@ -6,6 +6,7 @@ import click
 
 from loom.cli.adopt import adopt
 from loom.cli.ai import ai
+from loom.cli.app_cmd import app_command
 from loom.cli.build_cmd import build_command
 from loom.cli.build_cmds import check, compile, source
 from loom.cli.changes_cmd import changes_command
@@ -36,7 +37,6 @@ from loom.cli.serve_cmd import serve
 from loom.cli.session import session
 from loom.cli.since_cmd import since_command
 from loom.cli.suggest import suggest_command
-from loom.cli.sync import sync
 from loom.cli.tasks_cmd import ask_command, evidence_command, tasks
 from loom.cli.upgrade import upgrade
 from loom.version import __version__
@@ -76,6 +76,7 @@ main.add_command(compile)
 main.add_command(check)
 main.add_command(source)
 main.add_command(serve)
+main.add_command(app_command)
 main.add_command(accept)
 main.add_command(annotate)
 main.add_command(suggest_command)
@@ -96,7 +97,6 @@ main.add_command(here_command)
 main.add_command(since_command)
 main.add_command(changes_command)
 main.add_command(mcp_command)
-main.add_command(sync)
 main.add_command(tasks)
 main.add_command(ask_command)
 main.add_command(evidence_command)

@@ -193,22 +193,6 @@ def test_init_makes_no_copies_directory_and_protects_nothing_of_the_persons(tmp_
     assert "[agents]\n" in text and "\ndeny = []\n" in text and load_quilt(q).config.agents_deny == []
 
 
-def test_the_document_workspace_never_selects_an_agents_document(tmp_path: Path) -> None:
-    from loom.sync import SyncError, SyncState, update_documents
-
-    q = with_copy(tmp_path)
-    state = SyncState(
-        directory="project",
-        remote="origin",
-        url="overleaf.git",
-        branch="master",
-        master="drafting/main.tex",
-        integrated="",
-    )
-    with pytest.raises(SyncError, match="an agent's document, which is never published"):
-        update_documents(load_quilt(q), state, "add", ".loom/agents/copies/aidoc.tex")
-
-
 # ---- the copy (phase 2) ---------------------------------------------------------------------------------------
 
 

@@ -973,7 +973,7 @@ One tool per agent command, named for it (`loom status` is `loom_status`), its o
 
 ## Publish
 
-Build the site and the PDFs, serve them, and exchange sources with a workspace.
+Build the site and the PDFs, and serve them and the home page.
 
 ### `loom build`
 
@@ -1005,11 +1005,26 @@ A quilt an earlier loom made is served waiting: the viewer offers to bring it fo
 
 | option | description |
 |---|---|
-| `--port` | Port to listen on; fails if busy. |
+| `--port` | Port to listen on; fails if busy. Default: the one this quilt keeps on loom's home, else 8791. |
 | `--open` | Open the browser. |
 | `--no-compile` | Run no TeX: compile nothing, neither after a change nor on starting, and make no snippets. |
 | `--viewer` `PATH` | Serve the built viewer at PATH from where it lies, read on every request, so a rebuild of it shows on a reload: for trying a change to the viewer. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom app`
+
+`loom app [OPTIONS]`
+
+Run loom's home page until interrupted: the quilts on this machine, each served on a port it keeps, and the ones left open served again when it starts.
+
+One home runs on a machine: a home already running is left to run, and its address is printed. Once loom is updated, the home restarts each quilt's server and then itself.
+
+| option | description |
+|---|---|
+| `--port` | Port to listen on; when 8790 is held, any free one. |
+| `--open` | Open the home page in the browser, starting the home first when it is not running, and return. |
+| `--install` | Write loom's app in ~/Applications, which opens the home page, say where, and return. |
+| `--no-compile` | Serve every quilt with no compiles, as loom serve --no-compile. |
 
 ### `loom compile`
 
@@ -1040,88 +1055,6 @@ Lint, then compile every document, then the closures asked for. Exit 1 on any fa
 | option | description |
 |---|---|
 | `--closures` | Which statements' closures to compile after the documents: all of them, or none; stale compiles none yet. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-### `loom sync`
-
-`loom sync [OPTIONS] COMMAND [ARGS]...`
-
-Exchange the paper's sources with a document workspace, such as an Overleaf project.
-
-#### `loom sync documents`
-
-`loom sync documents [OPTIONS] [add|remove] [DOCUMENT]`
-
-Change which documents publish to the workspace, without publishing.
-
-| option | description |
-|---|---|
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync fetch`
-
-`loom sync fetch [OPTIONS]`
-
-Fetch the document workspace's changes for review in the viewer's Review, without changing your files.
-
-| option | description |
-|---|---|
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync incorporate`
-
-`loom sync incorporate [OPTIONS]`
-
-Apply the fetched pull to the quilt's files, stamping first each document it reaches; the viewer's Review does the same.
-
-| option | description |
-|---|---|
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync init`
-
-`loom sync init [OPTIONS] DIR`
-
-Pair the quilt with a document workspace through DIR, your clone of it, such as an Overleaf project's.
-
-Clone the workspace yourself (`git clone URL DIR`), anywhere, inside the quilt or not. Loom runs Git only in DIR and never changes its files or its checked-out branch, so after `publish --push` your branch there is behind until you pull; it skips DIR when it reads the quilt. The remote and branch are the ones DIR's branch follows, and the main document's directory is the workspace's root, as Overleaf compiles a project from its top. DIR is refused when it is the quilt's own repository, holds a quilt, follows a remote of the quilt's repository or sits inside one of loom's own directories, and `publish --push` refuses a workspace that holds a quilt.
-
-| option | description |
-|---|---|
-| `--publish-main` | The main document's path in the workspace, when it differs from the quilt's. |
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync publish`
-
-`loom sync publish [OPTIONS]`
-
-Prepare the selected documents' sources as a workspace revision, check each compiles, and stamp each as published.
-
-| option | description |
-|---|---|
-| `--push` | Push the prepared revision to the document workspace. |
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync status`
-
-`loom sync status [OPTIONS]`
-
-Show the document workspace's revisions, the selection and what is prepared; --patch prints the incoming diff.
-
-| option | description |
-|---|---|
-| `--patch` | Print the incoming revision as a patch against the quilt's paths instead. |
-| `--to` `FILE` | With --patch, write the patch to FILE, a new file outside the quilt's sources and .loom/. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 

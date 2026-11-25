@@ -381,7 +381,13 @@ def test_a_second_adoption_numbers_its_landmark(quilt):
 
 
 def test_a_git_quilt_is_left_uncommitted(quilt):
-    from loom.sync import git, revision
+    import subprocess
+
+    def git(cwd: Path, *args: str) -> str:
+        return subprocess.check_output(["git", *args], cwd=cwd, text=True)
+
+    def revision(cwd: Path, ref: str) -> str:
+        return git(cwd, "rev-parse", "--verify", ref).strip()
 
     git(quilt.root, "init", "-b", "main")
     git(quilt.root, "config", "user.name", "Tester")
