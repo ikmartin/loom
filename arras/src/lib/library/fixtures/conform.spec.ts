@@ -23,8 +23,8 @@ const samples: Sample[] = readdirSync(DIR)
 /** The transport's fields, which the views' spec adds to every answer and request (`gen`, `since`), and the publisher's `ok` and `result`, which the client does not read. */
 const TRANSPORT = new Set(['ok', 'gen', 'unchanged', 'since', 'result']);
 
-/** Fields whose shape is a union the specs name: an ask's place by its `what`, a row's body by its kind, what changed under an attestation, a result's source (`{doc}` for a draft's, `{ref, short}` for a work's); compared as objects only. */
-const VARIANT = new Set(['on', 'body', 'changed', 'target', 'source']);
+/** Fields whose shape is a union the specs name: an ask's place by its `what`, a row's body by its kind, what changed under an attestation, a result's source (`{doc}` for a draft's, `{ref, short}` for a work's); and a node's `points`, keyed by the ids its body names; compared as objects only. */
+const VARIANT = new Set(['on', 'body', 'changed', 'target', 'source', 'points']);
 
 /** The fields an ask to an agent carries beyond the row's own, by its `what` (`evidence.md` §4.1). */
 const ASK_FIELDS: Record<string, string[]> = {
@@ -109,7 +109,12 @@ const CALLS: Record<string, (r: Record<string, unknown>) => Promise<api.Answer<u
 	'web-focus': (r) => api.webFocus({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string, r.more === true),
 	'web-graph': (r) => api.webGraph({ scope: r.scope as never, doc: r.doc as string | undefined }, r.result as string),
 	'library-works': (r) => api.works(r.doc as string | undefined, r.since as number | undefined),
-	'library-places': (r) => api.places({ ref: r.ref as string, ...(r.pages ? { pages: r.pages as number[] } : {}) }, r.since as number | undefined),
+	'library-places': (r) => (r.node ? api.places({ node: r.node as string }) : api.places({ ref: r.ref as string, ...(r.pages ? { pages: r.pages as number[] } : {}) }, r.since as number | undefined)),
+	'library-work': (r) => api.work(r.ref as string),
+	'library-digest-scopes': (r) => api.digestScopes(r.all ? { all: true } : { ref: r.ref as string }),
+	'library-node': (r) => api.node(r.node ? { node: r.node as string, ...(r.brief ? { brief: true } : {}) } : { ref: r.ref as string, item: r.item as string }),
+	'library-find': (r) => api.find(r.ref as string, r.q as string),
+	'library-digest': (r) => api.digest(r.refs as string[] | 'all', r.scope as never, r.chosen as string[] | undefined),
 	'library-receive': (r) => api.receive(new File([new Uint8Array(r.size as number)], r.name as string)),
 	'library-take': (r) => api.take(r.items as never, r.online as false | undefined),
 	'library-answer': (r) => api.answerDrop(r.question as string, r.same as string | null, r.online as boolean | undefined),
@@ -163,6 +168,7 @@ describe('every generated sample passes through the client as a served answer wo
 const NOT_MODELLED: Record<string, string> = {
 	'library-entry.key-taken': 'the fixture keeps no entries whose keys could collide',
 	'library-undo.waits-again': 'the fixture files no document under a work, so no filing is undone',
+	'library-digest.no-reviewer': 'the fixture always knows its reviewer, so an ask is never refused for want of one',
 };
 
 /** The fixture a sample is asked of: on a quilt that has not said whether loom may use the network, or has it off, where the sample's refusal needs one. */
@@ -177,6 +183,14 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 	// a work holding a PDF, one found by an identifier and not yet looked up, and one stating none
 	const held = f.data.works.find((w) => w.holds.pdf)!.ref;
 	const unlooked = f.data.works.find((w) => !w.lookup)!.ref;
+	// a work held with its source, one held only as a PDF, and one holding neither
+	const source = f.data.works.find((w) => w.holds.tex && w.holds.pdf)!.ref;
+	const pdfOnly = f.data.works.find((w) => w.holds.pdf && !w.holds.tex)!.ref;
+	const neither = f.data.works.find((w) => !w.holds.pdf && !w.holds.tex)!.ref;
+	// its outline, and the first of its results digested, with its page
+	const read = await f.call<{ gen: number; outline: { items: { item: string | null; node: string | null; page: number | null }[] } }>('library-work', { ref: source });
+	const outline = read.ok ? read.value.outline.items : [];
+	const digested = outline.find((i) => i.node);
 	switch (s.endpoint) {
 		case 'review-row':
 			// the sample names its row's kind after the read's name, where it is not a question's
@@ -212,7 +226,22 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 			const other = f.data.works.find((w) => w.ref !== candidate)!.ref;
 			return { ...r, question: row.question ?? '', same: s.name.endsWith('.same') ? candidate : r.same === null ? null : other };
 		}
+		case 'library-work':
+		case 'library-digest-scopes':
+		case 'library-find':
+			return r.all ? r : { ...r, ref: s.name.endsWith('.no-document') ? neither : s.name.endsWith('.pdf') ? pdfOnly : source };
+		case 'library-digest':
+			return { ...r, refs: [s.name.endsWith('.no-document') ? neither : source] };
+		case 'library-node': {
+			// a digested result of the work held with its source, or one of its results not yet digested
+			if (s.answer.status) return r;
+			if (r.item) return { ref: source, item: outline.find((i) => i.item && !i.node)?.item ?? '' };
+			return { ...r, node: digested?.node ?? '' };
+		}
 		case 'library-places': {
+			// a node's place, alone or on the pages asked for, where the sample asks for one
+			if (r.node) return { node: digested?.node ?? '' };
+			if (r.pages && s.name.endsWith('.nodes')) return { ref: source, pages: [digested?.page ?? 1] };
 			// a work with a mark to digest on its pages, which is an annotation placed; one holding no PDF for the refusal
 			if (s.answer.status) return { ref: f.data.works.find((w) => !w.holds.pdf)!.ref };
 			const [ref, marks] = Object.entries(f.data.marks).find(([, ms]) => ms.length)!;
