@@ -56,7 +56,7 @@ def plain_folder(folder: object) -> bool:
 
 
 def checked_folder(root: Path, history: Path, folder: str) -> str:
-    """`folder`, refused unless the real folder it names is one the mirror may write: inside the quilt, under no dot-named folder (the door's place rule, `writes._place`), and neither loom's own `.loom/` nor the history.
+    """`folder`, refused unless the real folder it names is one the mirror may write: inside the quilt, under no dot-named folder (the door's place rule, `writes._place`), neither loom's own `.loom/` nor the history, and spelt as the folder spells itself.
 
     Asked at every use, so a record that came with the quilt names no place the mirror writes until it is judged here. Raises MirrorError `bad-record`.
     """
@@ -64,6 +64,18 @@ def checked_folder(root: Path, history: Path, folder: str) -> str:
 
     if not plain_folder(folder) or _place(root, folder) is None:
         raise MirrorError("bad-record", BAD_RECORD)
+    # spelt as the folder spells itself: where case is ignored another spelling reaches it, and paths would no longer match the scan's
+    parent = root
+    for part in PurePosixPath(folder).parts:
+        try:
+            names = os.listdir(parent)
+        except OSError:
+            break
+        if part not in names:
+            if part.casefold() in {n.casefold() for n in names}:
+                raise MirrorError("bad-record", BAD_RECORD)
+            break
+        parent = parent / part
     real = Path(os.path.realpath(root / folder))
     for own in (root / LOOM, history):
         mine = Path(os.path.realpath(own))
@@ -325,6 +337,52 @@ def _commits(clone: Path, state: SyncState, *spec: str) -> list[tuple[str, str]]
     return out
 
 
+_RANGE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@", re.M)
+_OLD_PATH = re.compile(r"^--- (?:a/(.+)|/dev/null)$", re.M)
+
+
+def _touched(clone: Path, state: SyncState, remote: str, first: int, last: int) -> list[tuple[str, str]]:
+    """(name, address) of each commit of the update that touched lines `first` to `last` of `remote`, read back past the commit that wrote them.
+
+    `git log -L` follows lines back to the commit that made them and no further. Where that commit made the lines where there were none, every earlier commit of the update that touched that place, the lines either side of where they went in, touched it too: so a block a co-author removed and the person then wrote again, or the other way round, counts both. Followed back at most eight times.
+    """
+    out: list[tuple[str, str]] = []
+    path, lo, hi, until = remote, first, last, state.incoming
+    for _ in range(8):
+        said = git(
+            clone,
+            "log",
+            "--no-ext-diff",
+            "--no-color",
+            "--format=%x01%H%x00%aN%x00%aE",
+            f"-L{lo},{hi}:{path}",
+            f"{state.integrated}..{until}",
+        ).decode("utf-8", errors="replace")
+        records = said.split("\x01")[1:]
+        if not records:
+            break
+        for record in records:
+            fields = record.partition("\n")[0].split("\0")
+            out.append((fields[1] if len(fields) > 1 else "", fields[2] if len(fields) > 2 else ""))
+        oldest = records[-1]
+        made = _RANGE.search(oldest)
+        before = _OLD_PATH.search(oldest)
+        if made is None or made.group(2) != "0" or before is None or before.group(1) is None:
+            break
+        sha = oldest.split("\0", 1)[0].strip()
+        if not REVISION.fullmatch(sha):
+            break
+        parent = revision(clone, f"{sha}^")
+        if parent == state.integrated:
+            break
+        size = len(git(clone, "show", f"{parent}:{before.group(1)}").splitlines())
+        if size == 0:
+            break
+        at = int(made.group(1))
+        path, lo, hi, until = before.group(1), max(1, min(at - 1, size)), max(1, min(at, size)), parent
+    return out
+
+
 def _hunks(clone: Path, state: SyncState, remote: str) -> list[tuple[int, int, int, int]]:
     """(old start, old length, new start, new length) of each change to `remote` over the whole update, in lines."""
     said = git(
@@ -418,8 +476,11 @@ def _changes(
                 inside = (lo <= final and hi >= first) if length else (first <= lo and hi <= final)
                 if inside and not any(f <= lo and hi <= e for f, e in inner):
                     taken[i] = True
-            span = f"-L{first},{min(final, max(lines, 1))}:{remote}"
-            keep(key, _commits(clone, state, span) or _commits(clone, state, "--", remote))
+            keep(
+                key,
+                _touched(clone, state, remote, first, min(final, max(lines, 1)))
+                or _commits(clone, state, "--", remote),
+            )
         old: list[str] | None = None
         start_of_document = text.find("\\begin{document}")
         for i, (a, b, start, length) in enumerate(hunks):
@@ -436,7 +497,7 @@ def _changes(
             else:
                 place = "between"
             lo, hi = max(1, start - 1), min(max(lines, 1), start + max(length, 1))
-            keep({"file": local, "place": place}, _commits(clone, state, f"-L{lo},{hi}:{remote}"))
+            keep({"file": local, "place": place}, _touched(clone, state, remote, lo, hi))
     # one row a place, whoever touched it
     merged: dict[tuple[str, str], set[str]] = {}
     for p in out.places:

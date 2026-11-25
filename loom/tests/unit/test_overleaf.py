@@ -406,9 +406,11 @@ def test_a_rename_with_an_edit_is_not_recorded_and_the_document_is_gone(tmp_path
     assert len(gone) == 1 and "drafting/main.tex" in json.dumps(gone[0])
 
 
-def test_only_an_unambiguous_identical_pair_is_a_rename(tmp_path: Path) -> None:
+def test_only_an_unambiguous_identical_pair_is_a_rename(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """Two identical files deleted and one added, or one deleted and two added, cannot say which went where."""
     from loom.sync import exact_renames
+
+    monkeypatch.setattr(overleaf, "_sealed", lambda _clone: True)  # a repository of the test's, not loom's clone
 
     root = tmp_path / "r"
     root.mkdir()
@@ -995,3 +997,124 @@ def test_no_word_a_new_quilt_or_the_design_carries_names_loom_sync() -> None:
     for rel in ("loom/src/loom/assets/init/readme.md", "docs/design/principles.md", "docs/specs/write-api.md"):
         text = (repo / rel).read_text(encoding="utf-8")
         assert "loom sync" not in text and "sync-incorporate" not in text and "sync-preview" not in text, rel
+
+
+# ---- the confirming look -----------------------------------------------------------------------------------------------
+
+
+def evil_project(tmp_path: Path) -> Path:
+    """Another repository, whose text must never reach the folder."""
+    return project(tmp_path / "evil.git", {"main.tex": TWO.replace("has a leaf", "EVIL")})
+
+
+@pytest.mark.parametrize(
+    "name, text",
+    [
+        ("config", '[url "{evil}"]\n\tinsteadOf = {base}\n'),
+        ("config", '[core]\n\tattributesFile = {attrs}\n[diff "evil"]\n\ttextconv = {script}\n'),
+        ("config.worktree", '[url "{evil}"]\n\tinsteadOf = {base}\n'),
+        ("info/attributes", "*.tex diff=evil\n"),
+        ("info/grafts", "{tip}\n"),
+        ("commondir", "{evil}\n"),
+        ("objects/info/alternates", "{evil}/objects\n"),
+        ("objects/info/http-alternates", "http://127.0.0.1:9/objects\n"),
+    ],
+)
+def test_a_key_written_into_loom_s_clone_after_loom_made_it_is_never_obeyed(
+    tmp_path: Path, name: str, text: str
+) -> None:
+    """O-1: the mark holds a seal of what in the clone can name a program or an address, checked before every git call; a clone that no longer matches is made again, never repaired, and nothing written into it runs or reaches the folder."""
+    root, bare = two_lemmas(tmp_path)
+    clone = root / ".loom/local/overleaf"
+    marker, evil = tmp_path / "MARKER", evil_project(tmp_path)
+    script = tmp_path / "textconv.sh"
+    script.write_text(f'#!/bin/sh\ntouch {marker}\ncat "$1"\n')
+    script.chmod(0o755)
+    (tmp_path / "attrs").write_text("*.tex diff=evil\n")
+    planted = clone / name
+    planted.parent.mkdir(parents=True, exist_ok=True)
+    tip = git(bare, "rev-parse", "main")
+    written = text.format(evil=evil, base=overleaf.BASE, attrs=tmp_path / "attrs", script=script, tip=tip)
+    with planted.open("a") as f:
+        f.write(written)
+    theirs = TWO.replace("not planar", "never planar")
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": theirs})
+    overleaf.update(load_quilt(root))
+    assert not marker.exists()
+    assert (root / "drafting/main.tex").read_text() == theirs
+    assert not planted.exists() or written not in planted.read_text(), "made again, not repaired"
+
+
+def test_a_proxy_written_into_loom_s_clone_never_hears_the_token(server: Server, tmp_path: Path) -> None:
+    """O-1: `http.proxy` written into loom's clone after it was made is never used: the clone is made again before Overleaf is reached."""
+    import socket
+    import threading
+
+    heard: list[bytes] = []
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(4)
+
+    def listen() -> None:
+        while True:
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                return
+            heard.append(conn.recv(65536))
+            conn.close()
+
+    threading.Thread(target=listen, daemon=True).start()
+    q = new_quilt(tmp_path)
+    store_token(server.url(ID), TOKEN)
+    pair(q, ID, "paper", "main.tex", [])
+    with (q.root / ".loom/local/overleaf/config").open("a") as f:
+        f.write(f"[http]\n\tproxy = http://127.0.0.1:{listener.getsockname()[1]}\n")
+    overleaf.update(load_quilt(q.root))
+    listener.close()
+    assert heard == []
+
+
+DEL = (
+    mirror.PREAMBLE
+    + "\\begin{document}\n"
+    + "\\begin{lemma}Alpha one.\\end{lemma}\n"
+    + "\\begin{lemma}Beta two.\\end{lemma}\n"
+    + "\\begin{lemma}Gamma three.\\end{lemma}\n"
+    + "\\end{document}\n"
+)
+
+
+@pytest.mark.parametrize("first, then", [("colleague", "person"), ("person", "colleague")])
+def test_a_block_one_removed_and_the_other_wrote_again_is_listed(tmp_path: Path, first: str, then: str) -> None:
+    """O-2: a block the colleague removed and the person then wrote again with new words, or the other way round, is the colleague's change too, since the colleague's commit touched that place."""
+    root, bare = mirror.paired(tmp_path, {"main.tex": DEL, "loom.sty": "% s\n"})
+    who = {"colleague": mirror.COLLEAGUE, "person": mirror.PERSON}
+    clones = {k: mirror.colleague(tmp_path, bare, k, who=w) for k, w in who.items()}
+    gone = DEL.replace("\\begin{lemma}Gamma three.\\end{lemma}\n", "")
+    mirror.edit(clones[first], "removed", {"main.tex": gone}, who=who[first])
+    mirror.edit(
+        clones[then], "again", {"main.tex": DEL.replace("Gamma three.", "Gamma, written again.")}, who=who[then]
+    )
+    said = overleaf.update(load_quilt(root))
+    assert said["by"] == ["Colleague"] and said["own"] == 0
+
+
+def test_a_record_naming_the_folder_in_another_case_is_refused_with_its_code(tmp_path: Path) -> None:
+    """O-15: the record's folder must be the folder's own spelling."""
+    root, bare = two_lemmas(tmp_path)
+    edit_record(root, folder="DRAFTING")
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    with pytest.raises(MirrorError) as refused:
+        overleaf.update(load_quilt(root))
+    assert refused.value.code == "bad-record" and (root / "drafting/main.tex").read_text() == TWO
+
+
+def test_a_record_switched_to_another_project_is_refused_with_its_code(tmp_path: Path) -> None:
+    """O-16: a project whose history does not hold what was last taken in is not this quilt's."""
+    root, _ = two_lemmas(tmp_path)
+    project(at(ID2), {"main.tex": TWO.replace("has a leaf", "is another project")})
+    edit_record(root, project=ID2)
+    with pytest.raises(MirrorError) as refused:
+        overleaf.update(load_quilt(root))
+    assert refused.value.code == "bad-record" and (root / "drafting/main.tex").read_text() == TWO

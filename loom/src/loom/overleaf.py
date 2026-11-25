@@ -47,6 +47,16 @@ HELPER = "osxkeychain"
 TIMEOUT = 300.0
 #: The folder of the machine's own place (`machine.data_dir`) where this machine marks each clone it made, so that a clone a quilt brought with it is never used.
 MARKS = "overleaf"
+#: The files of loom's clone that can name a program, an address or other objects, whose bytes as loom wrote them the mark holds (`_seal`): its configuration, its attributes, grafts, a pointer to another git folder, and the stores of objects it borrows.
+SEALED = (
+    "config",
+    "config.worktree",
+    "info/attributes",
+    "info/grafts",
+    "commondir",
+    "objects/info/alternates",
+    "objects/info/http-alternates",
+)
 #: Held by every step that makes, fetches into or removes loom's clone, so the fetch a server makes as it starts never races a pairing or its end.
 _CLONE_LOCK = threading.RLock()
 
@@ -133,6 +143,9 @@ def address(link: str) -> str:
 
 # ---- git, as the mirror runs it -------------------------------------------------------------------------------------
 
+#: What the person reads when the record names a project whose history does not hold what loom last took in.
+BAD_PROJECT = "This quilt's record names an Overleaf project that does not hold what loom last took in from it; end the pairing and pair it again."
+
 #: What each failure says to the person, by code.
 SAID = {
     "no-git": "Loom needs git to reach Overleaf, and this Mac has none.",
@@ -185,6 +198,8 @@ def run(clone: Path | None, *args: str, input: bytes | None = None) -> bytes:
     settings = [
         f"core.hooksPath={os.devnull}",
         "core.fsmonitor=false",
+        "gc.auto=0",
+        "maintenance.auto=false",
         "core.askPass=",
         "credential.helper=",
         f"credential.helper={HELPER}",
@@ -193,6 +208,10 @@ def run(clone: Path | None, *args: str, input: bytes | None = None) -> bytes:
     ]
     command = ["git", *(a for s in settings for a in ("-c", s))]
     if clone is not None:
+        if not _sealed(clone):
+            raise MirrorError(
+                "no-clone", "Loom's copy of the project changed since loom made it; update again to make it anew."
+            )
         command.append(f"--git-dir={clone}")
     try:
         done = subprocess.run(
@@ -277,15 +296,45 @@ def _mark_of(clone: Path) -> Path:
     return data_dir() / MARKS / f"{key}.json"
 
 
+def _seal(clone: Path) -> str:
+    """A digest of each of `SEALED` in the clone at `clone`, its bytes or that it is not there; a file that cannot be read as a file seals as such."""
+    held = []
+    for name in SEALED:
+        path = clone / name
+        try:
+            data: str | None = hashlib.sha256(path.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            data = None
+        except OSError:
+            data = "unreadable"
+        held.append([name, data, path.is_symlink()])
+    return hashlib.sha256(json.dumps(held).encode()).hexdigest()
+
+
 def _identity(clone: Path, project: str) -> dict[str, Any] | None:
-    """What a mark of the clone at `clone` for `project` holds: where it lies, the project, and the folder's identity on the file system, so a folder copied or put in its place is not it; None where no folder is there."""
+    """What a mark of the clone at `clone` for `project` holds: where it lies, the project, the folder's identity on the file system, so a folder copied or put in its place is not it, and the seal of what in it can name a program or an address (`_seal`), so a key written into it since is seen; None where no folder is there."""
     try:
         it = os.stat(clone, follow_symlinks=False)
     except OSError:
         return None
     if not stat.S_ISDIR(it.st_mode):
         return None
-    return {"clone": os.path.realpath(clone), "project": project, "dev": it.st_dev, "ino": it.st_ino}
+    return {
+        "clone": os.path.realpath(clone),
+        "project": project,
+        "dev": it.st_dev,
+        "ino": it.st_ino,
+        "seal": _seal(clone),
+    }
+
+
+def _sealed(clone: Path) -> bool:
+    """Whether the clone at `clone` is one this machine made, holding what it held then in each of `SEALED`: checked before every git call in it (`run`)."""
+    try:
+        held = json.loads(_mark_of(clone).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(held, dict) and held == _identity(clone, str(held.get("project")))
 
 
 def _marked(clone: Path, project: str) -> bool:
@@ -309,7 +358,7 @@ def _remove(path: Path) -> None:
 def _clone(root: Path, project: str) -> Path:
     """Loom's clone of `project`, without a work tree, in `.loom/local/overleaf/`, fetched from the address loom builds (`git_address`), with Overleaf's tip at `refs/loom/tip`.
 
-    Used only where this machine made it for this quilt and this project (`_marked`): any other folder found there, a clone a quilt brought with it among them, is removed and made again, so nothing in it (a hook, a setting, an address) is ever read. Refused (`bad-record`) where `.loom/local/` does not lie in the quilt's own `.loom/`.
+    Used only where this machine made it for this quilt and this project and nothing that can name a program or an address in it has changed since (`_marked`, `_seal`): any other folder found there, a clone a quilt brought with it or one whose configuration was written to since among them, is removed and made again, never repaired in place, so nothing in it (a hook, a setting, an address) is ever read. Refused (`bad-record`) where `.loom/local/` does not lie in the quilt's own `.loom/`.
     """
     local = Path(os.path.realpath(root / LOCAL))
     if local.parent != Path(os.path.realpath(root / LOOM)):
@@ -565,6 +614,11 @@ def fetch(quilt: Quilt) -> SyncState:
     try:
         clone = _clone(root, state.project)
         new = _tip(clone)
+        try:
+            revision(clone, state.integrated)
+        except MirrorError as exc:
+            # a project whose history does not hold what was last taken in from it is not this quilt's
+            raise MirrorError("bad-record", BAD_PROJECT) from exc
     except MirrorError as exc:
         _keep_here(root, problem=exc.code)
         raise
