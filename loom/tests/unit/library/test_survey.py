@@ -1209,3 +1209,106 @@ def test_article_s_contents_page_holds_no_place(tmp_path: Path) -> None:
     contents = "Contents\n1 Cycles\n2 Paths\n2\n2\n"
     got = _cycles(tmp_path, contents, f"1\nCycles\nLemma 1.1. {L_A}\n\n2\nPaths\n")
     assert (got["s1"], got["s2"]) == (("1", 2), ("2", 2)), "on the page the heading stands, never the contents'"
+
+
+#: Two lemmas whose first 24 letters agree, and a third: the source of the review's D-24 variants.
+QUIVERS = r"""\documentclass{article}
+\newtheorem{lemma}{Lemma}[section]
+\begin{document}
+\section{Quivers}
+\begin{lemma}\label{l:a}
+Every finite quiver with loops has a spanning forest of its arrows.
+\end{lemma}
+\begin{proof}
+Take the arrows one at a time.
+\end{proof}
+\begin{lemma}\label{l:b}
+Every finite quiver with loops has a cycle space of finite rank.
+\end{lemma}
+\clearpage
+\begin{lemma}\label{l:c}
+Each arrow outside the forest closes exactly one cycle.
+\end{lemma}
+\end{document}
+"""
+Q_A = "Every finite quiver with loops has a spanning forest of its arrows."
+Q_B = "Every finite quiver with loops has a cycle space of finite rank."
+Q_C = "Each arrow outside the forest closes exactly one cycle."
+TREE = "Every finite quiver with loops has a spanning tree of its arrows."
+
+
+def _quivers(tmp_path: Path, *pages: str) -> dict[str, tuple[str | None, int]]:
+    here = tmp_path / f"v{len(list(tmp_path.iterdir()))}"
+    here.mkdir()
+    s = survey.read(_one_file(here, QUIVERS), "main.tex", TEX)
+    return {k: v for k, v in survey.place(s, survey.Pages(list(pages))).items() if k.startswith("l:")}
+
+
+@pytest.mark.parametrize(
+    ("variant", "pages", "kept"),
+    [
+        (
+            "the two sharing their first 24 letters, swapped in print",
+            [
+                f"1 Quivers\nLemma 1.1. {Q_B}\nLemma 1.2. {Q_A}\nProof. Take the arrows one at a time.\n",
+                f"Lemma 1.3. {Q_C}\n",
+            ],
+            {"l:a": ("1.2", 1), "l:b": ("1.1", 1), "l:c": ("1.3", 2)},
+        ),
+        (
+            "a lemma inserted before l:a sharing its first 24 letters",
+            [
+                f"1 Quivers\nLemma 1.1. {TREE}\nLemma 1.2. {Q_A}\nProof. Take the arrows one at a time.\nLemma 1.3. {Q_B}\n",
+                f"Lemma 1.4. {Q_C}\n",
+            ],
+            {"l:a": ("1.2", 1), "l:b": ("1.3", 1), "l:c": ("1.4", 2)},
+        ),
+        (
+            "the 24-letter pair inserted before l:a",
+            [
+                f"1 Quivers\nLemma 1.1. {TREE}\nLemma 1.2. Every finite quiver with loops has a cycle basis.\nLemma 1.3. {Q_A}\nLemma 1.4. {Q_B}\n",
+                f"Lemma 1.5. {Q_C}\n",
+            ],
+            {"l:a": ("1.3", 1), "l:b": ("1.4", 1), "l:c": ("1.5", 2)},
+        ),
+        (
+            "a lemma inserted whose proof repeats l:a's words",
+            [
+                f"1 Quivers\nLemma 1.1. Spanning forests exist.\nProof. {Q_A}\nLemma 1.2. {Q_A}\nLemma 1.3. {Q_B}\n",
+                f"Lemma 1.4. {Q_C}\n",
+            ],
+            {"l:a": ("1.2", 1), "l:b": ("1.3", 1), "l:c": ("1.4", 2)},
+        ),
+        (
+            "an honest paper restating l:c at a line's start before it",
+            [
+                f"1 Quivers\nLemma 1.1. {Q_A}\nProof. Take the arrows one at a time.\nLemma 1.2. {Q_B}\nLemma 1.3. Each arrow outside the forest closes exactly one cycle, as shown below.\n",
+                f"Lemma 1.3. {Q_C}\n",
+            ],
+            {"l:a": ("1.1", 1), "l:b": ("1.2", 1)},
+        ),
+    ],
+)
+def test_a_result_s_words_begin_its_statement_and_two_lines_witnessing_it_name_it(
+    tmp_path: Path, variant: str, pages: list[str], kept: dict[str, tuple[str, int]]
+) -> None:
+    """The review's D-24, ruled: the words begin the statement, on the heading's line or the next, compared whole; where two lines witness one result, neither is taken and it is named."""
+    assert _quivers(tmp_path, *pages) == kept, variant
+
+
+def test_each_number_says_whether_its_words_found_it_or_its_place(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's D-25, ruled: the place rule cannot see two formula-only results swapped, so each kept number says how it was found, which digest writes into the node's header (`found`)."""
+    text = CYCLES.replace(MID, "$\\dim Z = n - 1$.")
+    page = f"1 Cycles\nLemma 1.1. {L_A}\nCorollary 1.2. dim Z = n − 1.\nLemma 1.3. {L_B}\n"
+    monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([page])))
+    root = tmp_path / "q"
+    root.mkdir()
+    done = survey.confirmed(root, TEX, _one_file(root, text), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
+    assert [(i.item, i.number, i.found) for i in done.items] == [
+        ("l:a", "1.1", "words"),
+        ("c:mid", "1.2", "place"),
+        ("l:b", "1.3", "words"),
+    ]
+    assert survey.Survey.from_json(done.to_json()).item("c:mid").found == "place"  # type: ignore[union-attr]

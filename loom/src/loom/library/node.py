@@ -28,12 +28,15 @@ KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "source": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "label": (_STR, frozenset({ids.STATEMENT}), True),
     "pages": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), True),
+    "found": (_STR, frozenset({ids.STATEMENT}), True),
     "anchors": (_TABLE, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "uses": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "mentions": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "pdf": (_HASH, frozenset({ids.REFERENCE}), None),
     "tex": (_HASH, frozenset({ids.REFERENCE}), None),
 }
+#: How loom found a statement's number and page in its work (`found`): its heading identified by its own words in the stored PDF, placed between two so identified, or with no PDF its number loom's reading that a compile of the source agreed with.
+FOUND = ("words", "place", "compile")
 #: The three every node has, which come first.
 REQUIRED = ("schema", "id", "taxon")
 #: A statement's taxon: a word of lower-case ASCII letters and hyphens.
@@ -80,6 +83,7 @@ class Node:
     source: str | None = None
     label: str | None = None
     pages: str | None = None
+    found: str | None = None
     anchors: tuple[tuple[str, str], ...] = ()
     uses: tuple[str, ...] = ()
     mentions: tuple[str, ...] = ()
@@ -295,6 +299,8 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
                 )
             )
         said = _type_problem(typ, value)
+        if not said and key == "found" and value not in FOUND:
+            said = f"is {value!r}, and is one of {', '.join(FOUND)}"
         if said:
             out.append(Problem(5, f"{name}'s `{key}` {said}.", line(key)))
         elif typ == _TABLE and isinstance(node_id, str):

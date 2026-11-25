@@ -145,6 +145,7 @@ def test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten(
         f"Every widget $W$ (Definition~\\ref{{{widget}}}) satisfies\n\\begin{{equation}}\\label{{{lemma}-eq00}}\n|x| \\le 1 .\n\\end{{equation}}\n"
     ), "its own label in the header, a display's an anchor, a result of the same work its id"
     assert node.anchors == ((f"{lemma}-eq00", "1.1"),), "numbered as the PDF shows it"
+    assert node.found == "words", "found in the PDF by its own words, and said so"
     proof = read(root, f"{lemma}-proof00")
     jones, bellamy = result.refs["Jones19"], next(r for r in done.made if r.endswith("-ref"))
     other = stub(root, jones, "2.1")

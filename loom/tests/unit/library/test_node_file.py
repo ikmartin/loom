@@ -289,3 +289,13 @@ def test_anchors_are_not_a_reference_s() -> None:
         "tq-00A1-ref.node",
     )
     assert any(c == 5 and "`anchors` is not a key of a reference" in m for c, m in found), found
+
+
+def test_found_says_one_of_three_ways() -> None:
+    """How loom found a statement's number and page in its work: words, place or compile, and nothing else."""
+    from loom.library.node import header_problems
+
+    good = {"schema": 1, "id": "tq-00K3", "taxon": "lemma", "source": "tq-00A1-ref", "found": "place"}
+    assert header_problems(good, "tq-00K3.node") == []
+    said = header_problems({**good, "found": "guessed"}, "tq-00K3.node")
+    assert [p.check for p in said] == [5] and "words, place, compile" in said[0].message

@@ -498,6 +498,7 @@ class _Run:
             source=self.ref,
             label=item.label,
             pages=str(item.page) if item.page else None,
+            found=item.found if item.number or item.page else None,
         )
 
     def proof_of(self, item: Item, k: int) -> str | None:
@@ -686,6 +687,7 @@ class _Run:
 
         `statement` is `of` where this is its own text, whose own labels go to its header; `exempt` the ids a pointer at which is listed nowhere (§4: the node itself, a proof's statement, their anchors). A body holding another result, its label that result's, waits: a node holds one result.
         """
+        from loom.library.survey import taxon_named
         from loom.scan.postnote import located
 
         raw = self._text(rel)[0][start:end]
@@ -721,7 +723,11 @@ class _Run:
                 keys = [k.strip() for _s, _e, g in cmd.groups for k in g.split(",") if k.strip()]
                 works = [self.work_of(k) for k in keys]
                 post = cmd.opts[-1][2] if cmd.opts else ""
-                results = located(post) if post and len(keys) == 1 and cmd.name not in bodies.MULTICITES else []
+                results = (
+                    [(taxon_named(t), n) for t, n in located(post)]
+                    if post and len(keys) == 1 and cmd.name not in bodies.MULTICITES
+                    else []
+                )
                 stubs = [self.stub_of(works[0], t, n) for t, n in results]
                 if len(stubs) == 1:
                     edits.append((cmd.start, cmd.end, f"\\ref{{{stubs[0]}}}"))

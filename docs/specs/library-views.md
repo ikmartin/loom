@@ -203,6 +203,7 @@ The overlay is off until a person turns it on, and the viewer remembers it once 
  "used_by": {"docs": ["drafting/bounds.tex"], "nodes": 1}}
 ```
 
+- `found` is the node's header's (`nodes.md` §2): `words`, `place` or `compile`, how its number and page were found in its work, which the check says where it is `place`; null where nothing was. An item of the outline carries it too.
 - `digested` is the latest `digested` record on this very text, its `how` as `evidence.md` §3.1 has it (`extracted` from the TeX source by loom, `transcribed` from the pages or `read` from a source by an agent, `corrected` by an agent, `written` by a person) and `by` the name of who did it; null for an item not digested.
 - `macros` is the work's macros node, which the viewer applies to this node alone; null when the work has none.
 - `points` gives, for every id and anchor the body points at, what is drawn in its place: the rendered view draws `\ref{tq-00A4}` as "2.1" and `\eqref{tq-00K3-eq00}` as "(3.3)", and the plain view draws each pointer as a chip with the name and the target's mark. A use in the same work has `source` null in its `ROW`.

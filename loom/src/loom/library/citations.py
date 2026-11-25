@@ -19,7 +19,7 @@ Numbered = dict[str, list[tuple[str, str, str]]]
 def resolve(result: ScanResult) -> None:
     """Resolve every citation the scan found, as the store holds the library now.
 
-    Each `CiteRec` gets its reference (`references.named`), the results its postnote locates, the node of its work holding each by kind and printed number both, and its target: the node where it locates one result the store holds, else its reference. A citation naming several works locates nothing, since one note can name a result of only one of them: it reads as naming no single result.
+    Each `CiteRec` gets its reference (`references.named`), the results its postnote locates, each kind as the survey names it (`survey.taxon_named`), the node of its work holding each by kind and printed number both, and its target: the node where it locates one result the store holds, else its reference. A citation naming several works locates nothing, since one note can name a result of only one of them: it reads as naming no single result.
 
     Parameters
     ----------
@@ -27,13 +27,15 @@ def resolve(result: ScanResult) -> None:
         The quilt's scan; its citations are resolved in place.
     """
     from loom.library.references import named
+    from loom.library.survey import taxon_named
 
     cites = result.edges.cites
     together = Counter((c.src, c.file, c.offset) for c in cites)
     for c in cites:
         c.ref = named(result, c.citekey)
         alone = together[(c.src, c.file, c.offset)] == 1
-        c.results = tuple(located(c.postnote)) if c.postnote and alone else ()
+        # each kind as the survey names it, so a work's Notation 7.1 is one result whichever reads it
+        c.results = tuple((taxon_named(t), n) for t, n in located(c.postnote)) if c.postnote and alone else ()
     works = numbered(result.quilt.root, {c.ref for c in cites if c.ref and c.results})
     for c in cites:
         c.nodes = tuple(node_of(works, c.ref, taxon, number) for taxon, number in c.results) if c.ref else ()

@@ -148,3 +148,15 @@ def test_a_citation_reaches_only_a_result_of_its_own_kind_and_number(tmp_path: P
     assert "tq-00L1" not in (got[("Smi24", "Corollary 2.1")], got[("Smi24", "Remark 2.1")]), "loom corrects no kind"
     assert (got[("Jon19", "Lemma 7")], got[("Smi24", "Lemma 7")]) == (jones, smith), "naming no single result"
     assert len(make(result)) == 0, "made once"
+
+
+def test_a_kind_the_survey_calls_other_is_one_result_whichever_reads_it(tmp_path: Path) -> None:
+    """The review's D-27: `Notation 7.1` is located under the survey's own taxon, so a held `other` 7.1 is its node and no second one is made."""
+    root = quilt(tmp_path)
+    (root / "main.tex").write_text(KINDS.replace("As \\cite[Corollary 2.1]{Smi24}", "As \\cite[Notation 7.1]{Smi24}"))
+    result = gathered(root)
+    smith = result.refs["Smi24"]
+    write_node(root, Node(id="tq-00N1", taxon="other", number="7.1", source=smith, body="We write Hom.\n"), new=True)
+    made = [read(root, i) for i in make(result)]
+    assert not [n for n in made if n and n.number == "7.1"], "no second node for the same result"
+    assert targets(result)[("Smi24", "Notation 7.1")] == "tq-00N1"
