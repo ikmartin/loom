@@ -280,7 +280,10 @@ def stage_document(
 
 
 def _links(staged: Path, original: Path, inside: Path) -> None:
-    """In `staged`, a copy of `original` made keeping its links, each link replaced by a copy of what it reaches where that is in `inside` under no dot-named folder (`_linkable`), as a shared macro file elsewhere in the quilt is; any other link is left out where the fence is up (`loom.fence`), and copied as what it reaches where it is not, as every link was before the fence. So a staged copy holds no link, and nothing loom does to it reads or writes through one."""
+    """In `staged`, a copy of `original` made keeping its links, each link replaced by a copy of what it reaches where that is in `inside` under no dot-named folder (`_linkable`), as a shared macro file elsewhere in the quilt is; any other link is left out where the fence is up (`loom.fence`), and copied as what it reaches where it is not, as every link was before the fence. So a staged copy holds no link, and nothing loom does to it reads or writes through one.
+
+    A folder copied where the fence is up leaves out every dot-named name in it, as `_linkable` would refuse a link to each. A link to a folder that holds the link itself, the quilt's root among them, is left out fenced or not, since copying it never ends.
+    """
     fenced = fence.state() is None
     bound = Path(os.path.realpath(inside))
     for folder, dirs, files in os.walk(staged):
@@ -288,14 +291,22 @@ def _links(staged: Path, original: Path, inside: Path) -> None:
             link = Path(folder) / name
             if not link.is_symlink():
                 continue
-            real = Path(os.path.realpath(original / link.relative_to(staged)))
+            place = original / link.relative_to(staged)
+            real = Path(os.path.realpath(place))
             link.unlink()
             if fenced and not _linkable(real, bound):
                 continue
             if real.is_dir():
-                shutil.copytree(real, link, symlinks=True)
+                if Path(os.path.realpath(place.parent)).is_relative_to(real):
+                    continue  # the folder holds the link: its copy would hold the link again, without end
+                shutil.copytree(real, link, symlinks=True, ignore=_dot_named if fenced else None)
             elif real.is_file():
                 shutil.copy2(real, link)
+
+
+def _dot_named(folder: str, names: list[str]) -> set[str]:
+    """`shutil.copytree`'s ignore for a folder a link reaches in a fenced stage: every name beginning with a dot."""
+    return {n for n in names if n.startswith(".")}
 
 
 def _linkable(real: Path, bound: Path) -> bool:
