@@ -509,10 +509,11 @@ class _Run:
         return have[k] if k < len(have) else None
 
     def _give_proofs(self, item: Item, sid: str) -> list[str]:
-        """Ids for an item's proofs: its statement's proofs in order, then new ones, the first past every number seen of an existing statement's (`store.next_proof`), of a new stem from `00`."""
+        """Ids for an item's proofs: its statement's proofs with text in order, then new ones, the first past every number seen of an existing statement's (`store.next_proof`), of a new stem from `00`; a pointer is never reused."""
         from loom.library.store import next_proof
 
-        have = list(self.proofs.get(sid, []))
+        # a pointer, an empty proof, is never loom's to write: it keeps its id, and the source's proof takes a new one
+        have = [p for p in self.proofs.get(sid, []) if not self.nodes[p].empty]
         out = have[: len(item.proofs)]
         while len(out) < len(item.proofs):
             if not self.write:
@@ -829,7 +830,7 @@ class _Run:
         return None
 
     def _ours(self, node: Node) -> bool:
-        """Whether loom may write a node again: a stub, or loom's own extraction no person compared, its proofs alike."""
+        """Whether loom may write a node again: a stub, or loom's own extraction no person compared, its proofs with text alike; a pointer proof is left as it stands (`_give_proofs`)."""
         from loom.library.node import node_bytes, node_hash
 
         for n in (node, *(self.nodes[p] for p in self.proofs.get(node.id, []))):

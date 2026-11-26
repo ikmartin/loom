@@ -265,3 +265,24 @@ def test_a_pointer_at_a_label_the_source_defines_twice_waits(tmp_path: Path, pdf
     done = digest(result, smith, ["lem:bound", "def:widget"], s)
     assert done.waiting == {"lem:bound": "\\ref{def:widget}: the source defines this label more than once"}
     assert "def:widget" not in done.waiting, "the result whose own label it is first is written"
+
+
+def test_a_pointer_proof_another_hand_made_is_kept_and_the_source_s_proof_takes_a_new_id(
+    tmp_path: Path, pdf_text: list[str]
+) -> None:
+    """The review's C-4: a pointer is neither a stub nor loom's extraction, so digest writes the statement and its proof beside it and never over it."""
+    from loom.library.node import Node
+    from loom.library.store import write_nodes
+
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    pointer = Node(id=f"{lemma}-proof00", taxon="proof", source=smith, pages="7")
+    write_nodes(root, [pointer])
+    held = read(root, pointer.id)
+    done = digest(result, smith, ["lem:bound"], surveyed(result, smith))
+    assert lemma in done.filled and read(root, pointer.id) == held, "the pointer as its hand left it"
+    proofs = [p for p in done.made if p.startswith(f"{lemma}-proof")]
+    assert proofs and pointer.id not in proofs
+    written = read(root, proofs[0])
+    assert written is not None and written.body.strip(), "the source's proof, read in full"
