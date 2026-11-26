@@ -32,6 +32,8 @@ class MarkEntry:
     lead: bool = False
     #: drawn again on a change's new words, which the annotation's words touch (`render/pending.py`): `mark.annotation.moved`
     moved: bool = False
+    #: `quote` is the page's words already, compared as they are rather than as TeX prints them: a Markdown file's (`render.build._marks_by_file`)
+    plain: bool = False
 
 
 @dataclass
@@ -149,6 +151,18 @@ def _place(html: str, entries: list[MarkEntry]) -> str:
             points.append((_point(html, blk, e), e.ann_id))
             continue
         placed = False
+        # a paragraph a displayed formula split stands as several blocks of one range: the words are in one of them
+        twins = [b for b in candidates if (b.start, b.end) == (blk.start, blk.end)]
+        if len(twins) > 1:
+            blk = next(
+                (
+                    b
+                    for b in twins
+                    if not _is_math(html[b.open_start : b.open_end])
+                    and _locate(html, b.open_end, b.close_start, e.quote, e.plain)
+                ),
+                blk,
+            )
         if _is_source(html[blk.open_start : blk.open_end]):
             found = _at_offsets(html, blk.open_end, blk.close_start, e.start - blk.start, e.end - blk.start)
             if found is not None:
@@ -159,7 +173,7 @@ def _place(html: str, entries: list[MarkEntry]) -> str:
                     moved.add(found)
                 placed = True
         elif not _is_math(html[blk.open_start : blk.open_end]):
-            for a_, b_ in _locate(html, blk.open_end, blk.close_start, e.quote):
+            for a_, b_ in _locate(html, blk.open_end, blk.close_start, e.quote, e.plain):
                 spans.setdefault((a_, b_), []).append(e.ann_id)
                 if e.moved:
                     moved.add((a_, b_))
@@ -284,8 +298,8 @@ def _is_math(open_tag: str) -> bool:
     return bool(_MATH_OPEN.match(open_tag))
 
 
-def _units(html: str, a: int, b: int) -> list[tuple[int, int, str, bool]]:
-    """The block's content between `a` and `b` as (start, end, projected text, atomic): text runs, and each math element whole."""
+def _units(html: str, a: int, b: int, plain: bool = False) -> list[tuple[int, int, str, bool]]:
+    """The block's content between `a` and `b` as (start, end, projected text, atomic): text runs, and each math element whole; with `plain`, a formula as its TeX between dollars, unprojected."""
     out: list[tuple[int, int, str, bool]] = []
     pos = a
     said_at: str | None = None
@@ -318,7 +332,7 @@ def _units(html: str, a: int, b: int) -> list[tuple[int, int, str, bool]]:
                 tex = tex.strip()
                 d = "$$" if display else "$"
                 stop = html.index(">", close) + 1
-                out.append((pos, stop, project(f"{d}{tex}{d}")[0], True))
+                out.append((pos, stop, f"{d}{tex}{d}" if plain else project(f"{d}{tex}{d}")[0], True))
                 pos = stop
             else:
                 pos = end
@@ -340,14 +354,14 @@ def _close_of(html: str, start: int, limit: int, name: str) -> int:
     return limit
 
 
-def _locate(html: str, a: int, b: int, quote: str) -> list[tuple[int, int]]:
-    """Where `quote` falls in html[a:b], as the ranges to wrap: one range when it is balanced markup, else one per run of text or formula."""
-    target = _norm(project(quote)[0])
+def _locate(html: str, a: int, b: int, quote: str, plain: bool = False) -> list[tuple[int, int]]:
+    """Where `quote` falls in html[a:b], as the ranges to wrap: one range when it is balanced markup, else one per run of text or formula. With `plain` the quote is the page's words already, compared as they are."""
+    target = _norm(quote if plain else project(quote)[0])
     if not target:
         return []
     chars: list[str] = []
     where: list[tuple[int, int]] = []
-    units = _units(html, a, b)
+    units = _units(html, a, b, plain)
     for u0, u1, text, atomic in units:
         if atomic:
             for ch in text:

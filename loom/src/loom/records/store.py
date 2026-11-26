@@ -1293,23 +1293,24 @@ def _lift_display_math(html_text: str) -> str:
     div = re.compile(r'<div class="math display">.*?</div>', re.S)
 
     def split(m: re.Match[str]) -> str:
-        inner = m.group(1)
+        attrs, inner = m.group(1) or "", m.group(2)
         if not div.search(inner):
             return m.group(0)
         out: list[str] = []
         pos = 0
+        # each piece keeps the paragraph's attributes: a file's `data-src` names the paragraph's lines, which hold them all
         for d in div.finditer(inner):
             before = inner[pos : d.start()].strip()
             if before:
-                out.append(f"<p>{before}</p>")
+                out.append(f"<p{attrs}>{before}</p>")
             out.append(d.group(0))
             pos = d.end()
         rest = inner[pos:].strip()
         if rest:
-            out.append(f"<p>{rest}</p>")
+            out.append(f"<p{attrs}>{rest}</p>")
         return "\n".join(out)
 
-    return re.sub(r"<p>(.*?)</p>", split, html_text, flags=re.S)
+    return re.sub(r"<p( [^>]*)?>(.*?)</p>", split, html_text, flags=re.S)
 
 
 def render_markdown(

@@ -1,4 +1,4 @@
-"""Annotations on a Markdown file the viewer draws: named by its path, on words quoted as the file or its page has them, found again after an edit above them, and detached when they are gone."""
+"""Annotations on a Markdown file the viewer draws: named by its path, on words quoted as the file or its page has them, found again after an edit above them, detached when they are gone, and marked on the page the publisher draws of the file."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from tests.helpers import json_of, refused
+from tests.helpers import json_of, ok, refused
 from tests.unit._quilts import demo
 
 AGENT = "Reading Agent"
@@ -65,3 +65,21 @@ def test_a_whole_file_takes_a_comment_and_a_quote_must_stand_once(q: Path) -> No
     assert res.target == NOTE and not res.detached and res.span is None
     refused("annotate", NOTE, "--quote", "not in it", "x", cwd=q, code=2, match="quote not found in notes/day1.md")
     refused("annotate", NOTE, "--page", "1", "--quote", "graph", "x", cwd=q, code=2, match="Markdown file")
+
+
+def test_the_files_page_marks_the_words_and_still_does_after_an_edit_above(q: Path) -> None:
+    ann = annotate(q, NOTE, "--quote", "the **second** proof", "Which one?")
+    whole = f'<mark class="annotation" data-annotation="{ann}">the <strong>second</strong> proof</mark>'
+
+    def page() -> str:
+        ok("build", cwd=q)
+        return (q / ".loom/cache/site/files" / f"{NOTE}.html").read_text(encoding="utf-8")
+
+    assert whole in page()
+    (q / NOTE).write_text(TEXT.replace("# Day one\n", "# Day one\n\nA new first paragraph.\n\n- one\n"), encoding="utf-8")
+    drawn = page()
+    assert whole in drawn
+    # each block names its lines in the file, which is how a mark and a change find their place on the page
+    now = (q / NOTE).read_text(encoding="utf-8")
+    start = now.index("The *median")
+    assert f'<p data-src="{NOTE}:{start}:{now.index(chr(10), start)}">' in drawn
