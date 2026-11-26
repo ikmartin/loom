@@ -403,6 +403,7 @@ def test_the_demo_is_ok_in_every_quilt_item(box: Box) -> None:
         "mcp": ("ok", ".mcp.json, .codex/config.toml, .gemini/settings.json, .cursor/mcp.json"),
         "ai files": ("ok", "current"),
         "macro block": ("ok", "current"),
+        "library": ("ok", "every node file passes the store's checks"),
         ".gitignore": ("ok", "has loom's lines"),
         "config": ("ok", "config.toml read cleanly"),
         "server": ("ok", "not running"),
@@ -600,6 +601,21 @@ def test_the_ai_files_by_upgrades_dry_run(box: Box) -> None:
     assert item(doctor(box, cwd=q), "ai files")["detail"] == "current, 1 edited"
 
 
+def test_a_node_file_the_stores_checks_refuse_is_named(box: Box) -> None:
+    """No write lets such a file into the library's store, so one there was put by hand: doctor names it and sends the person to lint."""
+    from loom.paths import LIBRARY_NODES
+
+    q = quilt(box)
+    assert item(doctor(box, cwd=q), "library")["status"] == "ok"
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
+    (q / LIBRARY_NODES / "dm-0Z01.node").write_text(
+        '+++\nschema = 1\nid = "dm-0Z01"\ntaxon = "lemma"\n+++\nA lemma of no work.\n'
+    )
+    got = item(doctor(box, cwd=q), "library")
+    assert (got["status"], got["remedy"]) == ("warn", "loom lint says each, with what to change")
+    assert "dm-0Z01.node" in got["detail"] and "loom:node-incomplete" in got["codes"]
+
+
 def test_an_older_macro_block_gets_its_patch(box: Box) -> None:
     """A document whose block an older loom wrote is named, and the JSON carries the patch that brings it up to date; loom never applies it (P7)."""
     q = quilt(box)
@@ -707,7 +723,7 @@ def test_the_text_report_lines_up(box: Box) -> None:
     # what is fine is counted on one line a section, naming each check; what is not is listed, aligned, its fix beneath (T2)
     fine = [int(m.group(1)) for ln in lines if (m := re.match(r"^  ok    (\d+) checks?: ", ln))]
     checks = [m for ln in lines if (m := re.match(r"^  (?:warn|fail)\s+\S+(?: \S+)?\s{2,}", ln))]
-    assert len(fine) == 2 and sum(fine) + len(checks) == 19 + 8, lines  # the machine's items and the quilt's
+    assert len(fine) == 2 and sum(fine) + len(checks) == 19 + 9, lines  # the machine's items and the quilt's
     assert len({m.end() for m in checks}) == 1, "the details do not start in one column"
     at = lines.index(next(ln for ln in lines if ln.startswith("  warn  pdfinfo")))
     assert lines[at + 1] == f"    fix: {item(doctor(box), 'pdfinfo')['remedy']}"  # beneath the item it fixes

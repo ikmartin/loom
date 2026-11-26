@@ -269,3 +269,21 @@ def test_a_library_result_of_no_work_put_there_by_hand_is_said(tmp_path: Path) -
     )
     rows = _rows(q, "loom:node-incomplete")
     assert [d["locations"][0]["file"] for d in rows] == [f"{LIBRARY_NODES}/dm-0Z01.node"], rows
+
+
+def test_every_check_of_the_library_s_store_is_said(tmp_path: Path) -> None:
+    """Lint says each `loom:node-*` the store's checks give, not only a result of no work: here a statement pointing at a node the store does not hold."""
+    from loom.paths import LIBRARY_NODES
+
+    q = demo(tmp_path)
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
+    (q / LIBRARY_NODES / "dm-0Z01-ref.node").write_text(
+        '+++\nschema = 1\nid = "dm-0Z01-ref"\ntaxon = "reference"\n+++\n@misc{Ref01, title = {A work}}\n'
+    )
+    (q / LIBRARY_NODES / "dm-0Z02.node").write_text(
+        '+++\nschema = 1\nid = "dm-0Z02"\ntaxon = "lemma"\nsource = "dm-0Z01-ref"\nuses = ["dm-0Z09"]\n+++\nBy Lemma~\\ref{dm-0Z09}.\n'
+    )
+    rows = [
+        d for d in json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"] if d["code"].startswith("loom:node-")
+    ]
+    assert rows and {d["locations"][0]["file"] for d in rows} == {f"{LIBRARY_NODES}/dm-0Z02.node"}, rows

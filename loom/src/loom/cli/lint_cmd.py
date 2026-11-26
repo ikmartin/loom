@@ -46,7 +46,7 @@ def _sorted(diags: list[Diagnostic]) -> list[Diagnostic]:
 
 
 def all_diagnostics(result: ScanResult) -> list[Diagnostic]:
-    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history, the documents' last compiles, the Markdown files' links and a library result of no work put in the store by hand (`loom:node-incomplete`), in the scanner's order, each with whose it is to fix (`scan.diagnostics.stamped`), as the manifest has them."""
+    """Scanner diagnostics plus those derived from the ledger, the review records, the full walk of the history, the documents' last compiles, the Markdown files' links, and the library's store (`loom:node-*`, which no write lets in, so a file put there by hand), in the scanner's order, each with whose it is to fix (`scan.diagnostics.stamped`), as the manifest has them."""
     from loom.library.checks import check as library_checks
     from loom.render.compiles import compile_problems
     from loom.scan.diagnostics import stamped
@@ -58,11 +58,8 @@ def all_diagnostics(result: ScanResult) -> list[Diagnostic]:
     history = load_history(result.quilt.history_dir)
     walk = [d for d in verify(result, history) if (d.code, d.message) not in seen]
     compiled = compile_problems(result) + markdown_links(result)
-    # no write lets such a file in (check 11); one put there by hand is said here
-    sourceless = [d for d in library_checks(result.quilt.root) if d.code == "loom:node-incomplete"]
-    return _sorted(
-        stamped(result, [_safe(result, history, d) for d in result.lint] + extra + walk + compiled + sourceless)
-    )
+    store = library_checks(result.quilt.root)
+    return _sorted(stamped(result, [_safe(result, history, d) for d in result.lint] + extra + walk + compiled + store))
 
 
 def _safe(result: ScanResult, history: History, d: Diagnostic) -> Diagnostic:

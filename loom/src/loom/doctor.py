@@ -739,6 +739,25 @@ def check_ai_files(root: Path) -> Item:
     )
 
 
+def check_library(root: Path) -> Item:
+    """The library's store passes its checks (`library.checks.check`, the `loom:node-*` codes): no write lets a file in that fails them, so one that does was put there by hand, and `loom lint` says each with what to change."""
+    from loom.library.checks import check
+
+    found = check(root)
+    if not found:
+        return Item("library", OK, QUILT, "every node file passes the store's checks")
+    files = sorted({d.locations[0].file.rsplit("/", 1)[-1] for d in found if d.locations})
+    named = ", ".join(files[:3]) + (f" and {len(files) - 3} more" if len(files) > 3 else "")
+    return Item(
+        "library",
+        WARN,
+        QUILT,
+        f"{len(found)} problem(s) in node files put in the store by hand: {named}",
+        "loom lint says each, with what to change",
+        {"codes": sorted({d.code for d in found})},
+    )
+
+
 def check_macro_blocks(quilt: Any) -> Item:
     """Every live document that carries loom's macro block carries this loom's, and one that loads loom.sty finds it (`loom:macros-missing`). Each gets the patch that puts this loom's block in place, in the JSON, since loom never edits a document (P7). A `loom.sty` a person keeps is theirs, and not checked."""
     from loom.reshape.ids import unified_diff
@@ -974,6 +993,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
             *check_mcp(root),
             check_ai_files(root),
             check_macro_blocks(quilt),
+            check_library(root),
             check_gitignore(root),
             check_config(quilt),
             check_server(root),
