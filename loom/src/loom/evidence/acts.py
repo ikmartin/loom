@@ -180,17 +180,25 @@ _TAKER = Who("person", "the person")
 
 
 def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]:
-    """A correction's file as `take` would write it, and the document it is compared with; refused as `take` refuses it: `refused` where the file fails the library's checks or the `compared` record taking it makes would be refused by the log, `stub` where it gives the node no text, `no-document` where its work holds no document.
+    """A correction's file as `take` would write it, and the document it is compared with; refused as `take` refuses it: `refused` where the file fails the library's checks, sets or clears `awaiting` or numbers an anchor that waits (loom's digest alone does, after the person's compile), or the `compared` record taking it makes would be refused by the log, `stub` where it gives the node no text, `no-document` where its work holds no document.
 
     `propose` calls it before filing a correction and `take` before writing one, so a correction is filed only where it can be taken, and the record is checked before any file changes.
     """
     from loom.library.checks import check_file
-    from loom.library.store import check_against
+    from loom.library.store import check_against, read
 
     name = f"{node}.node"
     new, problems = check_file(name, data, None)
     if new is None or problems:
         raise ActRefused("refused", f"the proposed file is not a valid {name}", problems)
+    was = read(root, node)
+    waiting = was.awaiting if was is not None else ()
+    if new.awaiting != waiting or any(anchor in waiting for anchor, _n in new.anchors):
+        # only digest, after the person's compile, numbers an anchor that waits for one
+        raise ActRefused(
+            "refused",
+            f"the proposed file changes which of {node}'s anchors wait for a compile, which only loom's digest does",
+        )
     # and against the library as it stands, as the store will check it when it is written
     problems = check_against(root, new)
     if problems:

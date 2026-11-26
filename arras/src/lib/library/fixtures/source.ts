@@ -13,7 +13,7 @@ type Body = Record<string, unknown>;
 /** A Lean status as loom sends one in every row, with what it waits on (`evidence.md` §5.2). */
 const leaned = (l: unknown) => (l && typeof l === 'object' ? { waiting_on: [], ...(l as object) } : l);
 
-/** A work's tab as loom answers it: the outline's `why` and `uncounted`, and each section's and item's `confirmed` and each item's `found` and `title`, the fields the node store adds to round six's. */
+/** A work's tab as loom answers it: the outline's `why`, and each section's and item's `confirmed` and each item's `found`, `title` and `waits`, the fields the node store adds to round six's. */
 function asLoomWork(a: object & { outline?: unknown }): object {
 	const o = a.outline as { sections: object[]; items: (object & { title?: string; lean?: unknown })[] } | null;
 	if (!o) return a;
@@ -21,10 +21,9 @@ function asLoomWork(a: object & { outline?: unknown }): object {
 		...a,
 		outline: {
 			why: null,
-			uncounted: null,
 			...o,
 			sections: o.sections.map((x) => ({ ...x, confirmed: true })),
-			items: o.items.map((i) => ({ title: null, ...i, confirmed: true, found: 'words', lean: leaned(i.lean) }))
+			items: o.items.map((i) => ({ title: null, waits: null, ...i, confirmed: true, found: 'words', lean: leaned(i.lean) }))
 		}
 	};
 }

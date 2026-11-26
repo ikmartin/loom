@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toHtml, type Point } from './latexlite';
 import { parseMacros } from './macros';
+import { library as words } from '$lib/words/library';
 
 const par = (s: string) => `<div class="tx-par">${s}</div>`;
 const inl = (tex: string) => `<span class="math inline">\\(${tex}\\)</span>`;
@@ -275,5 +276,16 @@ describe('what it does not know', () => {
 		const r = toHtml('\\begin{enumeratei}\\item a\\end{enumeratei}', {});
 		expect(r.unknown).toEqual(['\\begin{enumeratei}']);
 		expect(r.html).toContain('<ol class="tx-list">');
+	});
+});
+
+describe('an anchor whose number waits for the person\'s compile', () => {
+	it('draws its display with no tag and a reference to it in words, never as ??', () => {
+		const points = { 'tq-0002-eq00': { awaiting: true, number: null as unknown as undefined } };
+		const r = toHtml('Then\n\\begin{equation}\\label{tq-0002-eq00} a = b \\end{equation}\nso \\eqref{tq-0002-eq00} holds.', points);
+		expect(r.html).not.toContain('\\tag');
+		expect(r.html).not.toContain('??');
+		expect(r.html).toContain(words.side.awaitingRef);
+		expect(r.unresolved).toEqual([]);
 	});
 });

@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 14
+VERSION = 15
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -165,7 +165,7 @@ class Proof:
 class Item:
     """A result of the source, digested or not (`library-views.md` §3.2's `item`).
 
-    `item` is its own label, else `i` and its place among the source's results. `words` are the first words of its statement outside its mathematics, which identify its heading in the stored PDF (`place`); `found` says how its number and page were found (`node.FOUND`): `words`, `place`, or `compile` with no PDF. `name` is the word the source prints for it ("Lemma") and `taxon` the node's (`nodes.md` §5). `emulated` is loom's own reading of its number, from the source's counters; `number` is the number it prints, only once confirmed, and `page` its page in the work's stored PDF, only once found there (`confirm`, `place`). `order` is its place among the source's headings and results. Offsets are in `file`, the source's own text.
+    `item` is its own label, else `i` and its place among the source's results. `words` are the first words of its statement outside its mathematics, which identify its heading in the stored PDF (`place`); `found` says how its number and page were found (`node.FOUND`): `words`, `place`, or `compile` with no PDF. `name` is the word the source prints for it ("Lemma") and `taxon` the node's (`nodes.md` §5). `emulated` is loom's own reading of its number, from the source's counters; `number` is the number it prints, only once confirmed, and `page` its page in the work's stored PDF, only once found there (`confirm`, `place`). `order` is its place among the source's headings and results. `outside` names the displays outside every result its statement or proofs label or point at, whose numbers only a compile gives, so it is written only after one (`library.digest`). Offsets are in `file`, the source's own text.
     """
 
     item: str
@@ -190,6 +190,7 @@ class Item:
     order: int = 0
     words: list[str] = field(default_factory=list)
     found: str | None = None
+    outside: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -220,7 +221,7 @@ class Display:
 class Survey:
     """What one source holds, confirmed against the work's stored PDF `pdf` where there is one.
 
-    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `displays` are its numbered displays in order, which number its labels of displays (`_labels`). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`). `uncounted` says why the unasked path keeps no display's number, which waits for that compile: `construct`, the source sets a display loom cannot count (`_uncountable`); `version`, its stored PDF numbers a result or heading otherwise than loom reads the source, so it may be another version.
+    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `displays` are its numbered displays in order, which number its labels of displays (`_labels`). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`).
     """
 
     tex: str
@@ -240,7 +241,6 @@ class Survey:
     unseen: list[str] = field(default_factory=list)
     unconfirmed: list[str] = field(default_factory=list)
     compiled: bool = False
-    uncounted: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         """The survey as its kept file holds it."""
@@ -339,12 +339,11 @@ def read(src: Path, main: str, tex: str) -> Survey:
     # a local style's settings stand before the document's own, as it is loaded in the preamble
     styles = [f.src.clean[f.start : f.end] for f in closure.fragments if f.file not in exp.reached]
     _walk(out, exp.text, units, envs, files, taxa, exp, styles)
-    if _uncountable("\n".join([exp.text, *styles])):
-        out.uncounted = "construct"
     if not out.items:
         # a paper whose theorems loom cannot read (tcolorbox's, say) never shows as one with nothing in it
         out.why = "no-results"
     _label_all(out, units, envs, files, doc)
+    _name_outside(out, files)
     _bibliography(out, src, main, files, exp.reached)
     return out
 
@@ -403,12 +402,7 @@ def _walk(
             at = exp.exp_offset(rel, env.start)
             if at is not None and env.name in taxa:
                 events.append((at, 1, "result", (rel, env)))
-        dead = _unread(files[rel].clean)
-        shown = [env for env in _displays(fe.roots) if not any(a <= env.start < b for a, b in dead)]
-        if _grouped(files[rel].clean, [env.start for env in shown]):
-            # an argument a command may drop or set twice: loom cannot count it
-            out.uncounted = "construct"
-        for env in shown:
+        for env in _displays(fe.roots):
             at = exp.exp_offset(rel, env.start)
             if at is not None:
                 events.append((at, 2, "display", (rel, env)))
@@ -498,103 +492,29 @@ def _walk(
                 owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
 
 
-_COMMENT = re.compile(r"\\begin\s*\{comment\}.*?\\end\s*\{comment\}", re.S)
+#: A pointer at a label, or a label: what an item's text names one by.
+_NAMES = re.compile(r"\\(?:label|eqref|ref|cref|Cref|autoref|vref|Vref|pageref)\*?\s*\{([^{}]*)\}")
 
 
-#: A definition: a command's or an environment's.
-_DEFINES = re.compile(
-    r"\\(?:[egx]?def|let|(?:re)?newcommand|providecommand|DeclareRobustCommand|(?:New|Renew|Provide|Declare)Document(?:Command|Environment)|(?:re)?newenvironment)(?![A-Za-z@])"
-)
-#: What starts a numbered display, inside a definition: its environment begun, or its command.
-_NUMBERS = re.compile(
-    r"\\begin\s*\{(?:equation|align|gather|multline|flalign|alignat|xalignat|eqnarray)\}|\\(?:equation|align|gather|multline|flalign|alignat|eqnarray)(?![A-Za-z@*])"
-)
-#: A numbered display loom has no count of wherever it stands.
-_FOREIGN = re.compile(
-    r"\\(?:l?eqno)(?![A-Za-z@])|\\begin\s*\{(?:empheq|dmath|dseries|dgroup|IEEEeqnarray|numcases|subnumcases|fleqn)\}"
-    r"|\\(?:include|exclude|special|process)comment(?![A-Za-z@])"
-    r"|\\let\s*\\[A-Za-z@]+\s*=?\s*\\(?:equation|align|gather|multline|flalign|alignat|eqnarray)(?![A-Za-z@*])"
-)
-#: A conditional of TeX's, `\\iffalse`, `\\ifx`, one `\\newif` made or `\\let` to one, `\\unless`: which branch TeX reads loom does not evaluate. `\\iff` is the logical connective.
-_CONDITIONAL = re.compile(r"\\(?:if(?!f(?![A-Za-z@]))[A-Za-z@]*|unless)(?![A-Za-z@])")
-_BEGIN_DOCUMENT = re.compile(r"\\begin\s*\{document\}")
-
-
-def _uncountable(text: str) -> bool:
-    """Whether a source sets a numbered display loom cannot count: a command or an environment defined to begin one (`\\be`, a `\\newenvironment` around `equation`, `\\let\\beq\\equation`), `\\eqno`, a display of a package loom does not read (`empheq`, `dmath`), `comment`'s environments redefined, or a conditional in the document, whose branches loom does not evaluate; each steps TeX's count where loom sees otherwise."""
-    if _FOREIGN.search(text):
-        return True
-    body = _BEGIN_DOCUMENT.search(text)
-    if body is not None and _CONDITIONAL.search(text, body.end()):
-        return True
-    return any(_NUMBERS.search(_defined(text, m.end())) for m in _DEFINES.finditer(text))
-
-
-def _defined(text: str, at: int) -> str:
-    """What a definition starting at `at` defines, its name and arguments passed over: its brace groups, up to three (an environment's begin and end, a document command's argument spec and body)."""
-    groups: list[str] = []
-    while len(groups) < 3 and at < len(text):
-        ch = text[at]
-        if ch.isspace():
-            at += 1
-        elif ch == "{":
-            depth, start = 0, at
-            while at < len(text):
-                depth += {"{": 1, "}": -1}.get(text[at], 0)
-                at += 2 if text[at] == "\\" else 1
-                if depth == 0:
-                    break
-            groups.append(text[start:at])
-        elif ch == "[":
-            end = text.find("]", at)
-            at = len(text) if end < 0 else end + 1
-        elif ch == "\\" and not groups:
-            # the name being defined, `\def\be`
-            m = re.compile(r"\\(?:[A-Za-z@]+|.)").match(text, at)
-            at = m.end() if m else at + 1
-        elif ch == "*" and not groups:
-            # `\\newcommand*`
-            at += 1
-        elif ch == "#" and not groups:
-            # a `\def`'s parameters, `#1#2`
-            at += 2
-        else:
-            break
-    return "".join(groups)
-
-
-#: What stands before a brace that opens an argument: a command's name, or another argument's end.
-_ARGUMENT = re.compile(r"(?:\\[A-Za-z@]+\*?|[}\]])\Z")
-
-
-def _grouped(clean: str, starts: list[int]) -> bool:
-    """Whether any offset of `starts` stands inside an argument of a command, which the command may drop or set twice: braces right after a command's name or another argument (`\\hide{…}`, `\\footnote{…}`), counted from the file's start in one pass, `\\{` and `\\}` passed over. A bare group, `{\\renewcommand…}` around a restated theorem, sets what it holds once."""
-    stack: list[bool] = []
-    k = 0
-    for start in sorted(starts):
-        while k < start:
-            ch = clean[k]
-            if ch == "\\":
-                k += 2
+def _name_outside(out: Survey, files: dict[str, SourceFile]) -> None:
+    """Each item's `outside`: the labels of displays outside every result its statement and proofs name, in the order first named."""
+    spans = {}
+    for item in out.items:
+        spans[item.item] = [(item.file, item.body_start, item.body_end)] + [
+            (p.file, p.body_start, p.body_end) for p in item.proofs
+        ]
+    for item in out.items:
+        named: list[str] = []
+        for rel, a, b in spans[item.item]:
+            if rel not in files:
                 continue
-            if ch == "{":
-                j, newlines = k - 1, 0
-                # spaces and one line's end stand between a command and its argument; a blank line ends it
-                while j >= 0 and clean[j] in " \t\n" and newlines + (clean[j] == "\n") < 2:
-                    newlines += clean[j] == "\n"
-                    j -= 1
-                stack.append(bool(_ARGUMENT.search(clean[max(0, j - 79) : j + 1])))
-            elif ch == "}" and stack:
-                stack.pop()
-            k += 1
-        if any(stack):
-            return True
-    return False
-
-
-def _unread(clean: str) -> list[tuple[int, int]]:
-    """The spans of a file TeX skips unread, the `comment` environment, where a display numbers nothing; a conditional loom does not evaluate (`_uncountable`)."""
-    return [m.span() for m in _COMMENT.finditer(clean)]
+            for raw in _NAMES.findall(files[rel].clean, a, b):
+                for name in raw.split(","):
+                    name = " ".join(name.split())
+                    label = out.labels.get(name)
+                    if label is not None and label.kind == "equation" and label.owner is None and name not in named:
+                        named.append(name)
+        item.outside = named
 
 
 def _displays(roots: list[Env], inside: bool = False) -> Iterator[Env]:
@@ -1355,8 +1275,8 @@ def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None, lines
     by_item = {i.item: i for i in out.items}
     by_label = {sec.label: sec for sec in out.sections if sec.label}
     hints = {name: said for name, got in found.items() if (said := _hint(got.number, found)) is not None}
-    if pages is not None and out.uncounted is not None and not found:
-        # without a compile nothing would show a number loom miscounted: each waits for the person's
+    if pages is not None and not found:
+        # without a compile a display loom counts and TeX does not cancels one TeX counts and loom does not, shifting the numbers between, and nothing would show it: each waits for the person's compile
         displayed = {}
     elif pages is not None:
         displayed = _shown(out, pages, lines or {}, hints)
@@ -1440,32 +1360,6 @@ def _shown(
 def _shape(number: str) -> str:
     """A display's number as its kinds of character: digits `9`, lower-case letters `a`, capitals `A`, the rest as they stand."""
     return re.sub(r"[a-z]", "a", re.sub(r"[A-Z]", "A", re.sub(r"\d+", "9", number)))
-
-
-def _other_version(out: Survey) -> bool:
-    """Whether the stored PDF numbers a heading or a result it placed otherwise than loom reads the source: a sign it is another version, whose displays loom's count cannot be trusted to match. A class that prints a counter as a roman numeral or a letter where loom reads its value (revtex's and IEEEtran's sections, `I`) numbers it alike."""
-    marks = [(x.number, x.emulated) for x in out.sections] + [(i.number, i.emulated) for i in out.items]
-    return any(
-        number is not None and emulated is not None and not _alike(number, emulated) for number, emulated in marks
-    )
-
-
-def _alike(printed: str, read: str) -> bool:
-    """Whether a printed number is loom's reading, part by part, a part alike where it is the same or can print the same value as a roman numeral or a letter."""
-    a, b = re.split(r"[.\-]", printed), re.split(r"[.\-]", read)
-    return len(a) == len(b) and all(x == y or _values(x) & _values(y) for x, y in zip(a, b, strict=True))
-
-
-def _values(part: str) -> set[int]:
-    """The values a counter may have that prints as `part`: arabic, a roman numeral, or a single letter, `C` both 100 and 3."""
-    out = {int(part)} if part.isdigit() else set()
-    if re.fullmatch(r"[IVXLCDM]+|[ivxlcdm]+", part):
-        values = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
-        digits = [values[c] for c in part.lower()]
-        out.add(sum(-d if k + 1 < len(digits) and d < digits[k + 1] else d for k, d in enumerate(digits)))
-    if len(part) == 1 and part.isalpha():
-        out.add(ord(part.lower()) - ord("a") + 1)
-    return out
 
 
 def _number_at(line: str) -> str | None:
@@ -1677,8 +1571,6 @@ def confirmed(
         out.state, out.why = "failed", "pdf"
     else:
         out.unconfirmed, lines = _placed(out, pages, {})
-        if out.uncounted is None and _other_version(out):
-            out.uncounted = "version"
         _labels(out, {}, pages, lines)
         out.state, out.why = "ready", None if out.items else "no-results"
     keep(root, out)

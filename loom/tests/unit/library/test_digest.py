@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -135,8 +136,10 @@ def test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten(
     lemma, theorem = stub(root, smith, "1.2"), stub(root, smith, "2.1")
     s = surveyed(result, smith)
     done = digest(result, smith, [i.item for i in s.items], s)
-    assert done.waiting == {} and sorted(done.filled) == sorted([lemma, theorem]), (
-        "the drafts' stubs, filled under their ids"
+    assert done.waiting == {
+        "lem:far": "\\eqref{eq:outside}: an equation outside every result, which loom numbers only from a compile of the source"
+    } and sorted(done.filled) == sorted([lemma, theorem]), (
+        "the drafts' stubs, filled under their ids; a result pointing at an equation outside every result waits for the compile"
     )
     widget = stub(root, smith, "1.1")
     node = read(root, lemma)
@@ -144,7 +147,9 @@ def test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten(
     assert node.body == (
         f"Every widget $W$ (Definition~\\ref{{{widget}}}) satisfies\n\\begin{{equation}}\\label{{{lemma}-eq00}}\n|x| \\le 1 .\n\\end{{equation}}\n"
     ), "its own label in the header, a display's an anchor, a result of the same work its id"
-    assert node.anchors == ((f"{lemma}-eq00", "1.1"),), "numbered as the PDF shows it"
+    assert (node.anchors, node.awaiting) == ((), (f"{lemma}-eq00",)), (
+        "without a compile its display's number waits for one"
+    )
     assert node.found == "words", "found in the PDF by its own words, and said so"
     proof = read(root, f"{lemma}-proof00")
     jones, bellamy = result.refs["Jones19"], next(r for r in done.made if r.endswith("-ref"))
@@ -160,12 +165,13 @@ def test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten(
     main = read(root, theorem)
     assert main is not None and main.body == f"By Section~1 and \\eqref{{{lemma}-eq00}}, every widget is bounded.\n"
     assert main.uses == (lemma,), "a heading is no node: its number as the work prints it"
-    far = read(root, stub(root, smith, "2.2"))
-    assert far is not None and far.body == "This lemma uses (2.1) as its only display.\n", (
-        "a display outside every result, its number as printed"
+    from loom.library.digest import of_work
+
+    assert not [n for n in of_work(root, smith) if n.number == "2.2"], (
+        "not written until the compile numbers the equation it points at"
     )
     made = {r.on.name: r.get("from") for r in records(root, "digested")}  # type: ignore[attr-defined]
-    assert set(made) == {widget, lemma, f"{lemma}-proof00", theorem, f"{theorem}-proof00", far.id}
+    assert set(made) == {widget, lemma, f"{lemma}-proof00", theorem, f"{theorem}-proof00"}
     assert all(m == {"ref": smith, "tex": read(root, smith).tex} for m in made.values()), "what each was read from"  # type: ignore[union-attr]
     assert {r.get("how") for r in records(root, "digested")} == {"extracted"}  # type: ignore[attr-defined]
 
@@ -188,7 +194,7 @@ def test_digesting_again_writes_nothing_and_a_compared_node_is_kept(tmp_path: Pa
     acts.check(root, lemma, node_hash(node_bytes(node)), ME)
     third = digest(result, smith, every, s)
     assert lemma in third.kept and "lem:bound" in third.waiting and read(root, lemma) == node
-    assert undigested(root, smith, s) == [], "every item holds its text"
+    assert undigested(root, smith, s) == ["lem:far"], "every item holds its text but the one waiting for the compile"
 
 
 def test_a_stub_its_source_does_not_print_is_sought_once(tmp_path: Path, pdf_text: list[str]) -> None:
@@ -217,7 +223,7 @@ def test_an_item_waits_while_a_number_it_prints_is_not_confirmed(tmp_path: Path,
     s = surveyed(result, smith)
     done = digest(result, smith, ["lem:far"], s)
     assert done.waiting == {
-        "lem:far": "\\eqref{eq:outside}: the display's number (2.1 as loom reads it) is not confirmed in the work's PDF"
+        "lem:far": "\\eqref{eq:outside}: an equation outside every result, which loom numbers only from a compile of the source"
     }, "which pointer, at what, and why"
     from loom.library.digest import of_work
 
@@ -230,7 +236,14 @@ def test_a_plan_writes_nothing(tmp_path: Path, pdf_text: list[str]) -> None:
     s = surveyed(result, smith)
     files = sorted(p.name for p in (root / ".loom" / "library" / "nodes").iterdir())
     done = digest(result, smith, [i.item for i in s.items], s, write=False)
-    assert done.waiting == {} and len(done.filled) == 2 and done.made
+    assert (
+        done.waiting
+        == {
+            "lem:far": "\\eqref{eq:outside}: an equation outside every result, which loom numbers only from a compile of the source"
+        }
+        and len(done.filled) == 2
+        and done.made
+    )
     assert sorted(p.name for p in (root / ".loom" / "library" / "nodes").iterdir()) == files and not records(
         root, "digested"
     )
@@ -288,18 +301,70 @@ def test_a_pointer_proof_another_hand_made_is_kept_and_the_source_s_proof_takes_
     assert written is not None and written.body.strip(), "the source's proof, read in full"
 
 
-def test_a_result_labelling_a_display_waits_for_a_compile_where_loom_cannot_count_the_paper_s_displays(
+def test_a_node_whose_display_number_waits_passes_the_checks_and_draws_unnumbered(
     tmp_path: Path, pdf_text: list[str]
 ) -> None:
-    """The ruling on C-10, as the person reads it: the result waits, saying that the paper's equations are numbered only when they compile its source, and why."""
-    source = SOURCE.replace(
-        "\\begin{document}", "\\def\\be{\\begin{equation}}\\def\\ee{\\end{equation}}\n\\begin{document}"
+    """B, as ruled on 2026-11-25: without the person's compile a display's number is held back, the result written all the same; its anchor waits in `awaiting`, the checks pass it, a read draws a pointer at it with no number, and the outline says the result pointing outside every result waits."""
+    from loom.library import reads
+    from loom.library.checks import check
+
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    digest(result, smith, ["lem:bound", "thm:main", "lem:far"], surveyed(result, smith))
+    assert not [p for p in check(root) if p.code.startswith("loom:node")], "the store's checks pass it"
+    theorem = stub(root, smith, "2.1")
+    assert reads.node(result, theorem)["points"][f"{lemma}-eq00"] == {"number": None, "awaiting": True}
+    rows = {i["item"]: i["waits"] for i in reads.work(result, smith)["outline"]["items"] if i["item"]}
+    assert (rows["lem:far"], rows["lem:bound"]) == ("compile", None)
+
+
+def test_only_digest_sets_or_clears_awaiting(tmp_path: Path, pdf_text: list[str]) -> None:
+    """An agent's correction that numbers a waiting anchor, or drops it from `awaiting`, is refused by the check every correction passes before it is filed or taken (`acts._takeable`)."""
+    from loom.evidence.acts import ActRefused, propose
+    from loom.library.node import node_bytes
+
+    result, smith = quilt(tmp_path)
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    digest(result, smith, ["lem:bound"], surveyed(result, smith))
+    node = read(root, lemma)
+    assert node is not None
+    agent = Who("agent", "Claude Code Agent")
+    for forged in (
+        replace(node, awaiting=(), anchors=((f"{lemma}-eq00", "1.1"),)),
+        replace(node, awaiting=(), body=node.body + " "),
+    ):
+        with pytest.raises(ActRefused) as refused:
+            propose(root, lemma, node_bytes(forged), agent, "it is 1.1")
+        assert refused.value.code == "refused" and "wait for a compile" in str(refused.value)
+
+
+@pytest.mark.tex
+def test_the_person_s_compile_numbers_what_waited(tmp_path: Path, pdf_text: list[str]) -> None:
+    """The person's compile, their own act, confirms the displays' numbers against the stored PDF: digest then fills `anchors`, empties `awaiting`, and writes the result that pointed outside every result."""
+    result, smith = quilt(
+        tmp_path,
+        source=SOURCE.replace("\\documentclass{article}\n", "\\documentclass{article}\n\\usepackage{amsmath,amsthm}\n"),
     )
-    result, smith = quilt(tmp_path, source=source)
-    s = surveyed(result, smith)
-    assert s.uncounted == "construct"
-    done = digest(result, smith, ["lem:bound", "def:widget"], s)
-    assert done.waiting == {
-        "lem:bound": "\\label{eq:bound}: loom numbers this paper's equations only from a compile of its source, and then those it can confirm, since its source sets equations through commands or conditions loom cannot count without TeX"
-    }
-    assert "def:widget" not in done.waiting, "a result with no display is written as before"
+    root = result.quilt.root
+    lemma = stub(root, smith, "1.2")
+    every = [i.item for i in surveyed(result, smith).items]
+    digest(result, smith, every, surveyed(result, smith))
+    held = read(root, lemma)
+    assert held is not None and held.awaiting == (f"{lemma}-eq00",)
+    node = read(root, smith)
+    assert node is not None and node.tex and node.pdf
+    src = documents.source_dir(root, node.tex)
+    compiled = survey.complete(
+        root, node.tex, src, "main.tex", node.pdf, documents.path_of(root, node.pdf, "pdf"), online=False
+    )
+    assert compiled.compiled and compiled.state == "ready", compiled.why
+    done = digest(result, smith, every, compiled)
+    assert done.waiting == {}, done.waiting
+    filled = read(root, lemma)
+    assert filled is not None and (filled.anchors, filled.awaiting) == (((f"{lemma}-eq00", "1.1"),), ())
+    from loom.library.digest import of_work
+
+    far = next(n for n in of_work(root, smith) if n.number == "2.2")
+    assert far.body == "This lemma uses (2.1) as its only display.\n", "its number as the compile confirms it"

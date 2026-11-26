@@ -30,6 +30,7 @@ KEYS: dict[str, tuple[str, frozenset[str], bool | None]] = {
     "pages": (_STR, frozenset({ids.STATEMENT, ids.PROOF}), True),
     "found": (_STR, frozenset({ids.STATEMENT}), True),
     "anchors": (_TABLE, frozenset({ids.STATEMENT, ids.PROOF}), None),
+    "awaiting": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "uses": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "mentions": (_IDS, frozenset({ids.STATEMENT, ids.PROOF}), None),
     "pdf": (_HASH, frozenset({ids.REFERENCE}), None),
@@ -85,6 +86,7 @@ class Node:
     pages: str | None = None
     found: str | None = None
     anchors: tuple[tuple[str, str], ...] = ()
+    awaiting: tuple[str, ...] = ()
     uses: tuple[str, ...] = ()
     mentions: tuple[str, ...] = ()
     pdf: str | None = None
@@ -310,6 +312,22 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
                         5, f"{name}'s `anchors` names {anchor}, which is not one of {node_id}'s anchors.", line(key)
                     )
                 )
+        elif key == "awaiting" and isinstance(node_id, str):
+            table = header.get("anchors")
+            numbered: dict[str, Any] = table if isinstance(table, dict) else {}
+            for anchor in sorted(set(value)):
+                if ids.anchor_owner(anchor) != node_id:
+                    out.append(
+                        Problem(
+                            5,
+                            f"{name}'s `awaiting` names {anchor}, which is not one of {node_id}'s anchors.",
+                            line(key),
+                        )
+                    )
+                elif anchor in numbered:
+                    out.append(
+                        Problem(5, f"{name}'s `awaiting` names {anchor}, which `anchors` numbers already.", line(key))
+                    )
     return out
 
 

@@ -72,6 +72,8 @@ export interface OutlineItem {
 	page: number | null;
 	paper: Paper | null;
 	lean: LeanStatus | null;
+	/** `compile` where loom writes the result only once the person compiles the source: it points at an equation outside every result, which only the compile numbers. */
+	waits?: 'compile' | null;
 }
 
 /** A person's mark to digest on a work's page: an annotation of kind `to-digest`. */
@@ -94,8 +96,6 @@ export interface WorkAnswer extends Gen {
 	outline: {
 		from: 'tex' | 'pdf' | null;
 		state: 'ready' | 'reading';
-		/** Why loom keeps none of the paper's equation numbers until the person compiles its source: it sets equations loom cannot count, or its PDF may be another version; null where it keeps them. */
-		uncounted?: 'construct' | 'version' | null;
 		sections: Section[];
 		items: OutlineItem[];
 	} | null;
@@ -170,6 +170,8 @@ export interface Point {
 	page?: string;
 	work?: string;
 	paper?: Paper | null;
+	/** An anchor whose number loom keeps only after the person compiles the source. */
+	awaiting?: boolean;
 }
 
 /** A node beside its page, or a card (`library-node`, §3.4). */

@@ -117,7 +117,7 @@ def work(result: ScanResult, ref: str) -> dict[str, Any]:
     Returns
     -------
     dict
-        `gen`, the work's words, `holds` `{pdf, pages, tex}`, `entry`, `link`, `outline` `{from, state, why, uncounted, sections, items}`, `marks` and `unplaced` (`library-views.md` §3.2). A number in the outline the survey has not confirmed is loom's own reading of the source's counters, said by `confirmed` false.
+        `gen`, the work's words, `holds` `{pdf, pages, tex}`, `entry`, `link`, `outline` `{from, state, why, sections, items}`, an item `waits: "compile"` where it is written only after the person's compile, `marks` and `unplaced` (`library-views.md` §3.2). A number in the outline the survey has not confirmed is loom's own reading of the source's counters, said by `confirmed` false.
 
     Raises
     ------
@@ -140,7 +140,6 @@ def work(result: ScanResult, ref: str) -> dict[str, Any]:
         "from": None,
         "state": "ready",
         "why": None,
-        "uncounted": None,
         "sections": [],
         "items": [],
     }
@@ -200,13 +199,13 @@ def _outline(s: Survey, statements: list[Node], standing: Standing) -> dict[str,
                 "page": i.page,
                 "paper": standing.paper(node.id) if node is not None else None,
                 "lean": standing.lean(node.id) if node is not None else None,
+                # it points at an equation outside every result, whose number only the person's compile gives
+                "waits": "compile" if i.outside and not s.compiled and (node is None or node.empty) else None,
             }
         )
     holding = {n.id for n in held.values()}
     items += [_row(None, n, standing) for n in statements if n.empty and n.id not in holding]
-    # without a compile a miscounted display would show wrong nowhere: its paper's displays wait for the person's
-    uncounted = s.uncounted if not s.compiled else None
-    return {"from": "tex", "state": s.state, "why": s.why, "uncounted": uncounted, "sections": sections, "items": items}
+    return {"from": "tex", "state": s.state, "why": s.why, "sections": sections, "items": items}
 
 
 def _row(item: str | None, n: Node, standing: Standing) -> dict[str, Any]:
@@ -412,7 +411,7 @@ def _digested(standing: Standing, node: str, digest: str) -> dict[str, Any] | No
 
 
 def _points(root: Path, found: Node, index: Any, standing: Standing) -> dict[str, dict[str, Any]]:
-    """What is drawn in place of each id and anchor the body points at: a node's name, number and mark, and for a result of another work that work's short name (`work`); an anchor's number."""
+    """What is drawn in place of each id and anchor the body points at: a node's name, number and mark, and for a result of another work that work's short name (`work`); an anchor's number, or `awaiting` where only the person's compile numbers it."""
     from loom.library.body import pointers
 
     out: dict[str, dict[str, Any]] = {}
@@ -423,6 +422,10 @@ def _points(root: Path, found: Node, index: Any, standing: Standing) -> dict[str
         owner = ids.anchor_owner(target)
         if owner is not None:
             out[target] = {"number": index.anchor_number(target)}
+            held = found if owner == found.id else read(root, owner)
+            if held is not None and target in held.awaiting:
+                # numbered only by the person's compile, drawn so
+                out[target]["awaiting"] = True
             continue
         row = index.row(target)
         if row is None:

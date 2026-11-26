@@ -268,6 +268,9 @@ def _body_refs(node: Node, name: str, given: dict[str, Wrapper]) -> list[Problem
     for anchor, _number in node.anchors:
         if anchor not in seen:
             out.append(Problem(8, f"{name}'s `anchors` gives a number to {anchor}, which its body does not define."))
+    for anchor in node.awaiting:
+        if anchor not in seen:
+            out.append(Problem(8, f"{name}'s `awaiting` names {anchor}, which its body does not define."))
     return out
 
 

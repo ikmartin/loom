@@ -50,11 +50,8 @@ export const library = {
 		nothingDigested: 'No results digested yet.',
 		/** A work's outline in the column while nothing reads a work's results: said, rather than drawing nothing. */
 		notReadYet: "Loom does not read a work's sections and results yet, so its outline is empty. The paper opens here as it is.",
-		/** Under a TeX source's outline, where loom keeps none of the paper's equation numbers until the person compiles its source, by why. */
-		uncounted: {
-			construct: "Loom cannot count this paper's equations without TeX, so results that point at one wait for a compile of its source, which numbers those it can confirm.",
-			version: "This PDF numbers a result or a section otherwise than the TeX source does, so it may be another version: results that point at an equation wait for a compile of the source, which numbers those it can confirm."
-		} as Record<string, string>,
+		/** Beside a result in a TeX source's outline that points at an equation outside every result: loom writes it once the person compiles the source, which numbers that equation. */
+		waitsCompile: 'written once you compile the source',
 		/** The outline while the survey of a TeX source is still being read. */
 		reading: 'Reading the TeX source…',
 		/** The button under the outline that digests what was ticked. */
@@ -247,6 +244,8 @@ export const library = {
 		/** Under the result's name: its page, and how loom has it. */
 		where: (page: string, how: string) => (page ? `page ${page} · ${how}` : how),
 		how: { extracted: 'extracted exactly from the TeX source', transcribed: 'transcribed by an agent from the pages', read: 'read by an agent from the TeX source', corrected: 'corrected by an agent', written: 'written by you', stub: 'known from the TeX source, not read', none: 'not digested' },
+		/** Drawn in place of a reference to an equation whose number loom keeps only after the person compiles the source. */
+		awaitingRef: '(numbered once you compile the source)',
 		/** The two ways the statement is shown. */
 		rendered: 'rendered',
 		plain: 'plain',

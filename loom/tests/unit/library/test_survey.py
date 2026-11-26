@@ -1072,11 +1072,21 @@ h &= i \label{e:c}
 DISPLAYED = "1 One\na\n(1.1)\nBy (1.2) at a line's end, which is no display.\nb = c\n(1.2)\nd = e\nf = g\n(⋆)\nh = i\n(1.3)\nLemma 1.1. x\n(1.4)\np\n(1.5a)\nq\n(1.5b)\nr\n(1.6)\nz\n2 Two\nw\n(2.1)\n"
 
 
-def _displayed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> survey.Survey:
-    monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([text])))
-    root = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
-    root.mkdir()
-    return survey.confirmed(root, TEX, _one_file(root, DISPLAYS), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
+def _compiled_by(tmp_path: Path, source: str, text: str) -> survey.Survey:
+    """`source` confirmed as the person's compile does, against a stored PDF whose text is `text`, by a compile that reached every mark and agrees with loom's reading of each display: the path that alone keeps a display's number."""
+    here = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
+    here.mkdir()
+    s = survey.read(_one_file(here, source), "main.tex", TEX)
+    marks = [f"s{k}" for k in range(len(s.sections))]
+    for k, item in enumerate(s.items):
+        marks += [f"i{k}", *(f"p{k}-{j}" for j in range(len(item.proofs)))]
+    lines = [rf"\newlabel{{{survey.MARK}{m}}}{{{{1}}{{1}}}}" for m in marks]
+    lines += [rf"\newlabel{{{lab}}}{{{{{d.emulated}}}{{1}}}}" for d in s.displays if d.emulated for lab in d.labels]
+    return survey.confirm(s, ["\n".join(lines)], survey.Pages([text]))
+
+
+def _displayed(tmp_path: Path, _monkeypatch: pytest.MonkeyPatch, text: str) -> survey.Survey:
+    return _compiled_by(tmp_path, DISPLAYS, text)
 
 
 def test_a_display_is_numbered_by_its_counter_a_line_at_a_time(tmp_path: Path) -> None:
@@ -1363,16 +1373,11 @@ WIDE = r"""\documentclass{article}
 """
 
 
-def test_a_number_opening_or_ending_a_line_leaves_its_window_unkept(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_number_opening_or_ending_a_line_leaves_its_window_unkept(tmp_path: Path) -> None:
     """The review's C-8 and C-9: a number opening or ending a line may be a display's, a row of an `align` or a formula too wide for its number to stand apart, or a reference in the text that happens to begin or end a line. Counted, the reference cancels a display loom counts and the PDF does not number; uncounted, the display's cancels one loom does not count. Either way numbers slid by one, so such a line leaves its window unkept."""
 
     def kept(text: str) -> dict[str, str | None]:
-        monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([text])))
-        root = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
-        root.mkdir()
-        done = survey.confirmed(root, TEX, _one_file(root, WIDE), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
+        done = _compiled_by(tmp_path, WIDE, text)
         return {k: v.number for k, v in done.labels.items() if v.kind == "equation" and v.number}
 
     assert kept("1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n") == {"e:a": "1", "e:b": "2", "e:c": "3"}
@@ -1390,7 +1395,7 @@ def _confirmed_by(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str, 
     return survey.confirmed(root, TEX, _one_file(root, source), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
 
 
-#: The review's W3: a display TeX never reads, then a labelled one, then an `align` whose last line ends in `\\`, whose empty row TeX numbers.
+#: An `align` whose last line ends in `\\`, whose empty row TeX numbers, between two labelled displays.
 W3 = r"""\documentclass{article}
 \usepackage{amsmath}
 \newtheorem{lemma}{Lemma}[section]
@@ -1400,9 +1405,6 @@ W3 = r"""\documentclass{article}
 Every finite quiver with loops has a spanning forest of its own.
 \end{lemma}
 \begin{proof}
-\begin{comment}
-\begin{equation} y \end{equation}
-\end{comment}
 First \begin{equation}\label{eq:b} a = b \end{equation}
 and then \begin{align} w &= 0 \\ v &= 1 \\ \end{align}
 \begin{equation}\label{eq:c} c \end{equation}
@@ -1411,99 +1413,41 @@ and then \begin{align} w &= 0 \\ v &= 1 \\ \end{align}
 """
 
 
-def test_loom_counts_displays_as_tex_does_an_empty_last_row_and_nothing_tex_skips(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The review's C-10 (W3): a display in a `comment` environment loom counted and TeX skips, and an `align`'s empty last row TeX numbers and loom did not, cancelled in the count; loom now counts as TeX does, so each keeps its own number."""
+def test_loom_counts_an_align_s_empty_last_row_as_tex_does(tmp_path: Path) -> None:
+    """A `\\\\` ending an `align`'s last line leaves an empty row, which TeX numbers; loom reads it so, as its outline's reading."""
     s = survey.read(_one_file(tmp_path, W3), "main.tex", TEX)
     assert [d.emulated for d in s.displays] == ["1", "2", "3", "4", "5"], "eq:b, the align's three rows, eq:c"
-    text = "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof. First\na=b\n(1)\nand then\nw=0\n(2)\nv=1\n(3)\n(4)\nc\n(5)\n"
-    done = _confirmed_by(tmp_path, monkeypatch, W3, text)
-    assert done.uncounted is None
-    assert (done.labels["eq:b"].number, done.labels["eq:c"].number) == ("1", "5")
 
 
-def test_a_display_loom_cannot_count_is_found_in_the_source() -> None:
-    """A command or environment defined to begin a numbered display, `\\eqno`, or a package's display: each steps TeX's count where loom sees nothing."""
-    assert survey._uncountable(r"\def\be{\begin{equation}}\def\ee{\end{equation}}")
-    assert survey._uncountable(r"\newenvironment{eqn}{\begin{equation}}{\end{equation}}")
-    assert survey._uncountable(r"\newcommand{\eqq}[1]{\begin{equation}#1\end{equation}}")
-    assert survey._uncountable(r"\NewDocumentCommand{\x}{m}{\begin{align}#1\end{align}}")
-    assert survey._uncountable(r"$$ a \eqno(3) $$") and survey._uncountable(r"\begin{empheq}{equation} a \end{empheq}")
-    assert not survey._uncountable(
-        r"\newcommand{\R}{\mathbb R}" "\n" r"\begin{document}\begin{equation}a\end{equation}"
+#: The second review's R-6, the source's own build: a display behind a conditional renamed in the preamble, which TeX skips and loom counts, and one in a file `\input` without braces, which TeX numbers and loom does not read; in one window they cancel in any count.
+R6 = r"""\documentclass{article}
+\usepackage{amsmath}
+\newtheorem{lemma}{Lemma}[section]
+\let\Hide\iffalse
+\begin{document}
+\section{One}
+\begin{lemma}\label{l:a}
+Every finite quiver with loops has a spanning forest of its own.
+\end{lemma}
+\begin{proof}
+\Hide \begin{equation}\label{eq:long} a = b + c \end{equation} \fi
+\begin{equation}\label{eq:z} z = 1 \end{equation}
+\input part
+\end{proof}
+\end{document}
+"""
+
+
+def test_without_a_compile_no_display_keeps_a_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """B, as ruled on 2026-11-25: on the unasked path a display's number is never kept, so no pair of errors loom cannot see can shift one; the person's compile numbers them."""
+    text = "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof.\nz=1\n(1)\nu=1\n(2)\n"
+    done = _confirmed_by(tmp_path, monkeypatch, R6, text)
+    assert done.state == "ready" and done.items[0].number == "1.1", "results keep their numbers"
+    assert not [k for k, v in done.labels.items() if v.kind == "equation" and v.number]
+    again = _confirmed_by(
+        tmp_path,
+        monkeypatch,
+        W3,
+        "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof. First\na=b\n(1)\nand then\nw=0\n(2)\nv=1\n(3)\n(4)\nc\n(5)\n",
     )
-    assert not survey._uncountable(r"\def\x#1{#1}\begin{equation}a\end{equation}")
-    assert not survey._uncountable(r"\newcommand{\beq}{\begin{equation*}}"), "a display numbered nowhere"
-
-
-def test_without_a_compile_a_paper_loom_cannot_count_or_another_version_keeps_no_display_number(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """The ruling on C-10: on the unasked path a missing number waits for the person's compile and a wrong one would show nowhere, so a paper whose displays loom cannot count, or whose PDF may be another version, keeps none."""
-    macro = WIDE.replace(
-        "\\begin{document}", "\\def\\be{\\begin{equation}}\\def\\ee{\\end{equation}}\n\\begin{document}"
-    )
-    done = _confirmed_by(tmp_path, monkeypatch, macro, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
-    assert done.uncounted == "construct" and not [k for k, v in done.labels.items() if v.number]
-    same = _confirmed_by(tmp_path, monkeypatch, WIDE, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
-    assert same.uncounted is None and same.labels["e:c"].number == "3"
-    other = _confirmed_by(tmp_path, monkeypatch, WIDE, "2 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
-    assert other.uncounted == "version", "the PDF numbers the section 2 where the source reads 1"
-    assert not [k for k, v in other.labels.items() if v.kind == "equation" and v.number]
-
-
-@pytest.mark.parametrize(
-    "where",
-    [
-        "\\let\\iffull\\iffalse",
-        "\\newif\\iflong\\longfalse",
-        "\\newcommand*{\\be}{\\begin{equation}}",
-        "\\let\\beq\\equation",
-        "\\excludecomment{draft}",
-    ],
-)
-def test_a_conditional_or_a_display_loom_cannot_count_keeps_no_display_number(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, where: str
-) -> None:
-    """The second review's R-1 to R-3: loom evaluates no conditional (`\\iffalse … \\else`, a `\\newif`'s, one `\\let` to `\\iffalse`), so a document holding one, a starred or `\\let` definition of a display, or `comment`'s environments redefined, keeps no display number without a compile."""
-    body = "\\iffull\\begin{equation}\\label{e:p} p \\end{equation}\\fi\n" if "if" in where else ""
-    source = WIDE.replace("\\begin{document}", where + "\n\\begin{document}").replace(
-        "\\section{One}\n", "\\section{One}\n" + body
-    )
-    done = _confirmed_by(tmp_path, monkeypatch, source, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
-    assert done.uncounted == "construct" and not [
-        k for k, v in done.labels.items() if v.kind == "equation" and v.number
-    ]
-
-
-def test_a_display_inside_braces_keeps_no_display_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """R-3: an argument a command may drop or set twice."""
-    source = WIDE.replace(
-        "\\begin{equation}\\label{e:b} b \\end{equation}", "\\hide{\\begin{equation}\\label{e:b} b \\end{equation}}"
-    )
-    done = _confirmed_by(tmp_path, monkeypatch, source, "1 One\na\n(1)\nc + c + c\n(2)\n")
-    assert done.uncounted == "construct" and not [
-        k for k, v in done.labels.items() if v.kind == "equation" and v.number
-    ]
-
-
-def test_a_section_printed_as_a_roman_numeral_is_no_other_version() -> None:
-    """R-4: revtex and IEEEtran print sections `I`, `II` where loom reads 1, 2; an appendix's `C` is 3 as a letter."""
-    assert (
-        survey._alike("I", "1")
-        and survey._alike("II.3", "2.3")
-        and survey._alike("C", "3")
-        and survey._alike("iv", "4")
-    )
-    assert not survey._alike("2", "1") and not survey._alike("1.2", "1.3") and not survey._alike("B", "1")
-
-
-def test_a_display_in_a_bare_group_keeps_its_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """A bare group sets what it holds once, as a restated theorem's `{\\renewcommand{\\thethm}{…} …}` does: no argument, so nothing to drop or set twice."""
-    source = WIDE.replace(
-        "\\begin{equation}\\label{e:b} b \\end{equation}",
-        "\n{\\small\n\\begin{equation}\\label{e:b} b \\end{equation}}",
-    )
-    done = _confirmed_by(tmp_path, monkeypatch, source, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
-    assert done.uncounted is None and done.labels["e:b"].number == "2"
+    assert not [k for k, v in again.labels.items() if v.kind == "equation" and v.number], "however right the count"

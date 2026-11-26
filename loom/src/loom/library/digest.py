@@ -69,25 +69,19 @@ class Digested:
         }
 
 
-#: Why a paper's displays wait for a compile of its source (`Survey.uncounted`), finishing a sentence the person reads.
-_UNCOUNTED = {
-    "construct": "its source sets equations through commands or conditions loom cannot count without TeX",
-    "version": "its PDF numbers a result or a section otherwise than its source does, so it may be another version",
-}
-
-
 class _Wait(Exception):
     """An item that cannot be written yet, and why."""
 
 
 @dataclass
 class _Body:
-    """A body rewritten: its text, what it points at as uses and as mentions, and the numbers of the anchors it defines."""
+    """A body rewritten: its text, what it points at as uses and as mentions, the numbers of the anchors it defines, and those whose number waits for the person's compile."""
 
     text: str
     uses: set[str] = field(default_factory=set)
     mentions: set[str] = field(default_factory=set)
     anchors: dict[str, str] = field(default_factory=dict)
+    awaiting: set[str] = field(default_factory=set)
 
 
 @dataclass
@@ -606,16 +600,17 @@ class _Run:
                 raise _Wait(f"\\{command}{{{name}}}: the {label.kind}'s number is not confirmed in the work's PDF")
             return "text", number
         if label.kind == "equation":
+            if label.number is None and not self.s.compiled:
+                raise _Wait(
+                    f"\\{command}{{{name}}}: an equation outside every result, which loom numbers only from a compile of the source"
+                )
             if label.number is None:
                 raise _Wait(f"\\{command}{{{name}}}: {self._unnumbered(label)}")
             return "text", label.number
         raise _Wait(f"\\{command}{{{name}}}: loom does not read the number of a {label.kind} outside every result")
 
     def _unnumbered(self, label: Label) -> str:
-        """Why a display's number is not kept, as the person reads it: its paper's displays waiting for a compile of its source, or this one not confirmed in the PDF."""
-        if self.s.uncounted is not None and not self.s.compiled:
-            why = _UNCOUNTED.get(self.s.uncounted, "")
-            return f"loom numbers this paper's equations only from a compile of its source, and then those it can confirm, since {why}"
+        """Why a display's number is not kept after a compile, as the person reads it."""
         read_as = f" ({label.emulated} as loom reads it)" if label.emulated else ""
         return f"the display's number{read_as} is not confirmed in the work's PDF"
 
@@ -730,9 +725,13 @@ class _Run:
             anchor = self.anchor(name)
             edits.append((arg_at, arg_end, anchor))
             if label.kind == "equation":
-                if label.number is None:
+                if label.number is None and not self.s.compiled:
+                    # loom keeps no display's number without the person's compile: written, its number waiting
+                    out.awaiting.add(anchor)
+                elif label.number is None:
                     raise _Wait(f"\\label{{{name}}}: {self._unnumbered(label)}")
-                out.anchors[anchor] = label.number
+                else:
+                    out.anchors[anchor] = label.number
         for cmd in _commands(scan):
             points: list[str] = []
             if cmd.name in bodies.CITES:
@@ -870,6 +869,7 @@ class _Run:
             self._stub(sid, item),
             body=stmt_body.text,
             anchors=tuple(sorted(stmt_body.anchors.items())),
+            awaiting=tuple(sorted(stmt_body.awaiting)),
             uses=tuple(sorted(stmt_body.uses)),
             mentions=tuple(sorted(stmt_body.mentions)),
         )
@@ -884,6 +884,7 @@ class _Run:
                     source=self.ref,
                     pages=str(proof.page) if proof.page else None,
                     anchors=tuple(sorted(got.anchors.items())),
+                    awaiting=tuple(sorted(got.awaiting)),
                     uses=tuple(sorted(got.uses)),
                     mentions=tuple(sorted(got.mentions)),
                 )

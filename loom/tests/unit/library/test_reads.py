@@ -44,7 +44,6 @@ def test_a_work_s_outline_compiles_nothing(tmp_path: Path, monkeypatch: pytest.M
     monkeypatch.setattr(survey, "compile_marks", compiled)
     said = reads.work(scanned(tmp_path), ARDEN)
     assert said["outline"]["state"] == "ready" and len(said["outline"]["items"]) >= 8
-    assert said["outline"]["uncounted"] is None, "the showcase's Arden 2024 keeps its equations' numbers"
 
 
 def test_the_list_s_count_makes_no_survey(tmp_path: Path) -> None:
