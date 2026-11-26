@@ -527,3 +527,48 @@ def test_no_agent_and_no_unasked_digest_reaches_numbering(tmp_path: Path, pdf_te
     calls = re.compile(r"from loom\.evidence\.acts import [^\n]*\bnumbered\b|acts\.numbered\(")
     callers = sorted(p.relative_to(src).as_posix() for p in src.rglob("*.py") if calls.search(p.read_text()))
     assert callers == ["library/digest.py"], callers
+
+
+def test_a_number_goes_only_to_the_display_it_was_printed_for(tmp_path: Path, pdf_text: list[str]) -> None:
+    """The numbered review's N-1 and N-2: an anchor is its label's place in the source, and a correction may move it to another display or give the node another result's label; the compile's number is filled only where the node's display holding the anchor is the source's display holding that label, so a corrected node whose displays still match is numbered and the rest wait."""
+    two = SOURCE.replace(
+        "\\begin{equation}\\label{eq:bound}\n|x| \\le 1 .\n\\end{equation}\n",
+        "\\begin{equation}\\label{eq:bound}\n|x| \\le 1 .\n\\end{equation}\nand\n\\begin{equation}\\label{eq:two}\n|y| \\le 2 .\n\\end{equation}\n",
+    ).replace(
+        "By Section~\\ref{sec:w} and \\eqref{eq:bound}, every widget is bounded.\n",
+        "By Section~\\ref{sec:w} and \\eqref{eq:bound}, every widget is bounded:\n\\begin{equation}\\label{eq:main}\nz = 3\n\\end{equation}\n",
+    )
+    pdf_text[0] = pdf_text[0].replace("(1.1)\nProof.", "(1.1)\nand\n|y| ≤ 2 .\n(1.2)\nProof.")
+    pdf_text[1] = pdf_text[1].replace("every widget is bounded.\n", "every widget is bounded:\nz = 3\n(2.1)\n").replace("y = 2\n(2.1)", "y = 2\n(2.2)")  # fmt: skip
+
+    def compiled(result: ScanResult, ref: str) -> survey.Survey:
+        s = survey.Survey.from_json(surveyed(result, ref).to_json())
+        s.compiled = True
+        for name, number in (("eq:bound", "1.1"), ("eq:two", "1.2"), ("eq:main", "2.1")):
+            s.labels[name] = replace(s.labels[name], number=number)
+        return s
+
+    for case in ("swapped", "relabelled", "reworded"):
+        (tmp_path / case).mkdir()
+        result, smith = quilt(tmp_path / case, source=two)
+        root = result.quilt.root
+        lemma = stub(root, smith, "1.2")
+        digest(result, smith, ["lem:bound"], surveyed(result, smith))
+        held = read(root, lemma)
+        assert held is not None and held.awaiting == (f"{lemma}-eq00", f"{lemma}-eq01"), held
+        a, b = f"\\label{{{lemma}-eq00}}", f"\\label{{{lemma}-eq01}}"
+        if case == "swapped":
+            acts.correct(root, lemma, _hash(root, lemma), held.body.replace(a, "@").replace(b, a).replace("@", b), ME)
+        elif case == "relabelled":
+            acts.propose(root, lemma, node_bytes(replace(held, label="thm:main")), Who("agent", "A"), "w")
+            acts.check(root, lemma, _hash(root, lemma), ME)
+        else:
+            acts.correct(root, lemma, _hash(root, lemma), held.body.replace("satisfies", "obeys"), ME)
+        before = read(root, lemma)
+        done = digest(result, smith, ["lem:bound", "thm:main"], compiled(result, smith), numbers=True)
+        after = read(root, lemma)
+        assert after is not None
+        if case == "reworded":
+            assert lemma in done.numbered and after.anchors == ((f"{lemma}-eq00", "1.1"), (f"{lemma}-eq01", "1.2"))
+        else:
+            assert lemma not in done.numbered and after == before, (case, after)

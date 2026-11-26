@@ -878,26 +878,40 @@ class _Run:
         return None
 
     def _number_kept(self) -> None:
-        """Fill the compile's display numbers into the anchors waiting in each kept item's statement and proofs, nothing else of them (`acts.numbered`); a node whose anchors were given from another text of the source stays waiting, since an anchor is its label's place among its owner's."""
+        """Fill the compile's display numbers into the anchors waiting in each kept item's statement and proofs, nothing else of them (`acts.numbered`).
+
+        An anchor is its label's place among its owner's in the source, and a correction may move it or relabel the node, so one is filled only where the node's display holding it is the source's display holding that label, labels aside (`_display`); a node whose anchors were given from another text of the source stays waiting.
+        """
         from loom.evidence.acts import ActRefused, numbered
         from loom.library.node import node_bytes, node_hash
 
         for item in self.kept_items:
             sid = self.statement_of(item)
             self._give_proofs(item, sid)
-            confirmed: dict[str, str] = {}
+            confirmed: dict[str, tuple[str, str | None]] = {}
             for name, label in self.s.labels.items():
                 if label.owner != item.item or label.kind != "equation" or label.number is None or name in self.s.twice:
                     continue
                 try:
-                    confirmed[self.anchor(name)] = label.number
+                    anchor = self.anchor(name)
                 except _Wait:
                     continue
+                if label.proof is None:
+                    rel, start, end = item.file, item.body_start, item.body_end
+                else:
+                    proof = item.proofs[label.proof]
+                    rel, start, end = proof.file, proof.body_start, proof.body_end
+                confirmed[anchor] = (label.number, _display(self._text(rel)[1][start:end], name))
             for nid in (sid, *self.proofs.get(sid, [])):
                 n = self.nodes.get(nid)
                 if n is None or not n.awaiting or not self._anchored_here(n):
                     continue
-                fill = {a: confirmed[a] for a in n.awaiting if a in confirmed}
+                held = bodies.unread(n.body)
+                fill = {
+                    a: confirmed[a][0]
+                    for a in n.awaiting
+                    if a in confirmed and confirmed[a][1] is not None and _display(held, a) == confirmed[a][1]
+                }
                 if not fill:
                     continue
                 new = replace(
@@ -1159,6 +1173,34 @@ _POINTER = re.compile(
     + "|".join(sorted(bodies.REFS | bodies.CITES | {bodies.HYPERREF}, key=len, reverse=True))
     + r")\*?(?![A-Za-z@])"
 )
+
+
+_ENV = re.compile(r"\\(begin|end)\s*\{([^{}]*)\}")
+_LABELLED = re.compile(r"\\label\s*\{[^{}]*\}")
+
+
+def _display(text: str, name: str) -> str | None:
+    """The display environment of `text` holding the one `\\label{name}`, its labels dropped and its spaces run together; None where the label is not there once or no environment holds it.
+
+    `text` has its comments and verbatim blanked. `_number_kept` compares a kept node's display with the source's by it, so a number goes only to the display it was printed for.
+    """
+    at = [m.start() for m in _LABELLED.finditer(text) if " ".join(m.group(0)[6:].strip(" {}").split()) == name]
+    if len(at) != 1:
+        return None
+    open_: list[tuple[str, int]] = []
+    for m in _ENV.finditer(text):
+        env = m.group(2).strip()
+        if m.group(1) == "begin":
+            open_.append((env, m.start()))
+            continue
+        while open_ and open_[-1][0] != env:
+            open_.pop()
+        if not open_:
+            continue
+        _env, start = open_.pop()
+        if start < at[0] < m.start():
+            return " ".join(_LABELLED.sub(" ", text[start : m.end()]).split())
+    return None
 
 
 def _commands(scan: str) -> Iterator[_Cmd]:
