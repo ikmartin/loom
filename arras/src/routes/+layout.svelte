@@ -27,7 +27,6 @@
 	import { masterName } from '$lib/nav';
 	import { rail } from '$lib/shell/rail.svelte';
 	import { panel } from '$lib/shell/panel.svelte';
-	import { sessionView } from '$lib/sessions/sessions.svelte';
 	import { startReporting } from '$lib/here.svelte';
 	import { frame } from '$lib/words/frame';
 	import { chooseSource } from '$lib/library/source';
@@ -40,24 +39,12 @@
 	onMount(() => {
 		void chooseSource();
 		prefs.load();
-		sessionView.load();
 		store.start(1000);
 		void listen();
 		// asked at once, so a quilt an earlier loom made is known before anything else is drawn of it
 		void capabilities();
 	});
 
-	// A stored selection the corpus no longer lists is dropped once, on the first manifest; after that a session just made with `+ new` is briefly missing from the manifest and must survive it.
-	let checked = false;
-	$effect(() => {
-		const mm = store.manifest;
-		if (!mm || checked) return;
-		checked = true;
-		untrack(() => {
-			const id = sessionView.selected;
-			if (id && !(mm.sessions ?? []).some((s) => s.id === id) && !mm.threads[id]) sessionView.clear();
-		});
-	});
 	onDestroy(() => store.stop());
 
 	// One effect owns the <html> attributes and the stored copy; app.html has already applied them once, before the first paint.

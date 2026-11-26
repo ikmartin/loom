@@ -1,7 +1,6 @@
 // A session's transcript: what agents said into the session, read beside the documents (plan 0.20.1). It comes from the build's pages and, where a publisher serves, from a poll of `/_api/events`; the viewer posts nothing into it. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
 import { beside, pane, prefs } from '../workspace';
-import { openPicker, pickSession } from '../picker';
 import { QUICK, REFEREE, saying, serve } from '../manifest';
 import { noPolls } from '../polls';
 
@@ -129,44 +128,22 @@ test.describe('the transcript', () => {
 });
 
 test.describe('one transcript at a time', () => {
-	test('the picker opens the transcript beside, focus stays, and the URL remembers it', async ({ page }) => {
-		await page.goto('/node/sy-0003');
-		// one pane at rest: a reader who never wants a second carries no frame for it
-		await expect(pane(page, 1)).toHaveCount(0);
-		// choosing a session opens its transcript beside, and the reader stays in the node
-		await pickSession(page, REFEREE);
+	test('a transcript opened beside leaves focus with the reader, and the URL remembers it', async ({ page }) => {
+		await page.goto('/node/sy-0003' + beside('/session/' + REFEREE));
 		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
-		await expect(pane(page, 0)).toHaveClass(/focused/);
 		await expect(pane(page, 0).getByTestId('item-controls')).toHaveAttribute('aria-label', /^controls for /);
-		// closed, choosing it again opens it again
-		await pane(page, 1).getByTestId('tab-close').click();
-		await expect(pane(page, 1)).toHaveCount(0);
-		await pickSession(page, REFEREE);
-		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
-		await expect.poll(() => new URL(page.url()).searchParams.get('beside')).toBe('/session/' + REFEREE);
 		await expect(page.getByTestId('divider')).toBeVisible();
-		// and the arrangement is a link: a reload reproduces it
+		// the arrangement is a link: a reload reproduces it
 		await page.reload();
 		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
 		await expect(pane(page, 0).locator('.fragment').first()).toBeVisible();
 	});
 
-	test('reading a transcript chooses nothing: the footer keeps where writes go, and Write here chooses it', async ({ page }) => {
+	test('reading a transcript says nothing of a chosen session', async ({ page }) => {
 		await page.goto('/node/sy-0003' + beside('/session/' + REFEREE));
 		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
-		await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
-		await expect(pane(page, 1).getByTestId('chat-writing')).toContainText('You are not writing in a session.');
-		await pane(page, 1).getByTestId('chat-write-here').click();
-		await expect(page.getByTestId('session-footer-name')).toHaveText('referee');
 		await expect(pane(page, 1).getByTestId('chat-writing')).toHaveCount(0);
-		// the picker reads another session without choosing it, and that transcript says where writes go
-		await openPicker(page);
-		await page.getByTestId('show-closed').click();
-		await page.getByTestId(`session-${QUICK}`).hover();
-		await page.getByTestId(`session-read-${QUICK}`).click();
-		await expect(pane(page, 1).getByRole('tab')).toHaveText('quick');
-		await expect(page.getByTestId('session-footer-name')).toHaveText('referee');
-		await expect(pane(page, 1).getByTestId('chat-writing')).toContainText('You are writing in “referee”. This one is closed.');
+		await expect(page.locator('body')).not.toContainText(/writing in|write here|session chosen/i);
 	});
 
 	test('a transcript with nothing said says so, at the size of its text', async ({ page }) => {
@@ -174,18 +151,6 @@ test.describe('one transcript at a time', () => {
 		const empty = page.getByTestId('transcript-empty');
 		await expect(empty).toHaveText('Nothing has been said in this session yet.');
 		expect(parseFloat(await empty.evaluate((el) => getComputedStyle(el).fontSize))).toBeGreaterThan(13);
-	});
-
-	test("choosing a second session in the picker closes the first transcript, and writes go there", async ({ page }) => {
-		await page.goto('/node/sy-0003' + beside('/session/' + REFEREE));
-		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
-		// the second is the fixture's closed session, which the picker lists under Closed
-		await openPicker(page);
-		await page.getByTestId('show-closed').click();
-		await page.getByTestId(`session-${QUICK}`).click();
-		await expect(pane(page, 1).getByTestId('item-tab')).toHaveCount(1);
-		await expect(pane(page, 1).getByRole('tab')).toHaveText('quick');
-		await expect(page.getByTestId('session-footer-name')).toHaveText('quick');
 	});
 });
 

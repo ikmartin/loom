@@ -13,11 +13,12 @@ async function open(page: Page, width: number): Promise<void> {
 
 const fits = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
-test('1440: the column open, its four views, its footer, and two panes each with its toolbar', async ({ page }) => {
+test('1440: the column open, its four views, its foot, and two panes each with its toolbar', async ({ page }) => {
 	await open(page, 1440);
 	await expect(page.locator('.panel.away')).toHaveCount(0);
 	for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`primary-${v}`)).toBeVisible();
-	await expect(page.getByTestId('session-footer')).toBeInViewport();
+	await expect(page.getByTestId('legend-open')).toBeInViewport();
+	await expect(page.getByTestId('session-footer')).toHaveCount(0);
 	for (const i of [0, 1]) await expect(pane(page, i).getByTestId('item-controls')).toBeVisible();
 	expect(await fits(page)).toBe(true);
 });
@@ -25,16 +26,10 @@ test('1440: the column open, its four views, its footer, and two panes each with
 test('1100: the column folded to its strip of the four views, two panes each with its toolbar', async ({ page }) => {
 	await open(page, 1100);
 	await expect(page.locator('.panel.away')).toHaveCount(1);
-	for (const id of ['panel-fold', 'session-footer', 'strip-docs', 'strip-library', 'strip-web', 'strip-review']) await expect(page.getByTestId(id)).toBeInViewport();
+	for (const id of ['panel-fold', 'strip-docs', 'strip-library', 'strip-web', 'strip-review']) await expect(page.getByTestId(id)).toBeInViewport();
 	await expect(page.getByTestId('strip-docs')).toHaveAttribute('aria-current', 'page');
 	await expect(page.getByTestId('primary-docs')).toHaveCount(0);
-	// the agent's footer stands wholly inside the strip and the window, not merely overlapping them
-	const foot = (await page.getByTestId('session-footer').boundingBox())!;
-	const strip = (await page.getByTestId('column').boundingBox())!;
-	expect(foot.y).toBeGreaterThanOrEqual(0);
-	expect(foot.y + foot.height).toBeLessThanOrEqual(900);
-	expect(foot.x).toBeGreaterThanOrEqual(strip.x);
-	expect(foot.x + foot.width).toBeLessThanOrEqual(strip.x + strip.width);
+	await expect(page.getByTestId('session-footer')).toHaveCount(0);
 	for (const i of [0, 1]) await expect(pane(page, i).getByTestId('item-controls')).toBeVisible();
 	expect(await fits(page)).toBe(true);
 	// unfolded for this visit, the four views are back

@@ -90,8 +90,10 @@ test("without a publisher, the quilt's settings are shown as published and chang
 	await expect(page.getByTestId('agents-protected')).toContainText('config.toml');
 	await expect(page.getByTestId('deny-pattern')).toHaveCount(0);
 	await expect(page.getByTestId('agents-update')).toHaveCount(0);
-	// a quilt with no agent layer says what writes one, in the publisher's words
-	await expect(page.getByTestId('agents-no-layer')).toContainText('loom ai init');
+	// a quilt with no agent layer offers the setup card, which a static host cannot act on, and shows no command
+	await expect(page.getByTestId('agent-setup')).toContainText('Nothing is written here until you choose an app');
+	await expect(page.getByTestId('use-claude-code')).toHaveCount(0);
+	await expect(page.getByTestId('settings-window')).not.toContainText('loom ai init');
 	await settings(page, 'overleaf');
 	await expect(page.getByTestId('overleaf-not-served')).toHaveText('Shown as published. Pairing with Overleaf and updating need loom serving this quilt.');
 	await expect(page.getByTestId('settings-read-only')).toHaveCount(0);

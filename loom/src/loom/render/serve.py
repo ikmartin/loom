@@ -924,6 +924,8 @@ class LoomHandler(SimpleHTTPRequestHandler):
                     **({"quilt": self.quilt_id} if self.quilt_id else {}),
                     # the home stops a server it found at the pid the server gives here, never at one a file names
                     "pid": os.getpid(),
+                    # the quilt's folder, for the viewer to name where an agent's app should open; the viewer's alone, as the token is
+                    "root": str(Path(self.quilt_root).resolve()),
                     "stream": self.publications is not None,
                     **connected,
                     **frames,

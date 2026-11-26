@@ -1,6 +1,6 @@
-// One selection and what it governs (plan 0.13.1): where a write that names a session goes. Annotations belong to no session, so it governs nothing they draw.
-import { beforeEach, describe, expect, it } from 'vitest';
-import { findSessions, grouped, selected, sessionView, writable } from '$lib/sessions/sessions.svelte';
+// The sessions as Review › History lists them, and when each was touched.
+import { describe, expect, it } from 'vitest';
+import { grouped, sessionView, titleOf } from '$lib/sessions/sessions.svelte';
 import { touched, when } from '$lib/sessions/when';
 import type { Manifest, SessionRow } from '$lib/manifest/types';
 
@@ -13,93 +13,18 @@ const m = {
 	annotations: {}
 } as unknown as Manifest;
 
-beforeEach(() => {
-	sessionView.selected = null;
-});
-
-describe('the selection', () => {
-	it('is one selection, shared by open and closed sessions', () => {
-		sessionView.select('s-open');
-		expect(selected(m)?.id).toBe('s-open');
-		// picking a closed one moves the same selection rather than keeping a second
-		sessionView.select('s-shut');
-		expect(selected(m)?.id).toBe('s-shut');
-	});
-
-	it('keeps the selection when the selected row is picked again; clearing is how the author detaches', () => {
-		sessionView.select('s-open');
-		sessionView.select('s-open');
-		expect(sessionView.selected).toBe('s-open');
-		sessionView.clear();
-		expect(sessionView.selected).toBeNull();
-	});
-
-	it('clears when the selected session goes', () => {
-		sessionView.select('s-open');
-		sessionView.dropped('s-other');
-		expect(sessionView.selected).toBe('s-open'); // a different session going leaves it alone
-		sessionView.dropped('s-open');
-		expect(sessionView.selected).toBeNull();
-	});
-});
-
-describe('whether a write is allowed', () => {
-	it('refuses with nothing selected, and says which of the two problems it is', () => {
-		expect(writable(m)).toBe('No session selected: either select a session or start a new session.');
-	});
-
-	it('refuses a closed session with the other sentence', () => {
-		sessionView.select('s-shut');
-		expect(writable(m)).toBe('Selected session is closed: either select an open session or reopen the closed session.');
-	});
-
-	it('allows it only with an open session selected', () => {
-		sessionView.select('s-open');
-		expect(writable(m)).toBe('');
-	});
-});
-
 describe('the list', () => {
-	it('separates open from closed, whatever is selected', () => {
-		sessionView.selected = 's-open';
+	it('separates open from closed', () => {
 		const g = grouped(m);
 		expect(g.open.map((s) => s.id)).toEqual(['s-open', 's-other']);
 		expect(g.closed.map((s) => s.id)).toEqual(['s-shut']);
 	});
-});
 
-describe("the picker's find field", () => {
-	const found = (q: string) => {
-		const g = findSessions(rows, q);
-		return { open: g.open.map((s) => s.id), closed: g.closed.map((s) => s.id), closedCount: g.closedCount };
-	};
-	const rows = {
-		sessions: [
-			{ ...session('s-ref', 'open', 'Referee report'), purpose: 'answer the referee' },
-			session('s-talk', 'open', 'Talk slides'),
-			{ ...session('s-old', 'closed', 'Old referee pass'), purpose: 'first round' }
-		],
-		annotations: {}
-	} as unknown as Manifest;
-	beforeEach(() => (sessionView.renamed = {}));
-
-	it('lists everything when blank, and counts every closed session', () => {
-		expect(found('  ')).toEqual({ open: ['s-ref', 's-talk'], closed: ['s-old'], closedCount: 1 });
-	});
-
-	it('matches the title and the purpose, blind to case and surrounding space', () => {
-		expect(found(' REFEREE ')).toEqual({ open: ['s-ref'], closed: ['s-old'], closedCount: 1 });
-		expect(found('first round')).toEqual({ open: [], closed: ['s-old'], closedCount: 1 });
-	});
-
-	it('matches a pending rename rather than the name the manifest still carries', () => {
-		sessionView.renamed['s-talk'] = 'Colloquium';
-		expect(found('colloq').open).toEqual(['s-talk']);
-		expect(found('slides').open).toEqual([]);
-	});
-
-	it('finds nothing, and still counts the closed fold, when nothing matches', () => {
-		expect(found('zzz')).toEqual({ open: [], closed: [], closedCount: 1 });
+	it('names a session by a pending rename until the manifest carries it', () => {
+		sessionView.renamed['s-other'] = 'Colloquium';
+		expect(titleOf(grouped(m).open[1])).toBe('Colloquium');
+		delete sessionView.renamed['s-other'];
+		expect(titleOf(grouped(m).open[1])).toBe('s-other');
 	});
 });
 

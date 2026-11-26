@@ -118,6 +118,9 @@
 	{:else if name === 'quote'}
 		<path d="M6 8h4v4c0 2.5-1.5 4-4 4.5" />
 		<path d="M14 8h4v4c0 2.5-1.5 4-4 4.5" />
+	{:else if name === 'ask'}
+		<path d="M4 5h16v11H9l-5 4z" />
+		<path d="M9 10.5h.01M12 10.5h.01M15 10.5h.01" />
 	{:else if name === 'note'}
 		<path d="M5 3h10l4 4v14H5z" />
 		<path d="M15 3v4h4" />

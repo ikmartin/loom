@@ -8,26 +8,23 @@ const reading = (over: Partial<PlaceInput>): PlaceInput => ({
 	selection: null,
 	region: null,
 	review: null,
-	session: null,
 	...over
 });
 
 describe('placeOf', () => {
-	it('reports the focused item, the block at its top, the other pane and the session, each item bare', () => {
+	it('reports the focused item, the block at its top, and the other pane, each item bare', () => {
 		const got = placeOf(
 			reading({
 				current: { kind: 'document', id: 'drafting/main.tex', anchor: 'sec-2', view: 'text' },
 				beside: { kind: 'work', id: 'Bellamy19', place: { page: 3 } },
-				block: { src: 'nodes/sy-0003.tex:1:4', key: 'sy-0003' },
-				session: 's-2026-10-30-yx080j'
+				block: { src: 'nodes/sy-0003.tex:1:4', key: 'sy-0003' }
 			})
 		);
 		expect(got).toEqual({
 			route: 'reading',
 			item: { kind: 'document', id: 'drafting/main.tex' },
 			block: { src: 'nodes/sy-0003.tex:1:4', key: 'sy-0003' },
-			beside: { kind: 'work', id: 'Bellamy19', place: { page: 3 } },
-			session: 's-2026-10-30-yx080j'
+			beside: { kind: 'work', id: 'Bellamy19', place: { page: 3 } }
 		});
 	});
 
@@ -55,12 +52,11 @@ describe('placeOf', () => {
 	});
 
 	it('in Review reports the block under review in place of the workspace, and elsewhere only the path', () => {
-		const panes = { current: { kind: 'document' as const, id: 'drafting/main.tex' }, session: 's-1' };
+		const panes = { current: { kind: 'document' as const, id: 'drafting/main.tex' } };
 		expect(placeOf({ ...reading(panes), route: 'review', review: { key: 'sy-0003', cause: 'edited' } })).toEqual({
 			route: 'review',
-			review: { key: 'sy-0003', cause: 'edited' },
-			session: 's-1'
+			review: { key: 'sy-0003', cause: 'edited' }
 		});
-		expect(placeOf({ ...reading(panes), route: 'elsewhere', path: '/graph' })).toEqual({ route: 'elsewhere', path: '/graph', session: 's-1' });
+		expect(placeOf({ ...reading(panes), route: 'elsewhere', path: '/graph' })).toEqual({ route: 'elsewhere', path: '/graph' });
 	});
 });

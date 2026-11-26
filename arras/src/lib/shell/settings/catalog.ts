@@ -70,6 +70,8 @@ export const SETTINGS: Setting[] = [
 	{ id: 'notes.command', section: 'notes', name: notes.settings.command, what: notes.settings.commandWhat },
 	{ id: 'agents.deny', section: 'agents', name: 'Where agents may not write', what: "Patterns as in `.gitignore`, from the quilt's top. An agent may edit every other file in place; an edit to an accepted block shows it changed, and you keep or undo each edit in Review.", key: '[agents] deny' },
 	{ id: 'agents.protected', section: 'agents', name: 'Always protected', what: "Loom's records, this file and the research state, which an agent writes only through loom." },
+	{ id: 'agents.setup', section: 'agents', name: 'Use an agent here', what: 'An app set up here starts loom whenever a conversation in it opens this folder.' },
+	{ id: 'agents.told', section: 'agents', name: 'What an agent is told and sees', what: 'The same for every agent working here, in any app.' },
 	{ id: 'agents.apps', section: 'agents', name: 'Apps', what: 'Which agent apps start loom here.' },
 	{ id: 'library.online', section: 'library', name: 'Use the network', what: 'Let the library look identifiers up (zbMATH Open, Crossref) and fetch papers from arXiv. Off, it uses only what is on this computer.', key: '[library] online' },
 	{ id: 'overleaf', section: 'overleaf', name: overleaf.settings.project, what: overleaf.settings.projectWhat }

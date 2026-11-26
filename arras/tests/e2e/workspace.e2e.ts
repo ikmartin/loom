@@ -565,10 +565,9 @@ test.describe('a narrow window', () => {
 		await page.goto(FIG);
 		await expect(page.locator('.panel.away')).toHaveCount(1);
 		expect((await page.getByTestId('column').boundingBox())!.width).toBeLessThanOrEqual(61);
-		// what must stay in reach stays: unfold, the four views and the session's dot
+		// what must stay in reach stays: unfold and the four views
 		for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`strip-${v}`)).toBeVisible();
 		await expect(page.getByTestId('panel-fold')).toBeVisible();
-		await expect(page.getByTestId('session-footer')).toBeVisible();
 		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').panel)).not.toBe(false);
 	});
 
@@ -647,7 +646,7 @@ test.describe('the toolbar', () => {
 		expect([await firstLine(page, 0), await firstLine(page, 1)]).toEqual(before);
 	});
 
-	test('Annotate, the bar, then view with every other control in full words, the pane\'s own line last, and the tools that write on a row beneath; the divider only when something stands left of view', async ({ page }) => {
+	test('Ask your agent, Annotate, the bar, then view with every other control in full words, the pane\'s own line last, and the tools that write on a row beneath; the divider only when something stands left of view', async ({ page }) => {
 		await writes(page);
 		await page.goto('/master/drafting/main');
 		const bar = controls(page, 0);
@@ -655,7 +654,7 @@ test.describe('the toolbar', () => {
 		// the stepper once the document has said what it holds: its annotations and its pending changes
 		await expect(bar.getByTestId('step-prev')).toBeVisible();
 		const order = await bar.locator('button').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.testid));
-		expect(order).toEqual(['toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
+		expect(order).toEqual(['toolbar-ask', 'toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
 		await expect(bar.getByTestId('annotation-row').getByTestId('tool-annotate')).toBeVisible();
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 		await expect(page.getByTestId('toolbar-view')).toHaveAttribute('aria-label', 'view menu for main.tex');

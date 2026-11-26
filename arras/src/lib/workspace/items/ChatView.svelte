@@ -5,12 +5,11 @@
 	//
 	// **A long report folds after its first block.** A mode's report is one message whose blocks the publisher marks (`fold.ts`): its first block and a control show, and the rest is mounted only when opened, so a 40 KB report costs nothing to typeset until it is read, and the reader lands on its summary rather than its end. Which are open is this view's alone and remembered nowhere.
 	//
-	// **Reading is not writing.** Opening a transcript, by a link, a URL or the Sessions table, chooses nothing: the footer names the session writes go to, and a transcript of another one says so at its head, with Write here. One transcript is open at a time, the one read last.
+	// One transcript is open at a time, the one read last.
 	import { onDestroy, tick, untrack } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import { split } from '$lib/sessions/fold';
-	import { selected as writingIn, sessionView, titleOf } from '$lib/sessions/sessions.svelte';
 	import { carried, isAgent, Transcript } from '$lib/sessions/transcript.svelte';
 	import { when } from '$lib/sessions/when';
 	import { capabilities } from '$lib/write';
@@ -35,7 +34,6 @@
 		const id = item.id;
 		untrack(() => soleSession(id));
 	});
-	const writing = $derived(writingIn(m));
 
 	/** Whether the reader is at the newest message, so a new one keeps them there and does not pull them down from further up. */
 	function atBottom(): boolean {
@@ -147,12 +145,6 @@
 </script>
 
 <div class="chat" data-testid="chat">
-	{#if row && writing?.id !== item.id}
-		<p class="writing" data-testid="chat-writing">
-			{writing ? `You are writing in “${titleOf(writing)}”.` : 'You are not writing in a session.'}
-			{#if row.state === 'open'}<button type="button" class="as-link" data-testid="chat-write-here" onclick={() => sessionView.select(item.id)}>Write here</button>{:else}This one is closed.{/if}
-		</p>
-	{/if}
 	<div class="log" bind:this={scroller} data-testid="chat-log">
 		<div class="top" bind:this={top} aria-hidden="true"></div>
 		<ol class="messages" data-testid="transcript">
@@ -232,17 +224,6 @@
 	}
 	.empty {
 		font-size: 0.92rem;
-	}
-	.writing {
-		flex: none;
-		margin: 0;
-		padding: 6px 12px;
-		font-size: 12.5px;
-		color: var(--ink-soft);
-		border-bottom: 1px solid var(--rule);
-	}
-	.writing button {
-		margin-left: 4px;
 	}
 	.fold {
 		display: block;

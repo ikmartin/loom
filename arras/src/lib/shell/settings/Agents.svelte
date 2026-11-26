@@ -1,8 +1,12 @@
 <script lang="ts">
-	// Where agents may not write, a draft until Save, with how far that holds for the apps set up here (which cannot edit there, which are only asked); what is always protected; whether their edits in place wait in Your Changes; and the apps that start loom here. A saved list the permission file Claude Code reads has not caught up with is said at the top, with the act that rewrites it.
+	// The setup card, to use an agent's app here; where agents may not write, a draft until Save, with how far that holds for the apps set up here (which cannot edit there, which are only asked); what is always protected; whether their edits in place wait in Your Changes; the apps that start loom here, each not set up with Set up beside it; and what any agent here is told, sees and never does. A saved list the permission file Claude Code reads has not caught up with is said at the top, with the act that rewrites it.
 	import { store } from '$lib/manifest/client.svelte';
 	import type { QuiltSettings } from '$lib/manifest/types';
-	import { write } from '$lib/write';
+	import { can, write } from '$lib/write';
+	import AgentPanel from '$lib/agents/AgentPanel.svelte';
+	import AgentSetup from '$lib/agents/AgentSetup.svelte';
+	import { setup } from '$lib/agents/setup.svelte';
+	import { agents as words } from '$lib/words/agents';
 	import { draft } from './draft.svelte';
 	import Chips from './Chips.svelte';
 	import Row from './Row.svelte';
@@ -14,6 +18,10 @@
 	let pattern = $state('');
 	let busy = $state(false);
 	let error = $state('');
+	let canSetUp = $state(false);
+	$effect(() => {
+		void can('agents-setup').then((ok) => (canSetUp = ok));
+	});
 
 	function add(): void {
 		const p = pattern.trim();
@@ -39,9 +47,11 @@
 	</div>
 {/if}
 {#if error}<p class="note warn" role="alert">{error}</p>{/if}
-{#if !agents.layer}
-	<div class="note info" data-testid="agents-no-layer">This quilt has no agent layer, so no agent is told what loom is. To write one, run <code>{agents.command}</code> in a terminal.</div>
-{/if}
+<div class="card">
+	<Row id="agents.setup" stack>
+		<div class="in-row"><AgentSetup /></div>
+	</Row>
+</div>
 <div class="card">
 	<Row id="agents.deny" stack refused={draft.refused['agents.deny']}>
 		<Chips test="config-agents.deny" items={deny} remove={editable ? (p) => draft.set('agents.deny', deny.filter((x) => x !== p)) : undefined} />
@@ -73,14 +83,22 @@
 					<li>
 						<span class="app">{c.label}</span>
 						<span class="file">{c.file}</span>
-						{#if c.set_up}<span class="ok">Set up</span>{:else}<code class="how" title="Run in a terminal to set it up">{c.command}</code>{/if}
+						{#if c.set_up}<span class="ok">Set up</span>{:else if canSetUp}<button type="button" class="btn small" disabled={!!setup.busy} onclick={() => void setup.run(c.key)} data-testid="set-up-{c.key}">{setup.busy === c.key ? words.setup.busy : words.apps.setUp}</button>{:else}<span class="off">{words.apps.notSetUp}</span>{/if}
 					</li>
 				{/each}
 			</ul>
 			{#if agents.variant === 'shell'}<p class="aside">Agents here run loom in a shell, so no app starts loom's server.</p>{/if}
+			{#each agents.clients as c (c.key)}
+				{#if setup.error[c.key]}<p class="aside warn-ink" role="alert">{setup.error[c.key]}</p>{/if}
+			{/each}
 		</Row>
 	</div>
 {/if}
+<div class="card">
+	<Row id="agents.told" stack>
+		<div class="in-row"><AgentPanel parts={['told', 'sees', 'never']} /></div>
+	</Row>
+</div>
 
 <style>
 	.apps {
@@ -110,13 +128,15 @@
 		color: var(--state-accepted);
 		font-size: 12.5px;
 	}
-	.how {
-		font-family: var(--mono);
-		font-size: 11.5px;
-		color: var(--ink-soft);
-		background: var(--leaf);
-		padding: 1px 6px;
-		border-radius: 4px;
+	.off {
+		color: var(--ink-faint);
+		font-size: 12.5px;
+	}
+	.warn-ink {
+		color: var(--state-stale);
+	}
+	.in-row {
+		margin-top: 10px;
 	}
 	@media (max-width: 560px) {
 		.apps li {

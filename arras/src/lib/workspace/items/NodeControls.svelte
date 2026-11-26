@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A node's toolbar: the annotating bar, as a document has it; under *view*, `show settled annotations` and its key, then `open its context beside`, which opens what the node is in and rests on in the other pane, and `show verbatim code`, naming the reading a click gives.
+	// A node's toolbar: Ask your agent about the result, and the annotating bar, as a document has it; under *view*, `show settled annotations` and its key, then `open its context beside`, which opens what the node is in and rests on in the other pane, and `show verbatim code`, naming the reading a click gives.
 	import { store } from '$lib/manifest/client.svelte';
 	import type { Item } from '../item';
 	import { nodeState } from '../state.svelte';
@@ -12,6 +12,7 @@
 	import { can } from '$lib/write';
 	import { settledOn } from '$lib/annotations';
 	import { quoteLink } from '$lib/notes/link';
+	import { placesFor } from '$lib/agents/places';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
@@ -38,7 +39,7 @@
 {#snippet writing()}<AnnotateBar notes={held.notes} of={name} part="write" writes={writes && !node?.external} />{/snippet}
 
 {#if node}
-	<ItemToolbar {name} {note} bar={reading} tools={writes && !node.external ? writing : undefined} on={ui.showSettled || held.verbatim} hint={writes && !node.external ? hintFor(store.manifest, held.notes, hand.value) : ''}>
+	<ItemToolbar {name} {note} ask={() => placesFor(store.manifest, item)} bar={reading} tools={writes && !node.external ? writing : undefined} on={ui.showSettled || held.verbatim} hint={writes && !node.external ? hintFor(store.manifest, held.notes, hand.value) : ''}>
 		{#snippet view()}
 			{#if held.notes.ready || anySettled}
 				<ToolbarItem

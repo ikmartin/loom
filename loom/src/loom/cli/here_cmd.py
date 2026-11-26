@@ -22,7 +22,7 @@ from loom.scan.scan import ScanResult
 )
 @quilt_option
 def here_command(as_json: bool, quilt_path: str | None) -> None:
-    """Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, the annotation whose popup is open, and the session they have chosen. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/cache/crops/.
+    """Say where the person is looking in the viewer: the document, result, paper or session in front of them, the block at the top of the pane, the words they selected or the region of a page, and the annotation whose popup is open. A region or an annotation on a PDF page comes with a crop of the page around it, under .loom/cache/crops/.
 
     The viewer tab they touched last reports it to `loom serve`, which keeps it in memory only. With nothing serving the quilt, or no tab open, it says so. Each thing is named with the link `loom link` prints.
     """
@@ -171,9 +171,6 @@ def _resolve(result: ScanResult, place: dict[str, Any]) -> dict[str, Any]:
         ann = place.get("annotation")
         if isinstance(ann, str) and ann:
             out["annotation"] = _annotation(result, ann)
-    sid = place.get("session")
-    if isinstance(sid, str) and sid:
-        out["session"] = _item(result, {"kind": "session", "id": sid})
     return out
 
 
@@ -273,9 +270,6 @@ def _lines(looking: dict[str, Any]) -> list[str]:
             if ann.get("quote"):
                 out.append(f'            on "{ann["quote"]}"')
             out += page_lines(ann, "            ")
-    session = looking.get("session")
-    if session:
-        out += line("session", session, " (the one they have chosen)")
     return out
 
 
