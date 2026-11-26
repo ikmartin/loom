@@ -1192,7 +1192,7 @@ _LABELLED = re.compile(r"\\label\s*\{[^{}]*\}")
 
 
 def _display(text: str, name: str) -> str | None:
-    """The display environment of `text` holding the one `\\label{name}`, that label written `\\label{@}` and every other dropped, its spaces run together; None where the label is not there once or no environment holds it.
+    """The display environment of `text` holding the one `\\label{name}`, that label written `\\label{@}` and every other dropped, its spaces run together, after the number of environments `text` begins before it; None where the label is not there once or no environment holds it.
 
     `text` has its comments and verbatim blanked. `_number_kept` compares a kept node's display with the source's by it, so a number goes only to the display it was printed for.
     """
@@ -1218,7 +1218,9 @@ def _display(text: str, name: str) -> str | None:
                 parts += [segment[last : lab.start()], "\\label{@}" if lab.start() == here else " "]
                 last = lab.end()
             parts.append(segment[last:])
-            return " ".join("".join(parts).split())
+            # and how many environments open before it, so a twin of the same text elsewhere is not it
+            before = sum(1 for e in _ENV.finditer(text, 0, start) if e.group(1) == "begin")
+            return f"{before}: " + " ".join("".join(parts).split())
     return None
 
 

@@ -618,3 +618,37 @@ def test_two_anchors_whose_displays_read_alike_never_trade_numbers(
             assert lemma not in done.numbered and after == before, after
         else:
             assert after is not None and after.anchors == ((a[7:-1], "1.1"), (b[7:-1], "1.2")), after
+
+
+def test_an_anchor_moved_onto_an_unlabelled_twin_waits(tmp_path: Path, pdf_text: list[str]) -> None:
+    """The numbered review's N-4: a correction moving the one anchor onto an unlabelled display of the same text keeps its order and its text; the display's place among the body's environments is the source's or the anchor waits, while the text as extracted is numbered."""
+    source = SOURCE.replace(
+        "\\begin{equation}\\label{eq:bound}\n|x| \\le 1 .\n\\end{equation}\n",
+        "\\begin{equation}\\label{eq:bound}\n|x| \\le 1 .\n\\end{equation}\nand\n\\begin{equation}\n|x| \\le 1 .\n\\end{equation}\n",
+    )
+    pdf_text[0] = pdf_text[0].replace("(1.1)\nProof.", "(1.1)\nand\n|x| ≤ 1 .\n(1.2)\nProof.")
+    for case in ("moved", "as-extracted"):
+        (tmp_path / case).mkdir()
+        result, smith = quilt(tmp_path / case, source=source)
+        root = result.quilt.root
+        lemma = stub(root, smith, "1.2")
+        digest(result, smith, ["lem:bound"], surveyed(result, smith))
+        held = read(root, lemma)
+        assert held is not None and held.awaiting == (f"{lemma}-eq00",), held
+        label, opening = f"\\label{{{lemma}-eq00}}", "\\begin{equation}"
+        body = held.body + "\n"
+        if case == "moved":
+            body = held.body.replace(label, "", 1)
+            at = body.index(opening, body.index("and")) + len(opening)
+            body = body[:at] + label + body[at:]
+        acts.correct(root, lemma, _hash(root, lemma), body, ME)
+        before = read(root, lemma)
+        s = survey.Survey.from_json(surveyed(result, smith).to_json())
+        s.compiled = True
+        s.labels["eq:bound"] = replace(s.labels["eq:bound"], number="1.1")
+        done = digest(result, smith, ["lem:bound"], s, numbers=True)
+        after = read(root, lemma)
+        if case == "moved":
+            assert lemma not in done.numbered and after == before, after
+        else:
+            assert after is not None and after.anchors == ((f"{lemma}-eq00", "1.1"),), after
