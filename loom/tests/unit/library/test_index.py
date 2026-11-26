@@ -6,6 +6,7 @@ import os
 import sqlite3
 import time
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -245,6 +246,28 @@ def test_it_is_made_again_at_will(root: Path) -> None:
         assert (done.read, done.changed) == (9, 9)
         assert index.count() == 9
         assert found(index, "widget")[0] == "tq-00A4"
+
+
+class _InterruptedAfterCommit(sqlite3.Connection):
+    """A connection whose COMMIT runs and is then interrupted, as serve's SIGTERM handler can interrupt it."""
+
+    def execute(self, sql: str, *args: Any) -> sqlite3.Cursor:
+        cursor = super().execute(sql, *args)
+        if sql == "COMMIT":
+            raise KeyboardInterrupt
+        return cursor
+
+
+@pytest.mark.parametrize("act", ["rebuild", "take"])
+def test_an_interrupt_after_a_commit_stops_the_work_as_an_interrupt(root: Path, act: str) -> None:
+    with NodeIndex.open(root) as index:
+        index.db.close()
+        index.db = sqlite3.connect(root / NODE_INDEX, isolation_level=None, factory=_InterruptedAfterCommit)
+        with pytest.raises(KeyboardInterrupt):
+            index.rebuild() if act == "rebuild" else index.take(["tq-00A4.node"])
+        assert not index.db.in_transaction
+    with NodeIndex.open(root) as index:
+        assert index.count() == 9
 
 
 def test_a_quilt_with_no_library_has_an_empty_index(tmp_path: Path) -> None:

@@ -349,7 +349,7 @@ class NodeIndex:
             return db
         except BaseException:
             with contextlib.suppress(sqlite3.Error):
-                db.execute("ROLLBACK")
+                _rollback(db)
             db.close()
             raise
 
@@ -379,7 +379,7 @@ class NodeIndex:
             self._set_meta("generation", str(kept))
             self.db.execute("COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            _rollback(self.db)
             raise
         return self.refresh()
 
@@ -434,7 +434,7 @@ class NodeIndex:
             done = self._refresh(present, started, only)
             self.db.execute("COMMIT")
         except BaseException:
-            self.db.execute("ROLLBACK")
+            _rollback(self.db)
             raise
         return done
 
@@ -1062,6 +1062,15 @@ def _complete(db: sqlite3.Connection) -> bool:
     """Whether an index holds every table it should: one at this version missing one is made again rather than refused on every question."""
     have = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
     return all(t in have for t in _TABLES)
+
+
+def _rollback(db: sqlite3.Connection) -> None:
+    """Roll back the transaction under way, if one is: the except of every `BEGIN IMMEDIATE`'s try.
+
+    An interrupt (serve's SIGTERM is one) can land after COMMIT has run but before the try ends, and SQLite ends a transaction itself on some errors; a ROLLBACK then would raise "no transaction is active" in place of what stopped the work.
+    """
+    if db.in_transaction:
+        db.execute("ROLLBACK")
 
 
 def _remove(path: Path) -> None:
