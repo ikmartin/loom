@@ -700,14 +700,15 @@ def _produced(found: Ask, evidence: Evidence, web: Web, edits: list[Any], lean_n
     if what == "which-result":
         block = found.on["block"]
         cites = found.get("cites")
-        # the block the ask was written on, as the records resolve a stored key: its place key once a label keys it, each block of a label a copied draft defines again
-        named = getattr(web, "named", None)
-        now = set(named(block["key"]) if named is not None else [block["key"]])
-        if any(mention_holds(evidence, key, str(cites), named) for key in now):
+        # the block the ask was written on, where its text went as every record's goes (`DraftWeb.placed`); a mention and an edit each where theirs went
+        placed = getattr(web, "placed", None)
+        edit_on = getattr(web, "edit_on", None)
+        now = set(placed(block) if placed is not None else [block["key"]])
+        if any(mention_holds(evidence, key, str(cites), placed) for key in now):
             return True
         return any(
             getattr(e, "author_kind", "") == "agent"
-            and now & set(named(e.target_key) if named is not None else [e.target_key])
+            and now & set(edit_on(e) if edit_on is not None else [e.target_key])
             and e.created >= found.at
             for e in edits
         )
@@ -722,13 +723,15 @@ def _states(record: Record, target: Subject) -> bool:
     )
 
 
-def mention_holds(evidence: Evidence, key: str, cites: str, named: Callable[[str], list[str]] | None = None) -> bool:
-    """Whether the person's last word on a citation of `cites` in the block at `key` is that it is only a mention; a mention's stored key is resolved as the records resolve one (`named`, `DraftWeb.named`), compared as it is without it."""
+def mention_holds(
+    evidence: Evidence, key: str, cites: str, placed: Callable[[dict[str, Any]], list[str]] | None = None
+) -> bool:
+    """Whether the person's last word on a citation of `cites` in the block at `key` is that it is only a mention; a mention is on the block its text went to (`placed`, `DraftWeb.placed`), and on its stored key as written without it."""
     said = [
         r
         for r in evidence.of_kind("mention")
         if r.get("cites") == cites
-        and key in (named(str(r.get("block", {}).get("key"))) if named is not None else [r.get("block", {}).get("key")])
+        and key in (placed(r.get("block", {})) if placed is not None else [r.get("block", {}).get("key")])
     ]
     return bool(said) and not said[-1].get("undo")
 
@@ -783,8 +786,7 @@ def place_of(quilt: Any, text: str) -> tuple[dict[str, Any], list[str]]:
         When nothing of the quilt is named so.
     """
     from loom.errors import ContentError
-    from loom.evidence.web import DraftWeb, blocks_named
-    from loom.records.locate import block_hash, context_of
+    from loom.evidence.web import DraftWeb, block_of, blocks_named
     from loom.scan.scan import scan
 
     result = scan(quilt)
@@ -798,9 +800,7 @@ def place_of(quilt: Any, text: str) -> tuple[dict[str, Any], list[str]]:
     if len(found) > 1:
         raise ContentError(f"{name} names {len(found)} blocks, one in each copy of its label; give one by its place: {', '.join(sorted(n.key for n in found))}")  # fmt: skip
     if found:
-        node = found[0]
-        block = {"key": node.key, "hash": block_hash(result, node.key), "context": context_of(result, node)}
-        return {"block": block}, sorted(node.reached_by)
+        return {"block": block_of(result, found[0])}, sorted(found[0].reached_by)
     ref, _, page = name.partition(":")
     if is_work(ref) and (not page or page.isdigit()):
         return ({"ref": ref, "page": int(page)} if page else {"ref": ref}), []

@@ -179,6 +179,8 @@ export const review = {
 		missing: 'This result could not be read.',
 		/** Under an agent's proposed correction. */
 		stands: (date: string) => `The text you compared on ${date} stands until you take this.`,
+		/** Under an agent's correction loom would not take now, in place of `take`. */
+		cannotTake: "This can't be taken as it stands now. Decline it, and ask the agent again if it is still needed.",
 		/** Takes an agent's correction. */
 		take: 'take',
 		/** Declines it. */

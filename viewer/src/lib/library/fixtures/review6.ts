@@ -70,7 +70,7 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 	const checks: CheckRow[] = [
 		{ row: `check:${refs.arden25}`, kind: 'check', docs: [MAIN], ref: refs.arden25, short: 'Arden 2025', pdf: null, nodes: [{ node: 'tq-05A1', name: 'Theorem 5.1', number: '5.1', title: 'Extension criterion', rests: { docs: [MAIN] }, how: 'transcribed' }] },
 		{ row: `check:${refs.vance}`, kind: 'check', docs: [MAIN], ref: refs.vance, short: 'Vance et al. 2023', pdf: null, nodes: ['Theorem 1.4', 'Lemma 2.2', 'Proposition 3.1'].map((name, i) => ({ node: `tq-05B${i}`, name, number: name.split(' ')[1], rests: { docs: [] }, how: 'transcribed' as const })) },
-		{ row: 'check:ev-2026-11-21-c8vz2a', kind: 'check', docs: [MAIN], correction: 'ev-2026-11-21-c8vz2a', node: 'tq-0201', name: 'Definition 1.2', ref: refs.arden24, short: 'Arden 2024', by: 'Claude Code' }
+		{ row: 'check:ev-2026-11-21-c8vz2a', kind: 'check', docs: [MAIN], correction: 'ev-2026-11-21-c8vz2a', node: 'tq-0201', name: 'Definition 1.2', ref: refs.arden24, short: 'Arden 2024', by: 'Claude Code', refusal: null }
 	];
 	bodies['check:ev-2026-11-21-c8vz2a'] = {
 		compared_at: '2026-11-18T15:20:00Z',

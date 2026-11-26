@@ -160,4 +160,7 @@ export function joined(groups: ReviewGroup[]): ShownGroup[] {
 }
 
 /** The cited results the rows hold, which `ask an agent to read all` asks for. */
+/** What a person can answer an agent's correction with: `take` only where loom would take it now (`refusal` null), `decline` always. */
+export const correctionAnswers = (r: Extract<ReviewRow, { kind: 'check'; correction: string }>): ('take' | 'decline')[] => (r.refusal === null ? ['take', 'decline'] : ['decline']);
+
 export const stubsOf = (rows: (ReviewRow | TaskRow)[]) => rows.flatMap((r) => (r.kind === 'cited' && r.citation === undefined ? r.stubs.map((s) => ({ node: s.node, docs: s.rests.docs })) : []));

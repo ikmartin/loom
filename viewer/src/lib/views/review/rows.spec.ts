@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { review as words } from '$lib/words/review';
 import { REF, round6 } from '$lib/library/fixtures/round6';
 import type { ReviewRow, TaskRow } from '$lib/library/types';
-import { joined, line, marks, question, quiet, task, type Names } from './rows';
+import { correctionAnswers, joined, line, marks, question, quiet, task, type Names } from './rows';
 
 describe("a work's results in a row", () => {
 	it('are named when one or two, the word made plural for two of a kind, and counted past two', () => {
@@ -97,5 +97,13 @@ describe('the kinds the viewer shows', () => {
 		expect(shown.map((g) => g.kind)).toEqual(['questions', 'attest', 'edits']);
 		expect(shown[1].rows.map((r) => r.row)).toEqual(['c1', 'a1', 'a2']);
 		expect(joined([{ kind: 'attested-changed', rows: [row('attested-changed', 'c1')] }])).toEqual([{ kind: 'attest', rows: [row('attested-changed', 'c1')] }]);
+	});
+});
+
+describe("an agent's correction", () => {
+	const row: Extract<ReviewRow, { kind: 'check'; correction: string }> = { row: 'check:ev-1', kind: 'check', docs: [], correction: 'ev-1', node: 'tq-0201', name: 'Definition 1.2', ref: 'tq-0200-ref', short: 'Arden 2024', by: 'Claude Code', refusal: null };
+	it('offers take only where loom would take it now, and decline always', () => {
+		expect(correctionAnswers({ ...row, refusal: null })).toEqual(['take', 'decline']);
+		expect(correctionAnswers({ ...row, refusal: 'tq-0201 uses tq-0999, which the library no longer holds' })).toEqual(['decline']);
 	});
 });

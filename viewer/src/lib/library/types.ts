@@ -317,7 +317,7 @@ export interface CheckNode {
 /** A work's digested results to check, or (`correction` set) an agent's correction to a node the person compared. */
 export type CheckRow =
 	| (RowBase & { kind: 'check'; ref: string; short: string; pdf: Hash | null; nodes: CheckNode[]; correction?: undefined })
-	| (RowBase & { kind: 'check'; correction: string; node: string; name: string; ref: string; short: string; by: string });
+	| (RowBase & { kind: 'check'; correction: string; node: string; name: string; ref: string; short: string; by: string; /** Why taking it would be refused now, in loom's words, never drawn; null where it can be taken. */ refusal: string | null });
 
 export interface AttestRow extends RowBase {
 	kind: 'attest';

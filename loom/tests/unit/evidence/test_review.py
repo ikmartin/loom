@@ -625,6 +625,32 @@ def test_a_mention_on_a_place_key_holds_once_a_label_keys_the_block_and_the_act_
     assert caught.value.code == "ambiguous" and "drafting/copy.tex#" in str(caught.value)
 
 
+def test_a_mention_follows_its_text_when_a_block_citing_the_same_work_is_put_in_above_it(root: Path) -> None:
+    """A mention made on a lemma's place key stays with that lemma once another lemma citing the same work is put in above it and takes the place key: the new lemma's `cited` row is listed, the old one's is not."""
+    from loom.evidence import acts
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    old = "\\begin{lemma}\nEvery widget on a compact surface is bounded by its own diameter, as in \\cite{Smi24}.\n\\end{lemma}\n"
+    new = "\\begin{lemma}\nNo gadget on an open surface is ever compact, unlike the widgets of \\cite{Smi24}.\n\\end{lemma}\n"
+    text = (root / DOC).read_text(encoding="utf-8")
+    (root / DOC).write_text(text.replace("\\end{document}", old + "\\end{document}"), encoding="utf-8")
+    [row] = [r.to_dict() for r in _gather(root).of("cited")]
+    place = row["key"]
+    assert "#" in place, "a lemma with no label is keyed by its place"
+    acts.mention(root, scan(load_quilt(root)), place, "tq-00A1-ref", PERSON)
+    assert _gather(root).of("cited") == []
+    (root / DOC).write_text(text.replace("\\end{document}", new + old + "\\end{document}"), encoding="utf-8")
+    result = scan(load_quilt(root))
+    drafts = DraftWeb(result)
+    [inserted] = [n.key for n in drafts.blocks if "gadget" in drafts.text(n)]
+    assert inserted == place, "the lemma put in above takes the place key"
+    assert [r.to_dict()["key"] for r in _gather(root).of("cited")] == [inserted], "the mention stays with its own lemma"
+
+
 def test_a_library_node_is_to_attest_once_it_and_all_it_uses_match_their_paper(root: Path) -> None:
     from loom.evidence import acts
     from loom.evidence.web import LibraryWeb
