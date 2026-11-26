@@ -6,7 +6,7 @@
 	import WorkHead from './WorkHead.svelte';
 	import WorkOutline from './WorkOutline.svelte';
 
-	const FILTERS: Filter[] = ['all', 'used', 'unchecked', 'nodoc'];
+	const FILTERS: Filter[] = ['all', 'used', 'nodoc'];
 	const work = $derived(lib.tab !== 'works' && lib.work.value?.ref === lib.tab ? lib.work.value : null);
 </script>
 

@@ -9,7 +9,7 @@ import { PdfView } from '$lib/pdf/view.svelte';
 import { Read } from '$lib/library/read.svelte';
 import type { WorkAnswer, WorksAnswer } from '$lib/library/types';
 
-export type Filter = 'all' | 'used' | 'unchecked' | 'nodoc';
+export type Filter = 'all' | 'used' | 'nodoc';
 export type Column = 'title' | 'authors' | 'year' | 'digested' | 'holds' | 'used';
 export const COLUMNS: Column[] = ['title', 'authors', 'year', 'digested', 'holds', 'used'];
 

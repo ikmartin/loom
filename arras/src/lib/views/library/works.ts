@@ -7,7 +7,6 @@ import type { Column, Filter } from './state.svelte';
 /** Whether a work passes a filter of the column. */
 export function passes(w: Work, filter: Filter): boolean {
 	if (filter === 'used') return w.used_in.length > 0;
-	if (filter === 'unchecked') return !!w.digested && w.digested.compared < w.digested.statements;
 	if (filter === 'nodoc') return !w.holds.pdf && !w.holds.tex;
 	return true;
 }

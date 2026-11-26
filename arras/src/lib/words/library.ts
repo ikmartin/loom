@@ -20,7 +20,7 @@ export const library = {
 	byline: (a: readonly string[]) => (!a.length ? '' : a.length === 1 ? a[0] : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a[0]} et al.`),
 	column: {
 		/** The four filters in the Library's column while the list of works is shown. */
-		filters: { all: 'All works', used: 'Used in your drafts', unchecked: 'Not yet compared', nodoc: 'No document' },
+		filters: { all: 'All works', used: 'Used in your drafts', nodoc: 'No document' },
 		/** Accessible name of the filters' list. */
 		filtersLabel: 'Filters',
 		/** A work's head in the column: what loom holds of it, after its authors and year. */
@@ -77,8 +77,8 @@ export const library = {
 		colsHead: 'Columns',
 		/** The columns menu's button at the right of the list's head; its accessible name. */
 		colsOpen: 'columns',
-		/** The Digested column: how many results are digested, of how many the source holds, and how many are compared. */
-		digested: (n: number, of: number | null, compared: number) => `${of === null ? n : `${n} of ${of}`} · ${compared} compared`,
+		/** The Digested column: how many results are digested, of how many the source holds, and how many are checked against their paper. */
+		digested: (n: number, of: number | null, compared: number) => `${of === null ? n : `${n} of ${of}`} · ${compared} checked`,
 		/** After a work's title: the words that tell a later version apart. */
 		version: (v: number | string) => (v === 2 ? 'second version' : typeof v === 'number' ? `version ${v}` : v),
 		/** A thumbnail's page for a work of which loom has no document. */

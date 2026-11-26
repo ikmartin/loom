@@ -22,6 +22,7 @@ test("the list holds round six's 300 works, sorted by title, and sorts, filters 
 	await expect(page.getByTestId('work-row').first()).toContainText('A note on admissible weightings');
 	await page.getByTestId('sort-title').click();
 	await expect(page.getByTestId('work-row').first()).not.toContainText('A note on admissible weightings');
+	await expect(page.getByTestId('library-column').getByRole('button')).toHaveText(['All works', 'Used in your drafts', 'No document']);
 	await page.getByTestId('filter-nodoc').click();
 	const nodoc = await page.getByTestId('work-row').count();
 	expect(nodoc).toBeGreaterThan(3);
@@ -30,7 +31,7 @@ test("the list holds round six's 300 works, sorted by title, and sorts, filters 
 	await page.getByTestId('works-search').fill('widgets and their');
 	await expect(page.getByTestId('work-row')).toHaveCount(1);
 	await expect(page.getByText('1 of 300')).toBeVisible();
-	await expect(row(page, 'Widgets and their bounds')).toContainText('11 of 62 · 2 compared');
+	await expect(row(page, 'Widgets and their bounds')).toContainText('11 of 62 · 2 checked');
 });
 
 test("a work's title is drawn in the list's sans, at the size of the columns beside it", async ({ page }) => {

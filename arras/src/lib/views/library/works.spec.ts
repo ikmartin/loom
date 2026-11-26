@@ -12,7 +12,6 @@ describe('the list of works', () => {
 
 	it('filters as the column says', () => {
 		expect([smith, jones, okafor].filter((w) => passes(w, 'used')).map((w) => w.ref)).toEqual(['a']);
-		expect([smith, jones, okafor].filter((w) => passes(w, 'unchecked')).map((w) => w.ref)).toEqual(['a']);
 		expect([smith, jones, okafor].filter((w) => passes(w, 'nodoc')).map((w) => w.ref)).toEqual(['b']);
 		expect([smith, jones, okafor].filter((w) => passes(w, 'all'))).toHaveLength(3);
 	});

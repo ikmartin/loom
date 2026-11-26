@@ -72,7 +72,7 @@ The viewer draws `matches` as round six's filled circle ("matches the paper"), `
 
 ### 3.1 The works list (1, 1 thumbs, 1 add, 1 digest, 1c, 1d)
 
-**Drawn.** In the column, the filters All works, Used in your drafts, Not yet compared and No document. Above the list, a search by title or author, `list` and `thumbnails`, `add work…` and `digest…`. The list's columns are Title, Authors, Year and Digested ("11 of 62 · 2 compared"; "3 · 0 compared" for a work held only as a PDF), and from the columns menu Loom has and Used in; any column sorts. A click opens a work in a tab; ⌘-click selects without opening; on a row, `digest…` and a menu of `open its source ↗`, `edit its entry…` and `delete`. Thumbnails draw each work's first page, or "no document".
+**Drawn.** In the column, the filters All works, Used in your drafts and No document; the results not yet checked against their paper are Review's (§4, `check`). Above the list, a search by title or author, `list` and `thumbnails`, `add work…` and `digest…`. The list's columns are Title, Authors, Year and Digested ("11 of 62 · 2 checked"; "3 · 0 checked" for a work held only as a PDF), and from the columns menu Loom has and Used in; any column sorts. A click opens a work in a tab; ⌘-click selects without opening; on a row, `digest…` and a menu of `open its source ↗`, `edit its entry…` and `delete`. Thumbnails draw each work's first page, or "no document".
 
 **Read `library-works`.** Given `{"doc"?: DOC}`; `doc` only from the Docs picker (§6.1). Answers every work:
 
@@ -93,7 +93,7 @@ The viewer draws `matches` as round six's filled circle ("matches the paper"), `
 - `link` is the work's own page for `open its source ↗`: the entry's `url`, else its DOI's resolver, else its arXiv page; null when it states none.
 - `version` is Open 3; `lookup` is null or `{"state": "unconfirmed", "identifier": "arxiv:2209.01234v2"}`, the identifier `scheme:value` with the scheme lower-case, which the viewer draws as "arXiv 2209.01234v2" (1d, below); `cited_as` is null here and is the picker's (§6.1).
 
-Filtering, sorting and searching are the viewer's, over the rows it holds: "Not yet compared" is `compared` less than `statements`; "No document" is no PDF and no TeX source.
+Filtering, sorting and searching are the viewer's, over the rows it holds: "No document" is no PDF and no TeX source.
 
 From: index (the references and a count of nodes by `source`), evidence (`compared`), scan (`used_in`), store (`holds`, `of`). Cost: one answer of 300 rows, about 60 KB; one grouped query on the index and one pass over the scan's citations, 50 ms warm. It opens no node file, no PDF and no source, and makes no survey.
 
