@@ -146,15 +146,17 @@ export const frame = {
 		/** Said after an upgrade that could not carry everything; the button then opens the quilt. */
 		problems: (n: number) => `The quilt is upgraded, but ${n === 1 ? 'one thing' : `${n} things`} could not be carried over.`,
 		open: 'open the quilt',
-		/** Why an upgrade did not happen, by the publisher's refusal; the button stays, to try again. */
+		/** Why an upgrade did not happen, by the publisher's refusal; the button stays, for once the cause is gone. */
 		failed: (code: string) =>
 			code === 'author-only'
 				? "Only the quilt's author can upgrade it."
 				: code === 'format-unknown'
 					? 'This quilt was made by a version of loom this one cannot upgrade from.'
-					: code === 'unreachable'
-						? 'Loom could not be reached, so the quilt was not upgraded.'
-						: 'The upgrade did not finish; try it again.'
+					: code === 'state-refused'
+						? 'The quilt was not upgraded: its research state holds a link that names nothing or a character that is not text, which loom will not write. Mend the research state, then upgrade the quilt again.'
+						: code === 'unreachable'
+							? 'Loom could not be reached, so the quilt was not upgraded.'
+							: 'The upgrade did not finish; try it again.'
 	},
 	open: {
 		/** The page `loom open` lands on, when the link it was given names nothing in this quilt. */
