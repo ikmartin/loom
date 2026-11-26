@@ -152,7 +152,7 @@
    "read_only_hint": false
   },
   "command": "loom annotate",
-  "description": "Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, or a project PDF; a MESSAGE of `-` is read from stdin.\n\nAn annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.",
+  "description": "Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, a project PDF, or a Markdown file; a MESSAGE of `-` is read from stdin.\n\nAn annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A Markdown file is named by its path with its suffix, and --quote is words of it, as the file or its page has them. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -220,7 +220,7 @@
      "type": "integer"
     },
     "quote": {
-     "description": "Anchor to this exact text: once in a key's own text, or on the page of a cited work given by --page.",
+     "description": "Anchor to this exact text: once in a key's own text or a Markdown file's, or on the page of a cited work given by --page.",
      "type": "string"
     },
     "reply": {
@@ -1228,7 +1228,7 @@
    "read_only_hint": true
   },
   "command": "loom link",
-  "description": "Print a markdown link to THING that the viewer can follow.\n\nTHING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.",
+  "description": "Print a markdown link to THING that the viewer can follow.\n\nTHING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF, a Markdown file or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -1241,7 +1241,7 @@
      "type": "integer"
     },
     "quote": {
-     "description": "Words to open at and light: on the work's page, on the PDF's page given by --at page=N, or at the place in a document; anywhere in it with no page or place.",
+     "description": "Words to open at and light: on the work's page, on the PDF's page given by --at page=N, at the place in a document, or in a Markdown file; anywhere in it with no page or place.",
      "type": "string"
     },
     "thing": {
@@ -1661,7 +1661,7 @@
    "read_only_hint": false
   },
   "command": "loom suggest",
-  "description": "File a suggested edit on KEY: --with NEW in place of --quote OLD, or beside it with --before or --after; without --quote, of the key's body.\n\nThe person keeps or discards it with `loom changes`: keeping writes it into the file, discarding leaves the text as it is, and `loom changes ID` prints the patch that takes it. An edit that names the annotation it --answers resolves that annotation when it is kept. `--before` with no quote puts the text at the head of the body, which is how a `\\uses{…}` is proposed. `--withdraw EDIT` takes back one of your own while it is open; `loom changes --by NAME` lists the edits NAME suggested, in every state.",
+  "description": "File a suggested edit on KEY, or on a Markdown file by its path: --with NEW in place of --quote OLD, or beside it with --before or --after; without --quote, of the key's body, which a Markdown file has none of.\n\nThe person keeps or discards it with `loom changes`: keeping writes it into the file, discarding leaves the text as it is, and `loom changes ID` prints the patch that takes it. An edit that names the annotation it --answers resolves that annotation when it is kept. `--before` with no quote puts the text at the head of the body, which is how a `\\uses{…}` is proposed. `--withdraw EDIT` takes back one of your own while it is open; `loom changes --by NAME` lists the edits NAME suggested, in every state.",
   "inputSchema": {
    "additionalProperties": false,
    "properties": {
@@ -1693,7 +1693,7 @@
      "type": "string"
     },
     "quote": {
-     "description": "The words it replaces, once in the key's own text and inside the block, short of its \\begin and \\end; without it, the key's body.",
+     "description": "The words it replaces, once in the key's own text and inside the block, short of its \\begin and \\end, or once in a Markdown file as written; without it, the key's body.",
      "type": "string"
     },
     "why": {

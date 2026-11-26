@@ -214,13 +214,13 @@ A number as a reader sees it -- `Theorem 3.4`, `3.4`, `(3)` -- finds what each d
 
 Print a markdown link to THING that the viewer can follow.
 
-THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
+THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF, a Markdown file or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
 
 | option | description |
 |---|---|
 | `--at` | A place in THING: a key inside the document or node, a heading's id in a Markdown file or notebook, page=N in a PDF, L and a line number in a text file. |
 | `--page` | A page of a work's PDF, from 1. |
-| `--quote` | Words to open at and light: on the work's page, on the PDF's page given by --at page=N, or at the place in a document; anywhere in it with no page or place. |
+| `--quote` | Words to open at and light: on the work's page, on the PDF's page given by --at page=N, at the place in a document, or in a Markdown file; anywhere in it with no page or place. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Review
@@ -231,13 +231,13 @@ Annotate, accept, keep or undo what changed, see what rests on what, what is kno
 
 `loom annotate [OPTIONS] [TARGET] [MESSAGE]`
 
-Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, or a project PDF; a MESSAGE of `-` is read from stdin.
+Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, a project PDF, or a Markdown file; a MESSAGE of `-` is read from stdin.
 
-An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
+An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A Markdown file is named by its path with its suffix, and --quote is words of it, as the file or its page has them. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
 
 | option | description |
 |---|---|
-| `--quote` | Anchor to this exact text: once in a key's own text, or on the page of a cited work given by --page. |
+| `--quote` | Anchor to this exact text: once in a key's own text or a Markdown file's, or on the page of a cited work given by --page. |
 | `--page` `N` | Page N of a PDF: a work's (TARGET its reference, or the key its entry has) or a project PDF by its path; with --quote, --box or --stroke. |
 | `--box` `X0,Y0,X1,Y1` | Anchor to a rectangle on the page, in points with the origin at the top left; ';' separates several. With --edit, where a drawn one stands now. |
 | `--stroke` `X,Y,X,Y,…` | A line of ink or an arrow on the page, in points from its top left; repeat for more lines. With --edit, its lines now. |
@@ -263,14 +263,14 @@ An annotation carries its author, its time and the version of the text it was wr
 
 `loom suggest [OPTIONS] [KEY]`
 
-File a suggested edit on KEY: --with NEW in place of --quote OLD, or beside it with --before or --after; without --quote, of the key's body.
+File a suggested edit on KEY, or on a Markdown file by its path: --with NEW in place of --quote OLD, or beside it with --before or --after; without --quote, of the key's body, which a Markdown file has none of.
 
 The person keeps or discards it with `loom changes`: keeping writes it into the file, discarding leaves the text as it is, and `loom changes ID` prints the patch that takes it. An edit that names the annotation it --answers resolves that annotation when it is kept. `--before` with no quote puts the text at the head of the body, which is how a `\uses{…}` is proposed. `--withdraw EDIT` takes back one of your own while it is open; `loom changes --by NAME` lists the edits NAME suggested, in every state.
 
 | option | description |
 |---|---|
 | `--with` `NEW` | The new text; '' deletes the quoted words, and - reads it from stdin. |
-| `--quote` `OLD` | The words it replaces, once in the key's own text and inside the block, short of its \begin and \end; without it, the key's body. |
+| `--quote` `OLD` | The words it replaces, once in the key's own text and inside the block, short of its \begin and \end, or once in a Markdown file as written; without it, the key's body. |
 | `--before` | Put the new text right before the quoted words, or at the head of the body. |
 | `--after` | Put the new text right after the quoted words, or at the end of the body. |
 | `--answers` `ID` | The annotation it answers; keeping the edit resolves it. |
