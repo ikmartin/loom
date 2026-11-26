@@ -35,6 +35,11 @@ MAX_BODY = 1024 * 1024
 KEPT_JOBS = 20
 
 
+def _carried() -> Path:
+    """Where the jobs that ended wait for the home that starts after an update."""
+    return registry.folder() / "jobs.json"
+
+
 class HomeRunning(Exception):
     """Another home runs on this machine already: it holds the home's lock."""
 
@@ -370,6 +375,25 @@ class Home:
         """The jobs running or done, newest first."""
         return [dict(job) for job in reversed(self.jobs.values())]
 
+    def hand_on(self) -> None:
+        """Keep the jobs that ended in `app/jobs.json` for the home that starts in this one's place after an update, which lists them as its own (`take_on`)."""
+        ended = [job for job in self.jobs_listing() if job["state"] != "running"]
+        try:
+            _carried().write_text(json.dumps(ended) + "\n", encoding="utf-8")
+        except (OSError, TypeError, ValueError):
+            traceback.print_exc()  # the restart goes on: the page loses the jobs' answers, never a quilt
+
+    def take_on(self) -> None:
+        """List the jobs the home before this one handed on (`hand_on`), once."""
+        try:
+            said = json.loads(_carried().read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            said = []
+        _carried().unlink(missing_ok=True)
+        for job in reversed(said if isinstance(said, list) else []):
+            if isinstance(job, dict) and isinstance(job.get("job"), str) and job.get("state") in ("done", "failed"):
+                self.jobs[job["job"]] = job
+
     def start_job(self, kind: str, work: Callable[[Callable[[str], None]], dict[str, Any]]) -> str:
         """Run `work` in a thread of its own, told a step to show as each begins; the job is listed by `quilt-list` as `running`, then `done` with what `work` answered or `failed` with `why` and `said`.
 
@@ -407,6 +431,7 @@ class Home:
             self.claimed.enter_context(locked(registry.folder() / "home.lock", wait=0))
         except EnvError as exc:
             raise HomeRunning from exc
+        self.take_on()
         for clear in (recover, sweep):
             try:
                 clear()
@@ -442,13 +467,15 @@ class Home:
             traceback.print_exc()
 
     def run(self, reexec: Callable[[], None] | None = None) -> None:
-        """Keep the quilts the person left open served, once a second, until `stop`; once loom's own code has moved and been still for `SETTLE`, and no quilt is being made, call `reexec`."""
+        """Keep the quilts the person left open served, once a second, until `stop`; once loom's own code has moved and been still for `SETTLE`, and no quilt is being made and no job runs, hand the jobs that ended on and call `reexec`."""
         while not self.stopping.wait(1.0):
             self.beat()
             sup = self.supervisor
             moved = sup.stamp != self.code and time.monotonic() - sup.still_since >= SETTLE
-            if reexec is not None and moved and not self.makings.running:
+            running = self.makings.running or any(job["state"] == "running" for job in list(self.jobs.values()))
+            if reexec is not None and moved and not running:
                 self.close()
+                self.hand_on()
                 reexec()
 
     def close(self) -> None:
