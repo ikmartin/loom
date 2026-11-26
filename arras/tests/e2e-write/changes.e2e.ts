@@ -153,6 +153,20 @@ test('Keep resolves the annotation a suggestion answers', async ({ page, served 
 	expect(text(served)).toContain('Each orbit');
 });
 
+test("a keep loom refuses is said in the viewer's words, by its code, and never in loom's", async ({ page, served }) => {
+	const edit = await editInPlace(served);
+	// loom's answer to a keep it refuses, as `change-keep` gives it; loom's own refusals are its suite's, and this is the viewer's wording of one
+	const loomSays = 'drafting/nodes/sy-0002.tex changed at line 3 since the change was listed (sha 1a2b3c)';
+	await page.route('**/_api/change-keep', (route) => route.fulfill({ json: { ok: true, result: '1 could not be', done: [], refused: [{ id: edit, why: loomSays, code: 'changed-since' }] } }));
+	await page.goto('/review');
+	await drawn(page, card(page, edit));
+	await card(page, edit).getByTestId('card-keep').click();
+	const said = page.getByTestId('column-message');
+	await expect(said).toHaveText('One change was not kept: its words changed in the file since, so loom left them as they are.');
+	await expect(said).not.toContainText(loomSays);
+	expect(text(served)).toContain('at most two points');
+});
+
 test("Keep all keeps every ready change of a document from its Changes menu, and Discard all every one Review lists", async ({ page, served }) => {
 	await editInPlace(served);
 	await page.goto('/master/drafting/main');

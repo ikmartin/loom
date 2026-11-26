@@ -15,6 +15,7 @@
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
 	import { can } from '$lib/write';
+	import { changeSaid } from './answers';
 	import ChangeRow from './rows/ChangeRow.svelte';
 	import SeeItLink from './SeeItLink.svelte';
 	import { rv } from './state.svelte';
@@ -35,19 +36,19 @@
 		void can('change-discard').then((yes) => (writes.discard = yes));
 	});
 
-	/** Keep or discard every change listed that can be; the column's message says how many, and what was refused. */
+	/** Keep or discard every change listed that can be; the column's message says how many, and why any was not, in the viewer's words (`changeSaid`). */
 	async function every(how: 'keep' | 'discard'): Promise<void> {
 		busy = true;
 		const res = how === 'keep' ? await keepChanges({ changes: ids }) : await discardChanges({ changes: ids });
 		busy = false;
 		if (!res.ok) return message.post(said({ code: res.error?.code ?? 'failed', message: res.error?.message ?? '' }));
-		const n = res.done?.length ?? ids.length - (res.refused?.length ?? 0);
-		message.post([how === 'keep' ? words.edits.keptAll(n) : words.edits.discardedAll(n), ...(res.refused ?? []).map((r) => r.why)].join(' '));
+		const refused = res.refused ?? [];
+		message.post(changeSaid(how, res.done?.length ?? ids.length - refused.length, refused));
 	}
 
 	async function back(): Promise<void> {
-		const why = await undo();
-		if (why) message.post(why);
+		// a refusal is loom's sentence, so the viewer says its own
+		if (await undo()) message.post(words.edits.notUndone);
 	}
 	const name = (path: string) => (path.split('/').pop() ?? path).replace(/\.tex$/, '');
 </script>

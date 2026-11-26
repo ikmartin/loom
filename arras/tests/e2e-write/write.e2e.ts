@@ -444,14 +444,16 @@ function compiled(served: Served): void {
 	writeFileSync(join(compileFolder(served.root, 'drafting/main.tex'), 'main.pdf'), '%PDF-1.4\n');
 }
 
-test('a block resting on a stale one not accepted with it is refused, said in its row, and nothing is accepted', async ({ page, served }) => {
+test('a block resting on a stale one not accepted with it is refused, said in the viewer\'s words and never loom\'s, and nothing is accepted', async ({ page, served }) => {
 	// sy-0002 rests on sy-0001, whose acceptance is stale: accepting sy-0002 alone would record it against what was never re-read
 	const ledger = acceptedKeys(served);
 	await page.goto('/review');
 	const orbits = acceptRow(page, 'sy-0002');
 	await openRow(orbits);
 	await orbits.getByTestId('review-accept').click();
-	await expect(page.getByTestId('column-message')).toContainText('Orbits: accept Widget first, or with it.');
+	await expect(page.getByTestId('column-message')).toHaveText('Orbits was not accepted.');
+	// loom's own sentence is written for the command line, and is never said
+	await expect(page.getByTestId('column-message')).not.toContainText('Accept Widget first');
 	expect(acceptedKeys(served)).toEqual(ledger);
 });
 

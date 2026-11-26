@@ -11,7 +11,7 @@
 	import { keyName, linkName } from '$lib/workspace/names';
 	import { can } from '$lib/write';
 	import { actSays, kindName, ready, refusal, whoMade } from './changes';
-	import { discardChanges, keepChanges } from './history.svelte';
+	import { discardChanges, keepChanges, type ChangeAnswer } from './history.svelte';
 	import { say } from './toasts.svelte';
 
 	let {
@@ -20,7 +20,8 @@
 		onopen,
 		place = false,
 		see,
-		bare = false
+		bare = false,
+		onanswer
 	}: {
 		c: PendingChange;
 		/** Whether its popup is open. */
@@ -33,6 +34,8 @@
 		see?: ((key: string, said: string) => void) | null;
 		/** Drawn without its frame, inside a row of Review's that opened to it. */
 		bare?: boolean;
+		/** Told what Keep or Discard answered, in place of the toast: Review says it in the column's message, in its own words. */
+		onanswer?: (how: 'keep' | 'discard', res: ChangeAnswer) => void;
 	} = $props();
 
 	const m = $derived(store.manifest);
@@ -54,6 +57,7 @@
 	async function act(how: 'keep' | 'discard', e: Event): Promise<void> {
 		e.stopPropagation();
 		const res = how === 'keep' ? await keepChanges({ changes: [c.id] }) : await discardChanges({ changes: [c.id] });
+		if (onanswer) return onanswer(how, res);
 		const refused = res.refused?.find((r) => r.id === c.id)?.why;
 		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? res.error?.message ?? 'the publisher refused it'] });
 	}

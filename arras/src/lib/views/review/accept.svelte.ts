@@ -1,11 +1,11 @@
-// Accepting from Results to accept, one row's block or those chosen together (`rv.picked`): what loom accepts leaves the list once the manifest is read again, and the column's message says what was accepted and, a sentence each, what was refused and why.
+// Accepting from Results to accept, one row's block or those chosen together (`rv.picked`): what loom accepts leaves the list once the manifest is read again, and the column's message says what was accepted and what was not, in the viewer's words (`acceptSaid`).
 
 import { said } from '$lib/library/said';
 import { store } from '$lib/manifest/client.svelte';
 import { displayNode } from '$lib/nodes/display';
 import { message } from '$lib/shell/message.svelte';
-import { review as words } from '$lib/words/review';
 import { write, type WriteResult } from '$lib/write';
+import { acceptSaid } from './answers';
 import { rv } from './state.svelte';
 
 /** What is being accepted: a block's key, `*` for those chosen together, or '' while nothing is. */
@@ -36,9 +36,8 @@ export async function acceptKeys(keys: string[], at: string, docs: Record<string
 	}
 	const ok = done.accepted ?? [];
 	for (const k of ok) rv.picked.delete(k);
-	const lines = ok.length ? [ok.length === 1 ? words.accepted.acceptedOne(name(ok[0])) : words.accepted.acceptedMany(ok.length)] : [];
-	for (const r of done.refused ?? []) lines.push(`${name(r.key)}: ${r.why.charAt(0).toLowerCase()}${r.why.slice(1)}`);
+	const text = acceptSaid(ok, (done.refused ?? []).map((r) => r.key), name, (key) => m.unresolved?.find((u) => u.key === key));
 	await store.refresh();
 	accepting.at = '';
-	message.post(lines.join(' '));
+	message.post(text);
 }

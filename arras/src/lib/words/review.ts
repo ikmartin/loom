@@ -337,7 +337,21 @@ export const review = {
 		/** A copy's quiet line before what it holds. */
 		copy: "an agent's copy",
 		/** A copy's link at the right of its row: opens it on its own page in Review, where it is taken in and applied. */
-		openCopy: 'review the copy'
+		openCopy: 'review the copy',
+		/** The column's message for changes loom would not keep or discard, one line for each reason; `why` by its code, absent where none is known. */
+		notDone: (how: 'keep' | 'discard', n: number, why?: string) => `${n === 1 ? 'One change was' : `${n} changes were`} not ${how === 'keep' ? 'kept' : 'discarded'}${why ? `: ${why}` : '.'}`,
+		/** Why, by the code loom refuses a keep or a discard with; a code not here is said by the frame's words, else not at all. */
+		why: {
+			changed: 'it changed after it was listed, so loom left it as it is.',
+			'changed-since': 'its words changed in the file since, so loom left them as they are.',
+			'no-such-change': 'it no longer waits.',
+			'not-open': 'it was kept or discarded already.',
+			'not-utf8': 'its file is not text loom can read.',
+			'not-writable': 'its file cannot be written.',
+			'outside-quilt': 'its file is outside the quilt.'
+		} as Record<string, string>,
+		/** The column's message when the last keep or discard could not be undone. */
+		notUndone: 'The last keep or discard could not be undone.'
 	},
 	accepted: {
 		/** Accepts a changed result again. */
@@ -348,6 +362,16 @@ export const review = {
 		acceptedOne: (name: string) => `Accepted ${name}.`,
 		/** The column's message after accepting several. */
 		acceptedMany: (n: number) => `Accepted ${n} results.`,
+		/** The column's message for a result loom would not accept, and why where its row's code says (`why`). */
+		notAccepted: (name: string, why?: string) => `${name} was not accepted${why ? `: ${why}` : '.'}`,
+		/** Why, by the queue's `refusal_code`. */
+		why: {
+			'not-yours': 'it is not in your documents.',
+			incomplete: 'it is marked incomplete.',
+			'open-claim': 'it is a conjecture or a question, which is not accepted.',
+			unclassified: 'loom cannot tell whether it is proved here, cited, or assumed.',
+			unidentified: 'something it rests on cannot be identified.'
+		} as Record<string, string>,
 		/** A changed result's quiet line where its own text was edited. */
 		changed: 'changed since you accepted',
 		/** A changed result's quiet line: its first reason, and how many more it has. */
