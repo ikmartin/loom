@@ -1069,7 +1069,7 @@ h &= i \label{e:c}
 \end{document}
 """
 #: Its PDF as `pdftotext` reads one: each display's number alone on its line, or opening its formula's first.
-DISPLAYED = "1 One\na\n(1.1)\nBy (1.2) at a line's end, which is no display.\nb = c\n(1.2)\nd = e\nf = g\n(⋆)\n(1.3) h = i\nLemma 1.1. x\n(1.4)\np\n(1.5a)\nq\n(1.5b)\nr\n(1.6)\nz\n2 Two\nw\n(2.1)\n"
+DISPLAYED = "1 One\na\n(1.1)\nBy (1.2) at a line's end, which is no display.\nb = c\n(1.2)\nd = e\nf = g\n(⋆)\nh = i\n(1.3)\nLemma 1.1. x\n(1.4)\np\n(1.5a)\nq\n(1.5b)\nr\n(1.6)\nz\n2 Two\nw\n(2.1)\n"
 
 
 def _displayed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, text: str) -> survey.Survey:
@@ -1107,14 +1107,8 @@ def test_a_display_s_number_is_kept_where_the_stored_pdf_shows_it_in_order(
         "e:in": ("1.4", 1),
         "e:after": ("1.6", 1),
         "e:two": ("2.1", 1),
-    }, (
-        "a number opening its formula's line read too; a tag's text loom cannot compare, and a mention at a line's end never"
-    )
-    ending = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i (1.3)"))
-    assert {k for k, v in ending.labels.items() if v.kind == "equation" and v.number} == set(kept), (
-        "a number ending its formula's line read too"
-    )
-    lost = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i"))
+    }, "a tag's text loom cannot compare, and a mention inside a line never"
+    lost = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("h = i\n(1.3)", "h = i"))
     kept = {k for k, v in lost.labels.items() if v.kind == "equation" and v.number}
     assert kept == {"e:two"}, (
         "a number not where loom reads one leaves its window, here the whole of section One, unkept; the next window keeps its own"
@@ -1126,7 +1120,7 @@ def test_a_display_loom_does_not_count_shifts_no_number_onto_its_neighbour(
 ) -> None:
     """The review's C-1: an `align` whose last line ends in `\\\\`, a `\\be … \\ee` or a display the PDF's version adds prints a number loom does not count, and the uncounted display's own line shows the number loom expects next; nothing of that window is kept, and no number shifts."""
     extra = DISPLAYED.replace("(1.1)\n", "(1.1)\nv\n(1.2)\n").replace("(1.2)\nd = e", "(1.3)\nd = e")
-    extra = extra.replace("(1.3) h = i", "(1.4) h = i")
+    extra = extra.replace("h = i\n(1.3)", "h = i\n(1.4)")
     done = _displayed(tmp_path, monkeypatch, extra)
     kept = {k: v.number for k, v in done.labels.items() if v.kind == "equation" and v.number}
     assert kept == {"e:two": "2.1"}, "e:b would read the uncounted display's (1.2), e:c its neighbour's"
@@ -1369,10 +1363,10 @@ WIDE = r"""\documentclass{article}
 """
 
 
-def test_a_number_at_the_end_of_a_wide_display_s_line_is_counted(
+def test_a_number_opening_or_ending_a_line_leaves_its_window_unkept(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The review's C-8: `pdftotext` sets a wide display's number at its line's end; uncounted, it let one display loom does not count balance the window, and every number after it slid by one."""
+    """The review's C-8 and C-9: a number opening or ending a line may be a display's, a row of an `align` or a formula too wide for its number to stand apart, or a reference in the text that happens to begin or end a line. Counted, the reference cancels a display loom counts and the PDF does not number; uncounted, the display's cancels one loom does not count. Either way numbers slid by one, so such a line leaves its window unkept."""
 
     def kept(text: str) -> dict[str, str | None]:
         monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([text])))
@@ -1381,5 +1375,8 @@ def test_a_number_at_the_end_of_a_wide_display_s_line_is_counted(
         done = survey.confirmed(root, TEX, _one_file(root, WIDE), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
         return {k: v.number for k, v in done.labels.items() if v.kind == "equation" and v.number}
 
-    assert kept("1 One\na\n(1)\nb\n(2)\nc + c + c (3)\n") == {"e:a": "1", "e:b": "2", "e:c": "3"}
+    assert kept("1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n") == {"e:a": "1", "e:b": "2", "e:c": "3"}
     assert kept("1 One\na\n(1)\nv\n(2)\nb\n(3)\nc + c + c (4)\n") == {}, "e:b and e:c would read (2) and (3)"
+    assert kept("1 One\na\nb\n(1)\nc + c + c\n(2)\nas part (3)\n") == {}, (
+        "a display the PDF leaves unnumbered and a reference ending a line: e:a, e:b and e:c would read (1), (2) and the reference's (3)"
+    )

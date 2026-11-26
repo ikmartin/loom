@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 11
+VERSION = 12
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -1282,7 +1282,7 @@ def _shown(
 ) -> dict[str, tuple[str, int | None]]:
     """Each label of a display the stored PDF numbers as loom reads it, with its page.
 
-    The displays are read a window at a time, a window being the lines between the neighbouring headings and results found. Its display numbers are the lines that are one alone, the lines that open with one, but for a line opening with a number another line of the window shows alone, or one not shaped as loom's numbers there are, which is a list's item (`(i) first;`), and the lines that end with one shaped as loom's numbers there are, a formula too wide for its number to stand apart. Only where they are exactly as many as loom counts displays is the n-th display given the n-th, and only where every display of the window that loom numbers is given the number loom reads (or a compile's `hints`, for a label) is any kept: a display loom does not count, or one the PDF leaves unnumbered, so leaves its whole window unkept and never shifts a number onto its neighbour.
+    The displays are read a window at a time, a window being the lines between the neighbouring headings and results found. Its display numbers are the lines that are one alone, the one place `pdftotext` sets nothing but a display's number. A line that opens or ends with a number shaped as loom's numbers there are may be a display's number (a row of an `align`, a formula too wide for its number to stand apart) or a reference in the text that happens to begin or end a line, so the window keeps nothing; one repeating a number shown alone there, a list's item, is passed over. Only where the numbers alone are exactly as many as loom counts displays is the n-th display given the n-th, and only where every display of the window that loom numbers is given the number loom reads (or a compile's `hints`, for a label) is any kept: a display loom does not count, or one the PDF leaves unnumbered, so leaves its whole window unkept and never shifts a number onto its neighbour.
     """
     import bisect
 
@@ -1299,20 +1299,17 @@ def _shown(
         lo = placed[i - 1][1] if i > 0 else -1
         hi = placed[i][1] if i < len(placed) else len(pages.lines)
         shapes = {_shape(d.emulated) for d in ds if d.emulated is not None and not d.tagged}
-        numbered = [(k, n) for k in range(lo + 1, hi) if (n := _number_at(pages.lines[k][1])) is not None] + [
-            (k, m.group("n"))
+        shown = [(k, m.group("n")) for k in range(lo + 1, hi) if (m := _ALONE.fullmatch(pages.lines[k][1]))]
+        alone = {n for _k, n in shown}
+        unsure = [
+            n
             for k in range(lo + 1, hi)
-            if _number_at(pages.lines[k][1]) is None
-            and (m := _ENDS.search(pages.lines[k][1])) is not None
-            and _shape(m.group("n")) in shapes
+            if not _ALONE.fullmatch(line := pages.lines[k][1])
+            for m in (_OPENS.match(line), _ENDS.search(line))
+            if m is not None and (n := m.group("n")) not in alone and (not shapes or _shape(n) in shapes)
         ]
-        numbered.sort()
-        alone = {n for k, n in numbered if _ALONE.fullmatch(pages.lines[k][1])}
-        shown = [
-            (k, n)
-            for k, n in numbered
-            if _ALONE.fullmatch(pages.lines[k][1]) or (n not in alone and (not shapes or _shape(n) in shapes))
-        ]
+        if unsure:
+            continue
         if len(shown) != len(ds):
             continue
         given: dict[str, tuple[str, int | None]] = {}
