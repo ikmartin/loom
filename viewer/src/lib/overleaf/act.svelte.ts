@@ -1,6 +1,6 @@
 // The Overleaf mirror's acts, shared by Settings › Overleaf, Update on a mirrored document's toolbar and Done in Overleaf on a change: one update at a time, the line its answer leaves (`mirror.said`), and the token Overleaf asked for, given once and the update tried again. Every sentence is `said.ts`'s, from the words file; loom's own are never shown.
 
-import { store } from '$lib/manifest/client.svelte';
+import { landed } from '$lib/manifest/updating.svelte';
 import { keepChanges } from '$lib/review/history.svelte';
 import { overleaf as words } from '$lib/words/overleaf';
 import { write, type WriteResult } from '$lib/write';
@@ -42,7 +42,7 @@ export async function updateNow(): Promise<boolean> {
 	mirror.busy = false;
 	if (res.ok) {
 		Object.assign(mirror, { said: answered(result<UpdateAnswer>(res)), refused: false, asks: '' });
-		await store.refresh();
+		await landed();
 		return true;
 	}
 	const code = res.error?.code ?? '';

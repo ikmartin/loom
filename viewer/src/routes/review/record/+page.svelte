@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
 	import type { CanonDoc } from '$lib/manifest/types';
 	import { canonUrl, masterUrl } from '$lib/nav';
@@ -48,7 +49,7 @@
 		said = null;
 		const done = await write(endpoint, body);
 		if (done.ok) {
-			await store.refresh();
+			await landed();
 			after?.();
 		}
 		said = { at, text: done.ok ? capital(done.result ?? 'done') : (done.error?.message ?? 'The publisher refused it.'), refused: !done.ok };

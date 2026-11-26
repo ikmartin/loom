@@ -1,6 +1,7 @@
 // The one draft of the quilt's settings, kept while the window is closed so a change is not lost by closing it. Save posts every change at once; a refusal names each setting it refused, shown beside that setting.
 
 import { store } from '$lib/manifest/client.svelte';
+import { landed } from '$lib/manifest/updating.svelte';
 import { write } from '$lib/write';
 import { edited, pending, published, type Value } from './draft';
 
@@ -39,7 +40,7 @@ class Draft {
 		this.message = '';
 		const answer = await write('settings-save', { changes: this.changes });
 		if (answer.ok) {
-			await store.refresh();
+			await landed();
 			this.revert();
 		} else {
 			this.refused = answer.error?.fields ?? {};

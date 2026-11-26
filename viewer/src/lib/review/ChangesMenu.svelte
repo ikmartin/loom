@@ -83,7 +83,7 @@
 		open = false;
 	}
 
-	/** Keep or discard every change of the document that is ready, shown so at once; a refusal is said. */
+	/** Keep or discard every change of the document that is ready, shown so once loom has recorded it; a refusal is said. */
 	async function every(how: 'keep' | 'discard'): Promise<void> {
 		open = false;
 		notes.close();

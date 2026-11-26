@@ -5,6 +5,7 @@
 	import ChangeList from './ChangeList.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import type { AdoptionReview, IncorporationMathReview, IncorporationOutcome } from '$lib/manifest/types';
 	import { masterUrl, placeUrl } from '$lib/nav';
 	import { can, write } from '$lib/write';
@@ -59,7 +60,7 @@
 			if (from) onward(from);
 		} else {
 			say({ text: done.error?.message ?? 'Loom did not save that choice.', refused: true });
-			await store.refresh();
+			await landed();
 		}
 		busy = '';
 	}
@@ -98,7 +99,7 @@
 				refused: false
 			});
 			checked = [];
-			await store.refresh();
+			await landed();
 		} else say({ text: done.error?.message ?? 'Loom did not write these changes.', refused: true });
 		busy = '';
 	}
@@ -106,7 +107,7 @@
 		busy = 'refresh';
 		const done = await write('adopt-refresh', { copy: c.copy });
 		say({ text: done.ok ? 'The copy now has your latest text wherever you changed it alone; a clash stays until it is reconciled.' : (done.error?.message ?? 'Loom did not refresh the copy.'), refused: !done.ok });
-		if (done.ok) await store.refresh();
+		if (done.ok) await landed();
 		busy = '';
 	}
 </script>

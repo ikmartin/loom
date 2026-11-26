@@ -8,6 +8,7 @@ import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { judge } from '$lib/outOfStep.svelte';
 import { judgeFormat } from '$lib/shell/upgrade.svelte';
+import { updating } from '$lib/manifest/updating.svelte';
 
 export interface Capabilities {
 	write_api: number;
@@ -30,6 +31,8 @@ export interface Capabilities {
 	root?: string;
 	/** The layout the publisher found the quilt in and the one this loom reads; `found` below `reads` while it waits on a quilt an earlier loom made (shell/upgrade.svelte.ts). */
 	format?: { found: number; reads: number };
+	/** The publisher's process, which the stream's `built` event names too, so a write's answer is matched with the server that gave it. */
+	pid?: number;
 }
 
 /** The versions of the write API this viewer knows how to speak. */
@@ -109,17 +112,21 @@ export interface WriteResult {
 	error?: { code: string; message: string; fields?: Record<string, string> };
 	/** `delete`'s answer: the log events it took out, the annotation's and its replies', which `restore` puts back. */
 	removed?: Record<string, unknown>[];
+	/** The build that publishes the write, which loom answers before it ends: the page marks itself updating until it has (`manifest/updating.svelte.ts`). */
+	publication?: number;
 }
 
-/** Ask the publisher to write. Errors come back as the publisher's own refusal rather than as an exception, because a refused annotation is an answer a reader needs to see. */
+/** Ask the publisher to write. Errors come back as the publisher's own refusal rather than as an exception, because a refused annotation is an answer a reader needs to see. The answer comes once loom has recorded the write, before the manifest carries it: an answer naming the build that publishes it marks the page updating until it has (`updating`), and a caller that reads the manifest after its write awaits `landed`. */
 export async function write(endpoint: string, body: Record<string, unknown>): Promise<WriteResult> {
 	try {
 		if (endpoint === 'review-accept' || endpoint.startsWith('adopt-')) {
 			body = { reviewer: store.manifest?.reviewer?.name ?? '', ...body };
 		}
+		/** The probe the request was sent with, whose `pid` names the server that answers it. */
+		let caps: Capabilities | null = null;
 		// The token is CSRF protection and not a login: a browser blocks a cross-origin response and never the request, so any page the author happens to be reading could otherwise POST into the corpus they are serving. A cross-site form post cannot set a custom header, which is what makes carrying one enough.
 		const send = async () => {
-			const caps = await capabilities();
+			caps = await capabilities();
 			return fetch(apiUrl('/' + endpoint), {
 				method: 'POST',
 				headers: {
@@ -137,7 +144,10 @@ export async function write(endpoint: string, body: Record<string, unknown>): Pr
 			res = await send();
 		}
 		const payload = (await res.json().catch(() => ({}))) as WriteResult;
-		if (res.ok && payload.ok) return payload;
+		if (res.ok && payload.ok) {
+			updating.expect((caps as Capabilities | null)?.pid, payload.publication);
+			return payload;
+		}
 		return { ok: false, error: payload.error ?? { code: 'failed', message: `the publisher answered ${res.status}` } };
 	} catch (err) {
 		return { ok: false, error: { code: 'unreachable', message: (err as Error).message } };

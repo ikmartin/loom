@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
@@ -38,8 +39,34 @@ def get(url: str, headers: dict[str, str] | None = None) -> tuple[int, dict[str,
         return e.code, dict(e.headers), b""
 
 
-def post(url: str, body: dict[str, Any], token: str | None = None) -> tuple[int, Any]:
-    """POST `body` as JSON with the token the running server minted, read from `/_api` as the viewer reads it; `token=""` sends none."""
+def post(url: str, body: dict[str, Any], token: str | None = None, *, settle: bool = True) -> tuple[int, Any]:
+    """POST `body` as JSON with the token the running server minted, read from `/_api` as the viewer reads it; `token=""` sends none. A write answers once it is recorded and names the build that publishes it (`publication`); with `settle` this waits, as a page does, until the stream says that build ended (`landed`)."""
+    status, answer = _post(url, body, token)
+    n = answer.get("publication") if isinstance(answer, dict) else None
+    if settle and status == 200 and isinstance(n, int):
+        landed(url.split("/_api/")[0] + "/", n)
+    return status, answer
+
+
+def landed(base: str, n: int) -> dict[str, Any]:
+    """The stream's `built` state once build `n` published or failed, read from `/_api/stream` at `base` as a page reads it."""
+    deadline = time.monotonic() + PATIENCE
+    with urllib.request.urlopen(base + "_api/stream", timeout=PATIENCE) as resp:
+        event = b""
+        while time.monotonic() < deadline:
+            line = resp.readline()
+            if not line:
+                break
+            if line.startswith(b"event: "):
+                event = line[len(b"event: ") :].strip()
+            elif line.startswith(b"data: ") and event == b"built":
+                state: dict[str, Any] = json.loads(line[len(b"data: ") :])
+                if state["published"] >= n or state["failed"] >= n:
+                    return state
+    raise AssertionError(f"build {n} never ended")
+
+
+def _post(url: str, body: dict[str, Any], token: str | None = None) -> tuple[int, Any]:
     data = json.dumps(body).encode("utf-8")
     headers = {"Content-Type": "application/json"}
     if token is None:

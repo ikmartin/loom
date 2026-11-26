@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -488,13 +489,17 @@ def test_a_write_through_the_api_asks_for_the_compiles_it_reaches(serve, tmp_pat
     assert queue.asked == []
     status, answer = post(s.url + "_api/change-keep", {"changes": [edit_id], "author": "Tom"})
     assert status == 200, answer
+    # asked once the publication is out, as the build's last step
+    deadline = time.time() + PATIENCE
+    while not queue.asked and time.time() < deadline:
+        time.sleep(0.05)
     assert len(queue.asked) == 1 and "drafting/main.tex" in queue.asked[0]
 
 
 def test_a_write_of_records_publishes_from_the_last_scan_and_once(
     serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:  # type: ignore[no-untyped-def]
-    """A session, an annotation and a message change nothing the scan reads: each is published before it answers, from the last scan, and the watcher, which sees the same files afterwards, builds nothing more (plan 0.18.2)."""
+    """A session, an annotation and a message change nothing the scan reads: each is published straight after it answers, under the hold that wrote it, from the last scan, and the watcher, which sees the same files afterwards, builds nothing more (plan 0.18.2)."""
     from loom.render import build as build_mod
     from tests.unit.render._serve import post
 
@@ -536,7 +541,7 @@ def test_a_write_of_records_publishes_from_the_last_scan_and_once(
 def test_a_write_the_watcher_sees_first_is_published_once_by_its_own_request(
     serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:  # type: ignore[no-untyped-def]
-    """A write that is slow to return is seen by the watcher while its request still holds the publication lock. The request publishes under that same hold, so the watcher, which takes the lock next, finds the write published and builds nothing, and the answer does not wait behind a second build."""
+    """A write that is slow to return is seen by the watcher while its request still holds the publication lock. The request publishes under that same hold, so the watcher, which takes the lock next, finds the write published and builds nothing more."""
     from loom.render import api
     from tests.unit.render._serve import post
 
@@ -589,7 +594,7 @@ def test_a_burst_of_edits_publishes_once(session) -> None:  # type: ignore[no-un
 
 
 def test_serve_streams_each_publication_and_ends_when_it_stops(session) -> None:  # type: ignore[no-untyped-def]
-    """`/_api/stream` says each time a new manifest is published, and nothing about what changed, so a viewer listening fetches it at once instead of on its next poll; it opens with how the compiles stand and who is connected, and says again when the compiles change; the server's stop ends it (plan 0.19.2, 0.29.1)."""
+    """`/_api/stream` says each time a new manifest is published, and nothing about what changed, so a viewer listening fetches it at once instead of on its next poll; it opens with how the compiles stand, who is connected and how the builds ended, says again when the compiles change and when a build ends; the server's stop ends it (plan 0.19.2, 0.29.1)."""
     import urllib.request
 
     s, d = session
@@ -599,13 +604,146 @@ def test_serve_streams_each_publication_and_ends_when_it_stops(session) -> None:
         assert resp.readline() == b": open\n" and resp.readline() == b"\n"
         assert [resp.readline(), resp.readline(), resp.readline()] == [b"event: compiles\n", b"data: {}\n", b"\n"]
         assert [resp.readline(), resp.readline(), resp.readline()] == [b"event: connected\n", b"data: []\n", b"\n"]
+        assert resp.readline() == b"event: built\n"
+        opened = json.loads(resp.readline()[len(b"data: ") :])
+        assert opened["server"] == os.getpid() and opened["published"] == s.builds and opened["failed"] == 0
+        assert resp.readline() == b"\n"
         s.rebuild()
         assert [resp.readline(), resp.readline(), resp.readline()] == [b"event: manifest\n", b"data:\n", b"\n"]
+        assert resp.readline() == b"event: built\n"
+        assert json.loads(resp.readline()[len(b"data: ") :])["published"] == opened["published"] + 1
+        assert resp.readline() == b"\n"
         s.publications.compiled(b'{"main.tex":{"state":"queued","again":false,"last":null}}')
         assert resp.readline() == b"event: compiles\n"
         assert json.loads(resp.readline()[len(b"data: ") :])["main.tex"]["state"] == "queued"
         s.publications.close()
         assert resp.read() == b"\n"
+
+
+def _held_build(monkeypatch: pytest.MonkeyPatch, fail: bool = False) -> tuple[threading.Event, threading.Event]:
+    """Hold every build from now on until the second event is set, the first saying one began; with `fail`, the held build then raises."""
+    from loom.render import serve as serve_mod
+
+    began, go = threading.Event(), threading.Event()
+    real = serve_mod.build
+
+    def held(*args, **kwargs):  # type: ignore[no-untyped-def]
+        began.set()
+        assert go.wait(PATIENCE)
+        if fail:
+            raise OSError("the disk is full")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(serve_mod, "build", held)
+    return began, go
+
+
+def test_a_write_answers_once_recorded_and_names_the_build_that_publishes_it(
+    serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    """A write from the viewer answers as soon as the act is recorded, while the build that publishes it has not ended, and names that build; the stream says when it published, and the manifest then holds the write."""
+    from tests.unit.render._serve import landed, post
+
+    d = demo(tmp_path)
+    s = serve(d, watch=False)
+    began, go = _held_build(monkeypatch)
+    answers: list[tuple[int, Any]] = []
+    note = {"target": "dm-0003", "message": "Answered early.", "author": "A. Author"}
+    writer = threading.Thread(target=lambda: answers.append(post(s.url + "_api/annotate", note, settle=False)))
+    writer.start()
+    assert began.wait(PATIENCE), "no build began after the write"
+    writer.join(10.0)
+    try:
+        assert answers, "the write waited for its publication before it answered"
+        status, answer = answers[0]
+        assert status == 200 and answer["ok"] is True
+        assert "Answered early." in (d / ".loom/records/annotations/log.jsonl").read_text(encoding="utf-8")
+        assert answer["publication"] == s._begun, "the answer names another build than the one publishing it"
+        assert "Answered early." not in get(s.url + "build/manifest.json")[2].decode()
+    finally:
+        go.set()
+    state = landed(s.url, answer["publication"])
+    assert state["published"] == answer["publication"] and state["failed"] == 0
+    assert "Answered early." in get(s.url + "build/manifest.json")[2].decode()
+
+
+def test_a_build_that_fails_after_a_write_is_said_and_the_write_stands(
+    serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    """The write is recorded and answered; the build that was to publish it fails, and the stream says that build failed and why, so a page that waits on it stops waiting and says so."""
+    from tests.unit.render._serve import landed, post
+
+    d = demo(tmp_path)
+    s = serve(d, watch=False)
+    _, go = _held_build(monkeypatch, fail=True)
+    go.set()
+    status, answer = post(
+        s.url + "_api/annotate", {"target": "dm-0003", "message": "Kept anyway.", "author": "A. Author"}, settle=False
+    )
+    assert status == 200 and answer["ok"] is True
+    state = landed(s.url, answer["publication"])
+    assert state["failed"] == answer["publication"] and state["published"] < answer["publication"]
+    assert "the disk is full" in state["why"]
+    assert "Kept anyway." in (d / ".loom/records/annotations/log.jsonl").read_text(encoding="utf-8")
+
+
+def test_a_build_that_fails_before_it_reads_the_files_still_takes_its_number(
+    serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    """A build that fails before it is under way (the files unreadable) is numbered and said all the same, so the next write names a later build and is never taken for the failed one's."""
+    from loom.render import serve as serve_mod
+    from tests.unit.render._serve import landed, post
+
+    s = serve(demo(tmp_path), watch=False)
+    real = serve_mod.snapshot
+    broken = [True]
+
+    def snap(*args, **kwargs):  # type: ignore[no-untyped-def]
+        # the build's own look at the files, not the write's reads
+        if broken[0] and sys._getframe(1).f_code.co_name == "rebuild":
+            raise OSError("the files cannot be read")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(serve_mod, "snapshot", snap)
+    note = {"target": "dm-0003", "message": "One.", "author": "A. Author"}
+    status, first = post(s.url + "_api/annotate", note, settle=False)
+    assert status == 200
+    assert landed(s.url, first["publication"])["failed"] == first["publication"]
+    broken[0] = False
+    status, second = post(s.url + "_api/annotate", {**note, "message": "Two."}, settle=False)
+    assert status == 200 and second["publication"] > first["publication"]
+    assert landed(s.url, second["publication"])["published"] == second["publication"]
+
+
+def test_a_second_write_names_a_later_build_than_the_first(
+    serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    """Two writes, the second sent while the first one's build is held: each answers with its own build, the second's later, and once both ended the stream says the later one published, so a page waiting on either stops waiting."""
+    from tests.unit.render._serve import landed, post
+
+    s = serve(demo(tmp_path), watch=False)
+    began, go = _held_build(monkeypatch)
+    answers: list[tuple[int, Any]] = []
+    first = threading.Thread(
+        target=lambda: answers.append(
+            post(s.url + "_api/annotate", {"target": "dm-0003", "message": "One.", "author": "A. Author"}, settle=False)
+        )
+    )
+    first.start()
+    assert began.wait(PATIENCE)
+    first.join(10.0)
+    second = threading.Thread(
+        target=lambda: answers.append(
+            post(s.url + "_api/annotate", {"target": "dm-0003", "message": "Two.", "author": "A. Author"}, settle=False)
+        )
+    )
+    second.start()
+    go.set()
+    second.join(PATIENCE)
+    assert [a[0] for a in answers] == [200, 200]
+    one, two = answers[0][1]["publication"], answers[1][1]["publication"]
+    assert two > one
+    assert landed(s.url, two)["published"] >= two
 
 
 def test_the_watcher_sees_loom_s_own_records_between_full_scans(tmp_path: Path) -> None:

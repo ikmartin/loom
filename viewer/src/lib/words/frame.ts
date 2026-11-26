@@ -53,6 +53,14 @@ export const frame = {
 		/** The column's message when an undo failed, with the publisher's reason. */
 		undoFailed: (why: string) => (why ? `It could not be undone. ${why}` : 'It could not be undone.')
 	},
+	updating: {
+		/** The line in the column's foot, and the folded dot's name, from a write's answer until the page carries it. */
+		on: 'Updating the page…',
+		/** The line in its place when the build that was to show a write failed: the write is done, the page is not up to date. */
+		failed: 'Done, but the page could not be brought up to date.',
+		/** The close button on that line. */
+		dismiss: 'Dismiss'
+	},
 	legend: {
 		/** The quiet link in the column's foot that opens the legend of the marks. */
 		open: 'what the marks mean',

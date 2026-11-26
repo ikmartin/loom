@@ -1,6 +1,6 @@
 <script lang="ts">
 	// The pairing card, while the quilt mirrors no project: the project's link, then, once loom reaches it, the new folder it goes in, its main file where it has several, and which of its history's authors is the person; Copy the project pairs. Where Overleaf asks for a git token, the token field (`TokenField`) stands under the link and the same request is made again once the token is kept. Every refusal is said in the words file's words by its code (`problemSaid`).
-	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { overleaf as words } from '$lib/words/overleaf';
 	import { write, type WriteResult } from '$lib/write';
 	import { ASKS_TOKEN, mirror } from './act.svelte';
@@ -56,7 +56,7 @@
 		if (!res.ok) return refusal(res, pair);
 		const done = (res.result as unknown as { paired: { folder: string } }).paired;
 		Object.assign(mirror, { said: words.pair.paired(done.folder), refused: false, asks: '' });
-		await store.refresh();
+		await landed();
 	}
 
 	function tick(email: string, on: boolean): void {
