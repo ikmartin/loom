@@ -1587,3 +1587,28 @@ def test_a_first_heading_continues_loom_s_reading_and_a_contents_page_ends_at_th
         page = page.split("\n\n1\n\n", 2)[2]
     got = survey.place(s, survey.Pages([page]))
     assert sorted(got.values()) == [(str(first), 1), (str(first + 1), 1)], got
+
+
+def test_a_kept_survey_is_compact_and_reads_back_whole(tmp_path: Path) -> None:
+    """The review's D-6: the kept file holds its lists as tables of rows and names a file only where it is not the main one; it reads back as it was."""
+    import json
+
+    from loom.library.survey import kept, path_of, survey
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.tex").write_text(
+        "\\documentclass{article}\n\\newtheorem{lemma}{Lemma}[section]\n\\begin{document}\n\\section{One}\\label{s:one}\n\\input{part}\n\\end{document}\n"
+    )
+    (src / "part.tex").write_text(
+        "\\begin{lemma}\\label{l:a}\nEvery widget is compact and closed,\n\\begin{equation}\\label{eq:a} x \\le 1 .\\end{equation}\n\\end{lemma}\n"
+        "\\begin{proof}\nBy the bound \\eqref{eq:a} and nothing else at all.\n\\end{proof}\n"
+    )
+    root = tmp_path / "q"
+    tex = "sha256:" + "ab" * 32
+    s = survey(root, tex, src, "main.tex")
+    assert s.items and s.items[0].file == "part.tex" and s.items[0].proofs and s.labels and s.displays
+    held = json.loads(path_of(root, tex).read_text(encoding="utf-8"))
+    assert held["items"]["cols"][0] == "item" and isinstance(held["labels"]["rows"], list)
+    back = kept(root, tex)
+    assert back is not None and back.to_json() == s.to_json()

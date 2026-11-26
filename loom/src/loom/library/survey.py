@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 18
+VERSION = 19
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -713,18 +713,64 @@ def kept(root: Path, tex: str, pdf: str | None = None) -> Survey | None:
     """The survey kept for the source `tex` and the stored PDF `pdf`, or None when there is none of this version."""
     try:
         data = json.loads(path_of(root, tex, pdf).read_text(encoding="utf-8"))
-        return Survey.from_json(data) if data.get("version") == VERSION else None
-    except (OSError, ValueError, TypeError):
+        return Survey.from_json(unpacked(data)) if data.get("version") == VERSION else None
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
         return None
 
 
 def keep(root: Path, survey: Survey) -> None:
-    """Write a survey to its file whole: a reader sees the last one or this one, never part of it."""
+    """Write a survey to its file whole, in its compact form (`packed`): a reader sees the last one or this one, never part of it."""
     path = path_of(root, survey.tex, survey.pdf)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(survey.to_json(), ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    tmp.write_text(json.dumps(packed(survey.to_json()), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     os.replace(tmp, path)
+
+
+#: The lists of a survey's JSON kept as tables; the labels are kept as one too, by name.
+_TABLES = ("sections", "items", "displays")
+
+
+def packed(data: dict[str, Any]) -> dict[str, Any]:
+    """A survey's JSON in the form its file keeps: each list of headings, results, displays, a result's proofs and the labels a table of `cols` and `rows`, and a file named only where it is not the main one; `unpacked` reads it back."""
+    main = data.get("main")
+
+    def table(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        cols = list(rows[0]) if rows else []
+        return {"cols": cols, "rows": [[cell(c, r[c]) for c in cols] for r in rows]}
+
+    def cell(col: str, value: Any) -> Any:
+        if col == "file" and value == main:
+            return None
+        if col == "proofs":
+            return table(value)
+        return value
+
+    out = {k: v for k, v in data.items() if k not in (*_TABLES, "labels")}
+    out.update({k: table(data.get(k) or []) for k in _TABLES})
+    out["labels"] = table([{"name": name, **label} for name, label in (data.get("labels") or {}).items()])
+    return out
+
+
+def unpacked(data: dict[str, Any]) -> dict[str, Any]:
+    """A survey's JSON from the form its file keeps (`packed`)."""
+    main = data.get("main")
+
+    def rows(table: dict[str, Any]) -> list[dict[str, Any]]:
+        cols = table["cols"]
+        return [{c: cell(c, v) for c, v in zip(cols, row, strict=True)} for row in table["rows"]]
+
+    def cell(col: str, value: Any) -> Any:
+        if col == "file" and value is None:
+            return main
+        if col == "proofs":
+            return rows(value)
+        return value
+
+    out = {k: v for k, v in data.items() if k not in (*_TABLES, "labels")}
+    out.update({k: rows(data[k]) for k in _TABLES})
+    out["labels"] = {r.pop("name"): r for r in rows(data["labels"])}
+    return out
 
 
 def survey(root: Path, tex: str, src: Path, main: str, pdf: str | None = None) -> Survey:
