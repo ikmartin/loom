@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
+from loom import own
 from loom.clock import stamp
 from loom.paths import LOOM, OVERLEAF_CLONE, SOURCE_SYNC, document_dir, under
 from loom.reshape.importer import closure_of
@@ -81,8 +82,8 @@ def checked_folder(root: Path, history: Path, folder: str) -> str:
             break
         parent = parent / part
     real = _real(root / folder)
-    for own in (root / LOOM, history):
-        mine = _real(own)
+    for place in (root / LOOM, history):
+        mine = _real(place)
         if real is None or mine is None or real == mine or real.is_relative_to(mine) or mine.is_relative_to(real):
             raise MirrorError("bad-record", BAD_RECORD)
     return folder
@@ -153,7 +154,7 @@ class SyncState:
     def write(self, root: Path) -> None:
         """Write the record and the review origins it projects; inside an update's act, staged with the files it took in (`writes.staging`)."""
         path = root / SOURCE_SYNC
-        path.parent.mkdir(parents=True, exist_ok=True)
+        own.mkdir(path.parent, root=root)
         from loom.review_origins import read, write
         from loom.writes import stage
 
@@ -178,8 +179,8 @@ class SyncState:
         if stage(path, text.encode("utf-8")):
             return
         temporary = path.with_suffix(".tmp")
-        temporary.write_text(text, encoding="utf-8")
-        temporary.replace(path)
+        own.write_text(temporary, text, encoding="utf-8", root=root)
+        own.replace(temporary, path, root=root)
 
 
 def git(clone: Path, *args: str, input: bytes | None = None) -> bytes:

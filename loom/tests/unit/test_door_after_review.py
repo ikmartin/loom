@@ -603,10 +603,12 @@ def _forged_move(root: Path, target: str, *, made: bool = False) -> tuple[list[s
     from loom.scan.quilt import load_quilt
 
     hist = load_quilt(root).history_dir
+    # the shell forging the line writes the store itself, where the history really is: loom's own store writes through no link (`loom.own`)
+    kept = Path(os.path.realpath(hist))
     forged = b"what the line would have recovery write\n"
-    after = None if made else writes.store(hist, (root / target).read_bytes())
+    after = None if made else writes.store(kept, (root / target).read_bytes())
     (root / "notes.md").write_text("a note\n")
-    _begun(root, "mv", {target: [writes.store(hist, forged), after], "notes.md": [writes.store(hist, b"a note\n"), writes.store(hist, b"after\n")]})  # fmt: skip
+    _begun(root, "mv", {target: [writes.store(kept, forged), after], "notes.md": [writes.store(kept, b"a note\n"), writes.store(kept, b"after\n")]})  # fmt: skip
     return writes.recover(root, hist), forged
 
 

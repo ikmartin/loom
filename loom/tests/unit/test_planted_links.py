@@ -1,0 +1,197 @@
+"""Loom's own writers never write or remove through a link planted in their path: a folder of `.loom/` or the history made a link to a folder outside the quilt holding a canary, or a file of loom's made a link to the canary itself. Each writer refuses or writes nothing, and the folder outside keeps its canary and gains nothing."""
+
+from __future__ import annotations
+
+import contextlib
+import json
+from collections.abc import Callable
+from pathlib import Path
+
+import pytest
+
+from loom import gitignore, layout, locks, looks, mailbox, own, review_origins, review_queue, sessions, since, writes
+from loom.history import ledger as hledger
+from loom.library import log as llog
+from loom.library import tags
+from loom.paths import (
+    ANNOTATION_LOG,
+    ANNOTATION_TYPES,
+    EDIT_LOG,
+    HISTORY,
+    LEDGER,
+    LIBRARY_LOG,
+    LOCAL,
+    LOOM_GITIGNORE,
+    RECORDS,
+    REVIEW_DECISIONS,
+    REVIEW_ORIGINS,
+    TAG_LOG,
+)
+from loom.records import edits, ledger, snapshots, types
+from loom.records import log as alog
+
+
+@pytest.fixture
+def q(tmp_path: Path) -> tuple[Path, Path]:
+    """A quilt with an empty `.loom/` and history, and a folder outside it holding a canary file."""
+    from loom.cli.quilt import write_minimal_quilt
+
+    root = tmp_path / "q"
+    root.mkdir()
+    write_minimal_quilt(root, "q", readme=False)
+    (root / RECORDS).mkdir(parents=True, exist_ok=True)
+    (root / LOCAL).mkdir(parents=True, exist_ok=True)
+    out = tmp_path / "outside"
+    out.mkdir()
+    (out / "canary").write_text("canary\n")
+    return root, out
+
+
+def untouched(out: Path) -> bool:
+    """The folder outside holds its canary as it was, and nothing else, in any folder below it."""
+    return (
+        sorted(p.relative_to(out).as_posix() for p in out.rglob("*")) == ["canary"]
+        and (out / "canary").read_text() == "canary\n"
+    )
+
+
+def plant(root: Path, rel: str, out: Path) -> None:
+    """Make `rel` a link to `out`, setting aside whatever stood there."""
+    p = root / rel
+    if p.is_dir() and not p.is_symlink():
+        p.rename(p.with_name(p.name + ".aside"))
+    elif p.exists() or p.is_symlink():
+        p.unlink()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.symlink_to(out)
+
+
+def run(fn: Callable[[], object]) -> None:
+    """Call a writer that meets a planted link: it may refuse, as every one here does, or write nothing."""
+    with contextlib.suppress(Exception):
+        fn()
+
+
+def _event() -> dict[str, object]:
+    return {"event": "created", "id": "a-1", "when": "2026-01-01T00:00:00Z"}
+
+
+#: Each record writer, by what it writes, with the folder of `.loom/` or the history a link is planted at in its path.
+RECORD_WRITERS: dict[str, tuple[str, Callable[[Path], object]]] = {
+    "the history's text store": (f"{HISTORY}/texts", lambda r: writes.store(r / HISTORY, b"agent's note\n")),
+    "a snapshot": (
+        f"{HISTORY}/texts",
+        lambda r: snapshots.write_snapshot(r, "x", r / HISTORY),
+    ),
+    "the history's ledger": (HISTORY, lambda r: hledger.append_entry(r / HISTORY, "stamp", {}, "me")),
+    "the annotation log": (RECORDS, lambda r: alog.append(r, _event())),
+    "the edit log": (RECORDS, lambda r: edits.append(r, _event())),
+    "the library's log": (
+        RECORDS,
+        lambda r: llog.record(r, "made", "w1", by="me", kind="person"),
+    ),
+    "the tag log": (f"{RECORDS}/tags", lambda r: tags._append(r, _event())),
+    "the types": (RECORDS, lambda r: types.save_types(r, None)),
+    "the review queue": (RECORDS, lambda r: review_queue._write(r, {}, "me")),
+    "the review origins": (RECORDS, lambda r: review_origins.write(r, {})),
+    "a look": (
+        RECORDS,
+        lambda r: looks._write(r, looks.Look("me", "now")),
+    ),
+    "the journal": (LOCAL, lambda r: writes._append_journal(r, {"event": "begin"})),
+    "the journal's index": (LOCAL, lambda r: writes._save_index(r, writes.Journal())),
+    "a lock": (LOCAL, lambda r: locks.locked(r / LOCAL / "x.lock").__enter__()),
+    "the sessions' index": (".loom/agents", lambda r: sessions.append_event(r, _event())),
+    "the active session": (".loom/agents", lambda r: sessions.set_active(r, "s1")),
+    "a message": (".loom/agents", lambda r: mailbox.post(r, "s-1", "hi", "me")),
+    "the ignore file": (".loom", lambda r: gitignore.write_loom_ignore(r)),
+    "a since marker": (LOCAL, lambda r: since.write_marker(r, "me", since.Marker(when="now", seen=set()))),
+    "a deletion kept for since": (LOCAL, lambda r: since.note_deletion(r, [{"to": "me", "id": "a-1"}], "you")),
+    "the format number": (".loom", lambda r: layout.stamp(r)),
+}
+
+
+@pytest.mark.parametrize("what", sorted(RECORD_WRITERS))
+def test_a_record_writer_writes_nothing_through_a_planted_folder_link(q: tuple[Path, Path], what: str) -> None:
+    root, out = q
+    where, fn = RECORD_WRITERS[what]
+    plant(root, where, out)
+    run(lambda: fn(root))
+    assert untouched(out)
+
+
+#: Each record file, a link planted at the file itself, and the writer that appends to it or writes it.
+RECORD_FILES: dict[str, tuple[str, Callable[[Path], object]]] = {
+    "the annotation log": (ANNOTATION_LOG, lambda r: alog.append(r, _event())),
+    "the edit log": (EDIT_LOG, lambda r: edits.append(r, _event())),
+    "the ledger": (LEDGER, lambda r: ledger.append_rows(r, [])),
+    "the library's log": (
+        LIBRARY_LOG,
+        lambda r: llog.record(r, "made", "w1", by="me", kind="person"),
+    ),
+    "the tag log": (TAG_LOG, lambda r: tags._append(r, _event())),
+    "the types": (ANNOTATION_TYPES, lambda r: types.save_types(r, None)),
+    "the review queue": (REVIEW_DECISIONS, lambda r: review_queue._write(r, {}, "me")),
+    "the review origins": (REVIEW_ORIGINS, lambda r: review_origins.write(r, {})),
+    "the history's ledger": (
+        f"{HISTORY}/ledger.jsonl",
+        lambda r: hledger.append_entry(r / HISTORY, "stamp", {}, "me"),
+    ),
+    "the journal": (f"{LOCAL}/writes.jsonl", lambda r: writes._append_journal(r, {"event": "begin"})),
+    "the ignore file": (LOOM_GITIGNORE, lambda r: gitignore.write_loom_ignore(r)),
+}
+
+
+@pytest.mark.parametrize("what", sorted(RECORD_FILES))
+@pytest.mark.parametrize("dangling", [False, True])
+def test_a_record_file_that_is_a_link_is_written_through_by_no_writer(
+    q: tuple[Path, Path], what: str, dangling: bool
+) -> None:
+    root, out = q
+    rel, fn = RECORD_FILES[what]
+    p = root / rel
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.unlink(missing_ok=True)
+    p.symlink_to(out / ("gone" if dangling else "canary"))
+    run(lambda: fn(root))
+    assert untouched(out)
+
+
+def test_a_store_link_into_an_agent_app_s_folder_takes_no_text(q: tuple[Path, Path]) -> None:
+    """The route the review found (R2-29): the history's `texts/` made a link to `.claude/agents/`, and an act's text stored through it, there a subagent."""
+    root, _out = q
+    agents = root / ".claude/agents"
+    agents.mkdir(parents=True)
+    plant(root, f"{HISTORY}/texts", agents)
+    with pytest.raises(own.Planted):
+        writes.store(root / HISTORY, b"---\nname: planted\n---\n")
+    assert not list(agents.iterdir())
+
+
+@pytest.mark.parametrize("inside", [False, True])
+def test_an_act_writes_no_record_through_a_planted_link(q: tuple[Path, Path], inside: bool) -> None:
+    """A person's act whose history step goes through a link planted at `.loom/records/history/steps`, to a folder outside the quilt or to an agent app's folder inside it: refused, and nothing written in either."""
+    root, out = q
+    if inside:
+        out = root / ".claude/agents"
+        out.mkdir(parents=True)
+        (out / "canary").write_text("canary\n")
+    (root / "notes").mkdir()
+    (root / "notes/a.md").write_text("one\n")
+    plant(root, f"{HISTORY}/steps", out)
+    with pytest.raises(writes.WriteRefused), writes.act(root, root / HISTORY, "restore") as w:
+        w.replace("notes/a.md", b"two\n")
+        w.replace(f"{HISTORY}/steps/0001-x/files.json", b"{}\n")
+    assert untouched(out) and (root / "notes/a.md").read_text() == "one\n"
+
+
+def test_with_no_link_each_record_writer_writes_what_it_wrote_before(q: tuple[Path, Path]) -> None:
+    """The writers moved onto `loom.own` write the same bytes where no link is planted."""
+    root, _out = q
+    d = writes.store(root / HISTORY, b"a\r\nb\n")
+    assert (root / HISTORY / "texts" / f"{d.split(':')[1]}.md").read_bytes() == b"a\r\nb\n"
+    alog.append(root, _event())
+    alog.append(root, _event())
+    assert (root / ANNOTATION_LOG).read_text().splitlines() == [json.dumps(_event(), sort_keys=True)] * 2
+    hledger.append_entry(root / HISTORY, "stamp", {"x": 1}, "me")
+    assert json.loads((root / HISTORY / "ledger.jsonl").read_text())["x"] == 1

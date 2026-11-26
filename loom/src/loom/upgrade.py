@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from loom import layout
+from loom import layout, own
 from loom.paths import AI, ANNOTATION_TYPES, LOOM_GITIGNORE
 
 if TYPE_CHECKING:
@@ -143,8 +143,8 @@ def upgrade(root: Path, *, write: bool = True) -> Upgraded:
     if not (root / ANNOTATION_TYPES).exists():
         # a quilt made before there were types gets the defaults; a file that is there is the person's, edited or not
         if write:
-            (root / ANNOTATION_TYPES).parent.mkdir(parents=True, exist_ok=True)
-            (root / ANNOTATION_TYPES).write_text(default_text(), encoding="utf-8")
+            own.mkdir((root / ANNOTATION_TYPES).parent, root=root)
+            own.write_text(root / ANNOTATION_TYPES, default_text(), encoding="utf-8", root=root)
         out.written.append(ANNOTATION_TYPES)
     # a `.loom/agents/instructions` that is not the quilt's own leads elsewhere, so nothing of the agent layer is written there
     out.blocked = blocker(root, AI, folder=True)

@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.clock import stamp
 from loom.evidence.subjects import HASH, Subject, Who, is_node, is_work, name_problem
 from loom.library.node import pages_problem
@@ -619,7 +620,7 @@ def _line(kind: str, by: Who, on: Subject | None, fields: dict[str, Any]) -> dic
 
 def append_line(path: Path, text: str) -> None:
     """Append one line to a log, under its lock: on a line of its own even where a writer that died left the last one unended, which then reads as one bad line and not as the start of this one."""
-    with path.open("a+b") as fh:
+    with own.open(path, "a+b") as fh:
         fh.seek(0, os.SEEK_END)
         ended = True
         if fh.tell():

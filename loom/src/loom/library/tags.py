@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom import clock
+from loom import clock, own
 from loom.library import ids
 from loom.locks import locked
 from loom.paths import TAG_LOG
@@ -173,7 +173,7 @@ def problems(tags: Tags) -> list[Diagnostic]:
 def _append(root: Path, event: dict[str, Any]) -> None:
     """Append one event as a line, after a line feed when the log's last line was cut short, so a crash mid-line costs that line alone."""
     path = root / TAG_LOG
-    with path.open("a+b") as fh:
+    with own.open(path, "a+b", root=root) as fh:
         cut = fh.tell() > 0 and os.pread(fh.fileno(), 1, fh.tell() - 1) != b"\n"
         fh.write(
             (b"\n" if cut else b"") + (json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")

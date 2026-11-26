@@ -12,6 +12,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.paths import ANNOTATION_TYPES
 
 #: The colours an annotation can take; what each means is its reader's.
@@ -346,6 +347,6 @@ def save_types(root: Path, given: list[Any] | None, plain: dict[str, Any] | None
     if problems:
         raise TypesRefused("; ".join(problems))
     path = root / ANNOTATION_TYPES
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    own.mkdir(path.parent, root=root)
+    own.write_text(path, text, encoding="utf-8", root=root)
     return load_types(root)

@@ -1,6 +1,6 @@
 """Loom's own writes, never through a link: what `Path` writes, made, appended, renamed and removed through folders opened one part at a time from an anchor without following a link, so a link planted in `.loom/`, the history or the machine's own place carries none of them elsewhere.
 
-The anchor is `root` where the path lies under it, else the folder holding the path's first `.loom` part, else the nearest folder above it holding a `.loom/` folder (a history kept outside `.loom/`), else the path's own folder; it is resolved, so a link above it (the person's arrangement of their disk) is followed, and nothing below it is. A part that is a link, to a folder or to a file, a dangling one among them, raises `Planted` and nothing is written or removed; a link removed by `unlink` goes itself, its target untouched. `docs/design/writes.md` ("Loom's own places") says what this covers.
+The anchor is `root` where the path lies under it, else the folder holding the path's first `.loom` part, else the nearest folder above it holding a `.loom/` folder (a history kept outside `.loom/`), else the nearest folder above it that is there; it is resolved, so a link above it (the person's arrangement of their disk) is followed, and nothing below it is. A part that is a link, to a folder or to a file, a dangling one among them, raises `Planted` and nothing is written or removed; a link removed by `unlink` goes itself, its target untouched. `docs/design/writes.md` ("Loom's own places") says what this covers.
 """
 
 from __future__ import annotations
@@ -53,7 +53,10 @@ def _split(path: Path | str, root: Path | str | None) -> tuple[str, tuple[str, .
         with contextlib.suppress(OSError):
             if stat.S_ISDIR(os.lstat(Path(*parts[:i], LOOM)).st_mode):
                 return os.path.realpath(Path(*parts[:i])), parts[i:]
-    return os.path.realpath(p.parent), (p.name,)
+    i = len(parts) - 1
+    while i > 1 and not os.path.isdir(Path(*parts[:i])):
+        i -= 1
+    return os.path.realpath(Path(*parts[:i])), parts[i:]
 
 
 def _refuse(at: int, part: str, where: Path | str) -> None:
@@ -125,11 +128,14 @@ def parent(path: Path | str, *, root: Path | str | None = None, make: bool = Fal
         yield at, parts[-1]
 
 
-def mkdir(path: Path | str, *, root: Path | str | None = None) -> None:
-    """`path.mkdir(parents=True, exist_ok=True)`, without following a link; `Planted` where a part is one."""
+def mkdir(path: Path | str, *, root: Path | str | None = None, exist_ok: bool = True) -> None:
+    """`path.mkdir(parents=True, exist_ok=exist_ok)`, without following a link; `Planted` where a part is one."""
     anchor, parts = _split(path, root)
-    with _walk(anchor, parts, make=True):
-        pass
+    if exist_ok or not parts:
+        with _walk(anchor, parts, make=True):
+            return
+    with _walk(anchor, parts[:-1], make=True) as at:
+        os.mkdir(parts[-1], 0o777, dir_fd=at)
 
 
 def open(  # noqa: A001 - `Path.open`'s own name, for a write

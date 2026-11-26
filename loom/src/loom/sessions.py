@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.clock import stamp
 from loom.locks import locked
 from loom.paths import ACTIVE_SESSION, SESSION_INDEX, SESSIONS
@@ -90,8 +91,8 @@ def load_events(root: Path) -> list[dict[str, Any]]:
 def append_event(root: Path, event: dict[str, Any]) -> None:
     """Append one event; opened for append so two writers interleave lines rather than losing one."""
     p = index_path(root)
-    p.parent.mkdir(parents=True, exist_ok=True)
-    with p.open("a", encoding="utf-8") as fh:
+    own.mkdir(p.parent, root=root)
+    with own.open(p, "a", encoding="utf-8", root=root) as fh:
         fh.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
 
 
@@ -234,11 +235,11 @@ def active(root: Path) -> str | None:
 def set_active(root: Path, sid: str | None) -> None:
     """Make one session the active one, or clear it. Written as a file rather than an event: this is a pointer, not history."""
     p = root / ACTIVE
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent, root=root)
     if sid is None:
-        p.unlink(missing_ok=True)
+        own.unlink(p, root=root, missing_ok=True)
         return
-    p.write_text(sid + "\n", encoding="utf-8")
+    own.write_text(p, sid + "\n", encoding="utf-8", root=root)
 
 
 def ensure_active(root: Path, who: str, title: str = "") -> Session:

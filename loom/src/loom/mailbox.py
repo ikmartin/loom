@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.clock import stamp
 from loom.locks import locked
 from loom.sessions import DIR
@@ -260,10 +261,10 @@ def post(
     if not body.strip() and not changed:
         raise ValueError("a message with no text and nothing attached says nothing")
     d = session_dir(root, sid)
-    d.mkdir(parents=True, exist_ok=True)
+    own.mkdir(d, root=root)
     # Two writers -- the person through the viewer and an agent through `say` -- must not draw the same number.
     p = inbox_path(root, sid)
-    with locked(p), p.open("a", encoding="utf-8") as fh:
+    with locked(p), own.open(p, "a", encoding="utf-8", root=root) as fh:
         e = Event(seq=last_seq(root, sid) + 1, kind=kind, who=who, when=stamp(), body=body, changed=changed or [])
         fh.write(json.dumps(e.to_json(), ensure_ascii=False, sort_keys=True) + "\n")
     return e

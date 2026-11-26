@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.records.selectors import Selector
 
 #: The drawing tools: how an annotation that is not on words is drawn on a PDF page.
@@ -492,8 +493,8 @@ def refound(result: Any, pdf: Path, a: Any, artifact: str) -> Refound | None:
     except MapRefused:
         return None
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(out.__dict__ if out else None) + "\n", encoding="utf-8")
+        own.mkdir(path.parent, root=result.quilt.root)
+        own.write_text(path, json.dumps(out.__dict__ if out else None) + "\n", encoding="utf-8", root=result.quilt.root)
     except OSError:
         pass
     return out
@@ -638,7 +639,7 @@ def take_in(
             held.append((page, body, here))
             out["taken"] += 1
         if lines and not dry_run:
-            with log_path(root).open("a", encoding="utf-8") as fh:
+            with own.open(log_path(root), "a", encoding="utf-8", root=root) as fh:
                 for e in lines:
                     fh.write(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n")
     return out

@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.history.ledger import Entry, History, append_entry, load_history
 from loom.history.versions import version_filename
 from loom.locks import locked
@@ -228,9 +229,9 @@ def write_step(
             for name, text in files.items():
                 stage(step_dir / name, text.encode("utf-8"))
         else:
-            step_dir.mkdir(parents=True)
+            own.mkdir(step_dir, exist_ok=False)
             for name, text in files.items():
-                (step_dir / name).write_text(text, encoding="utf-8")
+                own.write_text(step_dir / name, text, encoding="utf-8")
         data: dict[str, Any] = {"step": n, "dir": dirname}
         data.update(extra or {})
         data["froze"] = dict(sorted(plan.froze.items()))
@@ -316,7 +317,7 @@ def kept_bytes(result: ScanResult, rel: str) -> str:
     except OSError:
         data = None
     if data is not None and scan_reading(data) == result.files[rel].text:
-        return store(hist, data)
+        return store(hist, data, root=root)
     return write_raw(root, result.files[rel].text, hist)
 
 
