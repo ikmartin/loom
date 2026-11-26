@@ -14,6 +14,8 @@ const TEX: [RegExp, string][] = [
 export const docs = {
 	/** Over a draft whose last compile, after a change, made no PDF: its file, why (`texError`), and the line TeX stopped at, '' where unknown. */
 	notCompiled: (file: string, why: string, line: string) => `${file} has not compiled since it last changed${why ? `: ${why}` : ''}${line ? ` (line ${line})` : ''}. The PDF is the one from before.`,
+	/** Over a draft whose last compile finished with errors but made a PDF: its file, TeX's first error (`texError`), and the line it was at, '' where unknown. */
+	compiledWithErrors: (file: string, why: string, line: string) => `${file} compiled with errors${why ? `: ${why}` : ''}${line ? ` (line ${line})` : ''}. The PDF was made anyway and may be wrong there.`,
 	/** A compile's error and its line, as a title or a line under the paper says them. */
 	compileError: (why: string, line: string) => `${why}${line ? ` (line ${line})` : ''}`,
 	/** TeX's message in the person's words where the viewer knows it, else as TeX said it; '' for none. */
@@ -34,14 +36,12 @@ export const docs = {
 		head: 'Files',
 		/** Hover text on that head: the directory it shows. */
 		title: (dir: string) => `View of files in ${dir}/`,
-		/** Under the short drawer a hover lets down from the folded head. */
-		openAll: 'click Files to open them all',
 		/** The row for the quilt's research state, where the publisher lists no files. */
 		researchState: 'Research state'
 	},
 	picker: {
 		/** The button in Docs' column that opens the library over Docs. */
-		open: 'Library',
+		open: 'Open a work…',
 		/** The picker's search field. */
 		search: 'find a work by title or author',
 		/** Beside the search: how many works. */
@@ -174,6 +174,20 @@ export const docs = {
 		task: (one: boolean) => (one ? 'It becomes one task in Review, under Waiting for an agent.' : 'One task a result in Review, under Waiting for an agent.'),
 		/** The column's message after asking. */
 		asked: (name: string, one: boolean) => `Asked an agent to formalize ${name}. ${one ? 'It waits' : 'They wait'} in Review, under Waiting for an agent.`
+	},
+	textSize: {
+		/** The text size control on an HTML draft's toolbar, its accessible name as a group, with the draft's name. */
+		group: (of: string) => `Text size of ${of}`,
+		/** Its step down: hover text, and with the draft's name its accessible name. */
+		smaller: 'Smaller text',
+		smallerOf: (of: string) => `Smaller text in ${of}`,
+		/** Its step up. */
+		larger: 'Larger text',
+		largerOf: (of: string) => `Larger text in ${of}`,
+		/** The box between the steps, which shows the size and takes one typed; its accessible name. */
+		box: (of: string) => `Text size in ${of}`,
+		/** What the box shows: the size in px. */
+		said: (px: number) => `${px} px`
 	},
 	leanMarks: {
 		/** The item in a draft's view menu that shows or hides the Lean marks. */

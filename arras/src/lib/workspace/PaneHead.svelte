@@ -1,7 +1,7 @@
 <script lang="ts">
 	// A pane's head (plan 0.13.3 W2–W5): its row of tabs. It answers which item am I looking at; which reading of it, and the item's controls, are the toolbar's beneath it.
 	//
-	// **Tabs narrow, then scroll.** A tab is 148px at most, chosen against the corpus's real names (`main-atomic.tex`, `Arden24 · Prop 2.1`) with the controls showing; a crowded strip narrows every tab by the same amount, down to 1.5 times the strip's height, and past that the row of tabs scrolls — by the wheel as well as sideways, with no scrollbar drawn in a 30px strip — and the active tab is brought into view whenever it changes. A name that does not fit ends in an ellipsis before the controls, never under them, since a cut that reads as a whole name is a plausible name and not the name (V3); the full name is the tab's title. **A tab's controls sit over it**, at its right behind a gradient in its own colour, on the active tab always and on the others under the pointer or keyboard focus, so a tab never grows on hover and moves what the pointer was travelling towards; below 90px a tab, the active one too, shows only its close under the pointer and both under keyboard focus, so a narrow tab keeps room for its name and a press on its middle still chooses it. **Controls appear only where they can act**: the lone tab of a lone pane has neither, since moving it would empty one pane to refill the other and closing it would leave nothing.
+	// **Tabs narrow, then scroll.** Every tab is the one width every tab bar's tabs share (`.doc-tab`, `--tab-w` in theme.css), whatever its name; a crowded strip narrows every tab by the same amount, down to 1.5 times the strip's height, and past that the row of tabs scrolls — by the wheel as well as sideways, with no scrollbar drawn in a 30px strip — and the active tab is brought into view whenever it changes. A name that does not fit ends in an ellipsis before the controls, never under them, since a cut that reads as a whole name is a plausible name and not the name (V3); the full name is the tab's title. **A tab's controls sit over it**, at its right behind a gradient in its own colour, on the active tab always and on the others under the pointer or keyboard focus, so a tab never grows on hover and moves what the pointer was travelling towards; below 90px a tab, the active one too, shows only its close under the pointer and both under keyboard focus, so a narrow tab keeps room for its name and a press on its middle still chooses it. **Controls appear only where they can act**: the lone tab of a lone pane has neither, since moving it would empty one pane to refill the other and closing it would leave nothing.
 	import { tick } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { itemKey } from './item';
@@ -64,7 +64,7 @@
 				{@const on = pane.active === key}
 				{@const marker = kinds[item.kind].marker}
 				{@const says = marker ? `${marker.says} ${name}` : name}
-				<div class="tab" class:on role="presentation" data-testid="item-tab">
+				<div class="tab doc-tab" class:on role="presentation" data-testid="item-tab">
 					<button type="button" class="label" role="tab" aria-selected={on} aria-label={says} title={says} onclick={() => workspace.activate(index, key)}
 						>{#if marker}<span class="marker"><Icon name={marker.icon} size={12} /></span>{/if}{name}</button
 					>
@@ -114,10 +114,6 @@
 	.tab {
 		--tab: var(--leaf);
 		position: relative;
-		/* the width is what the tab contributes to the row's own size; the basis and the floor are what it narrows between */
-		flex: 0 1 148px;
-		width: 148px;
-		min-width: calc(var(--tab-h) * 1.5);
 		display: flex;
 		align-items: center;
 		background: var(--tab);

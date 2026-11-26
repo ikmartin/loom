@@ -12,7 +12,7 @@ import { join } from 'node:path';
 async function intoASession(page: import('@playwright/test').Page, served: Served): Promise<string> {
 	const id = served.openSessions().at(-1)!;
 	await pickSession(page, id);
-	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^writing in /);
+	await expect(page.getByTestId('session-footer')).toHaveAttribute('aria-label', /^Writing in /);
 	return id;
 }
 
@@ -267,7 +267,7 @@ async function noteOn(page: import('@playwright/test').Page, at: import('@playwr
 test('an annotation is written with no session selected, and names none', async ({ page, served }) => {
 	await holding(page, 'question');
 	await page.goto('/node/sy-0003');
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
+	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 	await noteOn(page, page.locator('[data-pane="0"] .fragment .env[data-id="sy-0003"] > p[data-src]').first(), 'Which sitting is this in?');
 	const mine = served.written('Which sitting is this in?');
 	expect(mine.target).toBe('sy-0003');
@@ -409,7 +409,7 @@ test('deleting a session from the picker tombstones it in the index, and no anno
 	// a tombstone, not a purge, and the annotation log is untouched
 	expect(served.log()).toEqual(written);
 	// and the viewer lets go of it: nothing is selected, and the picker no longer lists it
-	await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
+	await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 	await openPicker(page);
 	await expect(page.getByTestId(`session-${id}`)).toHaveCount(0);
 });

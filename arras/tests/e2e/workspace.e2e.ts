@@ -1,6 +1,6 @@
 // Reading mode as items in two panes: what a pane opens on, its tabs and its views, the divider between the panes, focus, the arrangement the URL keeps, and what gives way in a narrow window. Grouped by the principle each rule serves, and each test named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
-import { beside, openHere, pane, prefs, scrollPane, viewMenu } from '../workspace';
+import { beside, openHere, pane, prefs, scrollPane, settings, viewMenu } from '../workspace';
 import { serveWork } from '../works';
 import { PDF, serve } from '../manifest';
 
@@ -376,7 +376,7 @@ test.describe('the tab strip', () => {
 		await expect(pane(page, 0).getByRole('group', { name: /^views of / })).toHaveCount(0);
 	});
 
-	test('tabs are 148px, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
+	test('tabs are 180px whatever their names, narrow evenly, then scroll with the active tab in view', async ({ page }) => {
 		// the right pane is two fifths of the workspace, about 450px, so ten tabs pass the floor
 		await prefs(page, { divider: 0.6 });
 		await page.setViewportSize({ width: 1440, height: 900 });
@@ -386,17 +386,17 @@ test.describe('the tab strip', () => {
 		const row = pane(page, 1).getByRole('tablist');
 		const floor = 45; // 1.5 times the strip's 30px
 
-		// two tabs have room, and are 148px
+		// two tabs have room, and are 180px, their names of different lengths
 		await open(page, 'sy-0003');
 		await expect(tabs(page, 1)).toHaveCount(2);
-		expect(await widths(page, 1)).toEqual([148, 148]);
+		expect(await widths(page, 1)).toEqual([180, 180]);
 
 		// four do not: each narrows by the same amount, and together they fill the strip
 		for (const id of ['sy-0006', 'sy-0007']) await open(page, id);
 		await expect(tabs(page, 1)).toHaveCount(4);
 		const four = await widths(page, 1);
 		expect(Math.max(...four) - Math.min(...four), 'the spread of the widths, px').toBeLessThanOrEqual(1);
-		expect(four[0]).toBeLessThan(148);
+		expect(four[0]).toBeLessThan(180);
 		expect(four[0]).toBeGreaterThan(floor);
 		const room = await row.evaluate((r) => ({ scroll: r.scrollWidth, client: r.clientWidth }));
 		expect(room.scroll).toBeLessThanOrEqual(room.client);
@@ -429,6 +429,21 @@ test.describe('the tab strip', () => {
 		await expect(active.getByTestId('tab-close')).toBeVisible();
 		// and its whole name is its title
 		await expect(active.getByRole('tab')).toHaveAttribute('title', /Lemma/);
+	});
+
+	test("the Library's tabs are the same width as a pane's, Works and each work's alike, the title cut with an ellipsis and whole on hover", async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/library?fixture=round6');
+		const works = page.getByTestId('library-tab-works');
+		await expect(works).toBeVisible();
+		await page.getByTestId('work-row').filter({ hasText: 'Widgets and their bounds' }).first().click();
+		const work = page.getByTestId('library-tab');
+		await expect(work).toHaveCount(1);
+		for (const tab of [works, work]) expect((await tab.boundingBox())!.width).toBe(180);
+		await expect(work).toHaveAttribute('title', 'Widgets and their bounds');
+		const name = work.locator('.name');
+		await expect(name).toHaveCSS('text-overflow', 'ellipsis');
+		await expect(name).toHaveCSS('white-space', 'nowrap');
 	});
 
 	test('past the floor the tabs scroll, and the views beneath them keep their place', async ({ page }) => {
@@ -640,7 +655,7 @@ test.describe('the toolbar', () => {
 		// the stepper once the document has said what it holds: its annotations and its pending changes
 		await expect(bar.getByTestId('step-prev')).toBeVisible();
 		const order = await bar.locator('button').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.testid));
-		expect(order).toEqual(['toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
+		expect(order).toEqual(['toggle-annotation-row', 'changes-toggle', 'step-prev', 'step-next', 'open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-history', 'toolbar-view', 'tool-annotate', 'tool-comment', 'format-toggle', 'annotate-undo', 'annotate-redo']);
 		await expect(bar.getByTestId('annotation-row').getByTestId('tool-annotate')).toBeVisible();
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 		await expect(page.getByTestId('toolbar-view')).toHaveAttribute('aria-label', 'view menu for main.tex');
@@ -678,7 +693,7 @@ test.describe('the toolbar', () => {
 		expect(reading).not.toContain('tool-annotate');
 		expect(reading).not.toContain('toggle-annotation-row');
 		await expect(controls(page, 0).getByTestId('annotation-row')).toHaveCount(0);
-		expect(reading.slice(-3)).toEqual(['open-comments', 'open-notes', 'toolbar-view']);
+		expect(reading.slice(-5)).toEqual(['open-comments', 'open-notes', 'text-smaller', 'text-larger', 'toolbar-view']);
 		await expect(page.getByTestId('toolbar-view')).toHaveCSS('border-left-style', 'solid');
 	});
 
@@ -777,5 +792,52 @@ test.describe('the toolbar', () => {
 		await expect(page.getByTestId('toggle-hide-notes')).toHaveText('turn annotations on');
 		await page.getByTestId('toggle-hide-notes').click();
 		await expect(mark(0)).not.toHaveClass(/hidden/);
+	});
+});
+
+test.describe('each open document sizes on its own', () => {
+	/** A pane's zoom, as its box says it. */
+	const zoom = (page: Page, index: number) => pane(page, index).getByTestId('zoom-at');
+	/** The text size a pane's draft is drawn at, px. */
+	const text = (page: Page, index: number) => pane(page, index).locator('.fragment').first().evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+
+	test("zooming one PDF zooms no other, and its address keeps its zoom through a reload", async ({ page }) => {
+		await withPdfs(page);
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto(FIG + beside(OTHER));
+		await expect(zoom(page, 1)).toHaveValue(/%$/);
+		const right = await zoom(page, 1).inputValue();
+		await pane(page, 0).locator('canvas').first().waitFor();
+		await zoom(page, 0).fill('180');
+		await zoom(page, 0).press('Enter');
+		await expect(zoom(page, 0)).toHaveValue('180%');
+		await expect(zoom(page, 1)).toHaveValue(right);
+		await expect.poll(() => new URL(page.url()).searchParams.get('size')).toBe('1.8');
+		await page.reload();
+		await expect(zoom(page, 0)).toHaveValue('180%');
+	});
+
+	test("an HTML draft's text is sized from its toolbar, apart from the draft beside it, and Settings' size moves no draft open but starts the next", async ({ page }) => {
+		await page.setViewportSize({ width: 1440, height: 900 });
+		await page.goto('/master/drafting/main' + beside('/master/drafting/talk'));
+		await expect.poll(() => text(page, 1)).toBe(16);
+		await pane(page, 0).locator('.fragment').first().click();
+		const size = controls(page, 0).getByTestId('text-size');
+		await expect(size.getByTestId('text-size-at')).toHaveValue('16 px');
+		await size.getByTestId('text-larger').click();
+		await expect(size.getByTestId('text-size-at')).toHaveValue('17 px');
+		await expect.poll(() => text(page, 0)).toBe(17);
+		expect(await text(page, 1)).toBe(16);
+		await expect.poll(() => new URL(page.url()).searchParams.get('size')).toBe('17');
+		// Settings' size is where a draft opened next starts, and resizes neither open draft
+		await settings(page, 'appearance');
+		await page.getByTestId('size-l').click();
+		await page.keyboard.press('Escape');
+		expect(await text(page, 0)).toBe(17);
+		expect(await text(page, 1)).toBe(16);
+		// a reload keeps the size the address carries; the draft beside it, which carries none, opens at the start Settings set
+		await page.reload();
+		await expect.poll(() => text(page, 0)).toBe(17);
+		await expect.poll(() => text(page, 1)).toBe(19);
 	});
 });

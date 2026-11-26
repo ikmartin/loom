@@ -217,8 +217,8 @@ export class Workspace {
 		this.focus = pane;
 	}
 
-	/** Record where an open item now is — its anchor, place, note or view — without revealing it: the reader moved within it. */
-	update(key: string, patch: Partial<Pick<Item, 'view' | 'anchor' | 'place' | 'note' | 'params'>>): void {
+	/** Record where an open item now is — its anchor, place, note or view — or the size the reader gave it, without revealing it: the reader moved within it. */
+	update(key: string, patch: Partial<Pick<Item, 'view' | 'anchor' | 'place' | 'note' | 'params' | 'size'>>): void {
 		for (const p of this.panes) {
 			const i = p.items.findIndex((x) => itemKey(x) === key);
 			if (i >= 0) p.items[i] = { ...p.items[i], ...patch, seq: p.items[i].seq };
@@ -329,7 +329,9 @@ export class Workspace {
 		const was = p.items[i];
 		// the new place replaces the old rather than merging with it: revealing without a place keeps the reader where they were. A place on a work's pages is read on its paper, so it takes the default view rather than the one kept.
 		const onPages = item.kind === 'work' && !!item.place && Object.keys(item.place).length > 0;
-		p.items[i] = this.#stamp({ ...item, view: item.view ?? (onPages ? undefined : was.view) });
+		// the size given it stays with the open item, whatever place it is revealed at
+		const size = item.size ?? was.size;
+		p.items[i] = this.#stamp({ ...item, view: item.view ?? (onPages ? undefined : was.view), ...(size ? { size } : {}) });
 	}
 
 	#drop(pane: number, key: string): void {

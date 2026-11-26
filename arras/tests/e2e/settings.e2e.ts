@@ -25,6 +25,22 @@ test('Settings opens as a window over the page, Loom first with Profile at its h
 	await expect(win).toHaveCount(0);
 });
 
+test("Settings' button is a cog, a ring of eight teeth around a hole, at 18 px, and not a wheel of spokes that reads as a sun", async ({ page }) => {
+	await page.goto('/');
+	const svg = page.getByTestId('settings-toggle').locator('svg');
+	await expect(svg).toHaveAttribute('width', '18');
+	const cog = svg.locator('path[data-glyph="cog"]');
+	await expect(cog).toHaveCount(1);
+	// one closed outline: eight arcs of the ring between eight teeth, each tooth three straight edges
+	const d = (await cog.getAttribute('d'))!;
+	expect(d.match(/A/g)).toHaveLength(8);
+	expect(d.match(/L/g)).toHaveLength(24);
+	expect(d.trim().endsWith('Z')).toBe(true);
+	await expect(svg.locator('circle')).toHaveCount(1);
+	// no spoke: no short open stroke outside the outline
+	await expect(svg.locator('path')).toHaveCount(1);
+});
+
 test('each section opens its own page, saying where it is saved, and the window opens again where it was left', async ({ page }) => {
 	await page.goto('/');
 	for (const [section, title, where] of [

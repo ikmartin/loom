@@ -105,7 +105,8 @@
 	}
 </script>
 
-<div class="page item document">
+<!-- the draft's own text size, which its fragments read as the body size -->
+<div class="page item document" style:--body-size="{documentState(item).size}px" data-text-size={documentState(item).size}>
 	{#if landmark && doc}
 		<div class="gutters-host" use:guttersHost>
 			<div class="gutters" class:beside={!!notes.side}>

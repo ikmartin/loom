@@ -90,7 +90,6 @@ LEGACY = (
     "arras/src/lib/review/VersionView.svelte",
     "arras/src/lib/review/YourChanges.svelte",
     "arras/src/lib/sessions/DeleteSession.svelte",
-    "arras/src/lib/sessions/SessionFooter.svelte",
     "arras/src/lib/sessions/SessionPicker.svelte",
     "arras/src/lib/shell/AgentMark.svelte",
     "arras/src/lib/shell/Contents.svelte",
