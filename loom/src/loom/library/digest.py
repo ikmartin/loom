@@ -582,6 +582,8 @@ class _Run:
         label = self.s.labels.get(name)
         if label is None:
             raise _Wait(f"\\{command}{{{name}}}: the source defines no such label")
+        if name in self.s.twice:
+            raise _Wait(f"\\{command}{{{name}}}: the source defines this label more than once")
         owner = self.by_item.get(label.owner) if label.owner else None
         if owner is not None and (self._reading or "") != "proof":
             self.reached.append(owner.item)
@@ -706,6 +708,8 @@ class _Run:
             if statement is not None and label.result and label.owner == statement.item:
                 edits.append((at, end_, ""))
                 continue
+            if name in self.s.twice:
+                raise _Wait(f"\\label{{{name}}}: the source defines this label more than once")
             if label.owner != of.item:
                 raise _Wait(f"it holds {label.owner or name}, a result of its own, which one node cannot")
             anchor = self.anchor(name)

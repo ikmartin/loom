@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 9
+VERSION = 10
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -233,6 +233,7 @@ class Survey:
     sections: list[Section] = field(default_factory=list)
     items: list[Item] = field(default_factory=list)
     labels: dict[str, Label] = field(default_factory=dict)
+    twice: list[str] = field(default_factory=list)
     displays: list[Display] = field(default_factory=list)
     bibliography: list[str] = field(default_factory=list)
     bbl: str | None = None
@@ -615,7 +616,7 @@ def _label_all(
 ) -> None:
     """Every `\\label` of the reached files, by whose text holds it and what it numbers.
 
-    A label inside a result or one of its proofs is that result's: its own when it stands in the result's own text and is first there, else an anchor. A heading's label is its section's; anything else is classed by the environments around it.
+    A label inside a result or one of its proofs is that result's: its own when it stands in the result's own text and is first there, else an anchor. A heading's label is its section's; anything else is classed by the environments around it. A label defined more than once is kept as first defined and named in `twice`.
     """
     headings = {(u.file, lab): u.name for u in units for lab in u.labels}
     shown = {lab: d.emulated for d in out.displays for lab in d.labels}
@@ -627,6 +628,9 @@ def _label_all(
         lo = doc if rel == out.main else 0
         for lab, at in labels_in(clean, [(lo, len(clean))]):
             if lab in out.labels:
+                # TeX's \ref prints the last definition, the survey keeps the first: nothing may point by it
+                if lab not in out.twice:
+                    out.twice.append(lab)
                 continue
             chain = _innermost(fe.roots, at)
             owner = next((i for i in by_file.get(rel, []) if i.start <= at < i.end), None)

@@ -85,7 +85,7 @@ def pdf_text(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     return pages
 
 
-def quilt(tmp_path: Path, draft: str = DRAFT) -> tuple[ScanResult, str]:
+def quilt(tmp_path: Path, draft: str = DRAFT, source: str = SOURCE) -> tuple[ScanResult, str]:
     """A quilt whose draft cites two results of Smith 2024, which holds its source and a PDF: the scan and Smith's reference."""
     root = tmp_path / "q"
     root.mkdir()
@@ -98,7 +98,7 @@ def quilt(tmp_path: Path, draft: str = DRAFT) -> tuple[ScanResult, str]:
     smith = result.refs["Smi24"]
     folder = tmp_path / "source"
     folder.mkdir()
-    (folder / "main.tex").write_text(SOURCE)
+    (folder / "main.tex").write_text(source)
     (folder / "refs.bib").write_text(SOURCE_BIB)
     attach(root, smith, "tex", documents.put_source(root, folder), by="A. Author", kind="person")
     pdf = tmp_path / "smith.pdf"
@@ -255,3 +255,13 @@ def test_the_unasked_job_digests_what_the_drafts_cite(tmp_path: Path, pdf_text: 
         "thm:main",
     }, "what they rest on, and nothing the drafts do not use"
     assert smith not in due(root)
+
+
+def test_a_pointer_at_a_label_the_source_defines_twice_waits(tmp_path: Path, pdf_text: list[str]) -> None:
+    """The review's C-3: TeX's `\\ref` prints the last definition and the survey keeps the first, so the result pointing by it waits, naming the label, rather than reach the wrong result."""
+    result, smith = quilt(tmp_path, source=SOURCE.replace("\\section{Bounds}", "\\section{Bounds}\\label{def:widget}"))
+    s = surveyed(result, smith)
+    assert s.twice == ["def:widget"]
+    done = digest(result, smith, ["lem:bound", "def:widget"], s)
+    assert done.waiting == {"lem:bound": "\\ref{def:widget}: the source defines this label more than once"}
+    assert "def:widget" not in done.waiting, "the result whose own label it is first is written"
