@@ -117,6 +117,33 @@ describe('the changes section', () => {
 		expect(changesWaiting(y, { 'c-1': 'keep', 'c-2': 'discard', 's-1': 'keep' }, MAIN)).toBe(1 + copies);
 	});
 
+	it("folds the files a document loads beside its text into its own file's row, and leaves one whose document has no row a row of its own", () => {
+		const PAPER = 'project/paper.tex';
+		const OTHER = 'project/other.tex';
+		const masters = [...m.masters, { ...m.masters[1], path: PAPER, default: false, loads: ['project/style.sty', 'project/preamble.tex', 'project/refs.bib'] }, { ...m.masters[1], path: OTHER, default: false, loads: ['project/style.sty', 'project/other.sty'] }];
+		const fresh = (id: string, path: string, documents: string[]) => change({ id, path, documents, key: null, old: '', new: 'x' });
+		const y: Manifest = {
+			...x,
+			masters,
+			changes: [
+				fresh('c-1', 'project/style.sty', []),
+				fresh('c-2', PAPER, [PAPER]),
+				fresh('c-3', 'project/preamble.tex', [PAPER]),
+				fresh('c-4', 'project/sections/one.tex', [PAPER]),
+				fresh('c-5', 'project/refs.bib', []),
+				fresh('c-6', 'project/other.sty', []),
+				change({ id: 's-1', kind: 'suggested', author: 'agent', path: PAPER, documents: [PAPER] })
+			]
+		};
+		const rows = editRows(y, {});
+		const shown = rows.map((r) => (r.type === 'file' ? [r.path, r.changes.map((c) => c.id), r.also] : r.c.id));
+		// the paper's row holds its style file, its preamble and its bibliography; a section is a row of its own, and so is a style file whose only document has no row
+		expect(shown).toEqual([[PAPER, ['c-2', 'c-3', 'c-1', 'c-5'], ['project/preamble.tex', 'project/style.sty', 'project/refs.bib']], ['project/sections/one.tex', ['c-4'], []], 's-1', ['project/other.sty', ['c-6'], []]]);
+		expect(changesWaiting(y, {})).toBe(4 + copies);
+		// once the paper's own edits are kept, the files it loads are rows again
+		expect(editRows(y, { 'c-2': 'keep' }).filter((r) => r.type === 'file').map((r) => r.type === 'file' && r.path)).toEqual(['project/preamble.tex', 'project/sections/one.tex', 'project/style.sty', 'project/refs.bib', 'project/other.sty']);
+	});
+
 	it('lists a row for each change, naming the draft whose text holds it, or the file of one in no draft', () => {
 		const rows = changeList(x, {});
 		expect(rows.map((r) => r.c.id)).toEqual(['c-1', 'c-2', 'c-3']);

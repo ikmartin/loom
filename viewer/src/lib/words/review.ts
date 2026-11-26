@@ -345,8 +345,14 @@ export const review = {
 		discarded: 'Discarded.',
 		/** The quiet line of a file with edits made in place since the person's look: how many. */
 		sinceLook: (n: number) => (n === 1 ? 'edited since your look' : `${n} edits since your look`),
+		/** After it, on a document's row: how many of the files it loads beside its text (a style file, a bibliography, a preamble) its row holds too. */
+		loads: (n: number) => (n === 1 ? 'with a file it loads' : `with ${n} files it loads`),
+		/** Hover text on that line: which files. */
+		loadsHover: (names: string[]) => `Edits to ${listed(names)}, which this document loads, are kept or discarded here with it`,
 		/** Hover text on a file's own keep all and discard all, in its open row. */
 		fileHover: { keep: 'Keeps every change in this file', discard: 'Discards every change in this file, writing your old words back over its edits' },
+		/** The same on a document's row that holds the files it loads too. */
+		loadsFileHover: { keep: 'Keeps every change in this document and the files it loads', discard: 'Discards every change in this document and the files it loads, writing your old words back over its edits' },
 		/** Over Proposed edits: keeps every change listed that can be kept. */
 		keepAll: (n: number) => `keep all ${n}`,
 		/** Over Proposed edits: discards every change listed that can be. */

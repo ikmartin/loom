@@ -104,11 +104,12 @@ The values are properties of the publisher and its corpora, not of this corpus's
   "engine": "pdflatex",
   "compiled": "2026-09-16T14:39:10Z",
   "pdf": "tex/main-6f1b8942/main.pdf",
-  "numbering_known": true
+  "numbering_known": true,
+  "loads": ["drafting/macros.sty", "drafting/loom.sty", "drafting/refs.bib"]
 }
 ```
 
-`compiled`, `pdf`, and `numbering_known` are absent or false before the first compile. `compiled` is the PDF's own time, so it changes with every compile that makes one, and a viewer that shows the PDF reads it again when it does. A document is named by its path without `.tex`, kept as a path: `fragment` is `fragments/masters/<name>.html`, under the build directory, and `pdf` is `tex/<stem>-<hash>/<stem>.pdf`, the PDF in the document's compile folder (`.loom/cache/tex/<stem>-<hash>/`), which the server answers under the build directory's address; `<hash>` is the first eight hex digits of the SHA-256 of the name, so two documents that share a file name in two directories never share either; a viewer addresses a document by the same name. An agent's document is one that carries `copy_of`, the document it was copied from, where the history's moves have taken it; only one of the person's is the default, has a Review tab, or is selected by the document workspace, and the list holds the person's documents first. A viewer shows a copy beside the document `copy_of` names.
+`compiled`, `pdf`, and `numbering_known` are absent or false before the first compile. `compiled` is the PDF's own time, so it changes with every compile that makes one, and a viewer that shows the PDF reads it again when it does. A document is named by its path without `.tex`, kept as a path: `fragment` is `fragments/masters/<name>.html`, under the build directory, and `pdf` is `tex/<stem>-<hash>/<stem>.pdf`, the PDF in the document's compile folder (`.loom/cache/tex/<stem>-<hash>/`), which the server answers under the build directory's address; `<hash>` is the first eight hex digits of the SHA-256 of the name, so two documents that share a file name in two directories never share either; a viewer addresses a document by the same name. An agent's document is one that carries `copy_of`, the document it was copied from, where the history's moves have taken it; only one of the person's is the default, has a Review tab, or is selected by the document workspace, and the list holds the person's documents first. A viewer shows a copy beside the document `copy_of` names. `loads` is absent where it would be empty: the local files the document loads beside its text, in the order it loads them, its preamble's packages, class and inputs and then the bibliographies it names, never a file the distribution supplies, a bibliography named and not found, or the document itself; Review folds a change to one of them into the document's own row (`library-views.md` §4.2).
 
 ## 3. Nodes
 

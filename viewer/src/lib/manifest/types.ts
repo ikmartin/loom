@@ -186,6 +186,8 @@ export interface Master {
   compiled?: string;
   pdf?: string;
   numbering_known?: boolean;
+  /** The local files it loads beside its text: its preamble's packages, class and inputs, then the bibliographies it names; absent where none. */
+  loads?: string[];
   /** An agent document's source document, where the history's moves have taken it. */
   copy_of?: string;
   scope?: {kind: string; key?: string; title?: string; keys?: string[]};

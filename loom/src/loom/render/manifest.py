@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from loom.history.steps import document_loads
 from loom.paths import document_build, document_pdf_address
 from loom.render.fragments import master_title, plain_text
 from loom.render.threads import build_threads
@@ -194,6 +195,9 @@ def build_manifest(
             entry["compiled"] = _iso(pdf.stat().st_mtime)
             entry["pdf"] = document_pdf_address(m)
         entry["numbering_known"] = aux_known
+        loads = document_loads(result, m)
+        if loads:
+            entry["loads"] = loads
         if m in copies:
             entry["copy_of"] = copies[m]
             from loom.reshape.linearize import flatten

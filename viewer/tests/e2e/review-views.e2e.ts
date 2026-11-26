@@ -706,3 +706,34 @@ test("a link to a block an adoption took in opens the adoption's row and the blo
 	await expect(row.locator('.rr-h')).toHaveAttribute('aria-expanded', 'true');
 	await expect(page.locator('[data-testid="review-row"][data-adoption] > .rr-h')).toHaveAttribute('aria-expanded', 'true');
 });
+
+test("the files a document loads beside its text are folded into its row of Proposed edits, kept or discarded with it, and the column counts the rows drawn", async ({ page }) => {
+	await serve(page, (m) => {
+		const main = m.changes.find((c: { id: string }) => c.id === 'c-0f621ccf');
+		m.masters.find((d: { path: string }) => d.path === 'drafting/main.tex').loads = ['drafting/macros.sty', 'drafting/loom.sty', 'drafting/refs.bib'];
+		m.changes.push({ ...main, id: 'c-00000011', path: 'drafting/macros.sty', documents: [], key: null, block: null, old: '', new: '\\newcommand{\\Fix}{F}' }, { ...main, id: 'c-00000012', path: 'drafting/refs.bib', documents: [], key: null, block: null, old: '', new: '@book{Har77}' });
+	});
+	const sent: Record<string, unknown>[] = [];
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['change-keep', 'change-discard'], token: 't', quilt: 'q-test' } }));
+	await page.route('**/_api/change-*', (r) => {
+		const body = r.request().postDataJSON();
+		sent.push(body);
+		return r.fulfill({ json: { ok: true, result: 'done', done: body.changes, refused: [] } });
+	});
+	await open(page);
+	// two more files edited, both loaded by main.tex: still five rows
+	await expect(count(page, 'review-kind-edits')).toHaveText('5');
+	await page.getByTestId('review-kind-edits').click();
+	await expect(kindRows(page, 'edits')).toHaveCount(5);
+	await expect(page.locator('[data-testid="review-row"][data-file="drafting/macros.sty"]')).toHaveCount(0);
+	const main = page.locator('[data-testid="review-row"][data-file="drafting/main.tex"]');
+	await expect(main.locator('.tx')).toHaveText('main.tex');
+	await expect(main.locator('.meta')).toHaveText('3 edits since your look · with 2 files it loads');
+	await openRow(main);
+	await expect(main.getByTestId('change-card')).toHaveCount(3);
+	await expect(main.getByTestId('file-change').locator('> .note')).toHaveText(['Definition 1.1', 'macros.sty', 'refs.bib']);
+	await main.getByTestId('file-keep-all').click();
+	await expect.poll(() => sent).toEqual([{ changes: ['c-0f621ccf', 'c-00000011', 'c-00000012'] }]);
+	await expect(main).toHaveCount(0);
+	await expect(count(page, 'review-kind-edits')).toHaveText('4');
+});
