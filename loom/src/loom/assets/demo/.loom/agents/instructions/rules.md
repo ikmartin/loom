@@ -103,6 +103,16 @@ Loom is still how anything durable is recorded. A fault you find while answering
   - `loom history show`
   - `loom history verify`
   - `loom id`
+  - `loom library correct`
+  - `loom library digest`
+  - `loom library fill`
+  - `loom library node`
+  - `loom library propose`
+  - `loom library rests-on`
+  - `loom library search`
+  - `loom library stubs`
+  - `loom library uses`
+  - `loom library work`
   - `loom link`
   - `loom lint`
   - `loom mcp`

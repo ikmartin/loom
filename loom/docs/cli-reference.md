@@ -521,7 +521,7 @@ The papers you cite and the results taken from them.
 
 `loom library [OPTIONS] COMMAND [ARGS]...`
 
-The works this quilt holds: take PDFs, `.bib` files and LaTeX sources in.
+The works this quilt holds and the web of their results: take PDFs, `.bib` files and LaTeX sources in, read a work's results, and give them their text.
 
 #### `loom library add`
 
@@ -539,6 +539,140 @@ A FILE is a PDF, a `.bib`, a `.tex` file, an archive of a source, or a folder: e
 | `--online` | Allow this run to look up the identifier a PDF states, over `[library] online`. |
 | `--as` `NAME` | Who is filing, when the user config and git do not say. |
 | `--dry-run` | Say what would be added, asked and refused, and write nothing. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library correct`
+
+`loom library correct [OPTIONS] NODE`
+
+Propose a correction of a node's text: written at once where no person has compared it, else filed for the person to take or decline, the compared text standing meanwhile.
+
+| option | description |
+|---|---|
+| `--body` | The node's corrected text, as LaTeX; its header is kept. |
+| `--why` | What was wrong, for the person who compared it. |
+| `--mention` `NODE` | A node the text mentions without resting on it. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library digest`
+
+`loom library digest [OPTIONS] REF`
+
+Have loom write a work's results from its TeX source, numbered by its stored PDF: loom's own extraction, never a compile. A work whose numbers only a compile could confirm waits for the person's act in the viewer.
+
+| option | description |
+|---|---|
+| `--scope` | What the drafts cite of it, every result, or the items --item names. |
+| `--item` `ITEM` | A result of its source's survey, for --scope chosen. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library fill`
+
+`loom library fill [OPTIONS] STUB`
+
+Give a stub its text, transcribed from its work's PDF or read from its TeX source: its words are checked to stand there, and how it was made is recorded as yours.
+
+| option | description |
+|---|---|
+| `--body` | The result's text, as LaTeX, pointing at other nodes by their ids. |
+| `--from` | Read from the work's PDF, or from its TeX source. |
+| `--pages` | The page or pages it stands on, as the PDF numbers them (`12`, `12-13`), at most three; needed from a PDF and refused from the source. |
+| `--mention` `NODE` | A node the text mentions without resting on it; every other it names is a use. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library node`
+
+`loom library node [OPTIONS] NODE`
+
+A statement or a proof of the library with its neighbours: its header, its text, what it uses and mentions, its proofs, and what rests on it. NODE is its id.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library propose`
+
+`loom library propose [OPTIONS] REF`
+
+Propose a node at a place of a work no node holds: a new statement of REF, its words checked to stand there; it reads as not checked until the person compares it.
+
+| option | description |
+|---|---|
+| `--taxon` | What it is: lemma, theorem, definition, ... |
+| `--number` | Its number as the work prints it. |
+| `--title` | The name the work gives it. |
+| `--body` | The result's text, as LaTeX, pointing at other nodes by their ids. |
+| `--from` | Read from the work's PDF, or from its TeX source. |
+| `--pages` | The page or pages it stands on, as the PDF numbers them, at most three; needed from a PDF and refused from the source. |
+| `--mention` `NODE` | A node the text mentions without resting on it. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library rests-on`
+
+`loom library rests-on [OPTIONS] WHAT`
+
+The library's results a draft rests on, through its citations and what those use in turn: WHAT is a draft's result (its id or label) or a document's path. Each says how it stands; a stub is one nobody has read.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library search`
+
+`loom library search [OPTIONS] [WORDS]...`
+
+Search the library's statements, stubs among them, by their words, name, title and work.
+
+| option | description |
+|---|---|
+| `--work` `REF` | Only this work's statements: its id or its entry's key. |
+| `--taxon` | Only statements of this taxon (lemma, theorem, ...). |
+| `--tag` | Only statements with this tag. |
+| `--proofs` | Look in proofs' words too. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library stubs`
+
+`loom library stubs [OPTIONS]`
+
+The library's stubs: results known to stand in a work whose text nobody has read yet, which `loom library fill` gives their text.
+
+| option | description |
+|---|---|
+| `--work` `REF` | Only this work's stubs. |
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library uses`
+
+`loom library uses [OPTIONS] NODE`
+
+What a node's text uses and mentions, and which nodes use and mention it. NODE is its id.
+
+| option | description |
+|---|---|
+| `--json` | Print the report as one JSON object. |
+| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+#### `loom library work`
+
+`loom library work [OPTIONS] REF`
+
+A work: what loom holds of it and its outline, every result of its source digested or not. REF is its id.
+
+| option | description |
+|---|---|
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
