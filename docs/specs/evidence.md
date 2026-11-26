@@ -2,7 +2,7 @@
 
 This page specifies two logs loom keeps under `.loom/records/`: the **evidence log**, what someone did to a text (digested it, compared it with its paper, ran Lean on it, attested it), and the **asks log**, what a person asked of an agent and an agent of a person. It wins over `docs/design/library.md` about a shape, as that wins about what a record means. The node files these records speak of are `nodes.md`'s.
 
-What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a result's status (§5, `status.py`), a draft's over the drafts' web and a node's over the library's (`web.py`, `DraftWeb` and `LibraryWeb`). Review's lists and their reads and writes (§6, §7, `review.py`) are built for all that needs no node: questions, papers to fetch, Lean statements to attest, accepted and attested results that changed, proposed edits, and what waits for an agent. The Web's reads over the drafts are built (§8, `webview.py`). The lists `cited` and `check`, and the library's results in the Web, wait for the node store's references. Loom's own check of the quilt's Lean writes the `lean` records (§3.4, `loom/src/loom/formal/check.py`).
+What is built: both logs, their formats, their readers and writers (`loom/src/loom/evidence/log.py`, `asks.py`), the diagnostics for a line that cannot be read, what closes an ask (§4.3), the agents' commands (§4.5), and a result's status (§5, `status.py`), a draft's over the drafts' web and a node's over the library's (`web.py`, `DraftWeb` and `LibraryWeb`). Review's lists and their reads and writes (§6, §7, `review.py`) are built for all that needs no node: questions, papers to fetch, Lean statements to attest, accepted and attested results that changed, proposed edits, and what waits for an agent. The Web's reads over the drafts are built (§8, `webview.py`). The lists `cited` and `check`, and the library's results in the Web, wait for the node store's references. Loom's own check of the quilt's Lean writes the `lean` records (§3.4, `loom/src/loom/formal/check.py`). An agent's reading of a result's Lean is written by `loom formal read` (§3.8, `loom/src/loom/formal/reading.py`).
 
 ## 1. Files
 
@@ -130,6 +130,21 @@ The person's word that a citation of a work with no result named in it is a ment
 
 ```json
 {"at":"2026-11-21T18:30:00Z","block":{"context":{"after":{"gap":1,"hash":"sha256:511c96ceb7174affc0b103d8fbbb33384196d849f1eeb3c2e9da6145053ae9d3"},"before":{"gap":1,"hash":"sha256:8f9d61fac39402898f831bfec31c774438bb77be6a0cbd47c83cf53d31858372"},"copies":1,"documents":["drafting/main.tex"],"kind":"proof","twin":false},"hash":"sha256:b5a45e5f4685d21700a0c4f00c2d7a11872c7f5f4a22a6cdf9525d36c2a66a90","key":"thm:main/proof"},"by":{"kind":"person","name":"A. Author"},"cites":"tq-00B1-ref","id":"ev-2026-11-21-m1nt0b","kind":"mention","undo":false}
+```
+
+### 3.8 `reading`: an agent's reading of a result's Lean in ordinary mathematics
+
+What a person reads beside loom's Lean before attesting (`docs/design/library.md`, "Formalization"): the Lean of a `lean` record said in ordinary mathematics, part by part. Only an agent, and only by `loom formal read` and its tool (`loom/src/loom/formal/reading.py`), which a person's name is refused. It is written by a second agent asked only to read the Lean, never the agent that wrote it; loom cannot tell two agents of one app apart, since they declare one name, so that is the `formalize` mode's to say, not a check.
+
+- `on`: the result at the text the `lean` record checked, as that record's `on`.
+- `lean`: the id of the `lean` record read, the latest stating the result when it was written; refused `changed` where the command names another, and `no-lean` where none states the result.
+- `parts`: one to 100, each `{part, draft, declaration, reading}`: `part` its name, as "(i)" or a notion's word, at most 40 characters, `""` for the statement whole, no two alike; `draft` what the statement says there, as LaTeX, `""` where nothing in it answers; `declaration` the one declaration of the record the part reads, which must be one the person reads there, those stating the result and what their statements name in turn (`means`), and never one that only serves the proof (refused `no-such-declaration`); `reading` the agent's reading of that declaration, as LaTeX. A part carries no Lean of its own: the Lean drawn beside it is loom's print of the declaration it names (§3.4, `shown`).
+- `difference`: the agent's note of where the Lean and the statement differ, or null where it found none.
+
+Nothing checks a reading against the Lean, so it vouches for nothing: no status reads it (§5), and a person's attestation is of loom's Lean, never of the reading. It is **stale** once a `lean` record stating its result is newer than the one it names (`reading.stale`), on any text of the result, which Review says beside it (§7).
+
+```json
+{"at":"2026-11-21T17:52:30Z","by":{"kind":"agent","name":"Claude Code Agent"},"difference":null,"id":"ev-2026-11-21-r3ad1n","kind":"reading","lean":"ev-2026-11-21-l3an9e","on":{"hash":"sha256:744b4c900c1908b82e08a2c65d2d1b551cdb30398fbf85e6675b721e7088b8c5","label":"lem:balanced"},"parts":[{"declaration":"Showcase.balanced_eq_zero_of_isTree","draft":"If $Q$ is a tree, every balanced weighting $w$ on $Q$ is zero.","part":"","reading":"For a connected quiver $Q$ whose underlying graph is a tree, a balanced weighting $w$ of $Q$ is zero on every arrow."},{"declaration":"Quiver'.Connected","draft":"","part":"connected","reading":"$Q$ is connected when its underlying graph is."}]}
 ```
 
 ## 4. The asks log

@@ -26,7 +26,7 @@ ID = re.compile(EVIDENCE)
 #: When a record was written, in UTC to the second.
 AT = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 #: Every kind of record, in the order the spec gives them.
-KINDS = ("digested", "compared", "proposed", "declined", "lean", "attested", "sought", "mention")
+KINDS = ("digested", "compared", "proposed", "declined", "lean", "attested", "sought", "mention", "reading")
 #: How a node's text was made, and the one kind of hand that makes it so.
 HOWS = {
     "extracted": "loom",
@@ -45,6 +45,7 @@ HANDS = {
     "attested": ("person",),
     "sought": ("loom",),
     "mention": ("person",),
+    "reading": ("agent",),
 }
 #: The keys every record has.
 _COMMON = {"id", "kind", "at", "by"}
@@ -531,6 +532,31 @@ def _block(value: Any, what: str) -> None:
         raise ValueError(f"{what}'s context is an object")
 
 
+def _reading(raw: dict[str, Any], by: Who) -> Subject:
+    """An agent's reading of a `lean` record in ordinary mathematics (`docs/specs/evidence.md` §3.8): each part names a declaration of the record, which `formal.reading.write` checks, and carries no Lean of its own."""
+    _keys(raw, {"on", "lean", "parts", "difference"})
+    on = Subject.from_dict(raw["on"], ("node", "label"))
+    if on.kind == "node" and not is_node(on.name, "statement"):
+        raise ValueError(f"{on.name} is not a statement")
+    if not isinstance(raw["lean"], str) or not ID.fullmatch(raw["lean"]):
+        raise ValueError("lean is not a record's id")
+    parts = raw["parts"]
+    if not isinstance(parts, list) or not parts or len(parts) > 100:
+        raise ValueError("parts is a list of one to 100 parts")
+    for p in parts:
+        if not isinstance(p, dict) or set(p) != {"part", "draft", "declaration", "reading"}:
+            raise ValueError("a part has part, draft, declaration and reading")
+        _text(p["part"], "a part's name", most=40)
+        _text(p["draft"], "a part's draft")
+        _text(p["declaration"], "a part's declaration", empty=False, most=1000)
+        _text(p["reading"], "a part's reading", empty=False)
+    if len({p["part"] for p in parts}) != len(parts):
+        raise ValueError("two parts have one name")
+    if raw["difference"] is not None:
+        _text(raw["difference"], "difference", empty=False)
+    return on
+
+
 _CHECKS: dict[str, Callable[[dict[str, Any], Who], Subject | None]] = {
     "digested": _digested,
     "compared": _compared,
@@ -540,6 +566,7 @@ _CHECKS: dict[str, Callable[[dict[str, Any], Who], Subject | None]] = {
     "attested": _attested,
     "sought": _sought,
     "mention": _mention,
+    "reading": _reading,
 }
 
 
