@@ -78,6 +78,7 @@ MODULES = {
 FUNCTIONS = {
     "adopt.py:_flat_shape_made": "a temporary tree",
     "cli/app_cmd.py:_open": "the home's own log, in the machine's place",
+    "cli/open_cmd.py:_start": "the log of the server it starts, `.loom/local/open-serve.log`, beside `serve.json`",
     "adopt.py:_merge": "a temporary tree",
     "adopt.py:prepare": "the saved preview, `.loom/local/`",
     "adopt.py:decide": "the saved choices, a record",
