@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 13
+VERSION = 14
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -404,10 +404,11 @@ def _walk(
             if at is not None and env.name in taxa:
                 events.append((at, 1, "result", (rel, env)))
         dead = _unread(files[rel].clean)
-        for env in _displays(fe.roots):
-            if any(a <= env.start < b for a, b in dead):
-                # TeX never reads it, so it numbers nothing
-                continue
+        shown = [env for env in _displays(fe.roots) if not any(a <= env.start < b for a, b in dead)]
+        if _grouped(files[rel].clean, [env.start for env in shown]):
+            # an argument a command may drop or set twice: loom cannot count it
+            out.uncounted = "construct"
+        for env in shown:
             at = exp.exp_offset(rel, env.start)
             if at is not None:
                 events.append((at, 2, "display", (rel, env)))
@@ -497,7 +498,7 @@ def _walk(
                 owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
 
 
-_IFFALSE = re.compile(r"\\iffalse(?![A-Za-z@]).*?\\fi(?![A-Za-z@])|\\begin\s*\{comment\}.*?\\end\s*\{comment\}", re.S)
+_COMMENT = re.compile(r"\\begin\s*\{comment\}.*?\\end\s*\{comment\}", re.S)
 
 
 #: A definition: a command's or an environment's.
@@ -511,12 +512,20 @@ _NUMBERS = re.compile(
 #: A numbered display loom has no count of wherever it stands.
 _FOREIGN = re.compile(
     r"\\(?:l?eqno)(?![A-Za-z@])|\\begin\s*\{(?:empheq|dmath|dseries|dgroup|IEEEeqnarray|numcases|subnumcases|fleqn)\}"
+    r"|\\(?:include|exclude|special|process)comment(?![A-Za-z@])"
+    r"|\\let\s*\\[A-Za-z@]+\s*=?\s*\\(?:equation|align|gather|multline|flalign|alignat|eqnarray)(?![A-Za-z@*])"
 )
+#: A conditional of TeX's, `\\iffalse`, `\\ifx`, one `\\newif` made or `\\let` to one, `\\unless`: which branch TeX reads loom does not evaluate. `\\iff` is the logical connective.
+_CONDITIONAL = re.compile(r"\\(?:if(?!f(?![A-Za-z@]))[A-Za-z@]*|unless)(?![A-Za-z@])")
+_BEGIN_DOCUMENT = re.compile(r"\\begin\s*\{document\}")
 
 
 def _uncountable(text: str) -> bool:
-    """Whether a source sets a numbered display loom cannot count: a command or an environment defined to begin one (`\\be`, a `\\newenvironment` around `equation`), `\\eqno`, or a display of a package loom does not read (`empheq`, `dmath`); each steps TeX's count where loom sees nothing."""
+    """Whether a source sets a numbered display loom cannot count: a command or an environment defined to begin one (`\\be`, a `\\newenvironment` around `equation`, `\\let\\beq\\equation`), `\\eqno`, a display of a package loom does not read (`empheq`, `dmath`), `comment`'s environments redefined, or a conditional in the document, whose branches loom does not evaluate; each steps TeX's count where loom sees otherwise."""
     if _FOREIGN.search(text):
+        return True
+    body = _BEGIN_DOCUMENT.search(text)
+    if body is not None and _CONDITIONAL.search(text, body.end()):
         return True
     return any(_NUMBERS.search(_defined(text, m.end())) for m in _DEFINES.finditer(text))
 
@@ -543,6 +552,9 @@ def _defined(text: str, at: int) -> str:
             # the name being defined, `\def\be`
             m = re.compile(r"\\(?:[A-Za-z@]+|.)").match(text, at)
             at = m.end() if m else at + 1
+        elif ch == "*" and not groups:
+            # `\\newcommand*`
+            at += 1
         elif ch == "#" and not groups:
             # a `\def`'s parameters, `#1#2`
             at += 2
@@ -551,9 +563,38 @@ def _defined(text: str, at: int) -> str:
     return "".join(groups)
 
 
+#: What stands before a brace that opens an argument: a command's name, or another argument's end.
+_ARGUMENT = re.compile(r"(?:\\[A-Za-z@]+\*?|[}\]])\Z")
+
+
+def _grouped(clean: str, starts: list[int]) -> bool:
+    """Whether any offset of `starts` stands inside an argument of a command, which the command may drop or set twice: braces right after a command's name or another argument (`\\hide{…}`, `\\footnote{…}`), counted from the file's start in one pass, `\\{` and `\\}` passed over. A bare group, `{\\renewcommand…}` around a restated theorem, sets what it holds once."""
+    stack: list[bool] = []
+    k = 0
+    for start in sorted(starts):
+        while k < start:
+            ch = clean[k]
+            if ch == "\\":
+                k += 2
+                continue
+            if ch == "{":
+                j, newlines = k - 1, 0
+                # spaces and one line's end stand between a command and its argument; a blank line ends it
+                while j >= 0 and clean[j] in " \t\n" and newlines + (clean[j] == "\n") < 2:
+                    newlines += clean[j] == "\n"
+                    j -= 1
+                stack.append(bool(_ARGUMENT.search(clean[max(0, j - 79) : j + 1])))
+            elif ch == "}" and stack:
+                stack.pop()
+            k += 1
+        if any(stack):
+            return True
+    return False
+
+
 def _unread(clean: str) -> list[tuple[int, int]]:
-    """The spans of a file TeX skips unread, `\\iffalse` to its `\\fi` and the `comment` environment, where a display numbers nothing."""
-    return [m.span() for m in _IFFALSE.finditer(clean)]
+    """The spans of a file TeX skips unread, the `comment` environment, where a display numbers nothing; a conditional loom does not evaluate (`_uncountable`)."""
+    return [m.span() for m in _COMMENT.finditer(clean)]
 
 
 def _displays(roots: list[Env], inside: bool = False) -> Iterator[Env]:
@@ -1402,9 +1443,29 @@ def _shape(number: str) -> str:
 
 
 def _other_version(out: Survey) -> bool:
-    """Whether the stored PDF numbers a heading or a result it placed otherwise than loom reads the source: a sign it is another version, whose displays loom's count cannot be trusted to match."""
+    """Whether the stored PDF numbers a heading or a result it placed otherwise than loom reads the source: a sign it is another version, whose displays loom's count cannot be trusted to match. A class that prints a counter as a roman numeral or a letter where loom reads its value (revtex's and IEEEtran's sections, `I`) numbers it alike."""
     marks = [(x.number, x.emulated) for x in out.sections] + [(i.number, i.emulated) for i in out.items]
-    return any(number is not None and emulated is not None and number != emulated for number, emulated in marks)
+    return any(
+        number is not None and emulated is not None and not _alike(number, emulated) for number, emulated in marks
+    )
+
+
+def _alike(printed: str, read: str) -> bool:
+    """Whether a printed number is loom's reading, part by part, a part alike where it is the same or can print the same value as a roman numeral or a letter."""
+    a, b = re.split(r"[.\-]", printed), re.split(r"[.\-]", read)
+    return len(a) == len(b) and all(x == y or _values(x) & _values(y) for x, y in zip(a, b, strict=True))
+
+
+def _values(part: str) -> set[int]:
+    """The values a counter may have that prints as `part`: arabic, a roman numeral, or a single letter, `C` both 100 and 3."""
+    out = {int(part)} if part.isdigit() else set()
+    if re.fullmatch(r"[IVXLCDM]+|[ivxlcdm]+", part):
+        values = {"i": 1, "v": 5, "x": 10, "l": 50, "c": 100, "d": 500, "m": 1000}
+        digits = [values[c] for c in part.lower()]
+        out.add(sum(-d if k + 1 < len(digits) and d < digits[k + 1] else d for k, d in enumerate(digits)))
+    if len(part) == 1 and part.isalpha():
+        out.add(ord(part.lower()) - ord("a") + 1)
+    return out
 
 
 def _number_at(line: str) -> str | None:

@@ -1400,9 +1400,6 @@ W3 = r"""\documentclass{article}
 Every finite quiver with loops has a spanning forest of its own.
 \end{lemma}
 \begin{proof}
-\iffalse
-\begin{equation} x \end{equation}
-\fi
 \begin{comment}
 \begin{equation} y \end{equation}
 \end{comment}
@@ -1417,7 +1414,7 @@ and then \begin{align} w &= 0 \\ v &= 1 \\ \end{align}
 def test_loom_counts_displays_as_tex_does_an_empty_last_row_and_nothing_tex_skips(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The review's C-10 (W3): a display in `\\iffalse` or `comment` loom counted and TeX skips, and an `align`'s empty last row TeX numbers and loom did not, cancelled in the count; loom now counts as TeX does, so each keeps its own number."""
+    """The review's C-10 (W3): a display in a `comment` environment loom counted and TeX skips, and an `align`'s empty last row TeX numbers and loom did not, cancelled in the count; loom now counts as TeX does, so each keeps its own number."""
     s = survey.read(_one_file(tmp_path, W3), "main.tex", TEX)
     assert [d.emulated for d in s.displays] == ["1", "2", "3", "4", "5"], "eq:b, the align's three rows, eq:c"
     text = "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof. First\na=b\n(1)\nand then\nw=0\n(2)\nv=1\n(3)\n(4)\nc\n(5)\n"
@@ -1454,3 +1451,59 @@ def test_without_a_compile_a_paper_loom_cannot_count_or_another_version_keeps_no
     other = _confirmed_by(tmp_path, monkeypatch, WIDE, "2 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
     assert other.uncounted == "version", "the PDF numbers the section 2 where the source reads 1"
     assert not [k for k, v in other.labels.items() if v.kind == "equation" and v.number]
+
+
+@pytest.mark.parametrize(
+    "where",
+    [
+        "\\let\\iffull\\iffalse",
+        "\\newif\\iflong\\longfalse",
+        "\\newcommand*{\\be}{\\begin{equation}}",
+        "\\let\\beq\\equation",
+        "\\excludecomment{draft}",
+    ],
+)
+def test_a_conditional_or_a_display_loom_cannot_count_keeps_no_display_number(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, where: str
+) -> None:
+    """The second review's R-1 to R-3: loom evaluates no conditional (`\\iffalse … \\else`, a `\\newif`'s, one `\\let` to `\\iffalse`), so a document holding one, a starred or `\\let` definition of a display, or `comment`'s environments redefined, keeps no display number without a compile."""
+    body = "\\iffull\\begin{equation}\\label{e:p} p \\end{equation}\\fi\n" if "if" in where else ""
+    source = WIDE.replace("\\begin{document}", where + "\n\\begin{document}").replace(
+        "\\section{One}\n", "\\section{One}\n" + body
+    )
+    done = _confirmed_by(tmp_path, monkeypatch, source, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
+    assert done.uncounted == "construct" and not [
+        k for k, v in done.labels.items() if v.kind == "equation" and v.number
+    ]
+
+
+def test_a_display_inside_braces_keeps_no_display_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """R-3: an argument a command may drop or set twice."""
+    source = WIDE.replace(
+        "\\begin{equation}\\label{e:b} b \\end{equation}", "\\hide{\\begin{equation}\\label{e:b} b \\end{equation}}"
+    )
+    done = _confirmed_by(tmp_path, monkeypatch, source, "1 One\na\n(1)\nc + c + c\n(2)\n")
+    assert done.uncounted == "construct" and not [
+        k for k, v in done.labels.items() if v.kind == "equation" and v.number
+    ]
+
+
+def test_a_section_printed_as_a_roman_numeral_is_no_other_version() -> None:
+    """R-4: revtex and IEEEtran print sections `I`, `II` where loom reads 1, 2; an appendix's `C` is 3 as a letter."""
+    assert (
+        survey._alike("I", "1")
+        and survey._alike("II.3", "2.3")
+        and survey._alike("C", "3")
+        and survey._alike("iv", "4")
+    )
+    assert not survey._alike("2", "1") and not survey._alike("1.2", "1.3") and not survey._alike("B", "1")
+
+
+def test_a_display_in_a_bare_group_keeps_its_number(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A bare group sets what it holds once, as a restated theorem's `{\\renewcommand{\\thethm}{…} …}` does: no argument, so nothing to drop or set twice."""
+    source = WIDE.replace(
+        "\\begin{equation}\\label{e:b} b \\end{equation}",
+        "\n{\\small\n\\begin{equation}\\label{e:b} b \\end{equation}}",
+    )
+    done = _confirmed_by(tmp_path, monkeypatch, source, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
+    assert done.uncounted is None and done.labels["e:b"].number == "2"

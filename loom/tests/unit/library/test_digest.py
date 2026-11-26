@@ -300,6 +300,6 @@ def test_a_result_labelling_a_display_waits_for_a_compile_where_loom_cannot_coun
     assert s.uncounted == "construct"
     done = digest(result, smith, ["lem:bound", "def:widget"], s)
     assert done.waiting == {
-        "lem:bound": "\\label{eq:bound}: loom numbers this paper's equations only when you compile its source, since its source sets equations in a way loom cannot count without TeX"
+        "lem:bound": "\\label{eq:bound}: loom numbers this paper's equations only from a compile of its source, and then those it can confirm, since its source sets equations through commands or conditions loom cannot count without TeX"
     }
     assert "def:widget" not in done.waiting, "a result with no display is written as before"

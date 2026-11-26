@@ -71,7 +71,7 @@ class Digested:
 
 #: Why a paper's displays wait for a compile of its source (`Survey.uncounted`), finishing a sentence the person reads.
 _UNCOUNTED = {
-    "construct": "its source sets equations in a way loom cannot count without TeX",
+    "construct": "its source sets equations through commands or conditions loom cannot count without TeX",
     "version": "its PDF numbers a result or a section otherwise than its source does, so it may be another version",
 }
 
@@ -615,7 +615,7 @@ class _Run:
         """Why a display's number is not kept, as the person reads it: its paper's displays waiting for a compile of its source, or this one not confirmed in the PDF."""
         if self.s.uncounted is not None and not self.s.compiled:
             why = _UNCOUNTED.get(self.s.uncounted, "")
-            return f"loom numbers this paper's equations only when you compile its source, since {why}"
+            return f"loom numbers this paper's equations only from a compile of its source, and then those it can confirm, since {why}"
         read_as = f" ({label.emulated} as loom reads it)" if label.emulated else ""
         return f"the display's number{read_as} is not confirmed in the work's PDF"
 
