@@ -62,6 +62,7 @@
 {#if outline?.from === 'tex'}
 	<div class="rl">{words.column.contents}</div>
 	{#if outline.state === 'reading'}<p class="small grey pad">{words.column.reading}</p>{/if}
+	{#if outline.uncounted}<p class="small grey pad" data-testid="outline-uncounted">{words.column.uncounted[outline.uncounted]}</p>{/if}
 	{#each outline.sections as s (s.section)}
 		{@const items = outline.items.filter((it) => it.section === s.section)}
 		<button type="button" class="osec" onclick={() => s.page && lib.go(ref, s.page)} data-testid="outline-section"><span class="num">{s.number}</span> {s.title}{#if s.page}<span class="pg">{words.column.page(s.page)}</span>{/if}</button>

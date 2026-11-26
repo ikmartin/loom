@@ -117,7 +117,7 @@ def work(result: ScanResult, ref: str) -> dict[str, Any]:
     Returns
     -------
     dict
-        `gen`, the work's words, `holds` `{pdf, pages, tex}`, `entry`, `link`, `outline` `{from, state, why, sections, items}`, `marks` and `unplaced` (`library-views.md` §3.2). A number in the outline the survey has not confirmed is loom's own reading of the source's counters, said by `confirmed` false.
+        `gen`, the work's words, `holds` `{pdf, pages, tex}`, `entry`, `link`, `outline` `{from, state, why, uncounted, sections, items}`, `marks` and `unplaced` (`library-views.md` §3.2). A number in the outline the survey has not confirmed is loom's own reading of the source's counters, said by `confirmed` false.
 
     Raises
     ------
@@ -136,7 +136,14 @@ def work(result: ScanResult, ref: str) -> dict[str, Any]:
     assert held is not None
     standing = Standing(root)
     statements = [n for n in of_work(root, ref) if n.kind == ids.STATEMENT]
-    outline: dict[str, Any] = {"from": None, "state": "ready", "why": None, "sections": [], "items": []}
+    outline: dict[str, Any] = {
+        "from": None,
+        "state": "ready",
+        "why": None,
+        "uncounted": None,
+        "sections": [],
+        "items": [],
+    }
     s = surveyed(root, held)
     placed = set(_marked_nodes(result, ref))
     if s is not None:
@@ -197,7 +204,9 @@ def _outline(s: Survey, statements: list[Node], standing: Standing) -> dict[str,
         )
     holding = {n.id for n in held.values()}
     items += [_row(None, n, standing) for n in statements if n.empty and n.id not in holding]
-    return {"from": "tex", "state": s.state, "why": s.why, "sections": sections, "items": items}
+    # without a compile a miscounted display would show wrong nowhere: its paper's displays wait for the person's
+    uncounted = s.uncounted if not s.compiled else None
+    return {"from": "tex", "state": s.state, "why": s.why, "uncounted": uncounted, "sections": sections, "items": items}
 
 
 def _row(item: str | None, n: Node, standing: Standing) -> dict[str, Any]:

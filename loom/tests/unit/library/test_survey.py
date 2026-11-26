@@ -1380,3 +1380,77 @@ def test_a_number_opening_or_ending_a_line_leaves_its_window_unkept(
     assert kept("1 One\na\nb\n(1)\nc + c + c\n(2)\nas part (3)\n") == {}, (
         "a display the PDF leaves unnumbered and a reference ending a line: e:a, e:b and e:c would read (1), (2) and the reference's (3)"
     )
+
+
+def _confirmed_by(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source: str, text: str) -> survey.Survey:
+    """`source` surveyed on the unasked path against a stored PDF whose text is `text`."""
+    monkeypatch.setattr(survey.Pages, "of", classmethod(lambda cls, _pdf: cls([text])))
+    root = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
+    root.mkdir()
+    return survey.confirmed(root, TEX, _one_file(root, source), "main.tex", pdf=TEX, pdf_path=root / "x.pdf")
+
+
+#: The review's W3: a display TeX never reads, then a labelled one, then an `align` whose last line ends in `\\`, whose empty row TeX numbers.
+W3 = r"""\documentclass{article}
+\usepackage{amsmath}
+\newtheorem{lemma}{Lemma}[section]
+\begin{document}
+\section{One}
+\begin{lemma}\label{l:a}
+Every finite quiver with loops has a spanning forest of its own.
+\end{lemma}
+\begin{proof}
+\iffalse
+\begin{equation} x \end{equation}
+\fi
+\begin{comment}
+\begin{equation} y \end{equation}
+\end{comment}
+First \begin{equation}\label{eq:b} a = b \end{equation}
+and then \begin{align} w &= 0 \\ v &= 1 \\ \end{align}
+\begin{equation}\label{eq:c} c \end{equation}
+\end{proof}
+\end{document}
+"""
+
+
+def test_loom_counts_displays_as_tex_does_an_empty_last_row_and_nothing_tex_skips(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's C-10 (W3): a display in `\\iffalse` or `comment` loom counted and TeX skips, and an `align`'s empty last row TeX numbers and loom did not, cancelled in the count; loom now counts as TeX does, so each keeps its own number."""
+    s = survey.read(_one_file(tmp_path, W3), "main.tex", TEX)
+    assert [d.emulated for d in s.displays] == ["1", "2", "3", "4", "5"], "eq:b, the align's three rows, eq:c"
+    text = "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof. First\na=b\n(1)\nand then\nw=0\n(2)\nv=1\n(3)\n(4)\nc\n(5)\n"
+    done = _confirmed_by(tmp_path, monkeypatch, W3, text)
+    assert done.uncounted is None
+    assert (done.labels["eq:b"].number, done.labels["eq:c"].number) == ("1", "5")
+
+
+def test_a_display_loom_cannot_count_is_found_in_the_source() -> None:
+    """A command or environment defined to begin a numbered display, `\\eqno`, or a package's display: each steps TeX's count where loom sees nothing."""
+    assert survey._uncountable(r"\def\be{\begin{equation}}\def\ee{\end{equation}}")
+    assert survey._uncountable(r"\newenvironment{eqn}{\begin{equation}}{\end{equation}}")
+    assert survey._uncountable(r"\newcommand{\eqq}[1]{\begin{equation}#1\end{equation}}")
+    assert survey._uncountable(r"\NewDocumentCommand{\x}{m}{\begin{align}#1\end{align}}")
+    assert survey._uncountable(r"$$ a \eqno(3) $$") and survey._uncountable(r"\begin{empheq}{equation} a \end{empheq}")
+    assert not survey._uncountable(
+        r"\newcommand{\R}{\mathbb R}" "\n" r"\begin{document}\begin{equation}a\end{equation}"
+    )
+    assert not survey._uncountable(r"\def\x#1{#1}\begin{equation}a\end{equation}")
+    assert not survey._uncountable(r"\newcommand{\beq}{\begin{equation*}}"), "a display numbered nowhere"
+
+
+def test_without_a_compile_a_paper_loom_cannot_count_or_another_version_keeps_no_display_number(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The ruling on C-10: on the unasked path a missing number waits for the person's compile and a wrong one would show nowhere, so a paper whose displays loom cannot count, or whose PDF may be another version, keeps none."""
+    macro = WIDE.replace(
+        "\\begin{document}", "\\def\\be{\\begin{equation}}\\def\\ee{\\end{equation}}\n\\begin{document}"
+    )
+    done = _confirmed_by(tmp_path, monkeypatch, macro, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
+    assert done.uncounted == "construct" and not [k for k, v in done.labels.items() if v.number]
+    same = _confirmed_by(tmp_path, monkeypatch, WIDE, "1 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
+    assert same.uncounted is None and same.labels["e:c"].number == "3"
+    other = _confirmed_by(tmp_path, monkeypatch, WIDE, "2 One\na\n(1)\nb\n(2)\nc + c + c\n(3)\n")
+    assert other.uncounted == "version", "the PDF numbers the section 2 where the source reads 1"
+    assert not [k for k, v in other.labels.items() if v.kind == "equation" and v.number]

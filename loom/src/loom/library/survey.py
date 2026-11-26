@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 12
+VERSION = 13
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -220,7 +220,7 @@ class Display:
 class Survey:
     """What one source holds, confirmed against the work's stored PDF `pdf` where there is one.
 
-    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `displays` are its numbered displays in order, which number its labels of displays (`_labels`). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`).
+    `state` is `reading` until its compile, then `ready`, or `failed` with `why` (`no-main`, `unreadable`, `no-document`, `incomplete`, and the compile's own). `displays` are its numbered displays in order, which number its labels of displays (`_labels`). `unseen` names each heading, result and proof whose mark the compile never reached, by its id in the survey (`s3`, `lem:x`, `lem:x:proof0`); `unconfirmed` each heading and result that prints a number nothing confirmed, so it is left without one. `compiled` says whether a compile of the source, the person's own act, judged it; the unasked path never compiles (`confirmed`). `uncounted` says why the unasked path keeps no display's number, which waits for that compile: `construct`, the source sets a display loom cannot count (`_uncountable`); `version`, its stored PDF numbers a result or heading otherwise than loom reads the source, so it may be another version.
     """
 
     tex: str
@@ -240,6 +240,7 @@ class Survey:
     unseen: list[str] = field(default_factory=list)
     unconfirmed: list[str] = field(default_factory=list)
     compiled: bool = False
+    uncounted: str | None = None
 
     def to_json(self) -> dict[str, Any]:
         """The survey as its kept file holds it."""
@@ -338,6 +339,8 @@ def read(src: Path, main: str, tex: str) -> Survey:
     # a local style's settings stand before the document's own, as it is loaded in the preamble
     styles = [f.src.clean[f.start : f.end] for f in closure.fragments if f.file not in exp.reached]
     _walk(out, exp.text, units, envs, files, taxa, exp, styles)
+    if _uncountable("\n".join([exp.text, *styles])):
+        out.uncounted = "construct"
     if not out.items:
         # a paper whose theorems loom cannot read (tcolorbox's, say) never shows as one with nothing in it
         out.why = "no-results"
@@ -400,7 +403,11 @@ def _walk(
             at = exp.exp_offset(rel, env.start)
             if at is not None and env.name in taxa:
                 events.append((at, 1, "result", (rel, env)))
+        dead = _unread(files[rel].clean)
         for env in _displays(fe.roots):
+            if any(a <= env.start < b for a, b in dead):
+                # TeX never reads it, so it numbers nothing
+                continue
             at = exp.exp_offset(rel, env.start)
             if at is not None:
                 events.append((at, 2, "display", (rel, env)))
@@ -490,6 +497,65 @@ def _walk(
                 owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
 
 
+_IFFALSE = re.compile(r"\\iffalse(?![A-Za-z@]).*?\\fi(?![A-Za-z@])|\\begin\s*\{comment\}.*?\\end\s*\{comment\}", re.S)
+
+
+#: A definition: a command's or an environment's.
+_DEFINES = re.compile(
+    r"\\(?:[egx]?def|let|(?:re)?newcommand|providecommand|DeclareRobustCommand|(?:New|Renew|Provide|Declare)Document(?:Command|Environment)|(?:re)?newenvironment)(?![A-Za-z@])"
+)
+#: What starts a numbered display, inside a definition: its environment begun, or its command.
+_NUMBERS = re.compile(
+    r"\\begin\s*\{(?:equation|align|gather|multline|flalign|alignat|xalignat|eqnarray)\}|\\(?:equation|align|gather|multline|flalign|alignat|eqnarray)(?![A-Za-z@*])"
+)
+#: A numbered display loom has no count of wherever it stands.
+_FOREIGN = re.compile(
+    r"\\(?:l?eqno)(?![A-Za-z@])|\\begin\s*\{(?:empheq|dmath|dseries|dgroup|IEEEeqnarray|numcases|subnumcases|fleqn)\}"
+)
+
+
+def _uncountable(text: str) -> bool:
+    """Whether a source sets a numbered display loom cannot count: a command or an environment defined to begin one (`\\be`, a `\\newenvironment` around `equation`), `\\eqno`, or a display of a package loom does not read (`empheq`, `dmath`); each steps TeX's count where loom sees nothing."""
+    if _FOREIGN.search(text):
+        return True
+    return any(_NUMBERS.search(_defined(text, m.end())) for m in _DEFINES.finditer(text))
+
+
+def _defined(text: str, at: int) -> str:
+    """What a definition starting at `at` defines, its name and arguments passed over: its brace groups, up to three (an environment's begin and end, a document command's argument spec and body)."""
+    groups: list[str] = []
+    while len(groups) < 3 and at < len(text):
+        ch = text[at]
+        if ch.isspace():
+            at += 1
+        elif ch == "{":
+            depth, start = 0, at
+            while at < len(text):
+                depth += {"{": 1, "}": -1}.get(text[at], 0)
+                at += 2 if text[at] == "\\" else 1
+                if depth == 0:
+                    break
+            groups.append(text[start:at])
+        elif ch == "[":
+            end = text.find("]", at)
+            at = len(text) if end < 0 else end + 1
+        elif ch == "\\" and not groups:
+            # the name being defined, `\def\be`
+            m = re.compile(r"\\(?:[A-Za-z@]+|.)").match(text, at)
+            at = m.end() if m else at + 1
+        elif ch == "#" and not groups:
+            # a `\def`'s parameters, `#1#2`
+            at += 2
+        else:
+            break
+    return "".join(groups)
+
+
+def _unread(clean: str) -> list[tuple[int, int]]:
+    """The spans of a file TeX skips unread, `\\iffalse` to its `\\fi` and the `comment` environment, where a display numbers nothing."""
+    return [m.span() for m in _IFFALSE.finditer(clean)]
+
+
 def _displays(roots: list[Env], inside: bool = False) -> Iterator[Env]:
     """The display environments under `roots`, outermost only: a display inside another is a part of it (`subequations` holds its own)."""
     for env in roots:
@@ -525,7 +591,7 @@ def _display(out: Survey, clean: str, env: Env, numbering: Numbering, inner: boo
 
 
 def _lines(clean: str, env: Env) -> list[tuple[int, int]]:
-    """A display's lines: its body cut at each `\\\\` outside braces and outside the environments inside it (`aligned`, `cases`)."""
+    """A display's lines: its body cut at each `\\\\` outside braces and outside the environments inside it (`aligned`, `cases`), an empty last one after a `\\\\` ending the body among them, since TeX numbers it."""
     inner = [(c.start, c.end) for c in env.children]
     out: list[tuple[int, int]] = []
     start, depth, at = env.body_start, 0, env.body_start
@@ -543,7 +609,8 @@ def _lines(clean: str, env: Env) -> list[tuple[int, int]]:
             continue
         depth += {"{": 1, "}": -1}.get(ch, 0)
         at += 1
-    if clean[start : env.body_end].strip():
+    if out or clean[start : env.body_end].strip():
+        # a `\\` ending the last line leaves an empty row, which TeX numbers as any other
         out.append((start, env.body_end))
     return out
 
@@ -1247,7 +1314,10 @@ def _labels(out: Survey, found: dict[str, AuxNumber], pages: Pages | None, lines
     by_item = {i.item: i for i in out.items}
     by_label = {sec.label: sec for sec in out.sections if sec.label}
     hints = {name: said for name, got in found.items() if (said := _hint(got.number, found)) is not None}
-    if pages is not None:
+    if pages is not None and out.uncounted is not None and not found:
+        # without a compile nothing would show a number loom miscounted: each waits for the person's
+        displayed = {}
+    elif pages is not None:
         displayed = _shown(out, pages, lines or {}, hints)
     else:
         displayed = {
@@ -1329,6 +1399,12 @@ def _shown(
 def _shape(number: str) -> str:
     """A display's number as its kinds of character: digits `9`, lower-case letters `a`, capitals `A`, the rest as they stand."""
     return re.sub(r"[a-z]", "a", re.sub(r"[A-Z]", "A", re.sub(r"\d+", "9", number)))
+
+
+def _other_version(out: Survey) -> bool:
+    """Whether the stored PDF numbers a heading or a result it placed otherwise than loom reads the source: a sign it is another version, whose displays loom's count cannot be trusted to match."""
+    marks = [(x.number, x.emulated) for x in out.sections] + [(i.number, i.emulated) for i in out.items]
+    return any(number is not None and emulated is not None and number != emulated for number, emulated in marks)
 
 
 def _number_at(line: str) -> str | None:
@@ -1540,6 +1616,8 @@ def confirmed(
         out.state, out.why = "failed", "pdf"
     else:
         out.unconfirmed, lines = _placed(out, pages, {})
+        if out.uncounted is None and _other_version(out):
+            out.uncounted = "version"
         _labels(out, {}, pages, lines)
         out.state, out.why = "ready", None if out.items else "no-results"
     keep(root, out)

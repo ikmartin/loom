@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Any
 from loom.library import body as bodies
 from loom.library import ids
 from loom.library.node import Node
-from loom.library.survey import Item, Survey
+from loom.library.survey import Item, Label, Survey
 from loom.scan.labels import base36_encode
 from loom.scan.tokenize import match_group, read_mandatory, read_optional, skip_space
 
@@ -67,6 +67,13 @@ class Digested:
             "waiting": self.waiting,
             "sought": self.sought,
         }
+
+
+#: Why a paper's displays wait for a compile of its source (`Survey.uncounted`), finishing a sentence the person reads.
+_UNCOUNTED = {
+    "construct": "its source sets equations in a way loom cannot count without TeX",
+    "version": "its PDF numbers a result or a section otherwise than its source does, so it may be another version",
+}
 
 
 class _Wait(Exception):
@@ -600,10 +607,17 @@ class _Run:
             return "text", number
         if label.kind == "equation":
             if label.number is None:
-                read_as = f" ({label.emulated} as loom reads it)" if label.emulated else ""
-                raise _Wait(f"\\{command}{{{name}}}: the display's number{read_as} is not confirmed in the work's PDF")
+                raise _Wait(f"\\{command}{{{name}}}: {self._unnumbered(label)}")
             return "text", label.number
         raise _Wait(f"\\{command}{{{name}}}: loom does not read the number of a {label.kind} outside every result")
+
+    def _unnumbered(self, label: Label) -> str:
+        """Why a display's number is not kept, as the person reads it: its paper's displays waiting for a compile of its source, or this one not confirmed in the PDF."""
+        if self.s.uncounted is not None and not self.s.compiled:
+            why = _UNCOUNTED.get(self.s.uncounted, "")
+            return f"loom numbers this paper's equations only when you compile its source, since {why}"
+        read_as = f" ({label.emulated} as loom reads it)" if label.emulated else ""
+        return f"the display's number{read_as} is not confirmed in the work's PDF"
 
     def anchor(self, name: str) -> str:
         """The anchor a label inside a result or its proof is: its owner's id, `eq` or `it`, and its place among its owner's labels of that kind."""
@@ -717,8 +731,7 @@ class _Run:
             edits.append((arg_at, arg_end, anchor))
             if label.kind == "equation":
                 if label.number is None:
-                    read_as = f" ({label.emulated} as loom reads it)" if label.emulated else ""
-                    raise _Wait(f"\\label{{{name}}}: the display's number{read_as} is not confirmed in the work's PDF")
+                    raise _Wait(f"\\label{{{name}}}: {self._unnumbered(label)}")
                 out.anchors[anchor] = label.number
         for cmd in _commands(scan):
             points: list[str] = []

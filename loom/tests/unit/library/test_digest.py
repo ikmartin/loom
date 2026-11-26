@@ -286,3 +286,20 @@ def test_a_pointer_proof_another_hand_made_is_kept_and_the_source_s_proof_takes_
     assert proofs and pointer.id not in proofs
     written = read(root, proofs[0])
     assert written is not None and written.body.strip(), "the source's proof, read in full"
+
+
+def test_a_result_labelling_a_display_waits_for_a_compile_where_loom_cannot_count_the_paper_s_displays(
+    tmp_path: Path, pdf_text: list[str]
+) -> None:
+    """The ruling on C-10, as the person reads it: the result waits, saying that the paper's equations are numbered only when they compile its source, and why."""
+    source = SOURCE.replace(
+        "\\begin{document}", "\\def\\be{\\begin{equation}}\\def\\ee{\\end{equation}}\n\\begin{document}"
+    )
+    result, smith = quilt(tmp_path, source=source)
+    s = surveyed(result, smith)
+    assert s.uncounted == "construct"
+    done = digest(result, smith, ["lem:bound", "def:widget"], s)
+    assert done.waiting == {
+        "lem:bound": "\\label{eq:bound}: loom numbers this paper's equations only when you compile its source, since its source sets equations in a way loom cannot count without TeX"
+    }
+    assert "def:widget" not in done.waiting, "a result with no display is written as before"
