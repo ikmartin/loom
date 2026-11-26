@@ -926,7 +926,9 @@ def check_lean(root: Path) -> Item:
     extra["fence"] = why
     if why is not None:
         return Item("lean", WARN, QUILT, f"on, but loom cannot check Lean here: the fence is not up ({why})", "run loom outside an agent's sandboxed shell", extra)  # fmt: skip
-    have = f"on: the project in {install.LEAN}/, {toolchain}" + (f", Mathlib {extra['mathlib']}" if extra["mathlib"] else "")
+    have = f"on: the project in {install.LEAN}/, {toolchain}" + (
+        f", Mathlib {extra['mathlib']}" if extra["mathlib"] else ""
+    )
     last = switch.last_check(root)
     extra["last"] = last
     if last is None:
@@ -944,7 +946,11 @@ def check_lean(root: Path) -> Item:
     stands = files_unchanged(root)
     gone = sum(1 for r in latest.values() if not stands(r))
     extra["stale"] = gone
-    tail = f"; {gone} of {len(latest)} results' Lean changed since, which loom checks again while it serves" if gone else ""
+    tail = (
+        f"; {gone} of {len(latest)} results' Lean changed since, which loom checks again while it serves"
+        if gone
+        else ""
+    )
     return Item("lean", OK, QUILT, f"{have}; last checked {when} ({came}){tail}", "", extra, shown=True)
 
 

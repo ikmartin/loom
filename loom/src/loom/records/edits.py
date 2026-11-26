@@ -264,7 +264,9 @@ def _place_on_file(result: ScanResult, edit: Edit) -> Placed:
     if not found:
         raise Unplaced(f"the text {edit.id} quotes no longer stands in {rel}")
     if len(found) > 1:
-        raise Unplaced(f"the text {edit.id} quotes now stands {len(found)} times in {rel}, so where it goes is not known")
+        raise Unplaced(
+            f"the text {edit.id} quotes now stands {len(found)} times in {rel}, so where it goes is not known"
+        )
     a, b = found[0]
     changed = _beside(edit, text, (a, b))
     if changed is not None:

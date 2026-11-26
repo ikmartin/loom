@@ -73,7 +73,7 @@ def newest(proj: Path) -> float:
 
 def state(proj: Path, texts: list[str]) -> str:
     """One digest of what a check would read: the hash of each of the project's modules and configuration files, and the texts now of the results records state."""
-    files = {}
+    files: dict[str, str | None] = {}
     for p in _project_files(proj):
         try:
             files[p.relative_to(proj).as_posix()] = hashlib.sha256(p.read_bytes()).hexdigest()

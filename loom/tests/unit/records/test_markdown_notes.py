@@ -76,7 +76,9 @@ def test_the_files_page_marks_the_words_and_still_does_after_an_edit_above(q: Pa
         return (q / ".loom/cache/site/files" / f"{NOTE}.html").read_text(encoding="utf-8")
 
     assert whole in page()
-    (q / NOTE).write_text(TEXT.replace("# Day one\n", "# Day one\n\nA new first paragraph.\n\n- one\n"), encoding="utf-8")
+    (q / NOTE).write_text(
+        TEXT.replace("# Day one\n", "# Day one\n\nA new first paragraph.\n\n- one\n"), encoding="utf-8"
+    )
     drawn = page()
     assert whole in drawn
     # each block names its lines in the file, which is how a mark and a change find their place on the page
@@ -110,4 +112,16 @@ def test_the_mark_is_on_the_words_the_annotation_resolved_to_and_words_twice_on_
     assert f'data-annotation="{other}">a b c here</mark>' in page or f'data-annotation="{ann} {other}"' in page
     assert f'Say <mark class="annotation" data-annotation="{other}">' not in page
     # words the page prints twice, once as written and once through markup, are not one place
-    refused("annotate", NOTE, "--quote", "foo bar", "x", "--as", AGENT, cwd=q, code=2, match="ambiguous", env={"AI_AGENT": "1"})
+    refused(
+        "annotate",
+        NOTE,
+        "--quote",
+        "foo bar",
+        "x",
+        "--as",
+        AGENT,
+        cwd=q,
+        code=2,
+        match="ambiguous",
+        env={"AI_AGENT": "1"},
+    )

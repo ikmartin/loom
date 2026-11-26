@@ -21,9 +21,9 @@ from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, ASK_LOG, EDIT_LOG, EVID
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
+from loom.records.locate import block_hash, follow
 from loom.records.mdtext import SUFFIXES as MARKDOWN
 from loom.records.mdtext import is_markdown
-from loom.records.locate import block_hash, follow
 from loom.records.selectors import CONTEXT, Selector, _common_prefix_len, _common_suffix_len, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.render.uses import used

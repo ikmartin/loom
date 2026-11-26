@@ -48,6 +48,12 @@ def test_the_formalize_mode_says_how_to_work_in_lean_and_that_loom_runs_the_chec
     assert "formalize" in layout.modes(q)
     text = layout.tracked_docs(q)[".loom/agents/instructions/modes/formalize.md"]
     assert text.startswith("# Mode: formalize\n\nWhen it fits:")
-    for said in ('@[loom "LABEL"]', "`lean/Formal/`", "`loom formal check`", "lean/Loom.lean", "Loom checks the Lean itself"):
+    for said in (
+        '@[loom "LABEL"]',
+        "`lean/Formal/`",
+        "`loom formal check`",
+        "lean/Loom.lean",
+        "Loom checks the Lean itself",
+    ):
         assert said in text, said
     assert re.search(r"^- \*\*formalize\*\*", mode_index(q), re.M)

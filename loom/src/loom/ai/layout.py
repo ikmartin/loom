@@ -203,7 +203,9 @@ def lean_rules() -> tuple[list[str], list[str]]:
     from loom.formal.install import LEAN, MARKER_MODULE
 
     allow = [f"Edit({LEAN}/**)", *(f"Bash({c}*)" for c in LAKE_COMMANDS)]
-    deny = [f"Edit(/{LEAN}/{f})" for f in (f"{MARKER_MODULE}.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json")]
+    deny = [
+        f"Edit(/{LEAN}/{f})" for f in (f"{MARKER_MODULE}.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json")
+    ]
     return allow, deny
 
 

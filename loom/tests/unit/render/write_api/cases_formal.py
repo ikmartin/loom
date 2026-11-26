@@ -216,6 +216,7 @@ def _formal_enable(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 
     s, root = synthetic(serve, tmp_path, watch=False)
     installed: list[Path] = []
+
     def fake(r: Path, say: Any) -> Any:
         say("toolchain")
         installed.append(r)

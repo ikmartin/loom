@@ -85,7 +85,9 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
         raise LinkError(f"{href}: names no key")
     target = _quilt_target(result, root, href, key, place, records)
     if words and not _quotable(target):
-        raise LinkError(f"{href}: quoted words are for a place in a document, a PDF, a Markdown file or a work", "place")
+        raise LinkError(
+            f"{href}: quoted words are for a place in a document, a PDF, a Markdown file or a work", "place"
+        )
     return Target(target.kind, target.key, target.place, target.href, words)
 
 

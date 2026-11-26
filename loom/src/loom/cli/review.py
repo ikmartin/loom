@@ -1391,7 +1391,6 @@ def _check_named(result: ScanResult, target: str | None, ann_id: str | None, in_
     if not target:
         raise EnvError("TARGET is required")
     from loom.records.marks import project_pdf
-
     from loom.records.mdtext import markdown_file
 
     if markdown_file(result, target) is not None:

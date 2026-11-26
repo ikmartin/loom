@@ -43,7 +43,9 @@ def events(q: Path, edit: str) -> list[str]:
 
 def test_kept_after_an_edit_above_it_writes_exactly_its_words_and_carries_the_annotation_on_them(q: Path) -> None:
     edit = suggest(q, "--quote", "the second proof", "--with", "both proofs", "--comment", "The first is shorter.")
-    note = json_of("annotate", NOTE, "--quote", "Read the second proof", "Which?", "--as", AGENT, "--json", cwd=q, **AS_AGENT)
+    note = json_of(
+        "annotate", NOTE, "--quote", "Read the second proof", "Which?", "--as", AGENT, "--json", cwd=q, **AS_AGENT
+    )
     ann = note["written"][0]["id"]
     row = listed(q, edit)
     assert (row["kind"], row["path"], row["key"], row["state"]) == ("suggested", NOTE, None, "ready")
@@ -86,7 +88,9 @@ def test_discarded_it_leaves_every_byte_and_only_the_person_keeps_or_discards(q:
 
 def test_an_agent_quotes_the_file_once_and_withdraws_its_own(q: Path) -> None:
     refused("suggest", NOTE, "--with", "x", "--as", AGENT, cwd=q, code=2, match="--quote", **AS_AGENT)
-    refused("suggest", NOTE, "--quote", "is", "--with", "was", "--as", AGENT, cwd=q, code=2, match="ambiguous", **AS_AGENT)
+    refused(
+        "suggest", NOTE, "--quote", "is", "--with", "was", "--as", AGENT, cwd=q, code=2, match="ambiguous", **AS_AGENT
+    )
     edit = suggest(q, "--quote", "is even.", "--with", " (an even number)", "--after")
     assert listed(q, edit)["state"] == "ready"
     ok("suggest", "--withdraw", edit, "--as", AGENT, cwd=q, **AS_AGENT)

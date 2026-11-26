@@ -1519,7 +1519,9 @@ class ServeSession:
             self.presence.start()
             from loom.formal.again import Again
 
-            self.again = Again(self.quilt.root, lambda: self.last_report.result if self.last_report is not None else None)
+            self.again = Again(
+                self.quilt.root, lambda: self.last_report.result if self.last_report is not None else None
+            )
             self.again.start()
 
     def library_moved(self, result: Any = None) -> int | None:

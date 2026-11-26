@@ -13,7 +13,12 @@ from loom.evidence.log import replay
 from loom.formal import again, check, install, jobs, switch
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
-from tests.unit.formal.test_check import SATURATION, _probe, _status, _steps, quilt  # noqa: F401 -- `quilt` is a fixture
+from tests.unit.formal.test_check import (
+    SATURATION,
+    _probe,
+    _status,
+    _steps,
+)
 
 LATER = again.QUIET + 5
 
@@ -44,7 +49,9 @@ def test_nothing_recorded_or_nothing_stale_runs_nothing(quilt: Path, monkeypatch
     assert not looker.look(time.time() + LATER) and ran == []
 
 
-def test_a_changed_lean_file_is_checked_again_once_it_has_been_still(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_changed_lean_file_is_checked_again_once_it_has_been_still(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The record stops standing when its Lean changes; loom waits for the Lean to be still, then checks, and the result's record stands again."""
     _steps(monkeypatch, _probe())
     check.check(quilt)

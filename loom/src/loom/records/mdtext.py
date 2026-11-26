@@ -38,7 +38,9 @@ def text_of(root: Path, rel: str) -> str | None:
 
 
 #: What opens a line and prints nothing: its indent, a quote's `>`, a list's marker with its box, a heading's hashes.
-_LINE_HEAD = re.compile(r"[ \t]{0,3}(?:>[ \t]?)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}(?=[ \t]|$)[ \t]*)?")
+_LINE_HEAD = re.compile(
+    r"[ \t]{0,3}(?:>[ \t]?)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}(?=[ \t]|$)[ \t]*)?"
+)
 _TAG = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>]*)?/?>|<!--[\s\S]*?-->")
 _AUTOLINK = re.compile(r"<((?:https?|mailto|quilt|cited):[^<>\s]*)>")
 _ESCAPABLE = set("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~")

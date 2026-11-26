@@ -1019,8 +1019,8 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
     from loom.looks import UNDO
     from loom.paths import EDIT_LOG
     from loom.records.edits import file_text, home, reopened_event, replay, unanswered_event
-    from loom.records.mdtext import is_markdown
     from loom.records.log import log_path as annotation_log
+    from loom.records.mdtext import is_markdown
 
     result = out.result
     root, hist = result.quilt.root, result.quilt.history_dir

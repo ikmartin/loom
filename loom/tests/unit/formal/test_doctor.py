@@ -11,7 +11,7 @@ from loom import fence
 from loom.doctor import OK, WARN, check_lean
 from loom.formal import check, install, switch
 from tests.unit._quilts import showcase
-from tests.unit.formal.test_check import SATURATION, _probe, _steps, quilt  # noqa: F401 -- `quilt` is a fixture
+from tests.unit.formal.test_check import SATURATION, _probe, _steps
 
 
 def test_off_it_says_whether_the_quilt_carries_a_project(tmp_path: Path) -> None:
@@ -23,7 +23,9 @@ def test_off_it_says_whether_the_quilt_carries_a_project(tmp_path: Path) -> None
     assert item.status == OK and item.shown and "a Lean project in lean/, of which loom runs nothing" in item.detail
 
 
-def test_on_it_warns_of_what_the_check_needs_and_says_what_fixes_it(quilt: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_on_it_warns_of_what_the_check_needs_and_says_what_fixes_it(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     item = check_lean(quilt)
     assert item.status == OK and item.detail.endswith("not checked yet on this machine")
     assert item.detail.startswith(f"on: the project in lean/, {install.TOOLCHAIN}")

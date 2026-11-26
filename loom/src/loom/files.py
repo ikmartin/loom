@@ -436,7 +436,8 @@ def _on_blocks(text: str, rel: str, body: str, entries: list[MarkEntry]) -> list
     from loom.records.mdtext import on_page
 
     blocks = [
-        (int(a), int(b)) for a, b in re.findall(rf'data-src="{re.escape(html.escape(rel, quote=True))}:(\d+):(\d+)"', body)
+        (int(a), int(b))
+        for a, b in re.findall(rf'data-src="{re.escape(html.escape(rel, quote=True))}:(\d+):(\d+)"', body)
     ]
     out: list[MarkEntry] = []
     for e in entries:
