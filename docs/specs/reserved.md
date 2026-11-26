@@ -26,11 +26,9 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | `formal-enable` | turns formalization on for the quilt, on this machine | formalization |
 | `formal-check` | runs loom's own check of a formal proof again | formalization |
 | `quilt-import` | brings a dropped paper, folder or archive into the quilt | install and launch; the window's drop target calls it |
-| `sync-pair` | pairs the quilt with an Overleaf project from its link | Overleaf |
-| `sync-fetch` | fetches what changed there | Overleaf |
 | `changed-seen` | marks what changed as seen, one row or all | Review |
 
-Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `sync-` to Overleaf; `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch; `web-` to the Web, whose reads are built (`write-api.md`).
+Prefixes: `change-` and `history-` belong to the safe write path; `library-` to the library; `session-` and `agents-` to attaching an agent; `overleaf-` to Overleaf, whose endpoints are built (`write-api.md`); `adopt-`, `review-` and `changed-` to Review; `formal-` to formalization; `quilt-` to install and launch; `web-` to the Web, whose reads are built (`write-api.md`).
 
 ## Refusals, and what a write answers
 
