@@ -1112,8 +1112,28 @@ def test_a_display_s_number_is_kept_where_the_stored_pdf_shows_it_in_order(
     )
     lost = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("(1.3) h = i", "h = i (1.3)"))
     kept = {k for k, v in lost.labels.items() if v.kind == "equation" and v.number}
-    assert kept == {"e:a", "e:b", "e:two"}, (
-        "once one is not where loom counts it, none is kept until the counter starts again"
+    assert kept == {"e:two"}, (
+        "a number not where loom reads one leaves its window, here the whole of section One, unkept; the next window keeps its own"
+    )
+
+
+def test_a_display_loom_does_not_count_shifts_no_number_onto_its_neighbour(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's C-1: an `align` whose last line ends in `\\\\`, a `\\be … \\ee` or a display the PDF's version adds prints a number loom does not count, and the uncounted display's own line shows the number loom expects next; nothing of that window is kept, and no number shifts."""
+    extra = DISPLAYED.replace("(1.1)\n", "(1.1)\nv\n(1.2)\n").replace("(1.2)\nd = e", "(1.3)\nd = e")
+    extra = extra.replace("(1.3) h = i", "(1.4) h = i")
+    done = _displayed(tmp_path, monkeypatch, extra)
+    kept = {k: v.number for k, v in done.labels.items() if v.kind == "equation" and v.number}
+    assert kept == {"e:two": "2.1"}, "e:b would read the uncounted display's (1.2), e:c its neighbour's"
+    fewer = _displayed(tmp_path, monkeypatch, DISPLAYED.replace("a\n(1.1)\n", "a\n"))
+    assert {k for k, v in fewer.labels.items() if v.kind == "equation" and v.number} == {"e:two"}, (
+        "a display the PDF's version leaves unnumbered: e:b never takes (1.2) as its own when loom counts it 1.2 too"
+    )
+    listed = DISPLAYED.replace("z\n", "z\n(i) one;\n(1.6) again;\n")
+    kept = {k for k, v in _displayed(tmp_path, monkeypatch, listed).labels.items() if v.kind == "equation" and v.number}
+    assert "e:after" in kept and "e:a" in kept, (
+        "a list's items are no displays: one shaped as no display number is, one repeating a number shown alone"
     )
 
 

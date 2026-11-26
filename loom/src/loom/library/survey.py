@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 7
+VERSION = 8
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -1276,39 +1276,49 @@ def _shown(
 ) -> dict[str, tuple[str, int | None]]:
     """Each label of a display the stored PDF numbers as loom reads it, with its page.
 
-    The displays are read in order, each between the line the last was read at and the lines its neighbouring headings and results were found at: kept where a line there is the number loom reads (or a compile's `hints`, for a label), alone or before its formula, before any line that is another number alone. Once the next number shown alone is another, no later display is kept until `equation` starts again, since loom's count has lost its step.
+    The displays are read a window at a time, a window being the lines between the neighbouring headings and results found. Its display numbers are the lines that are one alone, and the lines that open with one, but for a line opening with a number another line of the window shows alone, or one not shaped as loom's numbers there are, which is a list's item (`(i) first;`). Only where they are exactly as many as loom counts displays is the n-th display given the n-th, and only where every display of the window that loom numbers is given the number loom reads (or a compile's `hints`, for a label) is any kept: a display loom does not count, or one the PDF leaves unnumbered, so leaves its whole window unkept and never shifts a number onto its neighbour.
     """
     import bisect
 
     placed = sorted(lines.items())
     orders = [o for o, _k in placed]
-    out_: dict[str, tuple[str, int | None]] = {}
-    last, lost, since = -1, False, None
+    windows: dict[int, list[Display]] = {}
     for d in out.displays:
-        if d.reset != since:
-            lost, since = False, d.reset
         if d.emulated is None and d.tagged:
             # `\tag*` prints its text with no parentheses
             continue
-        i = bisect.bisect_left(orders, d.after)
-        lo = max(last, placed[i - 1][1] if i > 0 else -1)
+        windows.setdefault(bisect.bisect_left(orders, d.after), []).append(d)
+    out_: dict[str, tuple[str, int | None]] = {}
+    for i, ds in windows.items():
+        lo = placed[i - 1][1] if i > 0 else -1
         hi = placed[i][1] if i < len(placed) else len(pages.lines)
-        j = bisect.bisect_right(pages.displayed, lo)
-        alone = pages.displayed[j] if j < len(pages.displayed) and pages.displayed[j] < hi else hi
-        if d.emulated is None:
-            # a line of `subequations`: its number is shown, and read by no one
-            last = alone if alone < hi else last
+        numbered = [(k, n) for k in range(lo + 1, hi) if (n := _number_at(pages.lines[k][1])) is not None]
+        alone = {n for k, n in numbered if _ALONE.fullmatch(pages.lines[k][1])}
+        shapes = {_shape(d.emulated) for d in ds if d.emulated is not None and not d.tagged}
+        shown = [
+            (k, n)
+            for k, n in numbered
+            if _ALONE.fullmatch(pages.lines[k][1]) or (n not in alone and (not shapes or _shape(n) in shapes))
+        ]
+        if len(shown) != len(ds):
             continue
-        wanted = {hints[lab] for lab in d.labels if lab in hints} or {d.emulated} - {None}
-        k = next((k for k in range(lo + 1, alone + 1) if k < hi and _number_at(pages.lines[k][1]) in wanted), None)
-        if k is None:
-            # the next number shown alone is another, or none is shown before the next heading or result
-            last, lost = (alone if alone < hi else last), lost or not d.tagged
-            continue
-        last = k
-        if not lost:
-            out_.update(dict.fromkeys(d.labels, (_number_at(pages.lines[k][1]) or "", pages.lines[k][0])))
+        given: dict[str, tuple[str, int | None]] = {}
+        for d, (k, n) in zip(ds, shown, strict=True):
+            if d.emulated is None or d.tagged:
+                # a line of `subequations`, or a `\tag`'s text: shown, counted, and compared with nothing
+                continue
+            wanted = {hints[lab] for lab in d.labels if lab in hints} or {d.emulated}
+            if n not in wanted:
+                break
+            given.update(dict.fromkeys(d.labels, (n, pages.lines[k][0])))
+        else:
+            out_.update(given)
     return out_
+
+
+def _shape(number: str) -> str:
+    """A display's number as its kinds of character: digits `9`, lower-case letters `a`, capitals `A`, the rest as they stand."""
+    return re.sub(r"[a-z]", "a", re.sub(r"[A-Z]", "A", re.sub(r"\d+", "9", number)))
 
 
 def _number_at(line: str) -> str | None:
