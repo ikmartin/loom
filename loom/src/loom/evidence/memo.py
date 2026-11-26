@@ -29,8 +29,15 @@ def stamps(paths: Iterable[Path]) -> tuple[Any, ...]:
     return tuple(out)
 
 
-def kept(root: Path, what: str, scan: Any, paths: Callable[[], Iterable[Path]], make: Callable[[], T]) -> T:
-    """`make()`, or what it returned last for this quilt and `what` while `scan` is the same object and no file of `paths()` changed.
+def kept(
+    root: Path,
+    what: str,
+    scan: Any,
+    paths: Callable[[], Iterable[Path]],
+    make: Callable[[], T],
+    also: Callable[[], Any] | None = None,
+) -> T:
+    """`make()`, or what it returned last for this quilt and `what` while `scan` is the same object, no file of `paths()` changed and `also()` answers as it did.
 
     Parameters
     ----------
@@ -44,6 +51,8 @@ def kept(root: Path, what: str, scan: Any, paths: Callable[[], Iterable[Path]], 
         The files the work reads, asked again on each call so that a record naming a new file is seen.
     make : callable
         Computes the work.
+    also : callable, optional
+        Anything else the work rests on that is not a file's state, such as the library index's generation (`library_mark`).
 
     Returns
     -------
@@ -51,7 +60,7 @@ def kept(root: Path, what: str, scan: Any, paths: Callable[[], Iterable[Path]], 
         What `make` returned, now or under the same scan and files.
     """
     key = (str(root.resolve()), what)
-    marks = stamps(paths())
+    marks = (stamps(paths()), also() if also is not None else None)
     held = _KEPT.get(key)
     if held is not None and held[1] is scan and held[0] == marks:
         return held[2]  # type: ignore[no-any-return]
@@ -61,17 +70,44 @@ def kept(root: Path, what: str, scan: Any, paths: Callable[[], Iterable[Path]], 
     return value
 
 
-def read_files(root: Path) -> list[Path]:
-    """What a read of Review or the Web rests on beside the scan: the evidence, asks, annotations and edits logs, the published manifest, every Lean file a record names, and the library's folder of nodes with each node file in it."""
+def forget(root: Path, what: str) -> None:
+    """Drop what `kept` holds for this quilt and `what`, so the next call computes it anew."""
+    _KEPT.pop((str(root.resolve()), what), None)
+
+
+def read_files(root: Path, *, nodes: bool = True) -> list[Path]:
+    """What a read of Review or the Web rests on beside the scan: the evidence, asks, annotations and edits logs, the published manifest, every Lean file a record names, and, with `nodes`, the library's folder of nodes with each node file in it; a read that takes the library from the index rests on its generation instead (`library_mark`)."""
     from loom.evidence.log import replay
     from loom.library.store import folder
     from loom.paths import ANNOTATION_LOG, ASK_LOG, EDIT_LOG, EVIDENCE_LOG, MANIFEST
 
     lean = {path for r in replay(root).of_kind("lean") for path in dict(r.get("files", {}))}
     logs = [EVIDENCE_LOG, ASK_LOG, ANNOTATION_LOG, EDIT_LOG, MANIFEST]
-    nodes = folder(root)
+    read = [*(root / p for p in logs), *(root / p for p in sorted(lean))]
+    if not nodes:
+        return read
+    there = folder(root)
     try:
-        each = sorted(p for p in nodes.iterdir() if p.name.endswith(".node"))
+        each = sorted(p for p in there.iterdir() if p.name.endswith(".node"))
     except OSError:
         each = []
-    return [*(root / p for p in logs), *(root / p for p in sorted(lean)), nodes, *each]
+    return [*read, there, *each]
+
+
+def library_mark(root: Path) -> Any:
+    """What a read that takes the library from the index rests on: the index's generation once it is brought up to date (`NodeIndex.open`), which moves whenever a node it holds changes; where the index cannot be opened, every node file's state, as the read then reads the files."""
+    import sqlite3
+
+    from loom.library.index import IndexUnavailable, NodeIndex
+    from loom.library.store import folder
+
+    try:
+        with NodeIndex.open(root) as index:
+            return index.generation()
+    except (IndexUnavailable, sqlite3.Error, OSError):
+        there = folder(root)
+        try:
+            each = sorted(p for p in there.iterdir() if p.name.endswith(".node"))
+        except OSError:
+            each = []
+        return stamps([there, *each])

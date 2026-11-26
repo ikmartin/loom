@@ -445,3 +445,71 @@ def test_search_and_the_graph_reach_the_library(library: Path) -> None:
 def test_a_draft_scope_holds_no_library_result_until_citations_reach_one(library: Path) -> None:
     d = _d(library)
     assert not any(d.is_library(k) for k in d.scope("draft", DOC) + d.scope("deps", DOC))
+
+
+def test_the_list_takes_the_library_from_the_index_and_reads_no_node_file_and_no_body(
+    library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The list reads the columns it shows, a result's name, number, title and how it stands, from the index brought up to date; a statement's body is left to the card and to search."""
+    from loom.evidence.web import LibraryWeb
+    from loom.library import node as node_module
+    from loom.library.index import NodeIndex
+
+    with NodeIndex.open(library):
+        pass  # the index made, as the first read of a server makes it
+    result = scan(load_quilt(library))  # the publisher's scan, which reads the works' references
+
+    def unread(*_a: object, **_k: object) -> None:
+        raise AssertionError("the list read a node's file or its body")
+
+    monkeypatch.setattr(node_module, "read_node", unread)
+    monkeypatch.setattr(LibraryWeb, "file", unread)
+    d = drafts(result, {}, library)
+    for sort in ("document", "status"):
+        listed = webview.listing(d, "library", None, sort=sort, opened=["tq-00A1-ref"])
+        assert listed["count"] == 4
+    assert [r["result"] for r in webview.group(d, "library", None, "tq-00A1-ref")["rows"]] == ["tq-00A4", "tq-00K3", "tq-00K5"]  # fmt: skip
+    assert d.row("tq-00B7")["reading"] == "stub" and d.row("tq-00K3")["source"]["short"] == "Smith 2024"
+
+
+def test_a_body_whose_text_moved_after_the_list_took_its_hash_is_never_sent_beside_it(
+    library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.evidence.web import Moved
+    from loom.library.index import NodeIndex
+    from loom.library.store import folder
+    from loom.render.endpoints.web import _web_focus
+
+    d = _d(library)
+    assert d.scope("library", None)  # the hashes taken
+    path = folder(library) / "tq-00K3.node"
+    path.write_text(path.read_text(encoding="utf-8").replace("Let $W$", "Let $V$"), encoding="utf-8")
+    with NodeIndex.open(library):
+        pass
+    with pytest.raises(Moved):
+        webview.focus(d, "library", None, "tq-00K3")
+    # the endpoint, handed the drafts made before the edit, makes them again and answers from the text now
+    from loom.render.endpoints import web as endpoint
+
+    monkeypatch.setitem(base._SCANS, library.resolve(), lambda: d.result)
+    made = [d]
+    monkeypatch.setattr(endpoint, "_drafts", lambda root: made.pop() if made else _d(root))
+    answer = _web_focus(library, {"scope": "library", "result": "tq-00K3"})
+    assert not made and answer["statement"]["body"].startswith("Let $V$")
+
+
+def test_a_kept_read_of_the_web_rests_on_the_librarys_generation_not_on_each_node_file(
+    library: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from loom.evidence.memo import read_files
+    from loom.library.store import folder
+
+    kept = scan(load_quilt(library))
+    monkeypatch.setitem(base._SCANS, library.resolve(), lambda: kept)
+    assert not any(p.suffix == ".node" for p in read_files(library, nodes=False))
+    first = _drafts(library)
+    assert _drafts(library) is first
+    path = folder(library) / "tq-00K3.node"
+    path.write_text(path.read_text(encoding="utf-8").replace("Let $W$", "Let $V$"), encoding="utf-8")
+    second = _drafts(library)
+    assert second is not first and second.statement("tq-00K3")["body"].startswith("Let $V$")

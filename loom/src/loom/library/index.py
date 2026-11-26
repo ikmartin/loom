@@ -15,7 +15,7 @@ import shutil
 import sqlite3
 import time
 import unicodedata
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -103,6 +103,48 @@ class Row:
     parent: str | None
     empty: bool
     hash: str
+
+
+class Rows(Mapping[str, Row]):
+    """Nodes as a list shows them, by id in the order given, each made a `Row` only when one is looked up: a list of thousands asks most of them for their work, their hash and whether they are empty, which `source`, `hash` and `empty` answer without one."""
+
+    def __init__(self, raw: dict[str, tuple[Any, ...]]) -> None:
+        self._raw = raw
+
+    def __getitem__(self, node_id: str) -> Row:
+        return _row(self._raw[node_id])
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._raw)
+
+    def __len__(self) -> int:
+        return len(self._raw)
+
+    def __contains__(self, node_id: object) -> bool:
+        return node_id in self._raw
+
+    def source(self, node_id: str) -> str | None:
+        return self._raw[node_id][5]  # type: ignore[no-any-return]
+
+    def empty(self, node_id: str) -> bool:
+        return bool(self._raw[node_id][8])
+
+    def hash(self, node_id: str) -> str:
+        return self._raw[node_id][9]  # type: ignore[no-any-return]
+
+    def ordered(self, key: Callable[[tuple[Any, ...]], Any]) -> Rows:
+        """These rows sorted by `key` of each raw row, `_ROW`'s columns in order."""
+        return Rows(dict(sorted(self._raw.items(), key=lambda kv: key(kv[1]))))
+
+    @classmethod
+    def of(cls, rows: Iterable[Row]) -> Rows:
+        """Rows made from `Row`s, as a reader of the files makes them."""
+        return cls(
+            {
+                r.id: (r.id, r.kind, r.taxon, r.number, r.title, r.source, r.pages, r.parent, int(r.empty), r.hash)
+                for r in rows
+            }
+        )
 
 
 @dataclass(frozen=True)
@@ -710,6 +752,22 @@ class NodeIndex:
         """The node `node_id` as a list shows it, with its hash, or None."""
         found = self.db.execute(f"SELECT {_ROW} FROM nodes WHERE id = ?", (node_id,)).fetchone()
         return _row(found) if found else None
+
+    def every(self, kind: str) -> Rows:
+        """Every node of a kind, as a list shows it, with its hash, by id.
+
+        Parameters
+        ----------
+        kind : str
+            `statement`, `proof`, `reference` or `macros`.
+
+        Returns
+        -------
+        Rows
+            No body; `node` gives one.
+        """
+        found = self.db.execute(f"SELECT {_ROW} FROM nodes WHERE kind = ?", (kind,)).fetchall()
+        return Rows({r[0]: r for r in sorted(found)})
 
     def hashed(self, digest: str) -> str | None:
         """The node whose file has the hash `digest`, the first by id where two files are the same bytes, or None."""
