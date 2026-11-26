@@ -56,6 +56,7 @@ MODULES = {
     "sessions.py": "loom's records of agents' sessions",
     "presence.py": "`.loom/local/`",
     "machine.py": "the machine's own place",
+    "own.py": "loom's own places, through folders opened without following a link; each caller is listed for what it writes",
     "app/": "the home's own places in the machine's (its list, its address and lock, the jobs it hands on over a restart, the servers' logs, the drops waiting, the records of quilts being made) and loom's app; a new quilt is made in a hidden folder beside its place and renamed into it whole, its skeleton `cli/quilt.py`'s and its paper brought in through the import's act",
     "looks.py": "the person's look, a record",
     "review_queue.py": "loom's records",
@@ -163,8 +164,15 @@ class _Writes(ast.NodeVisitor):
     visit_AsyncFunctionDef = visit_FunctionDef  # type: ignore[assignment]
     visit_ClassDef = visit_FunctionDef  # type: ignore[assignment]
 
+    def _own(self, n: ast.expr) -> bool:
+        """Whether `n` is the module `loom.own`, under whatever name it is imported."""
+        return isinstance(n, ast.Name) and self.aliases.get(n.id) == "loom.own"
+
     def visit_Attribute(self, n: ast.Attribute) -> None:
-        if n.attr in ATTRS:
+        if self._own(n.value):
+            # `own.write_text`, called or taken: a write never through a link, named so (`test_own_writes_follow_no_link`)
+            self.hit(f"own.{n.attr}", n)
+        elif n.attr in ATTRS:
             self.hit(n.attr, n)
         self.generic_visit(n)
 
@@ -176,7 +184,10 @@ class _Writes(ast.NodeVisitor):
         elif isinstance(fn, ast.Name):
             named = self.aliases.get(fn.id, fn.id)
         module, _, func = named.rpartition(".")
-        if (module, func) in FUNCS:
+        if module == "loom.own":
+            if isinstance(fn, ast.Name):  # `from loom.own import write_text`; `own.write_text` is seen as an attribute
+                self.hit(f"own.{func}", n)
+        elif (module, func) in FUNCS:
             self.hit(named, n)
         elif (
             named == "os.open"
