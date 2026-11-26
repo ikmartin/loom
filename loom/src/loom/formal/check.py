@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom import fence
+from loom import fence, paths
 from loom.evidence.subjects import Subject, Who, is_node
 from loom.formal import install, switch
 
@@ -105,7 +105,7 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
     toolchain = install.toolchain_folder(name)
     if not (toolchain / "bin" / "lake").is_file():
         raise Refused(f"the toolchain {name} is not installed here; turning formalization on again installs it")
-    missing = [p for p in _packages(proj) if not (proj / ".lake" / "packages" / p).is_dir()]
+    missing = [p for p in _packages(proj) if not (proj / paths.LAKE_PACKAGES / p).is_dir()]
     if missing:
         raise Refused(
             f"{', '.join(missing)} is not installed in the Lean project here; turning formalization on again fetches it"
@@ -128,7 +128,7 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
         from loom.errors import EnvError
         from loom.locks import locked
 
-        lock = locked(proj / ".lake" / "loom.lock", wait=1)
+        lock = locked(proj / paths.LAKE_LOCK, wait=1)
         try:
             lock.__enter__()
         except EnvError:
@@ -163,8 +163,8 @@ def _check(
             + ", ".join(p for p, h in before.items() if h is None)
             + "; turning formalization on again makes it"
         )
-    own, build = proj / ".lake" / "loom", proj / ".lake" / "build"
-    for p in (proj, proj / ".lake", own, build):
+    own, build = proj / paths.LAKE_LOOM, proj / paths.LAKE_BUILD
+    for p in (proj, proj / paths.LAKE, own, build):
         if p.is_symlink() or (p.exists() and not p.is_dir()):
             raise Refused(f"{p.relative_to(root)} is not a folder of the project's own; remove it and check again")
     # the two folders the check removes, each a plain folder in the project's .lake: loom's own for its runs, and Lake's build of the project's modules, which the check makes again from clean
@@ -202,10 +202,10 @@ def _check(
     if not ready:
         raise Refused("no module of the Lean project built:\n" + "\n".join(done.errors[:12] or [built.stdout[-2000:]]))
     lib = Path("lib") / "lean"
-    paths = [f"path={(proj / '.lake' / 'packages' / p / '.lake' / 'build' / lib).resolve()}" for p in _packages(proj)]
+    deps = [f"path={(proj / paths.LAKE_PACKAGES / p / paths.LAKE_BUILD / lib).resolve()}" for p in _packages(proj)]
     probed = run(
         "replaying the build in Lean's kernel and reading what it states",
-        [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *paths, *ready],
+        [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *deps, *ready],
     )
     if probed.returncode != 0:
         # the probe never answered, as when the machine was short of memory: no observation, so nothing is recorded
