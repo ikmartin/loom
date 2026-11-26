@@ -218,7 +218,7 @@ def tag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
     if not exists(root, node):
         raise TagRefused(f"{node} is not in the library, so it cannot be tagged")
     path = root / TAG_LOG
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     with locked(path):
         if by.strip() in replay(root).held(node, written):
             return False
@@ -262,7 +262,7 @@ def untag(root: Path, node: str, word: str, *, by: str, kind: str) -> bool:
     _who(by, kind)
     _id(node)
     path = root / TAG_LOG
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     with locked(path):
         tags = replay(root)
         holders = tags.held(node, written)

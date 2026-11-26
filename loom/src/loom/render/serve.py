@@ -371,7 +371,10 @@ def hold_viewer(source: Path) -> tuple[Path, Path]:
                     staged.rename(home / key)
             mark = home / key / "held" / str(pid)
             mark.parent.mkdir(exist_ok=True)
-            mark.touch()
+            # a link at this pid's own name goes itself, and the mark is made with `O_NOFOLLOW`, so nothing is made where a link leads
+            if mark.is_symlink():
+                own.unlink(mark, root=home)
+            os.close(own.os_open(mark, os.O_WRONLY | os.O_CREAT, 0o666, root=home))
             aside = _let_go(home)
     except OSError as exc:
         raise EnvError(_could_not("the viewer", home, exc, room="about 11 MB")) from exc

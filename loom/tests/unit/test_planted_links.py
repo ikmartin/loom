@@ -402,3 +402,57 @@ def test_the_home_s_sweep_of_old_drops_removes_nothing_through_a_planted_link(q:
     create.incoming().symlink_to(out)
     create.sweep()
     assert (out / "old" / "keep").read_text() == "keep\n"
+
+
+# ---- what the review found -------------------------------------------------------------------------------------------
+
+
+def test_a_viewer_s_mark_is_made_through_no_link_at_its_own_name(tmp_path: Path) -> None:
+    """A dangling link planted at this process's own mark in a version's `held/`: the start takes the link away and makes its mark, and nothing is made where the link led."""
+    import os
+
+    from loom.machine import viewers
+    from loom.render.serve import HeldBundle
+    from tests.unit.render.test_held_viewer import bundle
+
+    out = tmp_path / "outside"
+    out.mkdir()
+    HeldBundle(bundle(tmp_path / "v", "700")).close()
+    mark = viewers() / "700" / "held" / str(os.getpid())
+    mark.symlink_to(out / "made-through-link")
+    held = HeldBundle(bundle(tmp_path / "v", "700"))
+    assert not list(out.iterdir()) and mark.is_file() and not mark.is_symlink()
+    held.close()
+
+
+def test_unpairing_removes_no_mark_through_a_planted_link(q: tuple[Path, Path]) -> None:
+    """The machine's folder of the mirror's marks made a link to a folder outside holding a file of the mark's name: unpairing removes nothing there."""
+    from loom.machine import data_dir
+    from loom.paths import OVERLEAF_CLONE, SOURCE_SYNC
+    from loom.scan.quilt import load_quilt
+
+    root, out = q
+    (root / SOURCE_SYNC).parent.mkdir(parents=True, exist_ok=True)
+    (root / SOURCE_SYNC).write_text("{}\n")
+    mark = overleaf._mark_of(root / OVERLEAF_CLONE)
+    (out / mark.name).write_text("mark\n")
+    data_dir().mkdir(parents=True, exist_ok=True)
+    mark.parent.symlink_to(out)
+    run(lambda: overleaf.unpair(load_quilt(root)))
+    assert (out / mark.name).read_text() == "mark\n"
+
+
+def test_a_tag_makes_no_folder_through_a_planted_link(tmp_path: Path) -> None:
+    root, out = _library(tmp_path)
+    plant(root, RECORDS, out)
+    run(lambda: tags.tag(root, "tq-00A4", "read", by="me", kind="person"))
+    assert untouched(out)
+
+
+def test_the_token_s_folder_keeps_its_mode_where_it_is_a_planted_link(q: tuple[Path, Path]) -> None:
+    root, out = q
+    out.chmod(0o755)
+    machine.data_dir().mkdir(parents=True, exist_ok=True)
+    (machine.data_dir() / "tokens").symlink_to(out)
+    run(lambda: machine.write_token(root, "t"))
+    assert untouched(out) and (out.stat().st_mode & 0o777) == 0o755

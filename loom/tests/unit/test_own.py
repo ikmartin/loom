@@ -141,3 +141,16 @@ def test_with_no_link_each_write_is_what_path_writes(q: tuple[Path, Path]) -> No
     assert sorted(p.name for p in d.iterdir()) == ["c.txt", "p.txt"]
     with pytest.raises(FileNotFoundError):
         own.write_text(d / "none/x", "x")
+
+
+def test_a_link_to_another_quilt_never_becomes_the_anchor(tmp_path: Path) -> None:
+    """A history outside `.loom/` whose folder is a link to another quilt: the anchor is the outermost quilt, so the link is refused rather than taken for the other quilt's root."""
+    root, other = tmp_path / "q", tmp_path / "other"
+    (root / ".loom").mkdir(parents=True)
+    (other / ".loom").mkdir(parents=True)
+    (root / "hist").symlink_to(other)
+    with pytest.raises(own.Planted):
+        own.write_text(root / "hist/x.md", "x")
+    with pytest.raises(own.Planted):
+        own.mkdir(root / "hist/texts")
+    assert sorted(p.name for p in other.iterdir()) == [".loom"]

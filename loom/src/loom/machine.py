@@ -75,7 +75,8 @@ def write_token(root: Path, token: str) -> None:
     The folder is made closed to others, and a file an earlier server left is emptied and closed before the token goes in, since it keeps the mode it was made with.
     """
     p = token_file(root)
-    p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    # made through no link before its mode is set by path (`loom.own`)
+    own.mkdir(p.parent, root=data_dir())
     os.chmod(p.parent, 0o700)
     fd = own.os_open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600, root=data_dir())
     os.fchmod(fd, 0o600)

@@ -48,8 +48,8 @@ def _split(path: Path | str, root: Path | str | None, *, folder: bool = False) -
     if LOOM in parts[1:]:
         i = parts.index(LOOM, 1)
         return os.path.realpath(Path(*parts[:i])), parts[i:]
-    for i in range(len(parts) - 1, 0, -1):
-        # a history kept outside `.loom/` is anchored at the quilt holding it
+    for i in range(2, len(parts)):
+        # a history kept outside `.loom/` is anchored at the quilt holding it: the outermost, so a link below it to another quilt never becomes the anchor
         with contextlib.suppress(OSError):
             if stat.S_ISDIR(os.lstat(Path(*parts[:i], LOOM)).st_mode):
                 return os.path.realpath(Path(*parts[:i])), parts[i:]

@@ -556,7 +556,7 @@ def _build(
     told("publishing")
     keep = {rel for rel in fragments.values() if rel not in files} | transcripts
     publish(build_dir, files, manifest, prune, keep=keep)
-    cache_dir.mkdir(parents=True, exist_ok=True)
+    own.mkdir(cache_dir, root=root)
     uses = {rel: uses.get(rel, []) for rel in index}
     read_beside = in_cache(root, beside)
     shared = {n[1:] for said in [*uses.values(), read_beside] for n in said if n.startswith("@")}

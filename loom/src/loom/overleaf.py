@@ -373,7 +373,7 @@ def _clone(root: Path, project: str) -> Path:
         fresh = clone.with_name(clone.name + ".new")
         _remove(fresh)
         _remove(clone)
-        own.unlink(_mark_of(clone), missing_ok=True)
+        own.unlink(_mark_of(clone), root=data_dir(), missing_ok=True)
         own.mkdir(fresh.parent, root=root)
         run(None, "init", "--quiet", "--bare", "--template=", "--", str(fresh))
         own.replace(fresh, clone, root=root)
@@ -687,12 +687,14 @@ def update(quilt: Quilt, actor: str | None = None) -> dict[str, Any]:
 @_holding_clone
 def unpair(quilt: Quilt) -> None:
     """End the pairing: the record, loom's clone, its mark and this machine's part go; the folder stays, its files now the person's to edit like any other, and denied to agents until the person says otherwise in Settings."""
+    from loom.machine import data_dir
+
     root = quilt.root
     if not (root / SOURCE_SYNC).is_file():
         raise MirrorError("not-paired", "This quilt mirrors no Overleaf project.")
     own.unlink(root / SOURCE_SYNC, root=root)
     clone = root / OVERLEAF_CLONE
-    own.unlink(_mark_of(clone), missing_ok=True)
+    own.unlink(_mark_of(clone), root=data_dir(), missing_ok=True)
     _remove(clone)
     own.unlink(root / OVERLEAF_HERE, root=root, missing_ok=True)
 
