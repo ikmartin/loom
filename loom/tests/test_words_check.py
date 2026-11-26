@@ -35,6 +35,12 @@ def test_a_rename_moves_a_listed_component(words):
     assert module.moved_since("HEAD", {"viewer/src/New.svelte"}) == {"viewer/src/Old.svelte": "viewer/src/New.svelte"}
 
 
+def test_a_component_whose_folder_moved_keeps_its_place(words):
+    module, git, old = words
+    git("mv", "viewer", "client")
+    assert module.moved_since("HEAD", {"client/src/Old.svelte"}) == {"viewer/src/Old.svelte": "client/src/Old.svelte"}
+
+
 def test_a_copy_leaves_its_listed_source_in_place(words):
     module, git, old = words
     (old.parent / "Copy.svelte").write_text(old.read_text())

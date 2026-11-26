@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""A component writes none of the viewer's words: every sentence the viewer says is in arras/src/lib/words/ (docs/design/README.md, "The viewer's words in one place").
+"""A component writes none of the viewer's words: every sentence the viewer says is in viewer/src/lib/words/ (docs/design/README.md, "The viewer's words in one place").
 
 Usage:
     scripts/checks/words.py [--base REF] [--all] [--file PATH ...]
 
-Every `.svelte` file under `arras/src/` is read, except those on `LEGACY` below: the components that predate the words folder, each taken off the list when its words move. The list only shrinks, and the check holds it so: a path on `LEGACY` that the list at `--base` (default `$WORDS_BASE`, else `$HARDWRAP_BASE`, else HEAD) does not hold fails, a component moved since keeping its place (git's rename, or a copy whose source left the list; a copy made to start a new component leaves its source listed), as does a path on it that no longer exists or whose component now holds no words. A base that names no commit fails; a base whose `words.py` holds no list is said in the output, and then nothing is compared. In a component read, once its `<script>`, `<style>` and `<!-- -->` comments are dropped, these are words:
+Every `.svelte` file under `viewer/src/` is read, except those on `LEGACY` below: the components that predate the words folder, each taken off the list when its words move. The list only shrinks, and the check holds it so: a path on `LEGACY` that the list at `--base` (default `$WORDS_BASE`, else `$HARDWRAP_BASE`, else HEAD) does not hold fails, a component moved since keeping its place (git's rename, or a copy whose source left the list; a copy made to start a new component leaves its source listed), as does a path on it that no longer exists or whose component now holds no words. A base that names no commit fails; a base whose `words.py` holds no list is said in the output, and then nothing is compared. In a component read, once its `<script>`, `<style>` and `<!-- -->` comments are dropped, these are words:
 
 - text between tags that holds a letter once its HTML entities are decoded; glyphs, digits and punctuation alone (`×`, `›`, `·`, `…`, `2`) are not words;
 - the static part, holding a letter, of a `title`, `aria-label`, `aria-description`, `aria-roledescription`, `aria-valuetext`, `aria-placeholder`, `placeholder`, `alt` or `label` attribute, or of `value` on an `<input>` of type `button`, `submit` or `reset`, quoted or not (`title="Open {name}"` is words; `title={words.x}` and `title="{words.x}"` are not);
@@ -33,8 +33,8 @@ from bisect import bisect_right
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-SRC = ROOT / "arras" / "src"
-WORDS = "arras/src/lib/words/"
+SRC = ROOT / "viewer" / "src"
+WORDS = "viewer/src/lib/words/"
 FIX = f"move the words into {WORDS} (the file for the component's view, or frame.ts), as an entry named for the place it shows with a one-line comment saying where, and use the entry; a component that predates the folder and is not being changed stays on LEGACY in scripts/checks/words.py"
 
 #: Attributes whose value a person sees or hears.
@@ -48,97 +48,97 @@ REGEX_AFTER = set("(,=:[!&|?{};+-*%<>~^")
 #: What follows `{` in a block tag, before its name: `{#if}`, `{:else}`, `{/if}`, `{@html}`.
 BLOCK = "#:/@"
 
-#: The components that predate `arras/src/lib/words/` and still write their own words. A path comes off when its words move, and none is ever added (the check compares the list with its base's).
+#: The components that predate `viewer/src/lib/words/` and still write their own words. A path comes off when its words move, and none is ever added (the check compares the list with its base's).
 LEGACY = (
-    "arras/src/lib/components/Diagnostics.svelte",
-    "arras/src/lib/components/DiffView.svelte",
-    "arras/src/lib/components/DraftActions.svelte",
-    "arras/src/lib/components/HelpDot.svelte",
-    "arras/src/lib/components/LinkPreview.svelte",
-    "arras/src/lib/components/NoDrafts.svelte",
-    "arras/src/lib/components/OutOfStep.svelte",
-    "arras/src/lib/components/Palette.svelte",
-    "arras/src/lib/fragments/Fragment.svelte",
-    "arras/src/lib/fragments/FragmentNotes.svelte",
-    "arras/src/lib/graph/LocalBoxGraph.svelte",
-    "arras/src/lib/graph/LocalGraph.svelte",
-    "arras/src/lib/graph/LocalGraphPanel.svelte",
-    "arras/src/lib/pdf/DrawTools.svelte",
-    "arras/src/lib/pdf/MarkedDoc.svelte",
-    "arras/src/lib/pdf/PageMarks.svelte",
-    "arras/src/lib/pdf/PagesEditor.svelte",
-    "arras/src/lib/pdf/PdfMenu.svelte",
-    "arras/src/lib/pdf/PdfPage.svelte",
-    "arras/src/lib/pdf/PdfTools.svelte",
-    "arras/src/lib/pdf/Swatches.svelte",
-    "arras/src/lib/review/AnnotateBar.svelte",
-    "arras/src/lib/review/AnnotationPopup.svelte",
-    "arras/src/lib/review/ChangeCard.svelte",
-    "arras/src/lib/review/ChangeList.svelte",
-    "arras/src/lib/review/ChangePopup.svelte",
-    "arras/src/lib/review/Changed.svelte",
-    "arras/src/lib/review/ChangesMenu.svelte",
-    "arras/src/lib/review/ClosurePanel.svelte",
-    "arras/src/lib/review/ContributionReview.svelte",
-    "arras/src/lib/review/DeletedBar.svelte",
-    "arras/src/lib/review/LookControls.svelte",
-    "arras/src/lib/review/ReviewPanel.svelte",
-    "arras/src/lib/review/SideList.svelte",
-    "arras/src/lib/review/TypeList.svelte",
-    "arras/src/lib/review/VersionView.svelte",
-    "arras/src/lib/review/YourChanges.svelte",
-    "arras/src/lib/sessions/DeleteSession.svelte",
-    "arras/src/lib/shell/AgentMark.svelte",
-    "arras/src/lib/shell/Contents.svelte",
-    "arras/src/lib/shell/FileTree.svelte",
-    "arras/src/lib/shell/Settings.svelte",
-    "arras/src/lib/shell/column/DocumentList.svelte",
-    "arras/src/lib/shell/settings/Agents.svelte",
-    "arras/src/lib/shell/settings/Annotations.svelte",
-    "arras/src/lib/shell/settings/Appearance.svelte",
-    "arras/src/lib/shell/settings/Chips.svelte",
-    "arras/src/lib/shell/settings/Documents.svelte",
-    "arras/src/lib/shell/settings/Files.svelte",
-    "arras/src/lib/shell/settings/General.svelte",
-    "arras/src/lib/shell/settings/Library.svelte",
-    "arras/src/lib/shell/settings/Profile.svelte",
-    "arras/src/lib/workspace/CompareControls.svelte",
-    "arras/src/lib/workspace/HistoryMenu.svelte",
-    "arras/src/lib/workspace/ItemToolbar.svelte",
-    "arras/src/lib/workspace/Pane.svelte",
-    "arras/src/lib/workspace/PaneHead.svelte",
-    "arras/src/lib/workspace/PaneViews.svelte",
-    "arras/src/lib/workspace/VersionControls.svelte",
-    "arras/src/lib/workspace/Workspace.svelte",
-    "arras/src/lib/workspace/items/ChatView.svelte",
-    "arras/src/lib/workspace/items/CompiledControls.svelte",
-    "arras/src/lib/workspace/items/CompiledItem.svelte",
-    "arras/src/lib/workspace/items/ContextItem.svelte",
-    "arras/src/lib/workspace/items/DocumentControls.svelte",
-    "arras/src/lib/workspace/items/DocumentItem.svelte",
-    "arras/src/lib/workspace/items/FileControls.svelte",
-    "arras/src/lib/workspace/items/FileItem.svelte",
-    "arras/src/lib/workspace/items/NodeControls.svelte",
-    "arras/src/lib/workspace/items/NodeItem.svelte",
-    "arras/src/lib/workspace/items/NodePreview.svelte",
-    "arras/src/lib/workspace/items/PageItem.svelte",
-    "arras/src/lib/workspace/items/PageMeta.svelte",
-    "arras/src/lib/workspace/items/SessionDid.svelte",
-    "arras/src/lib/workspace/items/WorkControls.svelte",
-    "arras/src/routes/+page.svelte",
-    "arras/src/routes/graph/+page.svelte",
-    "arras/src/routes/loose/+page.svelte",
-    "arras/src/routes/review/problems/+page.svelte",
-    "arras/src/routes/review/proposed/+page.svelte",
-    "arras/src/routes/review/record/+layout.svelte",
-    "arras/src/routes/review/record/+page.svelte",
-    "arras/src/routes/review/record/acts/+page.svelte",
-    "arras/src/routes/review/record/sessions/+page.svelte",
-    "arras/src/routes/tag/[tag]/+page.svelte",
-    "arras/src/routes/tags/+page.svelte",
-    "arras/src/routes/taxa/+page.svelte",
-    "arras/src/routes/taxon/[slug]/+page.svelte",
-    "arras/src/routes/threads/+page.svelte",
+    "viewer/src/lib/components/Diagnostics.svelte",
+    "viewer/src/lib/components/DiffView.svelte",
+    "viewer/src/lib/components/DraftActions.svelte",
+    "viewer/src/lib/components/HelpDot.svelte",
+    "viewer/src/lib/components/LinkPreview.svelte",
+    "viewer/src/lib/components/NoDrafts.svelte",
+    "viewer/src/lib/components/OutOfStep.svelte",
+    "viewer/src/lib/components/Palette.svelte",
+    "viewer/src/lib/fragments/Fragment.svelte",
+    "viewer/src/lib/fragments/FragmentNotes.svelte",
+    "viewer/src/lib/graph/LocalBoxGraph.svelte",
+    "viewer/src/lib/graph/LocalGraph.svelte",
+    "viewer/src/lib/graph/LocalGraphPanel.svelte",
+    "viewer/src/lib/pdf/DrawTools.svelte",
+    "viewer/src/lib/pdf/MarkedDoc.svelte",
+    "viewer/src/lib/pdf/PageMarks.svelte",
+    "viewer/src/lib/pdf/PagesEditor.svelte",
+    "viewer/src/lib/pdf/PdfMenu.svelte",
+    "viewer/src/lib/pdf/PdfPage.svelte",
+    "viewer/src/lib/pdf/PdfTools.svelte",
+    "viewer/src/lib/pdf/Swatches.svelte",
+    "viewer/src/lib/review/AnnotateBar.svelte",
+    "viewer/src/lib/review/AnnotationPopup.svelte",
+    "viewer/src/lib/review/ChangeCard.svelte",
+    "viewer/src/lib/review/ChangeList.svelte",
+    "viewer/src/lib/review/ChangePopup.svelte",
+    "viewer/src/lib/review/Changed.svelte",
+    "viewer/src/lib/review/ChangesMenu.svelte",
+    "viewer/src/lib/review/ClosurePanel.svelte",
+    "viewer/src/lib/review/ContributionReview.svelte",
+    "viewer/src/lib/review/DeletedBar.svelte",
+    "viewer/src/lib/review/LookControls.svelte",
+    "viewer/src/lib/review/ReviewPanel.svelte",
+    "viewer/src/lib/review/SideList.svelte",
+    "viewer/src/lib/review/TypeList.svelte",
+    "viewer/src/lib/review/VersionView.svelte",
+    "viewer/src/lib/review/YourChanges.svelte",
+    "viewer/src/lib/sessions/DeleteSession.svelte",
+    "viewer/src/lib/shell/AgentMark.svelte",
+    "viewer/src/lib/shell/Contents.svelte",
+    "viewer/src/lib/shell/FileTree.svelte",
+    "viewer/src/lib/shell/Settings.svelte",
+    "viewer/src/lib/shell/column/DocumentList.svelte",
+    "viewer/src/lib/shell/settings/Agents.svelte",
+    "viewer/src/lib/shell/settings/Annotations.svelte",
+    "viewer/src/lib/shell/settings/Appearance.svelte",
+    "viewer/src/lib/shell/settings/Chips.svelte",
+    "viewer/src/lib/shell/settings/Documents.svelte",
+    "viewer/src/lib/shell/settings/Files.svelte",
+    "viewer/src/lib/shell/settings/General.svelte",
+    "viewer/src/lib/shell/settings/Library.svelte",
+    "viewer/src/lib/shell/settings/Profile.svelte",
+    "viewer/src/lib/workspace/CompareControls.svelte",
+    "viewer/src/lib/workspace/HistoryMenu.svelte",
+    "viewer/src/lib/workspace/ItemToolbar.svelte",
+    "viewer/src/lib/workspace/Pane.svelte",
+    "viewer/src/lib/workspace/PaneHead.svelte",
+    "viewer/src/lib/workspace/PaneViews.svelte",
+    "viewer/src/lib/workspace/VersionControls.svelte",
+    "viewer/src/lib/workspace/Workspace.svelte",
+    "viewer/src/lib/workspace/items/ChatView.svelte",
+    "viewer/src/lib/workspace/items/CompiledControls.svelte",
+    "viewer/src/lib/workspace/items/CompiledItem.svelte",
+    "viewer/src/lib/workspace/items/ContextItem.svelte",
+    "viewer/src/lib/workspace/items/DocumentControls.svelte",
+    "viewer/src/lib/workspace/items/DocumentItem.svelte",
+    "viewer/src/lib/workspace/items/FileControls.svelte",
+    "viewer/src/lib/workspace/items/FileItem.svelte",
+    "viewer/src/lib/workspace/items/NodeControls.svelte",
+    "viewer/src/lib/workspace/items/NodeItem.svelte",
+    "viewer/src/lib/workspace/items/NodePreview.svelte",
+    "viewer/src/lib/workspace/items/PageItem.svelte",
+    "viewer/src/lib/workspace/items/PageMeta.svelte",
+    "viewer/src/lib/workspace/items/SessionDid.svelte",
+    "viewer/src/lib/workspace/items/WorkControls.svelte",
+    "viewer/src/routes/+page.svelte",
+    "viewer/src/routes/graph/+page.svelte",
+    "viewer/src/routes/loose/+page.svelte",
+    "viewer/src/routes/review/problems/+page.svelte",
+    "viewer/src/routes/review/proposed/+page.svelte",
+    "viewer/src/routes/review/record/+layout.svelte",
+    "viewer/src/routes/review/record/+page.svelte",
+    "viewer/src/routes/review/record/acts/+page.svelte",
+    "viewer/src/routes/review/record/sessions/+page.svelte",
+    "viewer/src/routes/tag/[tag]/+page.svelte",
+    "viewer/src/routes/tags/+page.svelte",
+    "viewer/src/routes/taxa/+page.svelte",
+    "viewer/src/routes/taxon/[slug]/+page.svelte",
+    "viewer/src/routes/threads/+page.svelte",
 )
 
 
@@ -537,9 +537,9 @@ def legacy_at(base: str) -> set[str] | None:
 def moved_since(base: str, legacy: set[str]) -> dict[str, str]:
     """The components on `LEGACY` at `base` that moved since, each old path to its new one, so that a component keeps its place on the list when it moves.
 
-    A rename moves a path. To git a move whose old path now holds something new is a copy, so a copy counts as a move too, but only where its old path has left the list: a component copied to start a new one leaves its source where it was, on the list, and the copy is read like any new component. One `git diff` answers for every path.
+    A rename moves a path. To git a move whose old path now holds something new is a copy, so a copy counts as a move too, but only where its old path has left the list: a component copied to start a new one leaves its source where it was, on the list, and the copy is read like any new component. One `git diff` over every component in the repository answers for every path, so a component whose folder moved keeps its place too.
     """
-    shown_ = subprocess.run(["git", "diff", "-C", "-C", "--name-status", base, "--", "arras/src"], cwd=ROOT, capture_output=True, text=True)
+    shown_ = subprocess.run(["git", "diff", "-C", "-C", "--name-status", base, "--", "*.svelte"], cwd=ROOT, capture_output=True, text=True)
     moved: dict[str, str] = {}
     for line in shown_.stdout.splitlines():
         parts = line.split("\t")

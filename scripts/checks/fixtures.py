@@ -6,7 +6,7 @@ Usage:
 
 Compared byte for byte, over the files git would commit (tracked, or untracked and not ignored):
 
-- `docs/specs/fixture/` and its vendored copies `loom/tests/fixture/` and `arras/tests/fixture/`, less `views/`: the samples of the views' reads and writes, which `scripts/regen views` and `views-library` write into the source alone and the viewer's tests read from there, so no copy carries them;
+- `docs/specs/fixture/` and its vendored copies `loom/tests/fixture/` and `viewer/tests/fixture/`, less `views/`: the samples of the views' reads and writes, which `scripts/regen views` and `views-library` write into the source alone and the viewer's tests read from there, so no copy carries them;
 - `demos/demo/`, `demos/synthetic/` and `demos/showcase/` and the quilts under `loom/tests/quilts/` that `demos/build.py` copies them from, less the `EXPECTED-LINT.txt` it drops from demo and showcase, and less `.loom/records/review-observations.json`, which loom rewrites whenever it scans a quilt, so serving a demo would change it under the check.
 
 Exit 0 when every copy agrees, 1 otherwise.
@@ -29,7 +29,7 @@ VIEWS = ("views/",)
 # (source, copy, files the copy leaves out (a name ending in `/` a folder), the command that makes the copy again)
 PAIRS = [
     ("docs/specs/fixture", "loom/tests/fixture", VIEWS, REFRESH),
-    ("docs/specs/fixture", "arras/tests/fixture", VIEWS, REFRESH),
+    ("docs/specs/fixture", "viewer/tests/fixture", VIEWS, REFRESH),
     ("loom/tests/quilts/demo", "demos/demo", ("EXPECTED-LINT.txt", *STATE), DEMOS),
     ("loom/tests/quilts/synthetic", "demos/synthetic", STATE, DEMOS),
     ("loom/tests/quilts/showcase", "demos/showcase", ("EXPECTED-LINT.txt", *STATE), DEMOS),

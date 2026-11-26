@@ -1,12 +1,12 @@
-name: arras
+name: viewer
 
-# arras's lane of scripts/verify, run as it is at a terminal: `full --only arras` (svelte-check, vitest, one build, then the e2e, minimal, write and reading suites together). The write and reading suites serve with the real `loom serve` from this checkout, so a loom change runs them too.
+# the viewer's lane of scripts/verify, run as it is at a terminal: `full --only viewer` (svelte-check, vitest, one build, then the e2e, minimal, write and reading suites together). The write and reading suites serve with the real `loom serve` from this checkout, so a loom change runs them too.
 
 on:
   push:
-    paths: ['arras/**', 'loom/**', 'scripts/**', '.github/workflows/arras.yml']
+    paths: ['viewer/**', 'loom/**', 'scripts/**', '.github/workflows/viewer.yml']
   pull_request:
-    paths: ['arras/**', 'loom/**', 'scripts/**', '.github/workflows/arras.yml']
+    paths: ['viewer/**', 'loom/**', 'scripts/**', '.github/workflows/viewer.yml']
   workflow_dispatch:
 
 jobs:
@@ -24,13 +24,13 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: arras/package-lock.json # the lock file is not at the repository root
+          cache-dependency-path: viewer/package-lock.json # the lock file is not at the repository root
       - run: npm ci
-        working-directory: arras
+        working-directory: viewer
       - name: the Playwright version, which decides the browser build and keys its cache
         id: playwright
         run: echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright-core'].version")" >> "$GITHUB_OUTPUT"
-        working-directory: arras
+        working-directory: viewer
       - uses: actions/cache@v4
         id: browsers
         with:
@@ -39,24 +39,24 @@ jobs:
       - name: Chromium and its system libraries
         if: steps.browsers.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-        working-directory: arras
+        working-directory: viewer
       - name: Chromium's system libraries, the browser coming from the cache
         if: steps.browsers.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-        working-directory: arras
-      - run: scripts/verify full --only arras
+        working-directory: viewer
+      - run: scripts/verify full --only viewer
       - name: Preserve browser failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: arras-test-results
-          path: arras/test-results
+          name: viewer-test-results
+          path: viewer/test-results
           if-no-files-found: ignore
           retention-days: 7
       # the product build: scripts/verify's build step writes it with no fixture staged, and each suite serves a copy of it with its own fixture staged
       - uses: actions/upload-artifact@v4
         with:
           name: bundle
-          path: arras/.tmp-e2e/slot-1/bundle
+          path: viewer/.tmp-e2e/slot-1/bundle
           include-hidden-files: true # the path runs through the hidden .tmp-e2e; the build holds no dotfile, so this uploads exactly the build
           if-no-files-found: error

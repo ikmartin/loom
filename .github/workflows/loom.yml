@@ -53,7 +53,7 @@ jobs:
             .ok == false
             and (.failing | index("latexmk")) != null
             and any(.items[]; .name == "latexmk" and .status == "fail" and .path == null)
-            and any(.items[]; .name == "arras bundle" and .status == "ok" and .source == "vendored")
+            and any(.items[]; .name == "viewer bundle" and .status == "ok" and .source == "vendored")
           ' "$RUNNER_TEMP/doctor.json"
       - name: loom serve starts on the demo quilt and serves the viewer and the build
         working-directory: ${{ runner.temp }}
