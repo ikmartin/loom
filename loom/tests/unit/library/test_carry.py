@@ -265,6 +265,26 @@ def test_a_research_state_the_door_refuses_stops_the_carry_with_everything_kept(
     assert any(e["event"] == "begin" and "research-state.md" in e["files"] for e in journal)
 
 
+@pytest.mark.parametrize("why", ["a link that names nothing", "a byte that is not text"])
+def test_library_upgrade_answers_a_research_state_the_door_refuses_with_its_own_refusal(
+    tmp_path: Path, why: str
+) -> None:
+    """`library-upgrade` on a quilt whose research state the door refuses answers 409 `state-refused`, saying why and that the quilt is kept, not a 500 the viewer reads as worth trying again."""
+    from loom.render.api import UPGRADE, ApiError, handle
+
+    root = old_quilt(tmp_path)
+    state = root / "research-state.md"
+    bad = state.read_bytes() + (
+        b"See [](quilt:tq-9999).\n" if why == "a link that names nothing" else b"A stray \xff byte.\n"
+    )
+    state.write_bytes(bad)
+    with pytest.raises(ApiError) as refused:
+        handle(root, UPGRADE, {})
+    assert (refused.value.code, refused.value.status) == ("state-refused", 409)
+    assert "the carry stopped at research-state.md" in refused.value.message and "is as it was" in refused.value.message
+    assert state.read_bytes() == bad and (root / BIBLIOGRAPHY).is_file()
+
+
 def test_the_carry_takes_the_door_s_lock_before_the_id_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """The carry writes the research state through the door, so it takes the door's lock first and the id and library locks after it, the order every command keeps, and two commands never wait on each other's lock."""
     from contextlib import contextmanager
