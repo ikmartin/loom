@@ -531,6 +531,10 @@
      "description": "Repair TeX first: install loom's own TeX, or put back what it lacks. Touches nothing outside loom's directory.",
      "type": "boolean"
     },
+    "settle": {
+     "description": "Settle a write loom could neither finish nor undo as it stands, by the id the writes item gives: your files stay as they are, each suggested edit it wrote is recorded as the files show, and it is no longer said. The author's; refused in an agent's shell.",
+     "type": "string"
+    },
     "strict": {
      "description": "Count a warning as a failure: exit 2 when any item warns.",
      "type": "boolean"

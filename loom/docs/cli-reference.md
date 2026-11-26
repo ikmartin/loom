@@ -86,6 +86,7 @@ Each item is ok, warn (works, but you will hit it) or fail (a command you need w
 | `--json` | Machine-readable report on stdout. |
 | `--strict` | Count a warning as a failure: exit 2 when any item warns. |
 | `--repair` | Repair TeX first: install loom's own TeX, or put back what it lacks. Touches nothing outside loom's directory. |
+| `--settle` `ID` | Settle a write loom could neither finish nor undo as it stands, by the id the writes item gives: your files stay as they are, each suggested edit it wrote is recorded as the files show, and it is no longer said. The author's; refused in an agent's shell. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Write
