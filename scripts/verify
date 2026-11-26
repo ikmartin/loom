@@ -2,8 +2,8 @@
 """Run the workspace's verification: one command, one table, CI's state last (docs/contributing.md).
 
 Usage:
-    scripts/verify [fast|full|paper|client] [--only loom|viewer|docs] [--workers N]
-    scripts/verify --steps NAME[,NAME...] [--only loom|viewer|docs] [--workers N]
+    scripts/verify [fast|full|paper|client] [--only loom|viewer|docs] [--workers N] [--python X.Y]
+    scripts/verify --steps NAME[,NAME...] [--only loom|viewer|docs] [--workers N] [--python X.Y]
 
     fast     the everyday lane: loom lint, types and unit tier; the viewer's check and vitest; the docs checks that judge what a change wrote
     full     before a commit: fast, plus the checks that compare the working tree with git and with the generators' output, loom's TeX tier and every viewer Playwright suite
@@ -11,6 +11,7 @@ Usage:
     client   the client tier: a quilt's generated agent configuration tried against the real Claude Code, which calls a hosted model on your account; run by hand
     --steps  exactly the named steps (the table's names without the lane, e.g. "pytest tex"), whatever their tier
     --workers  how many test workers the run may use in all (`VERIFY_WORKERS` says the same); by default half the cores less what the machine is already carrying, never under two
+    --python   run every `uv` step under Python X.Y, one uv finds on this machine (never downloaded), in an environment of its own, `loom/.venv-X.Y`, so `loom/.venv` keeps the Python the viewer's suites serve with; `fast --only loom --python 3.11` is CI's oldest leg of loom.yml's matrix
 
 CI runs this script and nothing else, each lane's workflow in `.github/workflows/` with the arguments it names (docs/contributing.md). Under GitHub Actions (`GITHUB_ACTIONS` set) a failing step's output is printed whole and the CI state is not printed.
 
@@ -119,6 +120,21 @@ STEPS = [
         )
     ),
 ]
+
+
+def under_python(chosen: list[Step], version: str) -> list[Step]:
+    """Each `uv` step run under Python `version`, in `loom/.venv-<version>`; exits saying so when uv finds no such Python here.
+
+    `UV_PYTHON` is what CI's matrix sets; the environment of its own keeps `loom/.venv`, which the write and reading suites serve with, on its Python. Downloads are refused, so a machine without the Python is told rather than sent one.
+    """
+    if not re.fullmatch(r"\d+\.\d+", version):
+        raise SystemExit(f"verify: --python takes a version as X.Y, such as 3.11, not {version!r}")
+    pinned = {"UV_PYTHON": version, "UV_PYTHON_DOWNLOADS": "never", "UV_PROJECT_ENVIRONMENT": str(ROOT / "loom" / f".venv-{version}")}
+    found = subprocess.run(["uv", "python", "find", version], cwd=ROOT / "loom", env=env() | pinned, capture_output=True, text=True)
+    if found.returncode != 0:
+        raise SystemExit(f"verify: no Python {version} on this machine that uv can find, and --python downloads none; `uv python list` says what it finds, and `uv python install {version}` would add one")
+    print(f"uv steps under Python {version}: {found.stdout.strip()}", flush=True)
+    return [replace(s, env=s.env | pinned) if s.cmd[0] == "uv" else s for s in chosen]
 
 
 @dataclass
@@ -315,6 +331,7 @@ def main() -> int:
     parser.add_argument("--only", choices=("loom", "viewer", "docs"))
     parser.add_argument("--steps", help="comma-separated step names to run whatever their tier, instead of a tier")
     parser.add_argument("--workers", type=int, help="test workers the run may use in all; default from the cores and the load")
+    parser.add_argument("--python", metavar="X.Y", help="run the uv steps under this Python, one uv finds here, in loom/.venv-X.Y")
     args = parser.parse_args()
     if args.steps is None:
         tier = args.tier or "fast"
@@ -327,6 +344,8 @@ def main() -> int:
         if unknown or not names:
             parser.error(f"no step {', '.join(map(repr, unknown)) or 'named'}; the steps are {', '.join(s.name for s in STEPS)}")
         chosen = [s for s in STEPS if s.name in names and (args.only is None or s.lane == args.only)]
+    if args.python:
+        chosen = under_python(chosen, args.python)
     workers = budget(args.workers)
     chosen = share_workers(chosen, workers)
     if workers is not None:
