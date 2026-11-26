@@ -1081,6 +1081,8 @@ test.describe('the Notes list', () => {
 	});
 
 	test('with no file linking here it says what a note is', async ({ page }) => {
+		// the fixture's own files link into main.tex, so the quilt here is one whose files link nowhere
+		await serveKept(page, (m) => (m.backlinks = []));
 		await page.goto('/master/drafting/main');
 		await page.getByTestId('open-notes').click();
 		await expect(page.getByTestId('side-list')).toContainText('No file links here yet');
