@@ -175,6 +175,20 @@ export const docs = {
 		/** The column's message after asking. */
 		asked: (name: string, one: boolean) => `Asked an agent to formalize ${name}. ${one ? 'It waits' : 'They wait'} in Review, under Waiting for an agent.`
 	},
+	textSize: {
+		/** The text size control on an HTML draft's toolbar, its accessible name as a group, with the draft's name. */
+		group: (of: string) => `Text size of ${of}`,
+		/** Its step down: hover text, and with the draft's name its accessible name. */
+		smaller: 'Smaller text',
+		smallerOf: (of: string) => `Smaller text in ${of}`,
+		/** Its step up. */
+		larger: 'Larger text',
+		largerOf: (of: string) => `Larger text in ${of}`,
+		/** The box between the steps, which shows the size and takes one typed; its accessible name. */
+		box: (of: string) => `Text size in ${of}`,
+		/** What the box shows: the size in px. */
+		said: (px: number) => `${px} px`
+	},
 	leanMarks: {
 		/** The item in a draft's view menu that shows or hides the Lean marks. */
 		toggle: 'Lean marks',

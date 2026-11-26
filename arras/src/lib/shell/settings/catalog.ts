@@ -45,7 +45,7 @@ export const SECTIONS: Section[] = [
 
 export const SETTINGS: Setting[] = [
 	{ id: 'face', section: 'appearance', name: 'Typeface', what: 'The face documents and notes are set in.' },
-	{ id: 'size', section: 'appearance', name: 'Size', what: 'The body size, everywhere text is read.' },
+	{ id: 'size', section: 'appearance', name: 'Size', what: 'The body size, everywhere text is read, and the size a newly opened HTML draft starts at. A draft already open keeps its own size, which its toolbar sets.' },
 	{ id: 'width', section: 'appearance', name: 'Width', what: 'How wide a line runs before it wraps.' },
 	{ id: 'theme', section: 'appearance', name: 'Theme', what: "Auto follows this computer's light or dark setting." },
 	{ id: 'format', section: 'appearance', name: 'Document format', what: 'How a document and its results are set: the compiled paper, continuous or in its pages, or a column for reading on screen, narrow or wide.' },

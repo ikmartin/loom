@@ -28,6 +28,24 @@ function visited(): string[] {
 	}
 }
 const TAB = 'arras.library.tab';
+const ZOOM = 'arras.library.zoom';
+
+/** Each open work's paper's zoom, where the reader gave it one, kept for the visit as the open works are. */
+function zooms(): Record<string, number> {
+	try {
+		const v = typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(ZOOM);
+		return v ? (JSON.parse(v) as Record<string, number>) : {};
+	} catch {
+		return {};
+	}
+}
+function keepZoom(ref: string, zoom: number): void {
+	try {
+		sessionStorage.setItem(ZOOM, JSON.stringify({ ...zooms(), [ref]: zoom }));
+	} catch {
+		// a browser that keeps nothing opens the paper at the start again after a reload
+	}
+}
 
 /** The tab shown when the Library was left, where it is one of the open works. */
 function shown(open: string[]): string {
@@ -196,10 +214,10 @@ class LibraryState {
 		this.ticks.clear();
 	}
 
-	/** A work's reader's view and annotating, kept while the person moves between tabs. */
+	/** A work's reader's view and annotating, kept while the person moves between tabs; its paper's zoom is its own, kept for the visit. */
 	reader(ref: string): { view: PdfView; notes: Annotating } {
 		let r = this.#readers.get(ref);
-		if (!r) this.#readers.set(ref, (r = { view: new PdfView(), notes: new Annotating() }));
+		if (!r) this.#readers.set(ref, (r = { view: new PdfView(zooms()[ref], (z) => keepZoom(ref, z)), notes: new Annotating() }));
 		return r;
 	}
 
