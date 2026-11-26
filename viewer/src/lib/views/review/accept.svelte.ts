@@ -2,6 +2,7 @@
 
 import { said } from '$lib/library/said';
 import { store } from '$lib/manifest/client.svelte';
+import { landed } from '$lib/manifest/updating.svelte';
 import { displayNode } from '$lib/nodes/display';
 import { message } from '$lib/shell/message.svelte';
 import { write, type WriteResult } from '$lib/write';
@@ -37,7 +38,7 @@ export async function acceptKeys(keys: string[], at: string, docs: Record<string
 	const ok = done.accepted ?? [];
 	for (const k of ok) rv.picked.delete(k);
 	const text = acceptSaid(ok, (done.refused ?? []).map((r) => r.key), name, (key) => m.unresolved?.find((u) => u.key === key));
-	await store.refresh();
+	await landed();
 	accepting.at = '';
 	message.post(text);
 }

@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The mirror's card, while the quilt mirrors a project: the folder and main document with a link to the project's page in Overleaf; Update from Overleaf, "Overleaf has changes." beside it when the last fetch found text not taken in, and its line (the last press's answer, else the manifest's last update and what reaching Overleaf could not do, `standing`); the token field where Overleaf asks for one; who the person is on Overleaf, asked again when the history names someone they were not shown (`ask_me`); and End the pairing, asked once in place.
 	import type { OverleafState } from '$lib/manifest/types';
-	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import Icon from '$lib/components/Icon.svelte';
 	import { overleaf as words } from '$lib/words/overleaf';
 	import { write } from '$lib/write';
@@ -34,7 +34,7 @@
 		busy = false;
 		if (!res.ok) return void (said = problemSaid(res.error?.code));
 		authors = null;
-		await store.refresh();
+		await landed();
 	}
 	async function unpair(): Promise<void> {
 		busy = true;
@@ -43,7 +43,7 @@
 		asking = false;
 		if (!res.ok) return void (said = problemSaid(res.error?.code));
 		Object.assign(mirror, { said: words.paired.unpaired, refused: false, asks: '' });
-		await store.refresh();
+		await landed();
 	}
 </script>
 

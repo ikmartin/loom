@@ -6,6 +6,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { can, write } from '$lib/write';
 	import { displayNode } from '$lib/nodes/display';
 	import { anchorId, readUrl, reviewReadUrl } from '$lib/nav';
@@ -130,7 +131,7 @@
 			text = lines.join('\n');
 			refused = !ok.length;
 			picked = new Set([...picked].filter((k) => !ok.includes(k)));
-			await store.refresh();
+			await landed();
 		}
 		said = { at: at !== '*' && stands(at) ? at : '*', text, refused };
 		busy = '';

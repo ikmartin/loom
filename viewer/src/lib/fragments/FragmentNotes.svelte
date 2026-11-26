@@ -7,6 +7,7 @@
 	import { untrack, type Snippet } from 'svelte';
 	import { onDestroy } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { can } from '$lib/write';
 	import { annotate as record } from '$lib/review/history.svelte';
 	import { linkName } from '$lib/workspace/names';
@@ -215,7 +216,7 @@
 
 	/** Open the popup on an annotation just written, once the manifest that holds it has been drawn; a draft opened meanwhile ends the trying. Add comment stands, and keeps the keys typed, until it opens. */
 	async function openWritten(id: string): Promise<void> {
-		await store.refresh();
+		await landed();
 		for (let i = 0; i < 20; i++) {
 			// a draft opened meanwhile is the reader's next step, and no popup opens over it
 			if (drafting) break;

@@ -4,6 +4,7 @@
 	// **Annotate** on, selected words are marked at once in the look in hand and its style, and a drag over no words marks the region; a type that asks something opens the popup to say it first. **Comment** on, a press leaves a pin, written once it says something. The PDF's own tools draw ink, words on the page, a box, an oval or an arrow in the look in hand; words on the page are written once they say something. With no tool on, a selection goes to the caller and, where the caller says how to name and link its words (`offer`), stands with its actions (`SelectionMenu`): Quote, Annotate, which marks the words as the tool would, and New note; words Annotate marked, from the tool or the actions, stand with Quote and New note until the next press. Alt-drag draws a region to comment on.
 	import { tick, untrack, type ComponentProps, type Snippet } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import AnnotationPopup from '$lib/review/AnnotationPopup.svelte';
 	import SelectionMenu from '$lib/review/SelectionMenu.svelte';
 	import SideHost from '$lib/review/SideHost.svelte';
@@ -375,7 +376,7 @@
 					if (drafting !== mine) return;
 					closeDraft();
 					if (!id) return;
-					void store.refresh().then(() => showWhenDrawn(id));
+					void landed().then(() => showWhenDrawn(id));
 				}}
 			/>
 		</aside>

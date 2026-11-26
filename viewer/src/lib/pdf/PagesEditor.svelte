@@ -5,6 +5,7 @@
 	import Icon from '$lib/components/Icon.svelte';
 	import Popover from '$lib/components/Popover.svelte';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { follow, paneOfElement } from '$lib/workspace/links';
 	import { can, write } from '$lib/write';
 	import { base64, download, type MarkDesk } from './desk.svelte';
@@ -152,7 +153,7 @@
 				return;
 			}
 			const saved = (res as typeof res & { path?: string }).path ?? path.trim();
-			await store.refresh();
+			await landed();
 			const from = paneOfElement(host);
 			onclose();
 			follow({ kind: 'file', id: saved }, from, store.manifest);

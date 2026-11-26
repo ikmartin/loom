@@ -1,6 +1,7 @@
 // The client of the library's reads and writes (`docs/specs/library-views.md`): one function a read and a write, each answered as `{ok, value}` or `{ok: false, error}`. Where they go is the source's: the publisher, or round six's fixture until a read exists (`source.ts`). Every read carries the generation it last saw for the same question, so a publisher whose library has not changed answers `unchanged` and does no other work.
 
-import { can, capabilities, forgetCapabilities } from '$lib/write';
+import { can, capabilities, forgetCapabilities, type Capabilities } from '$lib/write';
+import { updating } from '$lib/manifest/updating.svelte';
 import { base } from '$app/paths';
 import { libraryPdfUrl } from '$lib/paths';
 import { store } from '$lib/manifest/client.svelte';
@@ -39,12 +40,13 @@ export interface Source {
 
 const hex = (hash: string) => hash.replace(/^sha256:/, '');
 
-/** The publisher: `POST /_api/<name>` with the token, a refused token probed again once, as `write()` does; bytes at their content addresses. */
+/** The publisher: `POST /_api/<name>` with the token, a refused token probed again once, as `write()` does, and a write's answer naming the build that publishes it marking the page updating, as `write()` does; bytes at their content addresses. */
 export const server: Source = {
 	async call<T extends Gen>(name: string, body: Record<string, unknown>): Promise<Answer<T>> {
 		try {
+			let caps: Capabilities | null = null;
 			const send = async () => {
-				const caps = await capabilities();
+				caps = await capabilities();
 				return fetch(`${base}/_api/${name}`, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json', ...(caps?.token ? { 'X-Loom-Token': caps.token } : {}) },
@@ -59,7 +61,10 @@ export const server: Source = {
 			// an answer that is not loom's JSON is a host that serves no write API: the read is not served here
 			const payload = (await res.json().catch(() => null)) as (T & { error?: ApiError }) | null;
 			if (!payload || payload.error?.code === 'unknown-endpoint') return { ok: false, error: { code: 'not-served', message: '' } };
-			if (res.ok && !payload.error) return { ok: true, value: payload };
+			if (res.ok && !payload.error) {
+				updating.expect((caps as Capabilities | null)?.pid, (payload as { publication?: unknown }).publication);
+				return { ok: true, value: payload };
+			}
 			return { ok: false, error: { ...(payload.error ?? { code: 'failed', message: '' }), status: res.status } };
 		} catch (err) {
 			return { ok: false, error: { code: 'unreachable', message: (err as Error).message } };

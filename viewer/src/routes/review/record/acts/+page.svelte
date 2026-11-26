@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { shortDate } from '$lib/badges';
 	import { store } from '$lib/manifest/client.svelte';
+	import { landed } from '$lib/manifest/updating.svelte';
 	import { isAgentDocument } from '$lib/manifest/documents';
 	import type { HistoryAct } from '$lib/manifest/types';
 	import Empty from '$lib/review/Empty.svelte';
@@ -34,7 +35,7 @@
 		busy = at;
 		said = null;
 		const done = await write('history-restore', { path: a.path, text: a.from });
-		if (done.ok) await store.refresh();
+		if (done.ok) await landed();
 		said = { at, text: done.ok ? capital(done.result ?? 'done') : (done.error?.message ?? 'The publisher refused it.'), refused: !done.ok };
 		busy = '';
 		asking = '';
