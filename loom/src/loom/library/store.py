@@ -199,10 +199,15 @@ def write_node(root: Path, node: Node, *, new: bool = False) -> str:
     return write_nodes(root, [node], new=new)[0]
 
 
-def check_against(root: Path, node: Node) -> list[Diagnostic]:
-    """What the library's checks find in `node`'s file against the library as it stands now, as `write_nodes` checks each file it writes (`check_file` over the index with the node laid over it), writing nothing: for an act that must know a write would be taken before it records anything."""
-    with NodeIndex.open(root) as index:
-        _n, found = check_file(file_name(node.id), node_bytes(node), _Batch(index, {node.id: node}))
+def check_against(root: Path, node: Node, index: NodeIndex | None = None) -> list[Diagnostic]:
+    """What the library's checks find in `node`'s file against the library as it stands now, as `write_nodes` checks each file it writes (`check_file` over the index with the node laid over it), writing nothing: for an act that must know a write would be taken before it records anything.
+
+    `index`, an index the caller holds open and up to date, spares opening one per call: Review asks this of every open correction in one read.
+    """
+    if index is None:
+        with NodeIndex.open(root) as opened:
+            return check_against(root, node, opened)
+    _n, found = check_file(file_name(node.id), node_bytes(node), _Batch(index, {node.id: node}))
     return found
 
 
