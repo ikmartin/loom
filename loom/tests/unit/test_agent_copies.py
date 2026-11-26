@@ -13,7 +13,7 @@ from loom.scan.labels import derived_of, is_id_shaped, plain_key
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import json_of, ok, refused, run
-from tests.unit._quilts import demo
+from tests.unit._quilts import demo, denying
 
 AS = ["--as", "Markas Hecht"]
 
@@ -171,8 +171,7 @@ def test_the_allocator_skips_a_number_a_derived_id_holds(tmp_path: Path) -> None
 def test_an_agent_works_in_a_copy_of_a_document_the_quilt_protects(tmp_path: Path) -> None:
     """With the person's directory protected, an agent is denied it in Claude Code's file and by loom's own commands, and still copies a document from it into `.loom/agents/copies/`, which is always its own."""
     q = demo(tmp_path)
-    cfg = q / "config.toml"
-    cfg.write_text(cfg.read_text() + '\n[agents]\ndeny = ["drafting/"]\n')
+    denying(q, "drafting/")
     shutil.rmtree(q / ".loom/agents/instructions")
     shutil.rmtree(q / ".claude", ignore_errors=True)
     ok("ai", "init", cwd=q)
@@ -192,22 +191,6 @@ def test_init_makes_no_copies_directory_and_protects_nothing_of_the_persons(tmp_
     text = (q / "config.toml").read_text()
     assert not (q / ".loom" / "agents" / "copies").exists() and "drafting" not in text
     assert "[agents]\n" in text and "\ndeny = []\n" in text and load_quilt(q).config.agents_deny == []
-
-
-def test_the_document_workspace_never_selects_an_agents_document(tmp_path: Path) -> None:
-    from loom.sync import SyncError, SyncState, update_documents
-
-    q = with_copy(tmp_path)
-    state = SyncState(
-        directory="project",
-        remote="origin",
-        url="overleaf.git",
-        branch="master",
-        master="drafting/main.tex",
-        integrated="",
-    )
-    with pytest.raises(SyncError, match="an agent's document, which is never published"):
-        update_documents(load_quilt(q), state, "add", ".loom/agents/copies/aidoc.tex")
 
 
 # ---- the copy (phase 2) ---------------------------------------------------------------------------------------

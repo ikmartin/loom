@@ -107,12 +107,28 @@ def test_a_marker_names_the_agent_as_its_apps_server_does(monkeypatch: pytest.Mo
     assert agent_name() == "Claude Code Agent"
 
 
-def test_a_declared_agent_is_an_agent_however_its_name_is_punctuated() -> None:
-    """`Referee (Agent)` is the form the orientation asks for and the showcase writes, so `(agent)` and `agent` are one word here: a name read otherwise shows a parked agent in the session picker as a person, and lets it run the author's own verbs."""
-    for name in ("Referee (Agent)", "Claude (AI)", "Referee [Agent]", "Referee Agent", "referee-agent", "AI", "bot"):
+def test_a_name_is_an_agent_s_by_the_form_loom_gives_its_agents_names_never_by_a_word_in_it() -> None:
+    """An agent's name ends in `Agent`, as every name loom gives the agents it sets up does, however punctuated (`Referee (Agent)` is the showcase's form); a word elsewhere in a name says nothing, so a person called Ai is a person (R2-9)."""
+    from loom.ai.clients import CLIENTS
+    from loom.identity import AGENT_NAMES, agents_act
+
+    for name in (*AGENT_NAMES.values(), *(c.agent for c in CLIENTS)):
         assert is_agent(name), name
-    for name in ("A. Author", "Wren Halloway", "Aiden Pearce", "Aimee"):
+    for name in ("Referee (Agent)", "Referee [Agent]", "Referee Agent", "referee-agent", "agent"):
+        assert is_agent(name), name
+    for name in (
+        "A. Author",
+        "Wren Halloway",
+        "Aiden Pearce",
+        "Aimee",
+        "Ai Tanaka",
+        "Claude (AI)",
+        "AI",
+        "bot",
+        "Agent Smith",
+    ):
         assert not is_agent(name), name
+    assert not agents_act("Ai Tanaka")
 
 
 def test_the_authors_verbs_refuse_a_declared_agent_whatever_shell_it_is_in(tmp_path: Path) -> None:
@@ -153,8 +169,6 @@ def test_every_act_that_is_the_authors_or_destroys_refuses_under_an_agent_marker
         ["changes", "--keep", "e-0000-00-00-m2qyj6"],
         ["changes", "--discard-all"],
         ["session", "delete", "s-2026-09-16-p9z37z", "--purge", "--yes", "--as", "A. Author"],
-        ["sync", "publish", "--push"],
-        ["sync", "incorporate"],
     ]
     for act in acts:
         refused(*act, "--quilt", str(q), code=2, match="an agent is running this shell", env=marked)

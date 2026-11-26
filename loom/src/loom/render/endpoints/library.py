@@ -415,7 +415,64 @@ def _locate(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _read_name(root: Path, node: str) -> str:
+    """A library result as a person reads it in a write's `result`: its name as its source prints it (`Lemma 3.2`), else its title, else `the result`; never its id."""
+    from loom.evidence.review import node_name
+    from loom.evidence.web import LibraryWeb
+
+    got = LibraryWeb(root).file(node)
+    return node_name(got[1]) if got is not None else "the result"
+
+
+def _evidence_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
+    """The person's acts on the library's results (library-views.md §7), each through the one writer of these records (`evidence.acts`): `library-check` that the text they were shown, `{node, hash}`, matches its paper; `library-correct` its text by hand, `{node, hash, body}`, answered with its new text's `hash`; `library-correction-take` and `library-correction-decline` an agent's correction, `{correction}`; `library-mention` that a citation naming no result is only a mention, `{citation, undo?}`. Recorded as the reviewer whatever `author` names, refused to a declared agent."""
+    from loom.evidence import acts
+    from loom.render.endpoints.formal import refusal
+    from loom.render.endpoints.review import _as, _person
+
+    who = _person(root, body)
+    try:
+        if endpoint == "library-check":
+            node = _str(body, "node", required=True) or ""
+            acts.check(root, node, _str(body, "hash", required=True) or "", who)
+            return {"ok": True, "result": f"{_read_name(root, node)} matches its paper" + _as(body, who)}
+        if endpoint == "library-correct":
+            node = _str(body, "node", required=True) or ""
+            shown, text = _str(body, "hash", required=True) or "", _str(body, "body", required=True) or ""
+            record = acts.correct(root, node, shown, text, who)
+            assert record.on is not None
+            return {"ok": True, "result": f"corrected {_read_name(root, node)}" + _as(body, who), "hash": record.on.hash}  # fmt: skip
+        if endpoint == "library-mention":
+            citation = _str(body, "citation", required=True) or ""
+            ref, at, key = citation.partition("@")
+            if not at or not ref or not key:
+                raise ApiError("bad-field", "citation is a cited row's citation, REF@KEY")
+            undo = body.get("undo", False)
+            if not isinstance(undo, bool):
+                raise ApiError("bad-field", "undo is true or false")
+            acts.mention(root, _scan(root), key, ref, who, undo=undo)
+            return {"ok": True, "result": ("cites it again" if undo else "only a mention") + _as(body, who)}
+        proposal = _str(body, "correction", required=True) or ""
+        if endpoint == "library-correction-take":
+            record = acts.take(root, proposal, who)
+            assert record.on is not None
+            return {"ok": True, "result": f"took the correction of {_read_name(root, record.on.name)}" + _as(body, who)}  # fmt: skip
+        acts.decline(root, proposal, who)
+        return {"ok": True, "result": "declined the correction" + _as(body, who)}
+    except acts.ActRefused as exc:
+        refused = refusal(exc)
+        # a correction the library's checks refuse says what each found
+        if exc.diagnostics:
+            refused.message += ": " + "; ".join(getattr(d, "message", None) or str(d) for d in exc.diagnostics)
+        raise refused from exc
+
+
 HANDLERS: dict[str, Handler] = {
+    "library-check": _evidence_act,
+    "library-correct": _evidence_act,
+    "library-correction-take": _evidence_act,
+    "library-correction-decline": _evidence_act,
+    "library-mention": _evidence_act,
     "library-delete": _library_act,
     "library-restore": _library_act,
     "library-look-up": _library_act,
@@ -448,7 +505,7 @@ READS: tuple[str, ...] = (
 #: The ones the publisher does not rebuild after: the reads, a file received and not yet taken, and the upgrade, after which a waiting publisher builds as it starts (`ServeSession.bring_forward`).
 NO_REBUILD: tuple[str, ...] = (*READS, "library-receive", "library-upgrade")
 #: The ones that change records alone, so the publication builds from the last scan.
-RECORD_WRITES: tuple[str, ...] = ()
+RECORD_WRITES: tuple[str, ...] = ("library-check", "library-correction-decline", "library-mention")
 #: The ones that take the library's lock themselves, once every lookup has answered, and so run outside the publication's lock: a slow service holds up no rebuild and no other write.
 OWN_LOCK: tuple[str, ...] = ("library-take", "library-answer", "library-look-up")
 #: The writes, each answered with the library's generation as it left it (`answered`).

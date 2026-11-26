@@ -22,6 +22,7 @@ import CompiledControls from './items/CompiledControls.svelte';
 import NotesItem from './items/NotesItem.svelte';
 import { docs as docsWords } from '$lib/words/docs';
 import { shortNames } from '$lib/views/docs/names.svelte';
+import { lib } from '$lib/views/library/state.svelte';
 import PlainControls from './items/PlainControls.svelte';
 import FileControls from './items/FileControls.svelte';
 import NodePreview from './items/NodePreview.svelte';
@@ -59,10 +60,18 @@ function nodeTab(id: string, m: Manifest): string {
 	return number ? `${n.taxon[0].toUpperCase()}${n.taxon.slice(1)} ${number}` : id;
 }
 
+/** A work's tab: its short name once the works list has said it; else "a deleted work" where the list, read, holds it no longer, and "a work" while it is read. */
+function workTab(ref: string): string {
+	const known = shortNames.get(ref);
+	if (known) return known;
+	const works = lib.works.value?.works;
+	return works && !works.some((w) => w.ref === ref) ? docsWords.work.deleted : docsWords.work.unread;
+}
+
 export const kinds: Record<ItemKind, Kind> = {
 	document: { tab: documentTab, renderer: DocumentItem, controls: DocumentControls },
 	// a work by its reference, named by its short name once the works list has said it; it previews nothing, since nothing the manifest says names its pages
-	work: { tab: (item) => shortNames.get(item.id) ?? '', renderer: WorkItem, controls: WorkControls },
+	work: { tab: (item) => workTab(item.id), renderer: WorkItem, controls: WorkControls },
 	node: {
 		tab: (item, m) => nodeTab(item.id, m),
 		renderer: NodeItem,

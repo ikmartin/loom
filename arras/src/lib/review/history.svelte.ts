@@ -1,6 +1,6 @@
 // The person's own annotation writes in this page's life, each kept with the write that undoes it and the write that does it again: Undo and Redo on the toolbar, ⌘Z and ⇧⌘Z. A new annotation or reply is undone by deleting it and done again by restoring what the delete took out; a delete by restoring and deleting again; an edit by an edit back to its type, look and words before; a resolve by reopening. Every annotation write in the viewer goes through here, so there is one record of what can be undone.
 //
-// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step names the quilt the server says it serves, and none is made where the server has said none; it is kept in the tab's session storage under that quilt, so a reload still offers its undo in that quilt and no other; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in The Record rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
+// Keep and Discard of pending changes go through here too, from the document and from Review alike, and are shown so at once (`acted.svelte.ts`). A suggestion loom wrote in when it was kept is undone by `change-undo`, which takes its words out of the file, the text they replaced back, and opens it again; one kept that loom did not write, its words being in already, is not undone. A Keep step names the quilt the server says it serves, and none is made where the server has said none; it is kept in the tab's session storage under that quilt, so a reload still offers its undo in that quilt and no other; loom says, when it is pressed, whether it still can be. A step loom says can no longer be undone leaves the history. A discarded suggestion is undone by `change-discard` with `undo`, which opens it again. A discarded edit in the file has the person's words written back, a version kept first, and comes back from that version in History rather than from here; an edit in the file kept only moved the person's look, and is not undone here either. Neither enters the history.
 //
 // A delete also stands at the foot of the window (`DeletedBar`) while it is done, since its mark goes with the annotation; its Undo there undoes that delete, wherever it is in the history.
 
@@ -320,9 +320,9 @@ export async function keepChanges(which: Which): Promise<ChangeAnswer> {
  */
 export async function discardChanges(which: Which, why?: string): Promise<ChangeAnswer> {
 	const { res, done, suggested } = await act('change-discard', which, why ? { why } : {});
-	// an edit in the file is not undone here: the words it had are in The Record, kept before they were replaced
+	// an edit in the file is not undone here: the words it had are in History, kept before they were replaced
 	const edits = done.length - suggested.length;
-	if (edits > 0) say({ title: edits === 1 ? 'Discarded an edit' : `Discarded ${edits} edits`, lines: ['Your words are back in the file. The text it had is kept as a version in The Record.'] });
+	if (edits > 0) say({ title: edits === 1 ? 'Discarded an edit' : `Discarded ${edits} edits`, lines: ['Your words are back in the file. The text it had is kept as a version in History.'] });
 	if (suggested.length) {
 		push({
 			label: suggested.length === 1 ? 'discard' : `discard of ${suggested.length} suggestions`,

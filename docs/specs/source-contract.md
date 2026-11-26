@@ -4,7 +4,7 @@ This spec says exactly what loom reads from an author's LaTeX and what each cons
 
 ## 1. What is read
 
-Loom scans every `.tex` file under the quilt root outside `.loom/`, the history and sync directories and tools' directories (a Lake project's `.lake`, its build and every package it depends on, among them), and every agent copy in `.loom/agents/copies/`, unless its first twenty lines include the line `% !LOOM ignore`. A directory left out is pruned as the tree is walked, never listed. A master is any file read here with `\documentclass`, wherever it sits, named by its path without `.tex`; it compiles from its own directory, so every name it gives (`\input`, a package, a figure, a bibliography) is read against that directory at every depth, a name with `..` reaches nothing, and files it reaches by `\input`, `\include` or `\nest` (an `\input` one heading level down) are read in its context. Files no master reaches are scanned too.
+Loom scans every `.tex` file under the quilt root outside `.loom/`, the history and sync directories, tools' directories (a Lake project's `.lake`, its build and every package it depends on, among them) and a Lake project whole (a folder below the quilt's root holding a `lakefile.toml` or a `lakefile.lean`, `scan.source.lake_root`), and every agent copy in `.loom/agents/copies/`, unless its first twenty lines include the line `% !LOOM ignore`. A directory left out is pruned as the tree is walked, never listed. A master is any file read here with `\documentclass`, wherever it sits, named by its path without `.tex`; it compiles from its own directory, so every name it gives (`\input`, a package, a figure, a bibliography) is read against that directory at every depth, a name with `..` reaches nothing, and files it reaches by `\input`, `\include` or `\nest` (an `\input` one heading level down) are read in its context. Files no master reaches are scanned too.
 
 Comments are blanked first: each, from an unescaped `%` to the end of the line, becomes spaces, except in `verbatim`, `lstlisting`, `comment` and `filecontents` environments and `\verb`. A commented-out environment defines nothing, and a commented-out `\ref` is no dependency. Directives (section 8) are read before blanking.
 
@@ -17,13 +17,17 @@ Theorem-like environments, headings and proofs are nodes. "With an id" means the
 | In the source | Key |
 |---|---|
 | theorem-like environment with an id | the id |
-| theorem-like environment without | `FILE#ENV:N`, the Nth `ENV` in FILE |
+| theorem-like environment without | its first label where that label keys (below), else `FILE#ENV:N`, the Nth `ENV` in FILE |
 | heading, `\part` to `\subparagraph`, with an id | the id |
 | heading without | `FILE#LABEL`, else `FILE#COMMAND:N` |
 | attached proof (section 5) | its id, else `S/proof`, `S/proof/2`, … |
 | unattached proof | its id, else `FILE#LABEL`, else `FILE#proof:N`, the Nth unattached proof in FILE; `loom:unattached-proof` (warning) |
 | other environment: `equation`, `figure`, undeclared | none; its labels name regions, `KEY#LABEL` |
 | a file | none; it owns the text no node claims |
+
+**A label keys its statement** when the label is shaped as a key (a letter, then letters, digits and `:._-`), is no id and none of the forms other keys take (`equation:…`, `prose:…`, `n-…`, a document's path), is defined once among every `\label` of the files documents read (a backup or a fragment no document reads changes no key), and reads as an anchor no other label does (lower-cased, punctuation folded, as the viewer makes one). The statement must be in the person's own files a document reads: an agent's copy under `.loom/` and a file no document reads keep their keys. Its proofs are then `LABEL/proof`, `LABEL/proof/2`, … and its regions `LABEL#EQ`. A label two statements carry, a draft copied to a new file among them, keys neither.
+
+**A place still names its statement.** `N` counts every `ENV` in FILE, labelled or not, so giving or taking a label renumbers nothing. `FILE#ENV:N`, its proofs' and its regions' keys still name a statement that a label or an id keys, so a record written on the place, and a command or `loom link` given it, finds the block now at it (the viewer does not yet resolve a place key): a label added later to a statement that had none must not lose the notes already on it (`docs/design/writes.md`, "Where a record goes").
 
 An environment is theorem-like when a master declares it: by `\newtheorem` or `\declaretheorem` in its preamble or the local files the preamble loads, or by `% !LOOM environment: ENV = Name, style` in the master. The declared name is the taxon. An undeclared environment is prose, and `loom:unknown-environment` (warning) if it has a common theorem-like name.
 

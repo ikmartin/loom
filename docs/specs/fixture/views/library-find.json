@@ -1,0 +1,38 @@
+{
+ "answer": {
+  "gen": 1789808400000,
+  "hits": [
+   {
+    "page": 1,
+    "rects": [
+     [
+      134.89871,
+      249.46085,
+      191.59972,
+      259.42345
+     ]
+    ]
+   },
+   {
+    "page": 2,
+    "rects": [
+     [
+      181.931275,
+      86.067085,
+      248.820121,
+      95.994366
+     ]
+    ]
+   }
+  ],
+  "ok": true,
+  "pages": 3,
+  "pdf": "sha256:e16ea0a74da711cddafcb5a49851aeb5e78f16f22ea7ee1a1fa2a0b9acb80d45",
+  "result": "read"
+ },
+ "endpoint": "library-find",
+ "request": {
+  "q": "median order",
+  "ref": "sh-0403-ref"
+ }
+}

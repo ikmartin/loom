@@ -154,7 +154,7 @@ test.describe('one transcript at a time', () => {
 	test('reading a transcript chooses nothing: the footer keeps where writes go, and Write here chooses it', async ({ page }) => {
 		await page.goto('/node/sy-0003' + beside('/session/' + REFEREE));
 		await expect(pane(page, 1).getByTestId('chat')).toBeVisible();
-		await expect(page.getByTestId('session-footer-lead')).toHaveText('not writing in a session');
+		await expect(page.getByTestId('session-footer-lead')).toHaveText('No session chosen');
 		await expect(pane(page, 1).getByTestId('chat-writing')).toContainText('You are not writing in a session.');
 		await pane(page, 1).getByTestId('chat-write-here').click();
 		await expect(page.getByTestId('session-footer-name')).toHaveText('referee');

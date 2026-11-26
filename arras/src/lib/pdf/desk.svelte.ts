@@ -7,7 +7,7 @@
 import { store } from '$lib/manifest/client.svelte';
 import type { Annotation } from '$lib/manifest/types';
 import { can, write, type WriteResult } from '$lib/write';
-import { hand, handPayload, lookOf, passes, type Annotating } from '$lib/review/annotating.svelte';
+import { hand, handPayload, lookOf, passes, type Annotating, type Nowhere } from '$lib/review/annotating.svelte';
 import { annotate, edit } from '$lib/review/history.svelte';
 import { say } from '$lib/review/toasts.svelte';
 import { ui } from '$lib/ui.svelte';
@@ -35,6 +35,8 @@ export interface Surface {
 	hidden?: boolean;
 	/** Where the publisher found an annotation the record holds no place for, by id (`library-places`): null where it stands nowhere, undefined while not yet known. Absent where nothing finds places. */
 	stands?: (id: string) => { page: number; rects: number[][] } | null | undefined;
+	/** Whether where the notes anchored by their words stand could not be learned: nothing finds places, or the places could not be read. */
+	unread?: boolean;
 }
 
 const INK_PAUSE = 900;
@@ -101,6 +103,12 @@ export class MarkDesk {
 
 	/** The annotations on the pages with no place on one now: detached on a changed file, or one whose record says no place. Listed, never drawn. */
 	detached = $derived<Annotation[]>(this.placed.filter((p) => !p.m && this.#known(p.a)).map((p) => p.a));
+
+	/** The notes anchored by their words alone that are listed and drawn on no page though the manifest does not call them detached, by why: `unread` while where they stand could not be learned, `unfound` where loom found their words on no page. */
+	nowhere = $derived.by<Nowhere>(() => {
+		const ids = this.detached.filter((a) => !a.detached && !a.rects?.length).map((a) => a.id);
+		return this.#surface().unread ? { unread: ids, unfound: [] } : { unread: [], unfound: ids };
+	});
 
 	/** The annotations in the file that one of loom's stands for, by reference; the pages leave them undrawn. */
 	hides = $derived<string[]>(this.rows.flatMap((a) => (a.hides ? [a.hides] : [])));

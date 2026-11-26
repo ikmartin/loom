@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, the tasks waiting for an agent between two rules, a collaborator's pull where the quilt has one, the drafts with what concerns each, and at its foot the Record. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds today's Your Changes draws are counted as their sections list what waits (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, a collaborator's pull where the quilt has one, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds today's Your Changes draws are counted as their sections list what waits (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -7,7 +7,7 @@
 	import { library as gen } from '$lib/library/gen.svelte';
 	import type { ReviewKind } from '$lib/library/types';
 	import { hovercard } from '$lib/shell/hovercards.svelte';
-	import { COLUMN_ORDER, rv } from '$lib/views/review/state.svelte';
+	import { COLUMN_ORDER, READS, rv } from '$lib/views/review/state.svelte';
 	import { review as words } from '$lib/words/review';
 	import { store } from '$lib/manifest/client.svelte';
 	import { pullLabel } from '$lib/review/proposed';
@@ -23,7 +23,9 @@
 	const m = $derived(store.manifest);
 	/** What a kind Your Changes draws lists as waiting, in one draft when given. */
 	const ours = (kind: YoursKind, doc?: string | null) => (m ? yoursCount(kind, m, acted.map, doc) : 0);
-	const kindCount = (kind: ReviewKind) => (isYours(kind) && m ? ours(kind) : counts?.kinds[kind]);
+	/** A kind's count: as drawn for Your Changes' two, else loom's, summed over the kinds the entry reads. */
+	const kindCount = (kind: ReviewKind) => (isYours(kind) && m ? ours(kind) : loomCount(kind));
+	const loomCount = (kind: ReviewKind) => (READS[kind] ?? [kind]).reduce<number | undefined>((n, k) => (counts?.kinds[k] === undefined ? n : (n ?? 0) + counts.kinds[k]!), undefined);
 	/** A draft's count with its two kinds as drawn: loom's until its rows of them are read. */
 	function draftCount(d: { doc: string; n: number }): number {
 		let n = d.n;
@@ -39,10 +41,10 @@
 	const everything = $derived(counts ? counts.everything + YOURS.reduce((n, k) => n + ours(k) - (counts.kinds[k] ?? 0), 0) : undefined);
 	// a draft's count is its entry in `drafts`; the kinds are counted for every draft only, so under a draft they show none
 	const draft = $derived(rv.doc ? counts?.drafts.find((d) => d.doc === rv.doc) : undefined);
-	const kinds = $derived(COLUMN_ORDER.filter((k) => counts?.kinds[k] !== undefined));
+	const kinds = $derived(COLUMN_ORDER.filter((k) => loomCount(k) !== undefined));
 	const inList = $derived(page.route.id === '/review');
 
-	/** Shows `kind` in the list, coming back to it from the Record. */
+	/** Shows `kind` in the list, coming back to it from History. */
 	function pick(kind: ReviewKind | 'all' | 'agents' | 'incoming'): void {
 		rv.choose(kind);
 		if (!inList) void goto(route('/review'));
@@ -58,30 +60,32 @@
 	<p class="rl">{words.column.waiting}</p>
 	<nav class="navl" aria-label={words.column.nav}>
 		<button type="button" class:on={on('all')} aria-current={on('all') ? 'true' : undefined} data-testid="review-kind-all" use:hovercard={{ text: words.column.everythingHover, place: 'beside' }} onclick={() => pick('all')}
-			>{words.column.everything}<span class="n">{rv.doc ? (draft ? draftCount(draft) : '') : (everything ?? '')}</span></button
+			><span class="t">{words.column.everything}</span><span class="n">{rv.doc ? (draft ? draftCount(draft) : '') : (everything ?? '')}</span></button
 		>
 		{#each kinds as k (k)}
 			<button type="button" class:on={on(k)} aria-current={on(k) ? 'true' : undefined} data-testid="review-kind-{k}" use:hovercard={{ text: words.kinds[k].hover, place: 'beside' }} onclick={() => pick(k)}
-				>{words.kinds[k].name}<span class="n">{rv.doc ? '' : kindCount(k)}</span></button
+				><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
 			>
 		{/each}
-		<div class="rule"></div>
-		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
-			>{words.kinds.agents.name}<span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
-		>
-		<div class="rule"></div>
 		{#if m?.incoming}
-			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}>{pullLabel(m)}</button>
+			<div class="rule"></div>
+			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}><span class="t">{pullLabel(m)}</span></button>
 		{/if}
 	</nav>
 	{#if counts?.drafts.length}
 		<p class="rl"><span use:hovercard={{ text: words.column.draftsHover, place: 'beside' }}>{words.column.drafts}</span></p>
 		<nav class="navl" aria-label={words.column.drafts}>
 			{#each counts.drafts as d (d.doc)}
-				<button type="button" class:on={inList && rv.doc === d.doc} aria-pressed={rv.doc === d.doc} data-testid="review-draft" onclick={() => narrow(d.doc)}>{words.file(d.doc)}<span class="n">{draftCount(d)}</span></button>
+				<button type="button" class:on={inList && rv.doc === d.doc} aria-pressed={rv.doc === d.doc} data-testid="review-draft" onclick={() => narrow(d.doc)}><span class="t">{words.file(d.doc)}</span><span class="n">{draftCount(d)}</span></button>
 			{/each}
 		</nav>
 	{/if}
+	<!-- nothing in it needs the person, so it stands apart from what waits for them -->
+	<nav class="navl" aria-label={words.kinds.agents.name}>
+		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
+			><span class="t">{words.kinds.agents.name}</span><span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
+		>
+	</nav>
 	<span class="grow"></span>
 	<a class="record" class:here={page.route.id?.startsWith('/review/record')} href={route('/review/record')} data-testid="review-record" use:hovercard={{ text: words.column.recordHover, place: 'beside' }}>{words.column.record}</a>
 </div>
@@ -130,7 +134,19 @@
 		background: var(--ann-neutral-wash);
 		font-weight: 500;
 	}
+	/* a label is one line whatever the font and the column's width: its words end in an ellipsis before they wrap, its count stays whole, and its hover says it in full */
+	.navl button {
+		min-width: 0;
+	}
+	.t {
+		flex: 0 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	.n {
+		flex: none;
 		margin-left: auto;
 		font-size: 12px;
 		color: var(--ink-faint);

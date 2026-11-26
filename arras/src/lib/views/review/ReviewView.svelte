@@ -1,22 +1,20 @@
 <script lang="ts">
-	// Review's list (`docs/specs/library-views.md` §4.2): under Everything a group for each kind, ordered by who is waiting, each folding, then a rule and the tasks waiting for an agent, folded; a kind alone when the column chooses one; narrowed to a draft when the column chooses one. Read again whenever the library's generation moves. Accepted results that changed and Proposed edits are today's Your Changes, a section each (`yours.ts`), and under Everything each is a group while its section lists something waiting.
+	// Review's list (`docs/specs/library-views.md` §4.2): under Everything a group for each kind, ordered by who is waiting, each folding, then a rule and the tasks waiting for an agent, folded; a kind alone when the column chooses one; narrowed to a draft when the column chooses one. Read again whenever the library's generation moves. Lean statements to attest holds the attested results that changed, first (`joined`). Results to accept and Proposed edits are today's Your Changes, a section each (`yours.ts`), and under Everything each is a group while its section lists something waiting.
 	import { said } from '$lib/library/said';
 	import './review.css';
 	import { page } from '$app/state';
-	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
-	import type { ReviewGroup, ReviewKind } from '$lib/library/types';
 	import { store } from '$lib/manifest/client.svelte';
 	import { acted } from '$lib/review/acted.svelte';
 	import YourChanges from '$lib/review/YourChanges.svelte';
 	import { review as words } from '$lib/words/review';
-	import { RANK, rv } from './state.svelte';
+	import { RANK, readList, rv } from './state.svelte';
 	import Group from './Group.svelte';
 	import Row from './Row.svelte';
 	import Task from './Task.svelte';
 	import { reviewNames } from './names.svelte';
 	import ReadAll from './ReadAll.svelte';
-	import { stubsOf } from './rows';
+	import { joined, stubsOf, type ShownGroup, type ShownKind } from './rows';
 	import SeeIt from './SeeIt.svelte';
 	import Pull from './Pull.svelte';
 	import YoursGroup from './YoursGroup.svelte';
@@ -28,10 +26,10 @@
 		const kind = rv.kind;
 		const doc = rv.doc ?? undefined;
 		void gen.gen;
-		if (kind !== 'incoming' && !yours(kind)) void rv.list.load(`list:${kind}:${doc ?? ''}`, (s) => api.reviewList(kind, doc, s));
+		if (kind !== 'incoming' && !yours(kind)) void rv.list.load(`list:${kind}:${doc ?? ''}`, (s) => readList(kind, doc, s));
 	});
 
-	const groups = $derived((rv.list.value?.groups ?? []).filter((g) => g.rows.length && !yours(g.kind)));
+	const groups = $derived(joined(rv.list.value?.groups ?? []).filter((g) => g.rows.length && !yours(g.kind)));
 	// the works and results the rows name by id, read once each
 	$effect(() => reviewNames.want(groups.flatMap((g) => g.rows)));
 
@@ -40,7 +38,7 @@
 	$effect(() => {
 		if (linked) rv.folded.delete('accepted-changed');
 	});
-	type Entry = { kind: ReviewKind | 'agents'; group?: ReviewGroup; n?: number };
+	type Entry = { kind: ShownKind; group?: ShownGroup; n?: number };
 	const entries = $derived.by((): Entry[] => {
 		const m = store.manifest;
 		return RANK.flatMap((kind): Entry[] => {

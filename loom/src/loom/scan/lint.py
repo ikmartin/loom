@@ -199,23 +199,20 @@ def _writes_left(result: ScanResult) -> list[Diagnostic]:
     from loom.writes import left
 
     out = []
-    for kind, files, why, kept in left(result.quilt.root, result.quilt.history_dir):
+    for kind, files, why, settles in left(result.quilt.root, result.quilt.history_dir):
         if not files:
             out.append(
                 Diagnostic(
                     "warning",
                     "loom:write-left",
-                    f"{why[0].upper()}{why[1:]}. No file of yours was touched.",
+                    f"{why[0].upper()}{why[1:]}.",
                     [],
                     owner="person",
                 )
             )
             continue
-        # the wording is the author's to judge (handover): no command, no id
-        if kept:
-            goes = "This stays until each file reads exactly as before the act or as the act left it. Putting back the version The Record kept just before the act, where it kept one, does that, and keeps your text as it is now first."
-        else:
-            goes = "This stays unless each file comes to read exactly as the act left it, since loom cannot undo an act whose texts the history lacks."
+        # the wording is the author's to judge (handover): no command, no id; what settles it is the verdict's own (`writes._judge`)
+        goes = settles
         if kind == "a Keep":
             goes += " Until it is settled, loom will not keep again the suggestions this act records."
         out.append(
@@ -234,8 +231,24 @@ def lint(result: ScanResult, edges: EdgeResult, graph: Graph) -> list[Diagnostic
     asm = result.assembly
     files = result.files
     diags: list[Diagnostic] = list(result.diagnostics) + list(edges.diagnostics)
+    config_lines = (
+        (result.quilt.root / "config.toml").read_text(encoding="utf-8", errors="replace").splitlines()
+        if (result.quilt.root / "config.toml").is_file()
+        else []
+    )
     for w in result.quilt.config.warnings:
-        diags.append(Diagnostic("warning", "loom:unknown-config-key", w, [Location("config.toml", 1)]))
+        # at the line of the table the warning names, where there is one
+        named = re.search(r"\[([A-Za-z0-9_-]+)\]|key ([A-Za-z0-9_-]+)\.|: ([A-Za-z0-9_-]+)\.[A-Za-z0-9_-]+ ", w)
+        table = next((g for g in named.groups() if g), None) if named else None
+        line = next(
+            (
+                i
+                for i, text in enumerate(config_lines, 1)
+                if table and re.match(rf"\s*\[\s*{re.escape(table)}\s*\]", text)
+            ),
+            1,
+        )
+        diags.append(Diagnostic("warning", "loom:unknown-config-key", w, [Location("config.toml", line)]))
     from loom.history.checks import quick_checks
     from loom.history.ledger import load_history
 

@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom.paths import CACHE, HISTORY, LOCAL, LOOM, SCRATCH, SOURCE_SYNC
+from loom.paths import CACHE, HISTORY, LOCAL, LOOM, SCRATCH
 
 NO_AUTHOR_MESSAGE = (
     'no author name: add name = "Your Name" under [author] in ~/.config/loom/config.toml, or pass --as NAME'
@@ -28,8 +28,6 @@ CONFIG_KEYS: dict[str, set[str]] = {
     "lint": {"disable"},
     # `deny`: where an agent may not write, gitignore-style, beside what is always protected (`loom.agents`)
     "agents": {"deny"},
-    # `track_edits`: whether every edit to an open file since the person's look waits in Your Changes (`loom.pending`)
-    "review": {"track_edits"},
     "author": {"name"},
     # `[basis]` names environments, so any key is valid there and each value is checked instead
     "basis": set(),
@@ -71,7 +69,6 @@ class QuiltConfig:
     author_declared: bool = False  # the quilt states an `[author]` table, even with an empty name
     lint_disable: list[str] = field(default_factory=list)
     agents_deny: list[str] = field(default_factory=list)  # [agents] deny: the patterns loom accepted, in order
-    track_edits: bool = False  # [review] track_edits: whether edits in place since the person's look wait to be kept
     basis: dict[str, str] = field(default_factory=dict)  # [basis]: environment name -> basis, over the built-in names
     warnings: list[str] = field(default_factory=list)
 
@@ -90,6 +87,11 @@ class QuiltConfig:
                 cfg.warnings.append(f"config.toml: [{table_name}] is not a table; ignored")
                 continue
             known = CONFIG_KEYS.get(table_name)
+            if table_name == "review" and "track_edits" in keys:
+                cfg.warnings.append(
+                    "config.toml: [review] track_edits is gone: every quilt keeps your look now, so your own edits in an editor wait in Your Changes too; delete the [review] table"
+                )
+                continue
             if known is None:
                 cfg.warnings.append(f"config.toml: unknown table [{table_name}]; ignored")
                 continue
@@ -113,10 +115,6 @@ class QuiltConfig:
         cfg.online_asked = "online" in table("library")
         cfg.lint_disable = [str(x) for x in table("lint").get("disable", [])]
         cfg.agents_deny = _agents_deny(table("agents").get("deny", []), cfg.warnings)
-        track = table("review").get("track_edits", False)
-        if not isinstance(track, bool):
-            cfg.warnings.append(f"config.toml: review.track_edits = {track!r} is not true or false; ignored")
-        cfg.track_edits = track is True
         from loom.scan.nodes import NAMED_BASES
 
         for env_name, basis in table("basis").items():
@@ -234,7 +232,7 @@ REMOVED_IN = (CACHE, LOCAL, SCRATCH)
 def removed_in(root: Path, config: QuiltConfig) -> str | None:
     """Why a path setting of the quilt at `root` cannot stand, or None: one that lies in a folder of `REMOVED_IN`, by its path or through a link.
 
-    The settings: `[quilt] history`, `research_state`, `main` and `home`, and the sync directory `loom sync init` records. Each names where the person's or loom's kept files go, and the sweep would remove them there.
+    The settings: `[quilt] history`, `research_state`, `main` and `home`. Each names where the person's or loom's kept files go, and the sweep would remove them there.
     """
     named = [
         ("[quilt] history", config.history),
@@ -242,12 +240,6 @@ def removed_in(root: Path, config: QuiltConfig) -> str | None:
         ("[quilt] main", config.main),
         ("[quilt] home", config.home),
     ]
-    try:
-        synced = json.loads((root / SOURCE_SYNC).read_text(encoding="utf-8")).get("directory")
-    except (OSError, ValueError, AttributeError):
-        synced = None
-    if isinstance(synced, str) and synced:
-        named.append(("the sync directory", synced))
     real_root = Path(os.path.realpath(root))
     for setting, value in named:
         if not value:
@@ -358,22 +350,46 @@ def _git_user_name(here: Path) -> tuple[str | None, tuple[Path, ...]]:
     return name, tuple(sorted(watch))
 
 
+#: `resolve_author`'s source for a name git gives: Review and `loom status` say so, since a look and an acceptance are kept under the name.
+FROM_GIT = "git config user.name"
+
+
 def resolve_author(explicit: str | None, cwd: Path | None = None) -> tuple[str, str]:
-    """Resolve a human identity locally; tracked quilt authors never identify its reader."""
+    """The person's name and where it comes from: `--as`, then the user config's `[author] name`, then git's `user.name`.
+
+    The one resolver of a person's name; a quilt's own `[author]` never names its reader. Each source is read once per process and again only when its files change (`_user_author`, `git_user_name`), so a process asks git nothing per call and sees a name saved in Settings at once. Raises NoAuthorError when no source gives one.
+    """
     if explicit and explicit.strip():
         return explicit.strip(), "--as"
-    author = load_user_config().get("author", {})
-    name = author.get("name") if isinstance(author, dict) else None
-    if isinstance(name, str) and name.strip():
-        return name.strip(), str(user_config_path())
+    name = _user_author()
+    if name:
+        return name, str(user_config_path())
     git_name = git_user_name(cwd)
     if git_name:
-        return git_name, "git config user.name"
+        return git_name, FROM_GIT
     raise NoAuthorError(NO_AUTHOR_MESSAGE)
 
 
+#: The user config's author name by the config's path and stamp, so it is read once until the file changes.
+_USER_AUTHOR: dict[Path, tuple[tuple[tuple[int, int] | None, ...], str]] = {}
+
+
+def _user_author() -> str:
+    """`[author] name` from the user config, '' when unset; read again only when the file's stamp changes."""
+    path = user_config_path()
+    stamp = _stamps((path,))
+    kept = _USER_AUTHOR.get(path)
+    if kept is not None and kept[0] == stamp:
+        return kept[1]
+    author = load_user_config().get("author", {})
+    name = author.get("name") if isinstance(author, dict) else None
+    out = name.strip() if isinstance(name, str) else ""
+    _USER_AUTHOR[path] = (stamp, out)
+    return out
+
+
 def reviewer_identity(cwd: Path) -> tuple[str, str]:
-    """Reading without a configured identity is allowed; acceptance writes still refuse."""
+    """The reviewer's name and its source as `resolve_author` gives them, `('', '')` when there is none: reading goes on without a name, and acceptance refuses."""
     try:
         return resolve_author(None, cwd)
     except NoAuthorError:

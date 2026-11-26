@@ -88,7 +88,7 @@ def _declared(result: ScanResult) -> str:
     "declared",
     default=None,
     metavar="NAME",
-    help="Who writes the node; an agent names itself, including Agent or AI.",
+    help="Who writes the node; an agent's name ends in Agent.",
 )
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
 @quilt_option
@@ -132,17 +132,35 @@ def new(
     )
     if path.exists():
         raise EnvError(f"{path} already exists")
-    refuse_protected(result.quilt, path)
+    if to:
+        refuse_protected(result.quilt, path)
+    else:
+        # beside the default document, which the quilt may protect: say where an agent's new result goes instead
+        refuse_protected(
+            result.quilt,
+            path,
+            "a new result of yours goes in a file you may write, named with --to FILE, or in your own copy of the document (loom draft DOC --ai NAME)",
+        )
     rel = path.relative_to(result.quilt.root.resolve() if to else result.quilt.root).as_posix()
     name = result.taxa[env].name if env in result.taxa else env
     if not dry_run:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        # exclusively, so a file that arrived since the check above is refused and never overwritten, lock or no lock
+        from loom.writes import WriteRefused, save
+
+        # through the door, refused when a file arrived since the check above, so one is never overwritten
         try:
-            with path.open("x", encoding="utf-8") as fh:
-                fh.write(skeleton(result, node_id, env, title, author))
-        except FileExistsError:
-            raise EnvError(f"{path} already exists") from None
+            save(
+                result.quilt.root,
+                result.quilt.history_dir,
+                path,
+                skeleton(result, node_id, env, title, author).encode("utf-8"),
+                kind="new",
+                actor=author,
+                new=True,
+            )
+        except WriteRefused as exc:
+            if exc.code == "exists":
+                raise EnvError(f"{path} already exists") from None
+            raise
     named = rel.removeprefix(f"{base}/") if base else rel
     line = f"\\input{{{named.removesuffix('.tex')}}}"
     Report(

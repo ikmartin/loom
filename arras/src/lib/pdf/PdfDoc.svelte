@@ -8,7 +8,6 @@
 	// Page sizes are per page, not per document: a scan's pages differ by a point or two, and a fixed transform would
 	// creep down a long paper. Page one's size is the placeholder until a page reports its own.
 	import { onMount, untrack, type ComponentProps } from 'svelte';
-	import { prefs } from '$lib/prefs.svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { PdfView } from './view.svelte';
 	import { document_ } from './document';
@@ -120,7 +119,7 @@
 	const LANDING = 18;
 	// A page wider than its column at the reader's zoom is drawn so its text block fits, with room for the dot: in half a pane the reader's zoom would cut every line. With nothing placed on the paper, the page fits instead.
 	const textFitted = $derived.by(() => {
-		const reader = prefs.zoom.pdf ?? 1.4;
+		const reader = v.zoom;
 		const w = sizes[at]?.width ?? sizes[1]?.width ?? 612;
 		if (!v.fitText || !columnWidth || w * reader <= columnWidth - PAGE_GUTTER) return null;
 		const room = textBlock ? (columnWidth - LANDING - 12) / (textBlock.x1 - textBlock.x0) : (columnWidth - PAGE_GUTTER) / w;
@@ -130,8 +129,8 @@
 	/** Whether the zoom a page is drawn at is settled: while it may still fit the text to a column not yet measured, a page drawn now would be drawn again a frame later. */
 	const ready = $derived(scale !== undefined || !v.fitText || columnWidth > 0);
 
-	// The reader's zoom for this kind of renderer, remembered across papers and across visits, unless a caller fixes it.
-	const fits = $derived(scale ?? fitted ?? textFitted ?? prefs.zoom.pdf ?? 1.4);
+	// This paper's own zoom (`PdfView.zoom`), unless a caller fixes it.
+	const fits = $derived(scale ?? fitted ?? textFitted ?? v.zoom);
 	// while the divider moves the pane holds this column's width (Pane.svelte), so the pages are drawn again once, at the drop
 	const drawAt = $derived(fits);
 

@@ -1,6 +1,6 @@
 <script lang="ts">
 	// How the viewer looks and a document reads, in this browser: typeface, size, line width and theme, with a sentence set as documents are; how a document is set, where an annotation opens, and whether ids stand in the margin.
-	import { prefs, type Face, type Size, type Width, type Theme, type Format } from '$lib/prefs.svelte';
+	import { prefs, SIZE_PX, type Face, type Size, type Width, type Theme, type Format } from '$lib/prefs.svelte';
 	import Row from './Row.svelte';
 	import Seg from './Seg.svelte';
 	import Toggle from './Toggle.svelte';
@@ -8,7 +8,7 @@
 
 <div class="card">
 	<Row id="face"><Seg label="Typeface" test="face" current={prefs.face} pick={(v) => (prefs.face = v as Face)} options={[{ v: 'serif', label: 'Serif' }, { v: 'sans', label: 'Sans' }]} /></Row>
-	<Row id="size"><Seg label="Size" test="size" current={prefs.size} pick={(v) => (prefs.size = v as Size)} options={[{ v: 's', label: 'S' }, { v: 'm', label: 'M' }, { v: 'l', label: 'L' }]} /></Row>
+	<Row id="size"><Seg label="Size" test="size" current={prefs.size} pick={(v) => ((prefs.size = v as Size), (prefs.textSize = SIZE_PX[v as Size]))} options={[{ v: 's', label: 'S' }, { v: 'm', label: 'M' }, { v: 'l', label: 'L' }]} /></Row>
 	<Row id="width"><Seg label="Width" test="width" current={prefs.width} pick={(v) => (prefs.width = v as Width)} options={[{ v: 'narrow', label: 'Narrow' }, { v: 'mid', label: 'Mid' }, { v: 'wide', label: 'Wide' }]} /></Row>
 	<Row id="theme"><Seg label="Theme" test="theme" current={prefs.theme} pick={(v) => (prefs.theme = v as Theme)} options={[{ v: 'light', label: 'Light' }, { v: 'dark', label: 'Dark' }, { v: 'system', label: 'Auto' }]} /></Row>
 </div>

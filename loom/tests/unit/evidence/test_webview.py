@@ -17,7 +17,6 @@ from loom.render.endpoints.web import _drafts
 from loom.scan.quilt import load_quilt
 from loom.scan.scan import scan
 from tests.helpers import ok
-from tests.unit._quilts import track_edits
 
 MAIN = r"""\documentclass{article}
 \newtheorem{lemma}{Lemma}
@@ -56,7 +55,6 @@ DOC, OTHER_DOC = "drafting/main.tex", "drafting/other.tex"
 def root(tmp_path: Path) -> Path:
     root = tmp_path / "q"
     ok("init", str(root), "--demo", cwd=tmp_path)
-    track_edits(root, on=False)
     (root / DOC).write_text(MAIN, encoding="utf-8")
     (root / OTHER_DOC).write_text(OTHER, encoding="utf-8")
     return root
@@ -224,7 +222,6 @@ def two(tmp_path: Path) -> Path:
     """Two drafts that both input a file holding a definition with a display and a lemma citing it."""
     root = tmp_path / "q"
     ok("init", str(root), "--demo", cwd=tmp_path)
-    track_edits(root, on=False)
     (root / "drafting/shared.tex").write_text(SHARED, encoding="utf-8")
     (root / DOC).write_text(TWO_MAIN, encoding="utf-8")
     (root / BOUNDS_DOC).write_text(TWO_BOUNDS, encoding="utf-8")
@@ -387,7 +384,9 @@ def test_the_library_lists_its_statements_by_work_with_how_each_reads_its_paper(
     assert d.scope("library", None) == ["tq-00A4", "tq-00K3", "tq-00K5", "tq-00B7"]
     row = d.row("tq-00K3")
     assert row["name"] == "lemma 3.2" and row["title"] == "Test lemma" and row["taxon"] == "lemma"
-    assert row["source"] == {"ref": "tq-00A1-ref", "short": None} and row["paper"] == row["reading"] == "unchecked"
+    assert (
+        row["source"] == {"ref": "tq-00A1-ref", "short": "Smith 2024"} and row["paper"] == row["reading"] == "unchecked"
+    )
     assert d.row("tq-00B7")["reading"] == "stub"
     listed = webview.listing(d, "library", None)
     assert [s["head"] for s in listed["sections"]] == ["library"] and listed["count"] == 4
@@ -410,7 +409,10 @@ def test_everything_holds_the_drafts_and_the_library_and_a_works_group_opens(lib
 def test_a_library_results_card_draws_its_body_what_it_points_at_and_what_uses_it(library: Path) -> None:
     d = _d(library)
     card = webview.focus(d, "library", None, "tq-00K3")
-    assert card["statement"]["body"].startswith("Let $W$ be a widget") and card["statement"]["macros"] is None
+    assert (
+        card["statement"]["body"].startswith("Let $W$ be a widget")
+        and card["statement"]["macros"]["node"] == "tq-00A1-macros"
+    )
     assert card["statement"]["points"] == {"tq-00A4": {"name": "definition 2.1", "number": "2.1", "paper": "unchecked"}}
     assert [r["result"] for r in card["uses"]["statement"]] == ["tq-00A4"]
     assert [r["result"] for r in card["uses"]["proof"]] == ["tq-00A4"]
@@ -418,7 +420,7 @@ def test_a_library_results_card_draws_its_body_what_it_points_at_and_what_uses_i
     used = webview.focus(d, "library", None, "tq-00A4")["used_by"]["rows"]
     assert [r["result"] for r in used] == ["tq-00K3", "tq-00K5"]
     fold = webview.focus(d, "library", None, "tq-00K3", more=True)["more"]
-    assert fold["proofs"] == [{"where": {"ref": "tq-00A1-ref", "short": None, "pages": "12-13"}, "uses": [d.row("tq-00A4")]}]  # fmt: skip
+    assert fold["proofs"] == [{"where": {"ref": "tq-00A1-ref", "short": "Smith 2024", "pages": "12-13"}, "uses": [d.row("tq-00A4")]}]  # fmt: skip
 
 
 def test_an_anchor_a_body_points_at_draws_as_the_number_its_source_prints(library: Path) -> None:

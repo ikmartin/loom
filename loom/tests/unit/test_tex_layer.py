@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 from loom.paths import document_build
 from loom.reshape.ids import unified_diff
 from loom.scan.quilt import load_quilt
@@ -270,6 +272,46 @@ def test_stage_sources_leaves_the_build_products_behind(tmp_path: Path) -> None:
 
     (p / "refs.bib").unlink()  # an arXiv-style source ships its .bbl and no .bib
     assert (stage_sources(p, tmp_path / "stage2") / "main.bbl").is_file()
+
+
+@pytest.mark.parametrize("fenced", [True, False])
+def test_a_folder_a_link_reaches_is_staged_without_its_dot_named_names_where_the_fence_is_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fenced: bool
+) -> None:
+    """A link in the document's folder to an ordinary folder of the quilt brings that folder in, but where the fence is up none of its dot-named names, as a link straight to each is left out (`_linkable`); with the fence down it is copied whole, as before."""
+    from loom import fence
+    from loom.tex.runner import stage_document
+
+    monkeypatch.setattr(fence, "state", lambda: None if fenced else "off")
+    q = tmp_path / "q"
+    for rel in ("notes/macros.tex", "notes/.private/s.txt", "notes/.env", "notes/sub/.git/config", "drafting/main.tex"):
+        (q / rel).parent.mkdir(parents=True, exist_ok=True)
+        (q / rel).write_text("x", encoding="utf-8")
+    (q / "drafting/notes").symlink_to("../notes")
+    staged = stage_document(q, "drafting", [], tmp_path / "stage") / "drafting" / "notes"
+    got = sorted(f.relative_to(staged).as_posix() for f in staged.rglob("*") if f.is_file())
+    whole = [".env", ".private/s.txt", "macros.tex", "sub/.git/config"]
+    assert got == (["macros.tex"] if fenced else whole)
+    assert not staged.is_symlink()
+
+
+@pytest.mark.parametrize("fenced", [True, False])
+@pytest.mark.parametrize("target", ["..", ".", "../.."])
+def test_a_link_to_a_folder_that_holds_it_is_left_out_of_the_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fenced: bool, target: str
+) -> None:
+    """A link to the quilt's root, or to any folder that holds the link, would have its copy hold the link again without end: it is left out, fenced or not, and the rest is staged."""
+    from loom import fence
+    from loom.tex.runner import stage_document
+
+    monkeypatch.setattr(fence, "state", lambda: None if fenced else "off")
+    q = tmp_path / "q"
+    (q / "drafting/sub").mkdir(parents=True)
+    (q / "drafting/main.tex").write_text("x", encoding="utf-8")
+    (q / "drafting/sub/up").symlink_to(target)
+    staged = stage_document(q, "drafting", [], tmp_path / "stage") / "drafting"
+    assert (staged / "main.tex").is_file() and (staged / "sub").is_dir()
+    assert not (staged / "sub/up").exists() and not (staged / "sub/up").is_symlink()
 
 
 def test_citation_labels_come_from_the_compile() -> None:

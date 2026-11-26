@@ -53,11 +53,11 @@ class Web(Protocol):
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
         """The hash now of what `key` names, read as `near` reads it; None when nothing answers or two texts could be meant."""
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
-        """Every subject the statement at `here` uses, and what those use in turn, with its hash now."""
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
+        """Every subject the statement at `here` uses, and what those use in turn, with its hash now; None for a library node a statement uses that the library no longer holds, which nothing answers for."""
 
     def notation(self, here: Here) -> dict[str, str] | None:
-        """Each command a person defined that the statement at `here` or its closure is typeset with, by the hash of its definition; None when this web cannot say, as for a library node before its work's macros are read."""
+        """Each command a person defined that the statement at `here` or its closure is typeset with, by the hash of its definition; None when this web cannot say, as for a node the library no longer holds."""
 
     def acceptance(self, here: Here) -> str | None:
         """`fresh` or `changed` for a draft's result the person accepted, from the ledger; None otherwise."""
@@ -81,12 +81,14 @@ class Web(Protocol):
 class LibraryWeb:
     """The library's texts now, read from the node store's files: a statement's or a proof's text by its id and the hash of its whole file, what its statement uses, and whether it is a stub.
 
-    It reads each file once and keeps what it read for its life, so one is made for each read; a quilt with no library answers nothing. A node's notation is its work's macros node's to say (the node store's phase 2), unknown until then: `notation` answers None, and nothing typeset with it reads formalized.
+    It reads each file once and keeps what it read for its life, so one is made for each read; a quilt with no library answers nothing. A node's notation is what its work's macros node defines and its text uses (`definitions_of`); a work with none defines nothing.
     """
 
     def __init__(self, root: Path) -> None:
         self.root = root
         self._read: dict[str, tuple[str, Node] | None] = {}
+        self._defs: dict[str, dict[str, tuple[str, str]]] = {}
+        self._entries: dict[str, tuple[str | None, str | None]] = {}
 
     @cached_property
     def _names(self) -> frozenset[str]:
@@ -129,8 +131,9 @@ class LibraryWeb:
         got = self.file(name)
         return [u for u in got[1].uses if is_node(u, "statement")] if got else []
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
-        out: dict[tuple[str, str], str] = {}
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
+        """What a node's statement uses, statements and stubs, and what those use in turn; a use whose node the library no longer holds is carried with no text, so what rests on it waits and says why."""
+        out: dict[tuple[str, str], str | None] = {}
         if here.kind != "node":
             return out
         seen, todo = {here.name}, self._uses(here.name)
@@ -140,13 +143,77 @@ class LibraryWeb:
                 continue
             seen.add(name)
             got = self.file(name)
+            out[("node", name)] = got[0] if got is not None else None
             if got is not None:
-                out[("node", name)] = got[0]
                 todo.extend(self._uses(name))
         return out
 
     def notation(self, here: Here) -> dict[str, str] | None:
-        return None if self.file(here.name) and here.kind == "node" else {}
+        """A node's notation: each command, or environment as `{name}`, its work's macros node defines that its text or a text of its closure is typeset with, and each those definitions use in turn, by its definition's hash (`definitions_of`); a work with no macros node defines none, so its rows are none; None for a node the library does not hold."""
+        from loom.scan.source import blank_comments
+
+        if here.kind != "node":
+            return {}
+        got = self.file(here.name)
+        if got is None:
+            return None
+        rows: dict[str, set[str]] = {}
+        for name in [here.name, *(n for (k, n), digest in self.closure(here).items() if k == "node" and digest)]:
+            held = self.file(name)
+            if held is None:
+                continue
+            defs = self._definitions(held[1].source)
+            for row, digest in used_rows([blank_comments(held[1].body)], defs).items():
+                rows.setdefault(row, set()).add(digest)
+        return {name: _together(hashes) for name, hashes in sorted(rows.items())}
+
+    def short(self, ref: str | None) -> str | None:
+        """A work's short name as a person reads it (`Smith 2024`), from its reference's entry; its key, or else its ref, where the entry names neither author nor title; None for no such work."""
+        return self._entry(ref)[0]
+
+    def title(self, ref: str | None) -> str | None:
+        """A work's title, from its reference's entry; None where it gives none, or for no such work."""
+        return self._entry(ref)[1]
+
+    def _entry(self, ref: str | None) -> tuple[str | None, str | None]:
+        """A work's short name and title, read once for this web's life."""
+        from loom.library.entries import read_entry, short
+        from loom.library.store import read
+
+        if not ref:
+            return None, None
+        if ref not in self._entries:
+            node = read(self.root, ref)
+            entry = read_entry(node.body) if node is not None else None
+            self._entries[ref] = (
+                (short(entry.fields, entry.key), entry.fields.get("title") or None)
+                if entry is not None
+                else ((ref, None) if node is not None else (None, None))
+            )
+        return self._entries[ref]
+
+    def macros(self, ref: str | None) -> dict[str, str] | None:
+        """A work's macros node as a body draws it beside a node's text, `{node, hash, body}`; None for a work with none, or a node naming no work."""
+        from loom.library.ids import macros_of
+        from loom.library.node import NodeUnreadable, node_hash, read_node
+        from loom.library.store import folder
+
+        if not ref:
+            return None
+        name = macros_of(ref)
+        try:
+            data = (folder(self.root) / f"{name}.node").read_bytes()
+            return {"node": name, "hash": node_hash(data), "body": read_node(data, f"{name}.node").body}
+        except (OSError, NodeUnreadable):
+            return None
+
+    def _definitions(self, ref: str | None) -> dict[str, tuple[str, str]]:
+        """A work's definitions, from its macros node, read once for this web's life; none for a work with none, or a node naming no work."""
+        if not ref:
+            return {}
+        if ref not in self._defs:
+            self._defs[ref] = definitions_of(self.root, ref)
+        return self._defs[ref]
 
     def acceptance(self, here: Here) -> str | None:
         return None
@@ -156,7 +223,11 @@ class LibraryWeb:
         return got[1].empty if got else None
 
     def holds(self, ref: str, want: str) -> bool | None:
-        return None
+        """Whether the work `ref` holds its `pdf` or its `tex`, by its reference; None for no such work."""
+        from loom.library.store import read
+
+        work = read(self.root, ref)
+        return bool(getattr(work, want, None)) if work is not None else None
 
     def cited(self, here: Here) -> list[str]:
         return []
@@ -187,7 +258,7 @@ class Joined:
     def resolve(self, key: tuple[str, str], near: Here) -> str | None:
         return (self.library if key[0] == "node" else self.draft).resolve(key, near)
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
         return self._for(here).closure(here)
 
     def notation(self, here: Here) -> dict[str, str] | None:
@@ -222,6 +293,25 @@ class Joined:
     def texts(self, key: tuple[str, str]) -> set[str]:
         return (self.library if key[0] == "node" else self.draft).texts(key)
 
+    def named(self, key: str) -> list[str]:
+        """The drafts' blocks a stored or requested key names now (`blocks_named`)."""
+        named = getattr(self.draft, "named", None)
+        return named(key) if named is not None else [key]
+
+
+def blocks_named(result: ScanResult, key: str) -> list[NodeRec]:
+    """The blocks a key names now, as the records resolve one, for a key a record, an ask or a request holds: a label two or more statements of the documents now carry names each of them (`records.locate.shared_label`); any other key the block it names itself or by the place it was written at (`ScanResult.node_named`); none where nothing is named so.
+
+    So a record written on a statement's place key is found once a label keys it, a place key is taken wherever a label key is, and a label a copied draft defines again names both texts, as an acceptance holds for both.
+    """
+    from loom.records.locate import shared_label
+
+    shared = shared_label(result, key) if key not in result.nodes else None
+    if shared is not None:
+        return list(shared)
+    found = result.node_named(key)
+    return [found] if found is not None and found.kind not in ("master", "file") else []
+
 
 def fold(text: str) -> str:
     """`text` with every run of whitespace one space and none at either end: what a hash reads, so a line broken or indented anew changes nothing."""
@@ -245,6 +335,53 @@ def macro_hash(macro: Macro) -> str:
         [macro.kind, macro.name, macro.args, default, fold(macro.body)], ensure_ascii=False, separators=(",", ":")
     )
     return "sha256:" + hashlib.sha256(canon.encode("utf-8")).hexdigest()
+
+
+def citations_in(clean: str) -> list[tuple[str, str]]:
+    """Each citation in comment-blanked text, in order, as `(KEY, LOCATOR)`: the key cited and the last optional argument, `''` where it names no result of the work; one `\\cite` of several keys is one citation of each."""
+    out: list[tuple[str, str]] = []
+    for m in _CITE.finditer(clean):
+        given = re.findall(r"\[([^\]]*)\]", m.group(1))
+        locator = given[-1].strip() if given else ""
+        out += [(key.strip(), locator) for key in m.group(2).split(",") if key.strip()]
+    return out
+
+
+def used_rows(texts: list[str], defs: dict[str, tuple[str, str]]) -> dict[str, str]:
+    """Each definition of `defs` that comment-blanked `texts` use, a command or an environment as `{name}`, and each those definitions use in turn, by its hash; loom's own commands are not rows."""
+    used = {m.group(1) for t in texts for m in _COMMAND.finditer(t)} - LOOM_MACROS
+    used |= {"{" + m.group(1) + "}" for t in texts for m in _BEGIN.finditer(t)}
+    rows: dict[str, str] = {}
+    todo, seen = sorted(used), set()
+    while todo:
+        name = todo.pop()
+        if name in seen or name not in defs:
+            continue
+        seen.add(name)
+        digest, body = defs[name]
+        rows[name] = digest
+        inner = {m.group(1) for m in _COMMAND.finditer(body)} - LOOM_MACROS
+        inner |= {"{" + m.group(1) + "}" for m in _BEGIN.finditer(body)}
+        todo.extend(sorted(inner - seen))
+    return rows
+
+
+def definitions_of(root: Path, ref: str) -> dict[str, tuple[str, str]]:
+    """The definitions a work's macros node holds, each command and each environment as `{name}`, with its definition's hash and its text, as a draft's are read (`macro_hash`, `environments`); none where the work has no macros node or it does not read."""
+    from loom.library.ids import macros_of
+    from loom.library.node import NodeUnreadable, read_node
+    from loom.library.store import folder
+    from loom.scan.macros import parse_macros
+    from loom.scan.source import blank_comments
+
+    name = f"{macros_of(ref)}.node"
+    try:
+        body = blank_comments(read_node((folder(root) / name).read_bytes(), name).body)
+    except (OSError, NodeUnreadable):
+        return {}
+    defs = {n: (macro_hash(m), f"{m.body} {m.default or ''}") for n, m in parse_macros(body).items()}
+    defs.update(environments(body))
+    return defs
 
 
 def _together(hashes: set[str]) -> str:
@@ -419,10 +556,10 @@ class DraftWeb:
         node = self._node(here)
         return [Here("block", k) for k in rests_on(self.result, node.key, self._keys)] if node is not None else []
 
-    def closure(self, here: Here) -> dict[tuple[str, str], str]:
+    def closure(self, here: Here) -> dict[tuple[str, str], str | None]:
         """What the statement at `here` uses, and what those use in turn, by label with each one's hash now; a result with no label is left out, since nothing could name it."""
         seen: set[str] = {here.name}
-        out: dict[tuple[str, str], str] = {}
+        out: dict[tuple[str, str], str | None] = {}
         todo = self.uses(here)
         while todo:
             step = todo.pop(0)
@@ -479,37 +616,22 @@ class DraftWeb:
         if node is None:
             return {}
         texts = [blank_comments(t) for t in self._texts_of(here)]
-        used = {m.group(1) for t in texts for m in _COMMAND.finditer(t)} - LOOM_MACROS
-        used |= {"{" + m.group(1) + "}" for t in texts for m in _BEGIN.finditer(t)}
         rows: dict[str, set[str]] = {}
         for master in node.reached_by:
-            defs = self._definitions.get(master, {})
-            todo, seen = sorted(used), set()
-            while todo:
-                name = todo.pop()
-                if name in seen or name not in defs:
-                    continue
-                seen.add(name)
-                digest, body = defs[name]
+            for name, digest in used_rows(texts, self._definitions.get(master, {})).items():
                 rows.setdefault(name, set()).add(digest)
-                inner = {m.group(1) for m in _COMMAND.finditer(body)} - LOOM_MACROS
-                inner |= {"{" + m.group(1) + "}" for m in _BEGIN.finditer(body)}
-                todo.extend(sorted(inner - seen))
         return {name: _together(hashes) for name, hashes in sorted(rows.items())}
 
     def cited(self, here: Here) -> list[str]:
         """Each citation in the statement or a text of its closure, which no node answers for until citations resolve to nodes: `KEY LOCATOR` for one result of a work, `KEY` for a work with no result named, which a `mention` will let go once it can name the work."""
         from loom.scan.source import blank_comments
 
-        out: list[str] = []
-        for text in self._texts_of(here):
-            for m in _CITE.finditer(blank_comments(text)):
-                given = re.findall(r"\[([^\]]*)\]", m.group(1))
-                locator = given[-1].strip() if given else ""
-                for key in m.group(2).split(","):
-                    if key.strip():
-                        out.append(f"{key.strip()} {locator}".strip())
+        out = [f"{key} {locator}".strip() for text in self._texts_of(here) for key, locator in citations_in(blank_comments(text))]  # fmt: skip
         return list(dict.fromkeys(out))
+
+    def named(self, key: str) -> list[str]:
+        """The keys of the blocks a stored or requested key names now (`blocks_named`)."""
+        return [n.key for n in blocks_named(self.result, key)]
 
     def texts(self, key: tuple[str, str]) -> set[str]:
         """The hash of each block bearing a label now, in any document; empty for anything but a label."""

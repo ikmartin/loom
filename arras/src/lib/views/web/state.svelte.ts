@@ -1,7 +1,9 @@
-// What the Web remembers while the person moves between views: its scope and draft, its form, the list's order, search and open groups, the result in focus and the trail of results followed, and the reads on screen. Kept in this module, since the column and the view both draw from it and a view is taken down when another is shown. Whether the source serves the Web's reads is asked once.
+// What the Web remembers while the person moves between views: its scope and draft, its form, the list's order, search and open groups, the column's results in graph form with their search and open groups, the result in focus and the trail of results followed, and the reads on screen. Kept in this module, since the column and the view both draw from it and a view is taken down when another is shown. Whether the source serves the Web's reads is asked once.
 
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import * as api from '$lib/library/api';
+import { store } from '$lib/manifest/client.svelte';
+import { mainDraft } from '$lib/manifest/documents';
 import { Read } from '$lib/library/read.svelte';
 import type { Row, WebFocus, WebGraph, WebList, WebScope } from '$lib/library/types';
 
@@ -10,8 +12,8 @@ const TRAIL = 6;
 
 class WebState {
 	scope = $state<WebScope>('deps');
-	/** The draft a scope of one draft names. */
-	doc = $state('drafting/main.tex');
+	/** The draft the person chose for a scope of one draft. */
+	#chosen = $state<string | null>(null);
 	form = $state<'list' | 'graph'>('list');
 	sort = $state<'document' | 'status'>('document');
 	q = $state('');
@@ -26,12 +28,37 @@ class WebState {
 	served = $state<boolean | null>(null);
 	/** The person's results chosen to formalize. */
 	chosen = new SvelteSet<string>();
+	/** In graph form, the column's search of results, and its groups opened (every group starts folded there). */
+	pq = $state('');
+	picksOpen = new SvelteSet<string>();
+	/** Whether the Web's column is open: set by the column while it stands, since the frame takes it down when it folds. */
+	columnOpen = $state(false);
 
 	list = new Read<WebList>();
+	/** The column's results in graph form: `web-list` by document, whatever order the list is in. */
+	picks = new Read<WebList>();
 	focus = new Read<WebFocus>();
 	graph = new Read<WebGraph>();
 
 	#asked = false;
+
+	/** The draft a scope of one draft names: the one chosen, else the quilt's main draft; null where the quilt names none. */
+	get doc(): string | null {
+		return this.#chosen ?? mainDraft(store.manifest);
+	}
+	set doc(path: string | null) {
+		this.#chosen = path;
+	}
+
+	/** Whether the reads may be asked: a scope of one draft has a draft to name. */
+	get named(): boolean {
+		return (this.scope !== 'draft' && this.scope !== 'deps') || !!this.doc;
+	}
+
+	/** Whether the scope names a draft and the quilt has none to name: no main draft, and none chosen. */
+	get draftless(): boolean {
+		return !this.named && !!store.manifest;
+	}
 
 	get at(): string | null {
 		return this.trail.at(-1)?.result ?? null;
@@ -39,7 +66,7 @@ class WebState {
 
 	/** Where every read looks. */
 	get where(): api.InScope {
-		return { scope: this.scope, doc: this.doc };
+		return { scope: this.scope, ...(this.doc ? { doc: this.doc } : {}) };
 	}
 
 	ask(): void {
@@ -65,6 +92,7 @@ class WebState {
 	choose(scope: WebScope): void {
 		this.scope = scope;
 		this.turned.clear();
+		this.picksOpen.clear();
 		this.groups.clear();
 	}
 }

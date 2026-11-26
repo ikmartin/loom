@@ -112,7 +112,7 @@ export interface CanonDoc {
 	cannot_restore?: string;
 }
 
-/** One line of the history, as Review › The Record lists it: what was done, when, by whom, and to what. */
+/** One line of the history, as Review › History lists it: what was done, when, by whom, and to what. */
 export interface HistoryAct {
 	action: string;
 	when: string;
@@ -309,8 +309,12 @@ export interface UnresolvedReview {
   changed_text: boolean;
   /** Null means an older sync record has no post-pull baseline. */
   local_changed?: boolean | null;
-  /** Why loom cannot accept it, in the person's words; '' when it can. */
+  /** Why loom cannot accept it, as an agent reads it, naming a directive and keys; '' when it can. The viewer words `refusal_code` instead. */
   refusal: string;
+  /** The same reason as a code, '' when it can be accepted; absent from an older publisher. */
+  refusal_code?: '' | 'not-yours' | 'incomplete' | 'open-claim' | 'unclassified' | 'unidentified';
+  /** The person's own notes on a block marked incomplete, in their TeX; absent from an older publisher. */
+  incomplete?: string[];
 }
 
 export interface Acceptance {
@@ -627,9 +631,9 @@ export interface QuiltSettings {
     stale: boolean;
     command: string;
     clients: AgentClient[];
+    /** How far the deny list holds for the apps set up here, one sentence: which cannot edit there, which are only asked; '' without an agent layer. */
+    holds?: string;
   };
-  /** `track_edits`: whether edits in place since the person's look wait in Your Changes, beside suggestions. */
-  review?: { track_edits: boolean };
   sync: { paired: true; directory: string; workspace: string; branch: string; documents: string[] } | { paired: false; command: string };
   warnings: string[];
 }
@@ -677,7 +681,8 @@ export interface Manifest {
   files?: ProjectFile[];
   /** Every pending change, edits since the reviewer's look and open suggested edits, in each file's order; absent before a first look. */
   changes?: PendingChange[];
-  changes_since?: { who: string; when: string };
+  /** The reviewer's look: when it was taken, whose it was carried over from when their name had none, and the places it leaves to the person (the config and each `[agents] deny` entry), where a change is never listed, and how far that holds for the apps set up here. */
+  changes_since?: { who: string; when: string; carried?: string; unwatched?: string[]; holds?: string };
   /** The quilt's configuration, for Settings; absent from an older publisher. */
   config?: QuiltSettings;
   macros: { default: Macro[]; sets: Record<string, Macro[]> };

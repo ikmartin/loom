@@ -98,8 +98,10 @@ def _review_list(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     kind = _str(body, "kind") or "all"
     if kind not in (*KINDS, AGENTS, "all"):
         raise ApiError("bad-field", f"kind is all, agents or one of {', '.join(KINDS)}")
-    _result, _manifest, gathered = _gathered(root)
-    return {"ok": True, "groups": listed(gathered, kind, _str(body, "doc"))}
+    from loom.library.generation import generation
+
+    result, _manifest, gathered = _gathered(root)
+    return {"ok": True, "groups": listed(gathered, kind, _str(body, "doc")), "gen": generation(result)}
 
 
 def _review_row(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -234,14 +236,25 @@ def _task(root: Path, kind: str, on: dict[str, Any], text: str) -> tuple[dict[st
     )
 
 
+def one_block(result: Any, key: str) -> Any:
+    """The one block a requested key names now, as the records resolve a key (`evidence.web.blocks_named`), its place key as well as its label key: `no-such-result` (404) where it names none, `ambiguous` (409), naming each by its place, where a label a copied draft defines again names several."""
+    from loom.evidence.web import blocks_named
+
+    found = blocks_named(result, key)
+    if len(found) > 1:
+        places = ", ".join(sorted(n.key for n in found))
+        raise ApiError("ambiguous", f"{key} names {len(found)} texts, one in each copy of its label; name one by its place: {places}", status=409)  # fmt: skip
+    if not found:
+        raise ApiError("no-such-result", f"{key} is no block of this quilt; reload", status=404)
+    return found[0]
+
+
 def _block(root: Path, key: str) -> tuple[dict[str, Any], list[str]]:
     """A block of a person's document as a note names it, and the documents that read it."""
     from loom.records.locate import block_hash, context_of
 
     result = _scan(root)
-    node = result.nodes.get(key)
-    if node is None or node.kind in ("master", "file"):
-        raise ApiError("no-such-result", f"{key} is no block of this quilt; reload", status=404)
+    node = one_block(result, key)
     block = {"key": node.key, "hash": block_hash(result, node.key), "context": context_of(result, node)}
     return {"block": block}, sorted(node.reached_by)
 
@@ -251,10 +264,10 @@ def _target(root: Path, result_key: str) -> tuple[Any, list[str]]:
     from loom.evidence.web import DraftWeb, Here
 
     result = _scan(root)
-    subject = DraftWeb(result).subject(Here("block", result_key))
+    node = one_block(result, result_key)
+    subject = DraftWeb(result).subject(Here("block", node.key))
     if subject is None:
         raise ApiError("no-such-result", f"{result_key} is no labelled result of a draft; reload", status=404)
-    node = result.nodes[result_key]
     return subject, sorted(node.reached_by)
 
 

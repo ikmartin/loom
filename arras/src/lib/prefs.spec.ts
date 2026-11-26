@@ -28,10 +28,18 @@ describe('the display preferences', () => {
 			zoom: { pdf: 1.4 },
 			face: 'serif',
 			size: 'm',
+			textSize: 16,
 			width: 'mid',
 			theme: 'system',
 			format: 'p1'
 		});
+	});
+
+	it("starts a new HTML draft at the text size kept, else at Settings' size, within bounds", () => {
+		expect(coerce({ textSize: 18 }).textSize).toBe(18);
+		expect(coerce({ textSize: 99 }).textSize).toBe(32);
+		expect(coerce({ size: 'l' }).textSize).toBe(19);
+		expect(coerce({ textSize: 'big', size: 's' }).textSize).toBe(13.5);
 	});
 
 	it('keeps the divider inside the range a pane is usable in', () => {

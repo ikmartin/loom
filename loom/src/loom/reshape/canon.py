@@ -56,15 +56,18 @@ def plan_import(quilt: Quilt, paper_file: Path, dest_rel: str | None = None) -> 
 
 
 def apply_import(quilt: Quilt, plan: ImportPlan) -> list[str]:
-    """Copy the paper's assets in; returns the quilt-relative paths written. A file already at its place with the same bytes is left alone (the in-place case)."""
+    """Copy the paper's assets in, as an act through the door (one the caller has open and staging, else its own); returns the quilt-relative paths written. A file already at its place with the same bytes is left alone (the in-place case)."""
+    from loom import writes
+    from loom.history.ledger import actor_for
+
     written: list[str] = []
-    for dest, src in plan.assets.items():
-        t = quilt.root / dest
-        if Path(src).resolve() == t.resolve():
-            continue
-        t.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy(src, t)
-        written.append(dest)
+    with writes.act(quilt.root, quilt.history_dir, "import", actor_for(quilt.root)) as w:
+        for dest, src in plan.assets.items():
+            t = quilt.root / dest
+            if Path(src).resolve() == t.resolve():
+                continue
+            w.replace(dest, Path(src).read_bytes())
+            written.append(dest)
     return written
 
 

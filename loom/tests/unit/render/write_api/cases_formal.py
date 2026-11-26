@@ -59,6 +59,7 @@ def _formal_plan(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert [t["key"] for t in found["targets"]] == ["sy-0003"] and found["targets"][0]["doc"] == "drafting/main.tex"
     assert [r["result"] for r in found["state"]] == ["sy-0001"]
     assert [(r["result"], r["assume"]) for r in found["prove"]] == [("sy-0002", False)]
+    assert all("fragment" in r for r in [*found["state"], *found["prove"]]) and isinstance(found["gen"], int)
     assert found["stops"] == [] and found["assume"] == []
     # nothing Lean has said of it yet: its own Lean, which the agent writes, is the person's to attest after
     assert [(g["why"], g["when"], [r["result"] for r in g["results"]]) for g in found["before"]] == [("attest", "after", ["sy-0003"])]  # fmt: skip
@@ -66,15 +67,43 @@ def _formal_plan(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assumed = succeeds(s, "formal-plan", {"targets": ["sy-0003"], "assume": ["sy-0002"]})
     assert [(r["result"], r["assume"]) for r in assumed["prove"]] == [("sy-0002", True)]
     assert [r["result"] for r in succeeds(s, "formal-plan", {"targets": [UNLABELLED]})["stops"]] == [UNLABELLED]
+    _nothing_to_read_against(s, root)
     _two_texts(s, root)
+
+
+def _nothing_to_read_against(s: Any, root: Path) -> None:
+    """The theorem's Lean assumes a stub of a work loom holds only as an entry, and a lemma that names no work: the list offers that work's document to add, now, and says the other waits until it is given a work; neither to read or compare."""
+    from loom.evidence.log import write
+    from loom.evidence.subjects import Who
+    from loom.library.node import Node, node_bytes
+    from loom.library.store import folder
+    from tests.unit.library._examples import fixtures
+
+    folder(root).mkdir(parents=True, exist_ok=True)
+    for name, data in fixtures().items():
+        (folder(root) / name).write_bytes(data)
+    (folder(root) / "tq-00C1.node").write_bytes(node_bytes(Node(id="tq-00C1", taxon="lemma", body="A lemma with no work.")))  # fmt: skip
+    here, _ = _lean(root, "sy-0003")
+    from loom.evidence.web import DraftWeb
+    from loom.scan.quilt import load_quilt
+    from loom.scan.scan import scan
+
+    on = DraftWeb(scan(load_quilt(root))).subject(here)
+    lean_file = "sha256:" + hashlib.sha256((root / "lean" / "A.lean").read_bytes()).hexdigest()
+    decls = [{"name": "t", "kind": "theorem", "role": "states", "names": {"label": "sy-0003"}, "statement": "sha256:" + "a" * 64, "axioms": ["propext", "b7", "c1"], "sorry": False}]  # fmt: skip
+    decls += [{"name": n, "kind": "axiom", "role": "states", "names": {"node": node}, "statement": "sha256:" + "5" * 64, "axioms": [], "sorry": False} for n, node in (("b7", "tq-00B7"), ("c1", "tq-00C1"))]  # fmt: skip
+    write(root, "lean", Who("loom"), on=on, project={"root": "lean", "toolchain": "t", "mathlib": "m", "manifest": "sha256:" + "2" * 64}, files={"lean/A.lean": lean_file}, declarations=decls, assumed=[], uses=[], replay={"tool": "leanchecker", "exit": 0, "output": ""}, ok=True)  # fmt: skip
+    before = _before(succeeds(s, "formal-plan", {"targets": ["sy-0003"]}))
+    assert ("no-document", "now", ["tq-00B7"]) in before and ("no-source", "waiting", ["tq-00C1"]) in before, before
+    assert not any(n in names for why, _, names in before if why in ("not-read", "not-checked") for n in ("tq-00B7", "tq-00C1"))  # fmt: skip
 
 
 def _before(found: dict[str, Any]) -> list[tuple[str, str, list[Any]]]:
     return [(g["why"], g["when"], [r.get("result") or r.get("label") for r in g["results"]]) for g in found["before"]]
 
 
-#: A lemma in a file both of the synthetic quilt's documents read, and the lemma its proof uses, with a text in each.
-BOUNDED = "drafting/nodes/bounded.tex#lemma:1"
+#: A lemma in a file both of the synthetic quilt's documents read, keyed by its label, which no other block carries, and the lemma its proof uses, with a text in each.
+BOUNDED = "thm:t"
 
 
 def _two_texts(s: Any, root: Path) -> None:

@@ -93,6 +93,7 @@ export const frame = {
 	},
 	/** What a refusal of loom's says, by its code: never loom's own message, which may name a setting, a field or an id. A code with none here says `errors.failed`. */
 	refused: {
+		ambiguous: 'That label is on a result in more than one copy of your draft, so loom cannot tell which you mean.',
 		'author-only': 'Only a person can do this; loom does not take it from an agent.',
 		'bad-entry': 'That is not a BibTeX entry loom can keep for this work.',
 		changed: 'It has changed since, so loom left it as it is.',
@@ -108,9 +109,11 @@ export const frame = {
 		'no-reviewer': 'Loom does not know your name yet. Set it in Settings, under Profile, and try again.',
 		'no-source': 'Loom holds no TeX source of this work to read its results from.',
 		'no-space': 'There is not enough room on this computer for the file.',
+		'no-such-citation': 'That citation is no longer there, or it names a result now.',
 		'no-such-incoming': 'That file is no longer waiting to be taken in. Drop it again.',
 		'no-such-intake': 'There is nothing of that drop left to undo.',
 		'no-such-node': 'That result is no longer in the library.',
+		'no-such-proposal': 'That correction is no longer waiting for you.',
 		'no-such-question': 'That question has been answered already.',
 		'no-such-ref': 'That work is no longer in the library.',
 		'no-such-result': 'That result is no longer in your drafts.',
@@ -128,6 +131,7 @@ export const frame = {
 		offline: 'This quilt keeps loom offline, so nothing was looked up.',
 		reading: 'Loom is still reading this work. Try again when it is done.',
 		'review-unavailable': 'Review could not be read just now.',
+		stub: 'Loom has no text of this result yet, so there is nothing to compare or correct.',
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
 	} as Record<string, string>,

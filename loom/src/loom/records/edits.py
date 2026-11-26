@@ -193,9 +193,8 @@ class Unplaced(ValueError):
 
 
 def node_of(result: ScanResult, key: str) -> NodeRec | None:
-    region = result.assembly.regions.get(key)
-    node: NodeRec | None = result.nodes.get(region.container if region else key)
-    return node
+    """The block `key` names now: a region's is the block it is in, and a place's the block at the place, whatever key it has since (`ScanResult.node_named`)."""
+    return result.node_named(key)
 
 
 def home(result: ScanResult, edit: Edit) -> NodeRec | None:

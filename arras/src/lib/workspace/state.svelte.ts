@@ -3,6 +3,7 @@
 import { getContext, setContext } from 'svelte';
 import { Annotating } from '$lib/review/annotating.svelte';
 import { PdfView } from '$lib/pdf/view.svelte';
+import { clampText, prefs } from '$lib/prefs.svelte';
 import type { MarkDesk } from '$lib/pdf/desk.svelte';
 import { itemKey, type Item } from './item';
 import { workspace } from './store.svelte';
@@ -12,26 +13,53 @@ export interface Arrival {
 	at: string | null;
 }
 
+/** Keeps the size the reader gives an open item on the item itself, so its address carries it. */
+const keep = (item: Item) => (size: number) => workspace.update(itemKey(item), { size });
+
 export class DocumentState {
 	/** Its annotating: the tool in hand, its annotations in reading order, the one open, the side list; the fragment registers the doing. */
 	notes = new Annotating();
 	arrival: Arrival = { at: null };
+	/** Its own text size in px: the one its item kept, else the start for an HTML draft when it opened (`prefs.textSize`); no other draft's size moves it, nor Settings'. */
+	size = $state(prefs.textSize);
+	#kept: (size: number) => void;
+
+	constructor(item: Item) {
+		if (item.size) this.size = clampText(item.size);
+		this.#kept = keep(item);
+	}
+
+	/** Set this draft's text size, which becomes the start of the next HTML draft opened. */
+	sizeTo(px: number): void {
+		const s = clampText(px);
+		this.size = s;
+		prefs.textSize = s;
+		this.#kept(s);
+	}
 }
 
 export class WorkState {
-	/** The reader's view of the paper: the tool, the fit, the page. */
-	pdf = new PdfView();
+	/** The reader's view of the paper: the tool, the fit, the page, its own zoom. */
+	pdf: PdfView;
 	/** Its annotating, as a document's: Annotate and Comment, its annotations in reading order, the one open, the side list. */
 	notes = new Annotating();
 	/** The paper's marks and file acts, which its renderer makes and the toolbar's `PDF ▾` acts through; null until the paper is drawn. */
 	desk = $state.raw<MarkDesk | null>(null);
+
+	constructor(item: Item) {
+		this.pdf = new PdfView(item.size, keep(item));
+	}
 }
 
 export class FileState {
-	/** The reader's view of a PDF among the project's files: the tool, the fit, the page. */
-	pdf = new PdfView();
+	/** The reader's view of a PDF among the project's files, or of a document's compiled PDF: the tool, the fit, the page, its own zoom. */
+	pdf: PdfView;
 	notes = new Annotating();
 	desk = $state.raw<MarkDesk | null>(null);
+
+	constructor(item: Item) {
+		this.pdf = new PdfView(item.size, keep(item));
+	}
 }
 
 export class NodeState {
@@ -45,13 +73,13 @@ export class NodeState {
 
 /** The state of an open item, made on first asking. */
 export function documentState(item: Item): DocumentState {
-	return workspace.stateOf(itemKey(item), () => new DocumentState());
+	return workspace.stateOf(itemKey(item), () => new DocumentState(item));
 }
 export function workState(item: Item): WorkState {
-	return workspace.stateOf(itemKey(item), () => new WorkState());
+	return workspace.stateOf(itemKey(item), () => new WorkState(item));
 }
 export function fileState(item: Item): FileState {
-	return workspace.stateOf(itemKey(item), () => new FileState());
+	return workspace.stateOf(itemKey(item), () => new FileState(item));
 }
 export function nodeState(item: Item): NodeState {
 	return workspace.stateOf(itemKey(item), () => new NodeState());

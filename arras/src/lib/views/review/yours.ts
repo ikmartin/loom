@@ -1,4 +1,4 @@
-// Review's two kinds that today's Your Changes draws on a served quilt, in place of round six's rows for them: "Accepted results that changed" shows its Waiting to be accepted section, every document's blocks by document, "Proposed edits" its Changes to keep and the agents' copies. The column counts for them what these sections list as waiting, and a draft narrows them as it narrows every kind.
+// Review's two kinds that today's Your Changes draws on a served quilt, in place of round six's rows for them: "Results to accept" shows its Waiting to be accepted section, every document's blocks by document, "Proposed edits" its Changes to keep and the agents' copies. The column counts for them what these sections list as waiting, and a draft narrows them as it narrows every kind.
 
 import type { Manifest } from '$lib/manifest/types';
 import type { ReviewKind, ReviewList } from '$lib/library/types';

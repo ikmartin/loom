@@ -1,7 +1,7 @@
 <script lang="ts">
-	// The formalize panel (11a, 11b; from the Web, 11c, 11e), over the view it was opened from: the results asked for in full, the sentence of what an agent will do, what stops the request and what keeps the result from reading formalized, each under its own head and drawn only when it holds something, what is to be stated, proved (or assumed for now) and assumed, what is formalized already, folded, each item's statement a click away; and the button, which asks an agent, one task a result. The plan is `formal-plan`'s, asked again as the person chooses to prove or assume. A modal dialog: it takes the keyboard on opening, what is behind it is inert, and Escape closes it, the keyboard going back to what opened it.
+	// The formalize panel (11a, 11b; from the Web, 11c, 11e), over the view it was opened from: the results asked for in full, the sentence of what an agent will do, what stops the request and what keeps the result from reading formalized (each group by why it stands there, and by whether the person can do it now, only after the agent's work, or nobody yet), each under its own head and drawn only when it holds something, what is to be stated, proved (or assumed for now) and assumed, what is formalized already, folded, each item's statement a click away; and the button, which asks an agent, one task a result. The plan is `formal-plan`'s, asked again as the person chooses to prove or assume. A modal dialog: it takes the keyboard on opening, what is behind it is inert, and Escape closes it, the keyboard going back to what opened it.
 	import * as api from '$lib/library/api';
-	import type { FormalPlan, NodeAnswer, PlanRow as Row } from '$lib/library/types';
+	import type { BeforeItem, FormalPlan, NodeAnswer, PlanRow as Row } from '$lib/library/types';
 	import Icon from '$lib/components/Icon.svelte';
 	import Mark from '$lib/marks/Mark.svelte';
 	import { leanMark, paperMark, hasLean } from '$lib/marks/marks';
@@ -47,6 +47,8 @@
 		return review.listed(works.map((w) => { const names = rows.filter((r) => (r.source && 'short' in r.source ? r.source.short : '') === w).map((r) => r.name); return w ? words.of(review.results(names), w) : review.results(names); }));
 	};
 	const doc = $derived(plan?.targets[0]?.doc ?? '');
+	/** The results among what stands before, leaving labels, citations and nodes to their own sentences. */
+	const rowsOf = (items: BeforeItem[]): Row[] => items.filter((x): x is BeforeItem & Row => 'result' in x);
 
 	async function show(r: Row): Promise<void> {
 		if (open[r.result] !== undefined) {
@@ -111,13 +113,24 @@
 				{/if}
 				{#if plan.before.length}
 					<h4>{words.before}<span class="n">{plan.before.length}</span></h4>
-					{#each plan.before as b (b.why)}
+					{#each plan.before as b (`${b.why}:${b.when}`)}
+						{@const rows = rowsOf(b.results)}
 						{@const many = b.results.length > 1}
-						<div class="need">
-							{#if b.why === 'not-read'}{words.notRead(byWork(b.results), many)}<span class="w">{words.notReadWhere(many)}</span>
-							{:else if b.why === 'not-checked'}{words.notChecked(byWork(b.results), many)}<span class="w">{words.notCheckedWhere(many)}</span>
-							{:else if b.why === 'attest'}{words.attest(review.listed(b.results.map((r) => r.name)), many)}<span class="w">{words.attestWhere}</span>
-							{:else}{words.attestedChanged(review.listed(b.results.map((r) => r.name)), many)}<span class="w">{words.attestedChangedWhere}</span>{/if}
+						{@const names = review.listed(rows.map((r) => r.name))}
+						<div class="need" data-testid="formalize-before" data-why={b.why} data-when={b.when}>
+							{#if b.why === 'not-read'}{words.notRead(byWork(rows), many)}<span class="w">{words.notReadWhere(many)}</span>
+							{:else if b.why === 'not-checked'}{words.notChecked(byWork(rows), many)}<span class="w">{words.notCheckedWhere(many)}</span>
+							{:else if b.why === 'attest' && b.when === 'now'}{words.attest(names, many)}<span class="w">{words.attestWhere}</span>
+							{:else if b.why === 'attest'}{words.attestAfter(names, many)}<span class="w">{words.afterWhere}</span>
+							{:else if b.why === 'attested-changed'}{words.attestedChanged(names, many)}<span class="w">{words.attestedChangedWhere}</span>
+							{:else if b.why === 'cycle'}{words.cycle(names, many)}<span class="w">{words.afterWhere}</span>
+							{:else if b.why === 'cite'}{words.cite(b.results.flatMap((x) => ('cite' in x ? [x.cite] : [])))}<span class="w">{words.waitingWhere}</span>
+							{:else}
+								{#each b.results as x, i (i)}
+									<span class="item">{'label' in x ? (b.why === 'ambiguous' ? words.ambiguous(x.label, review.listed(x.results.map((r) => r.name))) : words.missingLabel(x.label)) : 'node' in x ? words.missingNode : 'result' in x ? words.missing(x.name) : ''}</span>
+								{/each}
+								<span class="w">{b.why === 'ambiguous' ? words.ambiguousWhere(doc) : words.missingWhere(doc)}</span>
+							{/if}
 						</div>
 					{/each}
 					<p class="note">{words.beforeNote(one ? plan.targets[0].name : null)}</p>

@@ -127,7 +127,7 @@ TOOLS = [
         OPTIONAL,
         ("--version",),
         GIT,
-        "loom init --git and loom sync",
+        "loom init --git and the Overleaf mirror",
     ),
 ]
 
@@ -406,6 +406,45 @@ def check_tex() -> Item:
     return Item("tex", FAIL, REQUIRED, "none: documents show as their source and no PDF is made", REPAIR, extra)
 
 
+def check_fence() -> Item:
+    """Whether a TeX compile loom starts is fenced on this machine (`loom.fence.state`), in the person's words, with the way to turn it off or why it is not up: said in every state, and a warning only where loom's own test found the fence leaking."""
+    from loom import fence
+
+    why = fence.state()
+    if why is None:
+        return Item(
+            "tex fence",
+            OK,
+            OPTIONAL,
+            f"on: a file loom compiles reads only its own folder, the TeX in use with your own TeX files, and the system's programs, and reaches no network; {fence.OFF}=off turns it off for a paper it breaks",
+            "",
+            {"state": None},
+            shown=True,
+        )
+    said, remedy = {
+        "off": (
+            f"off, as {fence.OFF}=off asks: a file loom compiles can read any file you can",
+            f"unset {fence.OFF} to fence compiles again",
+        ),
+        "absent": (
+            "not on this system: a file loom compiles can read any file you can",
+            "none yet: the fence is macOS's",
+        ),
+        "nested": (
+            "not here: loom runs inside another sandbox, which holds no second, so a file loom compiles reads what that sandbox allows",
+            "run loom outside an agent's sandboxed shell to fence its compiles",
+        ),
+        "leaks": (
+            "not holding: a file read past it in loom's own test, so loom compiles unfenced and a file it compiles can read any file you can",
+            "tell loom's maintainers; nothing is fenced until it holds",
+        ),
+    }[why]
+    # a fence off, absent or nested breaks nothing, so it is said, not warned of; one that leaks is loom's own failing
+    if why == "leaks":
+        return Item("tex fence", WARN, OPTIONAL, said, remedy, {"state": why})
+    return Item("tex fence", OK, OPTIONAL, f"{said} ({remedy})", "", {"state": why}, shown=True)
+
+
 def check_tools() -> list[Item]:
     """Find every tool, ask its version, and probe what loom needs of it beyond presence: pdftotext's word boxes, and whether biber pairs with biblatex.
 
@@ -454,7 +493,7 @@ def check_tools() -> list[Item]:
                     WARN,
                     tool.severity,
                     "only Apple's installer stub: running it asks to install the Command Line Tools",
-                    "xcode-select --install, or leave it: loom works without git but for loom init --git and loom sync",
+                    "xcode-select --install, or leave it: loom works without git but for loom init --git and the Overleaf mirror",
                     {"path": path},
                 )
             )
@@ -780,6 +819,29 @@ def check_unpacked() -> Item:
     return Item("unpacked", OK, OPTIONAL, said, "", {"copies": len(copies), "bytes": size}, shown=True)
 
 
+def check_app() -> Item:
+    """Whether loom's home page runs on this machine (`loom app`), and at what address."""
+    from loom.app.registry import home_url
+
+    url = home_url()
+    return Item(
+        "app", OK, OPTIONAL, f"the home page at {url}" if url else "not running", "", {"url": url or None}, shown=True
+    )
+
+
+def check_server(root: Path) -> Item:
+    """Whether the quilt's server runs, and at what address; else the port it keeps on the home's list, if it is there."""
+    from loom.app.registry import port_of
+    from loom.render.serve import open_url
+
+    url = open_url(root)
+    if url:
+        return Item("server", OK, QUILT, f"running at {url}", "", {"url": url}, shown=True)
+    port = port_of(root)
+    said = f"not running; it keeps http://127.0.0.1:{port}/" if port else "not running"
+    return Item("server", OK, QUILT, said, "", {"url": None, "port": port}, shown=True)
+
+
 def check_sizes(root: Path) -> list[Item]:
     """What `.loom/` holds, by kind, in the units a person reads, the scratch and the write journal on their own; and each session whose scratch is over `lifetimes.LARGE_SCRATCH`, with the day it is removed, which is the whole of that limit."""
     import datetime
@@ -845,8 +907,8 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
         # not being in a quilt is normal here; a quilt that cannot be read is not
         if quilt_path or not str(exc).startswith("not inside a quilt"):
             bad_quilt = str(exc)
-    report.items += [check_tex(), *check_tools()]
-    report.items += [check_author(quilt), check_bundle(), check_unpacked()]
+    report.items += [check_tex(), check_fence(), *check_tools()]
+    report.items += [check_author(quilt), check_bundle(), check_unpacked(), check_app()]
     if bad_quilt is not None:
         # a path with no quilt at it has no config.toml to fix
         none_there = bool(quilt_path) and bad_quilt.startswith("not inside a quilt")
@@ -892,6 +954,7 @@ def run_doctor(quilt_path: str | None = None, strict: bool = False) -> Report:
             check_macro_blocks(quilt),
             check_gitignore(root),
             check_config(quilt),
+            check_server(root),
             *check_sizes(root),
         ]
     return report

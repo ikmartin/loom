@@ -1,26 +1,30 @@
 <script lang="ts">
-	// The Web's column (7a, 7b): its scope, the library, a draft, a draft and what it rests on, or everything, with the choice of draft under the two that need one; and its form, list or graph.
+	// The Web's column (7a, 7b): its scope, the library, a draft, a draft and what it rests on, or everything, with the choice of draft under the two that need one; its form, list or graph; and in graph form the scope's results to choose from (`WebResults`). While it stands it tells the Web it is open, so the graph's place can say where to choose a result.
 	import { store } from '$lib/manifest/client.svelte';
 	import type { WebScope } from '$lib/library/types';
 	import { isAgentDocument } from '$lib/manifest/documents';
 	import { wb } from '$lib/views/web/state.svelte';
 	import { web as words } from '$lib/words/web';
+	import WebResults from './WebResults.svelte';
+
+	$effect(() => {
+		wb.columnOpen = true;
+		return () => (wb.columnOpen = false);
+	});
 
 	const SCOPES: WebScope[] = ['library', 'draft', 'deps', 'all'];
-	// the person's drafts, the fixture's when the manifest has not their documents
-	const drafts = $derived.by(() => {
-		const docs = (store.manifest?.masters ?? []).filter((m) => !isAgentDocument(m)).map((m) => m.path);
-		return docs.includes(wb.doc) ? docs : [wb.doc, ...docs];
-	});
+	// the person's drafts; the one shown is the quilt's main draft until another is chosen
+	const drafts = $derived((store.manifest?.masters ?? []).filter((m) => !isAgentDocument(m)).map((m) => m.path));
 </script>
 
 <div class="wb-col" data-testid="web-column">
 	<p class="rl">{words.column.scope}</p>
 	<div class="scope" role="radiogroup" aria-label={words.column.scope}>
 		{#each SCOPES as s (s)}
-			<label class:on={wb.scope === s}><input type="radio" name="web-scope" checked={wb.scope === s} onchange={() => wb.choose(s)} data-testid="web-scope-{s}" />{words.column.scopes[s]}</label>
+			<label class:on={wb.scope === s} title={words.column.scopes[s]}><input type="radio" name="web-scope" checked={wb.scope === s} onchange={() => wb.choose(s)} data-testid="web-scope-{s}" /><span class="t">{words.column.scopes[s]}</span></label>
 			{#if wb.scope === s && (s === 'draft' || s === 'deps')}
-				<select class="draft" aria-label={words.column.draft} bind:value={wb.doc} data-testid="web-draft">
+				<select class="draft" aria-label={words.column.draft} value={wb.doc ?? ''} onchange={(e) => (wb.doc = e.currentTarget.value || null)} data-testid="web-draft">
+					{#if !wb.doc}<option value="" disabled>{words.column.choose}</option>{/if}
 					{#each drafts as d (d)}<option value={d}>{words.file(d)}</option>{/each}
 				</select>
 			{/if}
@@ -31,12 +35,15 @@
 		<button type="button" class:on={wb.form === 'list'} aria-pressed={wb.form === 'list'} data-testid="web-form-list" onclick={() => (wb.form = 'list')}>{words.column.list}</button>
 		<button type="button" class:on={wb.form === 'graph'} aria-pressed={wb.form === 'graph'} data-testid="web-form-graph" onclick={() => (wb.form = 'graph')}>{words.column.graph}</button>
 	</span>
+	{#if wb.form === 'graph'}<WebResults />{/if}
 </div>
 
 <style>
 	.wb-col {
 		flex: 1;
 		min-height: 0;
+		display: flex;
+		flex-direction: column;
 		overflow: auto;
 		margin: 0 -8px;
 		padding: 0 8px 10px;
@@ -62,6 +69,19 @@
 		border-radius: 6px;
 		cursor: pointer;
 	}
+	/* a scope is one line whatever the font and the column's width, its words ending in an ellipsis before they wrap, its hover saying them in full */
+	label {
+		min-width: 0;
+	}
+	label input {
+		flex: none;
+	}
+	.t {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
 	label:hover,
 	label.on {
 		background: var(--ann-neutral-wash);
@@ -72,6 +92,8 @@
 		font: inherit;
 	}
 	.seg {
+		align-self: flex-start;
+		flex: none;
 		display: inline-flex;
 		border: 1px solid var(--rule);
 		border-radius: 7px;

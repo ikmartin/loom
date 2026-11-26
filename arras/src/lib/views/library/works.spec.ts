@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Work } from '$lib/library/types';
-import { matches, passes, shown } from './works';
+import { cameAs, matches, passes, shown } from './works';
+import { candidate } from '$lib/library/intake';
 
 const work = (o: Partial<Work>): Work => ({ ref: 'r', short: '', title: 'T', authors: [], year: '', holds: { pdf: null, tex: false }, digested: null, used_in: [], link: null, version: null, lookup: null, cited_as: null, ...o });
 
@@ -11,7 +12,6 @@ describe('the list of works', () => {
 
 	it('filters as the column says', () => {
 		expect([smith, jones, okafor].filter((w) => passes(w, 'used')).map((w) => w.ref)).toEqual(['a']);
-		expect([smith, jones, okafor].filter((w) => passes(w, 'unchecked')).map((w) => w.ref)).toEqual(['a']);
 		expect([smith, jones, okafor].filter((w) => passes(w, 'nodoc')).map((w) => w.ref)).toEqual(['b']);
 		expect([smith, jones, okafor].filter((w) => passes(w, 'all'))).toHaveLength(3);
 	});
@@ -37,5 +37,22 @@ describe('the list of works', () => {
 		expect(shown(ws, { filter: 'all', q: 'kovac', sort: { key: 'title', dir: 1 } }).map((w) => w.title)).toEqual(['A']);
 		expect(shown(ws, { filter: 'all', q: '', sort: { key: 'year', dir: 1 } }).map((w) => w.title)).toEqual(['A', 'C', 'B']);
 		expect(shown(ws, { filter: 'all', q: '', sort: { key: 'year', dir: -1 } }).map((w) => w.title)).toEqual(['C', 'A', 'B']);
+	});
+});
+
+describe('two works stating one identifier', () => {
+	const unconfirmed = { state: 'unconfirmed' as const, identifier: 'arxiv:2401.01234v1' };
+	it('an unconfirmed row says the name it came in as, unless that is the identifier itself', () => {
+		expect(cameAs({ title: 'b.pdf', lookup: unconfirmed })).toBe('b.pdf');
+		expect(cameAs({ title: 'arXiv 2401.01234v1', lookup: unconfirmed })).toBe('');
+		expect(cameAs({ title: 'Widgets', lookup: null })).toBe('');
+	});
+	it('the question names each by its short name, and by its title as well where two short names are alike', () => {
+		const c = (short: string, title: string) => ({ ref: short + title, short, title, authors: [], year: '', how: 'arxiv:2401.01234v1' });
+		const files = [c('b.pdf', 'b.pdf'), c('b3.pdf', 'b3.pdf')];
+		expect(files.map((x) => candidate(x, files))).toEqual(['b.pdf', 'b3.pdf']);
+		const twins = [c('Arden 2024', 'Cycle spaces of finite quivers'), c('Arden 2024', 'Rank of a cycle space')];
+		expect(twins.map((x) => candidate(x, twins))).toEqual(['Arden 2024 · Cycle spaces of finite quivers', 'Arden 2024 · Rank of a cycle space']);
+		expect(candidate(c('', ''), [])).toBe('arXiv 2401.01234v1');
 	});
 });

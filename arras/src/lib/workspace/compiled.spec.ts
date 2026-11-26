@@ -46,7 +46,7 @@ describe('how a compile stands', () => {
 		expect(compileWord(c('queued'))).toBe('waiting to compile');
 		expect(compileWord(c('idle', 'failed'))).toBe('did not compile');
 		expect(compileWord(c('idle', 'errors'))).toBe('compiled with errors');
-		expect(compileError(c('idle', 'failed'))).toBe('! Undefined control sequence. at l.12 \\hlind');
+		expect(compileError(c('idle', 'failed'))).toBe('a command it uses is not defined (line 12)');
 		expect(compileError(c('idle', 'ok'))).toBe('');
 	});
 
@@ -63,9 +63,9 @@ describe('how a compile stands', () => {
 		expect(pdfLine(false, undefined)).toEqual({ word: 'not compiled yet', off: 'There is no compiled PDF to open yet' });
 		expect(pdfLine(false, c('compiling'))).toEqual({ word: 'compiling', off: 'There is no compiled PDF to open yet' });
 		expect(pdfLine(false, c('queued'))).toEqual({ word: 'waiting to compile', off: 'There is no compiled PDF to open yet' });
-		expect(pdfLine(false, c('idle', 'failed'))).toEqual({ word: 'did not compile', off: '! Undefined control sequence. at l.12 \\hlind' });
-		expect(pdfLine(true, c('idle', 'failed'))).toEqual({ word: 'did not compile', about: '! Undefined control sequence. at l.12 \\hlind' });
-		expect(pdfLine(true, c('idle', 'errors'))).toEqual({ word: 'compiled with errors', about: '! Undefined control sequence. at l.12 \\hlind' });
+		expect(pdfLine(false, c('idle', 'failed'))).toEqual({ word: 'did not compile', off: 'a command it uses is not defined (line 12)' });
+		expect(pdfLine(true, c('idle', 'failed'))).toEqual({ word: 'did not compile', about: 'a command it uses is not defined (line 12)' });
+		expect(pdfLine(true, c('idle', 'errors'))).toEqual({ word: 'compiled with errors', about: 'a command it uses is not defined (line 12)' });
 		expect(pdfLine(true, c('compiling', 'ok'))).toEqual({ word: 'compiling', about: undefined });
 	});
 

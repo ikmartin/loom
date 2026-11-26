@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { review as words } from '$lib/words/review';
 import { REF, round6 } from '$lib/library/fixtures/round6';
 import type { ReviewRow, TaskRow } from '$lib/library/types';
-import { line, marks, question, quiet, task, type Names } from './rows';
+import { joined, line, marks, question, quiet, task, type Names } from './rows';
 
 describe("a work's results in a row", () => {
 	it('are named when one or two, the word made plural for two of a kind, and counted past two', () => {
@@ -82,5 +82,20 @@ describe("round six's rows", () => {
 		const { inPaperOrder } = await import('./rows');
 		expect(words.results(inPaperOrder(['Lemma 5.9', 'Lemma 5.7']))).toBe('Lemmas 5.7 and 5.9');
 		expect(inPaperOrder(['Lemma 5.10', 'Theorem 5.9', 'Corollary A.1', 'Lemma 5.7'])).toEqual(['Lemma 5.7', 'Theorem 5.9', 'Lemma 5.10', 'Corollary A.1']);
+	});
+});
+
+describe('the kinds the viewer shows', () => {
+	const row = (kind: string, id: string) => ({ row: id, kind }) as unknown as ReviewRow;
+	it('join the attested results that changed to the Lean statements to attest, first, in the place of whichever came first', () => {
+		const shown = joined([
+			{ kind: 'questions', rows: [row('questions', 'q')] },
+			{ kind: 'attest', rows: [row('attest', 'a1'), row('attest', 'a2')] },
+			{ kind: 'attested-changed', rows: [row('attested-changed', 'c1')] },
+			{ kind: 'edits', rows: [row('edits', 'e')] }
+		]);
+		expect(shown.map((g) => g.kind)).toEqual(['questions', 'attest', 'edits']);
+		expect(shown[1].rows.map((r) => r.row)).toEqual(['c1', 'a1', 'a2']);
+		expect(joined([{ kind: 'attested-changed', rows: [row('attested-changed', 'c1')] }])).toEqual([{ kind: 'attest', rows: [row('attested-changed', 'c1')] }]);
 	});
 });

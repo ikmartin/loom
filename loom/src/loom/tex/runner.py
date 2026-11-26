@@ -13,10 +13,11 @@ import shutil
 import signal
 import subprocess
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from loom import fence
 from loom.clock import tex_date
 from loom.tex import missing, private
 
@@ -165,7 +166,7 @@ def stage_sources(
 ) -> Path:
     """Copy a paper directory into `dest` without its build products; returns the copy of `paper_dir`, the root to compile.
 
-    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves. With `regular_only`, for a source nobody at loom wrote, only folders and regular files with no other name are copied, judged by `lstat` alone: a link is never followed, and a device or a FIFO never opened.
+    latexmk reads and rewrites a .bbl or .fdb_latexmk in its working directory even under -outdir, so compiling the author's directory in place both depends on their editor's leftovers and writes into it. Hidden directories are skipped; a .bbl is kept when the tree has no .bib, since an arXiv-style source ships only that. Files the paper reaches outside its directory (`outside`, as `closure_of` lists them) land at the same relative position, so `../macros` still resolves; a cited paper's source is given none. A link the directory holds is copied as what it reaches where that lies under the copy's root and no dot-named folder, and otherwise left out where the fence is up and copied where it is not (`_links`). With `regular_only`, for a source nobody at loom wrote, only folders and regular files with no other name are copied, judged by `lstat` alone: a link is never followed, and a device or a FIFO never opened.
     """
     paper_dir = paper_dir.resolve()
     reached = [Path(o).resolve() for o in outside if Path(o).is_file()]
@@ -184,7 +185,8 @@ def stage_sources(
                 skip.add(n)
         return skip
 
-    shutil.copytree(paper_dir, root, ignore=ignore, symlinks=False)
+    shutil.copytree(paper_dir, root, ignore=ignore, symlinks=True)
+    _links(root, paper_dir, anchor)
     for f in reached:
         target = dest / f.relative_to(anchor)
         if not target.exists():
@@ -222,8 +224,9 @@ def compile_document(
     halt_on_error: bool = True,
     timeout: int = 600,
     started: Callable[[subprocess.Popen[str]], None] | None = None,
+    overlay: Mapping[str, bytes] | None = None,
 ) -> CompileResult:
-    """Compile a document from `base`, the quilt-relative directory it compiles from (P12), in a clean copy of that directory (`stage_document`).
+    """Compile a document from `base`, the quilt-relative directory it compiles from (P12), in a clean copy of that directory (`stage_document`), with `overlay`'s files (quilt-relative) written into the copy: a document not yet written, compiled as it would be.
 
     A document's directory holds whatever its author's editor left there, and latexmk reads a `.bcf`, `.aux` or `.toc` it finds in its working directory and runs biber there even under `-outdir`; compiling the directory in place both depends on those leftovers and writes into it. The log's relative names are the document's directory's, which `CompileResult.cwd` says.
 
@@ -251,17 +254,21 @@ def compile_document(
     """
     tex_rel = Path(tex).relative_to(root).as_posix() if Path(tex).is_absolute() else Path(tex).as_posix()
     with tempfile.TemporaryDirectory(prefix="loom-compile-") as tmp:
-        stage = stage_document(root, base, [tex_rel], Path(tmp))
+        stage = stage_document(root, base, [tex_rel], Path(tmp), overlay)
         cwd = stage / base
-        res = compile_tex(cwd, os.path.relpath(stage / tex_rel, cwd), outdir, engine, halt_on_error, timeout, started)
+        res = compile_tex(
+            cwd, os.path.relpath(stage / tex_rel, cwd), outdir, engine, halt_on_error, timeout, started, reads=stage
+        )
     res.cwd = root / base
     return res
 
 
-def stage_document(root: Path, base: str, extra: list[str], dest: Path) -> Path:
+def stage_document(
+    root: Path, base: str, extra: list[str], dest: Path, overlay: Mapping[str, bytes] | None = None
+) -> Path:
     """A copy of the document directory `base` under `dest`, at its quilt-relative place, for latexmk to run in; returns `dest`.
 
-    Left out: build products (`BUILD_PRODUCTS`; a `.bbl` stays when the directory has no `.bib`, as an arXiv source ships only that), hidden directories, the directories never read as a document's (`scan.source.SKIP_DIRS`), and the sync directory. `extra` (quilt-relative files, the document itself when it sits elsewhere, as an agent copy or a closure does) is copied to its own place. Files are copied, never linked, since a package may rewrite a file in its working directory (a TikZ externalisation, a `filecontents`).
+    Left out: build products (`BUILD_PRODUCTS`; a `.bbl` stays when the directory has no `.bib`, as an arXiv source ships only that), hidden directories, the directories never read as a document's (`scan.source.SKIP_DIRS`), and the sync directory. `extra` (quilt-relative files, the document itself when it sits elsewhere, as an agent copy or a closure does) is copied to its own place. Files are copied, never linked, since a package may rewrite a file in its working directory (a TikZ externalisation, a `filecontents`); a link the directory holds is copied as what it reaches where that lies in the quilt under no dot-named folder, and otherwise left out where the fence is up and copied where it is not (`_links`).
     """
     from loom.scan.source import SKIP_DIRS
     from loom.sync import skipped_directory
@@ -282,13 +289,57 @@ def stage_document(root: Path, base: str, extra: list[str], dest: Path) -> Path:
                 skip.add(n)
         return skip
 
-    shutil.copytree(top, dest / base, ignore=ignore, dirs_exist_ok=True)
+    if top.is_dir():
+        shutil.copytree(top, dest / base, ignore=ignore, dirs_exist_ok=True, symlinks=True)
+        _links(dest / base, top, root)
+    (dest / base).mkdir(parents=True, exist_ok=True)
+    for rel, data in (overlay or {}).items():
+        (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+        (dest / rel).write_bytes(data)
     for rel in extra:
-        target = dest / rel
-        if (root / rel).is_file() and not target.exists():
+        target, source = dest / rel, root / rel
+        if source.is_symlink() and fence.state() is None:
+            if not _linkable(Path(os.path.realpath(source)), Path(os.path.realpath(root))):
+                continue  # as a link in the document's folder is (`_links`)
+        if source.is_file() and not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(root / rel, target)
+            shutil.copy2(source, target)
     return dest
+
+
+def _links(staged: Path, original: Path, inside: Path) -> None:
+    """In `staged`, a copy of `original` made keeping its links, each link replaced by a copy of what it reaches where that is in `inside` under no dot-named folder (`_linkable`), as a shared macro file elsewhere in the quilt is; any other link is left out where the fence is up (`loom.fence`), and copied as what it reaches where it is not, as every link was before the fence. So a staged copy holds no link, and nothing loom does to it reads or writes through one.
+
+    A folder copied where the fence is up leaves out every dot-named name in it, as `_linkable` would refuse a link to each. A link to a folder that holds the link itself, the quilt's root among them, is left out fenced or not, since copying it never ends.
+    """
+    fenced = fence.state() is None
+    bound = Path(os.path.realpath(inside))
+    for folder, dirs, files in os.walk(staged):
+        for name in [*dirs, *files]:
+            link = Path(folder) / name
+            if not link.is_symlink():
+                continue
+            place = original / link.relative_to(staged)
+            real = Path(os.path.realpath(place))
+            link.unlink()
+            if fenced and not _linkable(real, bound):
+                continue
+            if real.is_dir():
+                if Path(os.path.realpath(place.parent)).is_relative_to(real):
+                    continue  # the folder holds the link: its copy would hold the link again, without end
+                shutil.copytree(real, link, symlinks=True, ignore=_dot_named if fenced else None)
+            elif real.is_file():
+                shutil.copy2(real, link)
+
+
+def _dot_named(folder: str, names: list[str]) -> set[str]:
+    """`shutil.copytree`'s ignore for a folder a link reaches in a fenced stage: every name beginning with a dot."""
+    return {n for n in names if n.startswith(".")}
+
+
+def _linkable(real: Path, bound: Path) -> bool:
+    """Whether a link that reaches `real` is copied into a fenced stage: a file or folder in `bound`, the quilt or a paper's folders, under no folder whose name begins with a dot, `.git` and `.loom` among them."""
+    return real.is_relative_to(bound) and not any(p.startswith(".") for p in real.relative_to(bound).parts)
 
 
 def compile_tex(
@@ -302,6 +353,7 @@ def compile_tex(
     *,
     foreign: bool = False,
     online: bool = True,
+    reads: Path | None = None,
 ) -> CompileResult:
     """Compile `tex_rel` (relative to `root`) with latexmk into `outdir`, fetching what it lacks into loom's TeX; return a result even when latexmk is missing.
 
@@ -325,6 +377,8 @@ def compile_tex(
         A source nobody at loom wrote: compiled under `FOREIGN` (`tex_env`), each program capped at `FOREIGN_CPU` seconds of CPU, ended when loom exits, and fetched for from its text alone.
     online : bool, default True
         Whether the network may be used to fetch what it lacks.
+    reads : Path, optional
+        The folder of staged sources the run may read where the fence is up (`loom.fence`), when it holds more than `root`; default `root`.
 
     Returns
     -------
@@ -334,14 +388,16 @@ def compile_tex(
     rounds = missing.Round()
     if fetching:
         rounds.fetch(missing.preflight(root, tex_rel))
-    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, foreign=foreign)
+    res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, reads or root, foreign=foreign)
     for _ in range(missing.ROUNDS):
         if res.ok or not fetching or foreign or res.returncode == 124 or res.stopped:
             break
         log = res.log.read_text(encoding="utf-8", errors="replace") if res.log is not None else ""
         if not rounds.fetch(missing.from_log(log, res.stdout)):
             break
-        res = _compile_once(root, tex_rel, outdir, engine, halt_on_error, timeout, started, foreign=foreign)
+        res = _compile_once(
+            root, tex_rel, outdir, engine, halt_on_error, timeout, started, reads or root, foreign=foreign
+        )
     res.fetched, res.needed, res.note = rounds.fetched, rounds.needed, rounds.note
     return res
 
@@ -354,12 +410,15 @@ def _compile_once(
     halt_on_error: bool,
     timeout: int,
     started: Callable[[subprocess.Popen[str]], None] | None,
+    reads: Path,
     *,
     foreign: bool = False,
 ) -> CompileResult:
     """One latexmk run of `tex_rel` into `outdir`.
 
     latexmk reads no rc file (`-norc`): one in a quilt is a Perl program, and one at home may turn on shell escape. The run writes into a scratch directory beside `outdir`, seeded with `outdir`'s files so latexmk still runs only the passes it needs, and its output replaces `outdir`'s only when it made a PDF: a failed run leaves the last good PDF and aux in place, and only its log is kept. The run is a process group of its own, killed whole on timeout or by `stop_run` on the process `started` is handed; a run that times out, is stopped or dies of a signal keeps nothing, so the last whole compile's log stays.
+
+    Where the fence is up (`loom.fence`) latexmk runs inside it, reading `reads` and writing the run's folder, its temporary folder there and, for a document that uses biblatex, biber's unpacked folder cloned there (`_fenced_env`); a fenced run that fails is never run again unfenced.
     """
     engine = normalise_engine(engine)
     exe = which_latexmk()
@@ -384,6 +443,11 @@ def _compile_once(
         if foreign:
             # `ulimit -t` holds in every program latexmk starts, so a TeX outlives a killed loom by its CPU cap at most
             cmd = ["/bin/sh", "-c", f'ulimit -t {FOREIGN_CPU} && exec "$@"', "sh", *cmd]
+        env = tex_env(foreign=foreign)
+        lua = engine == "lualatex"
+        if fence.state() is None:
+            env = {**_fenced_env(env, reads, run, lua=lua), "PWD": str(root)}
+            cmd = fence.fenced(cmd, stage=reads, out=run, var=Path(env["TEXMFVAR"]))
         proc = subprocess.Popen(
             cmd,
             cwd=root,
@@ -391,7 +455,7 @@ def _compile_once(
             stderr=subprocess.PIPE,
             text=True,
             errors="replace",
-            env=tex_env(foreign=foreign),
+            env=env,
             start_new_session=True,
         )
         if started is not None:
@@ -411,9 +475,11 @@ def _compile_once(
             return CompileResult(
                 False, engine, outdir, proc.returncode, out + err, ["the compile was stopped"], stopped=True
             )
+        if lua and fence.state() is None:
+            fence.after_run(run / FENCED / "texmf-var")
         made_one = any((run / n).is_file() for n in made)
         for f in sorted(run.rglob("*")) if made_one else [run / f"{stem}.log"]:
-            if f.is_file():
+            if f.is_file() and f.relative_to(run).parts[0] != FENCED:
                 target = outdir / f.relative_to(run)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(f, target)
@@ -448,6 +514,44 @@ def _end_live() -> None:
     """End every foreign compile still running when loom exits, with what it started."""
     for proc in list(_LIVE):
         stop_run(proc)
+
+
+#: The folder in a fenced run's folder for its temporary files and biber's clone, never kept with the output.
+FENCED = ".loom-fenced"
+
+
+def _fenced_env(env: dict[str, str], reads: Path, run: Path, *, lua: bool = False) -> dict[str, str]:
+    """`env` for a run inside the fence, whose caller also sets `PWD` to where it runs, as a shell does, since Perl asks `/bin/pwd`, which may not look at a folder outside the fence: a TeX cache of the run's own, cloned from loom's (`fence.run_var`, with LuaTeX's font database where `lua`), its temporary folder in the run's folder, and biber's own (`PAR_GLOBAL_TMPDIR`, and `PAR_GLOBAL_TEMP` where set) there too. Where the sources use biblatex each is a copy-on-write clone of the folder it named, made there, since the fence lets a run neither write nor read the machine's unpacked biber, and an empty one would have biber unpack 200 MB on every run."""
+    own = run / FENCED
+    (own / "tmp").mkdir(parents=True, exist_ok=True)
+    env = {**env, "TMPDIR": str(own / "tmp"), "TEXMFVAR": str(fence.run_var(own, lua=lua))}
+    biblatex = _uses_biblatex(reads)
+    for var in ("PAR_GLOBAL_TMPDIR", "PAR_GLOBAL_TEMP"):
+        if var not in env:
+            continue
+        unpacked, clone = Path(env[var]), own / var.lower()
+        made = (
+            biblatex
+            and unpacked.is_dir()
+            and subprocess.run(
+                ["/bin/cp", "-c", "-R", str(unpacked), str(clone)], capture_output=True, check=False
+            ).returncode
+            == 0
+        )
+        env[var] = str(clone if made else own / "tmp")
+    return env
+
+
+def _uses_biblatex(folder: Path) -> bool:
+    """Whether a TeX source in `folder` names biblatex, whose biber the run may start."""
+    for f in folder.rglob("*"):
+        if f.suffix in (".tex", ".sty", ".cls", ".ltx") and f.is_file():
+            try:
+                if b"biblatex" in f.read_bytes():
+                    return True
+            except OSError:
+                continue
+    return False
 
 
 def stop_run(proc: subprocess.Popen[str]) -> None:

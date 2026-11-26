@@ -34,6 +34,7 @@ from loom.paths import (
     LIBRARY_DOCUMENTS,
     LIBRARY_LOCK,
     LIBRARY_NODES,
+    WRITES_LOCK,
 )
 from loom.scan.bib import citekey_slug, parse_bib, raw_entries
 from loom.scan.tokenize import match_group
@@ -149,7 +150,7 @@ def carry(root: Path, result: ScanResult, *, write: bool = True) -> Carried:
 
     Notes
     -----
-    Holds the id lock and the library's lock throughout, the annotation log's while it is rewritten. An entry whose key a reference already holds, ignoring case, makes none, so a second carry changes nothing; the old files are removed only after every reference and document is written, and a work's folder that could not be carried stays.
+    Holds the door's lock, then the id lock and the library's lock, throughout, the annotation log's while it is rewritten. The research state is rewritten only through the door (`pages.write`); where the door refuses it, the carry stops there with a `ContentError` that says why, before the old library is removed, so the quilt keeps its old layout and an upgrade once the state is mended carries the rest. An entry whose key a reference already holds, ignoring case, makes none, so a second carry changes nothing; the old files are removed only after every reference and document is written, and a work's folder that could not be carried stays.
     """
     out = Carried()
     with _held(root, write):
@@ -165,9 +166,10 @@ def carry(root: Path, result: ScanResult, *, write: bool = True) -> Carried:
 
 @contextmanager
 def _held(root: Path, write: bool) -> Iterator[None]:
-    """The id lock and then the library's lock, as gathering and every node writer take them; neither when not writing, which makes no lock file."""
+    """The door's lock, then the id lock and then the library's lock, as gathering and every node writer take the last two; none when not writing, which makes no lock file. The door's lock comes first because the carry writes the research state through the door, and the door's lock is taken before the id lock everywhere (`cli._quilt.drawing_ids`): taken after it, a carry and a command drawing an id could each wait on the other."""
     with ExitStack() as stack:
         if write:
+            stack.enter_context(locked(root / WRITES_LOCK))
             stack.enter_context(locked(root / ID_LOCK))
             stack.enter_context(locked(root / LIBRARY_LOCK))
         yield
@@ -699,10 +701,12 @@ def _overviews(root: Path, works: list[_Work], names: _Names, out: Carried, *, w
 
 
 def _state(root: Path, result: ScanResult, names: _Names, out: Carried, *, write: bool) -> None:
-    """Rewrite the research state's `cited:work:` links as `quilt:` links to their references, written as a page is, and recorded as loom's; a state whose other links name nothing is written whole without the record."""
+    """Rewrite the research state's `cited:work:` links as `quilt:` links to their references, through the door as a page is written, and recorded as loom's. Where the door refuses (a link of the state's that names nothing, a byte that is not text, or the door's own refusal), the carry stops with a `ContentError` saying so, and the state is as it was: it is the person's file, which only the door writes."""
+    from loom.errors import ContentError
     from loom.links import LinkError
     from loom.pages import state_page
     from loom.pages import write as write_page
+    from loom.writes import WriteRefused
 
     rel = result.quilt.config.research_state
     path = root / rel
@@ -715,10 +719,11 @@ def _state(root: Path, result: ScanResult, names: _Names, out: Carried, *, write
         return
     try:
         write_page(result, state_page(result.quilt.config), new, actor="loom", session=None)
-    except (LinkError, UnicodeEncodeError):
-        temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-        temporary.write_bytes(new.encode("utf-8", errors="surrogateescape"))
-        os.replace(temporary, path)
+    except (LinkError, UnicodeEncodeError, WriteRefused) as exc:
+        why = "it holds bytes that are not text" if isinstance(exc, UnicodeEncodeError) else str(exc)
+        raise ContentError(
+            f"the carry stopped at {rel}, whose links to works it rewrites, because loom could not write it: {why}. {rel} is as it was, and the old library and the quilt's layout are kept; once {rel} is mended, an upgrade carries the rest, and nothing twice"
+        ) from None
 
 
 def _rewrite_links(text: str, names: _Names, out: Carried, where: str) -> tuple[str, int]:

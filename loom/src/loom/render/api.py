@@ -56,7 +56,7 @@ NO_REBUILD = tuple(name for family in FAMILIES for name in family.NO_REBUILD)
 #: Writes that change records alone, which the scan never reads, or keep a version, whose landmark the build reads again (`build(reuse=…)`); their publication builds from the last scan (`ServeSession.rebuild`).
 RECORD_WRITES = tuple(name for family in FAMILIES for name in family.RECORD_WRITES)
 #: Writes that take their own locks and hold none while they wait on the network, so the publisher runs them outside the publication's lock.
-OWN_LOCK = ("here", *library.OWN_LOCK)
+OWN_LOCK = ("here", *library.OWN_LOCK, *sync.OWN_LOCK)
 
 
 def discovery() -> dict[str, Any]:
@@ -83,6 +83,10 @@ def handle(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, Any]:
     dict
         `{"ok": True, "result": <what the CLI would have printed>}`.
     """
+    from loom.identity import at_the_viewer
+
     if endpoint not in discovery()["capabilities"]:
         raise ApiError("unknown-endpoint", f"no endpoint {endpoint}", status=404)
-    return HANDLERS[endpoint](root, endpoint, body)
+    # a write over HTTP is the person at the viewer, whichever shell started the server
+    with at_the_viewer():
+        return HANDLERS[endpoint](root, endpoint, body)

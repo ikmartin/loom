@@ -20,8 +20,9 @@ async function open(page: Page): Promise<void> {
 	await expect(page.getByTestId('docs-library')).toBeVisible();
 }
 
-test('the Library button opens the picker over Docs, which finds, sorts and opens a work beside the draft', async ({ page }) => {
+test('the Open a work… button opens the picker over Docs, which finds, sorts and opens a work beside the draft', async ({ page }) => {
 	await open(page);
+	await expect(page.getByTestId('docs-library')).toHaveText('Open a work…');
 	await page.getByTestId('docs-library').click();
 	const picker = page.getByTestId('docs-picker');
 	// a modal dialog: it takes the keyboard, the draft behind it is inert, and Escape gives the keyboard back to the Library button
@@ -174,6 +175,10 @@ test('the formalize panel from the Web: chosen results or the card, what stops t
 	await expect(panel).toContainText('Theorem 2.3 of Okafor 2022 has not been read.');
 	await expect(panel).toContainText('Lemmas 5.7 and 5.9 of Arden 2024 and Theorem 5.1 of Arden 2025 have not been checked against their papers.');
 	await expect(panel).toContainText('Lemma 3.3 waits for you to attest its Lean statement.');
+	// what only the agent's work makes possible, and what nobody settles yet, each said so
+	await expect(panel.locator('[data-testid="formalize-before"][data-why="attest"][data-when="after"]')).toHaveText("Theorem 3.4 will wait for you to attest its Lean statement once it is written.After the agent's work.");
+	await expect(panel.locator('[data-testid="formalize-before"][data-why="cite"]')).toHaveText('The citation of Oka22 names no result of its work.Nothing you do now settles this; loom does not yet tell which result a citation means.');
+	expect(await panel.getByTestId('formalize-before').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-when')))).toEqual(['now', 'now', 'now', 'after', 'waiting']);
 	await expect(page.getByTestId('formalize-ask')).toBeDisabled();
 	await expect(page.getByTestId('formalize-ask')).toHaveText('add a label to Definition 3.2 first');
 	const lemma = panel.getByTestId('formalize-item').filter({ hasText: 'Lemma 3.11' });
@@ -189,7 +194,7 @@ test('the formalize panel from the Web: chosen results or the card, what stops t
 	await page.getByTestId('focus-formalize').click();
 	await expect(page.getByTestId('formalize-ask')).toHaveText('ask an agent to formalize Theorem 1');
 	await page.getByTestId('formalize-ask').click();
-	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to formalize Theorem 1. It waits in Review, under Waiting for an agent.');
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to formalize Theorem 1. It waits in Review, under Agents still working.');
 	await expect(panel).toHaveCount(0);
 	await expect(page).toHaveURL(/\/web/);
 });

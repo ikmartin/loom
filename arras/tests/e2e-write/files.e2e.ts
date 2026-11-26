@@ -79,7 +79,7 @@ test('a box in a Markdown file is ticked in place: one character of the file cha
 	await expect.poll(() => onDisk(served.root, 'notes/intro.md')).toContain('- [x] Draw a widget');
 	await page.reload();
 	await expect(file.locator('li.task input').nth(2)).toBeChecked();
-	// and The Record says what was done
+	// and History says what was done
 	await page.goto('/review/record/acts');
 	await expect(page.getByTestId('history-act').filter({ hasText: 'Ticked a box in intro.md' }).first()).toBeVisible();
 });

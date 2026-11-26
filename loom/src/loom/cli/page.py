@@ -18,7 +18,7 @@ from loom.identity import writer
 @click.option(
     "--base", default=None, metavar="HASH", help="The page's hash as you read it; required once the page exists."
 )
-@click.option("--as", "declared", default=None, help="Who is writing. An agent names itself, including Agent or AI.")
+@click.option("--as", "declared", default=None, help="Who is writing. An agent's name ends in Agent.")
 @click.option("--session", "which", default=None, envvar="LOOM_SESSION", help="Log this call to the session.")
 @click.option("--dry-run", is_flag=True, help="Check everything and write nothing.")
 @click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
@@ -85,6 +85,6 @@ def write(
     if current == body:
         Report(f"{page.name} already reads so; nothing written", data=data).emit(as_json)
         return
-    write_page(result, page, body, actor=name, session=found.id if found else None)
+    write_page(result, page, body, actor=name, session=found.id if found else None, seen=current)
     log_run(found.id if found else None, f"loom write {target}", root)
     Report(f"wrote {page.name}{linking}", data=data).emit(as_json)

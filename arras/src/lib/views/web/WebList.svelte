@@ -11,6 +11,8 @@
 	import Snippet from './Snippet.svelte';
 	import { inView, lay } from './window';
 	import { formalize } from '$lib/formalize/state.svelte';
+	import { store } from '$lib/manifest/client.svelte';
+	import { isAgentDocument } from '$lib/manifest/documents';
 
 	let found = $state<WebSearch | null>(null);
 	let timer: ReturnType<typeof setTimeout> | undefined;
@@ -19,14 +21,14 @@
 		const w = wb.where;
 		const sort = wb.sort;
 		void gen.gen;
-		void wb.list.load(`${w.scope}:${w.doc}:${sort}`, (s) => api.webList(w, sort, [], 0, s));
+		if (wb.named) void wb.list.load(`${w.scope}:${w.doc}:${sort}`, (s) => api.webList(w, sort, [], 0, s));
 	});
 	$effect(() => {
 		const q = wb.q.trim();
 		const w = wb.where;
 		void gen.gen;
 		clearTimeout(timer);
-		if (!q) return void (found = null);
+		if (!q || !wb.named) return void (found = null);
 		timer = setTimeout(async () => {
 			const a = await api.webSearch(w, q);
 			if (a.ok && wb.q.trim() === q) found = a.value;
@@ -34,6 +36,8 @@
 	});
 
 	const list = $derived(wb.list.value);
+	/** How many drafts of the person's the quilt holds, for the sentence where it names no main draft. */
+	const drafts = $derived((store.manifest?.masters ?? []).filter((d) => !isAgentDocument(d)).length);
 	/** A group starts open under what a draft rests on, folded elsewhere; the person's turn flips it. */
 	const isOpen = (sec: WebSection, g: WebGroup) => (sec.head === 'uses') !== wb.turned.has(g.group);
 	const rowsOf = (g: WebGroup): Row[] | null => g.rows ?? wb.groups.get(g.group) ?? null;
@@ -91,10 +95,16 @@
 				<WebRow row={h.row} choosing />
 				{#if h.snippet}<Snippet snippet={h.snippet} />{/if}
 			{:else}<p class="outscope">{words.list.nothing}</p>{/each}
+		{:else if wb.draftless}
+			<p class="outscope" data-testid="web-draftless">{words.list.draftless(drafts)}</p>
+		{:else if !wb.named}
+			<p class="outscope">{words.list.loading}</p>
 		{:else if wb.list.error}
 			<p class="outscope">{wb.list.error.code === 'not-served' ? words.list.notServed : words.list.failed(said(wb.list.error))}</p>
 		{:else if !list}
 			<p class="outscope">{words.list.loading}</p>
+		{:else if !list.count}
+			<p class="outscope" data-testid="web-empty">{words.list.empty(wb.scope, wb.doc ?? '')}</p>
 		{:else}
 			<div class="window" style:height="{laid.height}px" data-testid="web-window">
 				{#each shown as l (l.kind === 'row' ? `r:${l.row.result}:${l.top}` : `${l.kind}:${l.top}`)}

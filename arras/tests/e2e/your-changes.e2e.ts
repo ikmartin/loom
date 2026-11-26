@@ -47,7 +47,10 @@ test('every pending change is a card, grouped by the document that lists it, and
 	const s = card(page, SUGGESTED);
 	await expect(s).toContainText('Suggestion');
 	await expect(s).toContainText('agent');
-	await expect(s.getByTestId('change-where')).toContainText('drafting/nodes/sy-0002.tex');
+	// where: the block, not the file loom keeps it in under its id; a file of the person's is named
+	await expect(s.getByTestId('change-where')).not.toContainText('drafting/nodes/');
+	await expect(s.getByTestId('change-where').getByRole('link')).toHaveCount(1);
+	await expect(card(page, LONE).getByTestId('change-where')).toHaveText('notes/intro.md');
 	await expect(s.getByTestId('change-words').locator('.del')).toHaveText('Every orbit');
 	await expect(s.getByTestId('change-words').locator('.ins')).toHaveText('Each orbit');
 	await expect(s).toContainText('One at a time.');
@@ -142,7 +145,7 @@ test('the blocks waiting to be accepted are listed one document at a time', asyn
 test('with no change waiting it says so, and a static host offers no acts', async ({ page }) => {
 	await serve(page, (m) => (m.changes = []));
 	await page.goto('/review');
-	await expect(page.getByTestId('changes-empty')).toContainText('No changes wait in your text.');
+	await expect(page.getByTestId('changes-empty')).toContainText('No changes wait in the places agents may edit.');
 	await page.unrouteAll();
 	await withChanges(page);
 	await page.goto('/review');

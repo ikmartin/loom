@@ -1,0 +1,25 @@
+;; A TeX compile loom starts, fenced: latexmk with pdflatex, lualatex, bibtex or biber, or make4ht, in a staged copy of a document's folder.
+;; Parameters, each a resolved absolute path, given with -D and never written into this text:
+;; STAGE (the staged sources, and for make4ht its output, home and temporary folder), OUT (the run's output folder, its temporary folder and a clone of biber's unpacked folder),
+;; TEXBIN (the programs of the TeX in use), TEXDIST, TEXLOCAL, TEXSYSVAR and TEXSYSCONFIG (its trees, as kpsewhich names them), TEXPARENT (its own folder, of which only texmf.cnf and texmfcnf.lua are read),
+;; TEXMFHOME (the person's own TeX files), TEXMFVAR (the run's own TeX cache, a clone of loom's seed in its own folder; for loom's own fill of the seed, the seed),
+;; DEVDIR (the developer tools, which TeX Live's universal biber reaches through /usr/bin/lipo), USERTMP (the per-user temporary folder, where xcrun keeps its cache).
+(version 1)
+(deny default)
+(import "system.sb")
+(allow process-exec process-fork)
+(allow file-read* (subpath (param "STAGE")) (subpath (param "OUT"))
+                  (subpath (param "TEXBIN")) (subpath (param "TEXDIST")) (subpath (param "TEXLOCAL")) (subpath (param "TEXSYSVAR")) (subpath (param "TEXSYSCONFIG"))
+                  (literal (string-append (param "TEXPARENT") "/texmf.cnf")) (literal (string-append (param "TEXPARENT") "/texmfcnf.lua"))
+                  (subpath (param "TEXMFHOME")) (subpath (param "TEXMFVAR"))
+                  (subpath (param "DEVDIR")) (subpath "/bin") (subpath "/usr/bin")
+                  ;; MacTeX's folder of links, which its PATH entry /Library/TeX/texbin goes through to the TeX in use
+                  (subpath "/Library/TeX")
+                  (literal (string-append (param "USERTMP") "/xcrun_db"))
+                  ;; whether the Xcode licence is agreed, which xcrun checks before it runs lipo whenever its cache does not answer: a system file, the same for every person
+                  (literal "/Library/Preferences/com.apple.dt.Xcode.plist"))
+(allow file-read-metadata (path-ancestors (param "STAGE")) (path-ancestors (param "OUT"))
+                  (path-ancestors (param "TEXBIN")) (path-ancestors (param "TEXDIST")) (path-ancestors (param "TEXLOCAL")) (path-ancestors (param "TEXSYSVAR"))
+                  (path-ancestors (param "TEXSYSCONFIG")) (path-ancestors (param "TEXPARENT")) (path-ancestors (param "TEXMFHOME")) (path-ancestors (param "TEXMFVAR"))
+                  (path-ancestors (param "DEVDIR")) (path-ancestors (param "USERTMP")))
+(allow file-write* (subpath (param "STAGE")) (subpath (param "OUT")) (subpath (param "TEXMFVAR")))

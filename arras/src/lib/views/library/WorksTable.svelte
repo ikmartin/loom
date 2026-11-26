@@ -11,6 +11,7 @@
 	import { menus } from './menus.svelte';
 	import DigestMenu from './DigestMenu.svelte';
 	import { served } from '$lib/library/served.svelte';
+	import { cameAs } from './works';
 
 	let { works }: { works: Work[] } = $props();
 
@@ -84,13 +85,13 @@
 						{#if c === 'title'}
 							<td class="t">
 								{#if asking.has(w.ref) && w.lookup?.state === 'unconfirmed'}
-									<span>{words.works.identifier(w.lookup.identifier)}</span><span class="found ask">{words.works.lookAsk}</span>
+									<span>{words.works.identifier(w.lookup.identifier)}</span>{#if cameAs(w)}<span class="grey came" data-testid="work-came-as">{cameAs(w)}</span>{/if}<span class="found ask">{words.works.lookAsk}</span>
 									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w, true); }} data-testid="look-yes">{words.works.yes}</button>
 									<button type="button" class="linkish small quiet" onclick={(e) => { e.stopPropagation(); asking.delete(w.ref); }} data-testid="look-not">{words.works.notNow}</button>
 								{:else if w.lookup?.state === 'looking'}
 									<span class="grey">{w.title}</span><span class="found">{words.works.lookingUp}</span>
 								{:else if w.lookup?.state === 'unconfirmed'}
-									<span>{words.works.identifier(w.lookup.identifier)}</span><span class="found">{words.works.unconfirmed}</span>
+									<span>{words.works.identifier(w.lookup.identifier)}</span>{#if cameAs(w)}<span class="grey came" data-testid="work-came-as">{cameAs(w)}</span>{/if}<span class="found">{words.works.unconfirmed}</span>
 									<button type="button" class="linkish small" onclick={(e) => { e.stopPropagation(); void lookUp(w); }}>{words.works.lookUp}</button>
 								{:else}
 									<button type="button" class="open" onclick={(e) => { e.stopPropagation(); opened(e, w); }} data-testid="work-open">{w.title}</button>{#if w.version}<span class="found">· {words.works.version(w.version)}</span>{/if}
@@ -196,10 +197,6 @@
 	tbody tr.multi td {
 		background: var(--link-wash);
 	}
-	td.t {
-		font-family: var(--serif);
-		font-size: 14px;
-	}
 	td.d {
 		color: var(--ink-faint);
 		font-size: 11px;
@@ -232,6 +229,9 @@
 	.open:focus-visible {
 		outline: 2px solid var(--link);
 		outline-offset: 2px;
+	}
+	.came {
+		margin-left: 8px;
 	}
 	.found.ask {
 		color: var(--ink);

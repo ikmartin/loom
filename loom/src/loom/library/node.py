@@ -298,7 +298,7 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
                     5, f"{name} has `{key}` and no `source`; `{key}` says where in its source the text is.", line(key)
                 )
             )
-        said = _type_problem(typ, value)
+        said = pages_problem(value) if key == "pages" else _type_problem(typ, value)
         if not said and key == "found" and value not in FOUND:
             said = f"is {value!r}, and is one of {', '.join(FOUND)}"
         if said:
@@ -311,6 +311,20 @@ def header_problems(header: dict[str, Any], name: str, header_text: str = "") ->
                     )
                 )
     return out
+
+
+def pages_problem(value: Any) -> str | None:
+    """What is wrong with `value` as a node's `pages`, as the rest of a sentence; None when nothing is: a string with text in it, of any length.
+
+    The one rule for `pages`: the store's checks hold a file to it, and the evidence log a record naming a node's pages (`evidence.log`).
+    """
+    if not isinstance(value, str):
+        return "is not a string"
+    if not value:
+        return "is empty, where a key with nothing to say is left out"
+    if not value.strip():
+        return "is only white space, where a key with nothing to say is left out"
+    return None
 
 
 def _type_problem(typ: str, value: Any) -> str | None:

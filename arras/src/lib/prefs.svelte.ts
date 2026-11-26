@@ -31,7 +31,7 @@ export interface Prefs {
 	column: number;
 	/** Whether the left column is showing. It collapses independently of the split and goes first, because on a narrow window it is the column the reader needs least (plan 0.13 §7). */
 	panel: boolean;
-	/** How large a rendered page is drawn, per renderer kind (`pdf` today): a reader who wants a paper larger wants every paper larger, and the document's own size is the `size` setting. A second renderer gets its own entry rather than the PDF's number. */
+	/** The zoom a newly opened rendered page starts at, per renderer kind (`pdf` today): the last zoom given any paper, since each open paper keeps its own (`PdfView.zoom`). A second renderer gets its own entry rather than the PDF's number. */
 	zoom: Record<string, number>;
 	/** Whether each result's id and state stand in the left gutter. Off by default: a reader reading the paper does not need every key beside it, and the reader who does is working on the corpus rather than reading it. */
 	ids: boolean;
@@ -43,13 +43,24 @@ export interface Prefs {
 	hideAgentConfig: boolean;
 	/** The colour a PDF mark is drawn in next, '' for the neutral; it stays until another is chosen, as a highlighter stays in the hand. */
 	face: Face;
+	/** The body size everywhere text is read, Settings' S, M or L. */
 	size: Size;
+	/** The text size, in px, a newly opened HTML draft starts at: Settings' size sets it, and so does a size given any draft in its pane; a draft already open keeps its own. */
+	textSize: number;
 	width: Width;
 	theme: Theme;
 	format: Format;
 }
 
-export const DEFAULTS: Prefs = { divider: 0.5, outline: 0.55, column: 252, panel: true, ids: false, marginMarks: true, hideAux: true, hideAgentConfig: false, zoom: { pdf: 1.4 }, face: 'serif', size: 'm', width: 'mid', theme: 'system', format: 'p1' };
+export const DEFAULTS: Prefs = { divider: 0.5, outline: 0.55, column: 252, panel: true, ids: false, marginMarks: true, hideAux: true, hideAgentConfig: false, zoom: { pdf: 1.4 }, face: 'serif', size: 'm', textSize: 16, width: 'mid', theme: 'system', format: 'p1' };
+
+/** Settings' sizes in px, as theme.css sets `--body-size` for each. */
+export const SIZE_PX: Record<Size, number> = { s: 13.5, m: 16, l: 19 };
+/** A draft's text size, smallest and largest, in px. */
+export const TEXT_MIN = 10;
+export const TEXT_MAX = 32;
+/** A text size as a draft keeps it: within the bounds, to the half px. */
+export const clampText = (v: number): number => Math.min(TEXT_MAX, Math.max(TEXT_MIN, Math.round(v * 2) / 2));
 
 /** The left column's narrowest and widest: below the first a document's name no longer fits beside its marks, past the second the column takes the room a pane reads in. */
 export const COLUMN_MIN = 200;
@@ -84,6 +95,8 @@ export function coerce(raw: unknown): Prefs {
 		zoom,
 		face: pick(o.face, FACES, DEFAULTS.face),
 		size: pick(o.size, SIZES, DEFAULTS.size),
+		// a browser that kept no text size starts drafts at Settings' size
+		textSize: typeof o.textSize === 'number' && Number.isFinite(o.textSize) ? clampText(o.textSize) : SIZE_PX[pick(o.size, SIZES, DEFAULTS.size)],
 		width: pick(o.width, WIDTHS, DEFAULTS.width),
 		theme: pick(o.theme, THEMES, DEFAULTS.theme),
 		format: pick(o.format, FORMATS, DEFAULTS.format)
@@ -132,12 +145,13 @@ class PrefsState {
 	zoom = $state<Record<string, number>>({ ...DEFAULTS.zoom });
 	face = $state<Face>(DEFAULTS.face);
 	size = $state<Size>(DEFAULTS.size);
+	textSize = $state<number>(DEFAULTS.textSize);
 	width = $state<Width>(DEFAULTS.width);
 	theme = $state<Theme>(DEFAULTS.theme);
 	format = $state<Format>(DEFAULTS.format);
 
 	get current(): Prefs {
-		return { divider: this.divider, outline: this.outline, column: this.column, panel: this.panel, ids: this.ids, marginMarks: this.marginMarks, hideAux: this.hideAux, hideAgentConfig: this.hideAgentConfig, zoom: this.zoom, face: this.face, size: this.size, width: this.width, theme: this.theme, format: this.format };
+		return { divider: this.divider, outline: this.outline, column: this.column, panel: this.panel, ids: this.ids, marginMarks: this.marginMarks, hideAux: this.hideAux, hideAgentConfig: this.hideAgentConfig, zoom: this.zoom, face: this.face, size: this.size, textSize: this.textSize, width: this.width, theme: this.theme, format: this.format };
 	}
 
 	load(override?: Partial<Prefs>): void {
@@ -153,6 +167,7 @@ class PrefsState {
 		this.zoom = { ...p.zoom };
 		this.face = p.face;
 		this.size = p.size;
+		this.textSize = p.textSize;
 		this.width = p.width;
 		this.theme = p.theme;
 		this.format = p.format;

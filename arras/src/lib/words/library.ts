@@ -20,7 +20,7 @@ export const library = {
 	byline: (a: readonly string[]) => (!a.length ? '' : a.length === 1 ? a[0] : a.length === 2 ? `${a[0]} and ${a[1]}` : `${a[0]} et al.`),
 	column: {
 		/** The four filters in the Library's column while the list of works is shown. */
-		filters: { all: 'All works', used: 'Used in your drafts', unchecked: 'Not yet compared', nodoc: 'No document' },
+		filters: { all: 'All works', used: 'Cited in your drafts', nodoc: 'No PDF or source' },
 		/** Accessible name of the filters' list. */
 		filtersLabel: 'Filters',
 		/** A work's head in the column: what loom holds of it, after its authors and year. */
@@ -77,8 +77,8 @@ export const library = {
 		colsHead: 'Columns',
 		/** The columns menu's button at the right of the list's head; its accessible name. */
 		colsOpen: 'columns',
-		/** The Digested column: how many results are digested, of how many the source holds, and how many are compared. */
-		digested: (n: number, of: number | null, compared: number) => `${of === null ? n : `${n} of ${of}`} · ${compared} compared`,
+		/** The Digested column: how many results are digested, of how many the source holds, and how many are checked against their paper. */
+		digested: (n: number, of: number | null, compared: number) => `${of === null ? n : `${n} of ${of}`} · ${compared} checked`,
 		/** After a work's title: the words that tell a later version apart. */
 		version: (v: number | string) => (v === 2 ? 'second version' : typeof v === 'number' ? `version ${v}` : v),
 		/** A thumbnail's page for a work of which loom has no document. */
@@ -161,10 +161,15 @@ export const library = {
 		asks: (name: string, stated: string, works: string[]) => (works.length === 1 ? `${name} states ${stated}, as ${works[0]} in your library does. Is it that work?` : `${name} states ${stated}, as ${works.length} works in your library do. Is it one of them?`),
 		/** The question where the file states nothing a work states: it was dropped on that work's row. */
 		asksOn: (name: string, short: string) => `Is ${name} ${short}, the work you dropped it on?`,
+		/** The question where every work it named has since been deleted: only whether the file is a work of its own. */
+		asksGone: (name: string, stated: string) => (stated ? `${name} states ${stated}, as a work since deleted from your library did. Add it as a work of its own?` : `The work ${name} was dropped on has since been deleted from your library. Add it as a work of its own?`),
+		ownWork: 'yes, a work of its own',
 		/** The answers: that it is the one work asked about, that it is a work of its own beside one or several. */
 		isIt: 'yes',
 		notIt: 'no, a work of its own',
-		noneOfThem: 'none of them: a work of its own'
+		noneOfThem: 'none of them: a work of its own',
+		/** A work the question names whose short name another work asked about shares, told apart by its title. */
+		candidate: (short: string, title: string) => `${short} · ${title}`
 	},
 	drop: {
 		/** The cover over any view while a file is dragged over the window. */
@@ -191,7 +196,7 @@ export const library = {
 		selectHint: '⌘-click papers in the list to select them',
 		/** The menu's foot line: who does the work. */
 		byLoom: 'Loom does this itself, now, from the TeX source.',
-		byAgent: 'An agent does this, from the PDF. It waits in Review, under Waiting for an agent.',
+		byAgent: 'An agent does this, from the PDF. It waits in Review, under Agents still working.',
 		byEither: 'Loom does this itself, now, where it has a paper\'s TeX source. For a paper it has only as a PDF an agent does it, and it waits in Review.',
 		/** A work's menu when loom has no document of it. */
 		noDocument: 'Loom has no document of this work yet.',
@@ -225,7 +230,11 @@ export const library = {
 		/** A work with no document, in place of the reader. */
 		noDocument: "Loom has this work's entry and no document. Drop its PDF anywhere to add it.",
 		/** The chip's accessible name beside a result on the page. */
-		chip: (name: string) => name
+		chip: (name: string) => name,
+		/** Over the Comments list beside a work, where loom could not learn where its notes on words stand. */
+		unread: (n: number) => (n === 1 ? 'Loom could not learn where a note on words stands on the paper, so it is listed here and drawn on no page.' : `Loom could not learn where ${n} notes on words stand on the paper, so they are listed here and drawn on no page.`),
+		/** On a note's card where loom found its words on no page. */
+		unfound: 'Its words were not found on the paper, so it is drawn on no page.'
 	},
 	side: {
 		/** The close button of the result beside the page. */

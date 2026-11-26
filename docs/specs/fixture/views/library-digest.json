@@ -1,0 +1,16 @@
+{
+ "answer": {
+  "gen": 1789808400001,
+  "made": 12,
+  "ok": true,
+  "result": "digested 12",
+  "tasks": []
+ },
+ "endpoint": "library-digest",
+ "request": {
+  "refs": [
+   "sh-0402-ref"
+  ],
+  "scope": "all"
+ }
+}

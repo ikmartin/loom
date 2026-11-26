@@ -107,7 +107,7 @@ The node's `% !LOOM author:` line is whoever writes it: `--as`, else the configu
 | `--dry-run` | Say which id and file would be written, and write nothing. |
 | `--to` `FILE` | The node file to write, instead of nodes/<id>.tex beside the default document. |
 | `--session` `SESSION` | Log this call to the session. |
-| `--as` `NAME` | Who writes the node; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who writes the node; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -246,7 +246,7 @@ An annotation carries its author, its time and the version of the text it was wr
 | `--style` | How it is drawn on words, over its type's. |
 | `--weight` | An underline's or a strike's thickness, in whole pixels. |
 | `--opacity` | Its opacity, in percent. |
-| `--as` `NAME` | Who is writing; an agent names itself, with Agent or AI in the name. |
+| `--as` `NAME` | Who is writing; an agent's name ends in Agent. |
 | `--reply` `ID` | Answer annotation ID; the message is the reply. |
 | `--resolve` `ID` | Mark annotation ID resolved, with the message as why. |
 | `--edit` `ID` | Restate an annotation: a new body, --type, a look, or where a drawn one stands; never its anchor. |
@@ -274,7 +274,7 @@ The person keeps or discards it with `loom changes`: keeping writes it into the 
 | `--after` | Put the new text right after the quoted words, or at the end of the body. |
 | `--answers` `ID` | The annotation it answers; keeping the edit resolves it. |
 | `--comment` `TEXT` | What to say beside it, in Markdown. |
-| `--as` `NAME` | Who suggests it; an agent names itself, with Agent or AI in the name. |
+| `--as` `NAME` | Who suggests it; an agent's name ends in Agent. |
 | `--withdraw` `EDIT` | Withdraw suggested edit EDIT, one of yours still open, instead. |
 | `--why` | With --withdraw, why. |
 | `--dry-run` | Say what would be filed, and write nothing. |
@@ -304,16 +304,16 @@ Record that you accept KEYS as mathematically correct, each against the document
 
 `loom changes [OPTIONS] [ID]`
 
-List what waits on you, by document: each open suggested edit and, where the quilt tracks edits (`[review] track_edits`), each in-place edit to an open file since your last look, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
+List what waits on you, by document: each open suggested edit and each in-place edit since your last look to an open file agents may edit, cut by words; with ID, print the change's patch, which `git apply` takes as it stands.
 
-The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds each one's text as you last saw it, and `loom serve` takes your first when it starts. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
+The open files are the ones the viewer shows that are text, at most 1 MB, LaTeX's auxiliary files left out; your look holds the text of each one agents may edit as you last saw it, and `loom serve` takes your first when it starts. A place agents are denied is yours, and an edit there is never listed, whoever made it. Keeping and discarding are yours, never an agent's: keeping an in-place edit puts it into your look, keeping a suggested edit writes it into its file; discarding an in-place edit puts its old words back, discarding a suggested edit leaves the text as it is. A version of each document a write changes is kept first. Keeping says nothing about whether the mathematics is right, which is `loom accept`'s.
 
 | option | description |
 |---|---|
 | `--document` `DOC` | Only the changes in the files DOC is made of. |
 | `--keep` `ID|PATH` | Keep the change ID, or every change in PATH; may repeat. |
 | `--discard` `ID|PATH` | Discard the change ID, or every change in PATH; may repeat. |
-| `--keep-all` | Keep every change; where the quilt tracks edits and you have no look yet, take it. |
+| `--keep-all` | Keep every change; with no look of yours yet, take it first. |
 | `--discard-all` | Discard every change. |
 | `--why` | With a discard, why, which the agent that suggested an edit reads. |
 | `--by` `NAME` | NAME's suggested edits, in every state. |
@@ -556,7 +556,7 @@ A copy step records what each of its nodes began from, and who drafted it: `--as
 | option | description |
 |---|---|
 | `--ai` `NAME` | The agent document to write, .loom/agents/copies/NAME.tex. |
-| `--as` `NAME` | Who drafts it; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who drafts it; an agent's name ends in Agent. |
 | `--section` `ID` | Copy only this section or subsection and its descendants. |
 | `--dry-run` | Say what would be written, and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -596,7 +596,7 @@ End a session's current round. With no WHICH, the active one, which then stops b
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -613,7 +613,7 @@ A plain delete is a tombstone: the session stops being shown. Annotations belong
 |---|---|
 | `--purge` | Really erase it: its directory, transcript and index entry. This cannot be undone. |
 | `--why` | Why it was deleted; kept on the tombstone. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--yes`, `-y` | Skip the question --purge asks. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -640,7 +640,7 @@ Open a session and make it the active one.
 | option | description |
 |---|---|
 | `--name` `TITLE` | What to call it; default untitled. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--no-use` | Create it without making it the active session. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -655,7 +655,7 @@ Change a session's title. Nothing moves: the id is the address and does not chan
 | option | description |
 |---|---|
 | `--name` `TITLE` | The new title. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -671,7 +671,7 @@ The transcript is what the author reads afterwards. A person's message carries t
 | option | description |
 |---|---|
 | `--session` | The session to speak in. |
-| `--as` | Who is speaking. An agent names itself, including Agent or AI. |
+| `--as` | Who is speaking. An agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -684,7 +684,7 @@ Make WHICH the active session, resuming it when it was closed. WHICH is an id, a
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--dry-run` | Say what would change and write nothing. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
@@ -712,7 +712,7 @@ People's annotations and replies, whole, with the words they are on; what they r
 
 | option | description |
 |---|---|
-| `--as` | Who is looking. An agent names itself, including Agent or AI. |
+| `--as` | Who is looking. An agent's name ends in Agent. |
 | `--session` `SESSION` | Look as this session, one conversation's: its own marker, whose first look starts where your name's stands. An id, a title, or a unique id suffix. |
 | `--dry-run` | Report, and leave your marker where it was. |
 | `--json` | Print the report as one JSON object. |
@@ -729,7 +729,7 @@ A page is a reading the person edits directly and an agent writes here, never by
 | option | description |
 |---|---|
 | `--base` `HASH` | The page's hash as you read it; required once the page exists. |
-| `--as` | Who is writing. An agent names itself, including Agent or AI. |
+| `--as` | Who is writing. An agent's name ends in Agent. |
 | `--session` | Log this call to the session. |
 | `--dry-run` | Check everything and write nothing. |
 | `--json` | Print the report as one JSON object. |
@@ -761,7 +761,7 @@ Answer TASK, a question the person asked of an agent, in TEXT.
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -774,7 +774,7 @@ Say what you produced for TASK. The task closes when what it asked for exists, w
 | option | description |
 |---|---|
 | `--made` `ID` | What you produced: a node's id, a suggested edit's id. Repeat for each. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -786,7 +786,7 @@ Say that your session is working on TASK, so the person sees it taken; refused w
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -798,7 +798,7 @@ Withdraw TASK, a question or a paper you asked of the person and no longer need:
 
 | option | description |
 |---|---|
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -818,7 +818,7 @@ A question waits in Review with its choices and a field for the person's own wor
 | `--link` `URL` | With --paper: the http or https page you could not fetch it from, which the person opens. |
 | `--want` | With --paper: which document of the work. |
 | `--for` `DOC` | A draft it is asked for, so the person can see it with that draft's; default the documents that read the place. |
-| `--as` `NAME` | Who acts; an agent names itself, including Agent or AI. |
+| `--as` `NAME` | Who acts; an agent's name ends in Agent. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
@@ -968,12 +968,12 @@ One tool per agent command, named for it (`loom status` is `loom_status`), its o
 
 | option | description |
 |---|---|
-| `--as` `NAME` | The agent this server serves, with Agent or AI in the name; every write is recorded under it. |
+| `--as` `NAME` | The agent this server serves, a name ending in Agent; every write is recorded under it. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 
 ## Publish
 
-Build the site and the PDFs, serve them, and exchange sources with a workspace.
+Build the site and the PDFs, and serve them and the home page.
 
 ### `loom build`
 
@@ -1005,11 +1005,26 @@ A quilt an earlier loom made is served waiting: the viewer offers to bring it fo
 
 | option | description |
 |---|---|
-| `--port` | Port to listen on; fails if busy. |
+| `--port` | Port to listen on; fails if busy. Default: the one this quilt keeps on loom's home, else 8791. |
 | `--open` | Open the browser. |
 | `--no-compile` | Run no TeX: compile nothing, neither after a change nor on starting, and make no snippets. |
 | `--viewer` `PATH` | Serve the built viewer at PATH from where it lies, read on every request, so a rebuild of it shows on a reload: for trying a change to the viewer. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
+
+### `loom app`
+
+`loom app [OPTIONS]`
+
+Run loom's home page until interrupted: the quilts on this machine, each served on a port it keeps, and the ones left open served again when it starts.
+
+One home runs on a machine: a home already running is left to run, and its address is printed. Once loom is updated, the home restarts each quilt's server and then itself.
+
+| option | description |
+|---|---|
+| `--port` | Port to listen on; when 8790 is held, any free one. |
+| `--open` | Open the home page in the browser, starting the home first when it is not running, and return. |
+| `--install` | Write loom's app in ~/Applications, which opens the home page, say where, and return. |
+| `--no-compile` | Serve every quilt with no compiles, as loom serve --no-compile. |
 
 ### `loom compile`
 
@@ -1040,88 +1055,6 @@ Lint, then compile every document, then the closures asked for. Exit 1 on any fa
 | option | description |
 |---|---|
 | `--closures` | Which statements' closures to compile after the documents: all of them, or none; stale compiles none yet. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-### `loom sync`
-
-`loom sync [OPTIONS] COMMAND [ARGS]...`
-
-Exchange the paper's sources with a document workspace, such as an Overleaf project.
-
-#### `loom sync documents`
-
-`loom sync documents [OPTIONS] [add|remove] [DOCUMENT]`
-
-Change which documents publish to the workspace, without publishing.
-
-| option | description |
-|---|---|
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync fetch`
-
-`loom sync fetch [OPTIONS]`
-
-Fetch the document workspace's changes for review in the viewer's Review, without changing your files.
-
-| option | description |
-|---|---|
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync incorporate`
-
-`loom sync incorporate [OPTIONS]`
-
-Apply the fetched pull to the quilt's files, stamping first each document it reaches; the viewer's Review does the same.
-
-| option | description |
-|---|---|
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync init`
-
-`loom sync init [OPTIONS] DIR`
-
-Pair the quilt with a document workspace through DIR, your clone of it, such as an Overleaf project's.
-
-Clone the workspace yourself (`git clone URL DIR`), anywhere, inside the quilt or not. Loom runs Git only in DIR and never changes its files or its checked-out branch, so after `publish --push` your branch there is behind until you pull; it skips DIR when it reads the quilt. The remote and branch are the ones DIR's branch follows, and the main document's directory is the workspace's root, as Overleaf compiles a project from its top. DIR is refused when it is the quilt's own repository, holds a quilt, follows a remote of the quilt's repository or sits inside one of loom's own directories, and `publish --push` refuses a workspace that holds a quilt.
-
-| option | description |
-|---|---|
-| `--publish-main` | The main document's path in the workspace, when it differs from the quilt's. |
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync publish`
-
-`loom sync publish [OPTIONS]`
-
-Prepare the selected documents' sources as a workspace revision, check each compiles, and stamp each as published.
-
-| option | description |
-|---|---|
-| `--push` | Push the prepared revision to the document workspace. |
-| `--dry-run` | Say what would change and write nothing. |
-| `--json` | Print the report as one JSON object. |
-| `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
-
-#### `loom sync status`
-
-`loom sync status [OPTIONS]`
-
-Show the document workspace's revisions, the selection and what is prepared; --patch prints the incoming diff.
-
-| option | description |
-|---|---|
-| `--patch` | Print the incoming revision as a patch against the quilt's paths instead. |
-| `--to` `FILE` | With --patch, write the patch to FILE, a new file outside the quilt's sources and .loom/. |
 | `--json` | Print the report as one JSON object. |
 | `--quilt` `PATH` | Quilt root (default: discovered by walking up). |
 

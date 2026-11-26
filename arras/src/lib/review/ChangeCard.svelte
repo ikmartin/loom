@@ -1,5 +1,5 @@
 <script lang="ts">
-	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; in Review it names where it is and links there.
+	// One pending change as a card: what it is and who made it, its words out and in (struck and underlined in teal; new words that hold an environment or a paragraph break as TeX made them, `new_html`), what a suggestion's writer says of it and the annotation it answers, why it cannot be kept or discarded where it cannot, and Keep and Discard, which act as its popup's do (`history.svelte.ts`). In the list beside a text a click opens it at its words; in Review it names where it is, which lays its draft over Review there.
 	import Icon from '$lib/components/Icon.svelte';
 	import Prose from '$lib/math/Prose.svelte';
 	import TexProse from '$lib/math/TexProse.svelte';
@@ -18,7 +18,8 @@
 		c,
 		on = false,
 		onopen,
-		place = false
+		place = false,
+		see
 	}: {
 		c: PendingChange;
 		/** Whether its popup is open. */
@@ -27,6 +28,8 @@
 		onopen?: () => void;
 		/** Say where it is, with a link there, as Review does. */
 		place?: boolean;
+		/** In Review, how a block it names is shown: laid over Review at it (see it, given the block and the words that named it), or, with null, named in words; absent outside Review, where it is a link into its document. */
+		see?: ((key: string, said: string) => void) | null;
 	} = $props();
 
 	const m = $derived(store.manifest);
@@ -34,6 +37,8 @@
 	const why = $derived(refusal(c));
 	const answers = $derived(c.answers ? m?.annotations[c.answers] : undefined);
 	const who = $derived(whoMade(m, c));
+	/** Whether the change is in its block's own file, which loom keeps under the block's id and a person never named: then the block alone says where it is. */
+	const ownFile = $derived(!!c.key && (c.path.split('/').pop() ?? '').replace(/\.tex$/, '') === (m?.keys?.[c.key]?.node ?? c.key));
 	// a passage, not a few words: shown as TeX made it, since raw LaTeX environments read as nothing but source
 	const made = $derived(!!c.new_html && /\\begin\{|\n\s*\n/.test(c.new));
 
@@ -50,6 +55,10 @@
 		if (!res.ok || refused) say({ title: how === 'keep' ? 'Not kept' : 'Not discarded', lines: [refused ?? res.error?.message ?? 'the publisher refused it'] });
 	}
 </script>
+
+{#snippet goes(text: string, href: string, key: string)}
+	{#if see === undefined}<a {href} onclick={(e) => e.stopPropagation()}>{text}</a>{:else if see}<button type="button" class="see" data-testid="change-see" onclick={(e) => { e.stopPropagation(); see(key, text); }}>{text}</button>{:else}{text}{/if}
+{/snippet}
 
 <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
 <div
@@ -71,7 +80,7 @@
 	</div>
 	{#if place && m}
 		<div class="where" data-testid="change-where">
-			{#if c.key}<a href={placeUrl(m, c.key)} onclick={(e) => e.stopPropagation()}>{keyName(m, c.key)}</a> · {/if}<code>{c.path}</code>
+			{#if c.key}{@render goes(keyName(m, c.key), placeUrl(m, c.key), c.key)}{/if}{#if !ownFile}{#if c.key} · {/if}<code>{c.path}</code>{/if}
 		</div>
 	{/if}
 	<div class="dx" data-testid="change-words">
@@ -81,7 +90,7 @@
 		{:else if c.new}<span class="ins"><TexProse text={c.new} /></span>{/if}
 	</div>
 	{#if c.comment_html}<div class="ct"><Prose html={c.comment_html} /></div>{/if}
-	{#if answers && m}<div class="ct none" data-testid="change-card-answers">It answers <a href={noteUrl(m, answers)} onclick={(e) => e.stopPropagation()}>{linkName(m, `quilt:${answers.id}`)}</a>.</div>{/if}
+	{#if answers && m}<div class="ct none" data-testid="change-card-answers">It answers {@render goes(linkName(m, `quilt:${answers.id}`), noteUrl(m, answers), answers.target.key)}.</div>{/if}
 	{#if why}<div class="ct none" data-testid="change-card-why">{why}</div>{/if}
 	<div class="acts">
 		<button type="button" class="btn small primary" disabled={!ready(c) || !allowed.keep} title={says.keep} data-testid="card-keep" onclick={(e) => void act('keep', e)}><Icon name="check" size={12} />Keep</button>
@@ -189,5 +198,13 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
+	}
+	.see {
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		color: var(--link);
+		cursor: pointer;
 	}
 </style>

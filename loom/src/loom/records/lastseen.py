@@ -76,7 +76,9 @@ def freeze_moved(result: ScanResult, records: list[Record]) -> list[str]:
     texts = current_texts(result)
     frozen: list[str] = []
     for key, text in texts.items():
-        old = previous.get(key)
+        node = result.assembly.nodes[key]
+        # a statement a label or an id keys since was seen under its place's key
+        old = previous.get(key) if key in previous or not node.place else previous.get(node.place)
         if old is None or old == text:
             continue
         if hash_text(old) in wanted:

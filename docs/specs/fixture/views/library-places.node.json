@@ -1,0 +1,35 @@
+{
+ "answer": {
+  "gen": 1789808400001,
+  "ok": true,
+  "pdf": "sha256:8c21ed504f947f16b6e2a65bfa9d470795c14ab522320757cb5f27e5b4e59a8f",
+  "places": [
+   {
+    "lacks": [],
+    "lean": {
+     "lean": "none",
+     "role": null,
+     "waiting_on": []
+    },
+    "name": "Lemma 2.2",
+    "node": "sh-040B",
+    "number": "2.2",
+    "page": 2,
+    "paper": "unchecked",
+    "rects": [
+     [
+      151.8711,
+      135.681084,
+      302.346811,
+      145.608365
+     ]
+    ]
+   }
+  ],
+  "result": "1 placed"
+ },
+ "endpoint": "library-places",
+ "request": {
+  "node": "sh-040B"
+ }
+}

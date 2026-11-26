@@ -9,6 +9,7 @@ import os
 import shutil
 import socket
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -100,10 +101,12 @@ def par_cache(tmp_path_factory: pytest.TempPathFactory) -> Path:
 
 
 @pytest.fixture(autouse=True)
-def isolated_env(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, fake_bin: Path, par_cache: Path
-) -> Path:
-    """Isolate PATH, HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, every TeX tree and every LOOM_* variable but the tier gates; return the temporary HOME. `tex` puts the real TeX first on PATH, `poppler` the real pdftotext, and each skips when it is absent."""
+def isolated_env(request: pytest.FixtureRequest, tmp_path: Path, fake_bin: Path, par_cache: Path) -> Iterator[Path]:
+    """Isolate PATH, HOME, XDG_CONFIG_HOME, XDG_DATA_HOME, every TeX tree, every LOOM_* variable but the tier gates and every agent marker; yield the temporary HOME. `tex` puts the real TeX first on PATH, `poppler` the real pdftotext, and each skips when it is absent.
+
+    The isolation is a `MonkeyPatch` of its own, undone after the test's: a test's `monkeypatch.undo()` takes back only what the test patched, so no test ever runs on in the shell's own HOME or with the markers of an agent that runs the suite.
+    """
+    monkeypatch = pytest.MonkeyPatch()
     assert not str(tmp_path.resolve()).startswith(str(NOTES)), "tests must never run under ~/notes"
     home = tmp_path / "home"
     (home / ".config").mkdir(parents=True)
@@ -142,9 +145,17 @@ def isolated_env(
         monkeypatch.delenv(var, raising=False)
     # a command slow enough to show progress depends on how busy the machine is, and a test reads what the command said; the `progress` fixture lets it through
     monkeypatch.setenv("LOOM_PROGRESS", "off")
+    if not request.node.get_closest_marker("tex"):
+        # the shim TeX is a Python script in the test's temporary folder, which the fence lets no compile read; the TeX tier, with real TeX, runs fenced
+        monkeypatch.setenv("LOOM_FENCE", "off")
     monkeypatch.setenv("FAKE_TEX_LOG", str(tmp_path / "fake-tex.log"))
     monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(home / ".gitconfig-none"))
     monkeypatch.setenv("GIT_CONFIG_NOSYSTEM", "1")
+    # the Overleaf mirror's credential helper: a file in the test's own folder stands in for the macOS Keychain, which no test reaches
+    monkeypatch.setattr("loom.overleaf.HELPER", f"store --file={tmp_path / 'keychain-stand-in'}")
+    # Overleaf's git stands in as a folder of bare repositories, one a project id, which a test's server may serve instead
+    monkeypatch.setattr("loom.overleaf.BASE", str(tmp_path / "overleaf-projects"))
+    monkeypatch.setattr("loom.overleaf.PROTOCOLS", ("https", "http", "file"))
     if not request.node.get_closest_marker("network"):
         monkeypatch.setattr(socket.socket, "connect", _loopback_only(socket.socket.connect))
     # a fresh shim's first run waits on macOS for the system's check of a new executable, which a parallel suite can make longer than doctor's timeout; the hang test sets its own
@@ -154,7 +165,10 @@ def isolated_env(
 
     expand._FOUND.clear()
     expand._MISSING.clear()
-    return home
+    try:
+        yield home
+    finally:
+        monkeypatch.undo()
 
 
 @pytest.fixture

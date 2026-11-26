@@ -6,7 +6,7 @@
 	import WorkHead from './WorkHead.svelte';
 	import WorkOutline from './WorkOutline.svelte';
 
-	const FILTERS: Filter[] = ['all', 'used', 'unchecked', 'nodoc'];
+	const FILTERS: Filter[] = ['all', 'used', 'nodoc'];
 	const work = $derived(lib.tab !== 'works' && lib.work.value?.ref === lib.tab ? lib.work.value : null);
 </script>
 
@@ -14,7 +14,7 @@
 	{#if lib.tab === 'works'}
 		<nav class="navl" aria-label={words.column.filtersLabel}>
 			{#each FILTERS as f (f)}
-				<button type="button" class:on={lib.filter === f} aria-current={lib.filter === f ? 'true' : undefined} onclick={() => (lib.filter = f)} data-testid="filter-{f}">{words.column.filters[f]}</button>
+				<button type="button" class:on={lib.filter === f} aria-current={lib.filter === f ? 'true' : undefined} onclick={() => (lib.filter = f)} data-testid="filter-{f}" title={words.column.filters[f]}><span class="t">{words.column.filters[f]}</span></button>
 			{/each}
 		</nav>
 	{:else if work}
@@ -49,6 +49,16 @@
 		background: none;
 		color: var(--ink);
 		cursor: pointer;
+	}
+	/* a filter is one line whatever the font and the column's width, its words ending in an ellipsis before they wrap */
+	.navl button {
+		min-width: 0;
+	}
+	.t {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 	.navl button:hover {
 		background: var(--ann-neutral-wash);

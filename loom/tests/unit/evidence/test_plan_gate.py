@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from loom.evidence.acts import attest_refusal
+from loom.evidence.acts import attest_refusal, unreadable
 from loom.evidence.log import Evidence, log_path, parse, replay
 from loom.evidence.plan import STATED, Item, Need, asked, asked_of, elaborated, needed, plan, target_need
 from loom.evidence.status import Status, closure_now, needs, statements_of, status
@@ -22,6 +22,8 @@ from loom.library.node import Node, node_bytes
 from loom.library.store import folder
 
 REF = "tq-00RF-ref"
+#: A work loom holds only as an entry, with no document to read or compare its results with.
+BARE = "tq-00RB-ref"
 T = Here("block", "T")
 LABEL = "t:main"
 
@@ -85,10 +87,13 @@ class World:
 
     def __init__(self, root: Path, seed: int) -> None:
         self.root, self.rng = root, random.Random(seed)
+        #: How many corrections Review offered to take, each tried, and how many it showed with their take refused (`_offered`).
+        self.takes = self.untakeable = 0
         self.lines: list[dict[str, Any]] = []
         nodes = folder(root)
         nodes.mkdir(parents=True)
         (nodes / f"{REF}.node").write_bytes(node_bytes(Node(id=REF, taxon="reference", pdf=h("9"), body="@article{R,\n  title = {R},\n}\n")))  # fmt: skip
+        (nodes / f"{BARE}.node").write_bytes(node_bytes(Node(id=BARE, taxon="reference", body="@article{B,\n  title = {B},\n}\n")))  # fmt: skip
         self.ids = [f"tq-000{i}" for i in range(self.rng.randint(2, 6))]
         self.cites: list[str] = []
         #: a node whose own Lean uses the target's, so the target's, resting on it, comes round
@@ -98,12 +103,16 @@ class World:
             uses = tuple(x for x in self.ids[:i] if self.rng.random() < 0.35)
             stub = self.rng.random() < 0.2
             taxon = "definition" if self.rng.random() < 0.35 else "lemma"
-            self.write(Node(id=n, taxon=taxon, source=REF, pages="1", uses=uses, body="" if stub else f"Text of {n}."))
+            # most of a work with its document, some of a work with none, a few naming no work
+            r = self.rng.random()
+            source = REF if r < 0.8 else BARE if r < 0.9 else None
+            self.write(Node(id=n, taxon=taxon, source=source, pages="1" if source else None, uses=uses, body="" if stub else f"Text of {n}."))  # fmt: skip
         changed = []
         for n in self.ids:
             node, s = self.nodes[n], self.web().subject(Here("node", n))
             assert s is not None
-            if not node.empty and self.rng.random() < 0.6:
+            # compared only where `check` takes it: a node of a work with its document
+            if not node.empty and node.source == REF and self.rng.random() < 0.6:
                 self.compare(n)
             # a node over a stub has no Lean here: reading the stub would change what its attestation names
             over_stub = any(self.nodes[k].empty for _, k in self.web().closure(Here("node", n)))
@@ -116,7 +125,12 @@ class World:
                     if self.rng.random() < 0.25:
                         changed.append(n)
         for n in changed:
-            self.write(Node(**{**self.nodes[n].__dict__, "pages": "2"}))
+            # its pages for a node of a work, its words for one that names none, which can have no pages
+            node = self.nodes[n]
+            self.write(
+                Node(**{**node.__dict__, **({"pages": "2"} if node.source else {"body": node.body + " Changed."})})
+            )
+        self.propose_some(changed)
         self.statement = [x for x in self.ids if self.rng.random() < 0.4]
         self.proof = [x for x in self.ids if x not in self.statement and self.rng.random() < 0.4]
         self.cites = ["R Theorem 2"] if self.rng.random() < 0.1 else []
@@ -147,6 +161,23 @@ class World:
         with path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(line) + "\n")
         return line
+
+    def propose_some(self, changed: list[str]) -> None:
+        """An agent's corrections against some nodes compared on their text now, of each kind: a good one, one of no text, one whose pages are only white space, one moving the node to a work with no document; whatever `take` would refuse `propose` refuses (E-53), and the rest are filed for the person."""
+        from loom.evidence import acts
+
+        evidence = self.evidence()
+        for n in self.ids:
+            node, s = self.nodes[n], self.web().subject(Here("node", n))
+            compared = s is not None and any(r.on is not None and r.on.hash == s.hash for r in evidence.about("node", n, of="compared"))  # fmt: skip
+            if n in changed or node.empty or not compared or self.rng.random() > 0.4:
+                continue
+            kind = self.rng.choice(["good", "no-text", "white-pages", "no-document"])
+            change = {"good": {"body": node.body + " Corrected."}, "no-text": {"body": "   \n"}, "white-pages": {"pages": " "}, "no-document": {"source": BARE}}[kind]  # fmt: skip
+            try:
+                acts.propose(self.root, n, node_bytes(Node(**{**node.__dict__, **change})), READER, "page 1")
+            except acts.ActRefused:
+                assert kind != "good", n
 
     def compare(self, n: str) -> None:
         s = self.web().subject(Here("node", n))
@@ -213,8 +244,11 @@ class World:
                 found = standing[key[1]]
                 return key[1], found, elaborated(ev, found, now), refusal(Here("node", key[1]))
 
-            mine = target_need("T", self.status("T"), elaborated(ev, self.status("T"), now), refusal(T), web.texts)
-            return mine + [n for n in needed(leaves, own, web.texts) if n not in mine]
+            def paper(node: str) -> str | None:
+                return unreadable(self.root, node)
+
+            mine = target_need("T", self.status("T"), elaborated(ev, self.status("T"), now), refusal(T), web.texts, paper)  # fmt: skip
+            return mine + [n for n in needed(leaves, own, web.texts, paper) if n not in mine]
 
         self.found = plan(["T"], [], item, uses, before)
         return self.found.before
@@ -223,6 +257,9 @@ class World:
         """Do one entry as the list says: the person's now, the agent's after (a Lean written, which the person attests in a later round)."""
         if need.why == "missing":
             self.write(self.nodes[need.key])
+        elif need.why == "no-document":
+            # the work's document filed under it, as the library's intake files it
+            (folder(self.root) / f"{BARE}.node").write_bytes(node_bytes(Node(id=BARE, taxon="reference", pdf=h("9"), body="@article{B,\n  title = {B},\n}\n")))  # fmt: skip
         elif need.why == "not-read":
             self.write(Node(**{**self.nodes[need.key].__dict__, "body": f"Text of {need.key}."}))
             self.compare(need.key)
@@ -282,7 +319,7 @@ def test_what_the_plan_names_before_is_what_the_gate_asks_both_ways(seeds: range
         world, rounds, left, after = _done(tmp_path / f"{seed}", seed, None)
         # the list names something exactly while the gate keeps the target from reading formalized
         assert (left == []) == (after.lean == "formalized"), (seed, left, after.waiting_on)
-        if not world.cites and world.round is None:
+        if not world.cites and world.round is None and all(n.source for n in world.nodes.values()):
             assert after.lean == "formalized", (seed, rounds, left, after.waiting_on)
         for need in [*left, *(n for r in rounds for n in r)]:
             seen[need.why] = seen.get(need.why, 0) + 1
@@ -292,7 +329,9 @@ def test_what_the_plan_names_before_is_what_the_gate_asks_both_ways(seeds: range
             _, _, left, without = _done(tmp_path / f"{seed}-skip", seed, skip)
             assert without.lean != "formalized" and left, (seed, rounds[last][skip[1]])
     # every kind of thing the random libraries can ask is asked somewhere
-    assert {"missing", "not-read", "not-checked", "cite", "attest", "cycle"} <= set(seen), seen
+    assert {"missing", "not-read", "not-checked", "no-document", "no-source", "cite", "attest", "cycle"} <= set(seen), (
+        seen
+    )
 
 
 #: The person, and the agent that reads a stub, as the acts take them.
@@ -301,11 +340,22 @@ READER = Who("agent", "Reader (Agent)")
 
 
 def _act(world: World, need: Need) -> None:
-    """The act an entry offered `now` names, through the function its endpoint calls: compare a node (`library-check`), attest a Lean (`formal-attest`), have an agent read a stub (its text written and recorded `digested`, as the node store's fill will); a node deleted is put back as the library's undo puts it."""
+    """The act an entry offered `now` names, through the function its endpoint calls: compare a node (`library-check`), attest a Lean (`formal-attest`), file its work's document under the work (`library-take`, `intake.take`), have an agent read a stub (its text written and recorded `digested`, as the node store's fill will); a node deleted is put back as the library's undo puts it."""
     from loom.evidence import acts
 
     if need.why == "missing":
         world.write(world.nodes[need.key])
+        return
+    if need.why == "no-document":
+        from loom.library import intake
+
+        node = world.nodes[need.key]
+        assert node.source is not None, need
+        pdf = world.root / "dropped.pdf"
+        pdf.write_bytes(b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n")
+        [row] = intake.take(world.root, [intake.Item(path=pdf, work=node.source, force=True)], by="A. Author")
+        # another node of the same work may have had it filed already this round
+        assert row.state in ("added", "here"), (need, row)
         return
     if need.why == "not-read":
         # an agent reads it: the text written as the node store's fill writes it, and recorded through the one writer of these records
@@ -340,6 +390,19 @@ def _as_made(world: World, need: Need, at: Path) -> None:
         shutil.rmtree(at)
 
 
+def _take_as_made(world: World, proposal: str, at: Path) -> None:
+    """The person takes an agent's correction (`library-correction-take`) on a copy of the quilt as it is."""
+    import shutil
+
+    from loom.evidence import acts
+
+    shutil.copytree(world.root, at)
+    try:
+        acts.take(at, proposal, PERSON)
+    finally:
+        shutil.rmtree(at)
+
+
 def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]:
     """The library made from `seed`, worked as the list says: each round, every entry offered `now` tried through its act on the quilt as the list was made, then all done in the panel's order, the agent's `after` work done when nothing is offered now. Each entry whose act loom refused, with why, and how many acts the order of one round alone made refused."""
     from loom.evidence.acts import ActRefused
@@ -360,6 +423,19 @@ def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]
                 _as_made(world, need, root.parent / f"{root.name}-{i}-{j}")
             except ActRefused as exc:
                 refused.append((need, f"{exc.code}: {exc}"))
+        # each correction Review's check rows offer the person to take, taken on the quilt as it is; one whose row says the take is refused now (`acts.take_refusal`) is offered to decline alone
+        from loom.evidence.acts import take_refusal
+
+        for n in [x for x in world.ids if x in world.nodes]:
+            proposal = world.status(n).proposal
+            if proposal is not None and take_refusal(world.root, proposal) is not None:
+                world.untakeable += 1
+            elif proposal is not None:
+                world.takes += 1
+                try:
+                    _take_as_made(world, proposal, root.parent / f"{root.name}-{i}-take-{n}")
+                except ActRefused as exc:
+                    refused.append((Need(n, "take", "now"), f"{exc.code}: {exc}"))
         if refused:
             break
         for need in now:
@@ -372,12 +448,13 @@ def _offered(root: Path, seed: int) -> tuple[World, list[tuple[Need, str]], int]
 
 @pytest.mark.parametrize("seeds", [range(0, 150), range(150, 300)], ids=str)
 def test_every_entry_offered_now_is_an_act_loom_takes(seeds: range, tmp_path: Path) -> None:
-    """With the list empty exactly when the target reads formalized, this makes the list and the acts unable to disagree: what the list offers the person now, loom takes, on the quilt as the list was made."""
-    done = 0
+    """With the list empty exactly when the target reads formalized, this makes the lists and the acts unable to disagree: what the formalize list offers the person now, and each correction Review's check rows offer to take, loom takes, on the quilt as it was offered."""
+    done, takes = 0, 0
     for seed in seeds:
         world, refused, _ = _offered(tmp_path / f"{seed}", seed)
         assert refused == [], (seed, refused)
         left, after = world.plan(), world.status("T")
         assert (left == []) == (after.lean == "formalized"), (seed, left, after.waiting_on)
         done += after.lean == "formalized"
-    assert done > len(seeds) // 2
+        takes += world.takes
+    assert done > len(seeds) // 2 and takes > 0

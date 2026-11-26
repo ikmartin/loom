@@ -1,4 +1,4 @@
-// Review's words: its column (the kinds, their counts' hover cards, the drafts, the Record line), the list and its groups, each kind's row and body, the tasks waiting for an agent, and what the column's message says after an act. An entry is named for the place it shows, with a comment saying where, on one line.
+// Review's words: its column (the kinds, their counts' hover cards, the drafts, the History line), the list and its groups, each kind's row and body, the tasks waiting for an agent, and what the column's message says after an act. An entry is named for the place it shows, with a comment saying where, on one line.
 
 import type { ReviewKind } from '$lib/library/types';
 
@@ -23,9 +23,9 @@ export const review = {
 		drafts: 'Drafts',
 		/** Hover card on Drafts. */
 		draftsHover: 'Show only what concerns one draft.',
-		/** The quiet line at the column's foot that opens the Record inside Review. */
-		record: 'Record',
-		/** Hover card on Record. */
+		/** The quiet line at the column's foot that opens History inside Review. */
+		record: 'History',
+		/** Hover card on History. */
 		recordHover: 'Every version of your documents loom kept, the sessions agents worked in, and everything done in this quilt.',
 		/** Hover card on a collaborator's pull, under the kinds. */
 		pullHover: "A collaborator's changes to your project, fetched for you to read and take in whole, or not.",
@@ -34,16 +34,15 @@ export const review = {
 	},
 	/** The kinds' names, in the column and over their groups in the list, and the hover card on each in the column. */
 	kinds: {
-		'accepted-changed': { name: 'Accepted results that changed', hover: 'Results you had accepted whose text has changed since, and those taken in from a copy or a pull. Read each, and accept it or not; those never accepted are folded beneath.' },
+		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or a pull. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
-		'attested-changed': { name: 'Attested results that changed', hover: 'Results whose statement, or a definition under it, changed after you attested the Lean. Say whether the Lean still states it.' },
-		cited: { name: 'Cited results to digest', hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
-		check: { name: 'Digested results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
-		attest: { name: 'Lean statements to attest', hover: "Lean has accepted these. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
-		fetch: { name: 'Papers to fetch', hover: 'Papers an agent needs and could not download. Open each page, download the paper, and drop the file anywhere in loom.' },
+		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
+		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
+		attest: { name: 'Lean statements to attest', hover: "Results whose statement, or a definition under it, changed since you attested the Lean come first: say whether the Lean still states each. Then those Lean has accepted that you never attested. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
+		fetch: { name: 'Papers to add', hover: 'Papers an agent needs and could not download. Open each page, download the paper, and drop the file anywhere in loom.' },
 		edits: { name: 'Proposed edits', hover: "Changes waiting in your text, and agents' copies to take in. Keep or discard each." },
-		agents: { name: 'Waiting for an agent', hover: 'Work you asked of an agent that none has finished. Nothing here needs you.' }
-	} satisfies Record<ReviewKind | 'agents', { name: string; hover: string }>,
+		agents: { name: 'Agents still working', hover: 'Work you asked of an agent that none has finished. Nothing here needs you.' }
+	} satisfies Record<Exclude<ReviewKind, 'attested-changed'> | 'agents', { name: string; hover: string }>,
 	list: {
 		/** The list where a kind, or a kind for one draft, has nothing waiting. */
 		empty: 'Nothing waits here.',
@@ -93,9 +92,9 @@ export const review = {
 		/** A cited result's quiet line once the person marked its place. */
 		marked: 'marked by you',
 		/** The column's message after asking for one. */
-		asked: 'Asked an agent to read it. It comes back under Digested results to check.',
+		asked: 'Asked an agent to read it. It comes back under Results to check.',
 		/** The column's message after asking for all. */
-		askedAll: 'Asked an agent to read them. They wait under Waiting for an agent, and come back under Digested results to check.',
+		askedAll: 'Asked an agent to read them. They wait under Agents still working, and come back under Results to check.',
 		/** Over the sentence of a draft that cites the result. */
 		citesHere: (where: string) => `${where} cites it here`,
 		/** The find bar's field, its accessible name. */
@@ -326,6 +325,17 @@ export const review = {
 		accepted: 'Accepted.'
 	},
 	yours: {
+		/** Under a block waiting to be accepted that cannot be yet, why, by loom's code (`refusal_code`); an older publisher sends none. */
+		cannot: (code?: string) =>
+			({
+				'not-yours': "Can't be accepted: it is not in your documents.",
+				incomplete: "Can't be accepted yet: it is marked incomplete.",
+				'open-claim': "Can't be accepted: it is a conjecture or a question, which is not accepted.",
+				unclassified: "Can't be accepted yet: loom cannot tell whether it is proved here, cited, or assumed.",
+				unidentified: "Can't be accepted yet: something it rests on cannot be identified."
+			})[code ?? ''] ?? "Can't be accepted yet.",
+		/** The same for a block marked incomplete with notes, before the person's own notes on it. */
+		cannotNoted: "Can't be accepted yet: it is marked incomplete:",
 		/** Under Proposed edits, the tag on an agent's copy waiting to be taken in. */
 		copy: "an agent's copy",
 		/** Beside a copy's name: the draft it would change. */
@@ -334,14 +344,30 @@ export const review = {
 		openCopy: 'Review the copy',
 		/** Over a copy opened from Proposed edits: back to the list. */
 		back: '‹ Proposed edits',
-		/** Under Accepted results that changed, narrowed to a draft with no blocks to accept. */
+		/** Under Results to accept, narrowed to a draft with no blocks to accept. */
 		none: (doc: string) => `Nothing of ${file(doc)} waits to be accepted.`,
-		/** Under Accepted results that changed, over every draft's folded blocks, when none waits. */
+		/** Under Results to accept, over every draft's folded blocks, when none waits. */
 		nothing: 'Nothing waits to be accepted.'
 	},
 	statement: {
 		/** In place of a statement whose rendering could not be read. */
 		missing: 'This text could not be read.'
+	},
+	/** Notes said once over a section (`SaidOnce`). */
+	once: {
+		/** Its close button. */
+		close: 'Close this note',
+		/** Over Proposed edits: what the list holds, since when, the places it never watches, and how far a deny holds for the apps set up here (`holds`, loom's sentence in the person's words, as Settings › Agents says it). */
+		watched: (when: string, carried: string, unwatched: string[], holds: string) =>
+			[
+				`Here wait agents' suggestions, and every edit made in the places agents may edit since your look${when ? ` of ${when}` : ''}${carried ? `, carried over from ${carried}'s` : ''}.`,
+				unwatched.length ? `Your own places are not watched, so an edit there is never listed: ${unwatched.join(', ')}.` : '',
+				holds
+			]
+				.filter(Boolean)
+				.join(' '),
+		/** Under the bar that names the reviewer, where the name is git's. */
+		nameFromGit: (name: string) => `You review as ${name}, the name git gives, and your look and acceptances are kept under it. Set your own name in Settings › Profile.`
 	},
 	seeIt: {
 		/** Under a row's text: lays its document over Review, at the result. */

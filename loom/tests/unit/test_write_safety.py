@@ -18,7 +18,7 @@ import pytest
 import loom
 
 QUILTS = Path(loom.__file__).resolve().parents[2] / "tests" / "quilts"
-AGENT = "Agent Smith"
+AGENT = "Smith Agent"
 WORDS = "orbit group action finite widget lemma bound measure compact dense closed map kernel image quotient series limit converges uniformly hence suppose every exists integral norm space basis linear operator".split()
 
 
@@ -27,7 +27,7 @@ WORDS = "orbit group action finite widget lemma bound measure compact dense clos
 
 @pytest.fixture
 def q(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """A copy of the synthetic quilt, edits tracked, with a Markdown task list; the person is `Pat`, and no agent marker is set."""
+    """A copy of the synthetic quilt with a Markdown task list; the person is `Pat`, and no agent marker is set."""
     return synthetic(tmp_path, monkeypatch)
 
 
@@ -44,14 +44,10 @@ def synthetic(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     (root / "tasks.md").write_text(
         "# Tasks\n\n- [ ] read the first proof again\n- [x] write the second answer\n", encoding="utf-8"
     )
-    from loom.config_edit import set_values
+    from loom.looks import take
     from loom.scan.quilt import load_quilt
 
-    try:
-        set_values(load_quilt(root), {"review.track_edits": True})
-    except Exception:  # noqa: BLE001 -- a loom from before edit tracking refuses the table
-        pass
-    call(root, "change-keep", {"all": True})  # the first look
+    take(load_quilt(root), "Pat")  # the first look, the quilt's suggested edits left open
     return root
 
 

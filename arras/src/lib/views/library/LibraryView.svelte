@@ -37,10 +37,10 @@
 
 <main class="lv" data-testid="library-view">
 	<div class="tabs" role="tablist">
-		<button type="button" class="tab pin" class:on={lib.tab === 'works'} role="tab" aria-selected={lib.tab === 'works'} data-testid="library-tab-works" onclick={() => lib.show('works')}>{words.tabs.works}</button>
+		<button type="button" class="tab doc-tab pin" class:on={lib.tab === 'works'} role="tab" aria-selected={lib.tab === 'works'} title={words.tabs.works} data-testid="library-tab-works" onclick={() => lib.show('works')}><span class="name">{words.tabs.works}</span></button>
 		{#each lib.open as ref (ref)}
 			{@const w = byRef.get(ref)}
-			<div class="tab" class:on={lib.tab === ref} role="tab" tabindex="-1" aria-selected={lib.tab === ref} title={w?.title} data-testid="library-tab">
+			<div class="tab doc-tab" class:on={lib.tab === ref} role="tab" tabindex="-1" aria-selected={lib.tab === ref} title={w?.title} data-testid="library-tab">
 				<button type="button" class="linkish name" onclick={() => lib.show(ref)}>{w?.short ?? ''}</button>
 				<button type="button" class="ib x" title={words.tabs.close} aria-label={words.tabs.close} onclick={() => lib.closeWork(ref)}><Icon name="close" size={16} /></button>
 			</div>
@@ -54,7 +54,14 @@
 </main>
 
 <style>
+	/* the title is cut with an ellipsis where the tab is narrower than it; the tab's hover text gives it whole */
 	.name {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		text-align: left;
 		color: inherit;
 	}
 	.name:hover {

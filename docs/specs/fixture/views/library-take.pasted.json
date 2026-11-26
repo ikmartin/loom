@@ -1,6 +1,6 @@
 {
  "answer": {
-  "gen": 1789808400003,
+  "gen": 1789808400004,
   "ok": true,
   "result": "took in 2: 2 added",
   "rows": [
@@ -12,7 +12,7 @@
     "identifier": "arxiv:2311.04567",
     "item": 0,
     "name": "2311.04567",
-    "ref": "sh-0409-ref",
+    "ref": "sh-040H-ref",
     "short": "2311.04567",
     "state": "added",
     "tex": false,
@@ -29,7 +29,7 @@
     "identifier": "doi:10.1000/example.2020.7",
     "item": 0,
     "name": "10.1000/example.2020.7",
-    "ref": "sh-040A-ref",
+    "ref": "sh-040I-ref",
     "short": "10.1000/example.2020.7",
     "state": "added",
     "tex": false,

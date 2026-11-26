@@ -1,0 +1,34 @@
+{
+ "answer": {
+  "authors": [
+   "Cortez"
+  ],
+  "entry": "@article{Cortez07,\n  author = {Cortez, Hilario},\n  title = {Flows on infinite quivers: a survey},\n  journal = {Bull. Imag. Soc.},\n  year = {2007},\n  pages = {1--44},\n}\n",
+  "gen": 1789808400000,
+  "holds": {
+   "pages": null,
+   "pdf": null,
+   "tex": false
+  },
+  "link": null,
+  "marks": [],
+  "ok": true,
+  "outline": {
+   "from": null,
+   "items": [],
+   "sections": [],
+   "state": "ready",
+   "why": null
+  },
+  "ref": "sh-0404-ref",
+  "result": "read",
+  "short": "Cortez 2007",
+  "title": "Flows on infinite quivers: a survey",
+  "unplaced": [],
+  "year": "2007"
+ },
+ "endpoint": "library-work",
+ "request": {
+  "ref": "sh-0404-ref"
+ }
+}

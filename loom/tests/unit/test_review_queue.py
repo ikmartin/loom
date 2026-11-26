@@ -86,6 +86,11 @@ def test_an_agent_copys_blocks_are_not_the_persons_to_accept(root: Path) -> None
 def test_a_block_loom_cannot_accept_says_why(root: Path) -> None:
     rows = _rows(root)
     assert rows["sy-000B"]["refusal"] == "Its basis is not said; a % !LOOM basis: line inside it says it."
+    # the viewer words the reason by its code, and an incomplete block's notes as the person wrote them
+    assert (rows["sy-000B"]["refusal_code"], rows["sy-000B"]["incomplete"]) == ("unclassified", [])
+    assert rows["sy-000C/proof"]["refusal_code"] == "incomplete"
+    assert rows["sy-000C/proof"]["incomplete"][0].startswith("Show that there are no fixed points")
+    assert (rows["sy-0001"]["refusal_code"], rows["sy-0001"]["incomplete"]) == ("", [])
     assert rows["sy-000C/proof"]["refusal"].startswith("It is marked incomplete: Show that there are no fixed points")
     assert not rows["sy-000C/proof"]["refusal"].endswith("..")
     assert rows["sy-0001"]["refusal"] == ""
@@ -107,9 +112,8 @@ def test_accepting_a_block_keeps_its_edit_and_keeping_one_accepts_nothing(root: 
     from loom.looks import changes, take
     from loom.pending import in_place, keep
     from loom.scan.scan import scan
-    from tests.unit._quilts import track_edits
 
-    quilt = load_quilt(track_edits(root))
+    quilt = load_quilt(root)
     take(quilt, REVIEWER)
     _edit(root)
     assert [c.path for c in changes(quilt, REVIEWER)] == ["drafting/main.tex"]

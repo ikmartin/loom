@@ -1,0 +1,34 @@
+{
+ "answer": {
+  "authors": [
+   "Bellamy"
+  ],
+  "entry": "@article{Bellamy19,\n  author = {Bellamy, Rosalind},\n  title = {Median orders on weighted digraphs},\n  journal = {Ann. Fict. Math.},\n  volume = {19},\n  year = {2019},\n  pages = {203--241},\n  doi = {10.4171/showcase/19-2},\n}\n",
+  "gen": 1789808400000,
+  "holds": {
+   "pages": 3,
+   "pdf": "sha256:e16ea0a74da711cddafcb5a49851aeb5e78f16f22ea7ee1a1fa2a0b9acb80d45",
+   "tex": false
+  },
+  "link": "https://doi.org/10.4171/showcase/19-2",
+  "marks": [],
+  "ok": true,
+  "outline": {
+   "from": "pdf",
+   "items": [],
+   "sections": [],
+   "state": "ready",
+   "why": null
+  },
+  "ref": "sh-0403-ref",
+  "result": "read",
+  "short": "Bellamy 2019",
+  "title": "Median orders on weighted digraphs",
+  "unplaced": [],
+  "year": "2019"
+ },
+ "endpoint": "library-work",
+ "request": {
+  "ref": "sh-0403-ref"
+ }
+}

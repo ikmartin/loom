@@ -4,12 +4,29 @@ import { SvelteSet } from 'svelte/reactivity';
 import * as api from '$lib/library/api';
 import { Read } from '$lib/library/read.svelte';
 import type { ReviewCounts, ReviewKind, ReviewList } from '$lib/library/types';
+import type { ShownKind } from './rows';
 
-/** The kinds as the column lists them: alphabetically by their names. */
-export const COLUMN_ORDER: ReviewKind[] = ['accepted-changed', 'questions', 'attested-changed', 'cited', 'check', 'attest', 'fetch', 'edits'];
+/** The kinds as the column lists them: alphabetically by their names. Lean statements to attest holds the attested results that changed too (`joined`). */
+export const COLUMN_ORDER: Exclude<ShownKind, 'agents'>[] = ['questions', 'cited', 'attest', 'fetch', 'edits', 'accepted-changed', 'check'];
 
 /** The groups' order under Everything, by who waits, as `review-list` answers them; the two kinds today's Your Changes draws take their places in it. */
-export const RANK: (ReviewKind | 'agents')[] = ['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'attested-changed', 'edits', 'agents'];
+export const RANK: ShownKind[] = ['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'edits', 'agents'];
+
+/** The kinds of loom's that one entry of the column reads, in the order its list shows them. */
+export const READS: Partial<Record<ReviewKind, ReviewKind[]>> = { attest: ['attested-changed', 'attest'] };
+
+/** `review-list` for what the list shows: one kind, or the kinds one entry of the column reads (`READS`) as one answer, each asked whole. */
+export async function readList(kind: ReviewKind | 'all' | 'agents', doc?: string, s?: number): Promise<api.Answer<ReviewList>> {
+	const kinds = kind === 'all' || kind === 'agents' ? undefined : READS[kind];
+	if (!kinds) return api.reviewList(kind, doc, s);
+	const answers = await Promise.all(kinds.map((k) => api.reviewList(k, doc)));
+	const values: ReviewList[] = [];
+	for (const a of answers) {
+		if (!a.ok) return a;
+		values.push(a.value);
+	}
+	return { ok: true, value: { gen: Math.max(...values.map((v) => v.gen)), groups: values.flatMap((v) => v.groups) } };
+}
 
 class ReviewState {
 	/** What the list shows: everything, one kind, the tasks waiting for an agent, or a collaborator's pull. */

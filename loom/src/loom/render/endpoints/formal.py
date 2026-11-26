@@ -6,10 +6,10 @@ from pathlib import Path
 from typing import Any
 
 from loom.render.endpoints.base import ApiError, Handler, _scan, _str, plain
-from loom.render.endpoints.review import _as, _person
+from loom.render.endpoints.review import _as, _person, one_block
 
 #: The status each refusal of an act answers with; any other is 409.
-_STATUS = {"author-only": 403, "agent-only": 403, "no-such-result": 404, "no-such-node": 404, "no-such-proposal": 404, "refused": 400}  # fmt: skip
+_STATUS = {"author-only": 403, "agent-only": 403, "no-such-result": 404, "no-such-node": 404, "no-such-proposal": 404, "no-such-citation": 404, "refused": 400}  # fmt: skip
 
 
 def refusal(exc: Any) -> ApiError:
@@ -26,15 +26,13 @@ def webs(root: Path) -> tuple[Any, Any]:
 
 
 def here_of(drafts: Any, result: str) -> Any:
-    """Where a result is, by what a row names it with: a draft's block by its key, which is asked first since it has the shape of a node's id, else a node by its id; `no-such-result` (404) otherwise."""
+    """Where a result is, by what a row names it with: a draft's block by its key, as the records resolve one, its place key too (`review.one_block`), which is asked first since it has the shape of a node's id, else a node by its id; `no-such-result` (404) otherwise, `ambiguous` (409) for a label naming several blocks."""
     from loom.evidence.subjects import is_node
-    from loom.evidence.web import Here
+    from loom.evidence.web import Here, blocks_named
 
-    if any(n.key == result for n in drafts.blocks):
-        return Here("block", result)
-    if is_node(result):
-        return Here("node", result)
-    raise ApiError("no-such-result", f"{result} is no result of this quilt; reload", status=404)
+    if blocks_named(drafts.result, result) or not is_node(result):
+        return Here("block", one_block(drafts.result, result).key)
+    return Here("node", result)
 
 
 def _formal_attest(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -68,6 +66,7 @@ class _Planner:
         except (OSError, ValueError):
             manifest = {}
         self.manifest: dict[str, Any] = manifest
+        self.root = root
         self.drafts = drafts(_scan(root), manifest, root)
         self.library = LibraryWeb(root)
         self.web = Joined(self.drafts.web, self.library)
@@ -116,7 +115,7 @@ class _Planner:
 
     def before(self, target: str, found: Any) -> list[Any]:
         """What stands before `target` reads formalized, from the gate's own needs (`plan.asked_of`) of its Lean, or of the Lean the request will make (`plan.asked`, `status.needs`), each as the person reads it (`plan.needed`), the target's own Lean first."""
-        from loom.evidence.acts import attest_refusal
+        from loom.evidence.acts import attest_refusal, unreadable
         from loom.evidence.plan import asked, asked_of, needed, target_need
         from loom.evidence.status import Waiting, needs
         from loom.evidence.web import Here
@@ -149,16 +148,21 @@ class _Planner:
             return there.name, standing, self.elaborated(standing), refusal(there)
 
         standing = self.drafts.standing(target)
-        mine = target_need(target, standing, self.elaborated(standing), refusal(here), self.web.texts)
-        return mine + [n for n in needed(leaves, own, self.web.texts) if n not in mine]
+
+        def paper(node: str) -> str | None:
+            return unreadable(self.root, node)
+
+        mine = target_need(target, standing, self.elaborated(standing), refusal(here), self.web.texts, paper)
+        return mine + [n for n in needed(leaves, own, self.web.texts, paper) if n not in mine]
 
     def row(self, key: str) -> dict[str, Any]:
         from loom.evidence.webview import node_row
 
         if self.drafts.node(key) is not None:
-            return self.drafts.row(key)
+            # a result of the person's carries its statement's fragment, which the panel shows a click away
+            return {**self.drafts.row(key), "fragment": self.manifest.get("nodes", {}).get(key, {}).get("fragment")}
         held = self.library.file(key)
-        return node_row(key, self._node(key), held[1] if held else None)
+        return node_row(key, self._node(key), held[1] if held else None, self.library)
 
     def entry(self, need: Any) -> dict[str, Any]:
         """One thing standing before, as `before` sends it: a result's row, a citation's `{cite}`, a label's `{label, results}` with a row for each block bearing it, or a node the library holds no result by, `{node}`."""
@@ -188,17 +192,24 @@ def _results(body: dict[str, Any], name: str, *, required: bool) -> list[str]:
 def _planned(root: Path, body: dict[str, Any]) -> tuple[_Planner, list[str], list[str]]:
     """The planner for one read, the targets and the results chosen assumed for now; a target that is no result of the person's documents is `no-such-result` (404)."""
     planner = _Planner(root)
-    targets = _results(body, "targets", required=True)
-    assume = _results(body, "assume", required=False)
+    # each key as the records resolve one, a place key as well as a label key
+    targets = [_drafts_key(planner, k) for k in _results(body, "targets", required=True)]
+    assume = [_drafts_key(planner, k) if not planner.drafts.is_library(k) else k for k in _results(body, "assume", required=False)]  # fmt: skip
     for key in targets:
         if planner.drafts.node(key) is None:
             raise ApiError("no-such-result", f"{key} is no result of your documents; reload", status=404)
-    return planner, targets, assume
+    return planner, list(dict.fromkeys(targets)), list(dict.fromkeys(assume))
+
+
+def _drafts_key(planner: _Planner, key: str) -> str:
+    """A requested result's key now, as the records resolve one (`review.one_block`); `no-such-result`, `ambiguous` as it refuses."""
+    return str(one_block(planner.drafts.result, key).key)
 
 
 def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     """`formal-plan`: what asking an agent to formalize the targets comes to, and what stops it or stands before it reads formalized."""
     from loom.evidence.plan import plan
+    from loom.library.generation import generation
 
     planner, targets, assume = _planned(root, body)
     found = plan(targets, assume, planner.item, planner.uses, planner.before)
@@ -215,6 +226,7 @@ def _formal_plan(root: Path, body: dict[str, Any]) -> dict[str, Any]:
         "formalized": [row(k) for k in found.formalized],
         "stops": [row(k) for k in found.stops],
         "before": [{"why": why, "when": when, "results": results} for (why, when), results in groups.items()],
+        "gen": generation(_scan(root)),
     }
 
 

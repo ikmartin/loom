@@ -9,6 +9,37 @@
 
 	let { over }: { over: { doc: string; key: string; name: string } } = $props();
 	const master = $derived(store.manifest?.masters.find((x) => x.path === over.doc));
+
+	// It lands at the block once the document is drawn, and again each time what is drawn changes its height (a draft drawn as its source settles after it mounts, mathematics after it is set), until the reader scrolls by their own hand.
+	let box = $state<HTMLElement | null>(null);
+	let moved = false;
+	function land(): void {
+		if (moved || !box) return;
+		const at = box.querySelector<HTMLElement>(`[id="${CSS.escape(anchorId(over.key))}"]`);
+		if (at) box.scrollTop += at.getBoundingClientRect().top - box.getBoundingClientRect().top;
+	}
+	$effect(() => {
+		void over.key;
+		void master;
+		moved = false;
+		const b = box;
+		if (!b) return;
+		const grows = new ResizeObserver(() => land());
+		for (const c of b.children) grows.observe(c);
+		const own = () => (moved = true);
+		const keys = (e: KeyboardEvent) => ['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End', ' '].includes(e.key) && own();
+		b.addEventListener('wheel', own, { passive: true });
+		b.addEventListener('pointerdown', own);
+		b.addEventListener('touchstart', own, { passive: true });
+		b.addEventListener('keydown', keys);
+		return () => {
+			grows.disconnect();
+			b.removeEventListener('wheel', own);
+			b.removeEventListener('pointerdown', own);
+			b.removeEventListener('touchstart', own);
+			b.removeEventListener('keydown', keys);
+		};
+	});
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (rv.over = null)} />
@@ -19,8 +50,8 @@
 		<span class="quiet">{words.quiet([over.name ? words.seeIt.at(over.name) : '', words.seeIt.readOnly])}</span>
 		<button type="button" class="ib" title={words.seeIt.close} aria-label={words.seeIt.close} onclick={() => (rv.over = null)}><Icon name="close" size={18} /></button>
 	</header>
-	<div class="doc">
-		{#if master}<Fragment path={master.fragment} master={master.path} macroSet={master.macros ?? ''} isolatedMacros={!!master.macros} anchor={anchorId(over.key)} />{/if}
+	<div class="doc" bind:this={box} data-testid="review-over-doc">
+		{#if master}<div><Fragment path={master.fragment} master={master.path} macroSet={master.macros ?? ''} isolatedMacros={!!master.macros} anchor={anchorId(over.key)} onmounted={() => land()} /></div>{/if}
 	</div>
 </section>
 
