@@ -111,7 +111,7 @@
 		<div class="gutters-host" use:guttersHost>
 			<div class="gutters" class:beside={!!notes.side}>
 				<div class="column">
-					<Fragment path={doc.fragment} macroSet={doc.macros ?? ''} standalone anchor={item.anchor ?? ''} jump={item.seq} note={item.note} arrival={documentState(item).arrival} />
+					<Fragment path={doc.fragment} macroSet={doc.macros ?? ''} standalone anchor={item.anchor ?? ''} jump={item.seq} note={item.note} quote={item.quote} arrival={documentState(item).arrival} />
 				</div>
 			</div>
 		</div>
@@ -148,6 +148,7 @@
 									anchor={item.anchor ?? ''}
 									jump={item.seq}
 									note={item.note}
+									quote={item.quote}
 									arrival={documentState(item).arrival}
 									onmounted={fill}
 								/>{/key}

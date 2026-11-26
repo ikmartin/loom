@@ -9,7 +9,7 @@
 	import { mergeLines } from '$lib/pdf/marks';
 	import { paperPlace } from '$lib/pdf/place.svelte';
 	import QuoteChip from '$lib/review/QuoteChip.svelte';
-	import { can, write } from '$lib/write';
+	import { can, write, type WriteResult } from '$lib/write';
 	import { itemKey, type Item } from '../item';
 	import { openOutside } from '../links';
 	import { fileState, paneOf } from '../state.svelte';
@@ -28,12 +28,29 @@
 	const suffix = $derived(name.includes('.') ? name.split('.').pop()!.toLowerCase() : '');
 	const pdfPage = $derived(Number(/^page=(\d+)$/.exec(item.anchor ?? '')?.[1] ?? 1));
 	const paper = $derived(fileState(item).pdf);
-	/** Whether a link names a place on a PDF's pages: its page, or a mark on it. With none, it opens where the reader last was. */
-	const named = $derived(/^page=\d+$/.test(item.anchor ?? '') || !!item.note);
+	/** Whether a link names a place on a PDF's pages: its page, its quoted words, or a mark on it. With none, it opens where the reader last was. */
+	const named = $derived(/^page=\d+$/.test(item.anchor ?? '') || !!item.note || !!item.quote);
+	/** The words a link quotes, where loom finds them on the PDF (`locate` with `file`): lit while the link is in force, on the page given or the first that holds them. */
+	let lit = $state<{ page: number; rects: number[][] } | null>(null);
+	$effect(() => {
+		const words = item.quote;
+		const at = /^page=(\d+)$/.exec(item.anchor ?? '')?.[1];
+		if (!words || file?.kind !== 'pdf') {
+			lit = null;
+			return;
+		}
+		let dropped = false;
+		void write('locate', { file: item.id, text: words, ...(at ? { page: Number(at) } : {}) }).then((res: WriteResult & { page?: number; anchor?: { quads?: number[][] } }) => {
+			if (!dropped) lit = res.ok && res.anchor?.quads?.length ? { page: res.page ?? Number(at ?? 1), rects: res.anchor.quads } : null;
+		});
+		return () => {
+			dropped = true;
+		};
+	});
 	const place = paperPlace(
 		() => paper,
-		() => ({ seq: named ? (item.seq ?? 0) : 0, page: pdfPage }),
-		() => workspace.update(itemKey(item), { anchor: undefined, note: undefined })
+		() => ({ seq: named ? (item.seq ?? 0) : 0, page: lit?.page ?? pdfPage }),
+		() => workspace.update(itemKey(item), { anchor: undefined, note: undefined, quote: undefined })
 	);
 	const holder = paneOf();
 	const hidesNotes = $derived(holder ? workspace.hidesNotes(holder.index) : false);
@@ -219,7 +236,8 @@
 			page={place.opening.page}
 			share={place.opening.share}
 			seq={place.opening.seq}
-			focus={item.note ?? ''}
+			spans={lit ? [{ id: '_locator', page: lit.page, rects: lit.rects, transient: true }] : []}
+			focus={item.note ?? (lit ? '_locator' : '')}
 			lands={!place.spent}
 			onmoved={place.moved}
 			onselect={(e) => {

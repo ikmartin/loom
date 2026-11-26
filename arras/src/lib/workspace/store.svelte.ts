@@ -218,7 +218,7 @@ export class Workspace {
 	}
 
 	/** Record where an open item now is — its anchor, place, note or view — or the size the reader gave it, without revealing it: the reader moved within it. */
-	update(key: string, patch: Partial<Pick<Item, 'view' | 'anchor' | 'place' | 'note' | 'params' | 'size'>>): void {
+	update(key: string, patch: Partial<Pick<Item, 'view' | 'anchor' | 'place' | 'note' | 'quote' | 'params' | 'size'>>): void {
 		for (const p of this.panes) {
 			const i = p.items.findIndex((x) => itemKey(x) === key);
 			if (i >= 0) p.items[i] = { ...p.items[i], ...patch, seq: p.items[i].seq };

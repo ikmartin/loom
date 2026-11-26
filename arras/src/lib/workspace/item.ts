@@ -25,6 +25,8 @@ export interface Item {
 	place?: Place;
 	/** An annotation to open at its mark on arrival: what a link to an annotation names. */
 	note?: string;
+	/** Words a `quilt:` link quotes, lit where the item opens: in a document or a node, or on a project PDF's pages; a work's are its `place.quote`. */
+	quote?: string;
 	/** A document's review and incoming comparisons, which the review page opens by URL (`review`, `cause`, `incoming`). */
 	params?: Record<string, string>;
 	/** The size the reader gave this open item, kept with it in its address: a PDF's zoom (a document's compiled PDF, a project PDF, a work's paper), an HTML draft's text size in px. Absent until one is given, and the item is read at the starting size for its kind. */
@@ -81,6 +83,7 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 	const anchor = url.hash ? safe(url.hash.slice(1)) : undefined;
 	const query = url.searchParams;
 	const note = query.get('note') || undefined;
+	const quoted = query.get('quote')?.trim() ? { quote: query.get('quote')!.trim() } : {};
 	const n = Number(query.get('size') ?? '');
 	const size = query.has('size') && Number.isFinite(n) && n > 0 ? { size: n } : {};
 	switch (head) {
@@ -97,7 +100,7 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 				const v = query.get(k);
 				if (v) params[k] = v;
 			}
-			return { kind: 'document', id, ...(anchor ? { anchor } : {}), ...(note ? { note } : {}), ...(Object.keys(params).length ? { params } : {}), ...size };
+			return { kind: 'document', id, ...(anchor ? { anchor } : {}), ...(note ? { note } : {}), ...quoted, ...(Object.keys(params).length ? { params } : {}), ...size };
 		}
 		case 'library': {
 			const place = readKeys({ id: '' }, url.search.slice(1)) as WorkLink;
@@ -105,7 +108,7 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 			return { kind: 'work', id: safe(tail), ...(Object.keys(keys).length ? { place: keys } : {}), ...size };
 		}
 		case 'node':
-			return { kind: 'node', id: keyFromParam(tail), ...(anchor ? { anchor } : {}), ...(note ? { note } : {}) };
+			return { kind: 'node', id: keyFromParam(tail), ...(anchor ? { anchor } : {}), ...(note ? { note } : {}), ...quoted };
 		case 'context':
 			return { kind: 'context', id: keyFromParam(tail) };
 		case 'session':
@@ -113,7 +116,7 @@ export function itemFromPath(m: Documents | null, href: string): Item | null {
 		case 'page':
 			return { kind: 'page', id: safe(tail) };
 		case 'file':
-			return { kind: 'file', id: tail.split('/').map(safe).join('/'), ...(anchor ? { anchor } : {}), ...size };
+			return { kind: 'file', id: tail.split('/').map(safe).join('/'), ...(anchor ? { anchor } : {}), ...quoted, ...size };
 		case 'notes':
 			return { kind: 'notes', id: 'all' };
 		case 'pdf': {
@@ -149,6 +152,7 @@ export function pathFor(m: Documents | null, item: Item): string {
 			const q = new URLSearchParams();
 			for (const k of DOC_PARAMS) if (item.params?.[k]) q.set(k, item.params[k]);
 			if (item.note) q.set('note', item.note);
+			if (item.quote) q.set('quote', item.quote);
 			if (item.size) q.set('size', String(item.size));
 			return at + (q.size ? '?' + q : '') + hash;
 		}
@@ -157,16 +161,24 @@ export function pathFor(m: Documents | null, item: Item): string {
 			if (item.size) q.set('size', String(item.size));
 			return workUrl(item.id) + (q.size ? '?' + q : '');
 		}
-		case 'node':
-			return nodeUrl(item.id) + (item.note ? '?note=' + encodeURIComponent(item.note) : '') + hash;
+		case 'node': {
+			const q = new URLSearchParams();
+			if (item.note) q.set('note', item.note);
+			if (item.quote) q.set('quote', item.quote);
+			return nodeUrl(item.id) + (q.size ? '?' + q : '') + hash;
+		}
 		case 'context':
 			return route('/context/' + item.id.split('/').map(encodeURIComponent).join('/'));
 		case 'session':
 			return route('/session/' + encodeURIComponent(item.id)) + (item.view ? '?view=' + encodeURIComponent(item.view) : '');
 		case 'page':
 			return route('/page/' + encodeURIComponent(item.id));
-		case 'file':
-			return fileRoute(item.id) + sized + hash;
+		case 'file': {
+			const q = new URLSearchParams();
+			if (item.quote) q.set('quote', item.quote);
+			if (item.size) q.set('size', String(item.size));
+			return fileRoute(item.id) + (q.size ? '?' + q : '') + hash;
+		}
 		case 'pdf':
 			return pdfRoute(item.id) + sized + hash;
 		case 'notes':

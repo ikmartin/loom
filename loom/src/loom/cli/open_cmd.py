@@ -23,25 +23,36 @@ START_WAIT = 60.0
 def open_command(link: str, quilt_path: str | None) -> None:
     """Open this quilt's viewer at LINK, a quilt: or cited: link, at the words it quotes.
 
-    Run inside the quilt, as an editor runs it on the link under the cursor: `quilt:notes/day1.md#setup`, `quilt:REF#page=3&quote=…`, or the link inside a Markdown or org link around it. The viewer running for the quilt opens it; with none running, loom serve is started for it first. A link that names nothing the viewer shows is refused, with why.
+    Run inside the quilt, as an editor runs it on the link under the cursor: `quilt:notes/day1.md#setup`, `quilt:REF#page=3&quote=…`, or the link inside a Markdown or org link around it. A `cited:` link opens the work that states its identifier, at its pages. The viewer running for the quilt opens it; with none running, loom serve is started for it first. A link that names nothing the viewer shows is refused, with why.
     """
     import webbrowser
     from urllib.parse import quote
 
-    from loom.links import LinkError, resolve
+    from loom.links import LinkError, quilt_link, resolve
     from loom.render.serve import open_url
 
     href = bare(link)
     result = open_scan(quilt_path)
     root = result.quilt.root
     try:
-        resolve(result, root, href)
+        target = resolve(result, root, href)
     except LinkError as exc:
         raise EnvError(str(exc)) from None
+    if href.startswith("cited:"):
+        # a work by its identifier opens at its own pages here, as the quilt names it
+        href = quilt_link(target.key, target.place, _cited_quote(href))[len("[](") : -1]
     url = open_url(root) or _start(root)
     at = f"{url}open?link={quote(href, safe='')}"
     webbrowser.open(at)
     note(f"loom open: {at}")
+
+
+def _cited_quote(href: str) -> str:
+    """The words a `cited:` link quotes, from its query or its fragment; '' for none."""
+    from urllib.parse import parse_qs
+
+    keys = parse_qs(href.partition("?")[2].replace("#", "&") or href.partition("#")[2])
+    return (keys.get("quote") or [""])[0]
 
 
 def bare(link: str) -> str:

@@ -163,6 +163,10 @@ export const frame = {
 						? 'Loom could not be reached, so the quilt was not upgraded.'
 						: 'The upgrade did not finish; try it again.'
 	},
+	open: {
+		/** The page `loom open` lands on, when the link it was given names nothing in this quilt. */
+		nothing: (link: string) => (link ? `${link} names nothing in this quilt.` : 'No link was given to open.')
+	},
 	page: {
 		/** The heading of the page shown when the manifest could not be read. */
 		problems: 'Problems',

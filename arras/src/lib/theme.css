@@ -1303,6 +1303,14 @@ button.mark.annotation.settled { display: none; }
 	--ann-bar: 1.5px;
 }
 
+/* The words a followed link quotes (fragments/quote.ts, `lightRange`), lit while the link is in force, in the link colour a PDF's lit place is outlined in. */
+::highlight(loom-quote) {
+	background-color: color-mix(in srgb, var(--link, #35618f) 22%, transparent);
+	text-decoration: underline solid var(--link, #35618f);
+	text-decoration-thickness: 2px;
+	text-underline-offset: 3px;
+}
+
 /* The place a note is being written against, while its composer is open (fragments/pending.ts), drawn as not yet saved: the selected words washed and underlined in dashes, since focusing the composer ends the selection itself; a block chosen by a box, outlined in dashes. */
 ::highlight(note-pending) {
 	background-color: rgb(24 95 165 / 14%);
