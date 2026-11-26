@@ -1464,7 +1464,7 @@ def _judge(
         if made:
             settles += f" For {_named(made)}, which the act made, removing it does that."
         if replaced:
-            settles += " Putting back the version The Record kept just before the act, where it kept one, does that for a file it changed, and keeps your text as it is now first."
+            settles += " Putting back the version History kept just before the act, where it kept one, does that for a file it changed, and keeps your text as it is now first."
         return _Verdict(
             "left",
             f"a file of it has changed since, so recovery changed nothing: {_where(holds, kept=kept)}",

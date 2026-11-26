@@ -870,13 +870,13 @@ def called(edit: Edit) -> str:
 
 
 def _not_written(edit: Edit) -> str:
-    return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from The Record takes them out"
+    return f"loom has no write of {called(edit)} to undo on this machine: its words were in your text already when it was kept, or it was kept on another machine; restoring a version from History takes them out"
 
 
 def _changed_since(edit: Edit, how: str = "changed") -> str:
     if how == "too-much":
-        return f"the file has changed too much around {called(edit)} since it was kept to be sure where it was written, so its Keep is not undone; restore a version from The Record instead"
-    return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from The Record instead"
+        return f"the file has changed too much around {called(edit)} since it was kept to be sure where it was written, so its Keep is not undone; restore a version from History instead"
+    return f"{called(edit)} has changed where it was written since it was kept, so its Keep is not undone; restore a version from History instead"
 
 
 def _ending_at(raw: str, a: int, b: int) -> str:
@@ -1027,7 +1027,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
             out.refused.append(
                 {
                     "id": i,
-                    "why": f"loom will not undo the Keep of {called(e)} from its record: {said_why}; restore a version from The Record instead",
+                    "why": f"loom will not undo the Keep of {called(e)} from its record: {said_why}; restore a version from History instead",
                     "code": "not-written",
                 }
             )

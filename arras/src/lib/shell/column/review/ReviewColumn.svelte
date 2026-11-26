@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, the tasks waiting for an agent between two rules, a collaborator's pull where the quilt has one, the drafts with what concerns each, and at its foot the Record. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds today's Your Changes draws are counted as their sections list what waits (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, a collaborator's pull where the quilt has one, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds today's Your Changes draws are counted as their sections list what waits (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -44,7 +44,7 @@
 	const kinds = $derived(COLUMN_ORDER.filter((k) => loomCount(k) !== undefined));
 	const inList = $derived(page.route.id === '/review');
 
-	/** Shows `kind` in the list, coming back to it from the Record. */
+	/** Shows `kind` in the list, coming back to it from History. */
 	function pick(kind: ReviewKind | 'all' | 'agents' | 'incoming'): void {
 		rv.choose(kind);
 		if (!inList) void goto(route('/review'));
@@ -67,12 +67,8 @@
 				><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
 			>
 		{/each}
-		<div class="rule"></div>
-		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
-			><span class="t">{words.kinds.agents.name}</span><span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
-		>
-		<div class="rule"></div>
 		{#if m?.incoming}
+			<div class="rule"></div>
 			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}><span class="t">{pullLabel(m)}</span></button>
 		{/if}
 	</nav>
@@ -84,6 +80,12 @@
 			{/each}
 		</nav>
 	{/if}
+	<!-- nothing in it needs the person, so it stands apart from what waits for them -->
+	<nav class="navl" aria-label={words.kinds.agents.name}>
+		<button type="button" class:on={on('agents')} aria-current={on('agents') ? 'true' : undefined} data-testid="review-kind-agents" use:hovercard={{ text: words.kinds.agents.hover, place: 'beside' }} onclick={() => pick('agents')}
+			><span class="t">{words.kinds.agents.name}</span><span class="n">{rv.doc ? '' : (counts?.agents ?? '')}</span></button
+		>
+	</nav>
 	<span class="grow"></span>
 	<a class="record" class:here={page.route.id?.startsWith('/review/record')} href={route('/review/record')} data-testid="review-record" use:hovercard={{ text: words.column.recordHover, place: 'beside' }}>{words.column.record}</a>
 </div>

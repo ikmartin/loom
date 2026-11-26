@@ -7,7 +7,7 @@ import type { ReviewCounts, ReviewKind, ReviewList } from '$lib/library/types';
 import type { ShownKind } from './rows';
 
 /** The kinds as the column lists them: alphabetically by their names. Lean statements to attest holds the attested results that changed too (`joined`). */
-export const COLUMN_ORDER: Exclude<ShownKind, 'agents'>[] = ['accepted-changed', 'questions', 'cited', 'check', 'attest', 'fetch', 'edits'];
+export const COLUMN_ORDER: Exclude<ShownKind, 'agents'>[] = ['questions', 'cited', 'attest', 'fetch', 'edits', 'accepted-changed', 'check'];
 
 /** The groups' order under Everything, by who waits, as `review-list` answers them; the two kinds today's Your Changes draws take their places in it. */
 export const RANK: ShownKind[] = ['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'edits', 'agents'];

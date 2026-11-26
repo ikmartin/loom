@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › The Record › Sessions: every session, open and closed, with when it was last active, each opening its transcript; annotations belong to no session, so none is counted here. A new session is started here as in the picker, and Write here chooses an open one as where the person's writes go, which reading a transcript never does; renaming, closing, reopening and deleting are the picker's verbs (`sessions/actions.ts`).
+	// Review › History › Sessions: every session, open and closed, with when it was last active, each opening its transcript; annotations belong to no session, so none is counted here. A new session is started here as in the picker, and Write here chooses an open one as where the person's writes go, which reading a transcript never does; renaming, closing, reopening and deleting are the picker's verbs (`sessions/actions.ts`).
 	import { onMount } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import { threadUrl } from '$lib/nav';

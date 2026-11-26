@@ -112,7 +112,7 @@ export interface CanonDoc {
 	cannot_restore?: string;
 }
 
-/** One line of the history, as Review › The Record lists it: what was done, when, by whom, and to what. */
+/** One line of the history, as Review › History lists it: what was done, when, by whom, and to what. */
 export interface HistoryAct {
 	action: string;
 	when: string;

@@ -196,7 +196,7 @@ export const library = {
 		selectHint: '⌘-click papers in the list to select them',
 		/** The menu's foot line: who does the work. */
 		byLoom: 'Loom does this itself, now, from the TeX source.',
-		byAgent: 'An agent does this, from the PDF. It waits in Review, under Waiting for an agent.',
+		byAgent: 'An agent does this, from the PDF. It waits in Review, under Agents still working.',
 		byEither: 'Loom does this itself, now, where it has a paper\'s TeX source. For a paper it has only as a PDF an agent does it, and it waits in Review.',
 		/** A work's menu when loom has no document of it. */
 		noDocument: 'Loom has no document of this work yet.',

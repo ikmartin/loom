@@ -689,7 +689,7 @@ def _left_undo(q: Path, monkeypatch: pytest.MonkeyPatch) -> str:
     assert f"{first} neither as before the act nor as it left it" in said and "kept in the history" in said
     # what makes it go, in plain words, with no command and no id
     assert "This stays until each file reads exactly as before the act or as the act left it" in said
-    assert "Putting back the version The Record kept just before the act" in said
+    assert "Putting back the version History kept just before the act" in said
     assert "`" not in said and "loom lint" not in said and "loom doctor" not in said
     assert not re.search(r"(undo|keep):\S", said)  # no act's id
     return first

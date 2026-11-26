@@ -18,7 +18,7 @@ export interface Section {
 	says: string;
 }
 
-/** Every section, in the order the column lists them; The Record only where the corpus has something for it. */
+/** Every section, in the order the column lists them; History only where the corpus has something for it. */
 export function sectionsOf(m: Manifest): Section[] {
 	const changes = yourChangesCount(m);
 	const proposed = proposedCount(m);
@@ -30,7 +30,7 @@ export function sectionsOf(m: Manifest): Section[] {
 		{ id: 'changes', label: 'Your Changes', blurb: 'mathematics to accept, changes to keep', href: route('/review'), waits: changes, says: count(changes, 'change or block waits on you', 'changes and blocks wait on you') },
 		{ id: 'proposed', label: 'Proposed Changes', blurb: 'from agents and collaborators', href: route('/review/proposed'), waits: proposed, says: count(proposed, 'proposal to decide', 'proposals to decide') },
 		{ id: 'problems', label: 'Problems', blurb: "what's wrong in your LaTeX", href: route('/review/problems'), waits: problems, says: count(problems, 'error or warning in your LaTeX', 'errors and warnings in your LaTeX') },
-		{ id: 'record', label: 'The Record', blurb: 'versions, sessions, everything done', href: route('/review/record'), waits: orphans, says: [count(open, 'open session', 'open sessions'), count(orphans, 'version no document leads to', 'versions no document leads to')].join(', ') }
+		{ id: 'record', label: 'History', blurb: 'versions, sessions, everything done', href: route('/review/record'), waits: orphans, says: [count(open, 'open session', 'open sessions'), count(orphans, 'version no document leads to', 'versions no document leads to')].join(', ') }
 	];
 	return sections.filter((x) => x.id !== 'record' || m.publishes?.discussions !== false || (m.history?.steps.length ?? 0) > 0 || (m.canon ?? []).length > 0);
 }

@@ -14,12 +14,16 @@ const count = (page: Page, testid: string) => page.getByTestId(testid).locator('
 // round six's own rows and groups, apart from those of today's Your Changes, which Results to accept and Proposed edits draw
 const rows = (page: Page) => page.locator('[data-testid="review-row"][data-kind]');
 
-test('Everything lists what waits by who is waiting, and the column counts each kind alphabetically, the agents apart, two of them as Your Changes lists them', async ({ page }) => {
+test('Everything lists what waits by who is waiting, and the column counts each kind alphabetically, the agents below the drafts, two of them as Your Changes lists them', async ({ page }) => {
 	await open(page);
 	await expect(count(page, 'review-kind-all')).toHaveText('28');
 	const kinds = await page.getByTestId('review-column').locator('[data-testid^="review-kind-"]').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-testid')!.slice(12) + ' ' + b.querySelector('.n')?.textContent));
 	// Results to accept and Proposed edits count what their sections of the manifest's Your Changes list as waiting, not the fixture's rows; Lean statements to attest counts the attested results that changed too
-	expect(kinds).toEqual(['all 28', 'accepted-changed 5', 'questions 2', 'cited 4', 'check 5', 'attest 4', 'fetch 3', 'edits 5', 'agents 6']);
+	expect(kinds).toEqual(['all 28', 'questions 2', 'cited 4', 'attest 4', 'fetch 3', 'edits 5', 'accepted-changed 5', 'check 5', 'agents 6']);
+	await expect(page.getByTestId('review-column').locator('[data-testid^="review-kind-"] .t')).toHaveText(['Everything', 'Agent questions', "Cited results loom can't read", 'Lean statements to attest', 'Papers to add', 'Proposed edits', 'Results to accept', 'Results to check', 'Agents still working']);
+	// the tasks agents are still working on need nothing of the person, so they stand below the drafts, not under Waiting for you
+	expect(await page.getByTestId('review-kind-agents').evaluate((a) => !!(document.querySelector('[data-testid="review-draft"]')!.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+	await expect(page.getByTestId('review-record')).toHaveText('History');
 	const groups = await page.locator('[data-testid="review-group"][data-kind]').evaluateAll((gs) => gs.map((g) => g.getAttribute('data-kind')));
 	expect(groups).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'edits', 'agents']);
 	await expect(rows(page)).toHaveCount(18);
@@ -30,7 +34,7 @@ test('Everything lists what waits by who is waiting, and the column counts each 
 	await expect(page.locator('[data-testid="your-changes"][data-part="changes"]')).toHaveCount(1);
 	// the agents' group starts folded
 	await expect(page.getByTestId('review-task')).toHaveCount(0);
-	await page.getByTestId('review-group').filter({ hasText: 'Waiting for an agent' }).getByRole('button').click();
+	await page.getByTestId('review-group').filter({ hasText: 'Agents still working' }).getByRole('button').click();
 	await expect(page.getByTestId('review-task')).toHaveCount(6);
 	await expect(page.getByTestId('review-draft')).toHaveText(['main.tex22', 'bounds.tex5']);
 });
@@ -180,7 +184,7 @@ test("a cited result is located in its paper, its passage marked to digest, and 
 	// the row stays open, its other result under it
 	await expect(okafor).toContainText('Okafor 2022 · Corollary 4.2');
 	await okafor.getByRole('button', { name: 'ask an agent to read it' }).click();
-	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read it. It comes back under Digested results to check.');
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read it. It comes back under Results to check.');
 	await expect(okafor).toHaveCount(0);
 	await page.getByTestId('read-all').click();
 	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to read them.');
