@@ -161,7 +161,11 @@ def _take(fd: int, path: Path, wait: float, patience: Callable[[], AbstractConte
 
 @contextmanager
 def locked(
-    path: Path, *, wait: float | None = None, patience: Callable[[], AbstractContextManager[object]] | None = None
+    path: Path,
+    *,
+    wait: float | None = None,
+    patience: Callable[[], AbstractContextManager[object]] | None = None,
+    root: Path | None = None,
 ) -> Iterator[None]:
     """Hold the exclusive lock on `path`, across processes and threads, for the length of the block.
 
@@ -173,6 +177,8 @@ def locked(
         Seconds to wait before refusing; default `WAIT`.
     patience : callable, optional
         Makes a context manager entered only while actually waiting, for a command that shows it is alive.
+    root : Path, optional
+        The place the lock file is made in without following a link (`loom.own`); default the quilt holding it.
 
     Yields
     ------
@@ -189,9 +195,9 @@ def locked(
     if key in held:
         yield
         return
-    own.mkdir(path.parent)
+    own.mkdir(path.parent, root=root)
     # read-only is enough to lock, and never changes the file; never made through a link (`loom.own`)
-    fd = own.os_open(path, os.O_RDONLY | os.O_CREAT, 0o666)
+    fd = own.os_open(path, os.O_RDONLY | os.O_CREAT, 0o666, root=root)
     try:
         took = _take(fd, path, WAIT if wait is None else wait, patience)
         held.add(key)

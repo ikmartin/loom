@@ -360,6 +360,8 @@ def _clone(root: Path, project: str) -> Path:
 
     Used only where this machine made it for this quilt and this project and nothing that can name a program or an address in it has changed since (`_marked`, `_seal`): any other folder found there, a clone a quilt brought with it or one whose configuration was written to since among them, is removed and made again, never repaired in place, so nothing in it (a hook, a setting, an address) is ever read. Refused (`bad-record`) where `.loom/local/` does not lie in the quilt's own `.loom/`.
     """
+    from loom.machine import data_dir
+
     local = Path(os.path.realpath(root / LOCAL))
     if local.parent != Path(os.path.realpath(root / LOOM)):
         raise MirrorError(
@@ -377,7 +379,9 @@ def _clone(root: Path, project: str) -> Path:
         own.replace(fresh, clone, root=root)
         mark = _mark_of(clone)
         mark.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        mark.write_text(json.dumps(_identity(clone, project), sort_keys=True) + "\n", encoding="utf-8")
+        own.write_text(
+            mark, json.dumps(_identity(clone, project), sort_keys=True) + "\n", encoding="utf-8", root=data_dir()
+        )
     run(
         clone,
         "fetch",

@@ -8,9 +8,11 @@ import sys
 
 import click
 
+from loom import own
 from loom.app.registry import HOME_PORT
 from loom.cli._common import note
 from loom.errors import EnvError
+from loom.machine import data_dir
 
 
 @click.command(name="app")
@@ -121,8 +123,8 @@ def _open(port: int) -> None:
     url = home_url()
     if not url:
         log = folder() / "app.log"
-        log.parent.mkdir(parents=True, exist_ok=True)
-        with open(log, "ab") as out:
+        own.mkdir(log.parent, root=data_dir())
+        with own.open(log, "ab", root=data_dir()) as out:
             subprocess.Popen(
                 [sys.executable, "-P", "-m", "loom", "app", "--port", str(port)],
                 cwd=folder(),

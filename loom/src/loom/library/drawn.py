@@ -61,7 +61,7 @@ def give(root: Path, ref: str, tex: str) -> None:
     p = machine.words_file(root)
     home = machine.data_dir()
     p.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with locks.locked(p.with_suffix(".lock")):
+    with locks.locked(p.with_suffix(".lock"), root=home):
         works = _words(root)
         if works.get(ref) == tex:
             return

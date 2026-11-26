@@ -135,12 +135,18 @@ def check(root: Path, say: Callable[[str], None] = lambda _: None) -> Checked:
             )
         from loom.errors import EnvError
         from loom.locks import locked
+        from loom.own import Planted
 
         lock = locked(proj / paths.LAKE_LOCK, wait=1)
         try:
             lock.__enter__()
         except EnvError:
             raise Refused("loom is already checking this quilt's Lean; ask again once it is done") from None
+        except Planted:
+            # the lock is made through no link (`loom.own`), so a `.lake` made a link is refused here, before anything is removed
+            raise Refused(
+                f"{(proj / paths.LAKE).relative_to(root)} is not a folder of the project's own; remove it and check again"
+            ) from None
         try:
             done = _check(root, proj, name, toolchain, mods, places, Path(probe) / "Probe.lean", say)
         except Refused as e:

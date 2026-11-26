@@ -283,3 +283,58 @@ def test_the_visitor_sees_a_writer_however_it_is_spelled() -> None:
         found = {}
         _Writes("cli/nodes.py", found, _aliases(tree)).visit(tree)
         assert not found, code
+
+
+#: Writers of loom's own places that still write by path, by module or `module:qualname`, each with why; every other writer listed above writes only through `loom.own`, so a link planted in its path carries nothing (`docs/design/writes.md`, "Loom's own places").
+BY_PATH = {
+    "own.py": "the helper itself, which writes by name in folders it opened without following a link",
+    "lifetimes.py": "the sweep, which removes by name through folders opened from their home without following a link (`_remove_in`)",
+    "presence.py": "the server's presence record, written only where `.loom/local/live/` and every folder on its way is no link (`_place`), and opened with `O_NOFOLLOW`",
+    "layout.py:stamp": "a `.loom/` made by `tempfile` in the quilt's root and renamed into place, with nothing below the root to plant in yet",
+    "formal/check.py:_check": "Lake's `.lake/loom` and `.lake/build`, each refused where it or `.lake` is a link before it is removed",
+    "render/serve.py": "the viewer's copies in the machine's place, which a start removes only where they are loom's shapes and never through a link (`hold_viewer`); a `viewers` folder the person made a link is followed, as a run of the person's",
+    "tex/": "TeX's runs and staging, in temporary folders of their own, and the machine's own TeX; a compile folder in the cache is reached through no link before TeX writes in it by path (`runner._compile_once`, `tex4ht._html_once`)",
+    "app/create.py:Makings.close": "a quilt being made, in a hidden folder beside the place the person chose",
+    "app/create.py:make": "a quilt being made, in a hidden folder beside the place the person chose, and renamed into it",
+    "app/create.py:recover": "a quilt a create cut short, in a hidden folder beside the place the person chose",
+    "app/create.py:_unpack": "a drop's archive opened by `zipfile` and `tarfile`'s `data` filter into a folder made through no link the moment before",
+    "app/launcher.py:write_launcher": "the launcher, in the person's own Applications folder",
+    "ai/skills.py:write_skills": "a skill's folder in an app's place, the person's, left empty once the door removed its file",
+    "cli/quilt.py:write_minimal_quilt.write": "a quilt `loom init` makes, before it holds a `.loom/` anyone could plant in",
+    "cli/quilt.py:write_demo_quilt": "the demo quilt, into a folder that is new or empty",
+    "cli/quilt.py:undo_minimal_quilt": "taking back what `loom init` made",
+    "cli/quilt.py:_write_user_config_template": "the person's own config, where a link is their arrangement (a folder of dotfiles) and is followed",
+    "scan/quilt.py:save_author": "the person's own config, where a link is their arrangement and is followed",
+    "notes.py:set_command": "the person's own new-note commands beside their config, where a link is their arrangement and is followed",
+    "adopt.py:_flat_shape_made": "a temporary tree of its own",
+    "adopt.py:_merge": "a temporary tree of its own",
+    "cli/history_cmds.py:_scan_after": "a temporary copy of the quilt",
+    "cli/paper.py:_identity_for": "a temporary tree of its own",
+    "section_drafts.py:preview_in_paper": "a temporary stage of its own",
+    "reshape/": "temporary stages of their own",
+    "doctor.py:check_tools": "a temporary file of its own",
+    "fence.py": "the fence's canary, in temporary folders of its own",
+    "formal/check.py:check": "loom's probe, copied into a temporary folder of its own",
+    "formal/install.py:_install_elan": "elan's installer, downloaded into a temporary folder of its own",
+    "cli/help.py": "click's help formatter, which writes no file",
+    "app/server.py:_open": "no file: the supervisor's `open`",
+    "app/supervise.py:Supervisor._keep": "no file: the supervisor's `open`",
+    "library/documents.py:_from_zip": "no file: `ZipFile.open`, which reads",
+    "library/index.py:opened": "no file: the index's own `open`",
+}
+
+
+def _by_path(where: str) -> bool:
+    return any(where == k or ((k.endswith("/") or k.endswith(".py")) and where.startswith(k)) for k in BY_PATH)
+
+
+def test_loom_s_own_writes_follow_no_planted_link() -> None:
+    """Every writer of loom's own places writes through `loom.own` (folders opened without following a link, the file `O_NOFOLLOW`), but those `BY_PATH` names with why, so a new raw write into `.loom/`, the history or the machine's place fails here until it goes through `loom.own` or says why it need not."""
+    raw = {w: [c for c in calls if not c.startswith("own.")] for w, calls in writers().items()}
+    left = {w: c for w, c in raw.items() if c and not _by_path(w)}
+    assert not left, (
+        "these write loom's own places by path, following any link planted on the way: use `loom.own`, or list in BY_PATH with why: "
+        + "; ".join(f"{w} ({', '.join(c)})" for w, c in sorted(left.items()))
+    )
+    stale = sorted(k for k in BY_PATH if not any(w == k or w.startswith(k) for w, c in raw.items() if c))
+    assert not stale, f"listed as writing by path but writing nothing so now: {stale}"

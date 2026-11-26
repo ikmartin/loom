@@ -17,6 +17,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from loom import own
 from loom.scan.preamble import PreambleClosure
 from loom.tex import missing, private
 from loom.tex.runner import fence_refused, stage_document, stop_run, tex_env
@@ -448,7 +449,8 @@ def _html_once(
         errors = re.findall(r"^!.*$", text, re.M)
         page = out / f"{stem}.html"
         if page.is_file():
-            outdir.parent.mkdir(parents=True, exist_ok=True)
+            # the page's folder is reached through no link (`loom.own`); what is copied in goes into a folder just made there
+            own.mkdir(outdir.parent)
             fresh = Path(tempfile.mkdtemp(prefix=f".{outdir.name}.run-", dir=outdir.parent))
             for f in out.iterdir():
                 if f.is_file() and f.suffix.lower() in KEPT:
@@ -459,11 +461,11 @@ def _html_once(
             (fresh / SOURCES).write_text(json.dumps(read, sort_keys=True), encoding="utf-8")
             (fresh / TEXTS).write_text(json.dumps(texts, sort_keys=True, ensure_ascii=False), encoding="utf-8")
             old = outdir.with_name(f".{outdir.name}.old")
-            shutil.rmtree(old, ignore_errors=True)
+            own.rmtree(old, ignore_errors=True)
             if outdir.exists():
-                outdir.rename(old)
-            fresh.rename(outdir)
-            shutil.rmtree(old, ignore_errors=True)
+                own.replace(outdir, old)
+            own.replace(fresh, outdir)
+            own.rmtree(old, ignore_errors=True)
         made = outdir / f"{stem}.html" if page.is_file() else None
         return HtmlResult(
             made is not None and code == 0,

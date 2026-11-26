@@ -15,6 +15,7 @@ from loom import (
     layout,
     locks,
     looks,
+    machine,
     mailbox,
     overleaf,
     own,
@@ -26,6 +27,8 @@ from loom import (
     writes,
 )
 from loom.ai import layout as ai_layout
+from loom.app import registry
+from loom.formal import switch
 from loom.history import ledger as hledger
 from loom.library import acts, documents, drawn, intake, store, survey, tags
 from loom.library import log as llog
@@ -345,3 +348,57 @@ def test_a_mirror_s_clone_is_removed_through_no_link(q: tuple[Path, Path]) -> No
     plant(root, LOCAL, out)
     run(lambda: overleaf._remove(root / LOCAL / "clone"))
     assert (out / "clone" / "keep").read_text() == "keep\n"
+
+
+# ---- the machine's own place ------------------------------------------------------------------------------------------
+
+
+MACHINE_WRITERS: dict[str, tuple[str, Callable[[Path], object]]] = {
+    "the server's write token": ("tokens", lambda r: machine.write_token(r, "t")),
+    "the switch that turns formalization on": ("formal", lambda r: switch.turn_on(r)),
+    "what the last check found": ("formal", lambda r: switch.remember_check(r, {"n": 1})),
+    "the home's list of quilts": ("app", lambda r: registry._write({}, set())),
+    "the person's word for a work's compile": ("words", lambda r: drawn.give(r, "w1", "sha256:" + "0" * 64)),
+}
+
+
+@pytest.mark.parametrize("what", sorted(MACHINE_WRITERS))
+def test_the_machine_s_place_takes_no_write_through_a_planted_link(q: tuple[Path, Path], what: str) -> None:
+    """A folder of loom's own in the machine's data folder made a link to a folder outside: nothing is written through it."""
+    root, out = q
+    where, fn = MACHINE_WRITERS[what]
+    home = machine.data_dir()
+    home.mkdir(parents=True, exist_ok=True)
+    (home / where).symlink_to(out)
+    run(lambda: fn(root))
+    assert untouched(out)
+
+
+def test_a_compile_writes_nothing_where_a_link_planted_in_the_cache_leads(q: tuple[Path, Path]) -> None:
+    """TeX writes by path, so the compile folder is reached through no link before it runs: a link at `.loom/cache` stops the compile, and nothing is written or removed where it leads."""
+    from loom.tex.runner import compile_tex
+
+    root, out = q
+    (root / "a.tex").write_text("\\documentclass{article}\\begin{document}x\\end{document}\n")
+    (root / ".loom/cache").mkdir(parents=True, exist_ok=True)
+    plant(root, ".loom/cache", out)
+    with pytest.raises(own.Planted):
+        compile_tex(root, "a.tex", root / ".loom/cache/build/a", "pdflatex")
+    assert untouched(out)
+
+
+def test_the_home_s_sweep_of_old_drops_removes_nothing_through_a_planted_link(q: tuple[Path, Path]) -> None:
+    """The drops folder made a link to a folder outside holding an old folder: the sweep, which removes every drop past its days, removes nothing there."""
+    import os
+
+    from loom.app import create
+
+    _root, out = q
+    (out / "old").mkdir()
+    (out / "old" / "keep").write_text("keep\n")
+    for p in (out / "old" / "keep", out / "old"):
+        os.utime(p, (0, 0))
+    create.incoming().parent.mkdir(parents=True, exist_ok=True)
+    create.incoming().symlink_to(out)
+    create.sweep()
+    assert (out / "old" / "keep").read_text() == "keep\n"
