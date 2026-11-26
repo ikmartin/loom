@@ -163,7 +163,7 @@ The undo is offered on the machine that wrote the Keep, because the journal is t
 
 ## What the rebuild may rely on
 
-A write from the viewer answers once its act has committed, before the rebuild that publishes it, which follows under the server's `publication_lock` the request already holds, so no other build comes between; the answer names that build, and the page marks itself updating until it has published or failed (`docs/specs/write-api.md` §2). The rebuild may rely on the following.
+A write from the viewer answers once its act has committed, before the rebuild that publishes it, which follows under the server's `publication_lock`: held from the act through that rebuild, so no build comes between them, for every write but those that take their own lock (the library's intake, Overleaf, the reader's place), whose act runs outside it as before and which take it once the act is done, so the rebuild they name is still the next to begin; the answer names that build, and the page marks itself updating until it has published or failed (`docs/specs/write-api.md` §2). The rebuild may rely on the following.
 
 - A process holding `writes.lock` sees no other process's act between its `begin` and its `done`: a scan taken under the lock sees each act whole or not at all.
 - Recovery has run before any act, and any command that draws an id (`cli._quilt.drawing_ids`), holds the lock. An act still unsettled after it is one recovery could not settle, and is reported rather than hidden; the next step is numbered past every step folder there is, so it never shares a number with one such an act left (`History.next_step`).

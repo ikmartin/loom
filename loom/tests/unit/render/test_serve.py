@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -684,6 +685,34 @@ def test_a_build_that_fails_after_a_write_is_said_and_the_write_stands(
     assert state["failed"] == answer["publication"] and state["published"] < answer["publication"]
     assert "the disk is full" in state["why"]
     assert "Kept anyway." in (d / ".loom/records/annotations/log.jsonl").read_text(encoding="utf-8")
+
+
+def test_a_build_that_fails_before_it_reads_the_files_still_takes_its_number(
+    serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:  # type: ignore[no-untyped-def]
+    """A build that fails before it is under way (the files unreadable) is numbered and said all the same, so the next write names a later build and is never taken for the failed one's."""
+    from loom.render import serve as serve_mod
+    from tests.unit.render._serve import landed, post
+
+    s = serve(demo(tmp_path), watch=False)
+    real = serve_mod.snapshot
+    broken = [True]
+
+    def snap(*args, **kwargs):  # type: ignore[no-untyped-def]
+        # the build's own look at the files, not the write's reads
+        if broken[0] and sys._getframe(1).f_code.co_name == "rebuild":
+            raise OSError("the files cannot be read")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(serve_mod, "snapshot", snap)
+    note = {"target": "dm-0003", "message": "One.", "author": "A. Author"}
+    status, first = post(s.url + "_api/annotate", note, settle=False)
+    assert status == 200
+    assert landed(s.url, first["publication"])["failed"] == first["publication"]
+    broken[0] = False
+    status, second = post(s.url + "_api/annotate", {**note, "message": "Two."}, settle=False)
+    assert status == 200 and second["publication"] > first["publication"]
+    assert landed(s.url, second["publication"])["published"] == second["publication"]
 
 
 def test_a_second_write_names_a_later_build_than_the_first(

@@ -1286,9 +1286,15 @@ class ServeSession:
         with self.lock:
             if self._stopping:
                 return
-            if not records:
-                self._reload()
-            seen = snapshot(root, self.shown)
+            try:
+                if not records:
+                    self._reload()
+                seen = snapshot(root, self.shown)
+            except Exception as exc:
+                # numbered and said all the same, so no later build is given the number a write already waits on
+                self._begun += 1
+                self.publications.failed(self._begun, failure(exc))
+                raise
             moved = [p for p, m in seen.items() if self.published.get(p) != m] + [
                 p for p in self.published if p not in seen
             ]
