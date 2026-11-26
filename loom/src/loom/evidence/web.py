@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from loom.evidence.subjects import Subject, is_node
 from loom.paths import LOOM
@@ -293,10 +293,28 @@ class Joined:
     def texts(self, key: tuple[str, str]) -> set[str]:
         return (self.library if key[0] == "node" else self.draft).texts(key)
 
-    def named(self, key: str) -> list[str]:
-        """The drafts' blocks a stored or requested key names now (`blocks_named`)."""
-        named = getattr(self.draft, "named", None)
-        return named(key) if named is not None else [key]
+    def placed(self, block: dict[str, Any]) -> list[str]:
+        """The drafts' blocks a stored block is on now (`DraftWeb.placed`); its key as written where the drafts' web cannot say."""
+        placed = getattr(self.draft, "placed", None)
+        return placed(block) if placed is not None else [str(block.get("key"))]
+
+    def edit_on(self, edit: Any) -> list[str]:
+        """The drafts' block a suggested edit is on now (`DraftWeb.edit_on`); its key as written where the drafts' web cannot say."""
+        on = getattr(self.draft, "edit_on", None)
+        return on(edit) if on is not None else [edit.target_key]
+
+
+def block_of(result: ScanResult, node: NodeRec) -> dict[str, Any]:
+    """A block as a mention or an ask names it (`docs/specs/evidence.md` §3.7): its key, the hash of its text and its context (`records.locate.context_of`).
+
+    Writes the text to the snapshot store, as a note's is kept, since a record follows its text only where the store holds it (`records.locate.follow`).
+    """
+    from loom.records.locate import context_of
+    from loom.records.snapshots import write_snapshot
+    from loom.scan.owntext import own_text
+
+    digest, _ = write_snapshot(result.quilt.root, own_text(result, node), result.quilt.history_dir)
+    return {"key": node.key, "hash": digest, "context": context_of(result, node)}
 
 
 def blocks_named(result: ScanResult, key: str) -> list[NodeRec]:
@@ -466,6 +484,7 @@ class DraftWeb:
         self.reviewer = reviewer
         self._texts: dict[str, str] = {}
         self._hashes: dict[str, str] = {}
+        self._placed: dict[str, list[str]] = {}
 
     @cached_property
     def blocks(self) -> list[NodeRec]:
@@ -629,9 +648,32 @@ class DraftWeb:
         out = [f"{key} {locator}".strip() for text in self._texts_of(here) for key, locator in citations_in(blank_comments(text))]  # fmt: skip
         return list(dict.fromkeys(out))
 
-    def named(self, key: str) -> list[str]:
-        """The keys of the blocks a stored or requested key names now (`blocks_named`)."""
-        return [n.key for n in blocks_named(self.result, key)]
+    def placed(self, block: dict[str, Any]) -> list[str]:
+        """The keys of the blocks a stored block (`{key, hash, context}`, a mention's or an ask's) is on now: where its text went, as every record goes (`records.locate.follow`).
+
+        A label two copies of a draft carry: each copy holding its very text, as an acceptance holds. None where nothing says which block, so a block put in above one named by place never takes its record.
+        """
+        from loom.records.locate import block_hash, follow, shared_label
+
+        memo = json.dumps(block, sort_keys=True)
+        if memo in self._placed:
+            return self._placed[memo]
+        key, want = str(block.get("key")), str(block.get("hash") or "")
+        shared = shared_label(self.result, key) if key not in self.result.nodes else None
+        if shared is not None:
+            out = [n.key for n in shared if block_hash(self.result, n.key) == want]
+        else:
+            found = follow(self.result, key, self.result.nodes.get(key), want, context=block.get("context") or None)
+            out = [found.key] if found is not None and found.kind not in ("master", "file") else []
+        self._placed[memo] = out
+        return out
+
+    def edit_on(self, edit: Any) -> list[str]:
+        """The key of the block a suggested edit is on now (`records.edits.home`); none where it is on none."""
+        from loom.records.edits import home
+
+        found = home(self.result, edit)
+        return [found.key] if found is not None else []
 
     def texts(self, key: tuple[str, str]) -> set[str]:
         """The hash of each block bearing a label now, in any document; empty for anything but a label."""

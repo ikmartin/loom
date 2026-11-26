@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -73,6 +74,25 @@ def test_a_which_result_ask_on_a_place_key_closes_by_a_mention_written_once_a_la
     write(root, "mention", PERSON, block=now, cites="tq-00B1-ref", undo=False)
     [found] = [s for s in open_asks(root, closed=True, web=DraftWeb(result)) if s.ask.id == t.id]
     assert not found.open, "the ask's place key and the mention's label key name one block"
+
+
+def test_a_which_result_ask_stays_with_its_block_when_one_citing_the_same_work_is_put_in_above_it(root: Path) -> None:
+    place = _lemma(root)
+    on, _ = place_of(load_quilt(root), place)
+    t = ask(root, PERSON, "which-result", "agent", on, cites="tq-00B1-ref")
+    above = "\\begin{lemma}\nNo gadget on an open surface is compact, unlike \\cite{Smi24}.\n\\end{lemma}\n"
+    (root / DOC).write_text((MAIN % "").replace("\\begin{lemma}", above + "\\begin{lemma}", 1), encoding="utf-8")
+    moved = _lemma(root)
+    assert moved != place, "the lemma put in above takes the place key"
+
+    def standing() -> Any:
+        return next(s for s in open_asks(root, closed=True, web=DraftWeb(scan(load_quilt(root)))) if s.ask.id == t.id)
+
+    # a mention of the lemma now at the ask's place key is another block's
+    write(root, "mention", PERSON, block=place_of(load_quilt(root), place)[0]["block"], cites="tq-00B1-ref", undo=False)
+    assert standing().open, "the ask went with its lemma's text, not with its place key"
+    write(root, "mention", PERSON, block=place_of(load_quilt(root), moved)[0]["block"], cites="tq-00B1-ref", undo=False)
+    assert not standing().open
 
 
 def test_a_place_key_is_taken_wherever_a_label_key_is(root: Path) -> None:

@@ -128,10 +128,9 @@ def mention(root: Path, result: ScanResult, key: str, ref: str, by: Who, *, undo
     ActRefused
         `author-only`; `no-such-citation` where the block does not now cite that work without naming a result of it; `ambiguous` where the key is a label two copies of a draft carry, naming each by its place.
     """
-    from loom.evidence.web import blocks_named
+    from loom.evidence.web import block_of, blocks_named
     from loom.library.entries import read_entry
     from loom.library.store import read
-    from loom.records.locate import block_hash, context_of
 
     _only(by, "person")
     work = read(root, ref)
@@ -143,10 +142,8 @@ def mention(root: Path, result: ScanResult, key: str, ref: str, by: Who, *, undo
     node = named[0] if named else None
     if node is None or entry is None or bare_citation(result, node.key, entry.key) is None:
         raise ActRefused("no-such-citation", "that block does not cite that work without naming a result now; reload")
-    key = node.key
     with _held(root):
-        block = {"key": key, "hash": block_hash(result, key), "context": context_of(result, node)}
-        return _write(root, "mention", by, block=block, cites=ref, undo=undo)
+        return _write(root, "mention", by, block=block_of(result, node), cites=ref, undo=undo)
 
 
 def unreadable(root: Path, node: str) -> str | None:

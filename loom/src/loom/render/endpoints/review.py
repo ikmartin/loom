@@ -251,12 +251,11 @@ def one_block(result: Any, key: str) -> Any:
 
 def _block(root: Path, key: str) -> tuple[dict[str, Any], list[str]]:
     """A block of a person's document as a note names it, and the documents that read it."""
-    from loom.records.locate import block_hash, context_of
+    from loom.evidence.web import block_of
 
     result = _scan(root)
     node = one_block(result, key)
-    block = {"key": node.key, "hash": block_hash(result, node.key), "context": context_of(result, node)}
-    return {"block": block}, sorted(node.reached_by)
+    return {"block": block_of(result, node)}, sorted(node.reached_by)
 
 
 def _target(root: Path, result_key: str) -> tuple[Any, list[str]]:
