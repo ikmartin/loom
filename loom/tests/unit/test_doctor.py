@@ -733,7 +733,7 @@ def test_the_text_report_lines_up(box: Box) -> None:
     # what is fine is counted on one line a section, naming each check; what is not is listed, aligned, its fix beneath (T2)
     fine = [int(m.group(1)) for ln in lines if (m := re.match(r"^  ok    (\d+) checks?: ", ln))]
     checks = [m for ln in lines if (m := re.match(r"^  (?:warn|fail)\s+\S+(?: \S+)?\s{2,}", ln))]
-    assert len(fine) == 2 and sum(fine) + len(checks) == 19 + 9, lines  # the machine's items and the quilt's
+    assert len(fine) == 2 and sum(fine) + len(checks) == 19 + 10, lines  # the machine's items and the quilt's
     assert len({m.end() for m in checks}) == 1, "the details do not start in one column"
     at = lines.index(next(ln for ln in lines if ln.startswith("  warn  pdfinfo")))
     assert lines[at + 1] == f"    fix: {item(doctor(box), 'pdfinfo')['remedy']}"  # beneath the item it fixes
