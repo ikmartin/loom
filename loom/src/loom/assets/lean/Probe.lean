@@ -1,5 +1,5 @@
 /-
-Loom's probe of a built Lake project. Given the project's module names, it reads their .olean files as leanchecker does, imports only the modules they import from outside the project, with no initializer and no environment extension run, and hands every declaration of the project to Lean's kernel over them: nothing the project's modules hold executes here. Then it reads those same declarations. It prints one JSON object: `replay`, whether the kernel accepted every declaration (`exit` 0) or what it said; `modules`, each module's imports within the project; and `declarations`, each with its module, kind, statement, the axioms it rests on, the marker naming it and the declarations of the project it uses directly. A declaration Lean made for another (`Name.isInternalDetail`) is listed with what it uses alone, so that what reaches through it is followed.
+Loom's probe of a built Lake project. Given the project's own build (`own=DIR`), each package's (`path=DIR`) and the project's module names, it finds modules in the toolchain first, refuses an import the project built that is not among those named, reads their .olean files as leanchecker does, imports only the modules they import from outside the project, with no initializer and no environment extension run, and hands every declaration of the project to Lean's kernel over them: nothing the project's modules hold executes here. Then it reads those same declarations. It prints one JSON object: `replay`, whether the kernel accepted every declaration (`exit` 0) or what it said; `modules`, each module's imports within the project; and `declarations`, each with its module, kind, statement, the axioms it rests on, the marker naming it, the declarations of the project it uses directly, and those its statement names (`means`). A declaration Lean made for another (`Name.isInternalDetail`) is listed with no axioms, so that what reaches through it is followed.
 -/
 import Lean
 
@@ -51,6 +51,12 @@ def mentions : ConstantInfo → Array Name
   | .inductInfo v => v.type.getUsedConstants
   | c => c.type.getUsedConstants
 
+/-- The constants what a declaration says mentions: its type, and its value where `statement` takes the value in, and a type's constructors' types. -/
+def meaning (find : Name → Option ConstantInfo) : ConstantInfo → Array Name
+  | .defnInfo v => v.type.getUsedConstants ++ v.value.getUsedConstants
+  | .inductInfo v => v.ctors.foldl (fun acc c => acc ++ ((find c).map (·.type.getUsedConstants) |>.getD #[])) v.type.getUsedConstants
+  | c => c.type.getUsedConstants
+
 /-- The axioms a constant rests on, walking every body it reaches, each constant once over the whole run. -/
 partial def axiomsOf (find : Name → Option ConstantInfo) (c : Name) : StateM (NameMap NameSet) NameSet := do
   if let some found := (← get).find? c then return found
@@ -84,8 +90,13 @@ unsafe def readModule (m : Name) : IO (Array Import × Array ConstantInfo) := do
   return (first.imports, last.constants)
 
 unsafe def main (args : List String) : IO UInt32 := do
+  -- `own=DIR`, the project's own build; `path=DIR`, a package's build; the rest, the project's modules
+  let own := args.filterMap (·.dropPrefix? "own=" |>.map (·.toString)) |>.head? |>.getD "/nowhere"
+  let paths := args.filterMap (·.dropPrefix? "path=" |>.map (fun d => System.FilePath.mk d.toString))
+  let mods := args.filter (fun a => !a.startsWith "own=" && !a.startsWith "path=") |>.map String.toName
+  -- the toolchain's own modules first, so no build can stand in for Init or Lean
   initSearchPath (← findSysroot)
-  let mods := args.map String.toName
+  searchPathRef.modify (· ++ paths ++ [System.FilePath.mk own])
   let ours : NameSet := mods.foldl (·.insert ·) {}
   let mut modules : Array (String × Json) := #[]
   let mut outside : Array Import := #[]
@@ -95,9 +106,15 @@ unsafe def main (args : List String) : IO UInt32 := do
     let (imports, consts) ← readModule m
     modules := modules.push (m.toString, toJson (imports.filter (ours.contains ·.module) |>.map (·.module.toString)))
     outside := outside ++ imports.filter (!ours.contains ·.module)
+    unless (← findOLean m).toString.startsWith (own ++ "/") do
+      throw <| IO.userError s!"the module {m} is not the project's own build"
     for c in consts do
       constants := constants.insert c.name c
     held := held.push (m, consts)
+  -- a module the project built that is not among those given would be imported unchecked
+  for i in outside do
+    if (← findOLean i.module).toString.startsWith (own ++ "/") then
+      throw <| IO.userError s!"the module {i.module} is the project's own and not one loom checks"
   let env ← importModules outside {} (loadExts := false)
   let replay ← try
       discard <| env.toKernelEnv.replay constants
@@ -126,9 +143,11 @@ unsafe def main (args : List String) : IO UInt32 := do
         seen := s
         axioms := found.toArray.qsort Name.lt
       let uses := (mentions c).map owner |>.filter fun n => n != c.name && constants.contains n
+      let means := (meaning find c).map owner |>.filter fun n => n != c.name && constants.contains n
       decls := decls.push <| Json.mkObj [
         ("name", toJson c.name.toString), ("module", toJson m.toString), ("kind", toJson (kind c)),
-        ("internal", toJson internal), ("statement", toJson (if internal then "" else statement find c)),
+        ("internal", toJson internal), ("statement", toJson (statement find c)),
+        ("means", toJson ((means.foldl (·.insert ·) ({} : NameSet)).toArray.map (·.toString))),
         ("axioms", toJson (axioms.map (·.toString))), ("marker", toJson marker),
         ("uses", toJson ((uses.foldl (·.insert ·) ({} : NameSet)).toArray.map (·.toString)))]
   IO.println (Json.mkObj [("replay", replay), ("modules", Json.mkObj modules.toList), ("declarations", Json.arr decls)]).compress

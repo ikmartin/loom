@@ -1,6 +1,6 @@
 """What turning formalization on installs: elan where the machine has none, the toolchain the quilt's Lake project names, the project itself where the quilt has none, and Mathlib with its build from Mathlib's own cache.
 
-This is the one part of formalization that uses the network and runs unfenced, and only on the person's act (`formal/switch.py`). So it runs nothing a quilt could have chosen beyond the official Lean and Mathlib: a project is made only with a `lakefile.toml`, never a `lakefile.lean`, which is a program; the toolchain must be one of Lean's own releases; and every package the project requires or its manifest pins must come from the Lean community's or Lean's own repositories on GitHub.
+This is the one part of formalization that uses the network and runs unfenced, and only on the person's act (`formal/switch.py`). So it runs nothing a quilt could have chosen beyond Lean's and Mathlib's own releases: the toolchain must be one of Lean's, the project must have loom's shape (`untrusted`) and require Mathlib at a release tag from its own repository, and the manifest is resolved again from there every time, so a revision a quilt's manifest names is never fetched as it stands.
 """
 
 from __future__ import annotations
@@ -28,8 +28,12 @@ MATHLIB = "v4.36.0-rc2"
 MATHLIB_GIT = "https://github.com/leanprover-community/mathlib4"
 #: elan's own installer, which installs elan alone here (`--default-toolchain none`) and edits no shell profile.
 ELAN_INSTALLER = "https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh"
-#: Where a package may come from: the Lean community's repositories and Lean's own.
-TRUSTED = ("https://github.com/leanprover-community/", "https://github.com/leanprover/")
+#: A package Mathlib brings: a repository of the Lean community's or of Lean's own, named plainly.
+PACKAGE = re.compile(r"https://github\.com/(leanprover-community|leanprover)/[A-Za-z0-9_-][A-Za-z0-9_.-]*")
+#: A release tag of Mathlib's, as its maintainers tag one for each Lean release.
+RELEASE = re.compile(r"v\d+\.\d+\.\d+(-rc\d+)?")
+#: What a project's `lakefile.toml` may set besides its libraries and Mathlib.
+LAKEFILE_KEYS = frozenset({"name", "defaultTargets", "leanOptions", "lean_lib", "require", "version"})
 #: A toolchain of Lean's own releases, as `lean-toolchain` names it.
 OFFICIAL = re.compile(r"leanprover/lean4:v\d+\.\d+\.\d+(-rc\d+)?")
 #: The module that defines the marker `@[loom "NAME"]`, kept by loom in the project as a library of its own.
@@ -88,7 +92,10 @@ def toolchain_of(proj: Path) -> str:
 
 
 def untrusted(proj: Path) -> list[str]:
-    """Each package the project's `lakefile.toml` requires or its `lake-manifest.json` pins that does not come from a repository in `TRUSTED`, in words; a `lakefile.lean` is one by itself."""
+    """What the project asks for beyond loom's own shape, in words; [] for none.
+
+    Its `lakefile.toml` names the project, its default targets and Lean's options, loom's two libraries (`MARKER_MODULE`, `LIBRARY`) with nothing but their names, and at most Mathlib, from exactly `MATHLIB_GIT` at one of its release tags; a `lakefile.lean`, a program, is refused. Its manifest pins Mathlib from that repository at a release tag, and each other package from the Lean community's or Lean's own repositories as Mathlib's own manifest brings it (`inherited`). So a module the build makes is one of loom's libraries, and the one unfenced step fetches only what Mathlib's maintainers tagged.
+    """
     out: list[str] = []
     if (proj / "lakefile.lean").exists():
         out.append("lakefile.lean, a program loom does not run")
@@ -96,13 +103,23 @@ def untrusted(proj: Path) -> list[str]:
         config = tomllib.loads((proj / "lakefile.toml").read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
         return [*out, "a lakefile.toml loom can read"]
-    for req in config.get("require", []):
-        git, scope = req.get("git"), req.get("scope")
-        if git is not None:
-            if not isinstance(git, str) or not git.startswith(TRUSTED):
-                out.append(f"{req.get('name')!s} from {git!s}")
-        elif scope not in ("leanprover-community", "leanprover") or "path" in req:
-            out.append(f"{req.get('name')!s}, from no repository loom trusts")
+    out += [f"the setting {k}" for k in sorted(set(config) - LAKEFILE_KEYS)]
+    libs = config.get("lean_lib", [])
+    if not isinstance(libs, list) or sorted(str(lib.get("name")) if isinstance(lib, dict) else "" for lib in libs) != sorted((MARKER_MODULE, LIBRARY)) or any(set(lib) != {"name"} for lib in libs):  # fmt: skip
+        out.append(f"libraries other than {MARKER_MODULE} and {LIBRARY} as loom writes them")
+    requires = config.get("require", [])
+    for req in requires if isinstance(requires, list) else [requires]:
+        if not (
+            isinstance(req, dict)
+            and set(req) == {"name", "git", "rev"}
+            and req["name"] == "mathlib"
+            and _repository(req["git"]) == MATHLIB_GIT
+            and isinstance(req["rev"], str)
+            and RELEASE.fullmatch(req["rev"])
+        ):
+            out.append(
+                f"{req.get('name') if isinstance(req, dict) else req!s}, which is not Mathlib from {MATHLIB_GIT} at a release tag"
+            )
     try:
         manifest = json.loads((proj / "lake-manifest.json").read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -110,12 +127,23 @@ def untrusted(proj: Path) -> list[str]:
     except (OSError, ValueError):
         return [*out, "a lake-manifest.json loom can read"]
     for pkg in manifest.get("packages", []) if isinstance(manifest, dict) else []:
-        url = pkg.get("url") if isinstance(pkg, dict) else None
-        if not (
-            isinstance(pkg, dict) and pkg.get("type") == "git" and isinstance(url, str) and url.startswith(TRUSTED)
-        ):
-            out.append(f"{pkg.get('name') if isinstance(pkg, dict) else pkg!s} from {url!s}")
+        if not isinstance(pkg, dict) or pkg.get("type") != "git":
+            out.append(f"{pkg.get('name') if isinstance(pkg, dict) else pkg!s}, which is not a git repository")
+            continue
+        url, name = _repository(pkg.get("url")), pkg.get("name")
+        if name == "mathlib":
+            if url != MATHLIB_GIT or not RELEASE.fullmatch(str(pkg.get("inputRev"))):
+                out.append(f"mathlib from {pkg.get('url')!s} at {pkg.get('inputRev')!s}")
+        elif not (url is not None and PACKAGE.fullmatch(url) and pkg.get("inherited") is True):
+            out.append(f"{name!s} from {pkg.get('url')!s}, which Mathlib does not bring")
     return out
+
+
+def _repository(url: object) -> str | None:
+    """A repository's address as compared: without a final `.git` or `/`; None for what is not one."""
+    if not isinstance(url, str):
+        return None
+    return url.removesuffix("/").removesuffix(".git")
 
 
 def make_project(proj: Path) -> None:
@@ -186,19 +214,14 @@ def install(root: Path, say: Callable[[str], None] = lambda _: None) -> Installe
         _run([elan, "toolchain", "install", name], proj, "installing the toolchain")
         done.steps.append(("toolchain", time.monotonic() - t))
     lake = str(toolchain_folder(name) / "bin" / "lake")
-    if not (proj / "lake-manifest.json").exists():
-        say("fetching Mathlib and its build, about 1.3 GB the first time")
-        t = time.monotonic()
-        _run([lake, "update"], proj, "fetching Mathlib", name)
-        done.steps.append(("mathlib", time.monotonic() - t))
-        problems = untrusted(proj)
-        if problems:
-            raise Refused("Mathlib pinned what loom does not install: " + "; ".join(problems))
-    else:
-        say("fetching Mathlib's build")
-        t = time.monotonic()
-        _run([lake, "exe", "cache", "get"], proj, "fetching Mathlib's build", name)
-        done.steps.append(("mathlib", time.monotonic() - t))
+    # always resolved again from Mathlib's own repository, so a manifest a quilt carries chooses no revision
+    say("fetching Mathlib and its build, about 1.3 GB the first time")
+    t = time.monotonic()
+    _run([lake, "update"], proj, "fetching Mathlib", name)
+    done.steps.append(("mathlib", time.monotonic() - t))
+    problems = untrusted(proj)
+    if problems:
+        raise Refused("Mathlib pinned what loom does not install: " + "; ".join(problems))
     write_marker(proj)
     return done
 

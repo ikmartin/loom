@@ -11,7 +11,14 @@ from loom import fence
 
 
 def test_a_fenced_command_runs_under_the_lean_profile_with_its_places_as_parameters(tmp_path: Path) -> None:
-    places = {"PROJECT": str(tmp_path), "TOOLCHAIN": "/var/empty", "DEVDIR": "/var/empty", "PROBE": str(tmp_path)}
+    places = {
+        "PROJECT": str(tmp_path),
+        "BUILD": str(tmp_path),
+        "OWN": str(tmp_path),
+        "TOOLCHAIN": "/var/empty",
+        "DEVDIR": "/var/empty",
+        "PROBE": str(tmp_path),
+    }
     argv = fence.lean_argv(["/bin/echo", "hi"], places)
     assert argv[:3] == [fence.SANDBOX, "-f", str(fence.LEAN_PROFILE)]
     assert argv[-2:] == ["/bin/echo", "hi"] and f"PROJECT={tmp_path}" in argv
@@ -34,9 +41,11 @@ def test_a_place_holding_the_home_folder_leaks(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(fence.lean_state() is not None, reason="the fence is not up here")
-def test_a_fenced_program_reads_and_writes_the_project_and_nothing_outside_it(tmp_path: Path) -> None:
+def test_a_fenced_program_reads_the_project_and_writes_only_its_build(tmp_path: Path) -> None:
+    """It reads the project and nothing outside it, writes its own build and nothing else, Mathlib's build among the packages and the project's sources included, and reaches no network."""
     project, outside = tmp_path / "project", tmp_path / "outside"
-    project.mkdir()
+    (project / ".lake" / "build").mkdir(parents=True)
+    (project / ".lake" / "packages" / "mathlib").mkdir(parents=True)
     outside.mkdir()
     (outside / "secret.txt").write_text("secret\n", encoding="utf-8")
     (project / "mine.txt").write_text("mine\n", encoding="utf-8")
@@ -47,6 +56,9 @@ def test_a_fenced_program_reads_and_writes_the_project_and_nothing_outside_it(tm
 
     assert run("/bin/cat", str(project / "mine.txt")).stdout == "mine\n"
     assert run("/bin/cat", str(outside / "secret.txt")).returncode != 0
-    assert run("/usr/bin/touch", str(project / "made.txt")).returncode == 0 and (project / "made.txt").is_file()
+    built = project / ".lake" / "build" / "made.olean"
+    assert run("/usr/bin/touch", str(built)).returncode == 0 and built.is_file()
+    for elsewhere in (project / "made.txt", project / ".lake" / "packages" / "mathlib" / "made.olean"):
+        assert run("/usr/bin/touch", str(elsewhere)).returncode != 0 and not elsewhere.exists()
     assert run("/usr/bin/touch", str(outside / "made.txt")).returncode != 0 and not (outside / "made.txt").exists()
     assert run("/usr/bin/nc", "-z", "-w", "3", "1.1.1.1", "80").returncode != 0

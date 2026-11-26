@@ -51,14 +51,14 @@ class Checked:
 
 
 def modules(proj: Path) -> dict[str, str]:
-    """The project's modules, by name, each with its path from the project: every `.lean` file of the marker's library and of `install.LIBRARY`, outside hidden folders."""
+    """The project's modules, by name, each with its path from the project: every `.lean` file of its two libraries (`install.MARKER_MODULE`, `install.LIBRARY`), outside hidden folders, which are all the modules a project of loom's shape (`install.untrusted`) can build."""
     out: dict[str, str] = {}
     for path in sorted(proj.rglob("*.lean")):
         rel = path.relative_to(proj)
         if any(part.startswith(".") for part in rel.parts) or not path.is_file():
             continue
         name = ".".join(rel.with_suffix("").parts)
-        if name == install.MARKER_MODULE or name == install.LIBRARY or name.startswith(install.LIBRARY + "."):
+        if any(name == lib or name.startswith(lib + ".") for lib in (install.MARKER_MODULE, install.LIBRARY)):
             out[name] = rel.as_posix()
     return out
 
@@ -197,9 +197,11 @@ def _check(
     ready = [m for m, p in mods.items() if (build / "lib" / "lean" / Path(p).with_suffix(".olean")).is_file()]
     if not ready:
         raise Refused("no module of the Lean project built:\n" + "\n".join(done.errors[:12] or [built.stdout[-2000:]]))
+    lib = Path("lib") / "lean"
+    paths = [f"path={(proj / '.lake' / 'packages' / p / '.lake' / 'build' / lib).resolve()}" for p in _packages(proj)]
     probed = run(
         "replaying the build in Lean's kernel and reading what it states",
-        [lake, "env", "lean", "--run", str(probe), *ready],
+        [str(toolchain / "bin" / "lean"), "--run", str(probe), f"own={(build / lib).resolve()}", *paths, *ready],
     )
     if probed.returncode != 0:
         # the probe never answered, as when the machine was short of memory: no observation, so nothing is recorded
@@ -279,6 +281,28 @@ class _Decl:
     axioms: list[str]
     uses: list[str]
     internal: bool
+    means: list[str]
+
+
+def _statement_hashes(decls: dict[str, _Decl]) -> dict[str, str]:
+    """Each declaration's statement hash: what it says, with the statement of each declaration of the project it names there, in turn, so a theorem stated with a helper definition no marker names stops matching an attestation once that definition says something else."""
+    out: dict[str, str] = {}
+
+    def of(name: str, seen: frozenset[str]) -> str:
+        if name in out:
+            return out[name]
+        d = decls[name]
+        named = sorted((n, of(n, seen | {name})) for n in d.means if n in decls and n not in seen and n != name)
+        digest = (
+            "sha256:" + hashlib.sha256(json.dumps([d.statement, named], ensure_ascii=False).encode("utf-8")).hexdigest()
+        )
+        if not seen:
+            out[name] = digest
+        return digest
+
+    for name in decls:
+        of(name, frozenset())
+    return out
 
 
 def _resolver(root: Path) -> Callable[[str], list[Subject]]:
@@ -322,9 +346,17 @@ def _record(
             markers[d["name"].removesuffix("._loom")] = d["marker"]
             continue
         decls[d["name"]] = _Decl(
-            d["name"], d["module"], d["kind"], d["statement"], list(d["axioms"]), list(d["uses"]), bool(d["internal"])
+            d["name"],
+            d["module"],
+            d["kind"],
+            d["statement"],
+            list(d["axioms"]),
+            list(d["uses"]),
+            bool(d["internal"]),
+            list(d.get("means", [])),
         )
     imports: dict[str, list[str]] = {m: list(v) for m, v in found.get("modules", {}).items()}
+    statements = _statement_hashes(decls)
     resolve = _resolver(root)
     named: dict[str, list[Subject]] = {}
     for decl, marker in markers.items():
@@ -350,7 +382,7 @@ def _record(
             if by_result[subject.key][0] != decl:
                 continue  # one record for a result, however many declarations state it
             cone = _cone(by_result[subject.key], decls)
-            fields = _fields(subject, cone, decls, markers, named, mods, imports, hashes, errors, project)
+            fields = _fields(subject, cone, decls, markers, named, mods, imports, hashes, errors, project, statements)
             fields["replay"] = replayed
             latest = evidence.about(*subject.key, of="lean")
             if latest and latest[-1].on == subject and _same(latest[-1].fields, fields):
@@ -383,6 +415,7 @@ def _fields(
     hashes: dict[str, str | None],
     errors: dict[str, list[str]],
     project: dict[str, Any],
+    statements: dict[str, str],
 ) -> dict[str, Any]:
     """A `lean` record's fields for `subject` but its replay: its declarations, what it assumes and uses, the files it rests on and the verdict."""
     rows: list[dict[str, Any]] = []
@@ -404,7 +437,7 @@ def _fields(
                 else "def",
                 "role": "states" if states else "supports",
                 "names": names,
-                "statement": "sha256:" + hashlib.sha256(d.statement.encode("utf-8")).hexdigest(),
+                "statement": statements[name],
                 "axioms": d.axioms,
                 "sorry": "sorryAx" in d.axioms,
             }

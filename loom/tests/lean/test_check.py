@@ -144,3 +144,66 @@ def test_lean_reaching_outside_the_project_gets_nothing(quilt: Path, tmp_path: P
     lake = install.toolchain_folder(install.TOOLCHAIN) / "bin" / "lake"
     ran = subprocess.run([str(lake), "env", "lean", "Formal/Escape.lean"], cwd=install.project(quilt), capture_output=True, text=True, check=False)  # fmt: skip
     assert SECRET in ran.stdout and (outside / "written.txt").exists()
+
+
+def test_lean_the_project_built_outside_loom_s_libraries_proves_nothing(quilt: Path) -> None:
+    """A module of the project outside loom's two libraries, which a marked theorem imports, is never taken in unchecked: here it adds a theorem of False with the kernel's check skipped, and loom records nothing of the result it marks; with the library added to the lakefile, the check refuses the project."""
+    proj = install.project(quilt)
+    (proj / "Helper.lean").write_text(
+        "import Lean\nopen Lean Elab Command\nset_option debug.skipKernelTC true in\nrun_cmd liftCoreM do addDecl (.thmDecl {name := `Helper.bad, levelParams := [], type := mkConst ``False, value := mkConst ``True.intro})\n",
+        encoding="utf-8",
+    )
+    (proj / "Formal" / "Boom.lean").write_text('import Loom\nimport Helper\n\n@[loom "sh-0005"]\ntheorem Formal.boom : 1 = 2 := Helper.bad.elim\n', encoding="utf-8")  # fmt: skip
+    try:
+        said = str(check.check(quilt).errors)
+    except check.Refused as e:
+        said = str(e)
+    assert _lean(quilt, "sh-0005") == "none", "a theorem of False was taken as proved"
+    assert "Helper" in said, said
+    lakefile = proj / "lakefile.toml"
+    lakefile.write_text(lakefile.read_text(encoding="utf-8") + '\n[[lean_lib]]\nname = "Helper"\n', encoding="utf-8")
+    with pytest.raises(check.Refused, match="libraries other than"):
+        check.check(quilt)
+
+
+def test_changing_what_an_unmarked_definition_says_changes_the_statement(quilt: Path) -> None:
+    from loom.evidence.status import statements_of
+
+    lean = install.project(quilt) / "Formal" / "Defs.lean"
+    lean.write_text('import Loom\n\ndef Formal.D (n : Nat) : Prop := n + 0 = n\n\n@[loom "sh-0002"]\ntheorem Formal.t (n : Nat) : Formal.D n := by simp [Formal.D]\n', encoding="utf-8")  # fmt: skip
+    check.check(quilt)
+    before = statements_of(replay(quilt).about("label", "sh-0002", of="lean")[-1])
+    lean.write_text('import Loom\n\ndef Formal.D (n : Nat) : Prop := True\n\n@[loom "sh-0002"]\ntheorem Formal.t (n : Nat) : Formal.D n := trivial\n', encoding="utf-8")  # fmt: skip
+    check.check(quilt)
+    assert statements_of(replay(quilt).about("label", "sh-0002", of="lean")[-1]) != before
+
+
+BAD = "import Lean\nopen Lean Elab Command\nset_option debug.skipKernelTC true in\nrun_cmd liftCoreM do addDecl (.thmDecl {name := `Loom.bad, levelParams := [], type := mkConst ``False, value := mkConst ``True.intro})\n"
+
+
+def test_a_module_in_loom_s_own_library_is_replayed_too(quilt: Path) -> None:
+    """A module that builds in the marker's library is checked like the rest: the kernel refuses the theorem of False it adds, and nothing it supports reads proved."""
+    proj = install.project(quilt)
+    (proj / "Loom").mkdir()
+    (proj / "Loom" / "Helper.lean").write_text(BAD, encoding="utf-8")
+    (proj / "Formal" / "Boom.lean").write_text('import Loom\nimport Loom.Helper\n\n@[loom "sh-0005"]\ntheorem Formal.boom : 1 = 2 := Loom.bad.elim\n', encoding="utf-8")  # fmt: skip
+    assert "Loom.Helper" in check.modules(proj)
+    check.check(quilt)
+    [record] = replay(quilt).about("label", "sh-0005", of="lean")
+    assert record.get("replay")["exit"] != 0
+    assert _lean(quilt, "sh-0005") == "failed"
+
+
+def test_the_probe_refuses_a_module_the_project_built_and_was_not_given(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Were a module the project built left out of what loom checks, the probe refuses to import it unchecked, and nothing is recorded."""
+    proj = install.project(quilt)
+    (proj / "Loom").mkdir()
+    (proj / "Loom" / "Helper.lean").write_text(BAD, encoding="utf-8")
+    (proj / "Formal" / "Boom.lean").write_text('import Loom\nimport Loom.Helper\n\n@[loom "sh-0005"]\ntheorem Formal.boom : 1 = 2 := Loom.bad.elim\n', encoding="utf-8")  # fmt: skip
+    every = check.modules
+    monkeypatch.setattr(check, "modules", lambda p: {m: f for m, f in every(p).items() if m != "Loom.Helper"})
+    with pytest.raises(check.Refused, match="Loom.Helper is the project's own and not one loom checks"):
+        check.check(quilt)
+    assert replay(quilt).about("label", "sh-0005", of="lean") == []

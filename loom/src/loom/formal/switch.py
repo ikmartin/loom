@@ -1,4 +1,4 @@
-"""Whether formalization is on for a quilt on this machine: one file a quilt under loom's data folder, keyed by where the quilt lies, and never in the quilt, so that opening a co-author's quilt, or a copy of one's own, runs nothing until the person turns it on there."""
+"""Whether formalization is on for a quilt on this machine: one file a quilt under loom's data folder, keyed by where the quilt lies and holding which folder lies there, and never in the quilt, so that opening a co-author's quilt, a copy of one's own, or a quilt cloned where a deleted one lay runs nothing until the person turns it on there."""
 
 from __future__ import annotations
 
@@ -21,12 +21,26 @@ def switch_file(root: Path) -> Path:
 
 
 def is_on(root: Path) -> bool:
-    """Whether the person turned formalization on for the quilt at `root` on this machine; a file naming another quilt, or one that does not read, is off."""
+    """Whether the person turned formalization on for the quilt at `root` on this machine; a file naming another place or another folder at this one, or one that does not read, is off."""
     try:
         data = json.loads(switch_file(root).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return False
-    return isinstance(data, dict) and data.get("root") == str(Path(root).resolve()) and data.get("on") is True
+    return (
+        isinstance(data, dict)
+        and data.get("root") == str(Path(root).resolve())
+        and data.get("folder") == _folder(root)
+        and data.get("on") is True
+    )
+
+
+def _folder(root: Path) -> list[int] | None:
+    """Which folder lies at `root`: its device and inode, which a folder made anew at the same place does not share."""
+    try:
+        st = os.stat(root)
+    except OSError:
+        return None
+    return [st.st_dev, st.st_ino]
 
 
 def turn_on(root: Path) -> None:
@@ -36,7 +50,10 @@ def turn_on(root: Path) -> None:
     at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(json.dumps({"root": str(Path(root).resolve()), "on": True, "at": at}, indent=1) + "\n")
+        f.write(
+            json.dumps({"root": str(Path(root).resolve()), "folder": _folder(root), "on": True, "at": at}, indent=1)
+            + "\n"
+        )
 
 
 def turn_off(root: Path) -> None:

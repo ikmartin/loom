@@ -283,3 +283,30 @@ def test_the_marker_module_is_put_back_as_loom_ships_it(quilt: Path, monkeypatch
     marker.write_text("import Lean\n-- the marker made to mean something else\n", encoding="utf-8")
     check.check(quilt)
     assert marker.read_bytes() == install.MARKER.read_bytes()
+
+
+def _helped(helper: str, proof: str) -> list[dict[str, Any]]:
+    """A theorem marked for sh-0002 whose statement names a definition no marker names, and the proof it uses."""
+    return [
+        {**_decl("Formal.D", "def", f"def D := {helper}", []), "means": []},
+        {**_decl("Formal.t", "theorem", "theorem t : D", ["Formal.D", "Formal.p"]), "means": ["Formal.D"]},
+        {**_decl("Formal.p", "theorem", f"theorem p := {proof}", []), "means": []},
+        _marker("Formal.t", "sh-0002"),
+    ]
+
+
+def test_a_statement_s_hash_covers_the_unmarked_definitions_it_names(
+    quilt: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What a person attests is the stating declarations' statements: a definition with no marker that the statement names is part of what it says, so changing what that definition says changes the statement's hash, and changing only a proof does not."""
+    from loom.evidence.status import statements_of
+
+    def stated(helper: str, proof: str) -> dict[str, str]:
+        _steps(monkeypatch, _probe(extra=_helped(helper, proof)))
+        (install.project(quilt) / SATURATION).write_text(f"import Loom\n-- {helper} {proof}\n", encoding="utf-8")
+        check.check(quilt)
+        return statements_of(replay(quilt).about("label", "sh-0002", of="lean")[-1])
+
+    first = stated("n + 0 = n", "by simp")
+    assert stated("n + 0 = n", "by omega") == first
+    assert stated("True", "by omega") != first

@@ -1,6 +1,6 @@
 """The fence around what loom runs on macOS: Apple's `sandbox-exec` with a profile loom ships for each kind of run, so a file loom runs, one the person did not write among them, reads and writes only the places its profile names and reaches no network.
 
-A TeX compile (`assets/fence/tex.sb`) reads only its run's folders, the TeX in use and what TeX's own scripts need, and writes only its run's folders and TeX's font cache; where the fence is not up (`state`) it runs as it would without it. Lean's certifying check (`assets/fence/lean.sb`) reads the quilt's Lake project, its one toolchain, the developer tools' git and loom's probe, and writes only the project; it runs fenced or not at all (`lean_state`). A fenced run that fails is never tried again unfenced, since a file could fail on purpose to get the unfenced run.
+A TeX compile (`assets/fence/tex.sb`) reads only its run's folders, the TeX in use and what TeX's own scripts need, and writes only its run's folders and TeX's font cache; where the fence is not up (`state`) it runs as it would without it. Lean's certifying check (`assets/fence/lean.sb`) reads the quilt's Lake project, its one toolchain, the developer tools' git and loom's probe, and writes only the project's own build and loom's folder for the run; it runs fenced or not at all (`lean_state`). A fenced run that fails is never tried again unfenced, since a file could fail on purpose to get the unfenced run.
 """
 
 from __future__ import annotations
@@ -122,9 +122,16 @@ def fenced(argv: list[str], *, stage: Path, out: Path, var: Path | None = None) 
 
 
 def lean_places(*, project: Path, toolchain: Path, probe: Path) -> dict[str, str]:
-    """The Lean profile's parameters for one check, each resolved: the Lake project, the toolchain's folder, the developer tools' folder (`xcode-select -p`) and the folder of loom's probe."""
+    """The Lean profile's parameters for one check, each resolved: the Lake project, its own build and loom's folder for the run in it (the two places it writes), the toolchain's folder, the developer tools' folder (`xcode-select -p`) and the folder of loom's probe."""
     dev = _ask(["/usr/bin/xcode-select", "-p"], {"PATH": "/usr/bin:/bin"}).strip()
-    at = {"PROJECT": str(project), "TOOLCHAIN": str(toolchain), "DEVDIR": dev, "PROBE": str(probe)}
+    at = {
+        "PROJECT": str(project),
+        "BUILD": str(project / ".lake" / "build"),
+        "OWN": str(project / ".lake" / "loom"),
+        "TOOLCHAIN": str(toolchain),
+        "DEVDIR": dev,
+        "PROBE": str(probe),
+    }
     return {name: os.path.realpath(place).rstrip("/") if place else _NOWHERE for name, place in at.items()}
 
 

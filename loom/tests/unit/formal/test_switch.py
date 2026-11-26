@@ -32,6 +32,15 @@ def test_the_switch_is_kept_on_the_machine_and_a_copy_of_the_quilt_is_off(tmp_pa
     assert not switch.is_on(q)
 
 
+def test_a_quilt_cloned_where_one_was_turned_on_is_off(tmp_path: Path) -> None:
+    """Deleting a quilt formalization was on for and cloning a co-author's to the same place leaves it off: the switch names the folder, not only the place."""
+    q = showcase(tmp_path)
+    switch.turn_on(q)
+    shutil.rmtree(q)
+    shutil.copytree(showcase(tmp_path / "theirs"), q)
+    assert not switch.is_on(q)
+
+
 def test_a_switch_file_naming_another_quilt_is_off(tmp_path: Path) -> None:
     q = showcase(tmp_path)
     switch.turn_on(q)
@@ -69,31 +78,55 @@ def test_a_new_project_trusts_only_lean_s_and_the_community_s_repositories(tmp_p
     assert (proj / ".gitignore").read_text(encoding="utf-8") == "/.lake\n"
 
 
+LIBS = '[[lean_lib]]\nname = "Loom"\n\n[[lean_lib]]\nname = "Formal"\n'
+MATHLIB = '[[require]]\nname = "mathlib"\ngit = "https://github.com/leanprover-community/mathlib4"\nrev = "v4.36.0"\n'
+INHERITED = {"name": "batteries", "type": "git", "url": "https://github.com/leanprover-community/batteries", "inherited": True}  # fmt: skip
+OWN = {"name": "mathlib", "type": "git", "url": "https://github.com/leanprover-community/mathlib4", "inputRev": "v4.36.0", "inherited": False}  # fmt: skip
+
+
 @pytest.mark.parametrize(
     "lakefile, manifest, says",
     [
-        ('name = "x"\n[[require]]\nname = "mathlib"\ngit = "https://github.com/someone/mathlib4"\n', None, "someone"),
-        ('name = "x"\n[[require]]\nname = "local"\npath = "../elsewhere"\n', None, "local"),
-        ('name = "x"\n[[require]]\nname = "thing"\nscope = "someone"\n', None, "thing"),
+        (MATHLIB.replace("leanprover-community/mathlib4", "someone/mathlib4") + LIBS, None, "not Mathlib"),
         (
-            'name = "x"\n',
-            {"packages": [{"name": "batteries", "type": "git", "url": "https://evil.example/batteries"}]},
-            "evil.example",
+            MATHLIB.replace("leanprover-community/mathlib4", "leanprover-community/../someone/mathlib4") + LIBS,
+            None,
+            "not Mathlib",
         ),
-        ('name = "x"\n', {"packages": [{"name": "near", "type": "path", "dir": "../near"}]}, "near"),
+        (MATHLIB.replace("v4.36.0", "my-branch") + LIBS, None, "release tag"),
+        ('[[require]]\nname = "local"\npath = "../elsewhere"\n' + LIBS, None, "local"),
+        ('[[require]]\nname = "batteries"\nscope = "leanprover-community"\n' + LIBS, None, "batteries"),
+        (MATHLIB + LIBS + '\n[[lean_lib]]\nname = "Helper"\n', None, "libraries other than"),
+        (
+            MATHLIB + '[[lean_lib]]\nname = "Loom"\n\n[[lean_lib]]\nname = "Formal"\nroots = ["Elsewhere"]\n',
+            None,
+            "libraries other than",
+        ),
+        (MATHLIB + LIBS + '\n[[lean_exe]]\nname = "run"\n', None, "the setting lean_exe"),
+        (MATHLIB + LIBS, {"packages": [OWN, {**INHERITED, "url": "https://evil.example/batteries"}]}, "evil.example"),
+        (MATHLIB + LIBS, {"packages": [OWN, {**INHERITED, "inherited": False}]}, "Mathlib does not bring"),
+        (MATHLIB + LIBS, {"packages": [{**OWN, "inputRev": "master"}, INHERITED]}, "at master"),
+        (MATHLIB + LIBS, {"packages": [OWN, {"name": "near", "type": "path", "dir": "../near"}]}, "near"),
     ],
 )
-def test_a_project_requiring_anything_else_is_refused(
+def test_a_project_asking_for_anything_else_is_refused(
     tmp_path: Path, lakefile: str, manifest: dict | None, says: str
 ) -> None:  # type: ignore[type-arg]
-    """A co-author's project that requires a package from another repository, a folder, or a scope loom does not trust is named, so turning formalization on runs none of its code unfenced."""
+    """A co-author's project that requires anything but Mathlib from its own repository at a release tag, a package Mathlib does not bring, or a library or setting beyond loom's own is named, so neither the unfenced install nor the check builds anything else."""
     proj = tmp_path / "lean"
     proj.mkdir()
-    (proj / "lakefile.toml").write_text(lakefile, encoding="utf-8")
+    (proj / "lakefile.toml").write_text('name = "formal"\n' + lakefile, encoding="utf-8")
     if manifest is not None:
         (proj / "lake-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     found = install.untrusted(proj)
-    assert found and says in " ".join(found)
+    assert found and says in " ".join(found), found
+
+
+def test_loom_s_own_shape_with_mathlib_s_manifest_is_trusted(tmp_path: Path) -> None:
+    proj = tmp_path / "lean"
+    install.make_project(proj)
+    (proj / "lake-manifest.json").write_text(json.dumps({"packages": [OWN, INHERITED]}), encoding="utf-8")
+    assert install.untrusted(proj) == []
 
 
 def test_a_lakefile_that_is_a_program_is_refused(tmp_path: Path) -> None:
@@ -128,7 +161,7 @@ def test_install_refuses_an_untrusted_project_before_running_anything(
     (proj / "lakefile.toml").write_text(
         'name = "x"\n[[require]]\nname = "m"\ngit = "https://example.org/m"\n', encoding="utf-8"
     )
-    with pytest.raises(install.Refused, match="example.org"):
+    with pytest.raises(install.Refused, match="not Mathlib"):
         install.install(q)
     assert ran == []
 
