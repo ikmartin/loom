@@ -16,7 +16,7 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
-from loom import locks
+from loom import locks, own
 from loom.library.counters import Numbering, plain
 from loom.paths import LIBRARY_SURVEYS, SURVEY_LOCK, SURVEY_RUN
 from loom.reshape.importer import closure_of
@@ -721,10 +721,15 @@ def kept(root: Path, tex: str, pdf: str | None = None) -> Survey | None:
 def keep(root: Path, survey: Survey) -> None:
     """Write a survey to its file whole, in its compact form (`packed`): a reader sees the last one or this one, never part of it."""
     path = path_of(root, survey.tex, survey.pdf)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(packed(survey.to_json()), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    os.replace(tmp, path)
+    own.write_text(
+        tmp,
+        json.dumps(packed(survey.to_json()), ensure_ascii=False, separators=(",", ":")),
+        encoding="utf-8",
+        root=root,
+    )
+    own.replace(tmp, path, root=root)
 
 
 #: The lists of a survey's JSON kept as tables; the labels are kept as one too, by name.
@@ -834,7 +839,7 @@ def marked(src: Path, s: Survey, dest: Path) -> Path:
         text = sf.text
         for offset, what in sorted(inserts, reverse=True):
             text = text[:offset] + what + text[offset:]
-        (root / rel).write_bytes(text.encode(sf.encoding, errors="replace"))
+        own.write_bytes(root / rel, text.encode(sf.encoding, errors="replace"), root=root)
     return root
 
 
@@ -963,7 +968,6 @@ class Pages:
     @classmethod
     def of(cls, pdf: Path | None) -> Pages | None:
         """The text of every page of `pdf`, read by poppler's `pdftotext` at once; None without a PDF or poppler, or a PDF it cannot read."""
-        import shutil
         import subprocess
 
         exe = shutil.which("pdftotext")
@@ -1534,12 +1538,12 @@ def _scratch(at: Path | None) -> Iterator[Path]:
         with tempfile.TemporaryDirectory(prefix="loom-survey-") as tmp:
             yield Path(tmp)
         return
-    shutil.rmtree(at, ignore_errors=True)
-    at.mkdir(parents=True)
+    own.rmtree(at, ignore_errors=True)
+    own.mkdir(at, exist_ok=False)
     try:
         yield at
     finally:
-        shutil.rmtree(at, ignore_errors=True)
+        own.rmtree(at, ignore_errors=True)
 
 
 def complete(

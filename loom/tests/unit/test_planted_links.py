@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 from collections.abc import Callable
 from pathlib import Path
@@ -11,24 +12,33 @@ import pytest
 
 from loom import gitignore, layout, locks, looks, mailbox, own, review_origins, review_queue, sessions, since, writes
 from loom.history import ledger as hledger
+from loom.library import acts, documents, drawn, intake, store, survey, tags
 from loom.library import log as llog
-from loom.library import tags
 from loom.paths import (
     ANNOTATION_LOG,
     ANNOTATION_TYPES,
+    DRAWN_RUN,
     EDIT_LOG,
     HISTORY,
+    INCOMING,
     LEDGER,
+    LIBRARY_CACHE,
+    LIBRARY_DOCUMENTS,
     LIBRARY_LOG,
+    LIBRARY_NODES,
+    LIBRARY_UNDO,
     LOCAL,
     LOOM_GITIGNORE,
+    NODE_INDEX,
     RECORDS,
     REVIEW_DECISIONS,
     REVIEW_ORIGINS,
+    SURVEY_RUN,
     TAG_LOG,
 )
 from loom.records import edits, ledger, snapshots, types
 from loom.records import log as alog
+from tests.unit.library.test_store import _pair
 
 
 @pytest.fixture
@@ -195,3 +205,82 @@ def test_with_no_link_each_record_writer_writes_what_it_wrote_before(q: tuple[Pa
     assert (root / ANNOTATION_LOG).read_text().splitlines() == [json.dumps(_event(), sort_keys=True)] * 2
     hledger.append_entry(root / HISTORY, "stamp", {"x": 1}, "me")
     assert json.loads((root / HISTORY / "ledger.jsonl").read_text())["x"] == 1
+
+
+# ---- the library: its nodes, documents, drops, acts and caches ------------------------------------------------------
+
+
+def _library(tmp_path: Path) -> tuple[Path, Path]:
+    """The library's quilt of nine nodes, and a folder outside it holding a canary and a folder of loom's names (`drawn/run/keep`, `survey/run/keep`), which a removal through a link would take."""
+    from tests.unit.library._store import quilt
+
+    root = quilt(tmp_path)
+    out = tmp_path / "outside"
+    out.mkdir()
+    (out / "canary").write_text("canary\n")
+    return root, out
+
+
+def _pdf(tmp_path: Path) -> Path:
+    p = tmp_path / "paper.pdf"
+    p.write_bytes(b"%PDF-1.4\n%%EOF\n")
+    return p
+
+
+LIBRARY_WRITERS: dict[str, tuple[str, Callable[[Path, Path], object]]] = {
+    "a node written": (LIBRARY_NODES, lambda r, t: store.write_nodes(r, _pair())),
+    "a node removed": (LIBRARY_NODES, lambda r, t: store.remove_node(r, "tq-00A4")),
+    "the library's lock and a batch's record": (LOCAL, lambda r, t: store.write_nodes(r, _pair())),
+    "a document kept": (LIBRARY_DOCUMENTS, lambda r, t: documents.put_pdf(r, _pdf(t))),
+    "a source kept": (
+        LIBRARY_DOCUMENTS,
+        lambda r, t: documents.put_source(r, b"\\documentclass{article}\n", name="a.tex"),
+    ),
+    "a drop received": (INCOMING, lambda r, t: intake.receive(r, "a.pdf", io.BytesIO(b"%PDF-1.4\n"), 9)),
+    "a delete's undo": (LIBRARY_UNDO, lambda r, t: acts._keep(r, "u-x", {"nodes": []})),
+    "a drawing's run folder": (LIBRARY_CACHE, lambda r, t: drawn._scratch(r / DRAWN_RUN).__enter__()),
+    "a survey's run folder": (LIBRARY_CACHE, lambda r, t: survey._scratch(r / SURVEY_RUN).__enter__()),
+    "a survey kept": (
+        LIBRARY_CACHE,
+        lambda r, t: survey.keep(r, survey.Survey(tex="sha256:" + "0" * 64, main="a.tex")),
+    ),
+}
+
+
+@pytest.mark.parametrize("what", sorted(LIBRARY_WRITERS))
+def test_the_library_writes_and_removes_nothing_through_a_planted_link(tmp_path: Path, what: str) -> None:
+    root, out = _library(tmp_path)
+    where, fn = LIBRARY_WRITERS[what]
+    for folder in ("drawn/run", "survey/run"):
+        (out / folder).mkdir(parents=True)
+        (out / folder / "keep").write_text("keep\n")
+    plant(root, where, out)
+    run(lambda: fn(root, tmp_path))
+    for kept in ("drawn/run/keep", "survey/run/keep"):
+        assert (out / kept).read_text() == "keep\n", kept
+        (out / kept).unlink()
+    for gone in ("drawn/run", "survey/run", "drawn", "survey"):
+        (out / gone).rmdir()
+    assert untouched(out)
+
+
+def test_a_planted_link_where_the_node_index_belongs_goes_itself(tmp_path: Path) -> None:
+    """SQLite opens the index by its path, so a link standing there is taken away before it opens, and its target is left."""
+    from loom.library.index import NodeIndex
+
+    root, out = _library(tmp_path)
+    (root / NODE_INDEX).parent.mkdir(parents=True)
+    (root / NODE_INDEX).symlink_to(out / "canary")
+    with NodeIndex.open(root):
+        pass
+    assert untouched(out) and not (root / NODE_INDEX).is_symlink()
+
+
+def test_with_no_link_the_library_writes_what_it_wrote_before(tmp_path: Path) -> None:
+    root, _out = _library(tmp_path)
+    before = {p.name: p.read_bytes() for p in (root / LIBRARY_NODES).iterdir()}
+    store.write_nodes(root, _pair())
+    assert store.remove_node(root, "tq-0M02") and store.remove_node(root, "tq-0M01")
+    assert {p.name: p.read_bytes() for p in (root / LIBRARY_NODES).iterdir()} == before
+    d = documents.put_pdf(root, _pdf(tmp_path))
+    assert documents.path_of(root, d, "pdf").read_bytes() == _pdf(tmp_path).read_bytes()

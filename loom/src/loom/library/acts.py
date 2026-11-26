@@ -9,11 +9,11 @@ import contextlib
 import json
 import os
 import re
-import shutil
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.library import log
 from loom.library.entries import identifiers, read_entry
 from loom.library.ids import STATEMENT, kind_of
@@ -190,7 +190,7 @@ def delete(root: Path, ref: str, *, by: str, kind: str) -> str:
         entry = read_entry(node.body)
         undos = root / LIBRARY_UNDO
         for aside in undos.glob(".u-*.tmp") if undos.is_dir() else []:
-            shutil.rmtree(aside, ignore_errors=True)  # an undo a killed delete was writing, which nothing names
+            own.rmtree(aside, root=root, ignore_errors=True)  # an undo a killed delete was writing, which nothing names
         # past every undo kept and every one the log names, since `finish` and `restore` find a delete's acts by it
         named = {str(a["undo"]) for a in log.replay(root).lines if a.get("undo")}
         undo = draw("u-", named | ({p.name for p in undos.iterdir()} if undos.is_dir() else set()), seed=ref)
@@ -216,18 +216,18 @@ def _keep(root: Path, undo: str, record: dict[str, Any]) -> None:
     """Write `undo` whole, flushed, before anything is removed: a copy of each node it takes and `undo.json`, made aside and renamed into place, then `LIBRARY_DELETING` naming it."""
     home = root / LIBRARY_UNDO / undo
     aside = home.with_name(f".{undo}.tmp")
-    shutil.rmtree(aside, ignore_errors=True)
-    aside.mkdir(parents=True)
+    own.rmtree(aside, root=root, ignore_errors=True)
+    own.mkdir(aside, root=root, exist_ok=False)
     for node_id in record["nodes"]:
         _flushed(aside / file_name(node_id), (folder(root) / file_name(node_id)).read_bytes())
     _flushed(aside / "undo.json", (json.dumps(record, ensure_ascii=False, indent=1) + "\n").encode("utf-8"))
-    os.replace(aside, home)
+    own.replace(aside, home, root=root)
     _flushed(root / LIBRARY_DELETING, f"{undo}\n".encode())
 
 
 def _done(root: Path) -> None:
     """The delete under way is whole: `LIBRARY_DELETING` goes."""
-    (root / LIBRARY_DELETING).unlink(missing_ok=True)
+    own.unlink(root / LIBRARY_DELETING, root=root, missing_ok=True)
     _flush_dir(root / LIBRARY_UNDO)
 
 
@@ -260,7 +260,7 @@ def finish(root: Path) -> None:
         here = folder(root) / file_name(node_id)
         copy = home / file_name(node_id)
         if here.is_file() and copy.is_file() and here.read_bytes() == copy.read_bytes():
-            here.unlink()
+            own.unlink(here, root=root)
     _done(root)
 
 
@@ -341,28 +341,28 @@ def restore(root: Path, undo: str, *, by: str, kind: str) -> str:
             here = folder(root) / file_name(node_id)
             if here.is_file() and here.read_bytes() != (home / here.name).read_bytes():
                 raise ActRefused("changed", f"{node_id} has been written again since the delete")
-        folder(root).mkdir(parents=True, exist_ok=True)
+        own.mkdir(folder(root), root=root)
         for node_id in record["nodes"]:
             target = folder(root) / file_name(node_id)
             if target.is_file():
                 continue  # put back by a restore cut short, as the check above found
             temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
             _flushed(temporary, (home / target.name).read_bytes())
-            os.replace(temporary, target)
+            own.replace(temporary, target, root=root)
         _flush_dir(folder(root))
         if isinstance(record.get("notes"), dict):
             notes.put_back(root, record["notes"])
         ref = str(record["ref"])
         if not any(a["event"] == "restored" and a.get("undo") == undo for a in log.replay(root).of(ref)):
             log.record(root, "restored", ref, by=by, kind=kind, undo=undo)
-        (home / "undo.json").unlink()
-        shutil.rmtree(home, ignore_errors=True)
+        own.unlink(home / "undo.json", root=root)
+        own.rmtree(home, root=root, ignore_errors=True)
     return ref
 
 
 def _flushed(path: Path, data: bytes) -> None:
-    """Write `data` to `path` and flush it to the disk."""
-    with path.open("wb") as fh:
+    """Write `data` to `path` and flush it to the disk, never through a link (`loom.own`)."""
+    with own.open(path, "wb") as fh:
         fh.write(data)
         fh.flush()
         os.fsync(fh.fileno())

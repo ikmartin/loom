@@ -293,7 +293,7 @@ def test_a_file_is_on_the_disk_before_its_rename(tmp_path: Path, monkeypatch: py
     did: list[str] = []
     real_fsync, real_replace = os.fsync, os.replace
     monkeypatch.setattr(os, "fsync", lambda fd: (did.append("fsync"), real_fsync(fd))[1])
-    monkeypatch.setattr(os, "replace", lambda a, b: (did.append("replace"), real_replace(a, b))[1])
+    monkeypatch.setattr(os, "replace", lambda a, b, **kw: (did.append("replace"), real_replace(a, b, **kw))[1])
     write_node(root, Node(id="tq-0M05", taxon="remark", source="tq-00A1-ref", body="x\n"))
     assert did[:2] == ["fsync", "replace"]
 

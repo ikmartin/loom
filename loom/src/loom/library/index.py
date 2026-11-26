@@ -11,7 +11,6 @@ import contextlib
 import json
 import os
 import re
-import shutil
 import sqlite3
 import time
 import unicodedata
@@ -20,6 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from loom import own
 from loom.library import ids
 from loom.library.body import CITES, MULTICITES, RANGES, REFS, blank_comments, entry_of, labels
 from loom.library.node import SUFFIX, Node, NodeUnreadable, node_hash, read_node
@@ -292,10 +292,13 @@ class NodeIndex:
             Where this Python's SQLite has no FTS5.
         """
         path = root / NODE_INDEX
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.is_dir() and not path.is_symlink():
+        own.mkdir(path.parent, root=root)
+        if path.is_symlink():
+            # SQLite opens its file by path: a link where the index belongs goes itself, never its target
+            own.unlink(path, root=root)
+        elif path.is_dir():
             # a folder where the index belongs holds nothing of anyone's: the cache is loom's
-            shutil.rmtree(path)
+            own.rmtree(path, root=root)
         for attempt in (1, 2):
             db: sqlite3.Connection | None = None
             try:
@@ -397,7 +400,7 @@ class NodeIndex:
         if _inode(path) != self._inode:
             # the file this connection holds is gone, and SQLite would answer every write "readonly database"
             self.db.close()
-            path.parent.mkdir(parents=True, exist_ok=True)
+            own.mkdir(path.parent, root=self.root)
             self.db = self._connect(path)
             self._inode = _inode(path)
         started = time.time_ns()
@@ -1085,7 +1088,7 @@ def _rollback(db: sqlite3.Connection) -> None:
 def _remove(path: Path) -> None:
     for p in (path, path.with_name(path.name + "-journal")):
         with contextlib.suppress(FileNotFoundError):
-            p.unlink()
+            own.unlink(p)
 
 
 @contextlib.contextmanager

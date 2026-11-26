@@ -13,7 +13,7 @@ import stat
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import IO, Any
+from typing import IO, Any, BinaryIO, Literal, overload
 
 from loom.paths import LOOM
 
@@ -71,7 +71,9 @@ def _refuse(at: int, part: str, where: Path | str) -> None:
 
 @contextmanager
 def _walk(anchor: str, folders: tuple[str, ...], *, make: bool = False) -> Iterator[int]:
-    """The folder `folders` below `anchor`, opened a part at a time without following a link; with `make`, a part not there is made."""
+    """The folder `folders` below `anchor`, opened a part at a time without following a link; with `make`, a part not there is made, the anchor among them, which is not loom's place and is made as `Path.mkdir` makes it."""
+    if make:
+        os.makedirs(anchor, exist_ok=True)
     fd = os.open(anchor, _FOLDER)
     try:
         for i, part in enumerate(folders):
@@ -136,6 +138,36 @@ def mkdir(path: Path | str, *, root: Path | str | None = None, exist_ok: bool = 
             return
     with _walk(anchor, parts[:-1], make=True) as at:
         os.mkdir(parts[-1], 0o777, dir_fd=at)
+
+
+#: The modes that write bytes.
+_Bytes = Literal["wb", "ab", "xb", "r+b", "w+b", "a+b"]
+
+
+@overload
+def open(  # noqa: A001
+    path: Path | str,
+    mode: _Bytes,
+    *,
+    root: Path | str | None = None,
+    encoding: None = None,
+    newline: None = None,
+    perm: int = 0o666,
+    make: bool = False,
+) -> BinaryIO: ...
+
+
+@overload
+def open(  # noqa: A001
+    path: Path | str,
+    mode: str = "w",
+    *,
+    root: Path | str | None = None,
+    encoding: str | None = None,
+    newline: str | None = None,
+    perm: int = 0o666,
+    make: bool = False,
+) -> IO[Any]: ...
 
 
 def open(  # noqa: A001 - `Path.open`'s own name, for a write
@@ -228,9 +260,9 @@ def replace(src: Path | str, dst: Path | str, *, root: Path | str | None = None)
 
 
 def link(src: Path | str, dst: Path | str, *, root: Path | str | None = None) -> None:
-    """`os.link(src, dst)`, each name in its folder opened without following a link, and a link at `src` linked as itself."""
-    with parent(src, root=root) as (a, s), parent(dst, root=root) as (b, d):
-        os.link(s, d, src_dir_fd=a, dst_dir_fd=b, follow_symlinks=False)
+    """`os.link(src, dst)` with `dst` made in its folder opened without following a link; `src`, the file linked, is taken as it is, as `copyfile` reads it."""
+    with parent(dst, root=root) as (b, d):
+        os.link(os.path.abspath(src), d, dst_dir_fd=b)
 
 
 def unlink(path: Path | str, *, root: Path | str | None = None, missing_ok: bool = False) -> None:

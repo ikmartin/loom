@@ -21,6 +21,7 @@ from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Protocol
 
+from loom import own
 from loom.paths import LIBRARY_DOCUMENTS, LIBRARY_SOURCES
 
 #: The two kinds a reference holds, each with the suffix its file takes.
@@ -126,14 +127,14 @@ def put_source(root: Path, src: Path | bytes, *, name: str = "") -> str:
     pack : the same written to a file of the caller's, which `keep_packed` then stores.
     """
     store = root / LIBRARY_DOCUMENTS
-    store.mkdir(parents=True, exist_ok=True)
+    own.mkdir(store, root=root)
     temporary = store / f".packing.{os.getpid()}.{secrets.token_hex(4)}.tmp"
     try:
-        with temporary.open("wb") as out:
+        with own.open(temporary, "wb", root=root) as out:
             digest = pack(src, out, name=name, work=store)
         keep_packed(root, temporary, digest)
     finally:
-        temporary.unlink(missing_ok=True)
+        own.unlink(temporary, root=root, missing_ok=True)
     return digest
 
 
@@ -142,13 +143,13 @@ def keep_packed(root: Path, packed: Path, digest: str) -> None:
     target = path_of(root, digest, "tex")
     if target.is_file():
         return
-    target.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(target.parent, root=root)
     temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     try:
-        os.link(packed, temporary)
+        own.link(packed, temporary, root=root)
     except OSError:
-        shutil.copyfile(packed, temporary)
-    os.replace(temporary, target)
+        own.copyfile(packed, temporary, root=root)
+    own.replace(temporary, target, root=root)
 
 
 def source_tar(src: Path | bytes, *, name: str = "") -> bytes:
@@ -214,7 +215,7 @@ def pack(src: Path | bytes, out: BinaryIO, *, name: str = "", work: Path | None 
                 with path.open("rb") as fh:
                     tar.addfile(info, fh)
     finally:
-        shutil.rmtree(spool, ignore_errors=True)
+        own.rmtree(spool, ignore_errors=True)
     return "sha256:" + hashing.hash.hexdigest()
 
 
@@ -312,7 +313,7 @@ class _Budget:
 
 def _copy(reader: _Reads, target: Path, budget: _Budget) -> None:
     """Copy one member's bytes to `target` a piece at a time, spending them from `budget`; a read that fails is a damaged archive."""
-    with target.open("wb") as fh:
+    with own.open(target, "wb") as fh:
         while True:
             try:
                 chunk = reader.read(CHUNK)
@@ -328,7 +329,7 @@ def _spool_to(spool: Path, files: dict[str, Path], member: str, budget: _Budget)
     """The spool's file for the member `budget` has just counted: a name of its own, and a name repeated in an archive replaces the first, as unpacking it would."""
     old = files.get(member)
     if old is not None:
-        old.unlink(missing_ok=True)
+        own.unlink(old, missing_ok=True)
     return spool / f"{budget.files:06d}"
 
 
@@ -463,8 +464,8 @@ def source_dir(root: Path, digest: str) -> Path:
     if not stored.is_file():
         raise FileNotFoundError(f"the store holds no source {digest}")
     partial = out.with_name(f".{out.name}.{os.getpid()}")
-    shutil.rmtree(partial, ignore_errors=True)
-    partial.mkdir(parents=True)
+    own.rmtree(partial, root=root, ignore_errors=True)
+    own.mkdir(partial, root=root, exist_ok=False)
     try:
         with tarfile.open(stored, mode="r:") as tar:
             for member in tar:
@@ -474,17 +475,17 @@ def source_dir(root: Path, digest: str) -> Path:
                     continue
                 target = partial / safe
                 try:
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    with target.open("xb") as fh:
+                    own.mkdir(target.parent, root=root)
+                    with own.open(target, "xb", root=root) as fh:
                         shutil.copyfileobj(reader, fh, CHUNK)
                 except (FileExistsError, NotADirectoryError, IsADirectoryError):
                     continue
-        os.replace(partial, out)
+        own.replace(partial, out, root=root)
     except OSError:
         if not out.is_dir():
             raise
     finally:
-        shutil.rmtree(partial, ignore_errors=True)
+        own.rmtree(partial, root=root, ignore_errors=True)
     return out
 
 
@@ -529,21 +530,21 @@ def main_file(folder: Path) -> Path | None:
 
 def _place(target: Path, *, src: Path | None = None, data: bytes | None = None, link: bool = False) -> None:
     """Put a document at `target` whole: from `src`, linked when `link` and the file system allow, else copied to a temporary name beside it; or `data`; then renamed into place."""
-    target.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(target.parent)
     temporary = target.with_name(f".{target.name}.{os.getpid()}.tmp")
     try:
         if src is not None:
             try:
                 if not link:
                     raise OSError("copy")
-                os.link(src, temporary)
+                own.link(src, temporary)
             except OSError:
-                with src.open("rb") as fin, temporary.open("wb") as fout:
+                with src.open("rb") as fin, own.open(temporary, "wb") as fout:
                     while chunk := fin.read(CHUNK):
                         fout.write(chunk)
         else:
-            temporary.write_bytes(data or b"")
-        os.replace(temporary, target)
+            own.write_bytes(temporary, data or b"")
+        own.replace(temporary, target)
     finally:
         with contextlib.suppress(FileNotFoundError):
-            temporary.unlink()
+            own.unlink(temporary)

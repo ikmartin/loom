@@ -8,11 +8,11 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import shutil
 from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from loom import own
 from loom.library import ids
 from loom.library.body import entry_of, labels
 from loom.library.checks import check_file, diagnostics
@@ -271,7 +271,7 @@ def write_nodes(root: Path, nodes: Iterable[Node], *, new: bool = False) -> list
             # every writer holds this lock while its temporary file exists, so one seen now is a killed writer's
             for name in index.leftovers:
                 with contextlib.suppress(OSError):
-                    (target / name).unlink()
+                    own.unlink(target / name, root=root)
             view = _Batch(index, {n.id: n for n in batch})
             for node in batch:
                 name = file_name(node.id)
@@ -292,7 +292,7 @@ def write_nodes(root: Path, nodes: Iterable[Node], *, new: bool = False) -> list
                 found += diagnostics(name, node, problems)
             if found:
                 raise NodeRefused(found)
-            target.mkdir(parents=True, exist_ok=True)
+            own.mkdir(target, root=root)
             names = [file_name(n.id) for n in batch]
             _place(root, target, {name: data[n.id] for name, n in zip(names, batch, strict=True)}, new=new)
             index.take(names)
@@ -308,7 +308,7 @@ def _place(root: Path, target: Path, files: dict[str, bytes], *, new: bool) -> N
     placed: list[str] = []
     try:
         for name, data in files.items():
-            with temporary[name].open("wb") as fh:
+            with own.open(temporary[name], "wb", root=root) as fh:
                 fh.write(data)
                 fh.flush()
                 os.fsync(fh.fileno())
@@ -319,7 +319,7 @@ def _place(root: Path, target: Path, files: dict[str, bytes], *, new: bool) -> N
             for name in files:
                 if new:
                     try:
-                        os.link(temporary[name], target / name)
+                        own.link(temporary[name], target / name, root=root)
                     except FileExistsError:
                         raise NodeRefused(
                             diagnostics(
@@ -334,7 +334,7 @@ def _place(root: Path, target: Path, files: dict[str, bytes], *, new: bool) -> N
                             )
                         ) from None
                 else:
-                    os.replace(temporary[name], target / name)
+                    own.replace(temporary[name], target / name, root=root)
                 placed.append(name)
         except BaseException:
             _undo(root, target, placed, made)
@@ -344,21 +344,21 @@ def _place(root: Path, target: Path, files: dict[str, bytes], *, new: bool) -> N
     finally:
         for path in temporary.values():
             with contextlib.suppress(FileNotFoundError):
-                path.unlink()
+                own.unlink(path, root=root)
 
 
 def _record(root: Path, target: Path, names: list[str], made: set[str]) -> None:
     """Write the act's record, flushed: its names, the ones it makes, and a copy of each file it replaces."""
     act = root / LIBRARY_ACT
-    shutil.rmtree(act, ignore_errors=True)
-    act.mkdir(parents=True)
+    own.rmtree(act, root=root, ignore_errors=True)
+    own.mkdir(act, root=root, exist_ok=False)
     for name in names:
         if name not in made:
-            with (act / name).open("wb") as fh:
+            with own.open(act / name, "wb", root=root) as fh:
                 fh.write((target / name).read_bytes())
                 fh.flush()
                 os.fsync(fh.fileno())
-    with (act / "act.json").open("w", encoding="utf-8") as fh:
+    with own.open(act / "act.json", "w", encoding="utf-8", root=root) as fh:
         json.dump({"names": names, "made": sorted(made)}, fh)
         fh.flush()
         os.fsync(fh.fileno())
@@ -371,15 +371,15 @@ def _undo(root: Path, target: Path, placed: list[str], made: set[str]) -> None:
     for name in placed:
         if name in made:
             with contextlib.suppress(FileNotFoundError):
-                (target / name).unlink()
+                own.unlink(target / name, root=root)
         elif (act / name).is_file():
-            os.replace(act / name, target / name)
+            own.replace(act / name, target / name, root=root)
     _flush_folder(target)
     _forget(root)
 
 
 def _forget(root: Path) -> None:
-    shutil.rmtree(root / LIBRARY_ACT, ignore_errors=True)
+    own.rmtree(root / LIBRARY_ACT, root=root, ignore_errors=True)
 
 
 def _roll_back(root: Path) -> list[str]:
@@ -401,9 +401,9 @@ def _roll_back(root: Path) -> list[str]:
             continue
         if name in made:
             with contextlib.suppress(FileNotFoundError):
-                (target / name).unlink()
+                own.unlink(target / name, root=root)
         elif (act / name).is_file():
-            os.replace(act / name, target / name)
+            own.replace(act / name, target / name, root=root)
     _flush_folder(target)
     _forget(root)
     return names
@@ -453,5 +453,5 @@ def remove_node(root: Path, node_id: str) -> bool:
         _roll_forward(root)
         if not exists(root, node_id):
             return False
-        (folder(root) / file_name(node_id)).unlink()
+        own.unlink(folder(root) / file_name(node_id), root=root)
     return True

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
+from loom import own
 from loom.clock import stamp
 from loom.library import documents, log
 from loom.library.entries import (
@@ -170,13 +171,13 @@ def _read_json(p: Path) -> Any:
 
 
 def _write_json(p: Path, data: Any) -> None:
-    p.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(p.parent)
     tmp = p.with_name(f".{p.name}.{secrets.token_hex(6)}.tmp")
     try:
-        tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-        os.replace(tmp, p)
+        own.write_text(tmp, json.dumps(data, indent=1, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        own.replace(tmp, p)
     finally:
-        tmp.unlink(missing_ok=True)
+        own.unlink(tmp, missing_ok=True)
 
 
 def _suffix(name: str, head: bytes) -> str | None:
@@ -230,7 +231,7 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
     if length <= 0:
         raise IntakeRefused("not-a-document", f"{shown} is empty", 400)
     base = incoming(root)
-    base.mkdir(parents=True, exist_ok=True)
+    own.mkdir(base, root=root)
     if shutil.disk_usage(base).free < length + SPARE:
         _drain(stream, length)
         raise IntakeRefused("no-space", f"{shown} needs {length:,} bytes, and the disk has not that much to spare", 507)
@@ -239,7 +240,7 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
     got = 0
     suffix: str | None = None
     try:
-        with tmp.open("wb") as fh:
+        with own.open(tmp, "wb", root=root) as fh:
             while got < length:
                 chunk = stream.read(min(CHUNK, length - got))
                 if not chunk:
@@ -260,16 +261,16 @@ def receive(root: Path, name: str, stream: Reads, length: int) -> dict[str, Any]
             raise IntakeRefused("cut-short", f"{shown} arrived cut short: {got} of {length} bytes", 400)
         sha = h.hexdigest()
         d = base / sha
-        d.mkdir(exist_ok=True)
+        own.mkdir(d, root=root)
         if waiting_file(d) is None:
-            os.replace(tmp, d / f"{FILE}{suffix}")
+            own.replace(tmp, d / f"{FILE}{suffix}", root=root)
             # bytes taken before and arriving again wait under the name they came with now, still known not to be the works they were
             before = _read_json(d / ARRIVED) or {}
             _write_json(
                 d / ARRIVED, {"name": shown, "size": got, "when": stamp(), "not": list(before.get("not") or [])}
             )
     finally:
-        tmp.unlink(missing_ok=True)
+        own.unlink(tmp, root=root, missing_ok=True)
     return {"incoming": sha, "name": shown, "size": got}
 
 
@@ -301,8 +302,8 @@ def _drop_file(d: Path) -> None:
     """Remove the file a drop holds and the question asked of it; what arrived with it stays while an act on it stands."""
     f = waiting_file(d)
     if f is not None:
-        f.unlink(missing_ok=True)
-    (d / QUESTION).unlink(missing_ok=True)
+        own.unlink(f, missing_ok=True)
+    own.unlink(d / QUESTION, missing_ok=True)
 
 
 def _let_go(root: Path, d: Path, digest: str, which: str) -> bool:
@@ -318,11 +319,11 @@ def _let_go(root: Path, d: Path, digest: str, which: str) -> bool:
 def _remove_drop(d: Path) -> None:
     """Remove a drop the intake is done with: its records, and its folder unless a file waits in it again."""
     for name in (ACT, QUESTION):
-        (d / name).unlink(missing_ok=True)
+        own.unlink(d / name, missing_ok=True)
     if waiting_file(d) is None:
-        (d / ARRIVED).unlink(missing_ok=True)
+        own.unlink(d / ARRIVED, missing_ok=True)
     try:
-        d.rmdir()
+        own.rmdir(d)
     except OSError:
         return
 
@@ -497,7 +498,7 @@ def take(
                 rows.extend(_take_drop(t, n, drop, item.work, new=item.new, force=item.force))
                 if fresh and not write:
                     # a dry run leaves no drop behind that it made itself
-                    shutil.rmtree(incoming(root) / drop, ignore_errors=True)
+                    own.rmtree(incoming(root) / drop, root=root, ignore_errors=True)
     return rows
 
 
@@ -540,7 +541,7 @@ def _take_drop(t: _Take, n: int, drop: str, work: str, *, new: bool = False, for
         # each entry a row, as a pasted text's; the file's own bytes are the person's, and its entries are kept by the references made of them
         rows = _take_text(t, n, f.read_text(encoding="utf-8", errors="replace"), where=f" in {name}")
         if t.write:
-            shutil.rmtree(d, ignore_errors=True)
+            own.rmtree(d, ignore_errors=True)
         return rows
     if kind == "pdf":
         return _take_document(t, n, d, f, name, "pdf", "sha256:" + drop, None, work, arrived, new=new, force=force)
@@ -548,13 +549,13 @@ def _take_drop(t: _Take, n: int, drop: str, work: str, *, new: bool = False, for
     packed = d / f".packed.{os.getpid()}.{secrets.token_hex(4)}.tmp"
     try:
         try:
-            with packed.open("wb") as out:
+            with own.open(packed, "wb") as out:
                 digest = documents.pack(f, out, name=name, work=d)
         except documents.NotASource as exc:
             return [_cannot(t, d, n, drop, name, "not-a-source", str(exc))]
         return _take_document(t, n, d, f, name, "tex", digest, packed, work, arrived, new=new, force=force)
     finally:
-        packed.unlink(missing_ok=True)
+        own.unlink(packed, missing_ok=True)
 
 
 def _take_document(
@@ -609,7 +610,7 @@ def _cannot(t: _Take, d: Path, n: int, drop: str, name: str, code: str, why: str
         if _acts(d):
             _drop_file(d)
         else:
-            shutil.rmtree(d, ignore_errors=True)
+            own.rmtree(d, ignore_errors=True)
     return Row(drop, n, name, "cannot", code=code, why=why)
 
 
@@ -1101,7 +1102,7 @@ def answer(
         if same is not None and same not in refs:
             raise IntakeRefused("not-a-candidate", f"{same} is not one of this question's works", 400)
         with library_lock(root):
-            (d / QUESTION).unlink(missing_ok=True)
+            own.unlink(d / QUESTION, root=root, missing_ok=True)
             arrived = _read_json(d / ARRIVED) or {}
             if same is None:
                 arrived["not"] = sorted({*arrived.get("not", []), *refs, *held})
@@ -1140,7 +1141,7 @@ def undo(root: Path, drop: str, *, by: str, act: str = "") -> tuple[str, Row | N
         acts = _acts(d)
         if not acts:
             if waiting_file(d) is not None:
-                shutil.rmtree(d, ignore_errors=True)
+                own.rmtree(d, root=root, ignore_errors=True)
                 return "the drop was discarded", None
             raise IntakeRefused(
                 "no-such-intake", "there is nothing to take back: it is undone already, or was never taken in", 404
@@ -1153,11 +1154,11 @@ def undo(root: Path, drop: str, *, by: str, act: str = "") -> tuple[str, Row | N
         if rest:
             _write_json(d / ACT, {"acts": rest})
         else:
-            (d / ACT).unlink(missing_ok=True)
+            own.unlink(d / ACT, root=root, missing_ok=True)
         f = waiting_file(d)
         if not rest and (f is None or last.get("kind") != "unfiled"):
             # nothing stands on it now, so it goes whole, with any file an add's undo gave back to it: the add taken back is the person's no to it
-            shutil.rmtree(d, ignore_errors=True)
+            own.rmtree(d, root=root, ignore_errors=True)
             return said, None
         return said, _received(d) if f is not None else None
 
@@ -1254,7 +1255,7 @@ def _restore_file(root: Path, d: Path, digest: str, which: str) -> None:
         return
     src = documents.path_of(root, digest, which)
     if src.is_file():
-        shutil.copyfile(src, d / f"{FILE}{documents.SUFFIX[which]}")
+        own.copyfile(src, d / f"{FILE}{documents.SUFFIX[which]}", root=root)
 
 
 def _forget(root: Path, digest: str) -> None:
@@ -1262,7 +1263,7 @@ def _forget(root: Path, digest: str) -> None:
     if not digest or _named(root, digest):
         return
     for which in ("pdf", "tex"):
-        documents.path_of(root, digest, which).unlink(missing_ok=True)
+        own.unlink(documents.path_of(root, digest, which), root=root, missing_ok=True)
 
 
 def _has_nodes(root: Path, ref: str) -> bool:
@@ -1312,9 +1313,9 @@ def unfile(root: Path, ref: str, *, which: str = "pdf", by: str) -> dict[str, An
         # a source's `tex` is the hash of the very file the store holds, as a PDF's `pdf` is
         sha = documents.hex_of(digest)
         d = incoming(root) / sha
-        d.mkdir(parents=True, exist_ok=True)
+        own.mkdir(d, root=root)
         if waiting_file(d) is None:
-            shutil.copyfile(src, d / f"{FILE}{documents.SUFFIX[which]}")
+            own.copyfile(src, d / f"{FILE}{documents.SUFFIX[which]}", root=root)
         arrived = _read_json(d / ARRIVED) or {
             "name": f"{lib.shown(ref)['short']}{documents.SUFFIX[which]}",
             "size": src.stat().st_size,

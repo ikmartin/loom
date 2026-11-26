@@ -7,6 +7,7 @@ from typing import Any
 
 import click
 
+from loom import own
 from loom.cli._quilt import open_scan, quilt_option
 from loom.cli.report import Group, Item, Progress, Report, counted
 from loom.errors import EnvError
@@ -114,12 +115,10 @@ def add_command(
         progress.item(", ".join(p.name for p, _ in docs[:3]))
         rows = take(root, items, by=by, online=allowed, write=not dry_run, result=result)
     if dry_run:
-        import shutil
-
         from loom.library.intake import incoming
 
         for drop in made_here:
-            shutil.rmtree(incoming(root) / drop, ignore_errors=True)
+            own.rmtree(incoming(root) / drop, root=root, ignore_errors=True)
     notes = []
     if not online and not result.quilt.config.online_asked:
         notes.append("this quilt has not said whether loom may look papers up online: --online allows this run")
@@ -147,18 +146,18 @@ def _received_folder(root: Path, folder: Path) -> tuple[str, bool]:
     from loom.library.intake import incoming, receive_file
 
     base = incoming(root)
-    base.mkdir(parents=True, exist_ok=True)
+    own.mkdir(base, root=root)
     packed = base / f".{folder.name}.{os.getpid()}.{secrets.token_hex(4)}.tar"
     try:
         try:
-            with packed.open("wb") as out:
+            with own.open(packed, "wb", root=root) as out:
                 drop = pack(folder, out, name=folder.name, work=base).removeprefix("sha256:")
         except NotASource as exc:
             raise EnvError(str(exc)) from exc
         fresh = not (base / drop).is_dir()
         receive_file(root, packed, name=f"{folder.name}.tar")
     finally:
-        packed.unlink(missing_ok=True)
+        own.unlink(packed, root=root, missing_ok=True)
     return drop, fresh
 
 

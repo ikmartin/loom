@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import unicodedata
 from collections.abc import Iterable, Iterator, Mapping
 from contextlib import ExitStack, contextmanager, nullcontext
@@ -17,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any
 
-from loom import clock
+from loom import clock, own
 from loom.identity import is_agent
 from loom.library import documents
 from loom.library.checks import check_file
@@ -571,7 +570,7 @@ def _notes(root: Path, works: list[_Work], names: _Names, out: Carried, *, write
             pieces[i] = piece[: span[0]] + json.dumps(ref, ensure_ascii=False) + piece[span[1] :]
             changed += 1
         if changed and write:
-            with path.open("r+b") as fh:
+            with own.open(path, "r+b", root=root) as fh:
                 fh.write("\n".join(pieces).encode("utf-8", errors="surrogateescape"))
                 fh.truncate()
     out.notes_rekeyed = changed
@@ -816,7 +815,7 @@ def _clear(root: Path, folder: Path, kept: set[Path], out: Carried, *, write: bo
 def _gone(root: Path, path: Path, out: Carried, *, write: bool) -> None:
     if write:
         if path.is_dir() and not path.is_symlink():
-            shutil.rmtree(path)
+            own.rmtree(path, root=root)
         else:
-            path.unlink()
+            own.unlink(path, root=root)
     out.removed.append(_rel(root, path))
