@@ -790,11 +790,13 @@ def _keep_suggested(
             result = out.result = _rescan(result)
         taken, placed, refused = _place_kept(result, live)
         files = sorted({pl.file for _, pl in placed})
-        stale = {f for f in files if not w.reads_as(f, file_text(result, f))}
+        # the text each file was placed in: a scanned file's from the scan, a Markdown file's as its placement read it (`Placed.own`), never read again here
+        planned = {pl.file: pl.own for _, pl in placed if pl.file not in result.files}
+        stale = {f for f in files if not w.reads_as(f, planned.get(f, file_text(result, f)))}
         if not stale and placed:
             _say(said, keep_versions(result, files, APPLY, "Before keeping a suggested edit", writer[1]))
             # stamping the versions takes a moment: what is spliced is the bytes read after it, still as planned
-            stale = {f for f in files if not w.reads_as(f, file_text(result, f))}
+            stale = {f for f in files if not w.reads_as(f, planned.get(f, file_text(result, f)))}
         if not stale:
             break
     refused += [
@@ -1358,6 +1360,21 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
             said.append(
                 f"the words put back in {path} did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
             )
+    from loom.records.carry import carry
+    from loom.records.mdtext import is_markdown
+
+    for path, (was, now, _done) in out.wrote.items():
+        mine = [p for p in out.changes if p.path == path]
+        if not is_markdown(path) or not mine:
+            continue
+        # a Markdown file's annotations are on its text, which the undo changed as a whole
+        try:
+            after = after or _rescan(out.result)
+            carry(after, path, _lf(was), _lf(now), mine, writer)
+        except Exception as exc:  # noqa: BLE001 -- the undo is done; the annotations stay on the words taken out, said
+            said.append(
+                f"the annotations on the words taken out of {path} were not carried onto the words put back ({type(exc).__name__})"
+            )
     if out.before:
         try:
             carry_all(_rescan(after or out.result), out.before, out.changes, writer)
@@ -1366,6 +1383,11 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
                 f"the annotations on the words taken out were not carried onto the words put back ({type(exc).__name__})"
             )
     return said
+
+
+def _lf(text: str) -> str:
+    """`text` with its line endings read as the scan reads them."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:

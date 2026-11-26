@@ -67,6 +67,10 @@ def test_kept_after_an_edit_above_it_writes_exactly_its_words_and_carries_the_an
     done, no = unkeep(result, "Tester", [edit], ("human", "Tester"))
     assert (done, no) == ([edit], [])
     assert (q / NOTE).read_bytes() == before and events(q, edit) == ["created", "kept", "reopened"]
+    # the annotation the Keep carried onto the new words is carried back onto the words put back
+    result = open_scan(str(q))
+    res = next(r for r in Records(q).resolved(result) if r.annotation.id == ann)
+    assert not res.detached and res.annotation.selector.exact.startswith("Read the second proof")
 
 
 def test_discarded_it_leaves_every_byte_and_only_the_person_keeps_or_discards(q: Path) -> None:
@@ -88,3 +92,31 @@ def test_an_agent_quotes_the_file_once_and_withdraws_its_own(q: Path) -> None:
     ok("suggest", "--withdraw", edit, "--as", AGENT, cwd=q, **AS_AGENT)
     assert events(q, edit) == ["created", "discarded"]
     assert (q / NOTE).read_bytes() == TEXT.encode("utf-8")
+
+
+def test_a_file_that_moves_while_its_edit_is_kept_is_placed_again_and_never_written_at_a_stale_place(
+    q: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import loom.history.acts as acts
+    from loom.cli._quilt import open_scan
+    from loom.pending import keep
+
+    edit = suggest(q, "--quote", "the second proof", "--with", "both proofs")
+    moved = TEXT.replace("# Day one\r\n", "# Day one\r\n\r\nA paragraph the person typed.\r\n").encode("utf-8")
+    real = acts.keep_versions
+
+    def typing(*args: Any, **kw: Any) -> Any:
+        # the person saves while loom keeps a version before writing
+        out = real(*args, **kw)
+        if (q / NOTE).read_bytes() != moved:
+            (q / NOTE).write_bytes(moved)
+        return out
+
+    monkeypatch.setattr(acts, "keep_versions", typing)
+    done, refused_ = keep(open_scan(str(q)), "Tester", [edit], ("human", "Tester"))
+    now = (q / NOTE).read_bytes()
+    assert b"A paragraph the person typed." in now
+    if done:
+        assert now == moved.replace(b"Read the second proof.", b"Read both proofs.")
+    else:
+        assert now == moved and refused_[0]["code"] == "changed"
