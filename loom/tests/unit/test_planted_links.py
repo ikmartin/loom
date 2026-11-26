@@ -10,11 +10,28 @@ from pathlib import Path
 
 import pytest
 
-from loom import gitignore, layout, locks, looks, mailbox, own, review_origins, review_queue, sessions, since, writes
+from loom import (
+    gitignore,
+    layout,
+    locks,
+    looks,
+    mailbox,
+    overleaf,
+    own,
+    presence,
+    review_origins,
+    review_queue,
+    sessions,
+    since,
+    writes,
+)
+from loom.ai import layout as ai_layout
 from loom.history import ledger as hledger
 from loom.library import acts, documents, drawn, intake, store, survey, tags
 from loom.library import log as llog
+from loom.mcp import server as mcp_server
 from loom.paths import (
+    AI,
     ANNOTATION_LOG,
     ANNOTATION_TYPES,
     DRAWN_RUN,
@@ -33,11 +50,15 @@ from loom.paths import (
     RECORDS,
     REVIEW_DECISIONS,
     REVIEW_ORIGINS,
+    SCRATCH,
+    SITE,
+    SITE_SVG,
     SURVEY_RUN,
     TAG_LOG,
 )
 from loom.records import edits, ledger, snapshots, types
 from loom.records import log as alog
+from loom.render import assets, publish
 from tests.unit.library.test_store import _pair
 
 
@@ -284,3 +305,43 @@ def test_with_no_link_the_library_writes_what_it_wrote_before(tmp_path: Path) ->
     assert {p.name: p.read_bytes() for p in (root / LIBRARY_NODES).iterdir()} == before
     d = documents.put_pdf(root, _pdf(tmp_path))
     assert documents.path_of(root, d, "pdf").read_bytes() == _pdf(tmp_path).read_bytes()
+
+
+# ---- the agents' places, the build and this machine's part of the quilt ----------------------------------------------
+
+
+def _picture(t: Path) -> Path:
+    p = t / "pic.svg"
+    p.write_text("<svg/>\n")
+    return p
+
+
+QUILT_WRITERS: dict[str, tuple[str, Callable[[Path, Path], object]]] = {
+    "an agent's scratch": (SCRATCH, lambda r, t: mcp_server._keep(r, None, "x", "a large result\n")),
+    "the agent layer's record": (AI, lambda r, t: ai_layout._write(r, f"{AI}/README.md", "x\n")),
+    "the build's site": (SITE, lambda r, t: publish.write_atomic(r / SITE / "manifest.json", "{}")),
+    "a picture published": (SITE, lambda r, t: assets.publish_picture(_picture(t), r / SITE_SVG)),
+    "this machine's part of the mirror": (LOCAL, lambda r, t: overleaf._keep_here(r, who="me")),
+    "the server's presence": (LOCAL, lambda r, t: presence.Presence(r, "test")._write()),
+}
+
+
+@pytest.mark.parametrize("what", sorted(QUILT_WRITERS))
+def test_the_agents_places_and_the_build_take_no_write_through_a_planted_link(
+    q: tuple[Path, Path], tmp_path: Path, what: str
+) -> None:
+    root, out = q
+    where, fn = QUILT_WRITERS[what]
+    plant(root, where, out)
+    run(lambda: fn(root, tmp_path))
+    assert untouched(out)
+
+
+def test_a_mirror_s_clone_is_removed_through_no_link(q: tuple[Path, Path]) -> None:
+    """Taking loom's clone away removes nothing of a folder a link on the way leads to."""
+    root, out = q
+    (out / "clone").mkdir()
+    (out / "clone" / "keep").write_text("keep\n")
+    plant(root, LOCAL, out)
+    run(lambda: overleaf._remove(root / LOCAL / "clone"))
+    assert (out / "clone" / "keep").read_text() == "keep\n"

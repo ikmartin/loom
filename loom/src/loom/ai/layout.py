@@ -5,6 +5,7 @@ Mode files are the author's once written: `.loom-modes-version` records the ship
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ from importlib import resources
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from loom import own
 from loom.paths import AI
 from loom.scan.quilt import QuiltConfig
 
@@ -247,7 +249,7 @@ def read_versions(root: Path) -> dict[str, str]:
 def write_versions(root: Path, texts: dict[str, str]) -> None:
     """Record the shipped hash of each of `texts` (quilt-relative path -> text) under its file name, which is how `upgrade_layer` looks it up."""
     lines = [f"{Path(rel).name} {sha(t)}" for rel, t in sorted(texts.items(), key=lambda kv: Path(kv[0]).name)]
-    (root / AI / VERSION_FILE).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    own.write_text(root / AI / VERSION_FILE, "\n".join(lines) + "\n", encoding="utf-8", root=root)
 
 
 def quilt_config(root: Path) -> QuiltConfig:
@@ -425,18 +427,18 @@ def _write(root: Path, rel: str, text: str, expect: str | None = _UNREAD) -> Non
             put(root, None, rel, text.encode("utf-8"), kind="agents", expect=seen)
             return
         # loom's own record of the layer, in `.loom/`, written beside and moved into place without reading what is there
-        p.parent.mkdir(parents=True, exist_ok=True)
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC, 0o666)
-        with os.fdopen(fd, "wb") as fh:
+        own.mkdir(p.parent, root=root)
+        with own.open(tmp, "xb", root=root) as fh:
             fh.write(text.encode("utf-8"))
-        os.replace(tmp, p)
+        own.replace(tmp, p, root=root)
     except OSError as exc:
         raise WriteRefused(
             "not-writable",
             f"loom could not write {rel} ({exc.strerror}); nothing after it was written, so run this again once it can be",
         ) from exc
     finally:
-        tmp.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            own.unlink(tmp, root=root, missing_ok=True)
 
 
 @dataclass
@@ -735,13 +737,13 @@ def init_layer(root: Path, *, shell: bool = False, apps: list[str] | tuple[str, 
     if ai.exists():
         raise FileExistsError(str(ai))
     rep = LayerReport()
-    (ai / "modes").mkdir(parents=True)
+    own.mkdir(ai / "modes", root=root, exist_ok=False)
     texts = tracked_docs(root)
     for rel, text in texts.items():
         _write(root, rel, text)
         rep.written.append(rel)
     for name in ("README.md",):
-        (ai / name).write_text(_asset(name), encoding="utf-8")
+        own.write_text(ai / name, _asset(name), encoding="utf-8", root=root)
         rep.written.append(f"{AI}/{name}")
     write_versions(root, texts)
     rep.written.append(f"{AI}/{VERSION_FILE}")
@@ -830,8 +832,8 @@ def upgrade_layer(
         new_versions[Path(rel).name] = sha(shipped)
     _gone_modes(root, texts, recorded, rep, write=write)
     if write:
-        (ai / VERSION_FILE).write_text(
-            "\n".join(f"{k} {v}" for k, v in sorted(new_versions.items())) + "\n", encoding="utf-8"
+        own.write_text(
+            ai / VERSION_FILE, "\n".join(f"{k} {v}" for k, v in sorted(new_versions.items())) + "\n", root=root
         )
     for name in ("README.md",):
         p = ai / name
@@ -871,7 +873,7 @@ def _gone_modes(root: Path, texts: dict[str, str], recorded: dict[str, str], rep
             rep.theirs.append(rel)
             continue
         if write:
-            p.unlink()
+            own.unlink(p, root=root)
         rep.removed.append(rel)
 
 

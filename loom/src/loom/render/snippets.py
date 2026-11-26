@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from loom import own
 from loom.render.normalise import normalise
 from loom.tex.tex4ht import _balanced, _blank_comments, make_html, repair_displays
 
@@ -261,13 +262,15 @@ def render_snippets(
         with ThreadPoolExecutor(max_workers=max(1, min(len(parts), cap)), thread_name_prefix="loom-snippets") as pool:
             list(pool.map(run, parts))
         if remember:
-            cache_dir.mkdir(parents=True, exist_ok=True)
+            own.mkdir(cache_dir)
             for i in batch:
                 s = out.made[i]
                 if s.html is not None:
-                    (cache_dir / f"{keys[i]}.html").write_text(s.html, encoding="utf-8")
+                    own.write_text(cache_dir / f"{keys[i]}.html", s.html, encoding="utf-8")
                 else:
-                    (cache_dir / f"{keys[i]}.failed").write_text(s.error or "TeX made nothing of it", encoding="utf-8")
+                    own.write_text(
+                        cache_dir / f"{keys[i]}.failed", s.error or "TeX made nothing of it", encoding="utf-8"
+                    )
     for i, k in enumerate(keys):
         if k in first and first[k] != i:
             out.made[i] = out.made[first[k]]

@@ -10,7 +10,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 import stat
 import subprocess
 import tempfile
@@ -20,6 +19,7 @@ from pathlib import Path
 from typing import Any, ParamSpec, TypeVar
 from urllib.parse import urlsplit
 
+from loom import own
 from loom.paths import LOCAL, LOOM, OVERLEAF_CLONE, OVERLEAF_HERE, SOURCE_SYNC
 from loom.scan.quilt import Quilt
 from loom.sync import (
@@ -272,10 +272,10 @@ def _keep_here(root: Path, **changes: Any) -> None:
     """Write `changes` into this machine's part (`here`), whole or not at all."""
     data = {**here(root), **changes}
     path = root / OVERLEAF_HERE
-    path.parent.mkdir(parents=True, exist_ok=True)
+    own.mkdir(path.parent, root=root)
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    temporary.replace(path)
+    own.write_text(temporary, json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8", root=root)
+    own.replace(temporary, path, root=root)
 
 
 def _ask_again(root: Path, clone: Path, rev: str) -> None:
@@ -348,11 +348,11 @@ def _marked(clone: Path, project: str) -> bool:
 
 
 def _remove(path: Path) -> None:
-    """Take `path` away, a folder whole, never following a link to anything outside it."""
+    """Take `path` away, a folder whole, never following a link to anything outside it, on the way to it or below it (`loom.own`)."""
     if path.is_symlink() or path.is_file():
-        path.unlink()
+        own.unlink(path)
     elif path.is_dir():
-        shutil.rmtree(path)
+        own.rmtree(path)
 
 
 def _clone(root: Path, project: str) -> Path:
@@ -371,10 +371,10 @@ def _clone(root: Path, project: str) -> Path:
         fresh = clone.with_name(clone.name + ".new")
         _remove(fresh)
         _remove(clone)
-        _mark_of(clone).unlink(missing_ok=True)
-        fresh.parent.mkdir(parents=True, exist_ok=True)
+        own.unlink(_mark_of(clone), missing_ok=True)
+        own.mkdir(fresh.parent, root=root)
         run(None, "init", "--quiet", "--bare", "--template=", "--", str(fresh))
-        fresh.rename(clone)
+        own.replace(fresh, clone, root=root)
         mark = _mark_of(clone)
         mark.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         mark.write_text(json.dumps(_identity(clone, project), sort_keys=True) + "\n", encoding="utf-8")
@@ -445,7 +445,7 @@ def mirrored(root: Path, rel: str) -> bool:
     try:
         state = SyncState.read(root)
         folder = checked_folder(root, load_quilt(root).history_dir, state.folder)
-        own = os.stat(root / folder)
+        kept = os.stat(root / folder)
     except (SyncError, NoQuiltError, OSError, ValueError):
         return False
     top, real = _real(root), _real(root / rel)
@@ -457,7 +457,7 @@ def mirrored(root: Path, rel: str) -> bool:
             it = os.stat(place)
         except OSError:
             continue
-        if (it.st_dev, it.st_ino) == (own.st_dev, own.st_ino):
+        if (it.st_dev, it.st_ino) == (kept.st_dev, kept.st_ino):
             return True
         if place == top:
             break
@@ -686,11 +686,11 @@ def unpair(quilt: Quilt) -> None:
     root = quilt.root
     if not (root / SOURCE_SYNC).is_file():
         raise MirrorError("not-paired", "This quilt mirrors no Overleaf project.")
-    (root / SOURCE_SYNC).unlink()
+    own.unlink(root / SOURCE_SYNC, root=root)
     clone = root / OVERLEAF_CLONE
-    _mark_of(clone).unlink(missing_ok=True)
+    own.unlink(_mark_of(clone), missing_ok=True)
     _remove(clone)
-    (root / OVERLEAF_HERE).unlink(missing_ok=True)
+    own.unlink(root / OVERLEAF_HERE, root=root, missing_ok=True)
 
 
 def published(root: Path) -> dict[str, Any]:

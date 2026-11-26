@@ -676,8 +676,10 @@ def prepare(
     prepared["decision"] = decisions(result, copy, who, data=data)
     prepared["token"] = _digest(prepared)
     home = root / ADOPTION_PREVIEWS
-    home.mkdir(parents=True, exist_ok=True)
-    (home / (prepared["token"] + ".json")).write_text(json.dumps(prepared, indent=2) + "\n")
+    own.mkdir(home, root=root)
+    own.write_text(
+        home / (prepared["token"] + ".json"), json.dumps(prepared, indent=2) + "\n", encoding=None, root=root
+    )
     return prepared
 
 
@@ -1038,8 +1040,8 @@ def refresh(result: ScanResult, copy: str, *, write: bool = True) -> dict[str, A
         return answer
     try:
         temporary = path.with_suffix(".refresh.tmp")
-        temporary.write_text(text)
-        temporary.replace(path)
+        own.write_text(temporary, text, encoding=None)
+        own.replace(temporary, path)
         append_entry(
             history.dir,
             "refresh",
@@ -1047,8 +1049,8 @@ def refresh(result: ScanResult, copy: str, *, write: bool = True) -> dict[str, A
             None,
         )
     except Exception:
-        path.write_text(original)
-        ledger.write_bytes(ledger_before)
+        own.write_text(path, original, encoding=None)
+        own.write_bytes(ledger, ledger_before)
         raise
     return answer
 

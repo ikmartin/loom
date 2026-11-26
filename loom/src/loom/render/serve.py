@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote
 
-from loom import layout
+from loom import layout, own
 from loom.files import FILES_URL, Shown
 from loom.paths import COMPILES, LIBRARY_NODES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
 from loom.presence import Watch
@@ -209,8 +209,9 @@ def write_serve_json(root: Path, port: int) -> str:
 
         raise EnvError(_could_not("the server's write token", token_file(root).parent, exc)) from exc
     p = root / SERVE_JSON
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(
+    own.mkdir(p.parent, root=root)
+    own.write_text(
+        p,
         json.dumps(
             {
                 "port": port,
@@ -1695,7 +1696,7 @@ class ServeSession:
             self.compiles.stop()
         if self.unasked is not None:
             self.unasked.stop()
-        (self.quilt.root / COMPILES).unlink(missing_ok=True)
+        own.unlink(self.quilt.root / COMPILES, root=self.quilt.root, missing_ok=True)
         if self.presence:
             self.presence.stop()
         if self.again:
@@ -1708,7 +1709,7 @@ class ServeSession:
                 server.shutdown()
                 server.server_close()
         # nothing is listening any more, so nothing should tell a command that something is, and no write may carry its token
-        (self.quilt.root / SERVE_JSON).unlink(missing_ok=True)
+        own.unlink(self.quilt.root / SERVE_JSON, root=self.quilt.root, missing_ok=True)
         from loom.machine import forget_token
 
         forget_token(self.quilt.root)

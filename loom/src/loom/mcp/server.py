@@ -17,6 +17,7 @@ from typing import Any
 
 import mcp.types as types
 
+from loom import own
 from loom.ai.layout import ACTS, modes
 from loom.mcp.prompts import TARGET, TARGET_SAID, link_argv, message, mode_argv, prompts
 from loom.mcp.resources import TEMPLATES, NotAResource, reading
@@ -454,13 +455,13 @@ def _session(root: Path, given: object) -> str | None:
 def _keep(root: Path, session: object, what: str, text: str) -> str:
     """Write a large result into the session's scratch, `.loom/agents/scratch/<session>/`, which an agent may read and write and nothing commits, named for `what` produced it; its quilt-relative path."""
     where = root / scratch(_session(root, session) or "none")
-    where.mkdir(parents=True, exist_ok=True)
+    own.mkdir(where, root=root)
     stem = datetime.now().strftime("%Y-%m-%dT%H-%M-%S") + "-" + what
     path, n = where / f"{stem}.txt", 2
     # created exclusively, so a second server keeping a result in the same second takes the next name
     while True:
         try:
-            with path.open("x", encoding="utf-8") as fh:
+            with own.open(path, "x", encoding="utf-8", root=root) as fh:
                 fh.write(text)
             return path.relative_to(root).as_posix()
         except FileExistsError:
@@ -481,6 +482,6 @@ def _log(root: Path, given: object, command: str, why: str = "") -> None:
     if found is None:
         return
     p = files_dir(root, found)
-    p.mkdir(parents=True, exist_ok=True)
-    with (p / "run.log").open("a", encoding="utf-8") as fh:
+    own.mkdir(p, root=root)
+    with own.open(p / "run.log", "a", encoding="utf-8", root=root) as fh:
         fh.write(f"{stamp()}  {command}  (over MCP{', ' + why if why else ''})\n")

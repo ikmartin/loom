@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from loom import own
 from loom.history.ledger import load_history
 from loom.lifetimes import BuildIndex, in_cache, read_index, write_index
 from loom.paths import (
@@ -380,7 +381,7 @@ def _build(
     if force:
         # a text TeX refused may have been refused for the machine's sake, a package since installed; --force tries each once more, and nothing this process remembers stands in for it
         for failed in [*(root / SNIPPETS).glob("*.failed"), *(root / BLOCK_PREVIEWS).glob("*.html")]:
-            failed.unlink()
+            own.unlink(failed, root=root)
         forget()
     renderer = FragmentRenderer(plan)
     before = read_index(root)

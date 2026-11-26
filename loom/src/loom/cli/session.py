@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import click
 
+from loom import own
 from loom.cli._common import find_session, from_stdin
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
@@ -279,9 +280,7 @@ def delete_command(
             click.confirm("erase it?", abort=True, err=True)
         _purge_index(root, s.id)
         if s.directory(root).is_dir():
-            import shutil
-
-            shutil.rmtree(s.directory(root))
+            own.rmtree(s.directory(root), root=root)
         if active(root) == s.id:
             set_active(root, None)
         Report(f'erased {s.id} "{s.title}", its directory and its transcript', data=data).emit(as_json)
@@ -319,7 +318,7 @@ def _purge_index(root, sid: str) -> None:  # type: ignore[no-untyped-def]
             event["replaced"] = ""
             line = json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
         kept.append(line)
-    p.write_text("".join(kept), encoding="utf-8")
+    own.write_text(p, "".join(kept), encoding="utf-8", root=root)
 
 
 def _mail(quilt_path: str | None, which: str | None, declared: str | None):  # type: ignore[no-untyped-def]

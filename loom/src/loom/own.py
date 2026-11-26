@@ -37,8 +37,8 @@ class Planted(OSError):
         super().__init__(errno.ELOOP, f"{where} is a link, and loom writes nothing of its own through a link")
 
 
-def _split(path: Path | str, root: Path | str | None) -> tuple[str, tuple[str, ...]]:
-    """The resolved anchor of `path` and the parts below it, the file's own name last (`(anchor, ())` for the anchor itself)."""
+def _split(path: Path | str, root: Path | str | None, *, folder: bool = False) -> tuple[str, tuple[str, ...]]:
+    """The resolved anchor of `path` and the parts below it, the file's own name last (`(anchor, ())` for the anchor itself). Outside a quilt with no `root`, the anchor is the nearest folder there, `path` itself where it is a `folder` there, so only what is made below it is guarded."""
     p = Path(os.path.abspath(path))
     if root is not None:
         r = Path(os.path.abspath(root))
@@ -53,7 +53,7 @@ def _split(path: Path | str, root: Path | str | None) -> tuple[str, tuple[str, .
         with contextlib.suppress(OSError):
             if stat.S_ISDIR(os.lstat(Path(*parts[:i], LOOM)).st_mode):
                 return os.path.realpath(Path(*parts[:i])), parts[i:]
-    i = len(parts) - 1
+    i = len(parts) if folder else len(parts) - 1
     while i > 1 and not os.path.isdir(Path(*parts[:i])):
         i -= 1
     return os.path.realpath(Path(*parts[:i])), parts[i:]
@@ -67,6 +67,18 @@ def _refuse(at: int, part: str, where: Path | str) -> None:
         return
     if stat.S_ISLNK(st.st_mode):
         raise Planted(str(where))
+
+
+@contextmanager
+def _named(path: Path | str) -> Iterator[None]:
+    """An error raised in the block names `path` whole, as `Path`'s own would, rather than the one part opened in its folder."""
+    try:
+        yield
+    except Planted:
+        raise
+    except OSError as exc:
+        exc.filename = os.fspath(path)
+        raise
 
 
 @contextmanager
@@ -126,18 +138,21 @@ def parent(path: Path | str, *, root: Path | str | None = None, make: bool = Fal
     anchor, parts = _split(path, root)
     if not parts:
         raise IsADirectoryError(errno.EISDIR, "the anchor itself is no file", str(path))
-    with _walk(anchor, parts[:-1], make=make) as at:
+    with _named(path), _walk(anchor, parts[:-1], make=make) as at:
         yield at, parts[-1]
 
 
 def mkdir(path: Path | str, *, root: Path | str | None = None, exist_ok: bool = True) -> None:
     """`path.mkdir(parents=True, exist_ok=exist_ok)`, without following a link; `Planted` where a part is one."""
-    anchor, parts = _split(path, root)
-    if exist_ok or not parts:
-        with _walk(anchor, parts, make=True):
-            return
-    with _walk(anchor, parts[:-1], make=True) as at:
-        os.mkdir(parts[-1], 0o777, dir_fd=at)
+    anchor, parts = _split(path, root, folder=True)
+    with _named(path):
+        if not parts and not exist_ok:
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST))
+        if exist_ok:
+            with _walk(anchor, parts, make=True):
+                return
+        with _walk(anchor, parts[:-1], make=True) as at:
+            os.mkdir(parts[-1], 0o777, dir_fd=at)
 
 
 #: The modes that write bytes.
@@ -292,7 +307,11 @@ def rmtree(path: Path | str, *, root: Path | str | None = None, ignore_errors: b
             raise
 
 
-def copyfile(src: Path | str, dst: Path | str, *, root: Path | str | None = None, make: bool = False) -> None:
-    """`shutil.copyfile(src, dst)` with `dst` written never through a link; `src` is read as it is."""
+def copyfile(
+    src: Path | str, dst: Path | str, *, root: Path | str | None = None, make: bool = False, mode: bool = False
+) -> None:
+    """`shutil.copyfile(src, dst)` with `dst` written never through a link; `src` is read as it is. With `mode`, `shutil.copy`: the permission bits copied too."""
     with Path(src).open("rb") as fin, open(dst, "wb", root=root, make=make) as fout:
         shutil.copyfileobj(fin, fout)
+        if mode:
+            os.fchmod(fout.fileno(), stat.S_IMODE(os.fstat(fin.fileno()).st_mode))
