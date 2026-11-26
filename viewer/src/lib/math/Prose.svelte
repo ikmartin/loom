@@ -4,8 +4,7 @@
 	// The publisher writes mathematics into these bodies as the dialect's `<span class="math inline">\(…\)</span>`, the same markup a node fragment carries, but nothing ran MathJax over them: `{@html body_html}` put the delimiters on the page as literal text, so every `$…$` an author or an agent typed arrived as `\(n \le 2\)`. Fragments go through `Fragment.svelte` and titles through `Tex.svelte`; this is the third place published TeX appears and the one that had no typesetter.
 	import { store } from '$lib/manifest/client.svelte';
 	import { typesetSoon } from '$lib/math/mathjax';
-	import { linkName } from '$lib/workspace/names';
-	import { elided, linkIds } from './ids';
+	import { nameLinks } from './names';
 
 	let { html, class: klass = 'body', macroSet }: { html: string; class?: string; macroSet?: string } = $props();
 
@@ -17,17 +16,7 @@
 		const m = store.manifest;
 		void html;
 		if (!node || !m) return;
-		linkIds(node, (key) => !!m.nodes[key]);
-		// the words before a link may already say its kind ("Corollary [](quilt:…)"), and then it reads its number alone
-		let last: { el: Element; kind: string } | null = null;
-		for (const a of node.querySelectorAll<HTMLAnchorElement>('a[href^="quilt:"], a[href^="cited:"]')) {
-			if (a.textContent?.trim()) continue;
-			const before = a.previousSibling?.nodeType === Node.TEXT_NODE ? (a.previousSibling.textContent ?? '') : '';
-			const chained = last && a.previousSibling?.previousSibling === last.el ? last.kind : null;
-			const { text, kind } = elided(before, linkName(m, a.getAttribute('href') ?? ''), chained);
-			a.textContent = text;
-			last = kind ? { el: a, kind } : null;
-		}
+		nameLinks(node, m);
 	});
 
 	// The body this element was last typeset for. A list hands its body down from an item that is a new object on every manifest, so this effect runs again on each one while the markup, and what MathJax made of it, stays.
