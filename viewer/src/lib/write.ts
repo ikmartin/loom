@@ -9,6 +9,7 @@ import { store } from '$lib/manifest/client.svelte';
 import { judge } from '$lib/outOfStep.svelte';
 import { judgeFormat } from '$lib/shell/upgrade.svelte';
 import { judgeHome } from '$lib/home/listing.svelte';
+import { judgeStopped } from '$lib/shell/gone.svelte';
 import { updating } from '$lib/manifest/updating.svelte';
 
 export interface Capabilities {
@@ -66,6 +67,7 @@ export function capabilities(): Promise<Capabilities | null> {
 		judge(caps);
 		judgeFormat(caps);
 		judgeHome(caps);
+		judgeStopped(caps);
 		for (const watch of watchers) watch(caps);
 		return caps;
 	});

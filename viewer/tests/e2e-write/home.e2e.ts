@@ -165,3 +165,27 @@ test("the person's name is asked once, then shown in the footer and changed ther
 	await expect(page.getByTestId('home-name-shown')).toHaveText('M. Holt');
 	await expect(asked).toHaveCount(0);
 });
+
+test("a quilt's page whose server stopped says so and links to the home page, and goes once it is served again", async ({ page, context, homed }) => {
+	test.setTimeout(120_000);
+	const made = await homed.call('quilt-create', { name: 'Thesis' });
+	expect(made.status).toBe(200);
+	await page.goto('/');
+	const row = page.getByTestId('quilt-row');
+	await expect(row).toHaveAttribute('data-state', 'running', { timeout: 30_000 });
+	const opened = context.waitForEvent('page');
+	await row.getByTestId('quilt-open').click();
+	const quilt = await opened;
+	await quilt.waitForLoadState();
+	await expect(quilt.getByTestId('column')).toBeVisible();
+	await expect(quilt.getByTestId('stopped')).toHaveCount(0);
+	await row.getByTestId('quilt-stop').click();
+	const card = quilt.getByTestId('stopped');
+	await expect(card).toContainText('Loom has stopped serving this quilt.', { timeout: 30_000 });
+	await expect(card.getByTestId('stopped-home')).toHaveAttribute('href', homed.url);
+	await expect(card).not.toContainText('loom serve');
+	// opened again from the home page, the card goes by itself
+	await row.getByTestId('quilt-open').click();
+	await expect(card).toHaveCount(0, { timeout: 30_000 });
+	await quilt.close();
+});

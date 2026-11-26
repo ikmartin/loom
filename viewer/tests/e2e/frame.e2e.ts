@@ -239,3 +239,28 @@ test('a run in the wide faces draws the viewer in them, its chrome and its text 
 	expect(faces[0]).toMatch(/^Verdana/);
 	expect(faces[1]).toMatch(/^"?DejaVu Serif/);
 });
+
+test('loom updated under the page: "Loom was updated." with Reload above the document, at the foot elsewhere, and never a command', async ({ page }) => {
+	await page.route('**/_api', (route) => route.fulfill({ json: { write_api: 1, capabilities: [], token: 't', stale: true } }));
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/master/drafting/main');
+	const note = pane(page, 0).getByTestId('out-of-step');
+	await expect(note).toHaveText(/^Loom was updated\.\s*Reload$/);
+	await expect(note.getByTestId('out-of-step-reload')).toBeVisible();
+	// above the document, in the left pane only
+	await expect(pane(page, 0).locator('.body').getByTestId('out-of-step')).toHaveCount(1);
+	await page.goto('/review');
+	await expect(page.getByTestId('out-of-step')).toHaveText(/Loom was updated\./);
+	await expect(page.locator('body')).not.toContainText('loom serve');
+});
+
+test("a quilt just made from a paper whose working copy differs says so above its document, once", async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/master/drafting/main?made=differs');
+	const note = pane(page, 0).getByTestId('page-note');
+	await expect(note).toHaveText("Loom's working copy of your paper does not typeset exactly as the paper did; your paper is kept as you gave it.");
+	await note.getByRole('button', { name: 'close' }).click();
+	await expect(note).toHaveCount(0);
+	await page.goto('/master/drafting/main');
+	await expect(pane(page, 0).getByTestId('page-note')).toHaveCount(0);
+});

@@ -12,6 +12,7 @@
 	import LinkPreview from '$lib/components/LinkPreview.svelte';
 	import DeletedBar from '$lib/review/DeletedBar.svelte';
 	import OutOfStep from '$lib/components/OutOfStep.svelte';
+	import Stopped from '$lib/shell/Stopped.svelte';
 	import Toast from '$lib/review/Toast.svelte';
 	import Column from '$lib/shell/Column.svelte';
 	import Workspace from '$lib/workspace/Workspace.svelte';
@@ -188,5 +189,6 @@
 <LinkPreview />
 <DeletedBar />
 <OutOfStep />
+<Stopped />
 <Toast />
 {/if}

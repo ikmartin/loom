@@ -1,8 +1,18 @@
 <script lang="ts">
-	// The note above the document in the left pane: what the quilt's first page has to say, here that a quilt just made from a paper has a working copy that does not typeset as the paper did (`made.svelte.ts`). × puts it away.
+	// The note above the document in the left pane: that loom was updated under the page, with Reload (`outOfStep.svelte.ts`, as the mock-up's 6c draws it); and on a quilt just made from a paper whose working copy does not typeset as the paper did, that it does not (`made.svelte.ts`), which × puts away.
 	import { made } from './made.svelte';
+	import { outOfStep } from '$lib/outOfStep.svelte';
 	import { frame } from '$lib/words/frame';
+
+	const step = $derived(outOfStep.said && outOfStep.said !== outOfStep.dismissed ? outOfStep.said : null);
 </script>
+
+{#if step}
+	<div class="qnote" role="status" data-testid="out-of-step" data-step={step}>
+		<span class="t">{frame.note.updated}</span>
+		<button type="button" class="btn primary" onclick={() => location.reload()} data-testid="out-of-step-reload">{frame.note.reload}</button>
+	</div>
+{/if}
 
 {#if made.differs}
 	<div class="qnote" role="status" data-testid="page-note" data-note="differs">
@@ -32,6 +42,10 @@
 	}
 	.t {
 		flex: 1;
+	}
+	.qnote .btn {
+		padding: 4px 11px;
+		border-radius: 7px;
 	}
 	.ib {
 		display: inline-flex;

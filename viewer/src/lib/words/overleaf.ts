@@ -18,7 +18,7 @@ export const overleaf = {
 		/** What it does. */
 		projectWhat: 'A folder of this quilt holding one Overleaf project as Overleaf holds it. Loom reads the project when you press Update and never writes to it, so change the text in Overleaf. Agents may not write in the folder.',
 		/** In place of the card where the loom serving the quilt cannot pair. */
-		cannot: 'The loom serving this quilt cannot pair with Overleaf. Stop loom serve, run it again, then reload.',
+		cannot: 'The loom serving this quilt cannot pair with Overleaf. Reload this page once loom has restarted with its update.',
 		/** In place of the card on a page shown as published, with no loom serving it. */
 		published: 'Shown as published. Pairing with Overleaf and updating need loom serving this quilt.'
 	},

@@ -9,6 +9,7 @@ import { compiles } from './compiles.svelte';
 import { library } from '$lib/library/gen.svelte';
 import { presence } from '$lib/agents/presence.svelte';
 import { updating, type Built } from './updating.svelte';
+import { stopped } from '$lib/shell/gone.svelte';
 
 /** How often to poll while the stream is open, as a net under it; while it is down, the poll is what tells. */
 const NET = 5000;
@@ -49,6 +50,7 @@ export async function listen(): Promise<void> {
 	updating.listen();
 	source.onopen = () => {
 		updating.up();
+		stopped.back();
 		store.pace(NET);
 		// back after a drop: ask again what the publisher is, so a restart under this page is noticed
 		if (dropped) {
@@ -58,8 +60,10 @@ export async function listen(): Promise<void> {
 		}
 	};
 	// the browser reconnects by itself; until it does, the poll is back at its own pace
+	// and whether the server is still there is asked a moment later (`shell/gone.svelte.ts`)
 	source.onerror = () => {
 		dropped = true;
+		stopped.dropped();
 		updating.down();
 		presence.lost();
 		store.pace(UNASSISTED);

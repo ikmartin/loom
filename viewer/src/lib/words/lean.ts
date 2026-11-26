@@ -19,7 +19,7 @@ export const lean = {
 		/** What the check does. */
 		checkWhat: "Loom rebuilds the project from clean and replays it in Lean's kernel, then records what Lean accepted for each result a declaration states. Your agent asks for this itself; here you can ask for it again.",
 		/** When the publisher cannot turn Lean on. */
-		cannot: 'The loom serving this quilt cannot turn Lean on. Stop loom serve, run it again, then reload.',
+		cannot: 'The loom serving this quilt cannot turn Lean on. Reload this page once loom has restarted with its update.',
 		/** A viewer with no publisher serving it. */
 		published: 'Shown as published. Turning Lean on needs loom serving this quilt.'
 	},
