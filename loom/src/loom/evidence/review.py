@@ -14,6 +14,7 @@ from loom.evidence.asks import Standing, open_asks
 from loom.evidence.log import Evidence, Record
 from loom.evidence.status import Status, brief, gate, status
 from loom.evidence.web import DraftWeb, Here, Joined, LibraryWeb, Web
+from loom.formal.reading import latest, read_names, stale
 
 if TYPE_CHECKING:
     from loom.library.index import NodeIndex
@@ -531,7 +532,7 @@ def _attest_body(
     manifest: dict[str, Any],
     doc: str | None,
 ) -> dict[str, Any]:
-    """What a row to attest opens on (`docs/specs/evidence.md` §7, `review-row`): the Lean record to attest, the statement, the Lean that states it and each definition of the project that Lean's statement names, mapped to the result it stands for, all as loom's check read them; its notation, what it uses that the person attested and when, and the declarations that only serve its proof. The agent's account of its parts and of a difference is null until an agent's record gives it."""
+    """What a row to attest opens on (`docs/specs/evidence.md` §7, `review-row`): the Lean record to attest, the statement, the Lean that states it and each definition of the project that Lean's statement names, mapped to the result it stands for, all as loom's check read them; its notation, what it uses that the person attested and when, the declarations that only serve its proof, and the latest agent's reading of the Lean, null where none."""
     record = next((r for r in evidence.of_kind("lean") if r.id == found.lean_record), None)
     if here.kind == "block":
         statement: dict[str, Any] = {"fragment": manifest.get("nodes", {}).get(here.name, {}).get("fragment")}
@@ -564,17 +565,36 @@ def _attest_body(
     decls = {d["name"]: d for d in (record.get("declarations", []) if record else [])}
     on = record.on if record else None
     states = [n for n, d in decls.items() if on is not None and d.get("role") == "states" and d.get("names") == {on.kind: on.name}]  # fmt: skip
+    read = read_names(record) if record else []
     supporting = [n for n, d in decls.items() if d.get("role") == "supports"]
     return {
         "observation": found.lean_record,
         "statement": statement,
         "lean": [{"name": n, "kind": decls[n]["kind"], "shown": decls[n].get("shown")} for n in states],
-        "definitions": _definitions(evidence, web, library, here, decls, states, manifest, doc),
-        "parts": None,
+        "definitions": _definitions(
+            evidence, web, library, here, decls, [n for n in read if n not in states], manifest, doc
+        ),
         "notation": notation,
         "uses_attested": uses,
         "supporting": supporting,
-        "difference": None,
+        "account": _account(evidence, found),
+    }
+
+
+def _account(evidence: Evidence, found: Status) -> dict[str, Any] | None:
+    """The latest agent's reading of the result's Lean (`formal.reading`), as the person reads it beside loom's Lean: who read it and when, the record it read, whether a newer one states the result since, and its parts and difference; None where no agent read it."""
+    if found.subject is None:
+        return None
+    said = latest(evidence, *found.subject.key)
+    if said is None:
+        return None
+    return {
+        "by": said.by.name,
+        "at": said.at,
+        "observation": said.get("lean"),
+        "stale": stale(evidence, said),
+        "parts": [dict(p) for p in said.get("parts", [])],
+        "difference": said.get("difference"),
     }
 
 
@@ -584,24 +604,18 @@ def _definitions(
     library: LibraryWeb,
     here: Here,
     rows: dict[str, dict[str, Any]],
-    states: list[str],
+    named: list[str],
     manifest: dict[str, Any],
     doc: str | None,
 ) -> list[dict[str, Any]]:
-    """Each declaration of the project the stating declarations' statements name, and what those name in turn, as the Lean record has them, each beside the result its marker says it stands for, or none.
+    """Each declaration `named`, those the stating declarations' statements name and what those name in turn (`formal.reading.read_names`), as the Lean record has them, each beside the result its marker says it stands for, or none.
 
     One that stands for a result carries that result's statement and when the person attested its own Lean on its text now; one that stands for none is the Lean's alone, and the person's word on this result covers it, since its statement hash takes it in (`formal/check._statement_hashes`).
     """
     out: list[dict[str, Any]] = []
     closure = web.closure(here)
-    seen, todo = set(states), [m for n in states for m in rows[n].get("means", [])]
-    while todo:
-        name = todo.pop(0)
-        if name in seen or name not in rows:
-            continue
-        seen.add(name)
+    for name in named:
         d = rows[name]
-        todo.extend(d.get("means", []))
         stands: dict[str, Any] | None = None
         names = d.get("names")
         if isinstance(names, dict) and names:
