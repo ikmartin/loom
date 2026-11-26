@@ -152,8 +152,8 @@ def test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten(
     assert proof is not None and proof.body == (
         f"By \\eqref{{{lemma}-eq00}} and \\ref{{{other}}}; see \\cite{{{bellamy}}}. % not \\ref{{def:widget}}\n"
     ), "a located citation the other work's stub, a work alone its reference; a comment as it stands"
-    assert (proof.uses, proof.mentions) == ((other,), (bellamy,)), (
-        "its own statement's anchor listed nowhere; 'see' a mention"
+    assert (proof.uses, proof.mentions) == (tuple(sorted((other, bellamy))), ()), (
+        "its own statement's anchor listed nowhere; after 'see' a use too, since loom marks no mention"
     )
     assert read(root, jones) is not None, "the work the quilt holds as Jones19 is the one the source cites as Jon19"
     assert log.replay(root).cited_from(bellamy) == smith, "made from Smith's bibliography, and said so"

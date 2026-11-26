@@ -26,8 +26,6 @@ if TYPE_CHECKING:
     from loom.library.intake import Library
     from loom.scan.scan import ScanResult
 
-#: Words before a pointer that make it a mention, not a use: "see Lemma~\\ref{x}", "cf.~\\cite{y}".
-_SEE = re.compile(r"(?:\bcf\b\.?|\bcompare\b|\bsee\b)(?:[\s~,]|\balso\b|\be\.g\.)*(?:[A-Z][a-z]+\.?)?[\s~]*$", re.I)
 _LABEL = re.compile(r"\\label(?![A-Za-z@])")
 #: Commands whose one label loom may write as the number the work prints for it, and how it prints it.
 _PRINTED = {"ref": "{}", "eqref": "({})"}
@@ -754,12 +752,12 @@ class _Run:
                 for s_, e_, (_k, target) in got:
                     edits.append((s_, e_, target))
                     points.append(target)
-            mention = bool(_SEE.search(scan[max(0, cmd.start - 40) : cmd.start]))
+            # loom marks no mention: every pointer it finds is a use, and only an agent's proposal or the person moves one
             for target in points:
                 node = ids.anchor_owner(target) or target
                 if target in exempt or node in exempt:
                     continue
-                (out.mentions if mention else out.uses).add(node)
+                out.uses.add(node)
         text = raw
         for s_, e_, new in sorted(edits, reverse=True):
             text = text[:s_] + new + text[e_:]
