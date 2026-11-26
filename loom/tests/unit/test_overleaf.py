@@ -989,6 +989,25 @@ def test_every_refusal_an_update_knows_answers_with_its_code(tmp_path: Path) -> 
     assert (saved.value.code, saved.value.status) == ("mirrored", 409)
 
 
+def test_a_reviewer_name_an_agent_goes_by_is_refused_every_overleaf_act(tmp_path: Path) -> None:
+    """The quilt's reviewer name decides as the request's `author` does: an agent's name never updates, pairs or unpairs, and nothing is written."""
+    from loom.render.api import ApiError, handle
+    from loom.scan.quilt import save_author
+
+    root, bare = two_lemmas(tmp_path)
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    save_author("Referee Agent")
+    for endpoint, body in (
+        ("overleaf-update", {}),
+        ("overleaf-unpair", {}),
+        ("overleaf-pair", {"link": f"https://www.overleaf.com/project/{ID}"}),
+    ):
+        with pytest.raises(ApiError) as refused:
+            handle(root, endpoint, body)
+        assert (refused.value.code, refused.value.status) == ("author-only", 403), endpoint
+    assert (root / "drafting/main.tex").read_text() == TWO and paired(root) is not None
+
+
 def test_none_yet_is_asked_again_once_the_history_names_someone_new(tmp_path: Path) -> None:
     """O-7: a person who said "none yet" is asked again after their first change in Overleaf."""
     root = mirror.quilt_at(tmp_path)
