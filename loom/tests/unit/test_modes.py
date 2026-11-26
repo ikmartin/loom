@@ -54,6 +54,9 @@ def test_the_formalize_mode_says_how_to_work_in_lean_and_that_loom_runs_the_chec
         "`loom formal check`",
         "lean/Loom.lean",
         "Loom checks the Lean itself",
+        "`loom formal read RESULT`",
+        "Have a second agent read it",
+        "that you do not write",
     ):
         assert said in text, said
     assert re.search(r"^- \*\*formalize\*\*", mode_index(q), re.M)

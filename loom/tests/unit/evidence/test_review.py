@@ -474,7 +474,7 @@ def test_a_row_to_attest_opens_on_the_lean_its_notation_and_what_it_uses_that_wa
     [row] = [r for r in gathered.of("attest") if r.fields["result"] == _key(root, "lem:balanced")]
     body = review.body_of(row, {})
     lean = replay(root).about("label", "lem:balanced", of="lean")[-1]
-    assert body["observation"] == lean.id and body["parts"] is None and body["difference"] is None
+    assert body["observation"] == lean.id and body["account"] is None
     assert body["notation"] == [{"part": "Zcyc", "from": "preamble", "attested": True}]
     assert [u["result"] for u in body["uses_attested"]] == [_key(root, "def:cycle")]
     assert body["supporting"] == [] and "body" not in row.to_dict()
@@ -735,3 +735,21 @@ def test_a_row_to_attest_shows_loom_s_lean_and_each_definition_its_statement_nam
     assert z["stands_for"] == {"result": _key(root, "def:cycle"), "name": z["stands_for"]["name"], "statement": {"fragment": "fragments/def-cycle.html"}, "attested": attested.at}  # fmt: skip
     assert (w["name"], w["stands_for"]) == ("F.W", None)
     assert body["supporting"] == ["F.lemma", "F.W"]
+
+
+def test_a_row_to_attest_carries_the_latest_agents_reading_beside_loom_s_lean_stale_once_loom_records_newer_lean(
+    root: Path,
+) -> None:
+    """The agent's reading is drawn as the agent's, by its name, each part naming the declaration of loom's record it reads; it vouches for nothing, so the result still waits for the person, and once loom records a newer Lean for the result the reading reads stale."""
+    from loom.formal import reading
+
+    _lean(root, "lem:balanced")
+    part = {"part": "", "draft": "Every $w$ vanishes.", "declaration": "lem:balanced", "reading": "$w = 0$."}
+    made = reading.write(root, "lem:balanced", AGENT, [part], "None.")
+    [row] = [r for r in _gather(root).of("attest") if r.fields["result"] == _key(root, "lem:balanced")]
+    assert row.fields["lean"]["lean"] == "unattested"
+    account = review.body_of(row, {})["account"]
+    assert account == {"by": "Probe Agent", "at": made.at, "observation": made.get("lean"), "stale": False, "parts": [part], "difference": "None."}  # fmt: skip
+    _lean(root, "lem:balanced")
+    [row] = [r for r in _gather(root).of("attest") if r.fields["result"] == _key(root, "lem:balanced")]
+    assert review.body_of(row, {})["account"]["stale"] is True
