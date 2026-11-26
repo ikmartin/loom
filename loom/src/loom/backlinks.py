@@ -162,7 +162,7 @@ _ON_PAGE: dict[tuple[str, int, int, int, str], bool | None] = {}
 def words_found(result: Any, root: Path, link: dict[str, Any]) -> bool | None:
     """Whether a backlink's quoted words still stand in what it names, found as the viewer finds them to light them; None where it quotes nothing or loom cannot tell.
 
-    A result's words are looked for in its own text, a document's beyond any result in its own source with its inputs expanded, a project PDF's or a work's on the page the link names (`records.marks.lines_of`, `refs.search.find_in_page`); a PDF with no page named, or a work whose pages cannot be read, is not judged.
+    A result's words are looked for in its own text, a document's beyond any result in its own source with its inputs expanded, a Markdown file's in the file as written or as its page prints it (`records.mdtext.find`), a project PDF's or a work's on the page the link names (`records.marks.lines_of`, `refs.search.find_in_page`); a PDF with no page named, or a work whose pages cannot be read, is not judged.
     """
     from loom.records.selectors import find_quote
 
@@ -182,6 +182,13 @@ def words_found(result: Any, root: Path, link: dict[str, Any]) -> bool | None:
             text = expanded.text if expanded is not None else (result.files[key].text if key in result.files else None)
             return None if text is None else bool(find_quote(text, words))
         return None
+    from loom.records.mdtext import is_markdown
+
+    if kind == "file" and is_markdown(key):
+        from loom.records.mdtext import find, text_of
+
+        text = text_of(root, key)
+        return None if text is None else bool(find(text, words))
     page = int(m.group(1)) if (m := re.fullmatch(r"page=(\d+)", place)) else 0
     if not page:
         return None

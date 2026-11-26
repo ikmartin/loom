@@ -59,7 +59,7 @@ export function itemForQuilt(m: Manifest, body: string): Item | null {
 	if (key === 'state' && m.research_state) return { kind: 'page', id: 'state' };
 	if (isDocument(m, key)) return { kind: 'document', id: key, ...(place ? { anchor: anchorId(place) } : {}), ...quoted };
 	const file = m.files?.find((f) => f.path === key);
-	if (file && LINKED.has(file.kind)) return { kind: 'file', id: key, ...(place ? { anchor: place } : {}), ...(file.kind === 'pdf' ? quoted : {}) };
+	if (file && LINKED.has(file.kind)) return { kind: 'file', id: key, ...(place ? { anchor: place } : {}), ...(file.kind === 'pdf' || file.kind === 'markdown' ? quoted : {}) };
 	if (REFERENCE.test(key)) {
 		const page = Number(/^page=([1-9]\d*)$/.exec(place)?.[1] ?? 0);
 		const at = { ...(page ? { page } : {}), ...quoted };

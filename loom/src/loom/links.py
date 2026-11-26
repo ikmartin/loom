@@ -1,6 +1,6 @@
 """Links an agent or a person writes into what the viewer shows (plan 0.14 phase 3, specs/dialect.md §2.13).
 
-Two schemes and one grammar. `quilt:KEY[#PLACE][&quote=WORDS]` names something this quilt owns by its fixed key -- a node, a document, an annotation, a session, the research state (`quilt:state`), a work by its reference, or a shown file by its path with its suffix (`quilt:notes/day1.md#setup`) -- and `cited:SCHEME:VALUE[?page=N&quote=…]` names a place in a cited work by its global identifier. A place in a document, a project PDF or a work may carry quoted words, which the viewer opens at and lights. **Only what the viewer can show is linkable**: an included `.tex` file, a hidden file (a session's drafts among them), a deleted session are refused, because a link to something the viewer does not display is a link to nothing.
+Two schemes and one grammar. `quilt:KEY[#PLACE][&quote=WORDS]` names something this quilt owns by its fixed key -- a node, a document, an annotation, a session, the research state (`quilt:state`), a work by its reference, or a shown file by its path with its suffix (`quilt:notes/day1.md#setup`) -- and `cited:SCHEME:VALUE[?page=N&quote=…]` names a place in a cited work by its global identifier. A place in a document, a project PDF, a Markdown file or a work may carry quoted words, which the viewer opens at and lights. **Only what the viewer can show is linkable**: an included `.tex` file, a hidden file (a session's drafts among them), a deleted session are refused, because a link to something the viewer does not display is a link to nothing.
 
 A link is checked when it is posted (`loom session say`, `loom annotate`) and printed correctly by `loom link`, so an agent never composes one by hand. A link written into a shown Markdown file is checked by `loom lint` through the same `resolve` (`scan.lint.markdown_links`).
 """
@@ -85,7 +85,7 @@ def _quilt(result: Any, root: Path, href: str, records: list[Any] | None) -> Tar
         raise LinkError(f"{href}: names no key")
     target = _quilt_target(result, root, href, key, place, records)
     if words and not _quotable(target):
-        raise LinkError(f"{href}: quoted words are for a place in a document, a PDF or a work", "place")
+        raise LinkError(f"{href}: quoted words are for a place in a document, a PDF, a Markdown file or a work", "place")
     return Target(target.kind, target.key, target.place, target.href, words)
 
 
@@ -98,10 +98,12 @@ def split_quote(raw: str) -> tuple[str, str]:
 
 
 def _quotable(target: Target) -> bool:
-    """Whether quoted words can be found in what `target` names: a document or a node in one, a project PDF, or a work's pages."""
+    """Whether quoted words can be found in what `target` names: a document or a node in one, a project PDF, a Markdown file, or a work's pages."""
+    from loom.records.mdtext import is_markdown
+
     if target.kind in ("document", "node", "work"):
         return True
-    return target.kind == "file" and target.key.lower().endswith(".pdf")
+    return target.kind == "file" and (target.key.lower().endswith(".pdf") or is_markdown(target.key))
 
 
 def _quilt_target(result: Any, root: Path, href: str, key: str, place: str, records: list[Any] | None) -> Target:

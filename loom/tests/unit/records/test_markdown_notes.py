@@ -83,3 +83,15 @@ def test_the_files_page_marks_the_words_and_still_does_after_an_edit_above(q: Pa
     now = (q / NOTE).read_text(encoding="utf-8")
     start = now.index("The *median")
     assert f'<p data-src="{NOTE}:{start}:{now.index(chr(10), start)}">' in drawn
+
+
+def test_a_link_quotes_words_of_the_file_and_is_a_problem_once_they_are_gone(q: Path) -> None:
+    from loom.backlinks import words_found
+    from loom.cli._quilt import open_scan
+
+    link = ok("link", NOTE, "--quote", "median order of a graph", cwd=q).output.strip()
+    assert link == "[](quilt:notes/day1.md#quote=median%20order%20of%20a%20graph)"
+    said = {"kind": "file", "key": NOTE, "place": "", "quote": "median order of a graph"}
+    assert words_found(open_scan(str(q)), q, said) is True
+    (q / NOTE).write_text(TEXT.replace("median order", "mean order"), encoding="utf-8")
+    assert words_found(open_scan(str(q)), q, said) is False

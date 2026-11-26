@@ -20,13 +20,13 @@ from loom.errors import EnvError
 @click.option(
     "--quote",
     default=None,
-    help="Words to open at and light: on the work's page, on the PDF's page given by --at page=N, or at the place in a document; anywhere in it with no page or place.",
+    help="Words to open at and light: on the work's page, on the PDF's page given by --at page=N, at the place in a document, or in a Markdown file; anywhere in it with no page or place.",
 )
 @quilt_option
 def link_command(thing: str, at: str | None, page: int | None, quote: str | None, quilt_path: str | None) -> None:
     """Print a markdown link to THING that the viewer can follow.
 
-    THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
+    THING is a node or any key in it, a document's path, an annotation id, a session id, a work (its reference, or the key its entry has), or a file the viewer shows by its path (`notes/day1.md`, `--at` a heading's id; a PDF `--at page=N`; a text file `--at L12`). `--quote` carries words in a document, a project PDF, a Markdown file or a work, which the viewer opens at and lights. The link's text is empty: the viewer names the thing itself, as `Theorem 3.1`, and keeps the name right when the document is renumbered; write your own words between the brackets to show those instead. A thing the viewer does not show is refused, with why.
     """
     from loom.cli.review import _work_target
     from loom.links import LinkError, quilt_link, resolve
