@@ -23,7 +23,6 @@ from typing import Any
 from urllib.parse import unquote
 
 from loom import layout
-from loom.viewer_bundle import find_bundle
 from loom.files import FILES_URL, Shown
 from loom.paths import COMPILES, LIBRARY_NODES, SERVE_JSON, SITE, TEX, TEX_ADDRESS, document_build, document_page
 from loom.presence import Watch
@@ -33,6 +32,7 @@ from loom.scan.quilt import Quilt
 from loom.scan.scan import ScanResult
 from loom.tex.runner import CompileResult, compile_document, normalise_engine
 from loom.version import code_stamp
+from loom.viewer_bundle import find_bundle
 
 DEFAULT_PORT = 8791
 ASSET_SUFFIXES = {

@@ -53,7 +53,9 @@ def test_a_copy_whose_source_left_the_list_is_a_move(words):
     (old.parent / "Moved.svelte").write_text(old.read_text())
     old.write_text("<script>\n\timport X from './Moved.svelte';\n</script>\n\n<X />\n")
     git("add", "-A")
-    assert module.moved_since("HEAD", {"viewer/src/Moved.svelte"}) == {"viewer/src/Old.svelte": "viewer/src/Moved.svelte"}
+    assert module.moved_since("HEAD", {"viewer/src/Moved.svelte"}) == {
+        "viewer/src/Old.svelte": "viewer/src/Moved.svelte"
+    }
 
 
 def test_an_attachment_in_a_tag_is_read(words):

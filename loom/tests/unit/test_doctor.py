@@ -307,7 +307,14 @@ def dirty_checkout(box: Box) -> None:
 
 BUNDLES: list[tuple[str, Case, str, str | None, str, str]] = [
     # id, setup, status, source, detail starts with, remedy contains
-    ("env", env_valid, "ok", "LOOM_VIEWER_BUNDLE", "the viewer LOOM_VIEWER_BUNDLE names, built from commit abc1234", ""),
+    (
+        "env",
+        env_valid,
+        "ok",
+        "LOOM_VIEWER_BUNDLE",
+        "the viewer LOOM_VIEWER_BUNDLE names, built from commit abc1234",
+        "",
+    ),
     ("env-invalid", env_invalid, "fail", None, "LOOM_VIEWER_BUNDLE=", "unset it"),
     ("env-invalid-alone", env_invalid_alone, "fail", None, "LOOM_VIEWER_BUNDLE=", "unset it"),
     (
@@ -377,7 +384,9 @@ def test_a_vendored_bundle_behind_the_checkouts_viewer_warns(box: Box) -> None:
     git("commit", "-qam", "two")
     got = item(doctor(box), "viewer bundle")
     assert got["status"] == "warn" and f"built from {built}, but the viewer's sources changed in " in got["detail"], got
-    assert got["remedy"].endswith("scripts/vendor_viewer.py ../viewer/build") and "commit the viewer" not in got["remedy"]
+    assert (
+        got["remedy"].endswith("scripts/vendor_viewer.py ../viewer/build") and "commit the viewer" not in got["remedy"]
+    )
 
 
 # ---- the quilt section

@@ -139,7 +139,9 @@ def test_serve_refuses_a_loom_viewer_bundle_that_names_no_bundle(
     d = tmp_path / "demo"
     ok("init", str(d), "--demo")
     monkeypatch.setenv("LOOM_VIEWER_BUNDLE", str(tmp_path / "nowhere"))
-    refused("serve", "--port", "0", cwd=d, code=2, match=f"LOOM_VIEWER_BUNDLE={tmp_path / 'nowhere'} is not a directory")
+    refused(
+        "serve", "--port", "0", cwd=d, code=2, match=f"LOOM_VIEWER_BUNDLE={tmp_path / 'nowhere'} is not a directory"
+    )
 
 
 def test_serve_exit_2_without_bundle(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
