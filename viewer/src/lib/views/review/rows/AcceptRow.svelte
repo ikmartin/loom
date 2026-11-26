@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A block in Results to accept, drawn as round six's row: a box to choose it with others where it can be accepted, "main.tex · Lemma 3.3", why it waits at the right, a chevron. Open: what changed since it was accepted (`SinceAccepted`), else its text, each reference in them the in-page anchor the build gave it; the person's open notes on it; why loom cannot accept it yet, or `accept`; and `see it in main.tex`, which lays the draft over Review with that change. An accepted block, folded beneath, opens to its text alone.
+	// A block in Results to accept, drawn as round six's row: a box to choose it with others where it can be accepted, "main.tex · Lemma 3.3", why it waits at the right, a chevron. Open: what changed since it was accepted (`SinceAccepted`), else its text, each reference in them the in-page anchor the build gave it; the person's open notes on it; why loom cannot accept it yet, or `accept`; and `see it in main.tex`, which lays the draft over Review with that change. An accepted block, folded beneath, opens to its text alone. Within an adoption's row, a block that cannot be accepted says why at its right.
 	import Icon from '$lib/components/Icon.svelte';
 	import Fragment from '$lib/fragments/Fragment.svelte';
 	import { shortDate } from '$lib/badges';
@@ -21,7 +21,8 @@
 		doc,
 		row,
 		taken,
-		acts = false
+		acts = false,
+		within = false
 	}: {
 		key: string;
 		/** The document it is listed under, which names it. */
@@ -32,6 +33,8 @@
 		taken?: string;
 		/** Whether the person can accept here: the quilt served for writing and a reviewer named. */
 		acts?: boolean;
+		/** Whether it is drawn within its adoption's row, which says where it came from. */
+		within?: boolean;
 	} = $props();
 
 	const m = $derived(store.manifest!);
@@ -46,6 +49,7 @@
 
 	const meta = $derived.by(() => {
 		if (!row) return k?.acceptance ? words.accepted.by(k.acceptance.author, shortDate(k.acceptance.date)) : '';
+		if (within && row.refusal) return words.accepted.cannotRow(row.refusal_code);
 		if (changed) return words.accepted.more(!causes.length || causes[0].kind === 'own-text-changed' ? words.accepted.changed : causeLabel(m, causes[0]), Math.max(causes.length - 1, 0));
 		return taken ?? node.context ?? '';
 	});

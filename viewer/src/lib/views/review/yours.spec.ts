@@ -1,7 +1,7 @@
 // The rows of the two kinds drawn from the manifest, and what they count: Results to accept's blocks waiting, each once, the never accepted and the accepted folded beneath and uncounted; Proposed edits' files with edits made in place, suggested edits and copies; each narrowed to a draft as it is drawn.
 import { describe, expect, it } from 'vitest';
 import fixture from '../../../../tests/fixture/manifest.json';
-import type { Manifest, PendingChange } from '$lib/manifest/types';
+import type { Manifest, PendingChange, UnresolvedReview } from '$lib/manifest/types';
 import type { ReviewList } from '$lib/library/types';
 import { acceptList, acceptSections, acceptWaiting, changeGroups, changeList, changesWaiting, editRows, theirs } from './yours';
 
@@ -30,7 +30,9 @@ describe('the accept section', () => {
 
 	it('lists a row for each block waiting, the changed before the taken in within a document, and counts exactly those rows', () => {
 		const list = acceptList(m);
-		expect(list.waiting).toHaveLength(acceptWaiting(m));
+		expect(list.rows).toHaveLength(acceptWaiting(m));
+		// with no adoption, each block waiting is a row
+		expect(list.rows.map((r) => r.type === 'block' && r.key)).toEqual(list.waiting.map((b) => b.key));
 		const keys = [...list.waiting, ...list.never, ...list.accepted].map((b) => b.key);
 		expect(new Set(keys).size).toBe(keys.length);
 		expect(list.waiting.every((b) => b.row.cause !== 'never-accepted')).toBe(true);
@@ -38,7 +40,7 @@ describe('the accept section', () => {
 		expect(list.never.length).toBeGreaterThan(0);
 		// a block names the document it is listed under, whose file names its row
 		for (const b of list.waiting) expect(m.masters.some((d) => d.path === b.doc)).toBe(true);
-		expect(acceptList(m, TALK).waiting).toHaveLength(acceptWaiting(m, TALK));
+		expect(acceptList(m, TALK).rows).toHaveLength(acceptWaiting(m, TALK));
 	});
 
 	it('names the source of a block taken in from a copy, and lists it after its document\'s changed blocks', () => {
@@ -48,6 +50,32 @@ describe('the accept section', () => {
 		expect(row?.taken).toBe('Taken in from the copy “main-agent”');
 		const own = rows.filter((b) => b.doc === row!.doc);
 		expect(own.at(-1)?.key).toBe('sy-0001');
+	});
+
+	it('draws an adoption as one row holding every block it took in, standing where its first block does, and counts it once; a block taken in from Overleaf stays a row of its own', () => {
+		const COPY = '.loom/agents/copies/aidoc.tex';
+		const from: Record<string, Partial<UnresolvedReview>> = {
+			'sy-0002': { cause: 'adopted', contribution: COPY },
+			'sy-0004': { cause: 'adopted', contribution: COPY, refusal: 'It is marked incomplete.', refusal_code: 'incomplete' },
+			'sy-0005': { cause: 'incoming-pull', source_label: 'Taken in from Overleaf' },
+			'drafting/talk.tex#lemma:1': { cause: 'adopted', contribution: COPY }
+		};
+		const x: Manifest = { ...m, unresolved: m.unresolved!.map((r) => ({ ...r, ...from[r.key] })) };
+		const list = acceptList(x);
+		const shown = list.rows.map((r) => (r.type === 'adoption' ? [r.name, r.doc, r.blocks.map((b) => b.key)] : r.key));
+		expect(shown).toEqual(['sy-0001', 'sy-0002/proof', ['aidoc', MAIN, ['sy-0002', 'sy-0004', 'drafting/talk.tex#lemma:1']], 'sy-0005']);
+		// every block the rows hold is listed once, in `waiting`, with the document that names it
+		expect(list.waiting.map((b) => b.key)).toHaveLength(6);
+		expect(list.waiting.find((b) => b.key === 'drafting/talk.tex#lemma:1')?.doc).toBe(TALK);
+		expect(acceptWaiting(x)).toBe(4);
+		// a draft draws the adoption while it reads one of its blocks, holding only those
+		const talk = acceptList(x, TALK).rows;
+		expect(talk.map((r) => (r.type === 'adoption' ? r.blocks.map((b) => b.key) : r.key))).toEqual(['sy-0002/proof', ['drafting/talk.tex#lemma:1', 'sy-0002']]);
+		expect(acceptWaiting(x, TALK)).toBe(2);
+		// two copies are two rows
+		const y: Manifest = { ...x, unresolved: x.unresolved!.map((r) => (r.key === 'sy-0004' ? { ...r, contribution: '.loom/agents/copies/other.tex' } : r)) };
+		expect(acceptList(y).rows.filter((r) => r.type === 'adoption').map((r) => r.type === 'adoption' && r.name)).toEqual(['aidoc', 'other']);
+		expect(acceptWaiting(y)).toBe(5);
 	});
 
 	it('counts in a draft only what that draft reads, and nothing in a draft the quilt does not hold', () => {

@@ -1,12 +1,12 @@
-// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from a copy or a pull), the never accepted and the accepted folded beneath; "Proposed edits", a row for each file with edits made in place since the look (holding that file's changes), for each suggested edit and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
+// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from Overleaf) and one for each adoption of an agent's copy, holding the blocks it took in, the never accepted and the accepted folded beneath; "Proposed edits", a row for each file with edits made in place since the look (holding that file's changes), for each suggested edit and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
 
 import type { Key, Manifest, PendingChange, UnresolvedReview } from '$lib/manifest/types';
 import type { ReviewKind, ReviewList } from '$lib/library/types';
 import { isAgentDocument } from '$lib/manifest/documents';
 import { byDocument, pending, type ChangeGroup } from '$lib/review/changes';
 import { adoptionsOf } from '$lib/review/proposed';
-import { documentsWithBlocks } from '$lib/review/queue';
-import { acceptanceOf, waitingIn, type Acceptance, type BlockRow } from '$lib/review/yourChanges';
+import { documentsWithBlocks, takenLabel } from '$lib/review/queue';
+import { acceptanceOf, type Acceptance, type BlockRow } from '$lib/review/yourChanges';
 
 /** The two kinds drawn from the manifest. */
 export const YOURS = ['accepted-changed', 'edits'] as const satisfies ReviewKind[];
@@ -55,28 +55,65 @@ export interface AcceptItem {
 	taken?: string;
 }
 
-/** What Results to accept draws: the rows waiting, by document, each document's changed blocks before those taken in; beneath, folded and counting nothing, the never accepted and the accepted. */
+/** An adoption waiting in Results to accept: the blocks one agent's copy brought in, each under the document that lists it, in the order they are listed. */
+export interface AdoptionItem {
+	/** The copy, by path; for a block that names none, where it came from as its group is headed. */
+	copy: string;
+	/** The copy's name. */
+	name: string;
+	/** The document listing its first block, which its row names. */
+	doc: string;
+	blocks: AcceptItem[];
+}
+
+/** A row of Results to accept: a block of its own, or an adoption, which opens to its blocks. */
+export type AcceptRowItem = ({ type: 'block' } & AcceptItem) | ({ type: 'adoption' } & AdoptionItem);
+
+/** What Results to accept draws: the rows waiting (`rows`), by document, each document's changed blocks before those taken in, an adoption one row standing where its first block does; every block those rows hold (`waiting`); beneath, folded and counting nothing, the never accepted and the accepted. */
 export interface AcceptList {
+	rows: AcceptRowItem[];
 	waiting: AcceptItem[];
 	never: AcceptItem[];
 	accepted: { key: string; doc: string; k: Key }[];
 }
 
+/** A copy's name: its file's, without `.tex`. */
+const copyName = (path: string): string => (path.split('/').pop() ?? path).replace(/\.tex$/, '');
+
+/** The copy an adopted block came from, which its adoption's row is one for; null for a block not taken in from a copy. */
+export const adoptionOf = (row: UnresolvedReview): string | null => (row.cause === 'adopted' ? (row.contribution ?? takenLabel(row)) : null);
+
 /** Results to accept's rows, every draft's or one draft's. */
 export function acceptList(m: Manifest, doc?: string | null): AcceptList {
-	const out: AcceptList = { waiting: [], never: [], accepted: [] };
+	const out: AcceptList = { rows: [], waiting: [], never: [], accepted: [] };
+	const adoptions = new Map<string, Extract<AcceptRowItem, { type: 'adoption' }>>();
 	for (const s of acceptSections(m, doc)) {
 		const item = (b: BlockRow, taken?: string): AcceptItem => ({ key: b.key, doc: s.path, row: b.row!, ...(taken ? { taken } : {}) });
-		out.waiting.push(...s.a.changed.map((b) => item(b)), ...s.a.taken.flatMap((t) => t.rows.map((b) => item(b, t.label))));
+		const waiting = [...s.a.changed.map((b) => item(b)), ...s.a.taken.flatMap((t) => t.rows.map((b) => item(b, t.label)))];
+		out.waiting.push(...waiting);
+		for (const b of waiting) {
+			const copy = adoptionOf(b.row);
+			if (copy === null) {
+				out.rows.push({ type: 'block', ...b });
+				continue;
+			}
+			const row = adoptions.get(copy);
+			if (row) row.blocks.push(b);
+			else {
+				const r = { type: 'adoption' as const, copy, name: b.row.contribution ? copyName(b.row.contribution) : copy, doc: b.doc, blocks: [b] };
+				adoptions.set(copy, r);
+				out.rows.push(r);
+			}
+		}
 		out.never.push(...s.a.never.map((b) => item(b)));
 		out.accepted.push(...s.a.accepted.map((k) => ({ key: k.key, doc: s.path, k })));
 	}
 	return out;
 }
 
-/** The blocks Results to accept lists as waiting, changed since accepted or taken in, each once; in one draft when given. */
+/** The rows Results to accept draws as waiting: each block changed since accepted or taken in from Overleaf, each once, and each adoption; in one draft when given. */
 export function acceptWaiting(m: Manifest, doc?: string | null): number {
-	return acceptSections(m, doc).reduce((n, s) => n + waitingIn(s.a), 0);
+	return acceptList(m, doc).rows.length;
 }
 
 /** The changes Proposed edits draws, by the document listing them: every one, or, in a draft, one group of those in its text. Changes just kept or discarded (`gone`) are left out at once. */

@@ -36,7 +36,7 @@ export const review = {
 	},
 	/** The kinds' names, in the column and over their groups in the list, and the hover card on each in the column. */
 	kinds: {
-		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf. Read each, and accept it or not; those never accepted are folded beneath.' },
+		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf, what one copy brought in as one row. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
 		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
 		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
@@ -415,6 +415,23 @@ export const review = {
 		acceptPicked: (n: number) => `accept ${n}`,
 		/** Unchooses them. */
 		clear: 'clear',
+		/** An adoption's quiet line in Results to accept: how many results the person took in from an agent's copy. */
+		adoption: (n: number) => `taken in ${n} ${n === 1 ? 'result' : 'results'} from the copy`,
+		/** After it, how many of them cannot be accepted yet. */
+		cannotCount: (n: number) => `${n} can't be accepted yet`,
+		/** In an open adoption: accepts every result it took in that can be accepted. */
+		acceptAll: (n: number) => `accept all ${n}`,
+		/** Hover text on it. */
+		acceptAllHover: 'Accepts every result taken in from this copy that can be accepted; those that cannot yet say why',
+		/** A block's quiet line within its adoption where it cannot be accepted yet, by the queue's `refusal_code`. */
+		cannotRow: (code?: string) =>
+			({
+				'not-yours': "can't be accepted: not in your documents",
+				incomplete: "can't be accepted yet: marked incomplete",
+				'open-claim': "can't be accepted: a conjecture or a question",
+				unclassified: "can't be accepted yet: not said whether proved, cited or assumed",
+				unidentified: "can't be accepted yet: rests on something unidentified"
+			})[code ?? ''] ?? "can't be accepted yet",
 		/** The two folds beneath the results waiting, which count nothing. */
 		never: 'Never accepted',
 		done: 'Accepted',

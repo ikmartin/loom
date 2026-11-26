@@ -645,3 +645,64 @@ test("edits made in place are one row a file, opening to each with Keep and Disc
 	const intro = page.locator('[data-testid="review-row"][data-file="notes/intro.md"]');
 	await expect(intro.locator('.meta')).toHaveText('2 edits since your look');
 });
+
+test("an adoption is one row of Results to accept, opening to the blocks it took in, each with Accept, and accept all for those that can be, the others saying why; the column counts the rows drawn", async ({ page }) => {
+	const COPY = '.loom/agents/copies/aidoc.tex';
+	await serve(page, (m) => {
+		const from: Record<string, object> = {
+			'sy-0002': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”' },
+			'sy-0004': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”', refusal: 'It is marked incomplete.', refusal_code: 'incomplete' },
+			'sy-0005': { cause: 'adopted', contribution: COPY, source_label: 'Taken in from the copy “aidoc”' }
+		};
+		for (const r of m.unresolved) Object.assign(r, from[r.key] ?? {});
+	});
+	const sent: Record<string, unknown>[] = [];
+	await page.route('**/_api', (r) => r.fulfill({ json: { write_api: 1, capabilities: ['review-accept'], token: 't', quilt: 'q-test' } }));
+	await page.route('**/_api/review-accept', (r) => {
+		const body = r.request().postDataJSON();
+		sent.push(body);
+		return r.fulfill({ json: { ok: true, result: 'done', accepted: body.keys, refused: [] } });
+	});
+	await open(page);
+	// five blocks waiting, three of them one adoption: three rows
+	await expect(count(page, 'review-kind-accepted-changed')).toHaveText('3');
+	await expect(count(page, 'review-kind-all')).toHaveText('26');
+	await page.getByTestId('review-kind-accepted-changed').click();
+	await expect(kindRows(page, 'accepted-changed')).toHaveCount(3);
+	const adoption = page.locator(`[data-testid="review-row"][data-adoption="${COPY}"]`);
+	await expect(adoption.locator('.tx').first()).toHaveText('main.tex · aidoc');
+	await expect(adoption.getByTestId('review-row-why')).toHaveText("taken in 3 results from the copy · 1 can't be accepted yet");
+	// the blocks not from an adoption stay rows of their own
+	await expect(page.locator('[data-testid="review-row"][data-key="sy-0001"]')).toBeVisible();
+	await expect(page.locator('[data-testid="review-row"][data-key="sy-0002/proof"]')).toBeVisible();
+	await openRow(adoption);
+	const blocks = adoption.locator('[data-testid="review-row"][data-key]');
+	await expect(blocks).toHaveCount(3);
+	expect(await blocks.evaluateAll((rs) => rs.map((r) => r.getAttribute('data-key')))).toEqual(['sy-0002', 'sy-0004', 'sy-0005']);
+	// the one that cannot be accepted says why, in the viewer's words, and offers no Accept
+	const incomplete = adoption.locator('[data-testid="review-row"][data-key="sy-0004"]');
+	await expect(incomplete.getByTestId('review-row-why')).toHaveText("can't be accepted yet: marked incomplete");
+	await openRow(incomplete);
+	await expect(incomplete.getByTestId('review-refusal')).toHaveText("Can't be accepted yet: it is marked incomplete.");
+	await expect(incomplete.getByTestId('review-accept')).toHaveCount(0);
+	const orbits = adoption.locator('[data-testid="review-row"][data-key="sy-0002"]');
+	await openRow(orbits);
+	await expect(orbits.getByTestId('review-accept')).toBeVisible();
+	// accept all accepts exactly those that can be
+	await expect(adoption.getByTestId('adoption-accept-all')).toHaveText('accept all 2');
+	await adoption.getByTestId('adoption-accept-all').click();
+	await expect.poll(() => sent).toEqual([{ reviewer: expect.any(String), keys: ['sy-0002', 'sy-0005'] }]);
+	await expect(page.getByTestId('column-message')).toHaveText('Accepted 2 results.');
+});
+
+test("a link to a block an adoption took in opens the adoption's row and the block, in view", async ({ page }) => {
+	await serve(page, (m) => {
+		for (const r of m.unresolved) if (['sy-0002', 'sy-0005'].includes(r.key)) Object.assign(r, { cause: 'adopted', contribution: '.loom/agents/copies/aidoc.tex' });
+	});
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/review?fixture=round6#review-sy-0005');
+	const row = page.locator('#review-sy-0005');
+	await expect(row).toBeInViewport();
+	await expect(row.locator('.rr-h')).toHaveAttribute('aria-expanded', 'true');
+	await expect(page.locator('[data-testid="review-row"][data-adoption] > .rr-h')).toHaveAttribute('aria-expanded', 'true');
+});
