@@ -1,8 +1,7 @@
 // Round six's data (`docs/design/mockups/library-round-6/`), answering the reads of `docs/specs/library-views.md` as the backend will, so each view is built and tested before its backend exists. The 300 works come from the prototype's own generator and seed, so the list is the one the author marked; Smith 2024, Okafor 2022, Arden 2024 and 2025, Jones, Ostrander, Lindqvist and the dropped scan are its fixed works. Writes change the data in memory and raise the generation, as the publisher will. Written from the spec, before any read exists: where a backend answer differs, the backend's is right and this is corrected.
 
-import type { CheckRow, Note, DigestMark, LeanStatus, NodeAnswer, OutlineItem, Paper, Place, Section, Work, WorkAnswer } from '../types';
+import type { CheckRow, DigestMark, LeanStatus, NodeAnswer, OutlineItem, Paper, Place, Section, Work, WorkAnswer } from '../types';
 import { ask, review6, type ReviewFixture } from './review6';
-import { notes6 } from './notes6';
 import { paperUrl } from './paper';
 
 // ---- the prototype's generator, as it wrote it, so the same seed gives the same 300 works ----
@@ -214,8 +213,6 @@ export interface Fixture {
 	review: ReviewFixture;
 	/** Transcribed results the person has found match their paper. */
 	checked: string[];
-	/** The notes tab's notes (`notes6.ts`). */
-	notes: Note[];
 	/** Whether the quilt has said loom may use the network: `asked` it may, `off` it may not, and `unasked` refuses a take that does not go without it. */
 	network: 'asked' | 'off' | 'unasked';
 	/** The work each taken row added, by the row's id, which `library-undo` takes back out. */
@@ -235,7 +232,7 @@ export function round6(): Fixture {
 	const review = review6(REF);
 	// a transcribed result's row is beside its work's stored paper, as a digested one's is
 	for (const r of review.rows) if (r.kind === 'check' && 'nodes' in r && r.pdf === null) r.pdf = works.find((w) => w.ref === r.ref)?.holds.pdf ?? null;
-	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], notes: notes6(REF), network: 'asked', taken: {}, questions: {}, entries: {} };
+	return { gen: 1, works, results, marks, overlayPlaced: {}, deleted: {}, review, checked: [], network: 'asked', taken: {}, questions: {}, entries: {} };
 }
 
 const protoOf = (ref: string) => PROTO_OF[ref];

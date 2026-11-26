@@ -117,14 +117,24 @@ async function clickMark(page: Page, id: string): Promise<void> {
 /** The colour a line of a mark is drawn in: grey, in the light, given as sRGB or as `color()`. */
 const GREY = /rgb\(136, 135, 128\)|color\(srgb 0\.533\d* 0\.529\d* 0\.50\d*\)/;
 
-test('a selection stays selected and offers only Quote; a note on its words is drawn on the page in the look loom gave it', async ({ page, served }) => {
+test('a selection stays selected and offers its actions, opening nothing; a note on its words is drawn on the page in the look loom gave it', async ({ page, served }) => {
 	const id = await noteOnPageAs(served, 'incidence matrix', 'So the vertices are integral.', null);
 	await opened(page, served);
-	// highlighting a phrase to copy it is the ordinary thing to do with a paper, so selecting writes nothing and opens nothing: the selection survives, and Quote is offered at its end
+	// highlighting a phrase to copy it is the ordinary thing to do with a paper, so selecting writes nothing and opens nothing: the selection survives, and its actions stand at its end, opened by a click that keeps it
 	await selectOnly(page, 'incidence matrix');
 	await expect(page.getByTestId('ann-popup')).toHaveCount(0);
+	await page.getByTestId('selection-actions').click();
 	expect(await page.evaluate(() => window.getSelection()?.toString() ?? '')).toContain('incidence matrix');
 	await expect(page.getByTestId('quote-offer')).toBeVisible();
+	// New note is given the work's page and the words, as `loom link WORK --page N --quote` writes them; answered here, so no editor opens
+	const asked: Record<string, unknown>[] = [];
+	await page.route('**/_api/new-note', (r) => {
+		asked.push(r.request().postDataJSON());
+		return r.fulfill({ json: { ok: true, result: 'ran', how: 'ran', said: '' } });
+	});
+	await page.getByTestId('selection-new-note').click();
+	await expect.poll(() => asked[0]?.link).toBe(`quilt:${bellamy(served).ref}#page=2&quote=incidence%20matrix`);
+	expect(asked[0]).toMatchObject({ quote: 'incidence matrix' });
 	const written = served.written('So the vertices are integral.');
 	expect(written.target).toBe(bellamy(served).ref);
 	const anchor = written.anchor as Record<string, unknown>;

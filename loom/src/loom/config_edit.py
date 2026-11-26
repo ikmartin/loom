@@ -13,7 +13,7 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from loom.scan.quilt import Quilt, QuiltConfig, load_user_config
+from loom.scan.quilt import NOTES_DIR, Quilt, QuiltConfig, load_user_config
 
 #: The quilt's configuration, which Settings writes.
 CONFIG = "config.toml"
@@ -476,7 +476,8 @@ def published(result: ScanResult) -> dict[str, Any]:
             # how far the list holds for the apps set up here, in one sentence: which cannot edit there, which are only asked
             "holds": how_far_deny_holds(root),
         },
-        "notes": {"dir": cfg.notes_dir},
+        # '' while new notes go in the default folder, which `default` names
+        "notes": {"dir": "" if cfg.notes_dir == NOTES_DIR else cfg.notes_dir, "default": NOTES_DIR},
         "sync": sync,
         "warnings": list(cfg.warnings),
     }

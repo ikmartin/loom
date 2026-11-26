@@ -7,7 +7,7 @@ import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
 import { library as libraryWords } from '$lib/words/library';
 import { library as generation } from './gen.svelte';
-import type { FormalMarks, FormalPlan, NotesAnswer, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
+import type { FormalMarks, FormalPlan, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
 
 export interface ApiError {
 	code: string;
@@ -156,8 +156,6 @@ export const webGroup = (w: InScope, group: string, s?: number) => call<WebGroup
 export const webSearch = (w: InScope, q: string) => call<WebSearch>('web-search', { ...scoped(w), q });
 export const webFocus = (w: InScope, result: string, more: boolean, s?: number) => call<WebFocus>('web-focus', { ...scoped(w), result, ...(more ? { more: true } : {}), ...since(s) });
 export const webGraph = (w: InScope, result: string, s?: number) => call<WebGraph>('web-graph', { ...scoped(w), result, ...since(s) });
-export const notes = (sort: 'work' | 'date', orphaned: boolean, more?: { group?: string; offset: number }, s?: number) => call<NotesAnswer>('notes', { sort, orphaned, ...(more?.group ? { group: more.group } : {}), ...(more ? { offset: more.offset } : {}), ...since(s) });
-export const deleteNote = (annotation: string) => call<WriteDone>('delete', { annotation });
 export const formalMarks = (doc: string, s?: number) => call<FormalMarks>('formal-marks', { doc, ...since(s) });
 export const formalPlan = (targets: string[], assume: string[]) => call<FormalPlan>('formal-plan', { targets, assume });
 export const formalAsk = (targets: string[], assume: string[]) => call<WriteDone & { tasks: string[] }>('formal-ask', { targets, assume });

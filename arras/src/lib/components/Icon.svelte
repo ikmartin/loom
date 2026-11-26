@@ -123,6 +123,8 @@
 		<path d="M15 3v4h4" />
 		<path d="M9 12h6" />
 		<path d="M9 16h4" />
+	{:else if name === 'more'}
+		<path d="M6 12h.01M12 12h.01M18 12h.01" stroke-width="3" />
 	{:else if name === 'caret'}
 		<path d="m6 9 6 6 6-6" />
 	{:else if name === 'left'}

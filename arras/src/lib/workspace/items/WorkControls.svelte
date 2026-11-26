@@ -11,6 +11,7 @@
 	import { workState } from '../state.svelte';
 	import { library } from '$lib/words/library';
 	import { lib } from '$lib/views/library/state.svelte';
+	import { quoteLink } from '$lib/notes/link';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
@@ -22,6 +23,8 @@
 	const pdfOff = $derived(readable ? undefined : library.work.noPdf);
 	/** Whether the works list, read, holds this work no longer. */
 	const gone = $derived(!!lib.works.value && !lib.works.value.works.some((w) => w.ref === item.id));
+	// New note on the whole work, by its reference
+	const note = $derived({ link: quoteLink(item.id), title: name });
 
 	// the tools write, so a corpus served without a write API does not offer them
 	let writes = $state(false);
@@ -36,7 +39,7 @@
 {#if gone}
 	<ItemToolbar {name} />
 {:else}
-<ItemToolbar {name} bar={reading} tools={writes ? writing : undefined} on={ui.showSettled} hint={writes && readable ? hintFor(m, held.notes, hand.value) : ''}>
+<ItemToolbar {name} {note} bar={reading} tools={writes ? writing : undefined} on={ui.showSettled} hint={writes && readable ? hintFor(m, held.notes, hand.value) : ''}>
 	{#snippet view()}
 		<ToolbarItem
 			label={ui.showSettled ? 'hide settled annotations' : 'show settled annotations'}

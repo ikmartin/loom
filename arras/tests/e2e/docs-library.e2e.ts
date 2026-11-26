@@ -78,8 +78,8 @@ test('the Open a work… button opens the picker over Docs, which finds, sorts a
 		getSelection()!.addRange(range);
 		span.closest('.text')!.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
 	});
-	// the one reader's Quote, and no note: beside a draft the Library's own actions are not laid over it
-	await expect(page.getByTestId('quote-offer')).toBeVisible();
+	// the one reader's actions, and no note: beside a draft the Library's own actions are not laid over it
+	await expect(page.getByTestId('selection-actions')).toBeVisible();
 	await expect(page.getByRole('button', { name: 'note', exact: true })).toHaveCount(0);
 	await expect(page.getByTestId('mark-to-digest')).toHaveCount(0);
 	await expect(page).toHaveURL(/\/master\//);
@@ -123,32 +123,21 @@ test("a citation's card shows the cited result and opens its work beside the dra
 	await expect(page).toHaveURL(/\/master\//);
 });
 
-test('the notes tab lists every note by work, the orphaned first, and by date; an orphan is deleted, a group shows the rest, and a note on a work opens it beside the draft', async ({ page }) => {
+test('the notes tab lists every file that links into the quilt, each opening at its link, with the places it links to', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('docs-notes').click();
 	const tab = page.getByTestId('notes-tab');
 	await expect(page.getByRole('tab', { name: /All notes/ })).toBeVisible();
-	const groups = tab.getByTestId('notes-group');
-	await expect(groups.first()).toContainText('Orphaned · their document is gone, or their words are not found');
-	await expect(groups.first().getByTestId('note')).toHaveCount(2);
-	await expect(groups.first()).toContainText('was on old-intro.tex, deleted 14 Nov');
-	await expect(tab).toContainText('show orphaned notes (2)');
-	const head = (name: string) => groups.filter({ has: page.locator('h2', { hasText: new RegExp(`^${name}`) }) });
-	const main = head('main.tex');
-	await expect(main.getByTestId('note')).toHaveCount(3);
-	await main.getByRole('button', { name: '6 more' }).click();
-	await expect(main.getByTestId('note')).toHaveCount(9);
-	await expect(head('Arden 2024')).toContainText('summary');
-	await groups.first().getByTestId('note').first().getByRole('button', { name: 'delete' }).click();
-	await expect(page.getByTestId('column-message')).toContainText('Note deleted.');
-	await expect(groups.first().getByTestId('note')).toHaveCount(1);
-	await tab.getByTestId('notes-orphaned').uncheck();
-	await expect(groups.first()).not.toContainText('Orphaned');
-	await tab.getByRole('button', { name: 'date' }).click();
-	await expect(tab.getByTestId('note').first()).toContainText('is saturated by Proposition 2.6');
-	await tab.getByTestId('note').filter({ hasText: 'whose coordinates sum to zero' }).getByRole('button').first().click();
-	await expect(page.getByTestId('work-item')).toBeVisible();
-	await expect(page).toHaveURL(/\/notes|\/master\//);
+	// the fixture's three files that link into it, by path: two notes and the research state
+	await expect(tab.getByTestId('note-file')).toHaveCount(3);
+	expect(await tab.getByTestId('note-file').evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.path))).toEqual(['notes/intro.md', 'notes/page.html', 'research-state.md']);
+	const intro = tab.locator('[data-path="notes/intro.md"]');
+	await expect(intro).toContainText('1 link');
+	// the note opens at the heading above its link; the link opens the place it names
+	await expect(intro.locator('a.head')).toHaveAttribute('href', 'quilt:notes/intro.md#notes-on-the-widgets');
+	await expect(intro.getByTestId('note-target')).toHaveAttribute('href', 'quilt:sy-0002');
+	await intro.getByTestId('note-target').click();
+	await expect(page.locator('.fragment .env[data-id="sy-0002"]').first()).toBeVisible();
 });
 
 test('the formalize panel from the Web: chosen results or the card, what stops the request and what keeps it from reading formalized, prove or assume for now, and the request', async ({ page }) => {

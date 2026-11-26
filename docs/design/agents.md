@@ -43,7 +43,7 @@ Some acts make a claim only a person can make (*I checked this*, *I accept this 
 - saving the quilt's settings to `config.toml` in the viewer, and rewriting the permission files to a changed deny list there (`settings-save`, `agents-update`), since an agent never moves its own boundary;
 - adding a work to the library, filing a dropped document, correcting a work's entry, and deleting a work from it and putting it back (`library-receive`, `library-take`, `library-answer`, `library-undo`, `library-unfile`, `library-entry`, `library-delete`, `library-restore`), and looking a work up, which asks for the network (`library-look-up`);
 - setting up an agent's app in the viewer (`agents-setup`), for the same reason as the permission files.
-- setting the new-note command, which loom runs at the person's click (not built yet; `model.md`, "Notes").
+- setting or reading the new-note command, and running New note, which runs it at the person's click (`notes-settings`, `new-note`; `model.md`, "Notes"); the command is kept outside the quilt, in the person's own `notes.toml`, and a `[notes] command` in a quilt's config is ignored, so no repository brings one.
 
 Refusal is enforced, not requested. A declared name that calls itself an agent is refused. Under an agent's shell, recognised by the markers agent tools set (`AI_AGENT`, `CLAUDECODE`, `CODEX_SANDBOX`, `GEMINI_CLI`, `CURSOR_AGENT` and others), these acts are refused whatever name is declared, because a name cannot be checked and an agent typing the author's name is exactly the case to stop. The author runs them in a terminal of their own.
 

@@ -1,10 +1,11 @@
 <script lang="ts">
 	// A PDF that is annotated as a document is: the renderer with every annotation on its pages drawn in its look, the one popup opening from a mark, the item's annotating (`Annotating`) told the annotations in reading order (page, then top, then left; the detached last), and the pages editor over it.
 	//
-	// **Annotate** on, selected words are marked at once in the look in hand and its style, and a drag over no words marks the region; a type that asks something opens the popup to say it first. **Comment** on, a press leaves a pin, written once it says something. The PDF's own tools draw ink, words on the page, a box, an oval or an arrow in the look in hand; words on the page are written once they say something. With no tool on, a selection goes to the caller, which offers Quote, and Alt-drag draws a region to comment on.
-	import { tick, untrack, type ComponentProps } from 'svelte';
+	// **Annotate** on, selected words are marked at once in the look in hand and its style, and a drag over no words marks the region; a type that asks something opens the popup to say it first. **Comment** on, a press leaves a pin, written once it says something. The PDF's own tools draw ink, words on the page, a box, an oval or an arrow in the look in hand; words on the page are written once they say something. With no tool on, a selection goes to the caller and, where the caller says how to name and link its words (`offer`), stands with its actions (`SelectionMenu`): Quote, Annotate, which marks the words as the tool would, and New note; words Annotate's tool marked stand with Quote and New note until the next press. Alt-drag draws a region to comment on.
+	import { tick, untrack, type ComponentProps, type Snippet } from 'svelte';
 	import { store } from '$lib/manifest/client.svelte';
 	import AnnotationPopup from '$lib/review/AnnotationPopup.svelte';
+	import SelectionMenu from '$lib/review/SelectionMenu.svelte';
 	import SideHost from '$lib/review/SideHost.svelte';
 	import { hand, typeById, type Annotating, type Draft } from '$lib/review/annotating.svelte';
 	import { say } from '$lib/review/toasts.svelte';
@@ -37,7 +38,9 @@
 		onpage,
 		onlink,
 		onmoved,
-		overlay
+		overlay,
+		offer,
+		more
 	}: {
 		desk: MarkDesk;
 		view: PdfView;
@@ -64,6 +67,10 @@
 		onmoved?: DocProps['onmoved'];
 		/** A layer the caller draws over each drawn page: the Library's digest marks. */
 		overlay?: DocProps['overlay'];
+		/** How words selected on page `page` are named and linked to, for their actions; omitted, a selection has none. */
+		offer?: { name: (page: number) => string; link: (page: number, text: string) => string };
+		/** A view's own actions after the selection's, on the words selected; `hold` keeps them while the selection goes (a field of its own taking the keyboard), `done` takes them away. */
+		more?: Snippet<[{ page: number; text: string; rects: number[][]; hold: () => void; done: () => void }]>;
 	} = $props();
 
 	let paper = $state<HTMLElement | null>(null);
@@ -172,15 +179,59 @@
 	/** Whether the type in hand asks something, so words marked with it are said first. */
 	const asks = () => !!typeById(store.manifest, hand.type)?.open;
 
-	function selected(e: { page: number; text: string; rects: number[][]; client: Box }): void {
-		if (!annotating) return onselect?.(e);
+	type Selected = { page: number; text: string; rects: number[][]; client: Box };
+	/** Words selected and their actions: `marked` once Annotate has marked them, which no change of the selection takes away; `kept` while a view's own action holds them. */
+	let offered = $state<(Selected & { range?: Range; marked: boolean }) | null>(null);
+	let kept = $state(false);
+
+	function selected(e: Selected): void {
+		if (!annotating) {
+			onselect?.(e);
+			const sel = window.getSelection();
+			if (offer) offered = { ...e, range: sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : undefined, marked: false };
+			return;
+		}
+		mark(e);
+		if (offer) offered = { ...e, marked: true };
+	}
+
+	/** Mark the words in the look in hand; a type that asks something opens the popup for them first. */
+	function mark(e: Selected): void {
 		window.getSelection()?.removeAllRanges();
 		const rects = mergeLines(e.rects);
 		if (asks()) openDraft({ page: e.page, rects, quote: e.text }, e.client, { page: e.page, kind: desk.style(), rects });
 		else desk.markWords(e);
 	}
 
+	function letGo(): void {
+		offered = null;
+		kept = false;
+	}
+
+	// words let go of take their actions with them, unless marked or held; marked words keep theirs until the next press elsewhere
+	$effect(() => {
+		const gone = () => {
+			if (offered && !offered.marked && !kept && !window.getSelection()?.toString().trim()) letGo();
+		};
+		const pressed = (ev: PointerEvent) => {
+			if (offered?.marked && !(ev.target as Element | null)?.closest?.('.at-selection')) letGo();
+		};
+		document.addEventListener('selectionchange', gone);
+		document.addEventListener('pointerdown', pressed, true);
+		return () => {
+			document.removeEventListener('selectionchange', gone);
+			document.removeEventListener('pointerdown', pressed, true);
+		};
+	});
+	// taking up a tool ends what the last one offered
+	$effect(() => {
+		void notes.tool;
+		void view.tool;
+		untrack(letGo);
+	});
+
 	function boxed(e: { page: number; rects: number[][]; client: Box }): void {
+		letGo();
 		onregion?.(e);
 		if (!desk.writes) return;
 		if (annotating && !asks()) return desk.markRegion(e);
@@ -289,6 +340,25 @@
 	{/if}
 </div>
 <SideHost {notes} />
+{#if offered && offer && !drafting}
+	{@const o = offered}
+	<SelectionMenu
+		at={o.client}
+		range={o.range}
+		text={o.text}
+		name={offer.name(o.page)}
+		link={offer.link(o.page, o.text)}
+		annotate={desk.writes && !o.marked
+			? () => {
+					letGo();
+					mark(o);
+				}
+			: undefined}
+		ondone={letGo}
+		more={more ? extra : undefined}
+	/>
+	{#snippet extra()}{@render more?.({ page: o.page, text: o.text, rects: o.rects, hold: () => (kept = true), done: letGo })}{/snippet}
+{/if}
 {#if drafting}
 	<aside class="ann-popup-host" use:placed={drafting.at} data-testid="draft-host">
 		<AnnotationPopup

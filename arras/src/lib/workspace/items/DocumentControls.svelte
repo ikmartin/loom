@@ -19,6 +19,7 @@
 	import { leanMarks } from '$lib/views/docs/lean.svelte';
 	import { docs as docsWords } from '$lib/words/docs';
 	import TextSize from '$lib/views/docs/TextSize.svelte';
+	import { quoteLink } from '$lib/notes/link';
 
 	let { item, name }: { item: Item; name: string } = $props();
 
@@ -32,6 +33,8 @@
 	// the settled control is offered wherever there is something for it to draw, so a document whose every annotation is settled can still show them
 	const anySettled = $derived(!!master && settledIn(m, master.path));
 	const pdf = $derived(master ? pdfLine(!!master.pdf, compiles.all[master.path]) : undefined);
+	// New note on the whole document; a version is not one a link names
+	const note = $derived(master ? { link: quoteLink(master.path), title: name } : undefined);
 
 	// the tools write, so a corpus served without a write API does not offer them
 	let writes = $state(false);
@@ -61,7 +64,7 @@
 {/snippet}
 
 {#if master && !master.closed && !master.context_only}
-	<ItemToolbar {name} bar={reading} tools={writes ? writing : undefined} history={history ? versions : undefined} on={ui.showSettled} hint={writes ? hintFor(m, notes, hand.value) : ''}>
+	<ItemToolbar {name} {note} bar={reading} tools={writes ? writing : undefined} history={history ? versions : undefined} on={ui.showSettled} hint={writes ? hintFor(m, notes, hand.value) : ''}>
 		{#snippet view()}
 			{#if notes.ready || anySettled}
 				<!-- Settled annotations are hidden at rest; this shows them faintly, for the sitting, on every document and node. -->
@@ -81,5 +84,5 @@
 		{/snippet}
 	</ItemToolbar>
 {:else}
-	<ItemToolbar {name} bar={live} history={history ? versions : undefined} view={master?.pdf ? viewPdf : undefined} />
+	<ItemToolbar {name} {note} bar={live} history={history ? versions : undefined} view={master?.pdf ? viewPdf : undefined} />
 {/if}

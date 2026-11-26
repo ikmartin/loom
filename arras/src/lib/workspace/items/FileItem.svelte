@@ -6,9 +6,8 @@
 	import { dataUrl, filesUrl } from '$lib/paths';
 	import { MarkDesk } from '$lib/pdf/desk.svelte';
 	import MarkedDoc from '$lib/pdf/MarkedDoc.svelte';
-	import { mergeLines } from '$lib/pdf/marks';
 	import { paperPlace } from '$lib/pdf/place.svelte';
-	import QuoteChip from '$lib/review/QuoteChip.svelte';
+	import { quoteLink } from '$lib/notes/link';
 	import { can, write, type WriteResult } from '$lib/write';
 	import { itemKey, type Item } from '../item';
 	import { openOutside } from '../links';
@@ -205,18 +204,8 @@
 		refused = await openOutside({ file: item.id });
 	}
 
-	type Box = { left: number; top: number; width: number; height: number };
-	/** Words selected on a PDF page, offered Quote, and where they stand. */
-	let offered = $state<{ text: string; page: number; lines: number[][]; at: Box; range?: Range } | null>(null);
-
-	// words let go of take their offer with them, as a fragment's do
-	$effect(() => {
-		const gone = () => {
-			if (offered?.range && !window.getSelection()?.toString().trim()) offered = null;
-		};
-		document.addEventListener('selectionchange', gone);
-		return () => document.removeEventListener('selectionchange', gone);
-	});
+	/** Words selected on a PDF page are named by the file and the page, and linked to as `loom link FILE --page N --quote` prints. */
+	const offer = $derived(file ? { name: (n: number) => `${name} p. ${n}`, link: (n: number, text: string) => quoteLink(file.path, `page=${n}`, text) } : undefined);
 
 </script>
 
@@ -240,11 +229,7 @@
 			focus={item.note ?? (lit ? '_locator' : '')}
 			lands={!place.spent}
 			onmoved={place.moved}
-			onselect={(e) => {
-				// the selection's range goes with the offer, so letting go of the words takes the chip with them
-				const sel = window.getSelection();
-				offered = { page: e.page, text: e.text, lines: mergeLines(e.rects), at: e.client, range: sel?.rangeCount ? sel.getRangeAt(0).cloneRange() : undefined };
-			}}
+			{offer}
 		/>
 	</div>
 {:else}
@@ -274,9 +259,6 @@
 			</p>
 		{/if}
 	</div>
-{/if}
-{#if offered && file}
-	<QuoteChip at={offered.at} range={offered.range} words={offered.text} name="{name} p. {offered.page}" href="quilt:{file.path}#page={offered.page}" ondone={() => (offered = null)} />
 {/if}
 
 <style>
