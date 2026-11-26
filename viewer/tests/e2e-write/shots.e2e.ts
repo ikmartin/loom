@@ -1,13 +1,13 @@
-// Screenshots of the editing surfaces, which exist only where a publisher is actually serving the write API. ARRAS_SHOTS_OUT puts them elsewhere than the committed pictures, for checking the run itself.
+// Screenshots of the editing surfaces, which exist only where a publisher is actually serving the write API. VIEWER_SHOTS_OUT puts them elsewhere than the committed pictures, for checking the run itself.
 import { expect, test } from '../served';
 
-const OUT = process.env.ARRAS_SHOTS_OUT ?? '../docs/reports/images';
+const OUT = process.env.VIEWER_SHOTS_OUT ?? '../docs/reports/images';
 
 test('the editing surfaces', async ({ page, served }) => {
 	const session = served.openSessions().at(-1)!;
 	await page.setViewportSize({ width: 1440, height: 900 });
-	await page.addInitScript(() => localStorage.setItem('arras.prefs', JSON.stringify({ face: 'serif', size: 'm', width: 'mid', theme: 'light' })));
-	await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
+	await page.addInitScript(() => localStorage.setItem('viewer.prefs', JSON.stringify({ face: 'serif', size: 'm', width: 'mid', theme: 'light' })));
+	await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
 
 	await page.goto('/node/sy-0002');
 	const words = page.locator('[data-pane="0"] .fragment .env[data-id="sy-0002"] > p[data-src]').first();

@@ -96,7 +96,7 @@ describe('the display preferences', () => {
 		expect(read()).toEqual(DEFAULTS);
 		expect(() => write(DEFAULTS)).not.toThrow();
 
-		stub({ 'arras.prefs': 'not json' });
+		stub({ 'viewer.prefs': 'not json' });
 		expect(read()).toEqual(DEFAULTS);
 	});
 

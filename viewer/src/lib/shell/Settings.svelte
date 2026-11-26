@@ -21,7 +21,7 @@
 
 	let { indexes = [] }: { indexes?: Index[] } = $props();
 
-	const KEY = 'arras.settings';
+	const KEY = 'viewer.settings';
 	let open = $state(false);
 	let current = $state<SectionId>(remembered());
 	let canSave = $state(false);

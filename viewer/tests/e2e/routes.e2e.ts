@@ -35,8 +35,8 @@ test('unknown state labels and codes render generically', async ({ page }) => {
 		m.keys['sy-0003'].state = 'mysterious';
 		m.diagnostics.push({ severity: 'info', code: 'other:code', message: 'from another publisher', locations: [], keys: [] });
 	});
-	// a state loom never told arras about is still said, in the gutter Show ids opens, in its own word
-	await page.addInitScript(() => localStorage.setItem('arras.prefs', JSON.stringify({ ids: true })));
+	// a state loom never told the viewer about is still said, in the gutter Show ids opens, in its own word
+	await page.addInitScript(() => localStorage.setItem('viewer.prefs', JSON.stringify({ ids: true })));
 	await page.goto('/node/sy-0003');
 	await expect(page.locator('.fragment .node-margin', { hasText: 'mysterious' }).first()).toBeVisible();
 	// a code no table names is titled by its message, under its own code

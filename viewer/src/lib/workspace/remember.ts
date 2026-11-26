@@ -4,7 +4,7 @@ import type { Manifest } from '$lib/manifest/types';
 import { keptUnder } from '$lib/manifest/kept.svelte';
 import { itemFromPath } from './item';
 
-const KEY = 'arras.workspace';
+const KEY = 'viewer.workspace';
 
 function read(): Record<string, string> {
 	try {

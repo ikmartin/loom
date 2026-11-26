@@ -359,7 +359,7 @@ test.describe('the toolbar', () => {
 
 	test('a type that stays open asks something, so words marked with it open the popup to say it, and are written with what is said', async ({ page }) => {
 		const sent = await writes(page);
-		await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
+		await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
 		await page.goto('/master/drafting/main');
 		await page.getByTestId('tool-annotate').click();
 		await selectWithin(pane(page, 0).locator('.fragment .env[data-id="sy-0003"] > p[data-src]').first());
@@ -376,7 +376,7 @@ test.describe('the toolbar', () => {
 
 	test('a draft says it is not saved, keeps its own type, and asks before Escape throws its words away', async ({ page }) => {
 		const sent = await writes(page);
-		await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: 'question', over: {}, plain: {} })));
+		await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'question', over: {}, plain: {} })));
 		await page.goto('/master/drafting/main');
 		await page.getByTestId('tool-annotate').click();
 		await selectWithin(pane(page, 0).locator('.fragment .env[data-id="sy-0003"] > p[data-src]').first());
@@ -389,7 +389,7 @@ test.describe('the toolbar', () => {
 		// a draft of a type that stays open has no status yet and no foot
 		await expect(draft.getByTestId('popup-status')).toHaveCount(0);
 		await expect(draft.locator('.pfoot')).toHaveCount(0);
-		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand') ?? '{}').type)).toBe('question');
+		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('viewer.annotate.hand') ?? '{}').type)).toBe('question');
 		await draft.getByTestId('popup-comment-field').fill('Wrong bound.');
 		await page.keyboard.press('Escape');
 		await expect(draft.getByTestId('popup-discard-ask')).toBeVisible();
@@ -455,7 +455,7 @@ test.describe('the format menu', () => {
 		expect((await drawn(sample)).line).toMatchObject(GREEN);
 		await page.keyboard.press('Escape');
 		await expect(menu).toHaveCount(0);
-		const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand') ?? '{}'));
+		const kept = await page.evaluate(() => JSON.parse(localStorage.getItem('viewer.annotate.hand') ?? '{}'));
 		expect(kept).toEqual({ type: 'revision', over: { style: 'strike', color: 'green' }, plain: {} });
 		await page.reload();
 		await expect(page.getByTestId('tool-annotate').getByTestId('sample')).toHaveClass(/\bann-strike\b/);
@@ -663,7 +663,7 @@ test.describe('changed from a type', () => {
 		const sent = await writes(page);
 		await page.addInitScript(() => {
 			if (!sessionStorage.getItem('seeded')) {
-				localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: 'revision', over: { color: 'blue' } }));
+				localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'revision', over: { color: 'blue' } }));
 				sessionStorage.setItem('seeded', '1');
 			}
 		});
@@ -673,13 +673,13 @@ test.describe('changed from a type', () => {
 		await expect(menu.getByTestId('modified-line')).toContainText('Changed from Revision');
 		await menu.getByTestId('modified-reset').click();
 		await expect(menu.getByTestId('modified-line')).toHaveCount(0);
-		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand')!))).toEqual({ type: 'revision', over: {}, plain: {} });
+		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('viewer.annotate.hand')!))).toEqual({ type: 'revision', over: {}, plain: {} });
 		await menu.getByTestId('swatch-blue').click();
 		await menu.getByTestId('modified-update').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
 		expect((sent['types-save'].types as Record<string, unknown>[])[0]).toMatchObject({ id: 'revision', name: 'Revision', color: 'blue', style: 'highlight', opacity: 60 });
 		await expect(menu.getByTestId('modified-line')).toHaveCount(0);
-		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand')!))).toEqual({ type: 'revision', over: {}, plain: {} });
+		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('viewer.annotate.hand')!))).toEqual({ type: 'revision', over: {}, plain: {} });
 	});
 
 	test('Save as new type starts a type in the look in hand, and once it is saved the hand holds it', async ({ page }) => {
@@ -700,7 +700,7 @@ test.describe('changed from a type', () => {
 		await page.getByTestId('types-save').click();
 		await expect.poll(() => sent['types-save']).toBeTruthy();
 		expect((sent['types-save'].types as Record<string, unknown>[]).at(-1)).toEqual({ name: 'Hint', color: 'yellow', style: 'highlight', weight: 2, opacity: 60, open: false, instructions: '' });
-		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('arras.annotate.hand')!))).toEqual({ type: 'hint', over: {}, plain: {} });
+		await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('viewer.annotate.hand')!))).toEqual({ type: 'hint', over: {}, plain: {} });
 	});
 });
 
@@ -819,7 +819,7 @@ test.describe('undo and redo', () => {
 test.describe('the hint', () => {
 	test('says what Annotate and Comment do while they are on, and goes when they are put down', async ({ page }) => {
 		await writes(page);
-		await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
+		await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
 		await page.goto('/master/drafting/main');
 		const hint = page.getByTestId('annotate-hint');
 		await expect(hint).toHaveCount(0);

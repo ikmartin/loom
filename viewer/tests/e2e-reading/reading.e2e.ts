@@ -1,14 +1,14 @@
 // Reading under `loom serve` (plan 0.13 §11): the things the fixture-only suite cannot check because they need the publisher — on a work's pages, a selection mapped onto the page text loom derives and recorded, a box recorded as drawn, and a locator lit from a link; in a document, a selection across a citation quoted as written; and a PDF's place kept, as a work's and a project file's.
 //
 // A test that writes (`test`) is served on its own copy of the showcase, and one that only reads (`readOnly`) on its worker's; a test that needs a note to exist writes it first through the API.
-import { ARRAS, compileFolder, expect, readOnly, test, workOf, type Served } from '../served';
+import { VIEWER, compileFolder, expect, readOnly, test, workOf, type Served } from '../served';
 import type { Page } from '@playwright/test';
 import { beside, openHere } from '../workspace';
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 /** The showcase quilt every served copy is made from, whose works' references each copy keeps. */
-const SHOWCASE = join(ARRAS, '../loom/tests/quilts/showcase');
+const SHOWCASE = join(VIEWER, '../loom/tests/quilts/showcase');
 /** A work's reference, by the key its entry has, as a work's address names it. */
 const refOf = (key: string): string => workOf(SHOWCASE, key)!.ref;
 
@@ -133,7 +133,7 @@ test('a selection stays selected and offers its actions, opening nothing; a note
 
 test('a selection across a citation and a reference is quoted as they were written, and anchors', async ({ page, served }) => {
 	// the 0.14 study (F5): the rendered `[2, Theorem 3.2]` shares no text with `\cite[Theorem 3.2]{Bellamy19}`, and the page prints `Ehrhart’s` for `Ehrhart's`, so a selection across either was "quote not found" and only a note on the whole proof was offered
-	await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
+	await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: 'question', over: {} })));
 	await page.goto('/node/sh-000C');
 	await page.getByTestId('tool-annotate').click();
 	const para = page.locator('[data-pane="0"] .fragment details p').filter({ hasText: 'Ehrhart' }).first();
@@ -168,7 +168,7 @@ test('a selection across a citation and a reference is quoted as they were writt
 });
 
 test('a region drawn with Alt is commented on, recorded as drawn, and drawn as an outline in the look in hand', async ({ page, served }) => {
-	await page.addInitScript(() => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: null, over: {}, plain: { color: 'grey', style: 'underline', weight: 1, opacity: 100 } })));
+	await page.addInitScript(() => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: null, over: {}, plain: { color: 'grey', style: 'underline', weight: 1, opacity: 100 } })));
 	await opened(page, served);
 	const canvas = page.locator('[data-testid="pdf-page-2"] canvas');
 	// the column, not the window: the page's top at the top of the reader, so the display a third of the way down is in view
@@ -443,7 +443,7 @@ async function arrived(page: Page, n: number, pane = 0): Promise<void> {
 async function kept(page: Page, want: At): Promise<void> {
 	await expect
 		.poll(async () => {
-			const places = await page.evaluate(() => Object.values<At>(JSON.parse(localStorage.getItem('arras.places') ?? '{}')));
+			const places = await page.evaluate(() => Object.values<At>(JSON.parse(localStorage.getItem('viewer.places') ?? '{}')));
 			return places.some((at) => at.page === want.page && Math.abs(at.share - want.share) <= 0.01) ? said(want) : places.map(said).join(', ') || 'nothing kept';
 		})
 		.toBe(said(want));

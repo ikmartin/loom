@@ -14,9 +14,9 @@ const LINGER = 900;
 export function revealWhileScrolling(): () => void {
 	const timers = new WeakMap<Element, ReturnType<typeof setTimeout>>();
 	const onScroll = (e: Event): void => {
-		// arras scrolls its panels and panes, never the page; and a host's own elements are the host's to mark, not arras's
+		// The viewer scrolls its panels and panes, never the page; and a host's own elements are the host's to mark, not the viewer's
 		const el = e.target instanceof Element ? e.target : null;
-		if (!el?.closest('.arras')) return;
+		if (!el?.closest('.viewer')) return;
 		// a class set again restyles the element on every scroll event, and a pane's is laid out again with it
 		if (!el.classList.contains('is-scrolling')) el.classList.add('is-scrolling');
 		clearTimeout(timers.get(el));
@@ -44,7 +44,7 @@ export function revealWhileScrolling(): () => void {
  *     A Svelte action's handle.
  */
 export function barShown(node: HTMLElement): { destroy: () => void } {
-	const root = node.closest('.arras');
+	const root = node.closest('.viewer');
 	root?.classList.add('scrollbar-shown');
 	return { destroy: () => root?.classList.remove('scrollbar-shown') };
 }

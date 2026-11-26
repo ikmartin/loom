@@ -111,7 +111,7 @@ test.describe('the contents', () => {
 		await expect.poll(async () => Number(await line.getAttribute('aria-valuenow'))).toBeLessThan(40);
 		await page.mouse.up();
 		await expect.poll(async () => (await docs.boundingBox())!.height).toBeLessThan(before - 40);
-		const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').outline);
+		const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('viewer.prefs') ?? '{}').outline);
 		expect(stored).toBeLessThan(0.55);
 		await page.reload();
 		await expect.poll(async () => (await page.getByTestId('docs-part').boundingBox())!.height).toBeLessThan(before - 40);
@@ -154,7 +154,7 @@ test.describe('the contents', () => {
 		await expect.poll(async () => Number(await edge.getAttribute('aria-valuenow'))).toBeGreaterThan(before + 80);
 		await page.mouse.up();
 		await expect.poll(async () => (await column.boundingBox())!.width).toBeGreaterThan(before + 80);
-		const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').column);
+		const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('viewer.prefs') ?? '{}').column);
 		expect(stored).toBeGreaterThan(before + 80);
 		await page.reload();
 		await expect.poll(async () => (await page.getByTestId('column').boundingBox())!.width).toBeGreaterThan(before + 80);

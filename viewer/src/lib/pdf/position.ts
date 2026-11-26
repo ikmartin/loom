@@ -2,7 +2,7 @@
 //
 // A place belongs to the file and not to what it was opened as, so a work's paper and the same bytes among the project's files are one place, and another file behind a work has none of its own yet: page 12 of an edition says nothing about page 12 of a preprint.
 
-const KEY = 'arras.places';
+const KEY = 'viewer.places';
 
 /** A place in a paper: the page at the top of the view, and how far down it as a share of its height. Both are the page's own terms, so a place holds at any zoom or width, and whether or not the pages around it have been drawn yet. */
 export interface PagePlace {

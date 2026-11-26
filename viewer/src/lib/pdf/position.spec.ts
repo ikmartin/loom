@@ -38,7 +38,7 @@ describe('a reader’s place in a file', () => {
 		keepPlace(FILE, { page: 3, share: 0.25 });
 		keepPlace(FILE, { page: 1, share: 0 });
 		expect(keptPlace(FILE)).toBeNull();
-		expect(localStorage.getItem('arras.places')).toBe('{}');
+		expect(localStorage.getItem('viewer.places')).toBe('{}');
 	});
 
 	it('is not found under another file, or the same identifier at another length, and is still there for the file it was in', () => {
@@ -55,12 +55,12 @@ describe('a reader’s place in a file', () => {
 		['a share past the page', { page: 3, share: 1.5 }],
 		['a share that is no number', { page: 3, share: null }]
 	])('ignores %s', (_why, kept) => {
-		localStorage.setItem('arras.places', JSON.stringify({ 'abc:12': kept }));
+		localStorage.setItem('viewer.places', JSON.stringify({ 'abc:12': kept }));
 		expect(keptPlace(FILE)).toBeNull();
 	});
 
 	it('survives a store that holds nonsense, and writes over it', () => {
-		localStorage.setItem('arras.places', 'not json');
+		localStorage.setItem('viewer.places', 'not json');
 		expect(keptPlace(FILE)).toBeNull();
 		keepPlace(FILE, { page: 2, share: 0.5 });
 		expect(keptPlace(FILE)).toEqual({ page: 2, share: 0.5 });

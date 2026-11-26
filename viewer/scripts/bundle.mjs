@@ -2,20 +2,20 @@
 //
 // Usage: node scripts/bundle.mjs OUT [FIXTURE]
 //
-// ARRAS_PREBUILT names a built app (the output of `npm run build`, no fixture staged) to copy; scripts/verify builds once and sets it for every suite. Without it this runs `npm run build` under a lock, so two configs started together do not build into `build/` and `.svelte-kit/` at once.
+// VIEWER_PREBUILT names a built app (the output of `npm run build`, no fixture staged) to copy; scripts/verify builds once and sets it for every suite. Without it this runs `npm run build` under a lock, so two configs started together do not build into `build/` and `.svelte-kit/` at once.
 
 import { execFileSync, execSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ARRAS = fileURLToPath(new URL('..', import.meta.url));
+const VIEWER = fileURLToPath(new URL('..', import.meta.url));
 const [outArg, fixture] = process.argv.slice(2);
 if (!outArg) {
 	console.error('usage: node scripts/bundle.mjs OUT [FIXTURE]');
 	process.exit(2);
 }
-const out = resolve(ARRAS, outArg);
+const out = resolve(VIEWER, outArg);
 
 function sleep(ms) {
 	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -32,8 +32,8 @@ function alive(pid) {
 
 /** Run `fn` holding `.tmp-e2e/build.lock`; a lock whose owner has exited is taken over. */
 function locked(fn) {
-	const lock = join(ARRAS, '.tmp-e2e', 'build.lock');
-	mkdirSync(join(ARRAS, '.tmp-e2e'), { recursive: true });
+	const lock = join(VIEWER, '.tmp-e2e', 'build.lock');
+	mkdirSync(join(VIEWER, '.tmp-e2e'), { recursive: true });
 	const deadline = Date.now() + 300000;
 	for (;;) {
 		try {
@@ -61,17 +61,17 @@ function locked(fn) {
 }
 
 rmSync(out, { recursive: true, force: true });
-const prebuilt = process.env.ARRAS_PREBUILT && resolve(ARRAS, process.env.ARRAS_PREBUILT);
+const prebuilt = process.env.VIEWER_PREBUILT && resolve(VIEWER, process.env.VIEWER_PREBUILT);
 if (prebuilt) {
 	if (!existsSync(join(prebuilt, 'index.html'))) {
-		console.error(`ARRAS_PREBUILT=${prebuilt} has no index.html`);
+		console.error(`VIEWER_PREBUILT=${prebuilt} has no index.html`);
 		process.exit(2);
 	}
 	cpSync(prebuilt, out, { recursive: true });
 } else {
 	locked(() => {
-		execSync('npm run build', { cwd: ARRAS, stdio: ['ignore', 'ignore', 'inherit'] });
-		cpSync(join(ARRAS, 'build'), out, { recursive: true });
+		execSync('npm run build', { cwd: VIEWER, stdio: ['ignore', 'ignore', 'inherit'] });
+		cpSync(join(VIEWER, 'build'), out, { recursive: true });
 	});
 }
-if (fixture) execFileSync(process.execPath, [join(ARRAS, 'scripts', 'stage-fixture.mjs'), resolve(ARRAS, fixture), out], { cwd: ARRAS, stdio: ['ignore', 'ignore', 'inherit'] });
+if (fixture) execFileSync(process.execPath, [join(VIEWER, 'scripts', 'stage-fixture.mjs'), resolve(VIEWER, fixture), out], { cwd: VIEWER, stdio: ['ignore', 'ignore', 'inherit'] });

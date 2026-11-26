@@ -3,7 +3,7 @@
 import { useSource, waitForSource } from './api';
 import { library } from './gen.svelte';
 
-const KEY = 'arras.fixture';
+const KEY = 'viewer.fixture';
 
 /** Whether this visit runs on the fixture: asked once, then remembered for the tab. */
 function wanted(): boolean {

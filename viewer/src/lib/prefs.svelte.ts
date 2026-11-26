@@ -1,5 +1,5 @@
 // The viewer's own preferences: the body typeface, the body size, the line width, the theme, how a document is set, and whether an item's toolbar fades.
-// They are arras's and never the corpus's, so they live in this browser and are written nowhere else. Every storage access is guarded: a private window, cleared site data, or a thumbnail capture can make localStorage throw or come back empty, and the viewer must render anyway.
+// They are the viewer's and never the corpus's, so they live in this browser and are written nowhere else. Every storage access is guarded: a private window, cleared site data, or a thumbnail capture can make localStorage throw or come back empty, and the viewer must render anyway.
 
 
 export type Face = 'serif' | 'sans';
@@ -20,7 +20,7 @@ export type Format = 'p1' | 'p2' | 'b1' | 'b2';
  * `floating` opens a box over the text, anchored to the mark and inset from the window; `inline` opens it in place, pushing the text apart, and is the Authoring View's alone. A click opens one and hovering never does — the box a pointer brought up could not be read without holding the pointer still, and could not be clicked into at all.
  */
 
-const KEY = 'arras.prefs';
+const KEY = 'viewer.prefs';
 
 export interface Prefs {
 	/** The workspace's ratio: how much of the frame the left pane takes, 0.2 to 0.8, half by default since neither pane is primary. One ratio — a reader sets the shape of their screen once. */

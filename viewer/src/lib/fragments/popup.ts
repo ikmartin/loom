@@ -1,6 +1,6 @@
 // The one popup (review/AnnotationPopup.svelte, or review/ChangePopup.svelte for a pending change), opened at a mark. A click on a mark opens its annotation's popup, and on the mark of the one already open closes it; one popup at a time, so opening another closes the first. A change's mark is its words, old and new (`span.change`), and its popup names the annotations on them, each of which opens its own. It stands over the text below its mark, above it where there is no room, follows the mark as the page scrolls, and closes on ×, Escape or a click away. Hovering opens nothing.
 //
-// The popup lives inside the fragment, `position: fixed`, so arras writes only in its own subtree; its host is placed in window coordinates and kept clear of every edge.
+// The popup lives inside the fragment, `position: fixed`, so the viewer writes only in its own subtree; its host is placed in window coordinates and kept clear of every edge.
 
 import { mount, unmount, type Component } from 'svelte';
 import AnnotationPopup from '$lib/review/AnnotationPopup.svelte';

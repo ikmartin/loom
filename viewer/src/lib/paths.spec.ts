@@ -1,4 +1,4 @@
-// Every URL arras composes carries the base the bundle was built for, and every corpus URL the data root a host set. Under the suite's own empty base a composed path and a hard-coded one are the same string, so these run under a mocked non-empty base.
+// Every URL the viewer composes carries the base the bundle was built for, and every corpus URL the data root a host set. Under the suite's own empty base a composed path and a hard-coded one are the same string, so these run under a mocked non-empty base.
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { dataRoot, dataUrl, libraryPdfUrl, route, setDataRoot } from './paths';
 import { canonUrl, keyUrl, masterUrl, nodeUrl, readUrl, tagUrl, taxonUrl, threadUrl, workUrl } from './nav';

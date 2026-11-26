@@ -1,4 +1,4 @@
-// Screenshots for the workspace's feature reports (docs/reports/), as distinct from the reference figures in shots.spec.ts. Run with `npm run shots:report`; the images land in docs/reports/images/, or in `ARRAS_SHOTS_OUT` when it is set.
+// Screenshots for the workspace's feature reports (docs/reports/), as distinct from the reference figures in shots.spec.ts. Run with `npm run shots:report`; the images land in docs/reports/images/, or in `VIEWER_SHOTS_OUT` when it is set.
 import { expect, test, type Page } from '@playwright/test';
 import { outDir, settle, still } from './settle';
 import { viewMenu } from '../workspace';
@@ -8,7 +8,7 @@ const OUT = outDir('../docs/reports/images');
 /** Store the display preferences a shot is taken under, before the app reads them. */
 async function under(page: Page, prefs: Record<string, string> = {}): Promise<void> {
 	await page.goto('/');
-	await page.evaluate((p) => localStorage.setItem('arras.prefs', JSON.stringify({ face: 'serif', size: 'm', width: 'mid', theme: 'light', comments: 'floating', ...p })), prefs);
+	await page.evaluate((p) => localStorage.setItem('viewer.prefs', JSON.stringify({ face: 'serif', size: 'm', width: 'mid', theme: 'light', comments: 'floating', ...p })), prefs);
 }
 
 async function shot(page: Page, name: string, path: string): Promise<void> {

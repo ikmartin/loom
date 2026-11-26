@@ -1,4 +1,4 @@
-// Badge composition, as a pure function so it is unit-tested. Arras renders whatever labels and colours the manifest declares; unknown labels fall back to a neutral badge.
+// Badge composition, as a pure function so it is unit-tested. The viewer renders whatever labels and colours the manifest declares; unknown labels fall back to a neutral badge.
 import type { ColorClass, Key, Manifest, Node } from './manifest/types';
 
 export interface BadgePart {

@@ -486,7 +486,7 @@ test.describe('the divider', () => {
 		const divider = page.getByTestId('divider');
 		const frame = (await page.getByTestId('workspace').boundingBox())!;
 		const handle = (await divider.boundingBox())!;
-		const stored = () => page.evaluate(() => (JSON.parse(localStorage.getItem('arras.prefs') ?? '{}') as { divider?: number }).divider);
+		const stored = () => page.evaluate(() => (JSON.parse(localStorage.getItem('viewer.prefs') ?? '{}') as { divider?: number }).divider);
 		const before = await stored();
 		await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
 		await page.mouse.down();
@@ -568,7 +568,7 @@ test.describe('a narrow window', () => {
 		// what must stay in reach stays: unfold and the four views
 		for (const v of ['docs', 'library', 'web', 'review']) await expect(page.getByTestId(`strip-${v}`)).toBeVisible();
 		await expect(page.getByTestId('panel-fold')).toBeVisible();
-		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('arras.prefs') ?? '{}').panel)).not.toBe(false);
+		expect(await page.evaluate(() => JSON.parse(localStorage.getItem('viewer.prefs') ?? '{}').panel)).not.toBe(false);
 	});
 
 	test("a narrow pane's toolbar keeps its view whole, its bar giving way first", async ({ page }) => {

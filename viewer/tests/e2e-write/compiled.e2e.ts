@@ -1,10 +1,10 @@
 // A document's compiled PDF (plan 0.29.1): `view PDF` in the document's *view* menu opens it to read, the document's row in the tree current meanwhile, and a new compile opens it again where the reader is, with nobody asking; its own *view* menu opens the file the server answers in a tab of its own and saves it. The suite serves with `--no-compile`, so the test stands in for the compile by putting PDFs where one writes.
 import { appendFileSync, copyFileSync, mkdirSync, readFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
-import { ARRAS, compileFolder, expect, test } from '../served';
+import { VIEWER, compileFolder, expect, test } from '../served';
 import { pane, viewMenu } from '../workspace';
 
-const WORKS = join(ARRAS, '../loom/tests/quilts/sources/showcase-works');
+const WORKS = join(VIEWER, '../loom/tests/quilts/sources/showcase-works');
 const built = (root: string) => join(compileFolder(root, 'drafting/main.tex'), 'main.pdf');
 
 /** Put a PDF where a compile of drafting/main.tex writes, a minute on from now so its time differs from the last. */

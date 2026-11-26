@@ -21,6 +21,6 @@ describe('manifest loader', () => {
 	it('rejects unreadable JSON', async () => {
 		const result = await parseManifest('{not json');
 		expect(result.manifest).toBeNull();
-		if (result.manifest === null) expect(result.diagnostic.code).toBe('arras:manifest-unreadable');
+		if (result.manifest === null) expect(result.diagnostic.code).toBe('viewer:manifest-unreadable');
 	});
 });

@@ -199,7 +199,7 @@ describe('Keep and Discard', () => {
 		live.changes = [suggestion];
 		answer = { ok: true, result: 'kept 1', done: ['e-1'], refused: [] };
 		await h.keepChanges({ changes: ['e-1'] });
-		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [['e-1']] });
+		expect(JSON.parse(kept['viewer.keeps'])).toEqual({ 'q-one': [['e-1']] });
 		// the same tab, another quilt served on the port: nothing of q-one is offered
 		quilt = 'q-two';
 		vi.resetModules();
@@ -214,7 +214,7 @@ describe('Keep and Discard', () => {
 		answer = { ok: true, result: 'undid 1', done: ['e-1'], refused: [] };
 		expect(await h.undo()).toBe('');
 		expect(calls.at(-1)).toEqual(['change-undo', { changes: ['e-1'], quilt: 'q-one' }]);
-		expect(JSON.parse(kept['arras.keeps'])).toEqual({ 'q-one': [] });
+		expect(JSON.parse(kept['viewer.keeps'])).toEqual({ 'q-one': [] });
 		vi.unstubAllGlobals();
 	});
 

@@ -60,7 +60,7 @@ function push(step: Step): void {
 }
 
 /** Where the Keep steps still to be undone are kept for this tab: by quilt, the ids of each, oldest first. */
-const KEEPS = 'arras.keeps';
+const KEEPS = 'viewer.keeps';
 
 /** The quilt the server says it serves (`GET /_api`'s `quilt`), once it has answered; steps are kept and offered only under it. */
 let serving: string | undefined;

@@ -1,25 +1,25 @@
-/* Arras's own token vocabulary and base styles.
-   The names are drawn from print and are deliberately not the names used in the design documents or in any other product's system: arras renders a page of mathematics, not application chrome.
+/* The viewer's own token vocabulary and base styles.
+   The names are drawn from print and are deliberately not the names used in the design documents or in any other product's system: the viewer renders a page of mathematics, not application chrome.
    Every colour, measure and typeface is a variable; no component hardcodes a value. */
 
-/* Everything below is scoped to `.arras`, the class a host puts on the element it wants arras to live in -- `<html>` for the app served with loom, which is why the preference attributes `prefs.svelte.ts` writes to that same element still key these rules. Declaring on `.arras` would have arras defining `--ink` and `--paper` across a page it does not own, and resetting `box-sizing` on elements that are not its own; a host with its own design system should be able to embed a corpus without either happening to it. Restyling is then an ordinary stylesheet at ordinary specificity: `.arras { --paper: #111 }`. */
+/* Everything below is scoped to `.viewer`, the class a host puts on the element it wants the viewer to live in -- `<html>` for the app served with loom, which is why the preference attributes `prefs.svelte.ts` writes to that same element still key these rules. Declaring on `.viewer` would have the viewer defining `--ink` and `--paper` across a page it does not own, and resetting `box-sizing` on elements that are not its own; a host with its own design system should be able to embed a corpus without either happening to it. Restyling is then an ordinary stylesheet at ordinary specificity: `.viewer { --paper: #111 }`. */
 
 /* Padding and borders count inside a declared size. Without this a rail of `height: 100vh` with 12px of padding is 24px taller than the window, which puts the settings control and the counts line below the fold. */
-.arras,
-.arras *,
-.arras *::before,
-.arras *::after {
+.viewer,
+.viewer *,
+.viewer *::before,
+.viewer *::after {
 	box-sizing: border-box;
 }
 
 /* Every document tab in every tab bar (a pane's, the Library's) is one width whatever its title, and a crowded bar narrows them all by the same amount, as a browser's tabs do, down to 1.5 times a pane's strip; the title is cut with an ellipsis by the bar and given whole as the tab's hover text. */
-.arras .doc-tab {
+.viewer .doc-tab {
 	flex: 0 1 var(--tab-w);
 	width: var(--tab-w);
 	min-width: calc(var(--tab-h) * 1.5);
 }
 
-.arras {
+.viewer {
 	/* surfaces */
 	--paper: #fbfaf8;
 	--leaf: #f4f2ed;
@@ -128,7 +128,7 @@
 
 /* Dark mode: the light set inverted, washes as low-alpha overlays over the paper rather than tinted solids. */
 @media (prefers-color-scheme: dark) {
-	.arras:not([data-theme='light']) {
+	.viewer:not([data-theme='light']) {
 		--paper: #17171a;
 		--leaf: #1e1e22;
 		--sheet: #202025;
@@ -184,7 +184,7 @@
 		color-scheme: dark;
 	}
 }
-.arras[data-theme='dark'] {
+.viewer[data-theme='dark'] {
 	--paper: #17171a;
 	--leaf: #1e1e22;
 	--sheet: #202025;
@@ -241,15 +241,15 @@
 /* The four preferences of 15.7, applied as attributes on <html> by the layout. */
 /* The scale starts where the old middle was: 11px was below what anybody reads a paper at, and the old large was
    what a reader with ordinary eyesight actually chose, so each step moved down one name and a new large was added. */
-.arras[data-size='s'] { --body-size: 13.5px; }
-.arras[data-size='m'] { --body-size: 16px; }
-.arras[data-size='l'] { --body-size: 19px; }
+.viewer[data-size='s'] { --body-size: 13.5px; }
+.viewer[data-size='m'] { --body-size: 16px; }
+.viewer[data-size='l'] { --body-size: 19px; }
 /* `--measure` is a document's text block, which a paper format below sets for itself. `--prose-measure` is the line of Markdown, which is not a paper, so it follows Width alone. */
-.arras[data-width='narrow'] { --measure: 40rem; --prose-measure: 40rem; }
-.arras[data-width='mid'] { --measure: 48rem; --prose-measure: 48rem; }
-.arras[data-width='wide'] { --measure: 56rem; --prose-measure: 56rem; }
-.arras[data-face='serif'] { --body-face: var(--serif); }
-.arras[data-face='sans'] { --body-face: var(--sans); }
+.viewer[data-width='narrow'] { --measure: 40rem; --prose-measure: 40rem; }
+.viewer[data-width='mid'] { --measure: 48rem; --prose-measure: 48rem; }
+.viewer[data-width='wide'] { --measure: 56rem; --prose-measure: 56rem; }
+.viewer[data-face='serif'] { --body-face: var(--serif); }
+.viewer[data-face='sans'] { --body-face: var(--sans); }
 
 html,
 body {
@@ -461,34 +461,34 @@ main.page > h2,
 	scrollbar-gutter: stable;
 }
 
-/* Scrollbars, everywhere in arras: thin and invisible until the element is being scrolled (`is-scrolling`, which `$lib/shell/scrollbars` puts on it while it moves and takes off a moment after), so a panel, a pane or a box does not carry a grey stripe down its side at rest. The space is reserved either way, so nothing shifts when a bar appears. */
-.arras,
-.arras * {
+/* Scrollbars, everywhere in the viewer: thin and invisible until the element is being scrolled (`is-scrolling`, which `$lib/shell/scrollbars` puts on it while it moves and takes off a moment after), so a panel, a pane or a box does not carry a grey stripe down its side at rest. The space is reserved either way, so nothing shifts when a bar appears. */
+.viewer,
+.viewer * {
 	scrollbar-width: thin;
 	scrollbar-color: transparent transparent;
 }
-.arras .is-scrolling {
+.viewer .is-scrolling {
 	scrollbar-color: var(--rule-strong) transparent;
 }
-.arras ::-webkit-scrollbar {
+.viewer ::-webkit-scrollbar {
 	width: 8px;
 	height: 8px;
 	background: transparent;
 }
-.arras ::-webkit-scrollbar-thumb {
+.viewer ::-webkit-scrollbar-thumb {
 	background: transparent;
 	border-radius: 4px;
 	border: 2px solid transparent;
 	background-clip: content-box;
 }
-.arras .is-scrolling::-webkit-scrollbar-thumb {
+.viewer .is-scrolling::-webkit-scrollbar-thumb {
 	background-color: var(--rule-strong);
 }
 /* A long list read by moving through it keeps its bar at rest, so a reader can see where they are and drag to anywhere in it: a page whose main is `barShown` ($lib/shell/scrollbars, the problems page) marks the root `scrollbar-shown`. */
-.arras.scrollbar-shown {
+.viewer.scrollbar-shown {
 	scrollbar-color: var(--rule-strong) transparent;
 }
-.arras.scrollbar-shown::-webkit-scrollbar-thumb {
+.viewer.scrollbar-shown::-webkit-scrollbar-thumb {
 	background-color: var(--rule-strong);
 }
 
@@ -610,7 +610,7 @@ table.list th {
 }
 /* Off unless the reader asks (Settings > Show ids). The gutter is the corpus talking about the document -- keys and
    states -- which is what an author wants while working on it and not what anyone wants while reading it. */
-.arras:not([data-ids='yes']) .node-margin {
+.viewer:not([data-ids='yes']) .node-margin {
 	display: none;
 }
 /* Below about 34rem (`narrow`, from `guttersHost`) the gutter cannot hold an id at all, so it holds nothing rather than a column of initials. */
@@ -866,7 +866,7 @@ a.heading-link:focus {
 	content-visibility: auto;
 	contain-intrinsic-size: auto 600px;
 }
-/* The read view skips its leaf blocks: the paragraphs, displays, lists, tables and figures a section holds, and what an environment holds rather than the environment itself, whose margin annotation hangs in the gutter to its left. A box outside a skipped block is not hit, whatever clip margin the block is given, so an environment skipped whole would leave its margin's id painted and dead (DR-174). Never what arras puts beside the blocks in the fragment: a comment's box, a page's rule, a notice. `overflow-clip-margin` lets a mark's outline or a box's shadow spill past a skipped block's edge, and a browser without it skips nothing. Layout containment makes each block the containing block of a `position: fixed` box inside it, so a floating box is appended to the fragment, never into a block. A block put in above the reader starts at its placeholder size, which the browser's scroll anchoring does not answer, so a fragment holds the reader's place by hand while it changes (`fragments/hold.ts`). While skipped, a block's words and formulas are out of the accessibility tree, as a node page's sections are, and come back as it nears the screen. A paragraph run in after a label (`p1`, `p2`) is inline, which nothing skips. */
+/* The read view skips its leaf blocks: the paragraphs, displays, lists, tables and figures a section holds, and what an environment holds rather than the environment itself, whose margin annotation hangs in the gutter to its left. A box outside a skipped block is not hit, whatever clip margin the block is given, so an environment skipped whole would leave its margin's id painted and dead (DR-174). Never what the viewer puts beside the blocks in the fragment: a comment's box, a page's rule, a notice. `overflow-clip-margin` lets a mark's outline or a box's shadow spill past a skipped block's edge, and a browser without it skips nothing. Layout containment makes each block the containing block of a `position: fixed` box inside it, so a floating box is appended to the fragment, never into a block. A block put in above the reader starts at its placeholder size, which the browser's scroll anchoring does not answer, so a fragment holds the reader's place by hand while it changes (`fragments/hold.ts`). While skipped, a block's words and formulas are out of the accessibility tree, as a node page's sections are, and come back as it nears the screen. A paragraph run in after a label (`p1`, `p2`) is inline, which nothing skips. */
 @supports (overflow-clip-margin: 1px) {
 	:is(.fragment.read, .fragment.read :is(section, .included)) > :is(p, ul, ol, dl, table, blockquote, figure, pre, div.math, div.center),
 	:is(.fragment.read, .fragment.read :is(section, .included)) > :is(div.env, details.env-proof) > :is(p, ul, ol, dl, table, blockquote, figure, pre, div.math, div.center, div.env) {
@@ -892,37 +892,37 @@ a.heading-link:focus {
    Nothing about the content changes; only how it is set.
 
    `p1` and `p2` are the compiled page. `b1` is the measured column with a taxon accent at its edge, which is what
-   arras defaulted to before the paper setting existed; `b2` is the same content as a website reads it. */
+   the viewer defaulted to before the paper setting existed; `b2` is the same content as a website reads it. */
 
 /* ---- b2: wider, sans heads, environments carried by a tinted panel ---- */
-.arras[data-format='b2'] {
+.viewer[data-format='b2'] {
 	--measure: 46rem;
 	--gap-wide: 1.9rem;
 }
-.arras[data-format='b2'] .fragment {
+.viewer[data-format='b2'] .fragment {
 	line-height: 1.75;
 }
-.arras[data-format='b2'] .fragment h1,
-.arras[data-format='b2'] .fragment h2,
-.arras[data-format='b2'] .fragment h3 {
+.viewer[data-format='b2'] .fragment h1,
+.viewer[data-format='b2'] .fragment h2,
+.viewer[data-format='b2'] .fragment h3 {
 	font-family: var(--sans);
 	font-weight: 600;
 	letter-spacing: -0.01em;
 }
-.arras[data-format='b2'] .fragment .env {
+.viewer[data-format='b2'] .fragment .env {
 	padding: var(--gap) var(--gap-wide);
 	border-left-width: 0;
 	border-radius: var(--rad-card);
 	background: color-mix(in srgb, var(--taxon-tone, var(--rule)) 7%, var(--sheet));
 }
-.arras[data-format='b2'] .fragment .env-label {
+.viewer[data-format='b2'] .fragment .env-label {
 	font-size: 0.82em;
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 	color: var(--taxon-tone, var(--ink-soft));
 }
 /* A number is the paper's way of pointing at a result; a blog points with a link and a name. */
-.arras[data-format='b2'] .fragment .env-label .number {
+.viewer[data-format='b2'] .fragment .env-label .number {
 	display: none;
 }
 
@@ -932,38 +932,38 @@ a.heading-link:focus {
    the head runs into the first line, bold for a result or a definition and italic for a remark, the statement is
    italic where the class italicises it, and there is no rule, no fill and no colour anywhere on it. That last is the
    point — with the taxa uncoloured, the only coloured thing on the page is a finding. */
-.arras[data-format='p1'],
-.arras[data-format='p2'] {
+.viewer[data-format='p1'],
+.viewer[data-format='p2'] {
 	--measure: 33rem; /* amsart's text block is about 4.6in at 12pt */
 	/* The paper's own face where the reader asked for serif; `--body-face` still decides, so choosing sans still works. */
 	--serif: 'Latin Modern Roman', 'CMU Serif', 'Computer Modern', 'Palatino Linotype', Palatino, Georgia, serif;
 }
-.arras[data-format='p1'] .fragment,
-.arras[data-format='p2'] .fragment {
+.viewer[data-format='p1'] .fragment,
+.viewer[data-format='p2'] .fragment {
 	line-height: 1.42;
 	text-align: justify;
 	hyphens: auto;
 }
-.arras[data-format='p1'] .fragment p,
-.arras[data-format='p2'] .fragment p {
+.viewer[data-format='p1'] .fragment p,
+.viewer[data-format='p2'] .fragment p {
 	margin: 0;
 	text-indent: 1.4em;
 }
 /* A paragraph TeX set without an indent says so: one opening a section or an item, one continuing after a display, and every one in a list, whose `\listparindent` is nothing; a list's paragraphs stand apart by its `\parsep`. Where TeX has not said, the paragraph that opens a section, or follows a displayed thing, is not indented, as the class sets it. */
-.arras[data-format='p1'] .fragment p.noindent,
-.arras[data-format='p2'] .fragment p.noindent {
+.viewer[data-format='p1'] .fragment p.noindent,
+.viewer[data-format='p2'] .fragment p.noindent {
 	text-indent: 0;
 }
-.arras[data-format='p1'] .fragment :is(li, dd) p + p,
-.arras[data-format='p2'] .fragment :is(li, dd) p + p {
+.viewer[data-format='p1'] .fragment :is(li, dd) p + p,
+.viewer[data-format='p2'] .fragment :is(li, dd) p + p {
 	margin-top: 0.35em;
 }
-.arras[data-format='p1'] .fragment :is(h1, h2, h3, h4, h5, h6, .math.display, figure, .env) + p,
-.arras[data-format='p2'] .fragment :is(h1, h2, h3, h4, h5, h6, .math.display, figure, .env) + p {
+.viewer[data-format='p1'] .fragment :is(h1, h2, h3, h4, h5, h6, .math.display, figure, .env) + p,
+.viewer[data-format='p2'] .fragment :is(h1, h2, h3, h4, h5, h6, .math.display, figure, .env) + p {
 	text-indent: 0;
 }
-.arras[data-format='p1'] .fragment :is(h1, h2, h3, h4, h5, h6),
-.arras[data-format='p2'] .fragment :is(h1, h2, h3, h4, h5, h6) {
+.viewer[data-format='p1'] .fragment :is(h1, h2, h3, h4, h5, h6),
+.viewer[data-format='p2'] .fragment :is(h1, h2, h3, h4, h5, h6) {
 	text-align: center;
 	font-variant: small-caps;
 	font-weight: 400;
@@ -973,50 +973,50 @@ a.heading-link:focus {
 }
 /* Run-in heads: the label and the first paragraph are one line of text, which is what makes a compiled theorem
    look like prose with a bold opening rather than like a card. */
-.arras[data-format='p1'] .fragment .env,
-.arras[data-format='p2'] .fragment .env {
+.viewer[data-format='p1'] .fragment .env,
+.viewer[data-format='p2'] .fragment .env {
 	border-left-width: 0;
 	background: none;
 	padding: 0;
 	margin: 0.85em 0;
 }
-.arras[data-format='p1'] .fragment .env > .env-label,
-.arras[data-format='p2'] .fragment .env > .env-label,
-.arras[data-format='p1'] .fragment .env > .env-label + p,
-.arras[data-format='p2'] .fragment .env > .env-label + p {
+.viewer[data-format='p1'] .fragment .env > .env-label,
+.viewer[data-format='p2'] .fragment .env > .env-label,
+.viewer[data-format='p1'] .fragment .env > .env-label + p,
+.viewer[data-format='p2'] .fragment .env > .env-label + p {
 	display: inline;
 	text-indent: 0;
 	color: inherit;
 }
-.arras[data-format='p1'] .fragment .env > .env-label,
-.arras[data-format='p2'] .fragment .env > .env-label {
+.viewer[data-format='p1'] .fragment .env > .env-label,
+.viewer[data-format='p2'] .fragment .env > .env-label {
 	font-family: inherit;
 	font-weight: 700;
 	text-transform: none;
 	letter-spacing: 0;
 	font-size: 1em;
 }
-.arras[data-format='p1'] .fragment .env > .env-label .number::after,
-.arras[data-format='p2'] .fragment .env > .env-label .number::after {
+.viewer[data-format='p1'] .fragment .env > .env-label .number::after,
+.viewer[data-format='p2'] .fragment .env > .env-label .number::after {
 	content: '.';
 }
-.arras[data-format='p1'] .fragment .env > .env-label + p::before,
-.arras[data-format='p2'] .fragment .env > .env-label + p::before {
+.viewer[data-format='p1'] .fragment .env > .env-label + p::before,
+.viewer[data-format='p2'] .fragment .env > .env-label + p::before {
 	content: ' ';
 }
 /* A plain result is italic and a remark's head is italic rather than bold: amsthm's three styles, as they print. */
-.arras[data-format='p1'] .fragment .env[data-style='plain'] > .env-label + p,
-.arras[data-format='p2'] .fragment .env[data-style='plain'] > .env-label + p {
+.viewer[data-format='p1'] .fragment .env[data-style='plain'] > .env-label + p,
+.viewer[data-format='p2'] .fragment .env[data-style='plain'] > .env-label + p {
 	font-style: italic;
 }
-.arras[data-format='p1'] .fragment .env[data-style='remark'] > .env-label,
-.arras[data-format='p2'] .fragment .env[data-style='remark'] > .env-label {
+.viewer[data-format='p1'] .fragment .env[data-style='remark'] > .env-label,
+.viewer[data-format='p2'] .fragment .env[data-style='remark'] > .env-label {
 	font-weight: 400;
 	font-style: italic;
 }
 /* What the viewer adds is not the paper and is not set like it: a margin key sits inside the fragment and would otherwise inherit its justification and its indent, which at gutter width is unreadable. */
-.arras[data-format='p1'] .fragment .node-margin,
-.arras[data-format='p2'] .fragment .node-margin {
+.viewer[data-format='p1'] .fragment .node-margin,
+.viewer[data-format='p2'] .fragment .node-margin {
 	text-align: left;
 	text-indent: 0;
 	hyphens: none;
@@ -1024,12 +1024,12 @@ a.heading-link:focus {
 }
 
 /* A proof reads as prose, never as a disclosure widget: its head italic, with its full stop, and run into the first line as amsthm sets it. A summary cannot share a line with what its details hold, so the head floats and the first line wraps beside it, and the proof holds the float. */
-.arras[data-format='p1'] .fragment details.env-proof,
-.arras[data-format='p2'] .fragment details.env-proof {
+.viewer[data-format='p1'] .fragment details.env-proof,
+.viewer[data-format='p2'] .fragment details.env-proof {
 	display: flow-root;
 }
-.arras[data-format='p1'] .fragment details.env-proof > summary.env-label,
-.arras[data-format='p2'] .fragment details.env-proof > summary.env-label {
+.viewer[data-format='p1'] .fragment details.env-proof > summary.env-label,
+.viewer[data-format='p2'] .fragment details.env-proof > summary.env-label {
 	float: left;
 	display: block;
 	margin: 0 0.4em 0 0;
@@ -1037,46 +1037,46 @@ a.heading-link:focus {
 	font-weight: 400;
 	list-style: none;
 }
-.arras[data-format='p1'] .fragment details.env-proof > summary.env-label::before,
-.arras[data-format='p2'] .fragment details.env-proof > summary.env-label::before {
+.viewer[data-format='p1'] .fragment details.env-proof > summary.env-label::before,
+.viewer[data-format='p2'] .fragment details.env-proof > summary.env-label::before {
 	content: none;
 }
-.arras[data-format='p1'] .fragment details.env-proof[open] > summary.env-label::after,
-.arras[data-format='p2'] .fragment details.env-proof[open] > summary.env-label::after {
+.viewer[data-format='p1'] .fragment details.env-proof[open] > summary.env-label::after,
+.viewer[data-format='p2'] .fragment details.env-proof[open] > summary.env-label::after {
 	content: '.';
 }
-.arras[data-format='p1'] .fragment details.env-proof > summary.env-label + p,
-.arras[data-format='p2'] .fragment details.env-proof > summary.env-label + p {
+.viewer[data-format='p1'] .fragment details.env-proof > summary.env-label + p,
+.viewer[data-format='p2'] .fragment details.env-proof > summary.env-label + p {
 	display: block;
 }
 
 /* A document of LaTeX's standard classes (`article`, `report`, `book` and those built on them) is set as they set it: a large title centred over its author and date, and bold heads at the left margin, a section's larger than a subsection's. The `ams` classes keep the centred small capitals above, as does a document whose class loom has not read. */
-.arras:is([data-format='p1'], [data-format='p2']) .fragment:has(> [data-documentclass]:not([data-documentclass^='ams'])) :is(h1, h2, h3, h4, h5, h6) {
+.viewer:is([data-format='p1'], [data-format='p2']) .fragment:has(> [data-documentclass]:not([data-documentclass^='ams'])) :is(h1, h2, h3, h4, h5, h6) {
 	text-align: left;
 	font-variant: normal;
 	font-weight: 700;
 	letter-spacing: 0;
 	margin: 1.5em 0 0.6em;
 }
-.arras:is([data-format='p1'], [data-format='p2']) .fragment:has(> [data-documentclass]:not([data-documentclass^='ams'])) section > h1 {
+.viewer:is([data-format='p1'], [data-format='p2']) .fragment:has(> [data-documentclass]:not([data-documentclass^='ams'])) section > h1 {
 	font-size: 1.44em;
 }
-.arras:is([data-format='p1'], [data-format='p2']) .fragment:has(> [data-documentclass]:not([data-documentclass^='ams'])) section > h2 {
+.viewer:is([data-format='p1'], [data-format='p2']) .fragment:has(> [data-documentclass]:not([data-documentclass^='ams'])) section > h2 {
 	font-size: 1.2em;
 }
-.arras:is([data-format='p1'], [data-format='p2']) .fragment > h1[data-documentclass]:not([data-documentclass^='ams']) {
+.viewer:is([data-format='p1'], [data-format='p2']) .fragment > h1[data-documentclass]:not([data-documentclass^='ams']) {
 	text-align: center;
 	font-weight: 400;
 	font-size: 1.73em;
 	margin: 0.6em 0 0.5em;
 }
-.arras:is([data-format='p1'], [data-format='p2']) .fragment > :is(p.author, p.date) {
+.viewer:is([data-format='p1'], [data-format='p2']) .fragment > :is(p.author, p.date) {
 	text-align: center;
 	text-indent: 0;
 	font-size: 1.2em;
 	margin: 0.3em 0;
 }
-.arras:is([data-format='p1'], [data-format='p2']) .fragment > p.date {
+.viewer:is([data-format='p1'], [data-format='p2']) .fragment > p.date {
 	margin-bottom: 1.5em;
 }
 
@@ -1110,18 +1110,18 @@ a.heading-link:focus {
    value; these are the values. A result, a definition, an aside — and a fourth register deliberately left free,
    because the annotation colour has to be one no taxon can wear or a finding has nothing of its own (DR-175). Eight
    hues, one per taxon, used up every register the page had. */
-.arras {
+.viewer {
 	--taxon-result: #3f5c91;
 	--taxon-definition: #2f6f6a;
 	--taxon-aside: var(--ink-faint);
 }
 @media (prefers-color-scheme: dark) {
-	.arras:not([data-theme='light']) {
+	.viewer:not([data-theme='light']) {
 		--taxon-result: #8fadde;
 		--taxon-definition: #63c0b8;
 	}
 }
-.arras[data-theme='dark'] {
+.viewer[data-theme='dark'] {
 	--taxon-result: #8fadde;
 	--taxon-definition: #63c0b8;
 }

@@ -87,7 +87,7 @@ async function pdfMenu(page: Page, testid: string): Promise<void> {
 
 /** The look in hand, set before the page loads, as the format menu leaves it. */
 async function holding(page: Page, h: { type: string | null; over: Record<string, unknown>; plain?: Record<string, unknown> }): Promise<void> {
-	await page.addInitScript((v) => localStorage.setItem('arras.annotate.hand', JSON.stringify(v)), h);
+	await page.addInitScript((v) => localStorage.setItem('viewer.annotate.hand', JSON.stringify(v)), h);
 }
 
 const marks = (page: Page, kind?: string) => page.locator(kind ? `[data-testid^="page-mark-"][data-kind="${kind}"]` : '[data-testid^="page-mark-"]');

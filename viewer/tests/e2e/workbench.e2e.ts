@@ -78,7 +78,7 @@ test('without working documents, document views point at landmarks and the graph
 });
 
 test('a landmark\'s formulas typeset with its own macros: no formula falls back to its source', async ({ page }) => {
-	// a landmark's fragment names its macro set, which arras defines in one formula of its own before typesetting the fragment; a definition MathJax cannot read would fail that formula and leave the set undefined
+	// a landmark's fragment names its macro set, which the viewer defines in one formula of its own before typesetting the fragment; a definition MathJax cannot read would fail that formula and leave the set undefined
 	await page.goto('/canon/widgets-v1');
 	const math = page.locator('.fragment .math');
 	await expect(math.first().locator('mjx-container')).toBeAttached();

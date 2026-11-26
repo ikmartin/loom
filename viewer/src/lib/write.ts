@@ -2,7 +2,7 @@
 //
 // Detected, never assumed. The publisher answers `GET /_api` with the capabilities it actually serves, or 404 when it serves none, and a viewer that gets 404 shows no editing affordances at all -- which is how the same bundle reads a corpus published to a static host and edits one served by its own publisher, with no build-time flag deciding which.
 //
-// Arras writes nothing itself. It asks the publisher to act; overleaf-update and adopt-finish are the explicit acts that write the person's files.
+// The viewer writes nothing itself. It asks the publisher to act; overleaf-update and adopt-finish are the explicit acts that write the person's files.
 
 import { base } from '$app/paths';
 import { store } from '$lib/manifest/client.svelte';

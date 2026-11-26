@@ -1,15 +1,15 @@
-// Before `npm run dev:loom` starts: say whether ARRAS_LOOM names a `loom serve` that is running, so that a dev server pointed at nothing says so at once instead of showing "Loading manifest…" for ever.
+// Before `npm run dev:loom` starts: say whether VIEWER_LOOM names a `loom serve` that is running, so that a dev server pointed at nothing says so at once instead of showing "Loading manifest…" for ever.
 //
-// Usage: ARRAS_LOOM=http://127.0.0.1:PORT node scripts/loom-target.mjs
-const target = (process.env.ARRAS_LOOM ?? '').replace(/\/+$/, '');
-const how = 'start one on a quilt (`loom serve --quilt PATH --port 8791`) and run `ARRAS_LOOM=http://127.0.0.1:8791 npm run dev:loom`';
+// Usage: VIEWER_LOOM=http://127.0.0.1:PORT node scripts/loom-target.mjs
+const target = (process.env.VIEWER_LOOM ?? '').replace(/\/+$/, '');
+const how = 'start one on a quilt (`loom serve --quilt PATH --port 8791`) and run `VIEWER_LOOM=http://127.0.0.1:8791 npm run dev:loom`';
 if (!target) {
-	console.error(`dev:loom runs the viewer against a running loom serve, and ARRAS_LOOM names none: ${how}`);
+	console.error(`dev:loom runs the viewer against a running loom serve, and VIEWER_LOOM names none: ${how}`);
 	process.exit(2);
 }
 // the server answers only as 127.0.0.1 or localhost at its own port, so any other name would be refused on every request
 if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(target)) {
-	console.error(`ARRAS_LOOM is ${target}; loom serve answers only as http://127.0.0.1:PORT or http://localhost:PORT`);
+	console.error(`VIEWER_LOOM is ${target}; loom serve answers only as http://127.0.0.1:PORT or http://localhost:PORT`);
 	process.exit(2);
 }
 try {

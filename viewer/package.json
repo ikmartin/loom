@@ -1,11 +1,12 @@
 {
-"name": "arras",
-  "description": "A static viewer for node-based text corpora published to the loom-arras interface.",
+"name": "viewer",
+  "description": "A static viewer for node-based text corpora published to loom's viewer interface.",
   "version": "0.1.0-alpha.0",
   "license": "AGPL-3.0-or-later",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ikmartin/arras.git"
+    "url": "https://github.com/ikmartin/loom.git",
+    "directory": "viewer"
   },
   "private": true,
   "type": "module",
@@ -26,7 +27,7 @@
     "stage:fixture": "node scripts/stage-fixture.mjs tests/fixture",
     "shots": "playwright test --config playwright.shots.config.ts",
     "shots:report": "playwright test --config playwright.shots.config.ts tests/shots/report.spec.ts",
-    "shots:write": "ARRAS_SHOTS=1 playwright test --config playwright.write.config.ts shots.e2e.ts",
+    "shots:write": "VIEWER_SHOTS=1 playwright test --config playwright.write.config.ts shots.e2e.ts",
     "test:write": "playwright test --config playwright.write.config.ts",
     "test:reading": "playwright test --config playwright.reading.config.ts",
     "pdfjs:assets": "node scripts/pdfjs-assets.mjs"

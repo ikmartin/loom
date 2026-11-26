@@ -21,7 +21,7 @@
 		files: ProjectFile[];
 	}
 
-	const KEY = 'arras.tree';
+	const KEY = 'viewer.tree';
 	const m = $derived(store.manifest!);
 	// the folders opened are kept per quilt, keyed as `keptUnder` says
 	const corpus = $derived(keptUnder(m.corpus.name));

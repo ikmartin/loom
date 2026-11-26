@@ -13,10 +13,10 @@ export type Filter = 'all' | 'used' | 'nodoc';
 export type Column = 'title' | 'authors' | 'year' | 'digested' | 'holds' | 'used';
 export const COLUMNS: Column[] = ['title', 'authors', 'year', 'digested', 'holds', 'used'];
 
-const LAYOUT = 'arras.library.layout';
-const OVERLAY = 'arras.library.overlay';
-const SORT = 'arras.library.sort';
-const OPEN = 'arras.library.open';
+const LAYOUT = 'viewer.library.layout';
+const OVERLAY = 'viewer.library.overlay';
+const SORT = 'viewer.library.sort';
+const OPEN = 'viewer.library.open';
 
 /** The works open in this browser tab's visit before a reload. */
 function visited(): string[] {
@@ -27,8 +27,8 @@ function visited(): string[] {
 		return [];
 	}
 }
-const TAB = 'arras.library.tab';
-const ZOOM = 'arras.library.zoom';
+const TAB = 'viewer.library.tab';
+const ZOOM = 'viewer.library.zoom';
 
 /** Each open work's paper's zoom, where the reader gave it one, kept for the visit as the open works are. */
 function zooms(): Record<string, number> {
@@ -56,7 +56,7 @@ function shown(open: string[]): string {
 		return 'works';
 	}
 }
-const COLS = 'arras.library.columns';
+const COLS = 'viewer.library.columns';
 
 function remembered(key: string): string | null {
 	try {

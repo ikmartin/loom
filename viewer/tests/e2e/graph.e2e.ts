@@ -229,7 +229,7 @@ test.describe('the local graph', () => {
 	});
 
 	test('one local graph on screen: a context beside a document stands the float down', async ({ page }) => {
-		await page.addInitScript(() => localStorage.setItem('arras.localGraph', 'open'));
+		await page.addInitScript(() => localStorage.setItem('viewer.localGraph', 'open'));
 		await page.goto('/master/drafting/main' + beside('/context/sy-0003'));
 		await expect(pane(page, 1).getByTestId('local-graph-panel')).toBeVisible();
 		await pane(page, 0).locator('.fragment').first().click({ position: { x: 5, y: 5 } });

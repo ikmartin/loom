@@ -1,10 +1,10 @@
-// What a screenshot waits for before it is taken, shared by the shot suites: the page drawn, every formula typeset, and nothing on it still moving. Where the images land can be moved with `ARRAS_SHOTS_OUT`, so a run that only checks the suites leaves the committed images alone.
+// What a screenshot waits for before it is taken, shared by the shot suites: the page drawn, every formula typeset, and nothing on it still moving. Where the images land can be moved with `VIEWER_SHOTS_OUT`, so a run that only checks the suites leaves the committed images alone.
 
 import { expect, type Page } from '@playwright/test';
 
-/** The directory a suite writes into: `ARRAS_SHOTS_OUT` when set, else the suite's own committed place. */
+/** The directory a suite writes into: `VIEWER_SHOTS_OUT` when set, else the suite's own committed place. */
 export function outDir(committed: string): string {
-	return process.env.ARRAS_SHOTS_OUT ?? committed;
+	return process.env.VIEWER_SHOTS_OUT ?? committed;
 }
 
 /** The boxes of what can still move after a page has loaded: the graph's nodes as its layout settles, the fragments as formulas grow, the pages of a paper as they are drawn. */

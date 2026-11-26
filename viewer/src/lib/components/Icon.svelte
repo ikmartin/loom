@@ -1,7 +1,7 @@
 <script lang="ts">
 	// The viewer's glyphs. Line icons rather than unicode marks, which render at whatever weight and baseline a font decides, so they sit unevenly and read as punctuation. These are drawn on one 24x24 grid at one stroke width, which is what makes them look like a set.
 	//
-	// Inline rather than an icon package: arras ships vendored inside loom's wheel, so a dependency is weight in every install, and six paths are a few hundred bytes.
+	// Inline rather than an icon package: the viewer ships vendored inside loom's wheel, so a dependency is weight in every install, and six paths are a few hundred bytes.
 	let { name, size = 19 }: { name: string; size?: number } = $props();
 </script>
 

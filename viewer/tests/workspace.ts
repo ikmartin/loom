@@ -28,7 +28,7 @@ export async function settings(page: Page, section: string): Promise<void> {
 
 /** Start the page under these display preferences, stored before any script of the app runs; what is not named takes its default. */
 export async function prefs(page: Page, p: Record<string, unknown>): Promise<void> {
-	await page.addInitScript((v) => localStorage.setItem('arras.prefs', JSON.stringify(v)), p);
+	await page.addInitScript((v) => localStorage.setItem('viewer.prefs', JSON.stringify(v)), p);
 }
 
 /** Open a pane's *view* menu, where a toolbar keeps every control but its bar's: the focused pane's by default; open already, it is left open. */

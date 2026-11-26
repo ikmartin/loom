@@ -7,7 +7,7 @@
 	// **`render` is the virtualisation seam.** A page outside the window keeps its size and loses its canvas, its text
 	// layer and its overlay; the parent decides which pages are in, and this decides nothing about scrolling.
 	//
-	// It is deliberately NOT keyed on the manifest store: arras polls every second and swaps the manifest whenever its
+	// It is deliberately NOT keyed on the manifest store: the viewer polls every second and swaps the manifest whenever its
 	// hash changes, so a pane that re-derived from it would re-render a page a second — the failure `Fragment.svelte`
 	// has been patched for twice.
 	import { onDestroy, untrack, type Snippet } from 'svelte';

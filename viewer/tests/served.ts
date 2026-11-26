@@ -13,12 +13,12 @@ import { patient } from './sites';
 export interface Suite {
 	/** The quilt under `loom/tests/quilts/`. */
 	quilt: string;
-	/** Scratch directory, relative to `arras/`, for the bundle, the pristine copy and every served copy. */
+	/** Scratch directory, relative to `viewer/`, for the bundle, the pristine copy and every served copy. */
 	scratch: string;
 }
 
-export const ARRAS = fileURLToPath(new URL('..', import.meta.url));
-export const LOOM = join(ARRAS, '../loom/.venv/bin/loom');
+export const VIEWER = fileURLToPath(new URL('..', import.meta.url));
+export const LOOM = join(VIEWER, '../loom/.venv/bin/loom');
 /** The variables by which loom tells an agent's shell (`loom.identity.AGENT_MARKERS`). */
 const AGENT_MARKERS = ['AI_AGENT', 'CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'CODEX_SANDBOX', 'CURSOR_AGENT', 'GEMINI_CLI'];
 
@@ -70,7 +70,7 @@ export function workOf(root: string, key: string): { ref: string; pdf: string | 
 }
 
 export function scratchDir(suite: Suite): string {
-	return join(ARRAS, suite.scratch);
+	return join(VIEWER, suite.scratch);
 }
 
 function freePort(): Promise<number> {
@@ -154,10 +154,10 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt, overlea
 		// Overleaf's git stood in by a folder beside the copy, which loom's own Python is pointed at as it starts (`overleaf-stand-in/sitecustomize.py`)
 		rmSync(`${root}.overleaf`, { recursive: true, force: true });
 		mkdirSync(join(`${root}.overleaf`, 'projects'), { recursive: true });
-		Object.assign(env, { LOOM_OVERLEAF_STAND_IN: `${root}.overleaf`, PYTHONPATH: join(ARRAS, 'tests', 'overleaf-stand-in') });
+		Object.assign(env, { LOOM_OVERLEAF_STAND_IN: `${root}.overleaf`, PYTHONPATH: join(VIEWER, 'tests', 'overleaf-stand-in') });
 	}
 	const loom: Served['loom'] = (args, overrides = {}) =>
-		execFileSync(LOOM, [...args, '--quilt', root], { cwd: ARRAS, env: { ...env, ...overrides } }).toString();
+		execFileSync(LOOM, [...args, '--quilt', root], { cwd: VIEWER, env: { ...env, ...overrides } }).toString();
 	// Finish fixture writes before the publisher scans, so its first manifest describes one consistent source revision.
 	await prepare?.({ root, loom });
 	let lastLog = '';
@@ -166,9 +166,9 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt, overlea
 		const url = `http://127.0.0.1:${port}`;
 		const out = createWriteStream(logPath, { flags: 'a' });
 		const proc: ChildProcess = spawn(LOOM, ['serve', '--quilt', root, '--port', String(port), '--no-compile'], {
-			cwd: ARRAS,
+			cwd: VIEWER,
 			detached: true,
-			env: { ...env, LOOM_ARRAS_BUNDLE: join(dir, 'bundle'), TMPDIR: tmp },
+			env: { ...env, LOOM_VIEWER_BUNDLE: join(dir, 'bundle'), TMPDIR: tmp },
 			stdio: ['ignore', 'pipe', 'pipe']
 		});
 		proc.stdout!.pipe(out);

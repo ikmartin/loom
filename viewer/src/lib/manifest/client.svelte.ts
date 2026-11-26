@@ -109,7 +109,7 @@ class ManifestStore {
 		} catch (err) {
 			this.problem = {
 				severity: 'error',
-				code: 'arras:manifest-missing',
+				code: 'viewer:manifest-missing',
 				message: `could not fetch the manifest: ${(err as Error).message}`,
 				locations: [],
 				keys: []

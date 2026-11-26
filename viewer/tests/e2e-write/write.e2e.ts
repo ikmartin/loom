@@ -7,7 +7,7 @@ import { join } from 'node:path';
 /** Select an element's words as a reader would, and let go: the page offers to annotate them. */
 /** Hold a type in hand before the page loads, as the format menu would leave it. */
 async function holding(page: import('@playwright/test').Page, type: string): Promise<void> {
-	await page.addInitScript((t) => localStorage.setItem('arras.annotate.hand', JSON.stringify({ type: t, over: {} })), type);
+	await page.addInitScript((t) => localStorage.setItem('viewer.annotate.hand', JSON.stringify({ type: t, over: {} })), type);
 }
 
 async function select(at: import('@playwright/test').Locator): Promise<void> {

@@ -1,6 +1,6 @@
 // A note said once: shown the first visit it applies, and for the rest of that visit until it is closed. Remembered in this browser by its words, so it is said again only when what it says changes (another name, another list of places); a browser that keeps nothing says it each visit.
 
-const KEY = 'arras.said';
+const KEY = 'viewer.said';
 
 /** The notes shown in this visit, and those closed in it. */
 const shown = new Set<string>();

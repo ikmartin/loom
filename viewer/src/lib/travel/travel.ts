@@ -25,7 +25,7 @@ export function flash(el: Element): void {
 /**
  * Say, beside `from`, that there is nowhere to go.
  *
- * Placed in viewport coordinates and appended to `from`'s own pane rather than the page root: arras is a guest in the
+ * Placed in viewport coordinates and appended to `from`'s own pane rather than the page root: the viewer is a guest in the
  * document it renders and writes only inside its own subtree.
  */
 export function nowhere(from: Element, said = 'nothing to travel to'): void {

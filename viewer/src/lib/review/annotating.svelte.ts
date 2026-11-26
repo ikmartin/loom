@@ -86,7 +86,7 @@ function cleanLook(o: unknown): Partial<Look> {
 	return out;
 }
 
-const HAND_KEY = 'arras.annotate.hand';
+const HAND_KEY = 'viewer.annotate.hand';
 
 /** The look in hand, for every document: kept in this browser, so the next visit annotates as the last one did. */
 class HandState {

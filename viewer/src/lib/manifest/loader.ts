@@ -37,7 +37,7 @@ export async function parseManifest(text: string, etag: string | null = null, by
 			manifest: null,
 			diagnostic: {
 				severity: 'error',
-				code: 'arras:manifest-unreadable',
+				code: 'viewer:manifest-unreadable',
 				message: `manifest.json is not valid JSON: ${(err as Error).message}`,
 				locations: [],
 				keys: []
@@ -56,7 +56,7 @@ export async function loadManifest(url = dataUrl('manifest.json'), etag: string 
 			manifest: null,
 			diagnostic: {
 				severity: 'error',
-				code: 'arras:manifest-missing',
+				code: 'viewer:manifest-missing',
 				message: `${url} returned ${res.status}`,
 				locations: [],
 				keys: []

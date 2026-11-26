@@ -1,5 +1,5 @@
-// The viewer's reference figures: arras photographed rendering the vendored fixture, so the design shows what exists rather than what was drawn.
-// Run with `npm run shots`; the images are committed under docs/design/figures/, or written to `ARRAS_SHOTS_OUT` when it is set.
+// The reference figures: the viewer photographed rendering the vendored fixture, so the design shows what exists rather than what was drawn.
+// Run with `npm run shots`; the images are committed under docs/design/figures/, or written to `VIEWER_SHOTS_OUT` when it is set.
 import { test, type Page } from '@playwright/test';
 import { outDir, settle, still } from './settle';
 
@@ -7,7 +7,7 @@ const OUT = outDir('../docs/design/figures');
 
 async function shot(page: Page, name: string, path: string, opts: { theme?: 'light' | 'dark' } = {}) {
 	await page.goto('/');
-	await page.evaluate((theme) => localStorage.setItem('arras.prefs', JSON.stringify({ face: 'serif', size: 'm', width: 'mid', theme, comments: 'floating' })), opts.theme ?? 'light');
+	await page.evaluate((theme) => localStorage.setItem('viewer.prefs', JSON.stringify({ face: 'serif', size: 'm', width: 'mid', theme, comments: 'floating' })), opts.theme ?? 'light');
 	await page.goto(path);
 	await settle(page);
 	await page.screenshot({ path: `${OUT}/${name}.png`, fullPage: false });

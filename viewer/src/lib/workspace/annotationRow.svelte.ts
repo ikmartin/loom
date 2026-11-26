@@ -2,7 +2,7 @@
 //
 // Showing the row arms nothing; putting it away puts down any tool in hand, so no tool is ever armed while its button is out of sight.
 
-const KEY = 'arras.annotation-row';
+const KEY = 'viewer.annotation-row';
 
 class AnnotationRow {
 	open = $state(true);

@@ -48,7 +48,7 @@ test('a formula is never skipped off screen, so typesetting a document again nev
 });
 
 test('a document drawn again leaves nothing of the old one in MathJax', async ({ page }) => {
-	// MathJax lists every formula it typesets and each entry holds its output, so a document replaced stayed alive whole until arras forgot the entries whose output had left the page (plan 0.19.1)
+	// MathJax lists every formula it typesets and each entry holds its output, so a document replaced stayed alive whole until the viewer forgot the entries whose output had left the page (plan 0.19.1)
 	const typeset = () => page.waitForFunction(() => !!document.querySelector('.fragment mjx-container') && document.querySelectorAll('.fragment .math:not(:has(mjx-container))').length === 0);
 	await page.goto('/master/drafting/main');
 	await typeset();

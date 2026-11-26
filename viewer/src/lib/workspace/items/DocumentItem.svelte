@@ -46,7 +46,7 @@
 	const contextShown = $derived([0, 1].some((i) => workspace.active(i)?.kind === 'context'));
 
 	// The local graph follows the result being read. Whether it is open is a per-reader convenience kept in this browser, so a reader who put it away is not shown it on every document.
-	const GRAPH_KEY = 'arras.localGraph';
+	const GRAPH_KEY = 'viewer.localGraph';
 	let docRoot = $state<HTMLElement | null>(null);
 	let graphOpen = $state(false);
 	$effect(() => {
