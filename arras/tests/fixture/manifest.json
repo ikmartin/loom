@@ -97,7 +97,6 @@
     "simplify"
    ],
    "name": "Revision",
-   "notes": false,
    "open": true
   },
   {
@@ -115,7 +114,6 @@
     "review"
    ],
    "name": "Suggestion",
-   "notes": false,
    "open": true
   },
   {
@@ -132,22 +130,7 @@
     "referee"
    ],
    "name": "Question",
-   "notes": false,
    "open": true
-  },
-  {
-   "id": "note",
-   "instructions": "An aside that asks nothing and is worth finding again: an explanation, a remark on why a step works, a sign that something checks out, or a dead end, counterexample or decision about this result, recorded when you find it.",
-   "look": {
-    "color": "grey",
-    "opacity": 60,
-    "style": "highlight",
-    "weight": 2
-   },
-   "modes": [],
-   "name": "Note",
-   "notes": true,
-   "open": false
   }
  ],
  "annotations": {
@@ -681,12 +664,44 @@
   }
  },
  "arriving": [],
+ "backlinks": [
+  {
+   "at": "notes-on-the-widgets",
+   "from": "notes/intro.md",
+   "href": "quilt:sy-0002",
+   "key": "sy-0002",
+   "kind": "node",
+   "line": 3,
+   "place": "",
+   "quote": ""
+  },
+  {
+   "at": "",
+   "from": "notes/page.html",
+   "href": "quilt:sy-0002",
+   "key": "sy-0002",
+   "kind": "node",
+   "line": 6,
+   "place": "",
+   "quote": ""
+  },
+  {
+   "at": "goals",
+   "from": "research-state.md",
+   "href": "quilt:sy-0003",
+   "key": "sy-0003",
+   "kind": "node",
+   "line": 2,
+   "place": "",
+   "quote": ""
+  }
+ ],
  "canon": [
   {
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "73652e6c4035108e7c0fe6f3125fa3c25dcf0c574bfa7a2988cd23f98e82090d",
+   "hash": "f10325a0d7d13c333fca73d9bc6fd16279ce60b2bcf5cd85a0acad2291c9ac2d",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -701,7 +716,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "535815be9efdeccdb7d6c4ac7529c6c62ac73bb1ef5ba4cf8eaf7e44061d7ad2",
+   "hash": "d77eb20575b9e097053aed5cfbee918324dabd5bbbe2f7288755839d4f2208db",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -716,7 +731,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "1d72b38aa0048b0594c16293774c7e7a1efca457af4a911658fa3ba2865c19b9",
+   "hash": "898b1fe940ab8ced29bef9e1f8133643fac2a8deae2de3d90e0c47b743128717",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",

@@ -22,7 +22,7 @@ How to work in a quilt, whatever you have been asked to do. `orientation.md` say
    - compute the small cases before giving an opinion;
    - search the quilt, then the literature, before calling anything new or known;
    - offer an idea of your own in one sentence, and do not pursue it unless asked.
-10. **A dead end, a counterexample, or a decision about one result is a {type:note} annotation on what it concerns, written when it is found** — not only a line in a report, which nobody finds again from the result. A decision that governs the work as a whole is a line in the research state.
+10. **A dead end, a counterexample, or a decision about one result is an untyped annotation on what it concerns, written when it is found** — not only a line in a report, which nobody finds again from the result. A decision that governs the work as a whole is a line in the research state.
 
 ## Inputs
 
@@ -51,7 +51,7 @@ The author reads the viewer: what it does not show is never seen. So every outpu
 
 **Proposed text or agent document.** Proposed text is a change the author can take or refuse on its own: it lands at one place in one key, however long — a drop-in paragraph is proposed text, a suggested edit. A change that only makes sense with others, or that moves, merges, splits or reorders results, is an agent document of the passage it touches (`loom draft DOC --ai NAME --section ID`). The test: could the author take this one and refuse its neighbours?
 
-**A page is a reading, never a source.** Write the research state so that someone starting a session tomorrow knows what the work is after and what is settled; keep it short, and replace what no longer holds rather than appending to it. What you want to say of a work, so that the next agent finds it, is a {type:note} on the work, never cited as the paper; a {type:note} is also the home of what concerns one result.
+**A page is a reading, never a source.** Write the research state so that someone starting a session tomorrow knows what the work is after and what is settled; keep it short, and replace what no longer holds rather than appending to it. What you want to say of a work, so that the next agent finds it, is an untyped annotation on the work, never cited as the paper; an untyped annotation is also the home of what concerns one result.
 
 ## Findings
 
@@ -74,7 +74,7 @@ The author reads the viewer: what it does not show is never seen. So every outpu
 
 Most work is not a mode. The author asks a question, thinks aloud, wants a calculation checked, or asks for something no mode covers — and a mode applied because one had to be applied fits the answer to the form instead of the other way round. Choose the blocks below that fit what was asked and compose them yourself: a question about whether a hypothesis is load-bearing wants `[hypothesis-ledger]` and nothing else; a claim you doubt wants `[counterexample]` and `[worked-examples]`. Where nothing in the catalogue fits, answer in plain prose; the blocks are for structure that exists, not structure imposed.
 
-Loom is still how anything durable is recorded. A fault you find while answering something else is a {type:revision}; wording you propose is a suggested edit; a work worth citing is a {type:suggestion} naming it; a doubt is a {type:question} anchored where it is; something you read and found fine can be a {type:note} saying so. Say in your message what you recorded.
+Loom is still how anything durable is recorded. A fault you find while answering something else is a {type:revision}; wording you propose is a suggested edit; a work worth citing is a {type:suggestion} naming it; a doubt is a {type:question} anchored where it is; something you read and found fine can be an untyped annotation saying so. Say in your message what you recorded.
 
 ## Never
 
