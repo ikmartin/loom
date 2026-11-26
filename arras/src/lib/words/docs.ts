@@ -34,8 +34,6 @@ export const docs = {
 		head: 'Files',
 		/** Hover text on that head: the directory it shows. */
 		title: (dir: string) => `View of files in ${dir}/`,
-		/** Under the short drawer a hover lets down from the folded head. */
-		openAll: 'click Files to open them all',
 		/** The row for the quilt's research state, where the publisher lists no files. */
 		researchState: 'Research state'
 	},
