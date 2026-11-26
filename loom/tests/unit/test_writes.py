@@ -722,6 +722,49 @@ def test_a_commit_put_back_while_a_link_cannot_be_followed_raises_its_own_failur
     assert (root / "real.md").read_text(encoding="utf-8") == "before\n" and (root / "link.md").is_symlink()
 
 
+def test_a_temporary_the_failed_commit_cannot_remove_neither_masks_its_failure_nor_is_left_silently(
+    q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A commit that fails, whose temporary cannot be removed just then (its folder being swapped), raises its own failure rather than the removal's, and leaves the act begun, so recovery clears the temporary and undoes the act."""
+    import errno
+
+    root, history = q
+    real_rename, real_unlink, real_os_unlink, calls = writes._rename, Path.unlink, os.unlink, [0]
+
+    def rename(tmp: Path, target: Path) -> None:
+        calls[0] += 1
+        if calls[0] == 2:
+            raise RuntimeError("the disk is full")
+        real_rename(tmp, target)
+
+    def swapped(name: str) -> bool:
+        return name.startswith(".b.tex.") and name.endswith(writes.TEMP)
+
+    def unlink(self: Path, missing_ok: bool = False) -> None:
+        if swapped(self.name):
+            raise OSError(errno.EBUSY, "the folder is being swapped", str(self))
+        real_unlink(self, missing_ok=missing_ok)
+
+    def os_unlink(path: Any, *args: Any, **kw: Any) -> None:
+        if swapped(os.path.basename(path)):
+            raise OSError(errno.EBUSY, "the folder is being swapped", path)
+        real_os_unlink(path, *args, **kw)
+
+    monkeypatch.setattr(writes, "_rename", rename)
+    monkeypatch.setattr(Path, "unlink", unlink)
+    monkeypatch.setattr(writes.os, "unlink", os_unlink)
+    with pytest.raises(RuntimeError, match="the disk is full"), writes.act(root, history, "restore") as w:
+        w.replace("drafting/a.tex", b"A\n")
+        w.replace("drafting/b.tex", b"B\n")
+    monkeypatch.undo()
+    assert (root / "drafting/a.tex").read_bytes() == b"one\r\ntwo\r\nthree\r\n"
+    assert (root / "drafting/b.tex").read_bytes() == b"alpha\nbeta\n"
+    assert len(temps(root)) == 1 and [e["kind"] for e in writes.unsettled(root, history)] == ["restore"]
+    (said,) = writes.recover(root, history)
+    assert said.startswith("undid restore"), said
+    assert not temps(root) and not writes.unsettled(root, history)
+
+
 def test_a_link_that_cannot_be_followed_is_written_through_by_no_act(
     q: tuple[Path, Path], monkeypatch: pytest.MonkeyPatch
 ) -> None:

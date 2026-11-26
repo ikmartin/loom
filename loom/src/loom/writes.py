@@ -609,7 +609,9 @@ def _install(root: Path, rel: str, data: bytes | None, expect: bytes | None, mod
             raise WriteRefused("changed", f"{rel} changed while loom was writing it; nothing was written")
         _rename(tmp, target)
     except Exception:
-        tmp.unlink(missing_ok=True)
+        # a temporary that cannot be removed just now is left for the commit's own sweep, never raised over the failure
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
         raise
     _flush_dir(target.parent)
 
@@ -2130,12 +2132,17 @@ class Act:
         except Exception as exc:
             # each file already written goes back while it holds what loom wrote; one changed since is the person's
             kept = [rel for rel in reversed(done) if not _put_back(self.root, rel, self.before.get(rel), changed[rel])]
+            # a temporary that cannot be removed just now leaves the act begun, so recovery clears it (`_clear_temps_at`); the act's own failure is what is raised
+            littered = False
             for rel in changed:
                 for tmp in _temps(self.root, rel):
-                    tmp.unlink(missing_ok=True)
+                    try:
+                        tmp.unlink(missing_ok=True)
+                    except OSError:
+                        littered = True
             _prune(self.root, self.history, [rel for rel in done if self.before.get(rel) is None and rel not in kept])
             _remove_folders(self.root, made)
-            if not kept:
+            if not kept and not littered:
                 why = exc.message if isinstance(exc, WriteRefused) else f"{type(exc).__name__}: {exc}"
                 self.journal.append(self.root, {"event": "aborted", "act": self.id, "when": stamp(), "why": why})
             # else the act stays begun: recovery reports it, and its edits wait until the person has looked
