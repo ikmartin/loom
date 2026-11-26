@@ -231,8 +231,12 @@ export const review = {
 		paper: 'the paper',
 		lean: 'Lean, as Lean prints it',
 		reading: (by: string) => `${by}’s reading`,
-		/** Over a part of notation the statement defines. */
-		inStatement: 'defined in the statement:',
+		/** The parts table's head over the declaration of loom's record each part reads. */
+		reads: 'the Lean it reads',
+		/** Under the parts table's title: whose reading it is, and that nothing checks it. */
+		readingBy: (by: string, date: string) => `${by} read the Lean on ${date}. Nothing checks a reading against the Lean: your yes is to the Lean above.`,
+		/** Under the parts table's title, once loom checked the Lean again after the agent read it. */
+		readingStale: (by: string, date: string) => `${by} read an earlier Lean, on ${date}; loom has checked the Lean again since, so this reading may not say what the Lean above says.`,
 		/** For notation from the person's macros. */
 		fromMacros: 'notation from your macros, defined by no result',
 		/** A fold: the results the statement uses that the person attested already. */

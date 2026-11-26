@@ -242,15 +242,18 @@ test("a Lean statement to attest shows the statement beside loom's Lean, each de
 	await expect(balanced).toContainText('You attested its Lean on 12 Nov.');
 	await expect(defs.locator(`tr[data-lean="Quiver'.cycleSign"]`)).toContainText('Defined in the Lean only, standing for no result, so your yes covers it.');
 	await expect(defs.locator(`tr[data-lean="Quiver'.sameWay"] pre.lean`)).toHaveText("def Quiver'.sameWay");
-	// the agent's reading, part by part, carries no Lean of its own
-	const parts = lemma.locator('table.att:not(.defs)');
+	// the agent's reading, part by part, drawn as that agent's: each part names the declaration of loom's record it reads and carries no Lean of its own
+	await expect(lemma.getByTestId('attest-reading')).toHaveText('Claude Code Agent read the Lean on 21 Nov. Nothing checks a reading against the Lean: your yes is to the Lean above.');
+	const parts = lemma.getByTestId('attest-parts');
+	await expect(parts.locator('th')).toHaveText(['', 'your draft', 'the Lean it reads', 'Claude Code Agent’s reading']);
 	await expect(parts.locator('tbody tr')).toHaveCount(4);
+	await expect(parts.locator('tr[data-lean="Weighting.IsBalanced.eq_cycleSign_mul"]')).toContainText('(ii)');
 	await expect(parts).toContainText('notation from your macros, defined by no result');
 	await expect(parts.locator('pre.lean')).toHaveCount(0);
 	await lemma.getByRole('button', { name: /It uses Definitions 2.1 and 2.3, which you attested on 12 Nov./ }).click();
 	await expect(lemma).toContainText('Definition 2.3, Balanced');
-	await expect(lemma).toContainText('Claude Code found');
-	await expect(lemma).toContainText("Yes covers parts (i) and (ii), ε and supp. Lemma 3.3 then reads formalized. It covers Quiver'.cycleSign and Quiver'.sameWay too, which the Lean defines alone.");
+	await expect(lemma).toContainText('Claude Code Agent found');
+	await expect(lemma).toContainText("Yes covers parts (i), (ii) and ε, supp. Lemma 3.3 then reads formalized. It covers Quiver'.cycleSign and Quiver'.sameWay too, which the Lean defines alone.");
 	await lemma.getByRole('button', { name: 'no, it differs…' }).click();
 	await lemma.getByPlaceholder('what the Lean gets wrong').fill('(ii) should fix a₀ first');
 	await lemma.getByRole('button', { name: 'ask an agent to restate' }).click();
@@ -410,7 +413,9 @@ test("the review's round: locate washes the words found at reading size, a page 
 	const prop = page.getByTestId('review-row').filter({ hasText: 'Smith 2024 · Proposition 3.4' });
 	await prop.getByRole('button', { expanded: false }).first().click();
 	await expect(prop).toContainText('Smith 2024, as the paper has it');
-	await expect(prop.locator('table.att:not(.defs) th').nth(1)).toHaveText('the paper');
+	await expect(prop.getByTestId('attest-parts').locator('th').nth(1)).toHaveText('the paper');
+	// a reading of an earlier Lean says so
+	await expect(prop.getByTestId('attest-reading')).toHaveText('Claude Code Agent read an earlier Lean, on 20 Nov; loom has checked the Lean again since, so this reading may not say what the Lean above says.');
 	await expect(prop.getByTestId('attest-definitions').locator('th').nth(1)).toHaveText('in the paper');
 	await expect(prop).toContainText('Does the Lean say what the paper says?');
 	await expect(prop).not.toContainText('as you wrote it');

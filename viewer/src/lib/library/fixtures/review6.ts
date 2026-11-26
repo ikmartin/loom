@@ -110,27 +110,33 @@ export function review6(refs: Record<string, string>): ReviewFixture {
 			{ name: "Quiver'.cycleSign", kind: 'def', shown: "def Quiver'.cycleSign (Q : Quiver') (a₀ a : Q.Arrow) : ℤ :=\n  fun Q a₀ a => if Q.sameWay a₀ a then 1 else -1", stands_for: null },
 			{ name: "Quiver'.sameWay", kind: 'def', shown: null, stands_for: null }
 		],
-		parts: [
-			{ part: '(i)', draft: String.raw`if $\operatorname{supp} w$ is a forest, then $w = 0$;`, reading: String.raw`If $w$ is balanced and the arrows where $w$ is not zero form a forest, then $w$ is zero on every arrow.`, by: 'Claude Code' },
-			{ part: '(ii)', draft: String.raw`if the underlying graph of $Q$ is a cycle, then $w(a) = \varepsilon(a)\, w(a_0)$ for every arrow $a$.`, reading: String.raw`If the underlying graph of $Q$ is a single cycle, then for any arrow $a_0$, each arrow carries $\pm$ the weight of $a_0$, the sign saying whether it points the same way round the cycle.`, by: 'Claude Code' }
-		],
-		notation: [
-			{ part: 'ε', draft: String.raw`$\varepsilon(a) = \pm 1$ as $a$ agrees with the orientation of $a_0$ round the cycle`, reading: String.raw`$+1$ if $a$ and $a_0$ run the same way round the cycle, $-1$ otherwise.`, from: 'statement' },
-			{ part: 'supp', reading: String.raw`The arrows on which $w$ is not zero, as Mathlib defines the support of a function.`, from: 'macros' }
-		],
+		notation: [{ part: 'supp', from: 'preamble', attested: false }],
 		uses_attested: [{ result: 'def:quiver', name: 'Definition 2.1', title: 'Quiver', at: '2026-11-12T10:40:00Z' }, { result: 'def:balanced', name: 'Definition 2.3', title: 'Balanced', at: '2026-11-12T10:40:00Z' }],
 		supporting: ['Weighting.exists_leaf_of_isForest', 'Weighting.IsBalanced.restrict', "Quiver'.cycleSign_mul_self"],
-		difference: { by: 'Claude Code', text: 'One difference. The draft fixes no a₀ in (ii); Lean takes a₀ as given. The statement holds for every choice of a₀, so the two say the same if (ii) is read “for any arrow a₀”.' }
+		// an agent's: a second agent's reading of loom's Lean, each part naming the declaration it reads
+		account: {
+			by: 'Claude Code Agent',
+			at: '2026-11-21T17:52:30Z',
+			observation: 'ev-2026-11-21-l3an9e',
+			stale: false,
+			parts: [
+				{ part: '(i)', draft: String.raw`if $\operatorname{supp} w$ is a forest, then $w = 0$;`, declaration: 'Weighting.IsBalanced.eq_zero_of_isForest', reading: String.raw`If $w$ is balanced and the arrows where $w$ is not zero form a forest, then $w$ is zero on every arrow.` },
+				{ part: '(ii)', draft: String.raw`if the underlying graph of $Q$ is a cycle, then $w(a) = \varepsilon(a)\, w(a_0)$ for every arrow $a$.`, declaration: 'Weighting.IsBalanced.eq_cycleSign_mul', reading: String.raw`If the underlying graph of $Q$ is a single cycle, then for any arrow $a_0$, each arrow carries $\pm$ the weight of $a_0$, the sign saying whether it points the same way round the cycle.` },
+				{ part: 'ε', draft: String.raw`$\varepsilon(a) = \pm 1$ as $a$ agrees with the orientation of $a_0$ round the cycle`, declaration: "Quiver'.cycleSign", reading: String.raw`$+1$ if $a$ and $a_0$ run the same way round the cycle, $-1$ otherwise.` }
+			],
+			difference: 'One difference. The draft fixes no a₀ in (ii); Lean takes a₀ as given. The statement holds for every choice of a₀, so the two say the same if (ii) is read “for any arrow a₀”.'
+		}
 	};
 	bodies['attest:tq-00K5'] = {
 		observation: 'ev-2026-11-21-k5ob2q',
 		statement: frag('smith-34', p(`<b>Proposition 3.4.</b> <em>Let ${m('W')} be a widget as in Definition 2.1. Then ${m('W')} lies in a ball about the origin.</em>`)),
 		lean: [{ name: 'Smith.widget_bounded', kind: 'axiom', shown: 'axiom Smith.widget_bounded (W : Smith.Widget) : ∃ r, W.carrier ⊆ Metric.ball 0 r' }],
 		definitions: [{ name: 'Smith.Widget', kind: 'structure', shown: 'structure Smith.Widget : Type\n  | Smith.Widget.mk (carrier : Set (EuclideanSpace ℝ (Fin 2))) (compact : IsCompact carrier) : Smith.Widget', stands_for: { result: 'tq-00A4', name: 'Definition 2.1', statement: { body: String.raw`A \emph{widget} is a compact subset of the plane.` }, attested: null } }],
-		parts: [{ part: '', draft: String.raw`Let $W$ be a widget as in Definition 2.1. Then $W$ lies in a ball about the origin.`, reading: String.raw`Every widget is contained in some ball centred at the origin.`, by: 'Claude Code' }],
 		notation: [],
 		uses_attested: [],
-		supporting: []
+		supporting: [],
+		// read before loom checked this Lean again: the reading is of an earlier Lean
+		account: { by: 'Claude Code Agent', at: '2026-11-20T09:12:00Z', observation: 'ev-2026-11-20-k5old1', stale: true, parts: [{ part: '', draft: String.raw`Let $W$ be a widget as in Definition 2.1. Then $W$ lies in a ball about the origin.`, declaration: 'Smith.widget_bounded', reading: String.raw`Every widget is contained in some ball centred at the origin.` }], difference: null }
 	};
 	bodies['attested-changed:cor:cycle'] = {
 		observation: 'ev-2026-11-20-c35obs',
