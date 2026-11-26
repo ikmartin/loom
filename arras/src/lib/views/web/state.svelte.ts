@@ -1,4 +1,4 @@
-// What the Web remembers while the person moves between views: its scope and draft, its form, the list's order, search and open groups, the result in focus and the trail of results followed, and the reads on screen. Kept in this module, since the column and the view both draw from it and a view is taken down when another is shown. Whether the source serves the Web's reads is asked once.
+// What the Web remembers while the person moves between views: its scope and draft, its form, the list's order, search and open groups, the column's results in graph form with their search and open groups, the result in focus and the trail of results followed, and the reads on screen. Kept in this module, since the column and the view both draw from it and a view is taken down when another is shown. Whether the source serves the Web's reads is asked once.
 
 import { SvelteMap, SvelteSet } from 'svelte/reactivity';
 import * as api from '$lib/library/api';
@@ -28,8 +28,15 @@ class WebState {
 	served = $state<boolean | null>(null);
 	/** The person's results chosen to formalize. */
 	chosen = new SvelteSet<string>();
+	/** In graph form, the column's search of results, and its groups opened (every group starts folded there). */
+	pq = $state('');
+	picksOpen = new SvelteSet<string>();
+	/** Whether the Web's column is open: set by the column while it stands, since the frame takes it down when it folds. */
+	columnOpen = $state(false);
 
 	list = new Read<WebList>();
+	/** The column's results in graph form: `web-list` by document, whatever order the list is in. */
+	picks = new Read<WebList>();
 	focus = new Read<WebFocus>();
 	graph = new Read<WebGraph>();
 
@@ -85,6 +92,7 @@ class WebState {
 	choose(scope: WebScope): void {
 		this.scope = scope;
 		this.turned.clear();
+		this.picksOpen.clear();
 		this.groups.clear();
 	}
 }

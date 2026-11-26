@@ -21,7 +21,11 @@ export const web = {
 		form: 'Form',
 		/** The two forms. */
 		list: 'list',
-		graph: 'graph'
+		graph: 'graph',
+		/** In graph form, the column's line over the scope's results. */
+		results: 'Results',
+		/** In graph form, the search field over the column's results. */
+		find: 'find a result'
 	},
 	list: {
 		/** The search field over the list. */
@@ -108,6 +112,10 @@ export const web = {
 		none: 'nothing'
 	},
 	graph: {
+		/** In the graph's place while no result is chosen and the column is open. */
+		choose: 'Choose a result in the column to see what it uses and what uses it.',
+		/** In the graph's place while no result is chosen and the column is folded. */
+		openColumn: 'Open the column and choose a result to see what it uses and what uses it.',
 		/** The graph's column heads. */
 		back: 'two steps back',
 		uses: 'what it uses',

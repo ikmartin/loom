@@ -1,10 +1,16 @@
 <script lang="ts">
-	// The Web's column (7a, 7b): its scope, the library, a draft, a draft and what it rests on, or everything, with the choice of draft under the two that need one; and its form, list or graph.
+	// The Web's column (7a, 7b): its scope, the library, a draft, a draft and what it rests on, or everything, with the choice of draft under the two that need one; its form, list or graph; and in graph form the scope's results to choose from (`WebResults`). While it stands it tells the Web it is open, so the graph's place can say where to choose a result.
 	import { store } from '$lib/manifest/client.svelte';
 	import type { WebScope } from '$lib/library/types';
 	import { isAgentDocument } from '$lib/manifest/documents';
 	import { wb } from '$lib/views/web/state.svelte';
 	import { web as words } from '$lib/words/web';
+	import WebResults from './WebResults.svelte';
+
+	$effect(() => {
+		wb.columnOpen = true;
+		return () => (wb.columnOpen = false);
+	});
 
 	const SCOPES: WebScope[] = ['library', 'draft', 'deps', 'all'];
 	// the person's drafts; the one shown is the quilt's main draft until another is chosen
@@ -29,12 +35,15 @@
 		<button type="button" class:on={wb.form === 'list'} aria-pressed={wb.form === 'list'} data-testid="web-form-list" onclick={() => (wb.form = 'list')}>{words.column.list}</button>
 		<button type="button" class:on={wb.form === 'graph'} aria-pressed={wb.form === 'graph'} data-testid="web-form-graph" onclick={() => (wb.form = 'graph')}>{words.column.graph}</button>
 	</span>
+	{#if wb.form === 'graph'}<WebResults />{/if}
 </div>
 
 <style>
 	.wb-col {
 		flex: 1;
 		min-height: 0;
+		display: flex;
+		flex-direction: column;
 		overflow: auto;
 		margin: 0 -8px;
 		padding: 0 8px 10px;
@@ -83,6 +92,8 @@
 		font: inherit;
 	}
 	.seg {
+		align-self: flex-start;
+		flex: none;
 		display: inline-flex;
 		border: 1px solid var(--rule);
 		border-radius: 7px;

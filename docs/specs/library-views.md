@@ -387,7 +387,9 @@ From: scan, index, evidence, lean. Cost: 20 ms, under 10 KB.
 
 ### 5.5 The graph (7b)
 
-**Drawn.** Four columns: two steps back, what it uses, the focus, what uses it; a solid line for a use by a statement, a dashed one for a use by a proof; a column of more than six draws five and "and 3 more · in the list"; the focus's card under the graph at full width.
+**Drawn.** Four columns: two steps back, what it uses, the focus, what uses it; a solid line for a use by a statement, a dashed one for a use by a proof; a column of more than six draws five and "and 3 more · in the list"; the graph at the view's full width, and the focus's card under it at full width.
+
+The results to choose from are the column's, under Form, in graph form only: "Results", a search ("find a result", `web-search`), then the scope's results in paper order grouped by document as the list draws them `by document` (`web-list` by document, a group's rows `web-group` when it opens), every group folded until opened; there is no `by status` here. A row puts its result in focus, so the graph is drawn again and the trail grows; the result in focus is marked in the column, its group opened and kept scrolled into view, whether it was chosen there or by a box in the graph. Until a result is chosen the graph's place says "Choose a result in the column to see what it uses and what uses it.", or, with the column folded, "Open the column and choose a result to see what it uses and what uses it."
 
 **Read `web-graph`.** Given the scope and `{"result": RESULT}`; each column carries at most six results, and a column of more is sent five with the count of the rest in `more`, which the viewer also holds to whatever it is sent; answers `{"gen", "focus": ROW, "excerpt": "rank 𝒵(Q) = |A(Q)| − |V(Q)| + c", "columns": {"back": [ROW], "uses": [ROW], "used_by": [ROW]}, "more": {"back": 0, "uses": 0, "used_by": 0}, "edges": [{"from": RESULT, "to": RESULT, "proof": false}]}`, the edges only among what is drawn, each `from` a result that uses `to`, and `excerpt` the statement's first line in plain words, as search indexes them. The card under it is `web-focus`. Cost: 20 ms.
 
