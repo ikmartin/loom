@@ -21,6 +21,8 @@ from loom.paths import ANNOTATION_LOG, ANNOTATION_TYPES, ASK_LOG, EDIT_LOG, EVID
 from loom.records.annotations import Annotation, Record, load_records
 from loom.records.ids import repeated
 from loom.records.ledger import AcceptRow, latest_rows, read_ledger
+from loom.records.mdtext import SUFFIXES as MARKDOWN
+from loom.records.mdtext import is_markdown
 from loom.records.locate import block_hash, follow
 from loom.records.selectors import CONTEXT, Selector, _common_prefix_len, _common_suffix_len, resolve_selector
 from loom.records.snapshots import read_snapshot
@@ -608,6 +610,9 @@ class Records:
                 if a.target_key not in result.nodes and (a.page is not None or self._work(result, a, works)):
                     out.append(self._on_pdf_or_work(result, a, rec, works))
                     continue
+                if a.target_key not in result.nodes and is_markdown(a.target_key):
+                    out.append(self._on_markdown(a, rec))
+                    continue
                 # a document named by path is wherever the history's moves have taken it
                 in_doc = (result.current_document(a.in_doc) or a.in_doc) if a.in_doc else None
                 target = a.target_key
@@ -709,6 +714,17 @@ class Records:
             return ResolvedAnnotation(a, rec, None, True, recorded, ref, page=a.anchor.page)
         n, span = found
         return ResolvedAnnotation(a, rec, span, False, recorded, ref, page=n, refound=True)
+
+    def _on_markdown(self, a: Annotation, rec: Record) -> ResolvedAnnotation:
+        """An annotation on a Markdown file, by its path: its words found in the file as it is now (`mdtext.resolve`), detached when they are gone or the file is; one on the whole file is never detached while the file stands."""
+        from loom.records.mdtext import resolve, text_of
+
+        text = text_of(self.root, a.target_key)
+        if text is None:
+            return ResolvedAnnotation(a, rec, None, True, self._recorded(a, None), target=a.target_key)
+        span = resolve(text, a.selector) if a.selector is not None else None
+        detached = a.selector is not None and span is None
+        return ResolvedAnnotation(a, rec, span, detached, self._recorded(a, text), target=a.target_key)
 
     @staticmethod
     def _on_kept(
@@ -1094,8 +1110,8 @@ class Records:
                     "work": res.work or None,
                     # where it stands now: the page it was found again on, on a changed PDF
                     "page": res.page or (a.anchor.page if a.anchor else a.page),
-                    # a project PDF, by its path
-                    "file": a.target_key if a.target_key.lower().endswith(".pdf") else None,
+                    # a project PDF or a Markdown file, by its path
+                    "file": a.target_key if a.target_key.lower().endswith((".pdf", *MARKDOWN)) else None,
                 },
                 # the document a claim about a node is read in, or null for the node wherever it appears (plan 0.15, decision 9); where the history's moves have taken it, so a viewer draws it on the document as it is now
                 "in": res.in_doc,
