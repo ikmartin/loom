@@ -419,6 +419,54 @@ export const review = {
 		/** Over a copy opened from Proposed edits: back to the list. */
 		back: '‹ Proposed edits',
 	},
+	/** Settling a write loom could neither finish nor undo, on its notice in Problems (`SettleLeft`): the control, the preview drawn from `write-settle-preview`'s fields, and what is said after. Never an id, a digest, a command, or loom's own sentence. */
+	settle: {
+		/** The control on the notice; it asks what settling would do and writes nothing. */
+		button: 'Settle as it stands',
+		/** Hover card on it. */
+		buttonHover: 'See what settling it leaves and records before anything is done.',
+		/** While the preview is asked for. */
+		reading: 'Reading what settling it would do…',
+		/** The preview's first line: what settling never does. `kind` is the write's own name, "a Keep", "an import". */
+		lead: (kind: string) => `Settling ${kind || 'this write'} as it stands writes none of your files.`,
+		/** Over the person's files the write touched. */
+		files: (n: number) => (n === 1 ? 'This file stays exactly as it is now:' : 'These files stay exactly as they are now:'),
+		/** Over the suggested edits the write wrote or undid. */
+		edits: (n: number) => (n === 1 ? 'This suggested edit is recorded as your file shows it:' : 'These suggested edits are recorded as your files show them:'),
+		/** One suggested edit: whose and what (`words`), what it becomes by the preview's `outcome`, and why, as loom found it in the file; an outcome this viewer does not know is said as left. */
+		edit: (words: string, outcome: string, why: string) => {
+			const becomes = { kept: 'kept', open: 'open again, for you to keep or discard', closed: 'closed, as no longer applying' }[outcome] ?? 'left as it is';
+			return `${words}: ${becomes}${why ? `, since ${why}` : ''}.`;
+		},
+		/** What becomes of the version of your files the write began, by the preview's `history`; '' and `recorded` say nothing. */
+		history: {
+			lands: 'The version loom kept of your files just before this write is recorded in your history.',
+			removed: 'The version loom began of your files just before this write was never recorded, so it is not kept in your history.'
+		} as Record<string, string>,
+		/** Where the write touched no file loom can name and no suggested edit: the notice is all that goes. */
+		nothing: 'It decides nothing of your suggested edits and keeps no version; it only takes this notice away.',
+		/** The preview's confirming button. */
+		confirm: 'Settle it',
+		/** The preview's button that closes it, nothing done. */
+		cancel: 'Cancel',
+		/** While it settles. */
+		busy: 'Settling…',
+		/** Said after it is settled, over Problems: what was done, in counts, never loom's sentence. */
+		done: (outcomes: string[], history: string) => {
+			const counts = (['kept', 'open', 'closed'] as const).map((o) => [o, outcomes.filter((x) => x === o).length] as const).filter(([, n]) => n);
+			const said = { kept: 'kept', open: 'open again', closed: 'closed' };
+			const edits = counts.length ? ` Suggested edits: ${counts.map(([o, n]) => `${n} ${said[o]}`).join(', ')}.` : '';
+			const version = history === 'lands' ? ' Its version is recorded in your history.' : history === 'removed' ? ' The version it began is not kept.' : '';
+			return `Settled as it stands: none of your files was written.${edits}${version}`;
+		},
+		/** Why it was not settled or previewed, by loom's refusal code; any other code says the frame's word for it. */
+		refused: {
+			'author-only': 'Only you can settle a write; loom does not take it from an agent.',
+			'no-such-act': 'That write is no longer waiting to be settled, so nothing was done.',
+			'not-left': 'Loom settles that write itself the next time it writes, so there is nothing to decide.',
+			changed: 'A file changed while it was being settled, so nothing was done. Look at what settling does now, and settle it again.'
+		} as Record<string, string>
+	},
 	statement: {
 		/** In place of a statement whose rendering could not be read. */
 		missing: 'This text could not be read.'
