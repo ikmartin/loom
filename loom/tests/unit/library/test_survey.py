@@ -1502,3 +1502,19 @@ def test_a_result_naming_a_display_outside_every_result_by_any_ref_command_is_ma
         "l:d": [],
         "l:e": [],
     }
+
+
+def test_an_opening_ends_at_a_reference_a_citation_or_an_inclusion() -> None:
+    """The review's D-11: a key the PDF never prints is no opening word, and what it prints there instead is not in the source, so the opening stops there as at a formula; a label prints nothing and is passed over."""
+    from loom.library.survey import _opening
+    from loom.refs.search import _loose
+
+    assert _opening("Every knot considered in Lemma~\\ref{lem:wh} is slice.") == _loose(
+        "Every knot considered in Lemma"
+    )
+    assert _opening("Every gadget tower of \\cite[Def.~B.2]{Kov99} is finite.") == _loose("Every gadget tower of")
+    assert _opening("Every widget we study here \\input{/abs/path} is compact.") == _loose("Every widget we study here")
+    assert _opening("\\label{lem:x}Every widget is compact and closed.") == _loose(
+        "Every widget is compact and closed."
+    )
+    assert _opening("By \\eqref{eq:bound} the map is onto.") is None, "too few letters before the reference"

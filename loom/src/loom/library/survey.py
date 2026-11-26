@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 15
+VERSION = 16
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -859,11 +859,18 @@ def _words(text: str) -> list[str]:
 
 
 def _opening(text: str, *, least: int = 12) -> str | None:
-    """The words a statement, a proof or a heading opens with, before its first formula or environment, as `refs.search` compares page text; None when there are fewer than `least` letters to find it by."""
+    """The words a statement, a proof or a heading opens with, before its first formula, environment, cross-reference, citation or inclusion, as `refs.search` compares page text; None when there are fewer than `least` letters to find it by.
+
+    A reference's or a citation's argument is a key the PDF never prints, and what it prints instead ("Corollary 2.3", "[4]") is not in the source, so the opening stops there; a `\\label` prints nothing and is passed over.
+    """
     from loom.refs.search import _loose
 
-    text = re.sub(r"\\(?:label|ref|eqref|cref|Cref|autoref|cite\w*)\*?\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}", " ", text)
-    head = re.split(r"\$|\\\[|\\\(|\\begin\s*\{", text, maxsplit=1)[0]
+    text = re.sub(r"\\label\*?\s*\{[^{}]*\}", " ", text)
+    head = re.split(
+        r"\$|\\\[|\\\(|\\begin\s*\{|\\(?:[A-Za-z]*ref(?:range)?|[A-Za-z]*[Cc]ite[A-Za-z]*|input|include)(?![A-Za-z])",
+        text,
+        maxsplit=1,
+    )[0]
     head = re.sub(r"\\[A-Za-z@]+\*?|[{}~]", " ", head)
     words = _loose(" ".join(head.split()[:10]))
     return words if len(words) >= least else None
