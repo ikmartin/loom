@@ -437,7 +437,7 @@ def test_a_server_that_cannot_start_names_what_it_could_not_do(tmp_path: Path, w
     from tests.unit._quilts import demo
 
     q = demo(tmp_path)
-    env = {**os.environ, "LOOM_ARRAS_BUNDLE": str(bundle(tmp_path / "bundle", "1200"))}
+    env = {**os.environ, "LOOM_VIEWER_BUNDLE": str(bundle(tmp_path / "bundle", "1200"))}
     port = "0"
     taken = None
     if what == "the viewers":

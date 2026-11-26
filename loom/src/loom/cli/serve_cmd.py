@@ -42,7 +42,7 @@ def serve(port: int | None, open_browser: bool, no_compile: bool, viewer: str | 
 
     A quilt an earlier loom made is served waiting: the viewer offers to bring it forward, as loom upgrade does, and nothing is built until it has.
     """
-    from loom.arras_bundle import BundleEnvError
+    from loom.viewer_bundle import BundleEnvError
 
     quilt = open_quilt(quilt_path, older=True)
     if port is None:
@@ -53,12 +53,12 @@ def serve(port: int | None, open_browser: bool, no_compile: bool, viewer: str | 
     try:
         bundle = Path(viewer).expanduser().resolve() if viewer else locate_bundle()
     except BundleEnvError as e:
-        raise EnvError(f"{e}: point it at a built arras (the directory holding index.html), or unset it") from None
+        raise EnvError(f"{e}: point it at a built viewer (the directory holding index.html), or unset it") from None
     if viewer and (bundle is None or not (bundle / "index.html").is_file()):
         raise EnvError(f"--viewer {viewer} has no index.html; build the viewer there first, then start loom serve")
     if bundle is None:
         raise EnvError(
-            "the arras viewer bundle is not installed: set LOOM_ARRAS_BUNDLE, or use a loom checkout with the vendored bundle"
+            "the viewer bundle is not installed: set LOOM_VIEWER_BUNDLE, or use a loom checkout with the vendored bundle"
         )
     running = open_url(quilt.root)
     if running:

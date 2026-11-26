@@ -65,7 +65,7 @@ def app_command(port: int, open_page: bool, install: bool, no_compile: bool) -> 
     bundle = locate_bundle()
     if bundle is None:
         raise EnvError(
-            "the arras viewer bundle is not installed: set LOOM_ARRAS_BUNDLE, or use a loom with the vendored bundle"
+            "the viewer bundle is not installed: set LOOM_VIEWER_BUNDLE, or use a loom with the vendored bundle"
         )
     extra = ("--no-compile",) if no_compile else ()
     home = Home(bundle, port, extra)

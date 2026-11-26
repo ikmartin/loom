@@ -223,5 +223,5 @@ def test_a_files_route_in_the_viewer_is_the_app_whatever_its_suffix(served) -> N
     """`/file/notes/fig.png` names a file item and ends in an asset's suffix; it is answered with the app, while a missing asset elsewhere is still a 404."""
     s, _, _ = served
     status, _, body = get(s.url + "file/notes/fig.png")
-    assert status == 200 and b"<title>arras</title>" in body
+    assert status == 200 and b"<title>viewer</title>" in body
     assert get(s.url + "missing.png")[0] == 404
