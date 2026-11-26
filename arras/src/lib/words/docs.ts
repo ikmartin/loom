@@ -72,7 +72,7 @@ export const docs = {
 		/** Asks an agent to read a stub. */
 		read: 'ask an agent to read it',
 		/** The column's message after asking. */
-		asked: 'Asked an agent to read it. It comes back in Review, under Digested results to check.'
+		asked: 'Asked an agent to read it. It comes back in Review, under Results to check.'
 	},
 	notes: {
 		/** The button in Docs' column that opens the notes tab. */
@@ -125,13 +125,13 @@ export const docs = {
 		stopsLine: 'This stops the request.',
 		/** What keeps the result from reading formalized, and where each waits. */
 		notRead: (what: string, many: boolean) => `${what} ${many ? 'have' : 'has'} not been read.`,
-		notReadWhere: (many: boolean) => (many ? 'Wait in Review, under Cited results to digest.' : 'Waits in Review, under Cited results to digest.'),
+		notReadWhere: (many: boolean) => (many ? "Wait in Review, under Cited results loom can't read." : "Waits in Review, under Cited results loom can't read."),
 		notChecked: (what: string, many: boolean) => `${what} ${many ? 'have' : 'has'} not been checked against ${many ? 'their papers' : 'its paper'}.`,
-		notCheckedWhere: (many: boolean) => (many ? 'Wait in Review, under Digested results to check.' : 'Waits in Review, under Digested results to check.'),
+		notCheckedWhere: (many: boolean) => (many ? 'Wait in Review, under Results to check.' : 'Waits in Review, under Results to check.'),
 		attest: (names: string, many: boolean) => `${names} ${many ? 'wait' : 'waits'} for you to attest ${many ? 'their' : 'its'} Lean statement.`,
 		attestWhere: 'In Review, under Lean statements to attest.',
 		attestedChanged: (names: string, many: boolean) => `${names} changed after you attested ${many ? 'their' : 'its'} Lean statement.`,
-		attestedChangedWhere: 'In Review, under Attested results that changed.',
+		attestedChangedWhere: 'In Review, under Lean statements to attest.',
 		/** A Lean statement the agent will write, which then waits for the person's word. */
 		attestAfter: (names: string, many: boolean) => `${names} will wait for you to attest ${many ? 'their' : 'its'} Lean statement once it is written.`,
 		/** A Lean that comes round, through what it rests on, to a result already asked of. */
@@ -171,9 +171,9 @@ export const docs = {
 		ask: (name: string) => `ask an agent to formalize ${name}`,
 		needsLabel: (name: string) => `add a label to ${name} first`,
 		/** Beside the button. */
-		task: (one: boolean) => (one ? 'It becomes one task in Review, under Waiting for an agent.' : 'One task a result in Review, under Waiting for an agent.'),
+		task: (one: boolean) => (one ? 'It becomes one task in Review, under Agents still working.' : 'One task a result in Review, under Agents still working.'),
 		/** The column's message after asking. */
-		asked: (name: string, one: boolean) => `Asked an agent to formalize ${name}. ${one ? 'It waits' : 'They wait'} in Review, under Waiting for an agent.`
+		asked: (name: string, one: boolean) => `Asked an agent to formalize ${name}. ${one ? 'It waits' : 'They wait'} in Review, under Agents still working.`
 	},
 	textSize: {
 		/** The text size control on an HTML draft's toolbar, its accessible name as a group, with the draft's name. */

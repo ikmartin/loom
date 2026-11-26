@@ -284,7 +284,7 @@ def _library_results(evidence: Evidence, web: Web, lean_now: Callable[[Record], 
 def _check(
     root: Path, evidence: Evidence, web: Web, library: LibraryWeb, lean_now: Callable[[Record], bool]
 ) -> list[Row]:
-    """Digested results to check (library-views.md §4.3, `check`): a row a work, its statements with a text not compared with their paper on their text now; and a row for each open correction an agent proposed, with the word diff of the two bodies.
+    """Results to check (library-views.md §4.3, `check`): a row a work, its statements with a text not compared with their paper on their text now; and a row for each open correction an agent proposed, with the word diff of the two bodies.
 
     No draft rests on a library result until citations resolve to results, so `rests` names no document yet and the rows are in the order of their works.
     """
@@ -324,7 +324,7 @@ def _check(
 def _cited(
     root: Path, drafts: DraftWeb, manifest: dict[str, Any], evidence: Evidence, library: LibraryWeb
 ) -> list[Row]:
-    """Cited results to digest (library-views.md §4.3, `cited`): each citation, in a block of the person's documents, of a library work that names no result of it, while no `mention` of it holds; its body the citing block and which of its citations it is. A stub a draft rests on is listed once citations resolve to results."""
+    """Cited results loom can't read (library-views.md §4.3, `cited`): each citation, in a block of the person's documents, of a library work that names no result of it, while no `mention` of it holds; its body the citing block and which of its citations it is. A stub a draft rests on is listed once citations resolve to results."""
     from loom.evidence.acts import bare_citation
     from loom.evidence.asks import mention_holds
     from loom.evidence.web import citations_in

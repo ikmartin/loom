@@ -194,7 +194,7 @@ test('the formalize panel from the Web: chosen results or the card, what stops t
 	await page.getByTestId('focus-formalize').click();
 	await expect(page.getByTestId('formalize-ask')).toHaveText('ask an agent to formalize Theorem 1');
 	await page.getByTestId('formalize-ask').click();
-	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to formalize Theorem 1. It waits in Review, under Waiting for an agent.');
+	await expect(page.getByTestId('column-message')).toContainText('Asked an agent to formalize Theorem 1. It waits in Review, under Agents still working.');
 	await expect(panel).toHaveCount(0);
 	await expect(page).toHaveURL(/\/web/);
 });
