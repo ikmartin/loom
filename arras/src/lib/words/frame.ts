@@ -43,6 +43,18 @@ export const frame = {
 		/** The column's head while the manifest has not come yet, in place of the quilt's name; also the browser tab's title meanwhile. */
 		unnamed: 'loom'
 	},
+	session: {
+		/** The column's footer, before the chosen session's name. */
+		writingIn: 'Writing in',
+		/** The column's footer where no session is chosen; also its hover text, folded. */
+		none: 'No session chosen',
+		/** The footer's accessible name: the session writes go into, and why writes that name one are refused where they are. */
+		label: (name: string, why: string) => `Writing in ${name}${why ? `: ${why}` : ''}`,
+		/** The footer's accessible name where no session is chosen, with why writes that name one are refused. */
+		labelNone: (why: string) => `No session chosen${why ? `: ${why}` : ''}`,
+		/** The picker the footer opens; its accessible name. */
+		picker: 'Sessions'
+	},
 	message: {
 		/** The column's message, its accessible name as a group. */
 		label: 'What was just done',
@@ -66,8 +78,8 @@ export const frame = {
 	marks: {
 		/** A result's paper mark, filled green: the person found loom's copy matches its paper. Also the mark's accessible name. */
 		checked: 'matches the paper',
-		/** A result's paper mark, an amber ring: digested and not compared with its paper yet. */
-		unchecked: 'not compared yet',
+		/** A result's paper mark, an amber ring: digested, its copy not yet checked against its paper, as Review's Results to check list it. */
+		unchecked: 'not yet checked against its paper',
 		/** A result's paper mark, a dotted ring: a stub, known and not read. */
 		stub: 'not read',
 		/** The flag on a place of a page the person marked to digest. */
