@@ -13,7 +13,8 @@
 	let busy = $state(false);
 
 	async function save(): Promise<void> {
-		if (busy || !draft.trim()) return;
+		if (!draft.trim()) return document.getElementById(editing ? 'home-name-edit' : 'home-name-field')?.focus();
+		if (busy) return;
 		busy = true;
 		const r = await call('quilt-name', { name: draft.trim() });
 		busy = false;
@@ -43,7 +44,7 @@
 		<label for="home-name-field">{words.name.ask}</label>
 		<div class="r">
 			<input id="home-name-field" class="field" placeholder={words.name.placeholder} bind:value={draft} onkeydown={(e) => e.key === 'Enter' && void save()} data-testid="home-name-field" />
-			<button type="button" class="btn primary" disabled={busy || !draft.trim()} onclick={() => void save()} data-testid="home-name-save">{words.name.save}</button>
+			<button type="button" class="btn primary" disabled={busy} onclick={() => void save()} data-testid="home-name-save">{words.name.save}</button>
 		</div>
 		{#if refused}<div class="refused">{refused}</div>{/if}
 	</div>
@@ -52,7 +53,7 @@
 		{#if editing}
 			<label for="home-name-edit">{words.name.label}</label>
 			<input id="home-name-edit" class="field" bind:value={draft} use:focus onkeydown={(e) => (e.key === 'Enter' ? void save() : e.key === 'Escape' && (editing = false))} data-testid="home-name-field" />
-			<button type="button" class="btn primary" disabled={busy || !draft.trim()} onclick={() => void save()} data-testid="home-name-save">{words.name.save}</button>
+			<button type="button" class="btn primary" disabled={busy} onclick={() => void save()} data-testid="home-name-save">{words.name.save}</button>
 			<button type="button" class="btn quiet" onclick={() => (editing = false)}>{words.name.cancel}</button>
 			{#if refused}<span class="refused">{refused}</span>{/if}
 		{:else}
@@ -78,6 +79,10 @@
 	.r {
 		display: flex;
 		gap: 8px;
+	}
+	.r .btn {
+		padding: 4px 11px;
+		border-radius: 7px;
 	}
 	.field {
 		border: 1px solid var(--rule);

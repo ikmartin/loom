@@ -31,7 +31,11 @@
 	onMount(() => {
 		if (drop) {
 			received = send(drop);
-			void received.then(() => (sent = true));
+			// a drop refused as it is sent (more than 1 GB) is said at once, in place of the form
+			void received.then((got) => {
+				sent = true;
+				if (!got.ok && at === 'form') refuse(got.code, got.message);
+			});
 		}
 		field?.focus();
 		field?.select();
@@ -67,7 +71,8 @@
 	}
 
 	async function create(): Promise<void> {
-		if (busy || !name.trim()) return;
+		if (!name.trim()) return field?.focus();
+		if (busy) return;
 		busy = true;
 		said = null;
 		let key = '';
@@ -221,7 +226,7 @@
 		<div class="wf">
 			{#if at === 'form' || at === 'question'}
 				<button type="button" class="btn quiet" onclick={onclose} data-testid="quilt-window-cancel">{words.window.cancel}</button>
-				<button type="button" class="btn primary" disabled={busy || !name.trim() || (drop !== null && !sent) || (at === 'question' && !chosen)} title={at === 'question' && !chosen ? words.window.chooseFirst : undefined} onclick={() => void create()} data-testid="quilt-window-create">{words.window.create}</button>
+				<button type="button" class="btn primary" disabled={busy || (drop !== null && !sent) || (at === 'question' && !chosen)} title={at === 'question' && !chosen ? words.window.chooseFirst : undefined} onclick={() => void create()} data-testid="quilt-window-create">{words.window.create}</button>
 			{:else if at === 'done'}
 				{#if job?.typeset === false && job.tex === 'none'}
 					<button type="button" class="btn" onclick={() => void repairTex()} data-testid="quilt-window-repair">{words.tex.repair}</button>
@@ -260,6 +265,10 @@
 		align-items: flex-start;
 		justify-content: center;
 		padding-top: 120px;
+		font-family: var(--sans);
+		font-size: 13px;
+		line-height: 1.45;
+		color: var(--ink);
 	}
 	.win {
 		width: 560px;

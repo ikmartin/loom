@@ -113,7 +113,10 @@ test('New quilt asks only the name and makes an empty quilt on the list', async 
 	const win = page.getByTestId('quilt-window');
 	await expect(win).toContainText('New quilt');
 	await expect(win).toContainText('In ~/Quilts');
-	await expect(page.getByTestId('quilt-window-create')).toBeDisabled();
+	// Create with no name made nothing: the name is asked
+	await page.getByTestId('quilt-window-create').click();
+	await expect(page.getByTestId('quilt-window-name')).toBeFocused();
+	await expect(win).toHaveAttribute('data-at', 'form');
 	await page.getByTestId('quilt-window-name').fill('Knot invariants');
 	await page.getByTestId('quilt-window-name').press('Enter');
 	await expect(win).toHaveAttribute('data-at', 'done', { timeout: 60_000 });
@@ -150,7 +153,9 @@ test("the person's name is asked once, then shown in the footer and changed ther
 	await expect(page.getByTestId('home-name')).toHaveCount(0);
 	const asked = page.getByTestId('home-name-asked');
 	await expect(asked).toContainText('Your name, as it appears beside your comments and decisions');
-	await expect(page.getByTestId('home-name-save')).toBeDisabled();
+	await page.getByTestId('home-name-save').click();
+	await expect(page.getByTestId('home-name-field')).toBeFocused();
+	await expect(asked).toBeVisible();
 	await page.getByTestId('home-name-field').fill('Maren Holt');
 	await page.getByTestId('home-name-save').click();
 	await expect(asked).toHaveCount(0);

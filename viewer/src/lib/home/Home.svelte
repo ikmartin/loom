@@ -214,7 +214,8 @@
 		font-weight: 500;
 		margin: 0 auto 0 0;
 	}
-	.homepage :global(.btn) {
+	.hhead .btn,
+	.hnote > .btn {
 		padding: 4px 11px;
 		border-radius: 7px;
 	}
