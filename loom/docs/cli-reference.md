@@ -77,7 +77,7 @@ SRC is not modified; the history records that the spine superseded it, so it def
 
 `loom doctor [OPTIONS]`
 
-Check the TeX toolchain and what loom needs of it, poppler, git, the author name and the viewer bundle; inside a quilt, also its engine, its generated files, its .gitignore and its config.
+Check the TeX toolchain and what loom needs of it, poppler, git, the author name and the viewer bundle; inside a quilt, also its engine, its generated files, its .gitignore, its config, and its Lean where formalization is on.
 
 Each item is ok, warn (works, but you will hit it) or fail (a command you need will refuse), with the command that fixes it. Exits 0 when nothing fails and 2 when anything does; under --strict a warning counts as a failure. Without --repair it writes nothing; a tool is run only to ask its version or test what loom needs of it, and one that has not answered in 10 s is reported as hung.
 
@@ -407,7 +407,7 @@ Turn formalization off for this quilt on this machine: loom runs no Lean here un
 
 Turn formalization on for this quilt on this machine: install elan, the Lean toolchain and Mathlib (about 11 GB and a few minutes the first time), and make the quilt's Lean project where it has none.
 
-Kept on this machine and never in the quilt, so a co-author who opens the quilt runs nothing until they turn it on themselves. It downloads and runs Lean's and Mathlib's own installers; the check that follows runs fenced.
+Kept on this machine and never in the quilt, so a co-author who opens the quilt runs nothing until they turn it on themselves. It downloads and runs Lean's and Mathlib's own installers; the check that follows runs fenced. From then, while `loom serve` runs, loom also checks the Lean again on its own once a statement it states or the Lean a record rests on changes and has been still for a minute.
 
 | option | description |
 |---|---|

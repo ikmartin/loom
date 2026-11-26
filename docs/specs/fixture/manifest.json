@@ -71,6 +71,12 @@
     "fits": "new mathematics or text from the author's plan or request (\"implement each example in section 8\", \"restate Section 7 for $M(X,\\tau)$, marking what still needs proof\").",
     "name": "draft",
     "path": ".loom/agents/instructions/modes/draft.md"
+   },
+   {
+    "edited": false,
+    "fits": "stating a result of the quilt in Lean and proving it there, or stating again a Lean the person said gets something wrong (a `formalize` or `restate` task in `loom tasks`, or \"formalize Lemma 4.2\").",
+    "name": "formalize",
+    "path": ".loom/agents/instructions/modes/formalize.md"
    }
   ]
  },
@@ -701,7 +707,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "682b13e46dff62e94132291533d5866a0c3b73f6b44fe0b1253bd31535a84338",
+   "hash": "9b8df581b4d3c9fa4817feb04d4f870c9233e5d701b0c631d6a0263f69c41058",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -716,7 +722,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "2bf15773d166ceba2ab1946d1633b59efbdc52e57b14318bbf4c58f253cd3cf6",
+   "hash": "4675a58adcdfbf3e41bb41e9cdb0c2f1dea0f1086592c7286d0ce9bd41451612",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -731,7 +737,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "99f192a7c3b2c67dc06a8693f931c517d911fb3d79270d4ebd67c7079df6b426",
+   "hash": "0954ad658716eb1bb07b3ded6087fa0b5b4a2aa210707ef578f4e597b05dff80",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
