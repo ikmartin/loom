@@ -11,18 +11,21 @@ async function open(page: Page): Promise<void> {
 }
 
 const count = (page: Page, testid: string) => page.getByTestId(testid).locator('.n');
-// round six's own rows and groups, apart from those of today's Your Changes, which Accepted results that changed and Proposed edits draw
+// round six's own rows and groups, apart from those of today's Your Changes, which Results to accept and Proposed edits draw
 const rows = (page: Page) => page.locator('[data-testid="review-row"][data-kind]');
 
 test('Everything lists what waits by who is waiting, and the column counts each kind alphabetically, the agents apart, two of them as Your Changes lists them', async ({ page }) => {
 	await open(page);
 	await expect(count(page, 'review-kind-all')).toHaveText('28');
 	const kinds = await page.getByTestId('review-column').locator('[data-testid^="review-kind-"]').evaluateAll((bs) => bs.map((b) => b.getAttribute('data-testid')!.slice(12) + ' ' + b.querySelector('.n')?.textContent));
-	// Accepted results that changed and Proposed edits count what their sections of the manifest's Your Changes list as waiting, not the fixture's rows
-	expect(kinds).toEqual(['all 28', 'accepted-changed 5', 'questions 2', 'attested-changed 2', 'cited 4', 'check 5', 'attest 2', 'fetch 3', 'edits 5', 'agents 6']);
+	// Results to accept and Proposed edits count what their sections of the manifest's Your Changes list as waiting, not the fixture's rows; Lean statements to attest counts the attested results that changed too
+	expect(kinds).toEqual(['all 28', 'accepted-changed 5', 'questions 2', 'cited 4', 'check 5', 'attest 4', 'fetch 3', 'edits 5', 'agents 6']);
 	const groups = await page.locator('[data-testid="review-group"][data-kind]').evaluateAll((gs) => gs.map((g) => g.getAttribute('data-kind')));
-	expect(groups).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'attested-changed', 'edits', 'agents']);
+	expect(groups).toEqual(['questions', 'fetch', 'cited', 'check', 'attest', 'accepted-changed', 'edits', 'agents']);
 	await expect(rows(page)).toHaveCount(18);
+	// under Lean statements to attest, the attested results that changed first, then those never attested
+	const order = await page.locator('[data-testid="review-group"][data-kind="attest"] ~ [data-testid="review-row"]').evaluateAll((rs) => rs.map((r) => r.getAttribute('data-kind')));
+	expect(order.slice(0, 4)).toEqual(['attested-changed', 'attested-changed', 'attest', 'attest']);
 	await expect(page.locator('[data-testid="your-changes"][data-part="accept"]')).toHaveCount(1);
 	await expect(page.locator('[data-testid="your-changes"][data-part="changes"]')).toHaveCount(1);
 	// the agents' group starts folded
@@ -218,12 +221,16 @@ test('a Lean statement to attest shows it part by part beside the Lean and the a
 	await lemma.getByRole('button', { name: 'yes, I attest it' }).click();
 	await expect(page.getByTestId('column-message')).toContainText('Lemma 3.3 attested.');
 	await expect(lemma).toHaveCount(0);
-	await expect(count(page, 'review-kind-attest')).toHaveText('1');
+	await expect(count(page, 'review-kind-attest')).toHaveText('3');
 });
 
 test('an attested definition that changed is asked about in three steps, and each result resting on it again', async ({ page }) => {
 	await open(page);
-	await page.getByTestId('review-kind-attested-changed').click();
+	await page.getByTestId('review-kind-attest').click();
+	// the attested results that changed come first, each saying so, then those never attested
+	const kinds = await rows(page).evaluateAll((rs) => rs.map((r) => r.getAttribute('data-kind')));
+	expect(kinds).toEqual(['attested-changed', 'attested-changed', 'attest', 'attest']);
+	for (const r of await page.locator('[data-testid="review-row"][data-kind="attested-changed"]').all()) await expect(r).toContainText('changed since you attested');
 	const def = page.getByTestId('review-row').filter({ hasText: 'main.tex · Definition 3.7' });
 	await expect(def).toContainText('changed since you attested it · 2 results rest on it');
 	await def.getByRole('button', { expanded: false }).first().click();
@@ -490,6 +497,7 @@ test('before any draft has compiled, no block in Review is named by its id: an u
 		for (const n of Object.values(m.nodes) as { numbers: Record<string, unknown> }[]) n.numbers = {};
 	});
 	await open(page);
+	await expect(page.getByTestId('review-kind-accepted-changed')).toHaveText(/^Results to accept/);
 	await page.getByTestId('review-kind-accepted-changed').click();
 	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');
 	await accept.locator('details').evaluateAll((ds) => ds.forEach((d) => ((d as HTMLDetailsElement).open = true)));
@@ -501,7 +509,7 @@ test('before any draft has compiled, no block in Review is named by its id: an u
 	for (const place of await page.getByTestId('change-where').allInnerTexts()) expect(place).not.toMatch(/\b[a-z]{1,4}-[0-9A-Z]{4}\b/);
 });
 
-test('Accepted results that changed and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
+test('Results to accept and Proposed edits draw the sections of Your Changes, and a draft narrows each', async ({ page }) => {
 	await open(page);
 	await page.getByTestId('review-kind-accepted-changed').click();
 	const accept = page.locator('[data-testid="your-changes"][data-part="accept"]');

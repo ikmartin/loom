@@ -2,7 +2,7 @@
 
 import type { MarkKind } from '$lib/marks/Mark.svelte';
 import { paperMark } from '$lib/marks/marks';
-import type { AskedOn, ReviewRow, TaskRow } from '$lib/library/types';
+import type { AskedOn, ReviewGroup, ReviewKind, ReviewRow, TaskRow } from '$lib/library/types';
 import { review as words } from '$lib/words/review';
 
 /** The names of what a row names by id (`names.svelte.ts`): undefined while unread, or for what nothing names. */
@@ -139,6 +139,24 @@ export function task(t: TaskRow, n: Names): string {
 		default:
 			return t.text ?? t.words ?? '';
 	}
+}
+
+/** The kinds the viewer shows: loom's, with attested results that changed shown among the Lean statements to attest. */
+export type ShownKind = Exclude<ReviewKind, 'attested-changed'> | 'agents';
+export interface ShownGroup extends ReviewGroup {
+	kind: ShownKind;
+}
+
+/** Loom's groups as the viewer shows them: the attested results that changed joined to the Lean statements to attest, ahead of those never attested, in the place of whichever comes first; each row keeps its own kind. */
+export function joined(groups: ReviewGroup[]): ShownGroup[] {
+	const changed = groups.filter((g) => g.kind === 'attested-changed').flatMap((g) => g.rows);
+	const fresh = groups.filter((g) => g.kind === 'attest').flatMap((g) => g.rows);
+	const out: ShownGroup[] = [];
+	for (const g of groups) {
+		if (g.kind !== 'attest' && g.kind !== 'attested-changed') out.push(g as ShownGroup);
+		else if (!out.some((o) => o.kind === 'attest')) out.push({ kind: 'attest', rows: [...changed, ...fresh] });
+	}
+	return out;
 }
 
 /** The cited results the rows hold, which `ask an agent to read all` asks for. */

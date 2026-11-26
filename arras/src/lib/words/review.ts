@@ -34,16 +34,15 @@ export const review = {
 	},
 	/** The kinds' names, in the column and over their groups in the list, and the hover card on each in the column. */
 	kinds: {
-		'accepted-changed': { name: 'Accepted results that changed', hover: 'Results you had accepted whose text has changed since, and those taken in from a copy or a pull. Read each, and accept it or not; those never accepted are folded beneath.' },
+		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or a pull. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
-		'attested-changed': { name: 'Attested results that changed', hover: 'Results whose statement, or a definition under it, changed after you attested the Lean. Say whether the Lean still states it.' },
 		cited: { name: 'Cited results to digest', hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
 		check: { name: 'Digested results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
-		attest: { name: 'Lean statements to attest', hover: "Lean has accepted these. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
+		attest: { name: 'Lean statements to attest', hover: "Results whose statement, or a definition under it, changed since you attested the Lean come first: say whether the Lean still states each. Then those Lean has accepted that you never attested. To attest is to give your word that the Lean statement says what your result says; only then does the result read 'formalized'." },
 		fetch: { name: 'Papers to fetch', hover: 'Papers an agent needs and could not download. Open each page, download the paper, and drop the file anywhere in loom.' },
 		edits: { name: 'Proposed edits', hover: "Changes waiting in your text, and agents' copies to take in. Keep or discard each." },
 		agents: { name: 'Waiting for an agent', hover: 'Work you asked of an agent that none has finished. Nothing here needs you.' }
-	} satisfies Record<ReviewKind | 'agents', { name: string; hover: string }>,
+	} satisfies Record<Exclude<ReviewKind, 'attested-changed'> | 'agents', { name: string; hover: string }>,
 	list: {
 		/** The list where a kind, or a kind for one draft, has nothing waiting. */
 		empty: 'Nothing waits here.',
@@ -345,9 +344,9 @@ export const review = {
 		openCopy: 'Review the copy',
 		/** Over a copy opened from Proposed edits: back to the list. */
 		back: '‹ Proposed edits',
-		/** Under Accepted results that changed, narrowed to a draft with no blocks to accept. */
+		/** Under Results to accept, narrowed to a draft with no blocks to accept. */
 		none: (doc: string) => `Nothing of ${file(doc)} waits to be accepted.`,
-		/** Under Accepted results that changed, over every draft's folded blocks, when none waits. */
+		/** Under Results to accept, over every draft's folded blocks, when none waits. */
 		nothing: 'Nothing waits to be accepted.'
 	},
 	statement: {

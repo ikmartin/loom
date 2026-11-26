@@ -1,14 +1,14 @@
 <script lang="ts">
 	// One kind's group under Everything: its name and count, folding; the tasks waiting for an agent start folded.
 	import Icon from '$lib/components/Icon.svelte';
-	import type { ReviewGroup } from '$lib/library/types';
 	import { review as words } from '$lib/words/review';
 	import { rv } from './state.svelte';
 	import Row from './Row.svelte';
 	import Task from './Task.svelte';
 	import ReadAll from './ReadAll.svelte';
+	import type { ShownGroup } from './rows';
 
-	let { group }: { group: ReviewGroup } = $props();
+	let { group }: { group: ShownGroup } = $props();
 	const folded = $derived(rv.folded.has(group.kind));
 </script>
 

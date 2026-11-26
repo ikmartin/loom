@@ -7,7 +7,7 @@
 	import { library as gen } from '$lib/library/gen.svelte';
 	import type { ReviewKind } from '$lib/library/types';
 	import { hovercard } from '$lib/shell/hovercards.svelte';
-	import { COLUMN_ORDER, rv } from '$lib/views/review/state.svelte';
+	import { COLUMN_ORDER, READS, rv } from '$lib/views/review/state.svelte';
 	import { review as words } from '$lib/words/review';
 	import { store } from '$lib/manifest/client.svelte';
 	import { pullLabel } from '$lib/review/proposed';
@@ -23,7 +23,9 @@
 	const m = $derived(store.manifest);
 	/** What a kind Your Changes draws lists as waiting, in one draft when given. */
 	const ours = (kind: YoursKind, doc?: string | null) => (m ? yoursCount(kind, m, acted.map, doc) : 0);
-	const kindCount = (kind: ReviewKind) => (isYours(kind) && m ? ours(kind) : counts?.kinds[kind]);
+	/** A kind's count: as drawn for Your Changes' two, else loom's, summed over the kinds the entry reads. */
+	const kindCount = (kind: ReviewKind) => (isYours(kind) && m ? ours(kind) : loomCount(kind));
+	const loomCount = (kind: ReviewKind) => (READS[kind] ?? [kind]).reduce<number | undefined>((n, k) => (counts?.kinds[k] === undefined ? n : (n ?? 0) + counts.kinds[k]!), undefined);
 	/** A draft's count with its two kinds as drawn: loom's until its rows of them are read. */
 	function draftCount(d: { doc: string; n: number }): number {
 		let n = d.n;
@@ -39,7 +41,7 @@
 	const everything = $derived(counts ? counts.everything + YOURS.reduce((n, k) => n + ours(k) - (counts.kinds[k] ?? 0), 0) : undefined);
 	// a draft's count is its entry in `drafts`; the kinds are counted for every draft only, so under a draft they show none
 	const draft = $derived(rv.doc ? counts?.drafts.find((d) => d.doc === rv.doc) : undefined);
-	const kinds = $derived(COLUMN_ORDER.filter((k) => counts?.kinds[k] !== undefined));
+	const kinds = $derived(COLUMN_ORDER.filter((k) => loomCount(k) !== undefined));
 	const inList = $derived(page.route.id === '/review');
 
 	/** Shows `kind` in the list, coming back to it from the Record. */
