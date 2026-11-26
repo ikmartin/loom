@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -113,6 +114,38 @@ def test_tex_s_line_is_a_line_of_the_file_it_was_reading_never_of_the_document(t
     )
     (d,) = _linted(q, code=1)
     assert d["locations"] == [] and d["message"].endswith(", in main.aux, line 4")
+
+
+def test_a_file_the_fence_kept_out_is_said_as_that_and_not_as_missing(tmp_path: Path) -> None:
+    """A file not found that the document's folder reaches through a link out of the quilt or into a hidden folder, or names by its full path, is one the fence kept out of the compile: the problem says so, in the person's words. A file no link leads to, or one truly missing, is said as TeX says it."""
+    q = demo(tmp_path)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "refs.sty").write_text("\\ProvidesPackage{refs}\n", encoding="utf-8")
+    (q / "drafting/refs.sty").symlink_to(outside / "refs.sty")
+    _log(q, "(./main.tex\n! LaTeX Error: File `refs.sty' not found.\n\nl.3 \\usepackage{refs}\n)\n")
+    (d,) = _linted(q, code=1)
+    assert d["message"] == (
+        "drafting/main.tex did not compile: the fence kept TeX from reading refs.sty, which is outside the quilt; put a copy of it in the document's folder"
+    )
+    from loom.tex.runner import fence_refused
+
+    here = q / "drafting"
+    (q / ".private").mkdir()
+    (q / ".private/notes.tex").write_text("x\n", encoding="utf-8")
+    (here / "notes.tex").symlink_to("../.private/notes.tex")
+    assert fence_refused("! I can't find file `notes'.", here, q).endswith(
+        "reading notes, which is in a hidden folder; put a copy of it in the document's folder"
+    )
+    assert "named by its full path" in fence_refused(f"! LaTeX Error: File `{outside}/refs.sty' not found.", here, q)
+    (here / "own.sty").write_text("\\ProvidesPackage{own}\n", encoding="utf-8")
+    for error in (
+        "! LaTeX Error: File `own.sty' not found.",  # in the folder, no link followed
+        "! LaTeX Error: File `gone.sty' not found.",  # missing
+        f"! LaTeX Error: File `{os.path.relpath(outside / 'refs.sty', here)}' not found.",  # above the document's folder: not staged, fenced or not
+        "! Undefined control sequence.",
+    ):
+        assert fence_refused(error, here, q) == "", error
 
 
 def test_a_line_a_document_writes_beginning_with_a_bang_is_no_error_and_a_runaway_s_message_ends_clean(

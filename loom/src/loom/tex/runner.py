@@ -80,6 +80,36 @@ def tex_errors(text: str) -> list[str]:
     ]
 
 
+#: TeX's two ways of saying a file it was asked for is not there: LaTeX's, and the primitive `\\input`'s.
+_NOT_FOUND = re.compile(r"^! (?:LaTeX Error: File|I can't find file) `([^']+)'")
+
+
+def fence_refused(error: str, here: Path, quilt: Path) -> str:
+    """What to tell the person for `error`, a TeX error line, when it says a file is not found that the fence kept from the compile; '' for any other error.
+
+    A file is kept out when the document names it by a full path, or through a link in its folder (`here`) to a file outside the quilt or in a hidden folder (`_links`). A name above the document's folder, or a file no link leads to, is not the fence's, and gets ''.
+    """
+    m = _NOT_FOUND.match(error)
+    if m is None:
+        return ""
+    name = m.group(1)
+    top, at = Path(os.path.realpath(quilt)), Path(os.path.realpath(here))
+    for asked in (name, f"{name}.tex") if not Path(name).suffix else (name,):
+        place = Path(asked) if Path(asked).is_absolute() else at / asked
+        if not place.is_file():
+            continue
+        if Path(asked).is_absolute():
+            return f"the fence kept TeX from reading {name}, which is named by its full path; put it in the document's folder and name it from there"
+        if os.path.normpath(asked).startswith(".."):
+            return ""
+        real = Path(os.path.realpath(place))
+        if real == Path(os.path.normpath(at / asked)) or _linkable(real, top):
+            return ""  # no link followed, or one the stage copies: missing for some other reason
+        where = "is in a hidden folder" if real.is_relative_to(top) else "is outside the quilt"
+        return f"the fence kept TeX from reading {name}, which {where}; put a copy of it in the document's folder"
+    return ""
+
+
 @dataclass
 class CompileResult:
     ok: bool
@@ -97,12 +127,15 @@ class CompileResult:
     needed: list[str] = field(default_factory=list)
     note: str = ""  # what loom fetched for this compile and what it still needs, for the person
     stopped: bool = False  # ended by `stop_run` or a signal before it finished: it says nothing of the document, and left nothing in `outdir`
+    refused: str = ""  # the first error, a file not found, said as the fence keeping it out (`fence_refused`)
 
     @property
     def first_error(self) -> str:
-        """The first `!` line of the log, which is what TeX calls an error; latexmk's closing advice is not one. A package loom could not fetch comes first, since it is the cause."""
+        """The first `!` line of the log, which is what TeX calls an error; latexmk's closing advice is not one. A package loom could not fetch comes first, since it is the cause; a file the fence kept out is said as that, not as missing."""
         if self.needed:
             return self.note
+        if self.refused:
+            return self.refused
         if self.errors:
             return self.errors[0]
         summary = latexmk_summary(self.stdout)
@@ -260,6 +293,7 @@ def compile_document(
             cwd, os.path.relpath(stage / tex_rel, cwd), outdir, engine, halt_on_error, timeout, started, reads=stage
         )
     res.cwd = root / base
+    res.refused = fence_refused(res.errors[0], res.cwd, root) if res.errors else ""
     return res
 
 
