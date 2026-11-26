@@ -237,6 +237,7 @@ Each is also its MCP tool, as every agent command is. An agent names itself with
 | `loom ask TEXT --on PLACE [--choice C]…` | asks the person a `question`; PLACE is a draft's label or a block's key, a node's id, a work's id with `:PAGE`, or a document's path, a draft's label first since a draft's id has a node's shape |
 | `loom ask --paper REF --link URL [--want pdf\|tex] [TEXT]` | asks the person for a paper it could not fetch |
 | `loom evidence NAME` | a result's status and every record and ask about it; NAME is a draft's label or a node's id |
+| `loom formal read RESULT [--declaration D --reading R]… [--part P]… [--draft T]… [--difference TEXT] [--record ID]` | without a reading, the Lean to read: the latest `lean` record stating RESULT and each declaration the person reads there, as Lean printed it; with readings, records them as a `reading` (§3.8), the i-th `--reading` reading the i-th `--declaration`, `--part` naming each part where there are several and `--draft` giving what the statement says there; RESULT as for `loom evidence` |
 
 `loom ai orient` says how many asks are open for an agent, how many agents asked of the person and wait, and how many questions are answered and not yet seen by the agent that asked, when any are. `loom since` reports the person's answers to the questions the agent looking asked, each once. Over MCP, `ask`, `tasks take` and `tasks withdraw` act in the conversation's session, which the server sets, and none takes a session argument (`mcp.server.BOUND`).
 

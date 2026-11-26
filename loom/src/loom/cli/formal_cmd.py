@@ -1,4 +1,4 @@
-"""`loom formal`: formalization on this machine. Turning it on and off is the person's; asking loom to check the Lean is anyone's, and what Lean says is loom's own record."""
+"""`loom formal`: formalization on this machine. Turning it on and off is the person's; asking loom to check the Lean is anyone's, and what Lean says is loom's own record; reading a result's Lean in ordinary mathematics is an agent's."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ import click
 from loom.cli._quilt import open_quilt, quilt_option
 from loom.cli.help import CommandGroup
 from loom.cli.report import Group, Item, Progress, Report, counted
+from loom.cli.tasks_cmd import AS_OPTION, _agent
 from loom.errors import ContentError, EnvError
 
 JSON_OPTION = click.option("--json", "as_json", is_flag=True, help="Print the report as one JSON object.")
@@ -19,7 +20,7 @@ JSON_OPTION = click.option("--json", "as_json", is_flag=True, help="Print the re
 def formal(ctx: click.Context, as_json: bool, quilt_path: str | None) -> None:
     """Say whether formalization is on for this quilt on this machine, and whether loom can check its Lean here.
 
-    The person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom "LABEL"]`, and asks loom to check it (`loom formal check`). What Lean said is loom's own record, never an agent's.
+    The person turns it on (`loom formal on`), which installs Lean, its toolchain and Mathlib and makes the quilt's Lean project; from then an agent writes Lean in the project, marks each declaration that states a result with `@[loom "LABEL"]`, and asks loom to check it (`loom formal check`); a second agent, which did not write it, reads it in ordinary mathematics for the person (`loom formal read`). What Lean said is loom's own record, never an agent's.
     """
     if ctx.invoked_subcommand is not None:
         return
@@ -134,3 +135,96 @@ def check_command(as_json: bool, quilt_path: str | None) -> None:
     if done.errors and not done.written and not done.unchanged:
         raise ContentError(report.verdict + ":\n" + "\n".join(done.errors[:20]))
     report.emit(as_json)
+
+
+@formal.command(name="read")
+@click.argument("result")
+@click.option(
+    "--declaration",
+    "declarations",
+    multiple=True,
+    metavar="NAME",
+    help="The declaration a part reads, one of those the command lists without a reading; once for each part, in order.",
+)
+@click.option(
+    "--reading",
+    "readings",
+    multiple=True,
+    metavar="LATEX",
+    help="Your reading of that declaration in ordinary mathematics, as LaTeX; once for each part, in the order of --declaration.",
+)
+@click.option(
+    "--part",
+    "parts",
+    multiple=True,
+    metavar="NAME",
+    help="Each part's name, as (i) or a notion's word, in the same order; needed where there are several parts.",
+)
+@click.option(
+    "--draft",
+    "drafts",
+    multiple=True,
+    metavar="LATEX",
+    help="What the statement says in each part, as LaTeX, in the same order; '' where nothing in it answers.",
+)
+@click.option(
+    "--difference", default=None, help="Where the Lean and the statement differ; leave it out if you found nothing."
+)
+@click.option(
+    "--record",
+    default=None,
+    metavar="ID",
+    help="The Lean record you read, as listed; refused once a newer one states the result.",
+)
+@AS_OPTION
+@JSON_OPTION
+@quilt_option
+def read_command(result: str, declarations: tuple[str, ...], readings: tuple[str, ...], parts: tuple[str, ...], drafts: tuple[str, ...], difference: str | None, record: str | None, declared: str | None, as_json: bool, quilt_path: str | None) -> None:  # fmt: skip
+    """Read a result's Lean in ordinary mathematics, for the person to read beside it before attesting. RESULT is a draft's label or a node's id.
+
+    Without a reading, list the Lean to read: the latest record of loom's check stating the result, and each declaration the person reads there, as Lean printed it. With one, record your reading as yours, part by part, each part naming one of those declarations. Nothing checks a reading against the Lean, and it is stale once loom records a newer Lean for the result. Write it only for Lean you did not write.
+    """
+    from loom.evidence.log import replay
+    from loom.formal import reading
+
+    root = open_quilt(quilt_path).root
+    if not declarations and not readings:
+        found = reading.to_read(replay(root), result)
+        if found is None:
+            raise ContentError(f"no record of loom's check states {result}; it has no Lean to read yet")
+        Report(
+            f"{result}: the Lean to read, from {found['record']}",
+            groups=[
+                Group(
+                    "declarations",
+                    [Item(f"{d['shown'] or d['kind'] + ' ' + d['name']}") for d in found["declarations"]],
+                )
+            ],
+            data=found,
+        ).emit(as_json)
+        return
+    by = _agent(root, declared)
+    if len(readings) != len(declarations):
+        raise EnvError("give one --reading for each --declaration, in the same order")
+    for flag, given in (("--part", parts), ("--draft", drafts)):
+        if given and len(given) != len(declarations):
+            raise EnvError(f"give {flag} once for each part, or not at all")
+    if len(declarations) > 1 and not parts:
+        raise EnvError("name each part with --part, as (i) or a notion's word")
+    rows = [
+        {
+            "part": parts[i] if parts else "",
+            "draft": drafts[i] if drafts else "",
+            "declaration": d,
+            "reading": readings[i],
+        }
+        for i, d in enumerate(declarations)
+    ]
+    try:
+        made = reading.write(root, result, by, rows, difference or None, record=record)
+    except reading.Refused as exc:
+        raise ContentError(str(exc)) from None
+    Report(
+        f"{result}: your reading of {made.get('lean')} is recorded, {counted(len(rows), 'part')}",
+        data={"reading": made.id, "lean": made.get("lean")},
+    ).emit(as_json)
