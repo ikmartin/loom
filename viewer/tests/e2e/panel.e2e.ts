@@ -1,6 +1,6 @@
 // The side panel: the documents and their contents, the Nodes section, and the foot. Each test is named for the rule it holds.
 import { expect, test, type Page } from '@playwright/test';
-import { beside, pane, scrollPane, viewMenu } from '../workspace';
+import { beside, pane, scrollPane, viewMenu, wordsIn } from '../workspace';
 import { REFEREE, serveKept } from '../manifest';
 
 // these are about annotations and the page; the fixture's pending changes are left out, and tested apart (changes.e2e.ts)
@@ -17,7 +17,7 @@ test('nothing says whether a session is chosen, and an annotation needs none', a
 	const words = pane(page, 0).locator('.fragment .env[data-id="sy-0002"] p[data-src]').first();
 	await expect(words).toBeVisible();
 	await page.getByTestId('tool-comment').click();
-	await words.click({ position: { x: 4, y: 4 } });
+	await words.click({ position: await wordsIn(words, 'Every orbit') });
 	await page.getByTestId('popup-comment-field').fill('Say which orbit.');
 	await expect(page.getByTestId('popup-save')).toBeEnabled();
 	await expect(page.getByTestId('session-footer')).toHaveCount(0);
