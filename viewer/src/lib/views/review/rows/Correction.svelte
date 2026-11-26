@@ -1,5 +1,5 @@
 <script lang="ts">
-	// An agent's correction to a result the person compared, open: the two texts as one, what it takes out struck and what it puts in marked, each run drawn as a result's text is; the text compared stands until the person takes it, or declines it.
+	// An agent's correction to a result the person compared, open: the two texts as one, what it takes out struck and what it puts in marked, each run drawn as a result's text is; the text compared stands until the person takes it, or declines it. `take` is drawn only where loom would take it now (`refusal` null); otherwise a line says it can't be, and `decline` stands alone.
 	import { said } from '$lib/library/said';
 	import * as api from '$lib/library/api';
 	import { library as gen } from '$lib/library/gen.svelte';
@@ -10,10 +10,12 @@
 	import { toHtml } from '$lib/node/latexlite';
 	import { message } from '$lib/shell/message.svelte';
 	import { review as words } from '$lib/words/review';
+	import { correctionAnswers } from '../rows';
 
 	let { row }: { row: Extract<CheckRow, { correction: string }> } = $props();
 	const body = new Read<ReviewBody & { body: RowBody & Partial<CorrectionBody> }>();
 	let busy = $state(false);
+	const answers = $derived(correctionAnswers(row));
 	let box = $state<HTMLElement | null>(null);
 
 	$effect(() => {
@@ -42,9 +44,9 @@
 	<div class="stmt changes-markup fragment" bind:this={box} data-testid="review-correction">
 		{#each runs as r, i (i)}{#if r.op === '='}{@html r.html}{:else}<span class="change" data-change="c" data-side={SIDE[r.op]}>{@html r.html}</span>{/if}{' '}{/each}
 	</div>
-	{#if body.value.body.compared_at}<p class="note">{words.check.stands(words.day(body.value.body.compared_at))}</p>{/if}
+	{#if !answers.includes('take')}<p class="note" data-testid="correction-refused">{words.check.cannotTake}</p>{:else if body.value.body.compared_at}<p class="note">{words.check.stands(words.day(body.value.body.compared_at))}</p>{/if}
 	<div class="answers">
-		<button type="button" class="btn" disabled={busy} onclick={() => act(true)}>{words.check.take}</button>
+		{#if answers.includes('take')}<button type="button" class="btn" disabled={busy} onclick={() => act(true)}>{words.check.take}</button>{/if}
 		<button type="button" class="btn" disabled={busy} onclick={() => act(false)}>{words.check.decline}</button>
 	</div>
 {/if}
