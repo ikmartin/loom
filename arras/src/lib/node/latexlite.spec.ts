@@ -288,4 +288,10 @@ describe('an anchor whose number waits for the person\'s compile', () => {
 		expect(r.html).toContain(words.side.awaitingRef);
 		expect(r.unresolved).toEqual([]);
 	});
+	it('draws a number loom sends as null as unresolved, never as (null)', () => {
+		const points = { 'tq-0002-eq00': { number: null as unknown as undefined } };
+		const r = toHtml('By \\eqref{tq-0002-eq00} and \\ref{tq-0002-eq00}.', points);
+		expect(r.html).not.toContain('null');
+		expect(r.unresolved).toEqual(['tq-0002-eq00']);
+	});
 });

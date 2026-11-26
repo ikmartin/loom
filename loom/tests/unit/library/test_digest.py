@@ -315,6 +315,11 @@ def test_a_node_whose_display_number_waits_passes_the_checks_and_draws_unnumbere
     assert not [p for p in check(root) if p.code.startswith("loom:node")], "the store's checks pass it"
     theorem = stub(root, smith, "2.1")
     assert reads.node(result, theorem)["points"][f"{lemma}-eq00"] == {"number": None, "awaiting": True}
+    from loom.evidence.webview import drafts
+
+    assert drafts(result, {}, root).points(theorem)[f"{lemma}-eq00"] == {"number": None, "awaiting": True}, (
+        "the Web's card draws it as the Library does"
+    )
     rows = {i["item"]: i["waits"] for i in reads.work(result, smith)["outline"]["items"] if i["item"]}
     assert (rows["lem:far"], rows["lem:bound"]) == ("compile", None)
 
@@ -360,7 +365,11 @@ def test_the_person_s_compile_numbers_what_waited(tmp_path: Path, pdf_text: list
         root, node.tex, src, "main.tex", node.pdf, documents.path_of(root, node.pdf, "pdf"), online=False
     )
     assert compiled.compiled and compiled.state == "ready", compiled.why
-    done = digest(result, smith, every, compiled)
+    from loom.library.digest import scoped
+
+    again = scoped(result, smith, compiled, "all", None)
+    assert "lem:bound" in again, "scope all takes, after a compile, a node of loom's whose number waited"
+    done = digest(result, smith, again, compiled)
     assert done.waiting == {}, done.waiting
     filled = read(root, lemma)
     assert filled is not None and (filled.anchors, filled.awaiting) == (((f"{lemma}-eq00", "1.1"),), ())

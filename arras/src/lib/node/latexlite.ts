@@ -703,10 +703,12 @@ class Parser {
 		let w: string | undefined;
 		if (p?.awaiting && p.number == null) return words.side.awaitingRef;
 		if (p) {
-			if (cmd === 'eqref') w = p.number === undefined ? undefined : `(${p.number})`;
+			// loom sends a number it does not hold as null: unresolved, as one it does not send
+			const number = p.number ?? undefined;
+			if (cmd === 'eqref') w = number === undefined ? undefined : `(${number})`;
 			else if (cmd === 'pageref') w = p.page;
-			else if (cmd === 'ref' || cmd === 'vref' || cmd === 'Vref') w = p.number;
-			else w = p.name ?? p.number;
+			else if (cmd === 'ref' || cmd === 'vref' || cmd === 'Vref') w = number;
+			else w = p.name ?? number;
 			if (w !== undefined && cmd === 'Cref') w = w.charAt(0).toUpperCase() + w.slice(1);
 			if (w !== undefined && p.work !== undefined) w = `[${p.work}, ${p.name ?? w}]`;
 		}

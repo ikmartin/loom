@@ -492,8 +492,10 @@ def _walk(
                 owner.proofs.append(Proof(rel, p.start, p.end, p.body_start, p.body_end, opening))
 
 
-#: A pointer at a label, or a label: what an item's text names one by.
-_NAMES = re.compile(r"\\(?:label|eqref|ref|cref|Cref|autoref|vref|Vref|pageref)\*?\s*\{([^{}]*)\}")
+#: A label, or any command naming one: every `…ref…` (`\\eqref`, `\\cpageref`, `\\nameref`, `\\crefrange`'s two), `\\hyperref[label]`.
+_NAMES = re.compile(r"\\(?:label|[A-Za-z]*ref[A-Za-z]*)\*?\s*(?:\[([^\]]*)\])?\s*(?:\{([^{}]*)\})?(?:\s*\{([^{}]*)\})?")
+#: Verbatim text, which names nothing.
+_VERB = re.compile(r"\\verb\*?(.).*?\1|\\begin\s*\{verbatim\*?\}.*?\\end\s*\{verbatim\*?\}", re.S)
 
 
 def _name_outside(out: Survey, files: dict[str, SourceFile]) -> None:
@@ -508,7 +510,8 @@ def _name_outside(out: Survey, files: dict[str, SourceFile]) -> None:
         for rel, a, b in spans[item.item]:
             if rel not in files:
                 continue
-            for raw in _NAMES.findall(files[rel].clean, a, b):
+            text = _VERB.sub(" ", files[rel].clean[a:b])
+            for raw in (g for m in _NAMES.finditer(text) for g in m.groups() if g):
                 for name in raw.split(","):
                     name = " ".join(name.split())
                     label = out.labels.get(name)
@@ -1313,7 +1316,7 @@ def _shown(
 ) -> dict[str, tuple[str, int | None]]:
     """Each label of a display the stored PDF numbers as loom reads it, with its page.
 
-    The displays are read a window at a time, a window being the lines between the neighbouring headings and results found. Its display numbers are the lines that are one alone, the one place `pdftotext` sets nothing but a display's number. A line that opens or ends with a number shaped as loom's numbers there are may be a display's number (a row of an `align`, a formula too wide for its number to stand apart) or a reference in the text that happens to begin or end a line, so the window keeps nothing; one repeating a number shown alone there, a list's item, is passed over. Only where the numbers alone are exactly as many as loom counts displays is the n-th display given the n-th, and only where every display of the window that loom numbers is given the number loom reads (or a compile's `hints`, for a label) is any kept: a display loom does not count, or one the PDF leaves unnumbered, so leaves its whole window unkept and never shifts a number onto its neighbour.
+    The displays are read a window at a time, a window being the lines between the neighbouring headings and results found. Its display numbers are the lines that are one alone, the one place `pdftotext` sets nothing but a display's number. A line that opens or ends with a number shaped as loom's numbers there are may be a display's number (a row of an `align`, a formula too wide for its number to stand apart) or a reference in the text that happens to begin or end a line, so the window keeps nothing; one repeating a number shown alone there, a list's item, is passed over. Only where the numbers alone are exactly as many as loom counts displays is the n-th display given the n-th, and only where every display of the window that loom numbers is given its number, the compile's (`hints`) for a labelled one, which must have one, and loom's reading for one with no label, is any kept: a display loom does not count, or one the PDF leaves unnumbered, so leaves its whole window unkept and never shifts a number onto its neighbour.
     """
     import bisect
 
@@ -1348,7 +1351,10 @@ def _shown(
             if d.emulated is None or d.tagged:
                 # a line of `subequations`, or a `\tag`'s text: shown, counted, and compared with nothing
                 continue
-            wanted = {hints[lab] for lab in d.labels if lab in hints} or {d.emulated}
+            if any(lab not in hints for lab in d.labels):
+                # a labelled display the compile never set, or never wrote: loom's own count cannot stand in for it
+                break
+            wanted = {hints[lab] for lab in d.labels} or {d.emulated}
             if n not in wanted:
                 break
             given.update(dict.fromkeys(d.labels, (n, pages.lines[k][0])))

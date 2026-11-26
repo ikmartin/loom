@@ -241,7 +241,23 @@ def _references(root: Path) -> list[str]:
 
 
 def scoped(result: ScanResult, ref: str, s: Survey, scope: str, chosen: list[str] | None) -> list[str]:
-    """The survey's items a scope takes of a work: what the drafts cite (`used`), every item no node holds with its text (`all`), the items `chosen` names and those of the stubs it names, or the items the person's marks to digest are on (`marked`): a mark naming a stub, that stub's item; one naming none, the item on its page whose opening words it holds."""
+    """The survey's items a scope takes of a work: what the drafts cite (`used`), every item no node holds with its text (`all`), the items `chosen` names and those of the stubs it names, or the items the person's marks to digest are on (`marked`): a mark naming a stub, that stub's item; one naming none, the item on its page whose opening words it holds. After the person's compile every scope takes too each item whose node or proof has an anchor `awaiting` its number, so the compile's numbers reach it."""
+    items = _scoped(result, ref, s, scope, chosen)
+    if s.compiled:
+        items += _awaiting(result.quilt.root, ref, s)
+    return list(dict.fromkeys(items))
+
+
+def _awaiting(root: Path, ref: str, s: Survey) -> list[str]:
+    """The items of a work whose statement or a proof of it holds an anchor waiting for the person's compile."""
+    nodes = of_work(root, ref)
+    waiting = {n.id if n.kind == ids.STATEMENT else (n.parent or "") for n in nodes if n.awaiting}
+    held = matched(s, [n for n in nodes if n.kind == ids.STATEMENT])
+    return [item for item, n in held.items() if n.id in waiting]
+
+
+def _scoped(result: ScanResult, ref: str, s: Survey, scope: str, chosen: list[str] | None) -> list[str]:
+    """`scoped` before the items waiting for the compile's numbers."""
     from loom.refs.search import _loose
 
     root = result.quilt.root

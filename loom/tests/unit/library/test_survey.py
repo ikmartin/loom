@@ -1072,7 +1072,7 @@ h &= i \label{e:c}
 DISPLAYED = "1 One\na\n(1.1)\nBy (1.2) at a line's end, which is no display.\nb = c\n(1.2)\nd = e\nf = g\n(⋆)\nh = i\n(1.3)\nLemma 1.1. x\n(1.4)\np\n(1.5a)\nq\n(1.5b)\nr\n(1.6)\nz\n2 Two\nw\n(2.1)\n"
 
 
-def _compiled_by(tmp_path: Path, source: str, text: str) -> survey.Survey:
+def _compiled_by(tmp_path: Path, source: str, text: str, said: dict[str, str] | None = None) -> survey.Survey:
     """`source` confirmed as the person's compile does, against a stored PDF whose text is `text`, by a compile that reached every mark and agrees with loom's reading of each display: the path that alone keeps a display's number."""
     here = tmp_path / ("q" + str(len(list(tmp_path.iterdir()))))
     here.mkdir()
@@ -1081,7 +1081,9 @@ def _compiled_by(tmp_path: Path, source: str, text: str) -> survey.Survey:
     for k, item in enumerate(s.items):
         marks += [f"i{k}", *(f"p{k}-{j}" for j in range(len(item.proofs)))]
     lines = [rf"\newlabel{{{survey.MARK}{m}}}{{{{1}}{{1}}}}" for m in marks]
-    lines += [rf"\newlabel{{{lab}}}{{{{{d.emulated}}}{{1}}}}" for d in s.displays if d.emulated for lab in d.labels]
+    if said is None:
+        said = {lab: d.emulated for d in s.displays if d.emulated for lab in d.labels}
+    lines += [rf"\newlabel{{{lab}}}{{{{{n}}}{{1}}}}" for lab, n in said.items()]
     return survey.confirm(s, ["\n".join(lines)], survey.Pages([text]))
 
 
@@ -1451,3 +1453,30 @@ def test_without_a_compile_no_display_keeps_a_number(tmp_path: Path, monkeypatch
         "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof. First\na=b\n(1)\nand then\nw=0\n(2)\nv=1\n(3)\n(4)\nc\n(5)\n",
     )
     assert not [k for k, v in again.labels.items() if v.kind == "equation" and v.number], "however right the count"
+
+
+def test_on_the_compile_path_a_display_the_compile_never_set_keeps_nothing(tmp_path: Path) -> None:
+    """The third review's B-1: R-6's source compiled, `eq:long` behind the renamed `\\iffalse` never set and so not in the `.aux`, `eq:u` in the file `\\input` without braces unseen by loom; the counts balance, and loom's own reading must not stand in for the compile's word on a labelled display."""
+    text = "1 One\nLemma 1.1. Every finite quiver with loops has a spanning forest of its own.\nProof.\nz=1\n(1)\nu=1\n(2)\n"
+    unlabelled = R6.replace("\\begin{equation}\\label{eq:z}", "\\begin{equation}")
+    done = _compiled_by(tmp_path, unlabelled, text, said={})
+    assert not [k for k, v in done.labels.items() if v.kind == "equation" and v.number], (
+        "eq:long would read eq:z's (1), the unlabelled display beside it agreeing with loom's count"
+    )
+
+
+def test_a_result_naming_a_display_outside_every_result_by_any_ref_command_is_marked(tmp_path: Path) -> None:
+    """The third review's B-5: `\\hyperref[…]`, `\\crefrange`, `\\cpageref` and `\\nameref` name a display as `\\eqref` does, and a pointer inside `\\verb` names none."""
+    src = r"""\documentclass{article}
+\usepackage{amsmath}
+\newtheorem{lemma}{Lemma}
+\begin{document}
+\begin{equation}\label{eq:out} x \end{equation}
+\begin{lemma}\label{l:a} As \hyperref[eq:out]{above}. \end{lemma}
+\begin{lemma}\label{l:b} By \crefrange{eq:out}{eq:out}. \end{lemma}
+\begin{lemma}\label{l:c} On \cpageref{eq:out}, see \nameref{eq:out}. \end{lemma}
+\begin{lemma}\label{l:d} Type \verb|\eqref{eq:out}| for it. \end{lemma}
+\end{document}
+"""
+    s = survey.read(_one_file(tmp_path, src), "main.tex", TEX)
+    assert {i.item: i.outside for i in s.items} == {"l:a": ["eq:out"], "l:b": ["eq:out"], "l:c": ["eq:out"], "l:d": []}
