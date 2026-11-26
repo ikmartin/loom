@@ -1,5 +1,6 @@
 // A document's versions as Review › History and a version's toolbar read them: each labelled by the act it was kept at, oldest first; and every act of the history said in words. Model facts in, display facts out.
 import type { CanonDoc, HistoryAct, Manifest } from '$lib/manifest/types';
+import { review } from '$lib/words/review';
 
 const file = (p: string) => p.split('/').pop() ?? p;
 
@@ -28,9 +29,9 @@ export function versionActor(m: Pick<Manifest, 'history'>, c: CanonDoc): string 
 	return m.history?.steps.find((s) => s.landmark === c.path)?.actor ?? '';
 }
 
-/** Whether an act is a version a timeline already shows for the act beside it (a keep's, an undo's, a restore's), and so not listed again. */
+/** Whether an act is a version a timeline already shows for the act beside it (a keep's, an undo's, a restore's, a file's restore), and so not listed again. */
 function beside(a: HistoryAct): boolean {
-	return a.action === 'stamp' && !!a.kept_for && ['keep', 'undo', 'restore'].includes(a.kept_for);
+	return (a.action === 'stamp' && !!a.kept_for && ['keep', 'undo', 'restore'].includes(a.kept_for)) || (a.action === 'file-version' && a.kept_for === 'restore');
 }
 
 /** How much of a file an act took: one change, several, or the edit as a whole. */
@@ -46,6 +47,10 @@ export function actWords(a: HistoryAct): string {
 			return a.to === undefined || a.to === null ? `Removed the new file ${file(a.path ?? '')}, keeping its text` : `Undid ${changesWord(a)} to ${file(a.path ?? '')}`;
 		case 'restore':
 			return a.path ? `Put back in ${file(a.path)} the text an undo set aside` : `Put ${file(a.in ?? '')} back as a version`;
+		case 'file-version':
+			return review.fileVersions.kept(file(a.path ?? ''), a.message ?? '');
+		case 'file-restore':
+			return review.fileVersions.restored(file(a.path ?? ''));
 		case 'import':
 			return `Imported the paper${a.in ? ` as ${file(a.in)}` : ''}`;
 		case 'stamp':

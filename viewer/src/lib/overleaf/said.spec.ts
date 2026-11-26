@@ -19,7 +19,7 @@ describe('the Overleaf mirror in words', () => {
 		expect(answered({ state: 'up-to-date' })).toBe('Up to date with Overleaf · checked just now.');
 		const said = answered({ state: 'updated', files: 2, by: ['Cleo', 'Dan'], own: 1, places: [{ file: 'paper/main.tex', place: 'preamble', by: ['Cleo'] }, { file: 'paper/refs.bib', place: 'not-a-document', by: [] }], here: ['k1'], overwritten: ['paper/main.tex'] });
 		expect(said).toBe(
-			'Updated from Overleaf just now: 2 files changed, by Cleo and Dan. 1 change only you made in Overleaf is not listed in Review. Outside the results: the preamble of main.tex (Cleo); refs.bib. 1 result you changed here was written over; the version kept before the update holds your text. Written over, as they held changes made here: main.tex. The version kept before the update holds them.'
+			'Updated from Overleaf just now: 2 files changed, by Cleo and Dan. 1 change only you made in Overleaf is not listed in Review. Outside the results: the preamble of main.tex (Cleo); refs.bib. 1 result you changed here was written over; the version kept before the update holds your text. Written over, as they held changes made here: main.tex. History keeps each as it was before the update.'
 		);
 		expect(answered({ state: 'updated', files: 1, by: [], own: 0, places: [], here: [], overwritten: [] })).toBe('Updated from Overleaf just now: 1 file changed.');
 	});

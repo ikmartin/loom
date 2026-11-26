@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review › History › Versions (plan 0.25.5): one document's versions, oldest to newest and then Now, each kept at an act (the import, an edit kept, the text an undo set aside, changes taken in, one recorded by hand, the text a restore replaced), each opened, compared with now, or put back after asking; and a version recorded here by name. Versions no live document leads to are listed apart, since this is where they are reached from.
+	// Review › History › Versions (plan 0.25.5): one document's versions, oldest to newest and then Now, each kept at an act (the import, an edit kept, the text an undo set aside, changes taken in, one recorded by hand, the text a restore replaced), each opened, compared with now, or put back after asking; and a version recorded here by name. Under them, each version of a file no document's version holds (`FileVersions`). Versions no live document leads to are listed apart, since this is where they are reached from.
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
@@ -14,6 +14,7 @@
 	import ActionBar from '$lib/review/ActionBar.svelte';
 	import Empty from '$lib/review/Empty.svelte';
 	import Said from '$lib/review/Said.svelte';
+	import FileVersions from '$lib/review/FileVersions.svelte';
 
 	const m = $derived(store.manifest!);
 	const mine = $derived(m.masters.filter((x) => !x.closed && !x.context_only && !isAgentDocument(x)));
@@ -118,6 +119,7 @@
 				<Empty text={`No version of ${file} is kept yet.`} testid="history-no-versions" />
 			{/if}
 		{/if}
+		{#if m.history?.files?.length}<FileVersions files={m.history.files} {restores} />{/if}
 		{#if orphans.length}
 			<section class="orphans" data-testid="history-orphans">
 				<h2>Versions no document leads to</h2>

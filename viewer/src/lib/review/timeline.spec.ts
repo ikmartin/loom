@@ -32,6 +32,8 @@ describe('everything recorded', () => {
 			actWords(a('restore', { path: 'README.md' })),
 			actWords(a('move', { from: 'notes/a.md', to: 'drafts/b.md' })),
 			actWords(a('move', { from: 'drafting-ai/x.tex', to: '.loom/agents/copies/x.tex' })),
+			actWords(a('file-version', { path: 'paper/refs.bib', kept_for: 'sync', message: 'Before an update from Overleaf' })),
+			actWords(a('file-restore', { path: 'paper/refs.bib' })),
 			actWords(a('something-new'))
 		]).toEqual([
 			'Kept an edit to x.tex',
@@ -43,15 +45,17 @@ describe('everything recorded', () => {
 			'Put back in README.md the text an undo set aside',
 			'Moved a.md to b.md',
 			'Moved drafting-ai/x.tex to .loom/agents/copies/x.tex',
+			'Kept a version of refs.bib: Before an update from Overleaf',
+			'Put refs.bib back as a version',
 			'something new'
 		]);
 	});
 
 	it('lists them newest first, leaving out the versions a timeline shows beside their act, and keeps a document’s own when asked', () => {
 		const m = {
-			history: { steps: [], acts: [a('keep', { path: 'drafting/main.tex' }), a('stamp', { kept_for: 'keep', in: 'drafting/main.tex', landmark: 'l' }), a('page-write', { path: 'notes/a.md', page: 'notes/a.md' })] }
+			history: { steps: [], acts: [a('keep', { path: 'drafting/main.tex' }), a('stamp', { kept_for: 'keep', in: 'drafting/main.tex', landmark: 'l' }), a('page-write', { path: 'notes/a.md', page: 'notes/a.md' }), a('file-version', { path: 'p/refs.bib', kept_for: 'restore' }), a('file-restore', { path: 'p/refs.bib' })] }
 		} as unknown as Manifest;
-		expect(actsOf(m).map((x) => x.action)).toEqual(['page-write', 'keep']);
+		expect(actsOf(m).map((x) => x.action)).toEqual(['file-restore', 'page-write', 'keep']);
 		expect(actsOf(m, 'drafting/main.tex', new Set(['drafting/main.tex'])).map((x) => x.action)).toEqual(['keep']);
 	});
 });

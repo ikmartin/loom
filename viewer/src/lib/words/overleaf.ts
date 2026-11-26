@@ -118,7 +118,7 @@ export const overleaf = {
 		/** After it: blocks changed here that the update wrote over. */
 		here: (n: number) => `${plural(n, 'result', 'results')} you changed here ${n === 1 ? 'was' : 'were'} written over; the version kept before the update holds your text.`,
 		/** After it, right after the press: files changed here that the update wrote over. */
-		overwritten: (paths: string[]) => `Written over, as they held changes made here: ${listed(paths.map(file))}. The version kept before the update holds them.`
+		overwritten: (paths: string[]) => `Written over, as they held changes made here: ${listed(paths.map(file))}. History keeps each as it was before the update.`
 	},
 	/** What reaching Overleaf could not do, by the code loom gives; a code not here is said by `other`. */
 	problem: {
