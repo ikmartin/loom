@@ -57,6 +57,8 @@ export class FileState {
 	/** The reader's view of a PDF among the project's files, or of a document's compiled PDF: the tool, the fit, the page, its own zoom. */
 	pdf: PdfView;
 	notes: Annotating;
+	/** The request a Markdown file's page last answered (Fragment's `arrival`). */
+	arrival: Arrival = { at: null };
 	desk = $state.raw<MarkDesk | null>(null);
 
 	constructor(item: Item) {

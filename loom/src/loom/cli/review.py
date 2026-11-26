@@ -441,7 +441,7 @@ def _one_comment(
 ) -> str:
     """Append one review event to the log and describe it; the only writer of review records.
 
-    The target is a key; a work, whole or with `page` one of its PDF's pages; or a project PDF with its `page`. Text or a box on a work's page is anchored through the page text loom derives from the PDF its reference holds (plan 0.13 item 2); anything drawn with a `mark`, or along `strokes`, and anything on a project PDF, records its page, place and the PDF's hash (`records/marks.py`). Everything else about the event is as it is for a key.
+    The target is a key; a work, whole or with `page` one of its PDF's pages; a project PDF with its `page`; or a Markdown file by its path (`_on_markdown`). Text or a box on a work's page is anchored through the page text loom derives from the PDF its reference holds (plan 0.13 item 2); anything drawn with a `mark`, or along `strokes`, and anything on a project PDF, records its page, place and the PDF's hash (`records/marks.py`). Everything else about the event is as it is for a key.
     """
     root = result.quilt.root
     records = Records(root, result.quilt.history_dir).records
@@ -533,6 +533,14 @@ def _one_comment(
         )
     if mark or strokes:
         raise EnvError("--mark and --stroke draw on a page of a PDF: a project PDF's path, or a work's reference")
+    from loom.records.mdtext import markdown_file
+
+    if (md := markdown_file(result, target)) is not None and work is None:
+        if in_doc is not None:
+            raise EnvError("--in names the document a node is read in; a Markdown file is read as itself")
+        if page is not None or rects:
+            raise EnvError("--page and --box are for a PDF's pages; on a Markdown file, quote its words")
+        return _on_markdown(result, base, records, date, md, message, quote, styled, dry_run=dry_run)
     if work is not None and page is None and not quote and not rects:
         return _on_work(result, base, records, date, work, message, styled, dry_run=dry_run)
     if work is not None or page is not None or rects:
@@ -574,6 +582,51 @@ def _one_comment(
         dry_run,
     )
     return f"{ann_id}  {key}  {type_id or 'untyped'}  ({aid})"
+
+
+def _on_markdown(
+    result: ScanResult,
+    base: dict[str, Any],
+    records: list[Any],
+    date: str,
+    rel: str,
+    message: str | None,
+    quote: str | None,
+    styled: dict[str, Any],
+    *,
+    dry_run: bool,
+) -> str:
+    """An annotation on a Markdown file the viewer draws, by its path: on its quoted words, found as written or as the page prints them (`records.mdtext`), else on the whole file. The file's text is frozen as the version it was written on."""
+    from loom.records.mdtext import find, make_selector, text_of
+
+    root = result.quilt.root
+    text = text_of(root, rel) or ""
+    selector = None
+    if quote:
+        spans = find(text, quote)
+        if not spans:
+            raise NotFoundError("quote", f"quote not found in {rel}; quote its words as the file or its page has them")
+        if len(spans) > 1:
+            raise EnvError(f"quote is ambiguous ({len(spans)} occurrences); give a longer quote")
+        selector = make_selector(text, quote)
+    digest, _ = _snapshot(root, text, result.quilt.history_dir, dry_run)
+    ann_id = _append_new(
+        root,
+        {
+            **base,
+            "event": "created",
+            "target": rel,
+            "against": digest,
+            "anchor": selector.to_dict() if selector else None,
+            "in": None,
+            **styled,
+            "body": message or "",
+        },
+        records,
+        date,
+        dry_run,
+    )
+    return f"{ann_id}  {rel}  {styled['type'] or 'untyped'}  ({base['author']})"
 
 
 def _located(node: str, purpose: str | None) -> str:
@@ -1077,7 +1130,7 @@ def _rects(box: str) -> list[list[float]]:
 @click.option(
     "--quote",
     default=None,
-    help="Anchor to this exact text: once in a key's own text, or on the page of a cited work given by --page.",
+    help="Anchor to this exact text: once in a key's own text or a Markdown file's, or on the page of a cited work given by --page.",
 )
 @click.option(
     "--page",
@@ -1192,9 +1245,9 @@ def annotate(
     as_json: bool,
     quilt_path: str | None,
 ) -> None:
-    """Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, or a project PDF; a MESSAGE of `-` is read from stdin.
+    """Write an annotation on TARGET: a key, an equation's qualified key, a master path, a work, a project PDF, or a Markdown file; a MESSAGE of `-` is read from stdin.
 
-    An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
+    An annotation carries its author, its time and the version of the text it was written on, and belongs to no session. A Markdown file is named by its path with its suffix, and --quote is words of it, as the file or its page has them. A work is named by its reference, or by the key its entry has; one on a work with no --page is on the whole work. One on a page of a PDF -- a work's, or a project PDF by its path -- names the page with --page and the place with --quote (words on it), --box (a rectangle) or --stroke (ink), drawn with a --mark tool where it is not on words; `loom status --reading` lists those on cited works.
     """
     result = open_scan(quilt_path)
     root = result.quilt.root
@@ -1339,7 +1392,12 @@ def _check_named(result: ScanResult, target: str | None, ann_id: str | None, in_
         raise EnvError("TARGET is required")
     from loom.records.marks import project_pdf
 
-    if project_pdf(result, target) is None and _work_target(result, target) is None:
+    from loom.records.mdtext import markdown_file
+
+    if markdown_file(result, target) is not None:
+        if on_page:
+            raise EnvError("--page, --box and --stroke are for a PDF's pages; on a Markdown file, quote its words")
+    elif project_pdf(result, target) is None and _work_target(result, target) is None:
         if on_page:
             raise _not_a_work(result, target)
         resolve_key(result, target)

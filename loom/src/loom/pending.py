@@ -477,7 +477,7 @@ def _blocks(result: ScanResult, path: str, a: int, b: int) -> tuple[str | None, 
 def suggested(result: ScanResult) -> list[Pending]:
     """The open suggested edits, each placed in its key's text now with its state: `ready` to keep, `taken` when loom wrote it already (the door's journal) or its key reads as it taken, `unplaced` when its words no longer stand once (or a suggested edit before it is on them) or its file is not UTF-8, `on-a-copy` when none of the person's documents reads its key."""
     from loom.history.acts import documents_reaching
-    from loom.records.edits import Placed, compose, generation, home, replay, taken_how
+    from loom.records.edits import Placed, compose, file_encoding, generation, home, on_file, replay, taken_how
     from loom.writes import written
 
     out: list[Pending] = []
@@ -485,10 +485,12 @@ def suggested(result: ScanResult) -> list[Pending]:
     loom_wrote = written(result.quilt.root, result.quilt.history_dir)
     for edit, placed in compose(result, edits):
         node = home(result, edit)
+        # one on a Markdown file is on the file, by its path, and on no block
+        path = edit.target_key if on_file(edit) else node.file if node is not None else ""
         p = Pending(
             id=edit.id,
             kind="suggested",
-            path=node.file if node is not None else "",
+            path=path,
             # on no block, its key is no block's: never the one that took the key it was suggested on
             key=node.key if node is not None else None,
             documents=documents_reaching(result, [node.file]) if node is not None else [],
@@ -504,7 +506,7 @@ def suggested(result: ScanResult) -> list[Pending]:
         if isinstance(placed, Placed):
             p.at, p.span = list(placed.at), placed.at
             p.old = placed.own[placed.span[0] : placed.span[1]].strip() if edit.selector else p.old
-            p.blocks = [placed.key]
+            p.blocks = [] if on_file(edit) else [placed.key]
         # a file no document reads yet, as an empty one, is the person's to write
         if (
             node is not None
@@ -520,6 +522,8 @@ def suggested(result: ScanResult) -> list[Pending]:
             )
         elif node is not None and node.file in result.files and result.files[node.file].encoding != "utf-8":
             p.state, p.why = "unplaced", _not_utf8(node.file)
+        elif on_file(edit) and file_encoding(result, path) != "utf-8":
+            p.state, p.why = "unplaced", _not_utf8(path)
         elif f"{edit.id}:{generation(edit)}" in loom_wrote:
             p.state = "taken"
             p.why = "Loom wrote it in already; keeping it records it kept and writes nothing"
@@ -658,8 +662,8 @@ def keep(
     """
     from loom import writes
     from loom.history.acts import KEEP, keep_versions, ledger_line
-    from loom.records.carry import carry_all
-    from loom.records.edits import home, where_taken
+    from loom.records.carry import carry, carry_all
+    from loom.records.edits import file_text, home, on_file, where_taken
 
     chosen = _chosen(result, who, ids)
     refused = [{"id": p.id, "why": p.why or p.state} for p in chosen if p.state in ("unplaced", "on-a-copy")]
@@ -670,6 +674,8 @@ def keep(
     root, hist = result.quilt.root, result.quilt.history_dir
     edits = [p for p in chosen if p.kind == "edit"]
     asked = [p for p in chosen if p.kind == "suggested" and p.edit is not None]
+    # a Markdown file's annotations are on the file's text, carried from it as it stood before the Keep
+    files_before = {p.path: file_text(result, p.path) or "" for p in asked if p.edit is not None and on_file(p.edit)}
     done: list[str] = []
     kept: _Kept | None = None
     try:
@@ -711,12 +717,17 @@ def keep(
                 spans = {path: list(s) for path, s in kept.spans.items()} if kept else {}
                 for edit in kept.taken if kept else []:
                     node = home(after, edit)
-                    if node is not None:
-                        spans.setdefault(node.file, []).extend(where_taken(after, edit))
+                    path = edit.target_key if on_file(edit) else node.file if node is not None else None
+                    if path is not None:
+                        spans.setdefault(path, []).extend(where_taken(after, edit))
                 for path, s in spans.items():
                     absorb(after, who, path, s)
                 after = _rescan(after)
                 carry_all(after, before, [p for p in chosen if p.id in done], writer)
+                for path, was in files_before.items():
+                    mine = [p for p in chosen if p.path == path and p.id in done]
+                    if mine:
+                        carry(after, path, was, file_text(after, path) or "", mine, writer)
 
             w.then(follow)
     except writes.WriteRefused as exc:
@@ -748,7 +759,7 @@ def _keep_suggested(
     from loom import writes
     from loom.history.acts import APPLY, keep_versions, ledger_line
     from loom.paths import EDIT_LOG
-    from loom.records.edits import answered_event, generation, home, kept_event, replay
+    from loom.records.edits import answered_event, file_text, generation, home, kept_event, on_file, replay
     from loom.records.log import log_path as annotation_log
     from loom.scan.hashing import hash_text
     from loom.scan.owntext import key_hash
@@ -779,11 +790,13 @@ def _keep_suggested(
             result = out.result = _rescan(result)
         taken, placed, refused = _place_kept(result, live)
         files = sorted({pl.file for _, pl in placed})
-        stale = {f for f in files if not w.reads_as(f, result.files[f].text)}
+        # the text each file was placed in: a scanned file's from the scan, a Markdown file's as its placement read it (`Placed.own`), never read again here
+        planned = {pl.file: pl.own for _, pl in placed if pl.file not in result.files}
+        stale = {f for f in files if not w.reads_as(f, planned.get(f, file_text(result, f)))}
         if not stale and placed:
             _say(said, keep_versions(result, files, APPLY, "Before keeping a suggested edit", writer[1]))
             # stamping the versions takes a moment: what is spliced is the bytes read after it, still as planned
-            stale = {f for f in files if not w.reads_as(f, result.files[f].text)}
+            stale = {f for f in files if not w.reads_as(f, planned.get(f, file_text(result, f)))}
         if not stale:
             break
     refused += [
@@ -829,7 +842,10 @@ def _keep_suggested(
             w.log(*ledger_line(hist, APPLY, {"edit": e.id, "key": pl.key, "path": path}, writer[1]))
     for e in out.taken:
         node = home(result, e)
-        records(e, key_hash(result, node.key) if node is not None else "")
+        if on_file(e):
+            records(e, hash_text(file_text(result, e.target_key) or ""))
+        else:
+            records(e, key_hash(result, node.key) if node is not None else "")
     return out
 
 
@@ -837,7 +853,7 @@ def _place_kept(
     result: ScanResult, edits: list[Edit]
 ) -> tuple[list[Edit], list[tuple[Edit, Placed]], list[dict[str, str]]]:
     """Each edit taken already, placed, or refused, in `result`: the edits whose block reads as them taken, the rest placed together (`edits.compose`), and `{id, why, code?}` for one unplaced or in a file that is not UTF-8."""
-    from loom.records.edits import Placed, compose, home, taken_how
+    from loom.records.edits import Placed, compose, file_encoding, home, on_file, taken_how
 
     taken: list[Edit] = []
     rest: list[Edit] = []
@@ -846,6 +862,8 @@ def _place_kept(
         node = home(result, e)
         if node is not None and node.file in result.files and result.files[node.file].encoding != "utf-8":
             refused.append({"id": e.id, "why": _not_utf8(node.file), "code": "not-utf8"})
+        elif on_file(e) and file_encoding(result, e.target_key) != "utf-8":
+            refused.append({"id": e.id, "why": _not_utf8(e.target_key), "code": "not-utf8"})
         elif taken_how(result, e) is not None:
             taken.append(e)
         else:
@@ -1000,7 +1018,8 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
     from loom.history.acts import UNAPPLY, keep_versions, ledger_line
     from loom.looks import UNDO
     from loom.paths import EDIT_LOG
-    from loom.records.edits import home, reopened_event, replay, unanswered_event
+    from loom.records.edits import file_text, home, reopened_event, replay, unanswered_event
+    from loom.records.mdtext import is_markdown
     from loom.records.log import log_path as annotation_log
 
     result = out.result
@@ -1070,7 +1089,7 @@ def _unkeep(w: Any, out: _Unkept, ids: list[str], writer: tuple[str, str], said:
     for again in (False, True):
         if again:
             result = out.result = _rescan(result)
-        if all(f in result.files and w.reads_as(f, result.files[f].text) for f in files):
+        if all((f in result.files or is_markdown(f)) and w.reads_as(f, file_text(result, f)) for f in files):
             break
     else:
         raise writes.WriteRefused(
@@ -1341,6 +1360,21 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
             said.append(
                 f"the words put back in {path} did not go into your look ({type(exc).__name__}): Your Changes may list them as your edit"
             )
+    from loom.records.carry import carry
+    from loom.records.mdtext import is_markdown
+
+    for path, (was, now, _done) in out.wrote.items():
+        mine = [p for p in out.changes if p.path == path]
+        if not is_markdown(path) or not mine:
+            continue
+        # a Markdown file's annotations are on its text, which the undo changed as a whole
+        try:
+            after = after or _rescan(out.result)
+            carry(after, path, _lf(was), _lf(now), mine, writer)
+        except Exception as exc:  # noqa: BLE001 -- the undo is done; the annotations stay on the words taken out, said
+            said.append(
+                f"the annotations on the words taken out of {path} were not carried onto the words put back ({type(exc).__name__})"
+            )
     if out.before:
         try:
             carry_all(_rescan(after or out.result), out.before, out.changes, writer)
@@ -1349,6 +1383,11 @@ def _after_unkeep(out: _Unkept, who: str, writer: tuple[str, str]) -> list[str]:
                 f"the annotations on the words taken out were not carried onto the words put back ({type(exc).__name__})"
             )
     return said
+
+
+def _lf(text: str) -> str:
+    """`text` with its line endings read as the scan reads them."""
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def _undo_into_look(quilt: Any, who: str, path: str, was: str, now: str, done: list[tuple[int, int, str]]) -> bool:

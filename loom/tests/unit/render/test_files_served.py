@@ -173,7 +173,7 @@ def test_a_markdown_edit_republishes_without_a_scan(served) -> None:  # type: ig
     assert s.builds > before and s.last_report.result is scan
     m = json.loads(get(s.url + "build/manifest.json")[2])
     body = next(f["body"] for f in m["files"] if f["path"] == "notes/a.md")
-    assert get(s.url + "build/" + body)[2].decode().startswith('<h1 id="a-changed">')
+    assert get(s.url + "build/" + body)[2].decode().startswith('<h1 id="a-changed" data-src="notes/a.md:0:11">')
 
 
 def test_a_file_the_viewer_shows_is_linked_by_its_path_and_a_place_in_it(served) -> None:  # type: ignore[no-untyped-def]

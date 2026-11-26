@@ -1,8 +1,13 @@
 <script lang="ts">
 	// A file of the project (plan 0.22.7), drawn by its kind: a Markdown file or a notebook as the publisher drew it, an HTML page in its own frame, a PDF by pdf.js, an image, text as text. Anything else is named, with "Open in its application" where the publisher can open it, and loom never opens a file that runs code.
-	// A PDF's pages carry annotations (`pdf/desk.svelte.ts`), made and read as a document's are from the toolbar (`FileControls`); words selected with no tool on are offered Quote.
+	// A PDF's pages carry annotations (`pdf/desk.svelte.ts`), made and read as a document's are from the toolbar (`FileControls`); words selected with no tool on are offered their actions.
+	// A Markdown file's page is drawn as a document's fragment is (`Fragment`), its blocks carrying their lines in the file: its annotations are marked and open their popups, its pending changes are marked in the margin, words a link quotes are lit, and selected words are offered their actions and the tools (`FragmentNotes`), all on the file by its path.
 	import { store } from '$lib/manifest/client.svelte';
+	import Fragment from '$lib/fragments/Fragment.svelte';
+	import FragmentNotes from '$lib/fragments/FragmentNotes.svelte';
 	import Prose from '$lib/math/Prose.svelte';
+	import { nameLinks } from '$lib/math/names';
+	import SideHost from '$lib/review/SideHost.svelte';
 	import { dataUrl, filesUrl } from '$lib/paths';
 	import { MarkDesk } from '$lib/pdf/desk.svelte';
 	import MarkedDoc from '$lib/pdf/MarkedDoc.svelte';
@@ -15,7 +20,9 @@
 	import { fileState, paneOf } from '../state.svelte';
 	import { workspace } from '../store.svelte';
 	import { onlyTicks, ticksIn } from '../tasks';
+	import { untrack } from 'svelte';
 	import HtmlFrame from './HtmlFrame.svelte';
+	import { guttersHost } from './gutters';
 
 	let { item }: { item: Item } = $props();
 
@@ -89,7 +96,7 @@
 		held = f?.path;
 		failed = '';
 		if (!f) return;
-		const at = f.body ? dataUrl(f.body) : f.kind === 'text' || f.kind === 'tex' || f.kind === 'document' ? filesUrl(f.path) : '';
+		const at = f.kind === 'markdown' ? '' : f.body ? dataUrl(f.body) : f.kind === 'text' || f.kind === 'tex' || f.kind === 'document' ? filesUrl(f.path) : '';
 		if (!at) return;
 		void fetch(at + (at.includes('?') ? '&' : '?') + 'h=' + encodeURIComponent(hash), { cache: 'no-cache' })
 			.then((r) => (r.ok ? r.text() : Promise.reject(new Error(`${f.path}: ${r.status}`))))
@@ -119,15 +126,20 @@
 	}
 
 	// the publisher marks a task item and the viewer draws its box, which only a file loom can write to may change
-	$effect(() => {
-		void body;
-		const live = tickable;
+	function boxes(live: boolean): void {
 		for (const li of el?.querySelectorAll<HTMLElement>('.file-body li.task') ?? []) {
 			const box = boxOf(li);
 			const task = li.dataset.task;
+			// a publication that agrees with the box asked for ends the asking
+			if (task && file?.kind === 'markdown' && asked.get(task) === (li.dataset.done === 'true')) asked.delete(task);
 			box.checked = (task ? asked.get(task) : undefined) ?? li.dataset.done === 'true';
 			box.disabled = !(live && task);
 		}
+	}
+	$effect(() => {
+		void body;
+		const live = tickable;
+		untrack(() => boxes(live));
 	});
 
 	/** A new publication's boxes on the page as it stands. */
@@ -168,8 +180,7 @@
 	}
 
 	// a frame in the body fills the column at the shape its width and height name, which a browser works out for an image and not for a frame
-	$effect(() => {
-		void body;
+	function frames(): void {
 		for (const frame of el?.querySelectorAll<HTMLIFrameElement>('.file-body iframe') ?? []) {
 			const [w, h] = [Number(frame.getAttribute('width')), Number(frame.getAttribute('height'))];
 			if (w > 0 && h > 0) frame.style.aspectRatio = `${w} / ${h}`;
@@ -178,7 +189,18 @@
 				frame.style.height = `${h}px`;
 			}
 		}
+	}
+	$effect(() => {
+		void body;
+		untrack(frames);
 	});
+
+	/** A Markdown file's page, drawn or patched by its fragment: its boxes, its frames and its empty links made as a body's are. */
+	function drawn(root: HTMLElement): void {
+		boxes(tickable);
+		frames();
+		if (store.manifest) nameLinks(root, store.manifest);
+	}
 
 	// a line a problem names (`L12`), whose text is then drawn a line at a time so the line can be shown
 	const line = $derived(Number(/^L(\d+)$/.exec(item.anchor ?? '')?.[1] ?? 0));
@@ -241,6 +263,14 @@
 			<div class="image-frame" data-testid="image-frame">
 				<img class="file-image" src={filesUrl(file.path)} alt={name} draggable="false" />
 			</div>
+		{:else if file.kind === 'markdown' && file.body}
+			<div class="margined" use:guttersHost>
+				<FragmentNotes notes={kept.notes} fallback={file.path}>
+					<div class="body file-body">
+						<Fragment path={file.body} master={file.path} standalone annotations={kept.notes} anchor={item.anchor ?? ''} jump={item.seq ?? 0} note={item.note} quote={item.quote} arrival={kept.arrival} onmounted={drawn} />
+					</div>
+				</FragmentNotes>
+			</div>
 		{:else if body !== null}
 			<Prose html={body} class="body file-body" />
 		{:else if lines}
@@ -260,6 +290,7 @@
 			</p>
 		{/if}
 	</div>
+	{#if file.kind === 'markdown'}<SideHost notes={kept.notes} />{/if}
 {/if}
 
 <style>
@@ -333,6 +364,32 @@
 		border: 0;
 		margin: var(--gap-tight) 0;
 	}
+	/* a Markdown file's page keeps the face a body has, not a document's (`.fragment`); its margin (the icons of its annotations and changes, up to 30px past the text) stands in the slack beside the centred column, and the column gives up as much of its own width as that slack lacks, so nothing stands past the pane (`--host-width`, `guttersHost`) */
+	.file :global(.file-body .fragment) {
+		font-family: inherit;
+	}
+	.file :global(.margined .file-body) {
+		padding-right: clamp(0px, calc(30px - (var(--host-width, 0px) - var(--prose-measure)) / 2), 30px);
+	}
+	/* a table in a Markdown file's page, ruled as a body's is (`Prose`) and scrolled within itself when wider than the column */
+	.file :global(.file-body table) {
+		display: block;
+		max-width: 100%;
+		overflow-x: auto;
+		border-collapse: collapse;
+		margin: var(--gap-tight) 0;
+		font-size: 0.92em;
+	}
+	.file :global(.file-body :is(th, td)) {
+		text-align: left;
+		vertical-align: top;
+		padding: var(--gap-hair) var(--gap-tight);
+		border-bottom: 1px solid var(--rule);
+	}
+	.file :global(.file-body th) {
+		font-weight: 600;
+		border-bottom-color: var(--rule-strong);
+	}
 	/* a task item's box stands where its bullet would */
 	.file :global(.file-body li.task) {
 		list-style: none;
@@ -351,24 +408,39 @@
 		color: var(--ink-soft);
 		z-index: 1;
 	}
+	/* a Markdown file is not set as a paper: the format the reader chose for documents (`data-format`), which a fragment takes, leaves its page drawn as a body is, its headings below as they are */
+	.page.file :global(.file-body .fragment) {
+		line-height: inherit;
+		text-align: start;
+		hyphens: manual;
+	}
+	.page.file :global(.file-body .fragment p) {
+		margin: 1em 0;
+		text-indent: 0;
+	}
+	.page.file :global(.file-body .fragment :is(h1, h2, h3, h4, h5, h6)) {
+		text-align: start;
+		font-variant: normal;
+		letter-spacing: normal;
+	}
 	/* a file's own headings, which annotations and messages rarely have, on the scale a document of LaTeX's standard classes is set in: each level a step smaller than the one above, and the fourth and below at the text's own size, set apart by weight */
-	.file :global(.file-body :is(h1, h2, h3, h4, h5, h6)) {
+	.page.file :global(.file-body :is(h1, h2, h3, h4, h5, h6)) {
 		font-family: var(--sans);
 		font-weight: 500;
 		line-height: 1.25;
 		margin: 1.1em 0 0.45em;
 	}
-	.file :global(.file-body h1) {
+	.page.file :global(.file-body h1) {
 		font-size: 1.73em;
 		margin-top: 0;
 	}
-	.file :global(.file-body h2) {
+	.page.file :global(.file-body h2) {
 		font-size: 1.44em;
 	}
-	.file :global(.file-body h3) {
+	.page.file :global(.file-body h3) {
 		font-size: 1.2em;
 	}
-	.file :global(.file-body :is(h4, h5, h6)) {
+	.page.file :global(.file-body :is(h4, h5, h6)) {
 		font-size: 1em;
 		font-weight: 600;
 	}

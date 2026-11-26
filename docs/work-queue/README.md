@@ -45,7 +45,6 @@ Several triggers below are numbers loom already prints. That is the property to 
 | [WQ-68](WQ-68-toolbar-changes.md) | UI changes to the toolbar, workshopped through a demo the author revises | viewer | the author starts the toolbar workshop, or a control that must be visible at rest has no room on a pane's toolbar at the width two panes leave it |
 | [WQ-70](WQ-70-note-renderer-hook.md) | a hook that renders notes in other formats, org among them | loom, viewer | a person asks to read a non-Markdown note rendered rather than as text |
 | [WQ-71](WQ-71-wikilinks.md) | `[[wikilinks]]` between Markdown notes | loom, viewer | a quilt holds Markdown notes that link each other with `[[Note name]]` |
-| [WQ-72](WQ-72-quote-links-into-markdown.md) | a note's link carrying quoted words into a Markdown file | loom, viewer | T033 (annotations on Markdown) has landed |
 
 Twenty-eight active, seventeen slots of headroom.
 

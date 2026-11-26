@@ -198,3 +198,68 @@ test.describe('a Markdown file holding HTML', () => {
 		await expect(iframe).toHaveCount(0);
 	});
 });
+
+/** Select the whole of `at`'s words, as a drag over them would, and let go. */
+async function selectAll(at: import('@playwright/test').Locator): Promise<void> {
+	await at.evaluate((node) => {
+		const range = document.createRange();
+		range.selectNodeContents(node);
+		getSelection()!.removeAllRanges();
+		getSelection()!.addRange(range);
+		node.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+	});
+}
+
+test('words selected in a Markdown file are annotated on the file, marked there, and stay on their words after a paragraph is put in above them', async ({ page, served }) => {
+	await page.goto('/file/notes/intro.md');
+	const file = pane(page, 0).getByTestId('file-item');
+	const words = file.locator('p', { hasText: 'A widget is fixed by its locus' });
+	await expect(words).toBeVisible();
+	await selectAll(words);
+	await page.getByTestId('selection-actions').click();
+	await page.getByTestId('selection-annotate').click();
+	// on the file by its path, its quote the file's own words, links and all
+	await expect.poll(() => served.log().filter((e) => e.event === 'created' && e.target === 'notes/intro.md').length).toBe(1);
+	const entry = served.log().find((e) => e.event === 'created' && e.target === 'notes/intro.md')!;
+	expect((entry.anchor as { exact: string }).exact).toContain('A widget is fixed by its locus, and by nothing else. The [page on gadgets](page.html#second)');
+	const mark = file.locator(`mark.annotation[data-annotation="${entry.id}"]`);
+	await expect(mark).toContainText('A widget is fixed by its locus');
+	// the person writes a paragraph above it: the page is drawn again with the mark on the same words
+	const text = onDisk(served.root, 'notes/intro.md');
+	writeFileSync(join(served.root, 'notes/intro.md'), text.replace('## Setup\n', '## Setup\n\nA paragraph put in above.\n'));
+	await expect(file.locator('p', { hasText: 'A paragraph put in above.' })).toBeVisible();
+	await expect(mark).toContainText('A widget is fixed by its locus');
+	await expect(file.locator('p', { hasText: 'A paragraph put in above.' }).locator('mark.annotation')).toHaveCount(0);
+	// a click on the mark opens its popup
+	await mark.click();
+	await expect(page.getByTestId('ann-popup').first()).toBeVisible();
+});
+
+test("an agent's suggestion on a Markdown file is marked in its margin, and Keep writes exactly its words into the file", async ({ page, served }) => {
+	served.loom(['suggest', 'notes/intro.md', '--quote', 'Review the cards', '--with', 'Go over the cards', '--as', 'Referee Agent'], { AI_AGENT: '1' });
+	const before = onDisk(served.root, 'notes/intro.md');
+	await page.goto('/file/notes/intro.md');
+	const file = pane(page, 0).getByTestId('file-item');
+	const id = JSON.parse(served.loom(['changes', '--json'])).changes.find((c: { kind: string; path: string }) => c.kind === 'suggested' && c.path === 'notes/intro.md').id as string;
+	// the paragraph holding its words is marked, and its pen in the margin opens it
+	await expect(file.locator('p[data-change-at]', { hasText: 'Review the cards' })).toHaveAttribute('data-change-at', new RegExp(id));
+	await file.locator(`[data-testid="margin-change"][data-change="${id}"]`).click();
+	const popup = page.getByTestId('change-popup');
+	await expect(popup).toContainText('Go over the cards');
+	await popup.getByTestId('change-keep').click();
+	await expect.poll(() => onDisk(served.root, 'notes/intro.md')).toBe(before.replace('Review the cards', 'Go over the cards'));
+	await expect(file.locator('p', { hasText: 'Go over the cards' })).toBeVisible();
+});
+
+test("a suggestion on a Markdown file discarded leaves the file as it was, and is no longer marked", async ({ page, served }) => {
+	served.loom(['suggest', 'notes/intro.md', '--quote', 'Draw a widget', '--with', 'Draw two widgets', '--as', 'Referee Agent'], { AI_AGENT: '1' });
+	const before = onDisk(served.root, 'notes/intro.md');
+	await page.goto('/file/notes/intro.md');
+	const file = pane(page, 0).getByTestId('file-item');
+	const id = JSON.parse(served.loom(['changes', '--json'])).changes.find((c: { kind: string; path: string }) => c.kind === 'suggested' && c.path === 'notes/intro.md').id as string;
+	await file.locator(`[data-testid="margin-change"][data-change="${id}"]`).click();
+	await page.getByTestId('change-popup').getByTestId('change-discard').click();
+	await expect.poll(() => JSON.parse(served.loom(['changes', '--json'])).changes.some((c: { id: string }) => c.id === id)).toBe(false);
+	expect(onDisk(served.root, 'notes/intro.md')).toBe(before);
+	await expect(file.locator(`[data-testid="margin-change"][data-change="${id}"]`)).toHaveCount(0);
+});

@@ -211,6 +211,26 @@ def _marks_by_node(result: ScanResult, records: Records, gone: list[Gone] | None
     return out
 
 
+def _marks_by_file(result: ScanResult, records: Records) -> dict[str, list[MarkEntry]]:
+    """Mark entries for the annotations on Markdown files, by path: each on its words' place in the file, placed by the blocks' `data-src`, which give the words as the page prints them and which occurrence of them it is (`files.attach_files`)."""
+    from loom.records.mdtext import is_markdown, printed, text_of
+
+    out: dict[str, list[MarkEntry]] = {}
+    texts: dict[str, str | None] = {}
+    for res in records.resolved(result):
+        a = res.annotation
+        if res.span is None or not res.recorded or a.target_key in result.nodes or not is_markdown(a.target_key):
+            continue
+        text = texts.setdefault(a.target_key, text_of(result.quilt.root, a.target_key))
+        if text is None:
+            continue
+        lo, hi = res.span
+        out.setdefault(a.target_key, []).append(
+            MarkEntry(a.id, printed(text[lo:hi])[0], a.target_key, lo, hi, plain=True)
+        )
+    return out
+
+
 def _write_transcripts(root: Path, files: dict[str, str | bytes]) -> set[str]:
     """Every session's transcript as pages under `transcripts/<id>/<n>.json`, so a viewer with no publisher running still reads the chat; returns the pages of sessions nobody wrote in since this process last published them, which are on disk as they should be, for `publish` to keep.
 
@@ -507,7 +527,7 @@ def _build(
     from loom.scan.lint import link_words_missing, markdown_links
 
     # a Markdown file's links are judged on the page just drawn of it
-    drawn = attach_files(result, manifest, files)
+    drawn = attach_files(result, manifest, files, _marks_by_file(result, records))
     manifest["diagnostics"] += [d.to_dict() for d in markdown_links(result, drawn)]
     manifest["diagnostics"] += [d.to_dict() for d in link_words_missing(result, manifest.get("backlinks", []))]
     from loom.render.threads import last_active

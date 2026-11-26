@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from loom.records.annotations import Annotation
+from loom.records.mdtext import is_markdown
 from loom.records.selectors import Selector, resolve_selector
 from loom.records.snapshots import read_snapshot
 from loom.records.store import Records
@@ -158,6 +159,8 @@ def gone_annotations(result: ScanResult, records: Records) -> list[Gone]:
     kept: dict[str, str | None] = {}
     for res in records.resolved(result):
         a = res.annotation
+        if is_markdown(a.target_key) and a.target_key not in result.nodes:
+            continue  # a Markdown file's version is not TeX to set
         if a.earlier and res.recorded and not res.detached and a.target_hash and a.page is None:
             old = kept.setdefault(a.target_hash, _kept_text(result, a.target_hash))
             if old is not None and resolve_selector(old, Selector(a.earlier.get("quote", ""))) is not None:

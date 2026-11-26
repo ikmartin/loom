@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import quote, unquote
 
 if TYPE_CHECKING:
+    from loom.render.marks import MarkEntry
     from loom.scan.quilt import Quilt
     from loom.scan.scan import ScanResult
     from loom.tasks import Task
@@ -353,10 +354,11 @@ def render_file_markdown(
     *,
     tasks: list[Task] | None = None,
     links: list[Link] | None = None,
+    placed: bool = False,
 ) -> str:
     """The Markdown file `rel` drawn as the publisher draws pages, with ids on its headings, its relative links resolved against the shown files `kinds`, its raw HTML through the allowlist (`loom.raw_html`), and each task item a `li.task`.
 
-    Only a file's body takes raw HTML; pages and messages escape it. `seen` carries heading ids across calls, so a notebook's cells number repeats as one document does. `tasks` collects each item and makes its box tickable, for text that is a whole file; a notebook's cell passes none, so its boxes are only drawn. `links` collects each link and source as this page draws it, for text that is a whole file (`scan.lint.markdown_links`).
+    Only a file's body takes raw HTML; pages and messages escape it. `seen` carries heading ids across calls, so a notebook's cells number repeats as one document does. `tasks` collects each item and makes its box tickable, for text that is a whole file; a notebook's cell passes none, so its boxes are only drawn. `links` collects each link and source as this page draws it, for text that is a whole file (`scan.lint.markdown_links`). `placed`, for text that is a whole file, gives each block the `data-src` of its lines in the file (`_sources`), by which its annotations' marks and its changes are placed.
     """
     from loom.raw_html import clean
     from loom.records.store import render_markdown, source_line
@@ -373,12 +375,75 @@ def render_file_markdown(
     where = source_line(text) if links is not None else None
     rewrite = _rewriter(directory, kinds, {} if seen is None else seen, links, where, resolve)
     mark = mark_items(text, tasks)
+    sources = _sources(text, rel) if placed else None
 
     def walk(tokens: list[Any]) -> None:
         mark(tokens)
         rewrite(tokens)
+        if sources is not None:
+            sources(tokens)
 
     return render_markdown(text, tokens=walk, raw=lambda source, words: clean(source, resolve, words))
+
+
+#: The blocks of a drawn Markdown file that carry `data-src`: what holds words, and what holds such blocks.
+_SOURCED = frozenset(
+    {
+        "paragraph_open",
+        "heading_open",
+        "list_item_open",
+        "bullet_list_open",
+        "ordered_list_open",
+        "blockquote_open",
+        "table_open",
+        "tr_open",
+        "fence",
+        "code_block",
+    }
+)
+
+
+def _sources(text: str, rel: str) -> Any:
+    """The token pass that gives each block of a whole file's page `data-src="REL:START:END"`, the offsets of its lines in the file, as a fragment's blocks carry theirs (specs/dialect.md §1).
+
+    A token's lines are of the text with its mathematics lifted, which `records.store.source_line` maps back; a block's end is the end of its last line, its line break left out.
+    """
+    from loom.records.store import source_line
+
+    where = source_line(text)
+    starts = [0] + [i + 1 for i, ch in enumerate(text) if ch == "\n"]
+
+    def offset(line: int) -> int:
+        return starts[line] if line < len(starts) else len(text)
+
+    def walk(tokens: list[Any]) -> None:
+        for tok in tokens:
+            if tok.type not in _SOURCED or not tok.map:
+                continue
+            a = offset(where(tok.map[0]))
+            b = offset(where(tok.map[1]))
+            while b > a and text[b - 1] in "\r\n":
+                b -= 1
+            tok.attrSet("data-src", f"{rel}:{a}:{b}")
+
+    return walk
+
+
+def _on_blocks(text: str, rel: str, body: str, entries: list[MarkEntry]) -> list[MarkEntry]:
+    """Each mark entry on a Markdown file with the words its place prints on the page and which occurrence of them it is in the smallest block of `body` holding it (`records.mdtext.on_page`), so the mark goes on the words the annotation resolved to."""
+    from dataclasses import replace
+
+    from loom.records.mdtext import on_page
+
+    blocks = [
+        (int(a), int(b)) for a, b in re.findall(rf'data-src="{re.escape(html.escape(rel, quote=True))}:(\d+):(\d+)"', body)
+    ]
+    out: list[MarkEntry] = []
+    for e in entries:
+        holding = [(b - a, a) for a, b in blocks if a <= e.start and e.end <= b]
+        words, nth = on_page(text, e.start, e.end, min(holding)[1] if holding else 0)
+        out.append(replace(e, quote=words or e.quote, nth=nth))
+    return out
 
 
 def headings(body: str) -> set[str]:
@@ -498,8 +563,13 @@ def drawn_links(result: ScanResult) -> Drawn:
     return Drawn(kinds, out)
 
 
-def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, str | bytes]) -> Drawn:
-    """Publish the shown files into `manifest["files"]` and `corpus.home`, the links they make into `manifest["backlinks"]`, and each Markdown file's and notebook's body into `files` under `BODIES`; return what those pages link to, for `scan.lint.markdown_links`.
+def attach_files(
+    result: ScanResult,
+    manifest: dict[str, Any],
+    files: dict[str, str | bytes],
+    marks: dict[str, list[MarkEntry]] | None = None,
+) -> Drawn:
+    """Publish the shown files into `manifest["files"]` and `corpus.home`, the links they make into `manifest["backlinks"]`, and each Markdown file's and notebook's body into `files` under `BODIES`, a Markdown file's with its blocks' `data-src` and the marks of the annotations on it (`marks`, by path: `render.build._marks_by_file`); return what those pages link to, for `scan.lint.markdown_links`.
 
     Called once per build; the research state is listed like any Markdown file, and the viewer opens its page from the row. Every file carries `denied`, from `agents.denied_by`: what keeps agents out, or None where they may write it, so the viewer never matches the deny list itself and never guesses where a publisher said nothing.
     """
@@ -529,13 +599,17 @@ def attach_files(result: ScanResult, manifest: dict[str, Any], files: dict[str, 
                 text = ""
             found: list[Link] = []
             body = (
-                render_file_markdown(text, rel, kinds, tasks=[], links=found)
+                render_file_markdown(text, rel, kinds, tasks=[], links=found, placed=True)
                 if kind == "markdown"
                 else render_notebook(text, rel, kinds)
             )
             if kind == "markdown":
                 drawn.links[rel] = found
             headings_of(root, rel, kind, body)
+            if kind == "markdown" and marks and marks.get(rel):
+                from loom.render.marks import place_marks
+
+                body = place_marks(body, _on_blocks(text, rel, body, marks[rel]))
             entry["body"] = f"{BODIES}/{rel}.html"
             files[entry["body"]] = body
         entries.append(entry)

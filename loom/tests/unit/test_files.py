@@ -161,7 +161,7 @@ def test_the_manifest_lists_the_shown_files_and_the_front_door(q: Path) -> None:
     m = json.loads((built / "manifest.json").read_text())
     by = {f["path"]: f for f in m["files"]}
     assert by["notes/a.md"]["kind"] == "markdown" and by["notes/a.md"]["bytes"] == 4
-    assert (built / by["notes/a.md"]["body"]).read_text().startswith('<h1 id="a">A</h1>')
+    assert (built / by["notes/a.md"]["body"]).read_text().startswith('<h1 id="a" data-src="notes/a.md:0:3">A</h1>')
     assert by["drafting/main.tex"]["kind"] == "document" and "body" not in by["drafting/main.tex"]
     assert not [p for p in by if p.startswith(".")]
     assert m["corpus"]["home"] == "README.md"
