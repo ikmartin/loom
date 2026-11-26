@@ -128,13 +128,7 @@ def preview(root: Path, history: Path, act_id: str) -> Plan:
             "not-left", "Loom settles that write itself the next time it writes; there is nothing to decide."
         )
 
-    def read(rel: str) -> bytes | None:
-        try:
-            return door._read(root, rel)
-        except (door.WriteRefused, OSError):
-            return None
-
-    return _plan(root, history, act_id, begun[1], read)
+    return _plan(root, history, act_id, begun[1], _readable(lambda rel: door._read(root, rel)))
 
 
 def settle(root: Path, history: Path, act_id: str, who: str) -> Plan:
@@ -174,9 +168,22 @@ def settle(root: Path, history: Path, act_id: str, who: str) -> Plan:
         begun = w.journal.begun.get(act_id)
         if begun is None:
             raise SettleRefused("no-such-act", "That write is not waiting to be settled; nothing to do.", 404)
-        plan = _plan(root, history, act_id, begun[1], w.read)
+        plan = _plan(root, history, act_id, begun[1], _readable(w.read))
         _stage(w, root, history, begun[1], plan, who)
     return plan
+
+
+def _readable(read: Callable[[str], bytes | None]) -> Callable[[str], bytes | None]:
+    """`read`, with a file it cannot read as a file (a folder, a device, a path through what is now a file, one it may not open) taken as absent."""
+    from loom import writes as door
+
+    def safe(rel: str) -> bytes | None:
+        try:
+            return read(rel)
+        except (door.WriteRefused, OSError):
+            return None
+
+    return safe
 
 
 def _plan(root: Path, history: Path, act_id: str, entry: dict[str, Any], read: Callable[[str], bytes | None]) -> Plan:
@@ -260,13 +267,17 @@ def _decisions(root: Path, history: Path, entry: dict[str, Any], read: Callable[
 def _side(
     history: Path, entry: dict[str, Any], gen: str, e: Any, read: Callable[[str], bytes | None], undo: bool
 ) -> str | None:
-    """`kept`, `open` or `closed` by the edit's own splices at their places now; None where loom cannot tell: a text missing from the store, a splice that does not carry the edit's own words, or a file that is not text."""
+    """`kept`, `open` or `closed` by the edit's own splices at their places now; None where loom cannot tell: a text missing from the store, a splice that does not carry the edit's own words, a file that is not text, or one that as a whole does not bear the place out (`_borne_out`).
+
+    A line chooses its splice's place and the words beside it, so the words replaced found there, or no place found, decide nothing unless the whole file agrees.
+    """
     from loom import writes as door
 
     splices = door.splices_of(history, entry, edit=gen)
     if not splices:
         return None
     sides = set()
+    texts: list[str] = []
     for w in splices:
         if not _own(e, w, undo):
             return None
@@ -278,6 +289,7 @@ def _side(
         if text is None:
             sides.add("neither")
             continue
+        texts.append(text)
         try:
             after = door.place_in(w, text, side="after") is not None
             before = not after and door.place_in(w, text, side="before") is not None
@@ -285,23 +297,41 @@ def _side(
             after = before = False
         sides.add("after" if after else "before" if before else "neither")
     if sides == {"after"}:
-        return "open" if undo else "kept"
-    if sides == {"before"}:
-        return "kept" if undo else "open"
-    return "closed"
+        side = "open" if undo else "kept"
+    elif sides == {"before"}:
+        side = "kept" if undo else "open"
+    else:
+        side = "closed"
+    return side if _borne_out(e, side, texts) else None
+
+
+def _borne_out(e: Any, side: str, texts: list[str]) -> bool:
+    """Whether the files as a whole bear `side` out: open only where the edit's words stand nowhere in them, unless the words they replace hold them; closed only where neither its words nor the ones they replace stand anywhere.
+
+    Kept needs the edit's own words found standing at a place, which only the file can show, so it is taken as found.
+    """
+    words, quote = _norm(e.with_text), _norm(e.selector.exact if e.selector else "")
+    found = [_norm(t) for t in texts]
+    if side == "open":
+        return not words or words in quote or not any(words in t for t in found)
+    if side == "closed":
+        return not any((words and words in t) or (quote and quote in t) for t in found)
+    return True
+
+
+def _norm(t: str) -> str:
+    return " ".join(t.split())
 
 
 def _own(e: Any, w: Any, undo: bool) -> bool:
-    """Whether the splice `w` carries the edit's own words, as the edit log holds them: a line naming an edit with other words decides nothing of it."""
-
-    def norm(t: str) -> str:
-        return " ".join(t.split())
-
+    """Whether the splice `w` carries the edit's own words, as the edit log holds them: its new text in what the splice wrote, and for a replacement its quote in what the splice replaced. A line naming an edit with other words decides nothing of it."""
     new, old = (w.old, w.new) if undo else (w.new, w.old)
-    if norm(e.with_text):
-        return norm(e.with_text) in norm(new)
-    quote = e.selector.exact if e.selector else ""
-    return bool(norm(quote)) and norm(quote) in norm(old)
+    words, quote = _norm(e.with_text), _norm(e.selector.exact if e.selector else "")
+    if not words and not quote:
+        return False
+    if words and words not in _norm(new):
+        return False
+    return e.placement != "replace" or not quote or quote in _norm(old)
 
 
 def _reconcile(e: Any, side: str | None) -> Decision:
@@ -361,8 +391,8 @@ def _stage(w: Any, root: Path, history: Path, entry: dict[str, Any], plan: Plan,
             continue
         try:
             w.confirm(rel, w.read(rel))
-        except door.WriteRefused:
-            continue  # a folder or a device where the act wrote a file: nothing of it to leave as it is
+        except (door.WriteRefused, OSError):
+            continue  # a folder, a device or a path through a file where the act wrote a file: nothing of it to leave as it is
     writer = ("person", who)
     records = [d for d in plan.edits if d.record]
     if records:

@@ -337,15 +337,17 @@ def test_an_undo_of_a_keep_is_settled_by_the_words_it_put_back(tmp_path: Path, m
     assert _edit(root, edit).status == "open" and writes.left_acts(root, hist) == []
 
 
-def _forge_left(root: Path, hist: Path, edit: str, new: str) -> str:
-    """A Keep's `begin` line that no Keep wrote, naming the open `edit` with a splice of `new` for its quoted words, its texts in the store and neither of them what the file holds, so recovery leaves it. Returns its id."""
+def _forge_left(
+    root: Path, hist: Path, edit: str, new: str, *, was: str | None = None, old: str = OLD, at: int | None = None
+) -> str:
+    """A Keep's `begin` line that no Keep wrote, naming `edit` with a splice of `new` for `old` (its quoted words) at `at` of `was` (the file with a line added, at the quote), its texts in the store and neither of them what the file holds, so recovery leaves it. Returns its id."""
     from loom.paths import JOURNAL, JOURNAL_INDEX
     from loom.records.edits import generation
 
-    doc = (root / DOC).read_text()
-    was = doc + "% a line the forger says was there\n"
-    at = was.index(OLD)
-    now = was[:at] + new + was[at + len(OLD) :]
+    if was is None:
+        was = (root / DOC).read_text() + "% a line the forger says was there\n"
+    at = was.index(old) if at is None else at
+    now = was[:at] + new + was[at + len(old) :]
     gen = f"{edit}:{generation(_edit(root, edit))}"
     act = "keep:c3c3c3c3c3c3c3c3"
     begin = {
@@ -356,7 +358,7 @@ def _forge_left(root: Path, hist: Path, edit: str, new: str) -> str:
         "by": "person",
         "when": "2026-11-24T00:00:00Z",
         "files": {DOC: [writes.store(hist, was.encode()), writes.store(hist, now.encode())]},
-        "splices": {DOC: [{"at": at, "old": OLD, "new": new, "edit": gen}]},
+        "splices": {DOC: [{"at": at, "old": old, "new": new, "edit": gen}]},
         "edits": [gen],
         "records": [],
     }
@@ -382,6 +384,47 @@ def test_a_forged_left_line_gains_nothing_when_settled(tmp_path: Path, new: str)
     assert all(d.record is None for d in plan.edits)
     assert _person_s(root) == before and (root / EDIT_LOG).read_bytes() == log
     assert _edit(root, edit).status == "open" and writes.left_acts(root, hist) == []
+
+
+def test_a_forged_place_closes_no_edit_whose_words_still_stand(tmp_path: Path) -> None:
+    """A forged left Keep carrying the open suggestion's own words, at a place whose neighbours the forger made up and the file never held: no place is found, but the quoted words still stand in the file, so the suggestion stays open."""
+    root, hist, edit = _quilt(tmp_path)
+    pad = "Q" * 40
+    act = _forge_left(root, hist, edit, NEW, was=pad + OLD + pad + "\n", at=len(pad))
+    before = _person_s(root)
+    plan = settling.settle(root, hist, act, "Tester")
+    assert [d.outcome for d in plan.edits] == ["as-is"] and _person_s(root) == before
+    assert _edit(root, edit).status == "open" and writes.left_acts(root, hist) == []
+
+
+def test_a_forged_splice_of_other_words_reopens_no_kept_edit(tmp_path: Path) -> None:
+    """A forged left Keep says the kept suggestion's words replaced an unrelated sentence, which stands: the splice does not carry the edit's quote, so it decides nothing and the suggestion stays kept, its words in the file once."""
+    root, hist, edit = _quilt(tmp_path)
+    ok("changes", "--keep", edit, cwd=root)
+    other = "Original introduction."
+    act = _forge_left(root, hist, edit, NEW, old=other)
+    plan = settling.settle(root, hist, act, "Tester")
+    assert [d.outcome for d in plan.edits] == ["as-is"]
+    assert _edit(root, edit).status == "kept" and (root / DOC).read_text().count(NEW) == 1
+
+
+def test_a_left_act_whose_folder_became_a_file_is_settled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The person put a file where a folder the act made a file in was: settling cannot read that path, leaves it as it is, and ends the act."""
+    import shutil
+
+    root, hist, _ = _quilt(tmp_path)
+    _guard_dies(monkeypatch)
+    with pytest.raises(Died), writes.act(root, hist, "new", "Tester") as w:
+        w.replace(DOC, (root / DOC).read_bytes() + b"% the act's line\n")
+        w.replace("extra/made.md", b"made by the act\n")
+    monkeypatch.undo()
+    shutil.rmtree(root / "extra")
+    (root / "extra").write_text("the person's file now\n")
+    writes.recover(root, hist)
+    ((act, *_),) = writes.left_acts(root, hist)
+    before = _person_s(root)
+    settling.settle(root, hist, act, "Tester")
+    assert _person_s(root) == before and writes.left_acts(root, hist) == []
 
 
 def test_an_untrusted_left_line_is_only_ended(tmp_path: Path) -> None:
