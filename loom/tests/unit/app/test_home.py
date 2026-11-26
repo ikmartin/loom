@@ -82,7 +82,8 @@ def test_a_quilt_is_opened_listed_stopped_and_forgotten(home: Home, tmp_path: Pa
 def test_the_persons_name_is_asked_once_and_kept_for_every_quilt(home: Home) -> None:
     from loom.scan.quilt import user_config_path
 
-    assert call(home, "quilt-list")[1]["name"] == {"name": "", "source": ""}
+    listed = call(home, "quilt-list")[1]
+    assert listed["name"] == {"name": "", "source": ""} and listed["home_folder"] == str(Path.home())
     status, said = call(home, "quilt-name", {"name": "Ada Lovelace"})
     assert status == 200 and said == {"name": "Ada Lovelace", "source": str(user_config_path())}
     assert 'name = "Ada Lovelace"' in user_config_path().read_text()

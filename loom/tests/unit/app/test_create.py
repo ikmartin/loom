@@ -231,6 +231,8 @@ def test_a_paper_dropped_over_the_wire_becomes_a_quilt_that_is_served(home_serve
         jobs = post(home_server.url + "_api/quilt-list", {})[1]["jobs"]
         return next(j for j in jobs if j["job"] == said["job"])  # type: ignore[no-any-return]
 
+    # the list shows the quilt being made by its name and folder from the first answer, so a page that closed its window still lists it
+    assert job()["name"] == "Dropped" and job()["folder"] == str(tmp_path / "Dropped")
     until(lambda: job()["state"] != "running", "the quilt made")
     done = job()
     assert done["state"] == "done" and done["document"] == "paper/paper.tex", done

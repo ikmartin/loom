@@ -33,6 +33,8 @@
 	import OldFormat from '$lib/shell/OldFormat.svelte';
 	import { upgrade } from '$lib/shell/upgrade.svelte';
 	import { capabilities } from '$lib/write';
+	import Home from '$lib/home/Home.svelte';
+	import { homePage } from '$lib/home/listing.svelte';
 
 	let { children } = $props();
 
@@ -41,8 +43,10 @@
 		prefs.load();
 		store.start(1000);
 		void listen();
-		// asked at once, so a quilt an earlier loom made is known before anything else is drawn of it
-		void capabilities();
+		// asked at once, so a quilt an earlier loom made, or loom's home page, is known before anything else is drawn of it; the home holds no manifest to ask for
+		void capabilities().then((caps) => {
+			if (caps?.home === true) store.stop();
+		});
 	});
 
 	onDestroy(() => store.stop());
@@ -137,8 +141,10 @@
 	<link rel="icon" href={favicon} />
 </svelte:head>
 
-<!-- a quilt an earlier loom made: the frame's head, one sentence and one button, and nothing else until it is upgraded -->
-{#if upgrade.waiting}
+<!-- loom's home page, which holds no quilt; a quilt an earlier loom made: the frame's head, one sentence and one button, and nothing else until it is upgraded -->
+{#if homePage.is}
+	<Home />
+{:else if upgrade.waiting}
 	<OldFormat />
 {:else}
 <Column
