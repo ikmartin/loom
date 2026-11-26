@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -110,7 +111,8 @@ def _allowance(body: dict[str, Any]) -> bool | None:
 
 
 def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
-    """`library-works` (library-views.md §3.1): every work as a row, a read that gathers and writes nothing; `doc` adds the labels that document's compile cites each work by; `since`, the generation last answered, is answered `unchanged` while it stands."""
+    """`library-works` (library-views.md §3.1): every work as a row, a read that gathers and writes nothing but the end of a delete a killed act left under way, which it answers as `deleted` with its undo; `doc` adds the labels that document's compile cites each work by; `since`, the generation last answered, is answered `unchanged` while it stands."""
+    from loom.library.acts import finished
     from loom.library.generation import generation
     from loom.library.works import works
 
@@ -118,12 +120,19 @@ def _library_works(root: Path, body: dict[str, Any]) -> dict[str, Any]:
     since = body.get("since")
     if since is not None and (not isinstance(since, int) or isinstance(since, bool)):
         raise ApiError("bad-field", "since is the gen of an earlier answer, a number")
+    deleted = finished(root)
     result = _scan(root)
     gen = generation(result)
     if since == gen:
         return {"ok": True, "result": "unchanged", "gen": gen, "unchanged": True}
     rows = works(result, doc=doc)
-    return {"ok": True, "result": f"{len(rows)} works", "gen": gen, "works": rows}
+    return {
+        "ok": True,
+        "result": f"{len(rows)} works",
+        "gen": gen,
+        "works": rows,
+        **({"deleted": deleted} if deleted else {}),
+    }
 
 
 def _library_places(root: Path, body: dict[str, Any]) -> dict[str, Any]:
@@ -505,6 +514,20 @@ def _evidence_act(root: Path, endpoint: str, body: dict[str, Any]) -> dict[str, 
         raise refused from exc
 
 
+def _finishing(
+    read: Callable[[Path, dict[str, Any]], dict[str, Any]],
+) -> Callable[[Path, dict[str, Any]], dict[str, Any]]:
+    """A library read that first finishes a delete a killed act left under way (`acts.finished`), so no read answers from part of a deleted work; only `library-works` says it."""
+
+    def run(root: Path, body: dict[str, Any]) -> dict[str, Any]:
+        from loom.library.acts import finished
+
+        finished(root)
+        return read(root, body)
+
+    return run
+
+
 HANDLERS: dict[str, Handler] = {
     "library-check": _evidence_act,
     "library-correct": _evidence_act,
@@ -516,11 +539,11 @@ HANDLERS: dict[str, Handler] = {
     "library-look-up": _library_act,
     "library-entry": _library_act,
     "library-works": plain(_library_works),
-    "library-places": plain(_library_places),
-    "library-work": plain(_library_work),
-    "library-digest-scopes": plain(_library_digest_scopes),
-    "library-node": plain(_library_node),
-    "library-find": plain(_library_find),
+    "library-places": plain(_finishing(_library_places)),
+    "library-work": plain(_finishing(_library_work)),
+    "library-digest-scopes": plain(_finishing(_library_digest_scopes)),
+    "library-node": plain(_finishing(_library_node)),
+    "library-find": plain(_finishing(_library_find)),
     "library-digest": plain(_library_digest),
     "library-receive": plain(_library_receive),
     "library-take": _intake,

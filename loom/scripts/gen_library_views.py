@@ -264,6 +264,8 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     pasted = call("library-take.pasted", "library-take", {"items": [{"text": "2311.04567\n10.1000/example.2020.7"}]})
     here = dropped("bellamy-median-orders.pdf", _stored_pdf(root, BELLAMY))
     call("library-take.here", "library-take", {"items": [{"incoming": here}]})
+    # a file stating an arXiv number two works state: Arden's second version, its PDF taken off first, is the candidate, and Arden 2024, which holds a PDF, is held
+    call(None, "library-unfile", {"ref": ARDEN_V2})
     asked = dropped("2504.01234v3.pdf", _pdf("2504.01234v3"))
     question = call("library-take.question", "library-take", {"items": [{"incoming": asked}]})
     nothing = "ISBN 978-3-16-148410-0\nthe paper Okafor mentioned"
@@ -271,12 +273,11 @@ def samples(tmp: Path) -> dict[str, dict[str, Any]]:
     reprint = dropped("bellamy-reprint.pdf", _pdf("bellamy-reprint"))
     call("library-take.has-document", "library-take", {"items": [{"incoming": reprint, "for": BELLAMY}]})
 
-    # -- the question (two works state its arXiv number) answered: by a work it does not offer, then by one it offers, Arden's second version, its PDF taken off first, under which it is filed on the person's word though the other states the number too
+    # -- the question answered: by a work it does not offer, then by the one it offers, Arden's second version, under which it is filed on the person's word though the other states the number too
     first = question["rows"][0]["question"]
     call("library-answer.not-a-candidate", "library-answer", {"question": first, "same": CORTEZ})
-    call(None, "library-unfile", {"ref": ARDEN_V2})
     call("library-answer.same", "library-answer", {"question": first, "same": ARDEN_V2})
-    # and another file stating the number, as a work of its own
+    # and another file stating the number, which both works now hold one of, so it is asked about as a copy, kept as a work of its own
     reprint_v3 = dropped("2504.01234v3 (1).pdf", _pdf("2504.01234v3 (1)"))
     second = call(None, "library-take", {"items": [{"incoming": reprint_v3}]})["rows"][0]["question"]
     call("library-answer", "library-answer", {"question": second, "same": None})

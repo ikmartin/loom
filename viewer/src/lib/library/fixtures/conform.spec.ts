@@ -261,8 +261,9 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 			await f.call('library-take', { items: [{ text: '2209.01234v2' }], online: false });
 			return r.doc ? { ...r, doc: 'drafting/main.tex' } : r.since !== undefined ? { since: f.data.gen } : r;
 		case 'library-take': {
-			// a question made as the answer's is, by a file named by an arXiv number a work states
+			// a question made as the answer's is, by a file named by an arXiv number two works state: one found by it with no PDF, its candidate, and Arden 2024, which holds one and is held
 			if (!s.name.endsWith('.question')) return r;
+			await f.call('library-take', { items: [{ text: '2000.01000v3' }], online: false });
 			const got = await f.receive(new File([new Uint8Array(8)], '2000.01000v2.pdf'));
 			return { items: [{ incoming: got.ok ? got.value.incoming : '' }] };
 		}
@@ -275,7 +276,8 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 		case 'library-look-up':
 			return { ...r, ref: unlooked };
 		case 'library-answer': {
-			// a question made first, by a file named by an arXiv number a work states; answered with no work, with its candidate, or with a work it is not
+			// a question made first, by a file named by an arXiv number a work with no PDF states; answered with no work, with its candidate, or with a work it is not
+			await f.call('library-take', { items: [{ text: '2000.01000v3' }], online: false });
 			const got = await f.receive(new File([new Uint8Array(8)], '2000.01000v2.pdf'));
 			const took = got.ok ? await f.call<{ gen: number; rows: { question?: string; candidates?: { ref: string }[] }[] }>('library-take', { items: [{ incoming: got.value.incoming }] }) : null;
 			const row = took?.ok ? took.value.rows[0] : {};
@@ -321,7 +323,6 @@ async function adapted(s: Sample, f: ReturnType<typeof fixtureSource>): Promise<
 
 /** The fields the fixture fills that no sample of loom's fills yet, so their shape is unchecked, each with the sample that would check it; those samples are loom's generators' (`scripts/regen views`, `views-library`). A field the fixture fills that is not listed fails the check below, and so does a listed one a sample now fills. */
 const AWAITING_SAMPLES: Record<string, string> = {
-	'library-answer .row.authors': 'a work of its own naming its authors',
 	'library-node .title': 'a digested result with a title, which none of the showcase\'s Arden 2024 has',
 	'library-work .outline.items[].lean.role': 'a work\'s result that a Lean record states',
 	'library-work .outline.items[].title': 'a work\'s result with a title, which none of the showcase\'s Arden 2024 has',

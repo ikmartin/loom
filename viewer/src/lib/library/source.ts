@@ -17,7 +17,7 @@ function wanted(): boolean {
 	}
 }
 
-/** Whether this visit's fixture was asked for with `?<name>=<value>`, kept for the tab: `?network=unasked`, a quilt that has not said whether loom may use the network; `?web=large`, the Web at the size a reviewer measured. */
+/** Whether this visit's fixture was asked for with `?<name>=<value>`, kept for the tab: `?network=unasked`, a quilt that has not said whether loom may use the network; `?web=large`, the Web at the size a reviewer measured; `?delete=killed`, a delete a killed act left under way, which the first read finishes. */
 function kept(name: string, value: string): boolean {
 	try {
 		if (new URL(window.location.href).searchParams.get(name) === value) sessionStorage.setItem(`${KEY}.${name}`, value);
@@ -40,7 +40,7 @@ export function chooseSource(): Promise<void> {
 		if (!wanted()) return;
 		fixture = true;
 		const { fixtureSource } = await import('./fixtures/source');
-		const made = fixtureSource((gen) => library.heard(gen), { network: unasked() ? 'unasked' : 'asked', ...(kept('web', 'large') ? { web: 'large' as const } : {}) });
+		const made = fixtureSource((gen) => library.heard(gen), { network: unasked() ? 'unasked' : 'asked', ...(kept('web', 'large') ? { web: 'large' as const } : {}), ...(kept('delete', 'killed') ? { killed: true } : {}) });
 		useSource(made);
 		library.heard(made.data.gen);
 	})();

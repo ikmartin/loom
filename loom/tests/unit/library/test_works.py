@@ -75,6 +75,26 @@ def test_the_works_list_opens_no_node_file_no_pdf_and_no_source(
     assert [p for p in opened if p.endswith((".node", ".pdf", ".tar"))] == []
 
 
+def test_a_note_on_a_draft_leaves_the_generation_and_a_note_on_a_work_moves_it(tmp_path: Path) -> None:
+    """The review's M-29: only the annotation log's lines on works go into the generation, so a burst of notes on a draft sends the library's views no reads."""
+    from loom.records.log import append, append_new
+
+    root = quilt(tmp_path)
+    gather(scan(load_quilt(root)))
+    result = scan(load_quilt(root))
+    [ref] = [r["ref"] for r in works(result) if r["short"] == "Smith 2024"]
+    note = {"event": "created", "when": "2026-11-24T00:00:00Z", "author": "A. Author", "kind": "person", "anchor": None}
+    first = generation(result)
+    on_draft = append_new(root, {**note, "target": "main.tex", "body": "a note on the draft"}, "2026-11-24")
+    append(root, {"event": "resolved", "id": on_draft, "when": "2026-11-24T00:00:01Z"})
+    assert generation(result) == first, "a note on a draft moves nothing a library read answers from"
+    on_work = append_new(root, {**note, "target": ref, "body": "a note on the work"}, "2026-11-24")
+    moved = generation(result)
+    assert moved > first
+    append(root, {"event": "resolved", "id": on_work, "when": "2026-11-24T00:00:02Z"})
+    assert generation(result) > moved, "a later line naming a note on a work"
+
+
 def test_the_generation_stands_until_anything_a_row_reads_changes(tmp_path: Path) -> None:
     root = quilt(tmp_path)
     gather(scan(load_quilt(root)))

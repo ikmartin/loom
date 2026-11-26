@@ -534,6 +534,58 @@ def test_a_candidate_s_how_is_the_identifier_it_states_too(tmp_path: Path) -> No
     assert waiting(root)[0]["candidates"] == asked["candidates"]
 
 
+def test_every_candidate_offered_takes_its_yes(tmp_path: Path) -> None:
+    """A work holding a PDF already is no candidate for a dropped PDF, the work it was dropped on included, since a yes to it could never be taken."""
+    import shutil
+
+    root = quilt(tmp_path)
+    v1, v2, v3 = rows(root, Item(text="arXiv:2401.01234v1\narXiv:2401.01234v2\narXiv:2401.01234v3"))
+    [first] = rows(root, Item(drop=dropped(root, "2401.01234v1.pdf", a_pdf(tmp_path, ["Widgets", "one"]))))
+    assert answer(root, first["question"], v1["ref"], **ME).to_json()["state"] == "added"
+    [asked] = rows(
+        root, Item(drop=dropped(root, "2401.01234v4.pdf", a_pdf(tmp_path, ["Widgets", "four"])), work=v1["ref"])
+    )
+    assert [c["ref"] for c in asked["candidates"]] == [v2["ref"], v3["ref"]] and "held" not in asked
+    for n, c in enumerate(asked["candidates"]):
+        copy = tmp_path / f"copy{n}"
+        shutil.copytree(root, copy)
+        filed = answer(copy, asked["question"], c["ref"], **ME).to_json()
+        assert (filed["state"], filed["ref"], filed["under"]) == ("added", c["ref"], True), filed
+
+
+def test_a_second_copy_of_a_works_pdf_is_asked_about_as_what_it_is(tmp_path: Path) -> None:
+    """Where every work a dropped PDF names holds one already, it is asked about with no candidate and those works `held`: a work of its own, or let go."""
+    root = quilt(tmp_path)
+    [work] = rows(root, Item(text="arXiv:2401.01234v1"))
+    [first] = rows(root, Item(drop=dropped(root, "2401.01234v1.pdf", a_pdf(tmp_path, ["Widgets", "one"]))))
+    answer(root, first["question"], work["ref"], **ME)
+    [asked] = rows(root, Item(drop=dropped(root, "2401.01234v1.pdf", a_pdf(tmp_path, ["Widgets", "two"]))))
+    assert asked["state"] == "question" and asked["candidates"] == [], asked
+    assert [(h["ref"], h["how"]) for h in asked["held"]] == [(work["ref"], "arxiv:2401.01234v1")]
+    assert waiting(root)[0]["held"] == asked["held"]
+    with pytest.raises(IntakeRefused, match="not one of"):
+        answer(root, asked["question"], work["ref"], **ME)
+    own = answer(root, asked["question"], None, **ME).to_json()
+    assert own["state"] == "added" and own["ref"] != work["ref"] and waiting(root) == []
+    [again] = rows(root, Item(drop=dropped(root, "2401.01234v1.pdf", a_pdf(tmp_path, ["Widgets", "three"]))))
+    assert again["state"] == "question" and len(again["held"]) == 2
+    said, row = undo(root, again["id"], **ME)
+    assert (said, row, waiting(root)) == ("the drop was discarded", None, []), "let go"
+
+
+def test_a_work_of_its_own_is_made_where_a_work_named_holds_a_pdf_and_another_does_not(tmp_path: Path) -> None:
+    """A question naming a candidate and a work holding a PDF lists the second `held`, and answered a work of its own makes one rather than asking again about the held work."""
+    root = quilt(tmp_path)
+    v1, v2 = rows(root, Item(text="arXiv:2401.01234v1\narXiv:2401.01234v2"))
+    [first] = rows(root, Item(drop=dropped(root, "2401.01234v1.pdf", a_pdf(tmp_path, ["Widgets", "one"]))))
+    answer(root, first["question"], v1["ref"], **ME)
+    [asked] = rows(root, Item(drop=dropped(root, "2401.01234v2.pdf", a_pdf(tmp_path, ["Widgets", "two"]))))
+    assert [c["ref"] for c in asked["candidates"]] == [v2["ref"]]
+    assert [h["ref"] for h in asked["held"]] == [v1["ref"]]
+    own = answer(root, asked["question"], None, **ME).to_json()
+    assert own["state"] == "added" and own["ref"] not in (v1["ref"], v2["ref"]) and waiting(root) == [], own
+
+
 def filed_and_off(tmp_path: Path, name: str = "smith-widgets.pdf") -> tuple[Path, str, str, dict[str, Any]]:
     """A quilt whose one work had a PDF dropped on it and taken off again: the quilt, the work, the drop, and what `unfile` answered."""
     root = quilt(tmp_path)

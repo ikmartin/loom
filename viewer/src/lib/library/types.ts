@@ -50,6 +50,8 @@ export interface Work {
 
 export interface WorksAnswer extends Gen {
 	works: Work[];
+	/** A delete a killed act left under way, which this read finished: said once, with its undo, as after `library-delete`. */
+	deleted?: { undo: string; ref: string; short: string };
 }
 
 /** A section of a work's outline. */

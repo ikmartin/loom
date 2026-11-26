@@ -32,7 +32,7 @@ from loom.tex.aux import AuxNumber, parse_aux
 from loom.tex.runner import compile_tex, normalise_engine, stage_sources
 
 #: The survey's own format; a kept survey of another is read again.
-VERSION = 15
+VERSION = 19
 #: The longest one pass of a source's compile may run, in seconds.
 TIMEOUT = 300
 #: How long a compile waits for another quilt's survey compile to end before it is refused.
@@ -713,18 +713,64 @@ def kept(root: Path, tex: str, pdf: str | None = None) -> Survey | None:
     """The survey kept for the source `tex` and the stored PDF `pdf`, or None when there is none of this version."""
     try:
         data = json.loads(path_of(root, tex, pdf).read_text(encoding="utf-8"))
-        return Survey.from_json(data) if data.get("version") == VERSION else None
-    except (OSError, ValueError, TypeError):
+        return Survey.from_json(unpacked(data)) if data.get("version") == VERSION else None
+    except (OSError, ValueError, TypeError, KeyError, IndexError):
         return None
 
 
 def keep(root: Path, survey: Survey) -> None:
-    """Write a survey to its file whole: a reader sees the last one or this one, never part of it."""
+    """Write a survey to its file whole, in its compact form (`packed`): a reader sees the last one or this one, never part of it."""
     path = path_of(root, survey.tex, survey.pdf)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    tmp.write_text(json.dumps(survey.to_json(), ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    tmp.write_text(json.dumps(packed(survey.to_json()), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     os.replace(tmp, path)
+
+
+#: The lists of a survey's JSON kept as tables; the labels are kept as one too, by name.
+_TABLES = ("sections", "items", "displays")
+
+
+def packed(data: dict[str, Any]) -> dict[str, Any]:
+    """A survey's JSON in the form its file keeps: each list of headings, results, displays, a result's proofs and the labels a table of `cols` and `rows`, and a file named only where it is not the main one; `unpacked` reads it back."""
+    main = data.get("main")
+
+    def table(rows: list[dict[str, Any]]) -> dict[str, Any]:
+        cols = list(rows[0]) if rows else []
+        return {"cols": cols, "rows": [[cell(c, r[c]) for c in cols] for r in rows]}
+
+    def cell(col: str, value: Any) -> Any:
+        if col == "file" and value == main:
+            return None
+        if col == "proofs":
+            return table(value)
+        return value
+
+    out = {k: v for k, v in data.items() if k not in (*_TABLES, "labels")}
+    out.update({k: table(data.get(k) or []) for k in _TABLES})
+    out["labels"] = table([{"name": name, **label} for name, label in (data.get("labels") or {}).items()])
+    return out
+
+
+def unpacked(data: dict[str, Any]) -> dict[str, Any]:
+    """A survey's JSON from the form its file keeps (`packed`)."""
+    main = data.get("main")
+
+    def rows(table: dict[str, Any]) -> list[dict[str, Any]]:
+        cols = table["cols"]
+        return [{c: cell(c, v) for c, v in zip(cols, row, strict=True)} for row in table["rows"]]
+
+    def cell(col: str, value: Any) -> Any:
+        if col == "file" and value is None:
+            return main
+        if col == "proofs":
+            return rows(value)
+        return value
+
+    out = {k: v for k, v in data.items() if k not in (*_TABLES, "labels")}
+    out.update({k: rows(data[k]) for k in _TABLES})
+    out["labels"] = {r.pop("name"): r for r in rows(data["labels"])}
+    return out
 
 
 def survey(root: Path, tex: str, src: Path, main: str, pdf: str | None = None) -> Survey:
@@ -859,11 +905,18 @@ def _words(text: str) -> list[str]:
 
 
 def _opening(text: str, *, least: int = 12) -> str | None:
-    """The words a statement, a proof or a heading opens with, before its first formula or environment, as `refs.search` compares page text; None when there are fewer than `least` letters to find it by."""
+    """The words a statement, a proof or a heading opens with, before its first formula, environment, cross-reference, citation or inclusion, as `refs.search` compares page text; None when there are fewer than `least` letters to find it by.
+
+    A reference's or a citation's argument is a key the PDF never prints, and what it prints instead ("Corollary 2.3", "[4]") is not in the source, so the opening stops there; a `\\label` prints nothing and is passed over.
+    """
     from loom.refs.search import _loose
 
-    text = re.sub(r"\\(?:label|ref|eqref|cref|Cref|autoref|cite\w*)\*?\s*(?:\[[^\]]*\])?\s*\{[^{}]*\}", " ", text)
-    head = re.split(r"\$|\\\[|\\\(|\\begin\s*\{", text, maxsplit=1)[0]
+    text = re.sub(r"\\label\*?\s*\{[^{}]*\}", " ", text)
+    head = re.split(
+        r"\$|\\\[|\\\(|\\begin\s*\{|\\(?:[A-Za-z]*ref(?:range)?|[A-Za-z]*[Cc]ite[A-Za-z]*|input|include)(?![A-Za-z])",
+        text,
+        maxsplit=1,
+    )[0]
     head = re.sub(r"\\[A-Za-z@]+\*?|[{}~]", " ", head)
     words = _loose(" ".join(head.split()[:10]))
     return words if len(words) >= least else None
@@ -954,7 +1007,7 @@ class Pages:
 def place(s: Survey, pages: Pages) -> dict[str, tuple[str | None, int]]:
     """Each heading's and result's printed number and page, read in the work's stored PDF.
 
-    A result's line is identified by its kind and its own words: a line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`), the number then the name (`2.2 Lemma.`), or the name alone (`Claim.`), whose rest and the lines after it, never past the next line that heads a result or a section, hold the statement's opening words, or its first words outside its mathematics in order (`Item.words`). A result with too few words to go by is identified by its place between two results so identified, where the source and the PDF hold as many results' headings between them. A heading's line is identified by its title, on its line or, after its number alone on a line that opens a block, on the next; a number alone is kept only where it continues the sequence of the headings already found at its level. Never by a number: the number is read from the line once it is found, whatever loom's reading of it. Results and headings are looked for in the source's order, a result found by its words before the last mark where it is not after it; a contents page holds no place. A mark nothing identifies keeps nothing.
+    A result's line is identified by its kind and its own words: a line opening with its printed name and a number (`Lemma 2.2.`, `Lemma 2.2 (Title).`), the number then the name (`2.2 Lemma.`), or the name alone (`Claim.`), whose rest and the lines after it, never past the next line that heads a result or a section, hold the statement's opening words, or its first words outside its mathematics in order (`Item.words`). A result with too few words to go by is identified by its place between two results so identified, where the source and the PDF hold as many results' headings between them. A heading's line is identified by its title, on its line or, after its number alone on a line that opens a block or follows straight on the title of the heading above it, on the next; a number alone is kept only where it is loom's own reading or continues the sequence of the headings already found at its level. Never by a number: the number is read from the line once it is found, whatever loom's reading of it. Results and headings are looked for in the source's order, a result found by its words before the last mark where it is not after it; a contents page holds no place. A mark nothing identifies keeps nothing.
 
     Parameters
     ----------
@@ -1008,21 +1061,25 @@ def _route(s: Survey, pages: Pages) -> dict[str, tuple[str | None, int, int, str
     out: dict[str, tuple[str | None, int, int, str]] = {}
     taken: set[int] = set()
     found: dict[int, str] = {}  # each level's last heading number found, so a number alone continues it
+    parent: tuple[int, int] | None = None  # the level and title line of the heading just found, nothing found after it
     marks: list[Section | Item] = sorted([*s.sections, *s.items], key=lambda m: m.order)
     for mark in marks:
         if isinstance(mark, Section):
-            got = _heading(pages, heads, contents, at, mark, found) if mark.emulated is not None else None
+            titled = parent[1] if parent is not None and parent[0] < mark.level else None
+            got = _heading(pages, heads, contents, at, mark, found, titled) if mark.emulated is not None else None
             if got is not None:
-                number, page, k = got
+                number, page, k, title = got
                 out[mark.section] = (number, page, k, "words")
                 found = {lv: n for lv, n in found.items() if lv < mark.level} | {mark.level: number}
                 at = k + 1
+                parent = (mark.level, title)
         elif _worded(mark):
             line = _result(pages, heads, contents, at, mark, taken)
             if line is not None:
                 taken.add(line)
                 out[mark.item] = (heads.at[line][1], pages.lines[line][0], line, "words")
                 at = max(at, line + 1)
+                parent = None
     # a result with no words to go by: its place between two found by theirs, where the counts agree
     items = [i for i in marks if isinstance(i, Item)]
     for n, item in enumerate(items):
@@ -1074,13 +1131,12 @@ def _contents(pages: Pages, titles: list[str]) -> range:
         title = next((t for t in known if line.startswith(t)), None)
         if title is not None:
             if title in seen:
-                # the body's first heading: its number alone, just before its title on the same page, is the body's too
-                if (
-                    k - 1 > start
-                    and pages.lines[k - 1][0] == pages.lines[k][0]
-                    and _HEADING.fullmatch(pages.lines[k - 1][1])
-                ):
-                    k -= 1
+                # the body's first heading: its number alone, just before its title on the same page, empty lines between, is the body's too
+                j = k - 1
+                while j > start and not pages.lines[j][1]:
+                    j -= 1
+                if j > start and pages.lines[j][0] == pages.lines[k][0] and _HEADING.fullmatch(pages.lines[j][1]):
+                    k = j
                 break
             seen.add(title)
         elif line.strip("."):
@@ -1090,9 +1146,12 @@ def _contents(pages: Pages, titles: list[str]) -> range:
 
 
 def _heading(
-    pages: Pages, heads: _Heads, contents: range, at: int, sec: Section, found: dict[int, str]
-) -> tuple[str, int, int] | None:
-    """The first line after `at` that is `sec`'s heading, identified by its title: its number, its page and its line."""
+    pages: Pages, heads: _Heads, contents: range, at: int, sec: Section, found: dict[int, str], titled: int | None
+) -> tuple[str, int, int, int] | None:
+    """The first line after `at` that is `sec`'s heading, identified by its title: its number, its page, its line and its title's line.
+
+    A number alone heads a block, or follows straight on `titled`, the title line of the heading above it just found, as `pdftotext` writes a book's first section under its chapter's title with no empty line between.
+    """
     import heapq
 
     from loom.refs.search import _loose
@@ -1110,18 +1169,22 @@ def _heading(
             continue
         if m["rest"]:
             if _loose(f"{m['rest']} {pages.following(k)}").lower().startswith(title):
-                return number, page, k
+                return number, page, k, k
             continue
         # a number alone on a line heads a block, its title next, and continues the headings found at its level
-        if line.endswith(".") or not pages.opens(k) or not _loose(pages.following(k)).lower().startswith(title):
+        if line.endswith(".") or not (pages.opens(k) or k - 1 == titled):
+            continue
+        if not _loose(pages.following(k)).lower().startswith(title):
             continue
         if _continues(number, sec, found):
-            return number, page, k
+            return number, page, k, next(j for j in range(k + 1, k + 4) if pages.lines[j][1])
     return None
 
 
 def _continues(number: str, sec: Section, found: dict[int, str]) -> bool:
-    """Whether a heading's number continues the sequence of those found at its level: the next after the last, or the first under the heading above it."""
+    """Whether a heading's number continues the sequence of those found at its level: loom's own reading of it, the next after the last, or the first under the heading above it."""
+    if number == sec.emulated:
+        return True
     parts = re.split(r"[.\-]", number)
     last = found.get(sec.level)
     if last is not None:

@@ -272,6 +272,37 @@ def test_a_delete_cut_short_after_its_undo_is_finished_by_the_next_writer(
     assert kept(root) == before, where
 
 
+def test_a_delete_cut_short_is_finished_by_the_next_read_and_its_undo_offered_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The review's M-25: until the next write the work stood without its notes, and the delete's undo never reached the viewer; the works list now finishes it and answers it as `deleted`, and every other read finishes it too."""
+    import loom.library.acts as acts
+    from loom.render.endpoints.library import HANDLERS
+
+    root, ref = held(tmp_path)
+    _cut(monkeypatch, acts, "remove_node", after=True)
+    with pytest.raises(KeyboardInterrupt):
+        delete(root, ref, **ME)
+    monkeypatch.undo()
+    [undo] = [p.name for p in (root / LIBRARY_UNDO).glob("u-*")]
+    said = HANDLERS["library-works"](root, "library-works", {})
+    assert said["deleted"] == {"undo": undo, "ref": ref, "short": "Smith and Kovač 2024"}, said
+    assert ref not in {w["ref"] for w in said["works"]}
+    deleted_whole(root, ref, undo)
+    assert "deleted" not in HANDLERS["library-works"](root, "library-works", {}), (
+        "offered once, by the read that finished it"
+    )
+    assert restore(root, undo, **ME) == ref
+    _cut(monkeypatch, acts, "remove_node", after=True)
+    with pytest.raises(KeyboardInterrupt):
+        delete(root, ref, **ME)
+    monkeypatch.undo()
+    assert (root / LIBRARY_UNDO / "deleting").is_file()
+    with pytest.raises(Exception, match="no work"):
+        HANDLERS["library-work"](root, "library-work", {"ref": ref})
+    assert not (root / LIBRARY_UNDO / "deleting").exists(), "another read finishes it, and says nothing"
+
+
 def test_a_delete_cut_short_while_writing_its_undo_leaves_the_work_and_its_notes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

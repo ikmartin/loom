@@ -1249,7 +1249,9 @@ def test_a_lone_token_before_an_unnumbered_heading_continues_no_sequence(tmp_pat
     assert "s1" not in got, (
         "X continues nothing: no heading was found at its level before it, and it is not where one begins"
     )
-    assert "s2" not in got and got["l:a"] == ("1.1", 1), "nor does 2, with no heading found before it at its level"
+    assert got["s2"] == ("2", 1) and got["l:a"] == ("1.1", 1), (
+        "2 is loom's own reading, so kept with none found before it"
+    )
     numbered = _cycles(tmp_path, f"Some words before it.\n\n1\nCycles\nLemma 1.1. {L_A}\n\n2\nPaths\n")
     assert (numbered["s1"], numbered["s2"]) == (("1", 1), ("2", 1)), (
         "where the sequence begins and goes on, each is kept"
@@ -1502,3 +1504,111 @@ def test_a_result_naming_a_display_outside_every_result_by_any_ref_command_is_ma
         "l:d": [],
         "l:e": [],
     }
+
+
+def test_an_opening_ends_at_a_reference_a_citation_or_an_inclusion() -> None:
+    """The review's D-11: a key the PDF never prints is no opening word, and what it prints there instead is not in the source, so the opening stops there as at a formula; a label prints nothing and is passed over."""
+    from loom.library.survey import _opening
+    from loom.refs.search import _loose
+
+    assert _opening("Every knot considered in Lemma~\\ref{lem:wh} is slice.") == _loose(
+        "Every knot considered in Lemma"
+    )
+    assert _opening("Every gadget tower of \\cite[Def.~B.2]{Kov99} is finite.") == _loose("Every gadget tower of")
+    assert _opening("Every widget we study here \\input{/abs/path} is compact.") == _loose("Every widget we study here")
+    assert _opening("\\label{lem:x}Every widget is compact and closed.") == _loose(
+        "Every widget is compact and closed."
+    )
+    assert _opening("By \\eqref{eq:bound} the map is onto.") is None, "too few letters before the reference"
+
+
+#: A book whose chapters' first sections `pdftotext` writes straight after the chapter's title, the appendix's too, and its first section's subsection after an empty line.
+BOOK = r"""\documentclass{book}
+\begin{document}
+\chapter{One}
+\section{First things here}
+Some text about widgets.
+\subsection{Smaller things there}
+More text.
+\chapter{Two}
+\section{Second things here}
+Text.
+\appendix
+\chapter{Extra}
+\section{Appendix things}
+Text.
+\end{document}
+"""
+#: Its pages as `pdftotext` writes them.
+BOOK_PDF = [
+    "Chapter 1\n\nOne\n1.1\n\nFirst things here\n\nSome text about widgets.\n\n1.1.1\n\nSmaller things there\n\nMore text.\n\n1\n",
+    "Chapter 2\n\nTwo\n2.1\n\nSecond things here\n\nText.\n\n3\n",
+    "Appendix A\n\nExtra\nA.1\n\nAppendix things\n\nText.\n\n5\n",
+]
+
+
+def test_a_section_straight_after_its_chapter_s_title_is_read(tmp_path: Path) -> None:
+    """The review's D-21: a book's first section under each chapter, its number alone with no empty line between it and the chapter's title, and what is below it."""
+    s = survey.read(_one_file(tmp_path, BOOK), "main.tex", TEX)
+    got = survey.place(s, survey.Pages(BOOK_PDF))
+    assert sorted(got.values()) == [("1", 1), ("1.1", 1), ("1.1.1", 1), ("2", 2), ("2.1", 2), ("A", 3), ("A.1", 3)], got
+    after_prose = survey.place(s, survey.Pages([BOOK_PDF[0].replace("One\n1.1", "One\nA line of prose.\n1.1")]))
+    assert ("1.1", 1) not in after_prose.values(), (
+        "a number alone after a line that is no heading's title, opening no block, heads nothing"
+    )
+
+
+#: An article with a contents page, its sections numbered from `first`.
+def _opening_matters(first: int) -> str:
+    return (
+        "\\documentclass{article}\n"
+        + (f"\\setcounter{{section}}{{{first - 1}}}\n" if first != 1 else "")
+        + "\\begin{document}\n\\tableofcontents\n\\section{Opening matters here}\nText.\n\\section{Closing matters here}\nText.\n\\end{document}\n"
+    )
+
+
+def _matters_pdf(first: int) -> str:
+    """The article's page as `pdftotext` writes it: the contents' entries, each page number after an empty line, then the body, an empty line between each heading's number and its title."""
+    a, b = first, first + 1
+    return (
+        f"Contents\n{a} Opening matters here\n\n1\n\n{b} Closing matters here\n\n1\n\n"
+        f"{a}\n\nOpening matters here\n\nText.\n\n{b}\n\nClosing matters here\n\nText.\n\n1\n"
+    )
+
+
+@pytest.mark.parametrize(("first", "contents"), [(1, True), (4, False), (4, True), (0, False)])
+def test_a_first_heading_continues_loom_s_reading_and_a_contents_page_ends_at_the_body_s_first(
+    tmp_path: Path, first: int, contents: bool
+) -> None:
+    """The review's D-26: a first section numbered by `\\setcounter`, 4 or 0, is loom's own reading; article's contents page ends before the body's first number alone, an empty line between it and its title."""
+    s = survey.read(_one_file(tmp_path, _opening_matters(first)), "main.tex", TEX)
+    page = _matters_pdf(first)
+    if not contents:
+        page = page.split("\n\n1\n\n", 2)[2]
+    got = survey.place(s, survey.Pages([page]))
+    assert sorted(got.values()) == [(str(first), 1), (str(first + 1), 1)], got
+
+
+def test_a_kept_survey_is_compact_and_reads_back_whole(tmp_path: Path) -> None:
+    """The review's D-6: the kept file holds its lists as tables of rows and names a file only where it is not the main one; it reads back as it was."""
+    import json
+
+    from loom.library.survey import kept, path_of, survey
+
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.tex").write_text(
+        "\\documentclass{article}\n\\newtheorem{lemma}{Lemma}[section]\n\\begin{document}\n\\section{One}\\label{s:one}\n\\input{part}\n\\end{document}\n"
+    )
+    (src / "part.tex").write_text(
+        "\\begin{lemma}\\label{l:a}\nEvery widget is compact and closed,\n\\begin{equation}\\label{eq:a} x \\le 1 .\\end{equation}\n\\end{lemma}\n"
+        "\\begin{proof}\nBy the bound \\eqref{eq:a} and nothing else at all.\n\\end{proof}\n"
+    )
+    root = tmp_path / "q"
+    tex = "sha256:" + "ab" * 32
+    s = survey(root, tex, src, "main.tex")
+    assert s.items and s.items[0].file == "part.tex" and s.items[0].proofs and s.labels and s.displays
+    held = json.loads(path_of(root, tex).read_text(encoding="utf-8"))
+    assert held["items"]["cols"][0] == "item" and isinstance(held["labels"]["rows"], list)
+    back = kept(root, tex)
+    assert back is not None and back.to_json() == s.to_json()

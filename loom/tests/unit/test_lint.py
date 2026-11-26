@@ -269,3 +269,37 @@ def test_a_library_result_of_no_work_put_there_by_hand_is_said(tmp_path: Path) -
     )
     rows = _rows(q, "loom:node-incomplete")
     assert [d["locations"][0]["file"] for d in rows] == [f"{LIBRARY_NODES}/dm-0Z01.node"], rows
+
+
+def test_every_check_of_the_library_s_store_is_said(tmp_path: Path) -> None:
+    """Lint says each `loom:node-*` the store's checks give, not only a result of no work: here a statement pointing at a node the store does not hold."""
+    from loom.paths import LIBRARY_NODES
+
+    q = demo(tmp_path)
+    (q / LIBRARY_NODES).mkdir(parents=True, exist_ok=True)
+    (q / LIBRARY_NODES / "dm-0Z01-ref.node").write_text(
+        '+++\nschema = 1\nid = "dm-0Z01-ref"\ntaxon = "reference"\n+++\n@misc{Ref01, title = {A work}}\n'
+    )
+    (q / LIBRARY_NODES / "dm-0Z02.node").write_text(
+        '+++\nschema = 1\nid = "dm-0Z02"\ntaxon = "lemma"\nsource = "dm-0Z01-ref"\nuses = ["dm-0Z09"]\n+++\nBy Lemma~\\ref{dm-0Z09}.\n'
+    )
+    rows = [
+        d for d in json.loads(run("lint", "--json", cwd=q).stdout)["diagnostics"] if d["code"].startswith("loom:node-")
+    ]
+    assert rows and {d["locations"][0]["file"] for d in rows} == {f"{LIBRARY_NODES}/dm-0Z02.node"}, rows
+
+
+def test_a_bib_entry_gathering_cannot_keep_is_said_at_its_line_and_nothing_is_written(tmp_path: Path) -> None:
+    """The review's M-23: lint runs gathering's checks of the entries the drafts read without writing, and says each it cannot keep where the build's Problems does."""
+    from tests.unit.library.test_gather import BAD, BIB, quilt
+
+    root = quilt(tmp_path)
+    (root / "refs.bib").write_text(BIB + BAD)
+    (root / "main.tex").write_text((root / "main.tex").read_text().replace("\\cite{Jon19}", "\\cite{Jon19,Bad1}"))
+    [row] = _rows(root, "loom:bib-entry-refused")
+    assert (row["locations"][0]["file"], row["locations"][0]["line"]) == (
+        "refs.bib",
+        (BIB + BAD).splitlines().index("@article{Bad1,") + 1,
+    )
+    assert "jnotdefined" in row["message"] and row["owner"] == "person"
+    assert not (root / ".loom/library/nodes").exists(), "lint writes no reference"

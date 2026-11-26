@@ -49,7 +49,7 @@ def anchor_on_page(
     page : int
         The page, from 1.
     text : str, optional
-        What was selected. Matched against the word boxes with a tolerance for hyphenation and ligatures, and then located in the page text for offsets. Where the words occur more than once on the page, the occurrence `rects` covers is the one recorded, the first when no `rects` are given.
+        What was selected. Matched against the word boxes with a tolerance for hyphenation and ligatures, and then located in the page text for offsets. Where the words occur more than once on the page, the occurrence `rects` covers the most of is the one recorded, the first of two it covers alike, and the first when no `rects` are given.
     rects : list of [x0, y0, x1, y1], optional
         The lines a selection covers, as the viewer sends them, or what was drawn when there was no text worth selecting; in points with the origin at the top left.
     span : (start, end), optional
@@ -58,7 +58,7 @@ def anchor_on_page(
     Returns
     -------
     Placed
-        Basis `text` when the selection located in the page text, with `start`/`end` and derived quads, both of the occurrence chosen, and the triple's `prefix` and `suffix` the words around that occurrence; basis `box` otherwise, carrying the rectangles as the record and whatever words they cover as the triple's `exact`. Recording never fails: a selection found on the boxes but not in the page text is a box, a selection whose rectangles cover none of its words' occurrences, or two alike, is the box it covers, and a rectangle is a box.
+        Basis `text` when the selection located in the page text, with `start`/`end` and derived quads, both of the occurrence chosen, and the triple's `prefix` and `suffix` the words around that occurrence; basis `box` otherwise, carrying the rectangles as the record and whatever words they cover as the triple's `exact`. Recording never fails: a selection found on the boxes but not in the page text is a box, a selection whose rectangles cover none of its words' occurrences is the box it covers, and a rectangle is a box.
 
     Notes
     -----
@@ -103,15 +103,22 @@ def anchor_on_page(
     return Placed(anchor, selector, found, page_box(xml), anchor.basis)
 
 
+#: How much less of an occurrence the rectangles may cover than of the one they cover most, as a share of each, and still cover it as much: the slack of a line's box around its words.
+ALIKE = 0.05
+
+
 def _chosen(hits: list[Any], rects: list[list[float]]) -> int | None:
-    """Which occurrence of a selection's words is the one selected: the only one, the one its rectangles cover most, or the first when it came with none; None when its rectangles cover none, or two alike."""
+    """Which occurrence of a selection's words is the one selected: the only one, the one its rectangles cover the most of, the first of two they cover alike, as reading order would, or the first when it came with none; None when its rectangles cover none."""
     if len(hits) <= 1 or not rects:
         return 0 if hits else None
-    covered = [sum(_overlap(line, r) for line in hit.lines for r in rects) for hit in hits]
-    best = max(covered)
-    if best <= 0 or covered.count(best) > 1:
+    shares = []
+    for hit in hits:
+        area = sum(_overlap(line, line) for line in hit.lines)
+        shares.append(sum(_overlap(line, r) for line in hit.lines for r in rects) / area if area > 0 else 0.0)
+    best = max(shares)
+    if best <= 0:
         return None
-    return covered.index(best)
+    return next(k for k, share in enumerate(shares) if share >= best - ALIKE)
 
 
 def _overlap(a: Sequence[float], b: Sequence[float]) -> float:

@@ -14,7 +14,7 @@ import re
 import secrets
 import shutil
 import unicodedata
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -112,6 +112,7 @@ class Row:
     question: str = ""
     document: dict[str, Any] = field(default_factory=dict)
     candidates: list[dict[str, Any]] = field(default_factory=list)
+    held: list[dict[str, Any]] = field(default_factory=list)
     act: str = ""
 
     def to_json(self) -> dict[str, Any]:
@@ -131,6 +132,8 @@ class Row:
                 out["act"] = self.act
         if self.state == "question":
             out.update(question=self.question, document=self.document, candidates=self.candidates)
+            if self.held:
+                out["held"] = self.held
         if self.state in ("here", "cannot") or self.why:
             out["why"] = self.why
         if self.state == "cannot":
@@ -577,15 +580,21 @@ def _take_document(
             _remove_drop(d)
         return [_here(t, n, d.name, name, held)]
     stated = _stated(f, name, which)
-    others = (
+    named = (
         []
         if new or (work and force)
         else [r for r in t.lib.stating(stated) if r != work and r not in (arrived.get("not") or [])]
     )
+    # a work holding a document of this kind already takes no yes, so it is never a candidate
+    others = [r for r in named if not getattr(t.lib.refs[r], which)]
     if work and not others:
         return [_file_under(t, n, d, f, name, which, digest, work, packed)]
+    holding = [r for r in named if r not in others]
     if others:
-        return [_ask(t, n, d, name, which, stated, [*([work] if work else []), *others])]
+        free = [work] if work and not getattr(t.lib.refs[work], which) else []
+        return [_ask(t, n, d, name, which, stated, [*free, *others], held=holding)]
+    if holding:
+        return [_ask(t, n, d, name, which, stated, [], held=holding)]
     return [_add_new(t, n, d, f, name, which, digest, stated, packed)]
 
 
@@ -627,8 +636,18 @@ def _stated(f: Path, name: str, which: str) -> list[str]:
     return list(dict.fromkeys(out))
 
 
-def _ask(t: _Take, n: int, d: Path, name: str, which: str, stated: list[str], candidates: list[str]) -> Row:
-    """The one question, "is this one of these works?", its candidates those a stated identifier names and the work it was dropped on.
+def _ask(
+    t: _Take,
+    n: int,
+    d: Path,
+    name: str,
+    which: str,
+    stated: list[str],
+    candidates: list[str],
+    *,
+    held: Sequence[str] = (),
+) -> Row:
+    """The one question, "is this one of these works?", its candidates those a stated identifier names and the work it was dropped on, each able to take the document, and `held` those it names that hold one of its kind already; where every work it names holds one there is no candidate, the copy asked about as what it is: a work of its own (`answer` with None), or let go (`undo`).
 
     A candidate's `how` is the identifier it states too, as `arxiv:2504.01234v3`, which the viewer words; None for the work dropped on when it states none. The question's id is drawn past every question waiting, since an answer finds its drop by it.
     """
@@ -636,14 +655,20 @@ def _ask(t: _Take, n: int, d: Path, name: str, which: str, stated: list[str], ca
         str(q.get("question")) for p in incoming(t.root).glob(f"*/{QUESTION}") if isinstance(q := _read_json(p), dict)
     }
     qid = draw("q-", asked, seed=d.name)
-    shown = [
-        {**t.lib.shown(c), "how": next((x for x in stated if c in t.lib.stating([x])), None)}
-        for c in dict.fromkeys(candidates)
-    ]
+    shown, holding = (
+        [
+            {**t.lib.shown(c), "how": next((x for x in stated if c in t.lib.stating([x])), None)}
+            for c in dict.fromkeys(refs)
+        ]
+        for refs in (candidates, held)
+    )
     document = {"name": name, "kind": which, "identifiers": stated}
     if t.write:
-        _write_json(d / QUESTION, {"question": qid, "document": document, "candidates": shown})
-    return Row(d.name, n, name, "question", question=qid, document=document, candidates=shown)
+        _write_json(
+            d / QUESTION,
+            {"question": qid, "document": document, "candidates": shown, **({"held": holding} if holding else {})},
+        )
+    return Row(d.name, n, name, "question", question=qid, document=document, candidates=shown, held=holding)
 
 
 def _file_under(
@@ -1072,13 +1097,14 @@ def answer(
         if not (isinstance(q, dict) and q.get("question") == question):
             continue
         refs = [c["ref"] for c in q.get("candidates", [])]
+        held = [c["ref"] for c in q.get("held", [])]
         if same is not None and same not in refs:
             raise IntakeRefused("not-a-candidate", f"{same} is not one of this question's works", 400)
         with library_lock(root):
             (d / QUESTION).unlink(missing_ok=True)
             arrived = _read_json(d / ARRIVED) or {}
             if same is None:
-                arrived["not"] = sorted({*arrived.get("not", []), *refs})
+                arrived["not"] = sorted({*arrived.get("not", []), *refs, *held})
                 _write_json(d / ARRIVED, arrived)
             t = _Take(root, by, online, True, http, result, lib=Library.read(root))
             return _take_drop(t, 0, d.name, same or "", force=same is not None)[0]
@@ -1316,7 +1342,12 @@ def waiting(root: Path) -> list[dict[str, Any]]:
         q = _read_json(d / QUESTION)
         if isinstance(q, dict):
             row = replace(
-                row, state="question", question=q["question"], document=q["document"], candidates=q["candidates"]
+                row,
+                state="question",
+                question=q["question"],
+                document=q["document"],
+                candidates=q["candidates"],
+                held=q.get("held", []),
             )
         out.append(row.to_json())
     return out

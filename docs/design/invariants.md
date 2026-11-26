@@ -361,6 +361,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **2026-11-21.** Digests are gone with today's library (plan 0.32, the library's phase 2), and so are the guards named above. A version of a paper is now a reference of its own holding its documents by hash (`docs/specs/nodes.md` §7), so what a node was read from is the document its reference holds; the rule has no guard until the digest that writes nodes (phase 3) names one.
 
+**2026-11-26.** Guarded again: `loom/tests/unit/library/test_digest.py::test_a_work_s_results_are_written_from_its_source_its_pointers_rewritten`.
+
 ### A proposal is never a dependency
 
 **Rule.** The scan makes no edge to a proposed result from outside its own file, whether by `\cite[postnote]`, `\ref` or `\uses`: `loom:cites-proposed-node` (warning) reports the citation, and verifying the proposal makes it a dependency. So nobody's unchecked statement enters a closure, a closure document or a compile (P15).
@@ -372,6 +374,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Record.** Commit `3f38e7c9`.
 
 **2026-11-21.** Proposals are gone with today's library (plan 0.32, the library's phase 2), and so are `loom:cites-proposed-node` and the guard named above. The failure's lesson stands for the library's nodes, whose state is evidence's: an unchecked node entering a closure is phase 3's to settle, and the rule has no guard until then.
+
+**2026-11-26.** Guarded again: `loom/tests/unit/library/test_agent_web.py::test_a_correction_of_a_compared_node_waits_and_is_never_a_dependency` (plan 0.32, T008: an agent cannot record `compared`, and its correction of a node a person compared waits as proposed while the compared text stands).
 
 ### A document is filed under a work only on the person's word
 
@@ -385,6 +389,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **2026-11-21.** The intake is rebuilt on references (plan 0.32, the library's phase 2; the rulings on `library-views.md` Opens 6 and 18): a document is offered as a work the library has only by an identifier it states, never by its title or byline, and filed under it only on the person's answer or a drop on the work's row. The guards named above are gone; the guards are now `loom/tests/unit/library/test_intake.py::test_a_title_alike_is_never_a_match`, `::test_a_pdf_stating_an_identifier_the_library_has_asks_and_is_answered` and `::test_a_drop_on_a_row_is_filed_under_it`.
 
+**2026-11-26.** A document loom fetches is filed under the work whose entry states the identifier it was fetched on, without a question: the author's decision of 2026-11-20 (plan 0.32, the library's phase 3). Guard: `loom/tests/unit/library/test_unasked.py::test_online_arxiv_s_pdf_and_source_are_fetched_and_filed_under_the_work_its_entry_names`.
+
 ### Redoing a step keeps what a person verified
 
 **Rule.** `library update --redo` and `library drop` keep every result a person verified: its record, and its text in the digest byte for byte.
@@ -396,6 +402,8 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 **Record.** DR-326-ikmartin, DR-331-ikmartin, DR-333-ikmartin
 
 **2026-11-21.** `library update --redo` and `library drop` are gone with today's library (plan 0.32, the library's phase 2), and so are the guards named above. The rule's reason holds for the digest that writes over nodes a person may have checked (phase 3), and has no guard until then.
+
+**2026-11-26.** Guarded again: `loom/tests/unit/library/test_digest.py::test_digesting_again_writes_nothing_and_a_compared_node_is_kept`.
 
 **2026-11-26.** One exception, the author's choice ("Okay i") on 2026-11-26: after the person's compile of a work's source, digest fills the display numbers that compile confirmed into the anchors a checked node holds waiting for them (`awaiting`), and changes no other byte of it, recorded `digested` how `numbered`; the person's `compared` on the text before holds on the text after (`evidence.md` §3.1). Why: without a compile loom keeps no display's number, so a node a person checked before compiling would otherwise wait for its numbers for good, or lose their check to get them, and a number confirmed by their own compile is nothing they read against the page. The act refuses any other change (`acts.only_numbers`), and nothing but the person's digest after their compile reaches it. Guards: `loom/tests/unit/library/test_digest.py::test_the_person_s_compile_numbers_a_compared_node_and_its_check_holds`, `::test_a_corrected_node_is_numbered_alike`, `::test_numbering_refuses_any_change_beyond_the_numbers`, `::test_no_agent_and_no_unasked_digest_reaches_numbering`, `::test_a_number_goes_only_to_the_display_it_was_printed_for`, `::test_two_anchors_whose_displays_read_alike_never_trade_numbers`, `::test_an_anchor_moved_onto_an_unlabelled_twin_waits`.
 

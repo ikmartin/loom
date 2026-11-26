@@ -267,23 +267,24 @@ test("a file stating an arXiv number a work states is asked about in the column,
 		await page.getByTestId('add-work').click();
 		await page.getByTestId('choose-files-input').setInputFiles([{ name, mimeType: 'application/pdf', buffer: PAPER }]);
 	};
-	// yes: the file is filed under the work, and no row is added
-	await choose('2000.01000v2.pdf');
-	await expect(msg).toContainText('2000.01000v2.pdf states arXiv 2000.01000, as Arden 2024 in your library does. Is it that work?');
+	// yes: the file is filed under the work, which holds no PDF, and no row is added
+	await choose('2008.01056v2.pdf');
+	await expect(msg).toContainText('2008.01056v2.pdf states arXiv 2008.01056, as Lindqvist and Ueda 2017 in your library does. Is it that work?');
 	const answers = msg.getByTestId('column-message-choice');
 	await expect(answers).toHaveText(['yes', 'no, a work of its own']);
 	for (const a of await answers.all()) expect((await a.boundingBox())!.height).toBeGreaterThanOrEqual(28);
 	await expect(page.getByTestId('work-row')).toHaveCount(300);
 	await answers.filter({ hasText: 'yes' }).click();
-	await expect(msg).toContainText('Filed 2000.01000v2.pdf under Arden 2024.');
+	await expect(msg).toContainText('Filed 2008.01056v2.pdf under Lindqvist and Ueda 2017.');
 	await expect(page.getByTestId('work-row')).toHaveCount(300);
 	// no: a work of its own
-	await choose('2000.01000v3.pdf');
+	await choose('2003.01021v1.pdf');
 	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
 	await expect(page.getByTestId('work-row')).toHaveCount(301);
-	// closed unanswered: not asked again on this page, and nothing written; the work of its own just added states the number too, so two are asked about
-	await choose('2000.01000v4.pdf');
-	await expect(msg).toContainText('Is it one of them?');
+	// closed unanswered: not asked again on this page, and nothing written; the work of its own just added holds a PDF, so it is named beside the question rather than offered
+	await choose('2003.01021v2.pdf');
+	await expect(msg).toContainText('as Jones 2019 in your library does. Is it that work? 2003.01021v1.pdf states it too and holds its PDF already.');
+	await expect(answers).toHaveText(['yes', 'no, a work of its own']);
 	await page.getByTestId('column-message-dismiss').click();
 	await expect(msg).toHaveCount(0);
 	await page.getByTestId('add-work').click();
@@ -295,31 +296,32 @@ test("a file stating an arXiv number a work states is asked about in the column,
 	await expect(page.getByTestId('work-row')).toHaveCount(302);
 });
 
-test('the question names each work so its row can be told apart, two works stating one arXiv number by the file each came in as', async ({ page }) => {
+test('a copy of a PDF every work stating its number holds already is asked about as a copy, naming each work so its row can be told apart, kept as a work of its own or let go', async ({ page }) => {
 	await open(page);
 	const msg = page.getByTestId('column-message');
+	const answers = msg.getByTestId('column-message-choice');
 	const choose = async (name: string) => {
 		await page.getByTestId('add-work').click();
 		await page.getByTestId('choose-files-input').setInputFiles([{ name, mimeType: 'application/pdf', buffer: PAPER }]);
 	};
-	// two files stating Arden 2024's number, each a work of its own taken without the network: both rows read the number, each with the file it came in as
+	// Arden 2024 holds its PDF, so it is never offered: the copy is kept as a work of its own, taken without the network
 	await choose('2000.01000v3.pdf');
-	await msg.getByTestId('column-message-choice').filter({ hasText: 'no, a work of its own' }).click();
+	await expect(msg).toContainText('2000.01000v3.pdf states arXiv 2000.01000, whose PDF Arden 2024 holds already. Keep it as a work of its own?');
+	await expect(answers).toHaveText(['yes, a work of its own', 'no, let it go']);
+	await answers.filter({ hasText: 'yes, a work of its own' }).click();
 	await expect(page.getByTestId('work-row')).toHaveCount(301);
 	await choose('2000.01000v3 (1).pdf');
-	await expect(msg).toContainText('as 2 works in your library do. Is it one of them?');
-	await msg.getByTestId('column-message-choice').filter({ hasText: 'none of them' }).click();
+	await expect(msg).toContainText('whose PDF Arden 2024 and 2000.01000v3.pdf hold already.');
+	await answers.filter({ hasText: 'yes, a work of its own' }).click();
 	await expect(page.getByTestId('work-row')).toHaveCount(302);
 	const alike = page.getByTestId('work-row').filter({ hasText: 'arXiv 2000.01000v3' });
 	await expect(alike).toHaveCount(2);
 	await expect(alike.getByTestId('work-came-as')).toHaveCount(2);
 	expect((await alike.getByTestId('work-came-as').allInnerTexts()).sort()).toEqual(['2000.01000v3 (1).pdf', '2000.01000v3.pdf']);
-	// a third asks about all three: each button names its work as the row tells it from the others
+	// a third names all three, each as the row tells it from the others
 	await choose('2000.01000v3 (2).pdf');
-	const answers = msg.getByTestId('column-message-choice');
-	await expect(answers).toHaveText(['Arden 2024', '2000.01000v3.pdf', '2000.01000v3 (1).pdf', 'none of them: a work of its own']);
-	for (const name of ['2000.01000v3.pdf', '2000.01000v3 (1).pdf']) await expect(page.getByTestId('work-came-as').filter({ hasText: new RegExp(`^${name.replace(/[.()]/g, '\\$&')}$`) })).toHaveCount(1);
-	// a work deleted while the question waits is no longer offered: asked again once the column is quiet, it names what the library still holds
+	await expect(msg).toContainText('2000.01000v3 (2).pdf states arXiv 2000.01000, whose PDF Arden 2024, 2000.01000v3.pdf and 2000.01000v3 (1).pdf hold already. Keep it as a work of its own?');
+	// a work deleted while the question waits is no longer named: asked again once the column is quiet, it names what the library still holds
 	const remove = async (w: ReturnType<typeof page.getByTestId>) => {
 		await w.hover();
 		await w.getByTestId('row-more').click();
@@ -329,7 +331,7 @@ test('the question names each work so its row can be told apart, two works stati
 	};
 	const came = (name: string) => page.getByTestId('work-row').filter({ has: page.getByTestId('work-came-as').filter({ hasText: new RegExp(`^${name.replace(/[.()]/g, '\\$&')}$`) }) });
 	await remove(came('2000.01000v3.pdf'));
-	await expect(answers).toHaveText(['Arden 2024', '2000.01000v3 (1).pdf', 'none of them: a work of its own']);
+	await expect(msg).toContainText('whose PDF Arden 2024 and 2000.01000v3 (1).pdf hold already.');
 	// with every work it named gone, it asks only whether the file is a work of its own
 	await remove(came('2000.01000v3 (1).pdf'));
 	await remove(row(page, 'Cycle spaces of finite quivers').filter({ hasText: '2024' }));
@@ -338,6 +340,25 @@ test('the question names each work so its row can be told apart, two works stati
 	const before = await page.getByTestId('work-row').count();
 	await answers.click();
 	await expect(page.getByTestId('work-row')).toHaveCount(before + 1);
+	// let go: nothing is added, and the column says so
+	await page.getByTestId('column-message-dismiss').click();
+	await choose('2006.01042v1.pdf');
+	await expect(msg).toContainText('2006.01042v1.pdf states arXiv 2006.01042, whose PDF Smith 2024 holds already. Keep it as a work of its own?');
+	await answers.filter({ hasText: 'no, let it go' }).click();
+	await expect(msg).toContainText('Let 2006.01042v1.pdf go.');
+	await expect(page.getByTestId('work-row')).toHaveCount(before + 1);
+});
+
+test('a delete a killed act left under way is said once, by the first read of the list, with its undo', async ({ page }) => {
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.goto('/library?fixture=round6&delete=killed');
+	await expect(page.getByTestId('works-table')).toBeVisible();
+	const msg = page.getByTestId('column-message');
+	await expect(msg).toContainText('Deleted Ostrander 2020, with its results and notes');
+	await expect(page.getByTestId('work-row')).toHaveCount(299);
+	await page.getByTestId('column-message-undo').click();
+	await expect(page.getByTestId('work-row')).toHaveCount(300);
+	await expect(row(page, 'Widget categories and their duals')).toHaveCount(1);
 });
 
 test('on a quilt that has not said whether loom may use the network, a work added by an identifier asks in its row to be looked up this once', async ({ page }) => {

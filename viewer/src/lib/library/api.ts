@@ -5,6 +5,7 @@ import { base } from '$app/paths';
 import { libraryPdfUrl } from '$lib/paths';
 import { store } from '$lib/manifest/client.svelte';
 import { fetchFragment } from '$lib/fragments/fetch';
+import { message } from '$lib/shell/message.svelte';
 import { library as libraryWords } from '$lib/words/library';
 import { library as generation } from './gen.svelte';
 import type { FormalMarks, FormalPlan, DigestDone, DigestScope, DigestScopes, FindAnswer, Gen, NodeAnswer, PlacesAnswer, ReviewBody, ReviewCounts, ReviewKind, ReviewList, WebFocus, WebGraph, WebGroupAnswer, WebList, WebScope, WebSearch, WorkAnswer, WorksAnswer, WriteDone } from './types';
@@ -132,7 +133,13 @@ export const call = async <T extends Gen>(name: string, body: Record<string, unk
 // ---- the reads, each taking the generation held for the same question ----
 
 const since = (s?: number) => (s === undefined ? {} : { since: s });
-export const works = (doc?: string, s?: number) => call<WorksAnswer>('library-works', { ...(doc ? { doc } : {}), ...since(s) });
+/** The works list; a delete a killed act left under way, which loom finishes and answers once beside the rows, is said in the column with its undo, as after `library-delete`, by whichever view read first. */
+export const works = async (doc?: string, s?: number): Promise<Answer<WorksAnswer>> => {
+	const got = await call<WorksAnswer>('library-works', { ...(doc ? { doc } : {}), ...since(s) });
+	const deleted = got.ok ? got.value.deleted : undefined;
+	if (deleted) message.post(libraryWords.works.deleted(deleted.short), () => restore(deleted.undo));
+	return got;
+};
 /** What a work's tab says when its work has left the library. */
 const gone = libraryWords.works.gone;
 /** A work's tab: `library-work` where it is served; else the work's row of the list, with no outline, since nothing reads a work's results yet (phase 3), so its tab still opens its paper. */
@@ -218,4 +225,6 @@ export interface TakeRow {
 	document?: { name: string; kind: string; identifiers: string[] };
 	/** The works it may be; `how` the identifier the file states that the work states too, null for the work it was dropped on where that states none of them. */
 	candidates?: { ref: string; short: string; title: string; authors: string[]; year: string; how: string | null }[];
+	/** The works its identifiers name that hold a document of its kind already, and so are never candidates; sent only where it names one. With no candidates, the file is asked about as a copy: a work of its own, or let go. */
+	held?: { ref: string; short: string; title: string; authors: string[]; year: string; how: string | null }[];
 }
