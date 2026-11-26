@@ -46,6 +46,8 @@ export const home = {
 		cannotStart: 'Loom could not start it:',
 		/** A row's state while a new quilt is made, from New quilt or a drop. */
 		making: 'Being made…',
+		/** In the box under "Loom could not open it:", for a quilt a newer loom made. */
+		formatNewer: (found: number, reads: number) => `this quilt is format ${found}; this loom reads format ${reads}`,
 		/** The hint under a quilt a newer loom made, which this loom cannot open. */
 		newer: 'A newer loom made this quilt. To update loom, paste the line from loom’s GitHub page into Terminal again, as when you installed it; then open this quilt here.'
 	},
@@ -170,6 +172,10 @@ export const home = {
 		untypeset: 'Your paper is in, shown as its source:',
 		/** Done, the paper not typeset because loom has no TeX. */
 		noTex: 'Loom has no TeX yet.',
+		/** Done, the paper not typeset: TeX's own error, as TeX words it. */
+		texStopped: (error: string) => `TeX stopped at “${error}”.`,
+		/** Done, the paper not typeset, where TeX gave no error of its own. */
+		texStoppedPlain: 'TeX stopped before it finished.',
 		/** Done, but its server could not start; its row says why. */
 		madeNotOpen: (name: string) => `${name} is made and on your list, but loom could not open it.`,
 		/** The primary button once done, which opens the quilt in its own tab. */

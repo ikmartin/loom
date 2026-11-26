@@ -6,6 +6,7 @@
 	import { outcomeOf, openingOf, saidOf, stepAt, stepsOf, type Said } from './flow';
 	import type { Drop } from './drop';
 	import CopyDetails from './CopyDetails.svelte';
+	import { importSaidOf, untypesetOf } from './said';
 	import { home as words } from '$lib/words/home';
 
 	let { drop, onclose, onsteps }: { drop: Drop | null; onclose: () => void; onsteps?: (running: boolean) => void } = $props();
@@ -187,7 +188,7 @@
 				{#if outcome === 'unserved'}
 					<div class="said" data-testid="quilt-window-done">{words.window.madeNotOpen(madeName)}</div>
 				{:else if job?.typeset === false}
-					<div class="said" data-testid="quilt-window-done">{words.window.untypeset} {job.tex === 'none' ? words.window.noTex : (job.untypeset ?? '')}</div>
+					<div class="said" data-testid="quilt-window-done">{words.window.untypeset} {untypesetOf(job.untypeset ?? '', job.tex)}</div>
 				{:else}
 					<p class="ready" data-testid="quilt-window-done">{words.window.ready(madeName)}</p>
 				{/if}
@@ -208,7 +209,7 @@
 				<div class="said bad" data-testid="quilt-window-failed">
 					{#if said.failed}
 						{words.window.failed}
-						<div class="logbox">{said.failed}</div>
+						<div class="logbox">{importSaidOf(said.failed, listing?.home_folder)}</div>
 						<CopyDetails said={said.failed} />
 					{:else}
 						{words.window.failedPlain}

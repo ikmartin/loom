@@ -3,6 +3,7 @@
 	import { call, type QuiltRow } from './api';
 	import { homePage, shortPath } from './listing.svelte';
 	import CopyDetails from './CopyDetails.svelte';
+	import { cannotStartOf, refusalOf } from './said';
 	import { home as words } from '$lib/words/home';
 
 	let { q, disabled = false }: { q: QuiltRow; disabled?: boolean } = $props();
@@ -12,6 +13,10 @@
 
 	const dot = $derived(q.state === 'failed' ? 'failed' : q.state);
 	const folder = $derived(shortPath(q.folder, homePage.listing?.home_folder));
+	/** A refusal worded for the person (`said.ts`): a port lost as the server started is the row of a port another program holds. */
+	const refusal = $derived(q.why === 'refused' ? refusalOf(q.said ?? '', q.folder, homePage.listing?.home_folder) : null);
+	const why = $derived(refusal && 'port' in refusal ? 'port-taken' : q.why);
+	const newer = $derived(refusal && 'newer' in refusal ? refusal.newer : null);
 
 	/** Run one of the row's requests, then ask for the list again. */
 	async function act(endpoint: string, body: Record<string, unknown> = {}): Promise<boolean> {
@@ -46,7 +51,7 @@
 	}
 </script>
 
-<div class="qrow" data-testid="quilt-row" data-state={q.state} data-why={q.why ?? ''}>
+<div class="qrow" data-testid="quilt-row" data-state={q.state} data-why={why ?? ''}>
 	<div class="qn">
 		<span class="st {dot}" aria-hidden="true">{#if q.state === 'missing'}?{/if}</span>
 		<div class="who">
@@ -63,18 +68,19 @@
 			<span class="w soft">{words.state.stopped}</span>
 		{:else if q.state === 'missing'}
 			<span class="w">{words.state.missing}</span>
-		{:else if q.why === 'port-taken'}
+		{:else if why === 'port-taken'}
 			<span class="w">{words.state.portTaken}</span>
-		{:else if q.why === 'refused'}
+		{:else if refusal}
 			<span class="w">{words.state.refused}</span>
-			<div class="logbox">{q.said ?? ''}</div>
+			<div class="logbox" data-testid="quilt-row-said">{newer ? words.state.formatNewer(newer.found, newer.reads) : 'text' in refusal ? refusal.text : ''}</div>
 			<CopyDetails quilt={q.quilt} />
+			{#if newer}<div class="sub" data-testid="quilt-row-newer">{words.state.newer}</div>{/if}
 		{:else if q.why === 'exited'}
 			<span class="w">{words.state.exited}</span>
 			<div><CopyDetails quilt={q.quilt} /></div>
 		{:else}
 			<span class="w">{words.state.cannotStart}</span>
-			<div class="logbox">{q.said ?? ''}</div>
+			<div class="logbox" data-testid="quilt-row-said">{cannotStartOf(q.said ?? '', homePage.listing?.home_folder)}</div>
 			<CopyDetails quilt={q.quilt} />
 		{/if}
 		{#if refused}<div class="sub bad">{refused}</div>{/if}
@@ -88,13 +94,16 @@
 			{@render forget()}
 		{:else if q.state === 'missing'}
 			{@render forget()}
-		{:else if q.why === 'port-taken'}
+		{:else if why === 'port-taken'}
 			<div class="move">
 				<button type="button" class="btn" disabled={busy || disabled} onclick={() => void openStopped(true)} data-testid="quilt-move">{words.control.move}</button>
 				<div class="sub">{words.control.moveSaid}</div>
 			</div>
 		{:else if q.why === 'exited'}
 			{@render again()}
+		{:else if newer}
+			<!-- this loom cannot open what a newer one made: Open again would only refuse -->
+			{@render forget()}
 		{:else if q.state === 'failed'}
 			{@render again()}
 			{@render forget()}

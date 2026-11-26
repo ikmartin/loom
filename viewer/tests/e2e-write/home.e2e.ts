@@ -1,6 +1,6 @@
 // Loom's home page, end to end: the real viewer on a real `loom app` in a home folder of the test's own (`tests/home.ts`).
 
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { expect, test } from '../home';
@@ -188,4 +188,26 @@ test("a quilt's page whose server stopped says so and links to the home page, an
 	await row.getByTestId('quilt-open').click();
 	await expect(card).toHaveCount(0, { timeout: 30_000 });
 	await quilt.close();
+});
+
+test("a quilt that refused to start shows loom's refusal worded, with no command and no long path, and Copy details", async ({ page, homed }) => {
+	test.setTimeout(120_000);
+	const made = await homed.call('quilt-create', { name: 'Covering estimates' });
+	const key = (made.said as { job: string }).job;
+	await expect.poll(async () => ((await homed.call('quilt-list')).said.jobs as { job: string; state: string }[]).find((j) => j.job === key)?.state, { timeout: 60_000 }).toBe('done');
+	const quilt = (((await homed.call('quilt-list')).said.quilts as { quilt: string }[])[0]).quilt;
+	await homed.call('quilt-stop', { quilt });
+	writeFileSync(join(homed.folder, 'Quilts', 'Covering estimates', 'config.toml'), '[quilt\nname = "Covering estimates"\n');
+	await homed.call('quilt-open', { quilt });
+	await page.goto('/');
+	const row = page.getByTestId('quilt-row');
+	await expect(row).toHaveAttribute('data-why', 'refused', { timeout: 60_000 });
+	await expect(row.getByTestId('quilt-row-state')).toContainText('Loom could not open it:');
+	const said = row.getByTestId('quilt-row-said');
+	await expect(said).toHaveText(/^config\.toml is not valid TOML/);
+	for (const raw of ['loom serve', 'Ctrl-C', 'Error:', homed.folder]) await expect(said).not.toContainText(raw);
+	await row.getByTestId('copy-details').click();
+	await expect(row.getByTestId('copy-details-done')).toHaveText('Copied');
+	await expect(row.getByTestId('quilt-again')).toBeVisible();
+	await expect(row.getByTestId('quilt-forget')).toBeVisible();
 });
