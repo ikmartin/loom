@@ -65,6 +65,7 @@ def test_an_agent_fills_a_stub_from_the_source_whose_words_stand_there(tmp_path:
     lemma = stub(root, smith, "1.2")
     refused("library", "fill", lemma, "--from", "tex", "--body", "Every gadget is unbounded.", "--as", AGENT, cwd=root, code=1, match="not all on its source")  # fmt: skip
     refused("library", "fill", lemma, "--from", "tex", "--body", LEMMA, "--as", "A. Author", cwd=root, code=2, match="not an agent's name")  # fmt: skip
+    refused("library", "fill", lemma, "--from", "tex", "--pages", "40", "--body", LEMMA, "--as", AGENT, cwd=root, code=1, match="only with --from pdf")  # fmt: skip
     ok("library", "fill", lemma, "--from", "tex", "--body", LEMMA, "--as", AGENT, cwd=root)
     node = read(root, lemma)
     assert node is not None and node.body.startswith("Every widget")
@@ -138,6 +139,10 @@ def test_a_transcription_not_on_its_pages_is_refused(tmp_path: Path) -> None:
     refused("library", "fill", "sh-0Z01", "--pages", "1-2", "--body", wrong, "--as", AGENT, cwd=root, code=1, match="not all on its pages")  # fmt: skip
     refused("library", "fill", "sh-0Z01", "--pages", "40", "--body", words, "--as", AGENT, cwd=root, code=1, match="not all on its pages")  # fmt: skip
     refused("library", "propose", bellamy, "--taxon", "lemma", "--number", "9.9", "--pages", "1-2", "--body", wrong, "--as", AGENT, cwd=root, code=1, match="not all on its pages")  # fmt: skip
+    for pages, match in [("1-400", "at most 3 pages"), ("2-1", "--pages is a page"), ("\u00b2", "--pages is a page"), ("0", "--pages is a page")]:  # fmt: skip
+        refused("library", "fill", "sh-0Z01", "--pages", pages, "--body", words, "--as", AGENT, cwd=root, code=1, match=match)  # fmt: skip
+    write_node(root, Node(id="sh-0Z02", taxon="lemma", number="9.1", source=bellamy, pages="5"), new=True)
+    refused("library", "fill", "sh-0Z02", "--pages", "1-2", "--body", words, "--as", AGENT, cwd=root, code=1, match="stands on page 5")  # fmt: skip
     ok("library", "fill", "sh-0Z01", "--pages", "1-2", "--body", words, "--as", AGENT, cwd=root)
     assert [r.get("how") for r in replay(root).about("node", "sh-0Z01", of="digested")] == ["transcribed"]
 

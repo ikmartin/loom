@@ -206,8 +206,25 @@ def work_command(ref: str, as_json: bool, quilt_path: str | None) -> None:
     Report(head, groups=[Group("outline", items)] if items else [], data=said).emit(as_json)
 
 
-def _check_read(root: Path, work: Any, body: str, read_from: str, pages: str | None) -> dict[str, Any]:
-    """The document a text was read from, `{ref, pdf | tex, pages?}`, once its words stand there: on the PDF's pages `pages`, or in the TeX source; refused otherwise."""
+#: The most pages one statement's text is read from: a range wider than this would let any words pass.
+SPAN = 3
+
+
+def _span(pages: str | None) -> tuple[int, int] | None:
+    """A page or a range `12-13` as its first and last page; None where it is neither."""
+    first, _, last = (pages or "").partition("-")
+    if not first.isdecimal() or (last and not last.isdecimal()):
+        return None
+    return int(first), int(last or first)
+
+
+def _check_read(
+    root: Path, work: Any, body: str, read_from: str, pages: str | None, held_pages: str | None = None
+) -> dict[str, Any]:
+    """The document a text was read from, `{ref, pdf | tex, pages?}`, once its words stand there: on the PDF's pages `pages`, or in the TeX source; refused otherwise.
+
+    Pages are checked only from a PDF, so `--pages` is refused with the source; the range is at most `SPAN` pages and, for a stub whose pages are known (`held_pages`), must meet them.
+    """
     from loom.library import documents
     from loom.library.places import _words
     from loom.refs.search import fold
@@ -221,12 +238,20 @@ def _check_read(root: Path, work: Any, body: str, read_from: str, pages: str | N
         home = mapped(root, work.pdf) if work.pdf else None
         if home is None:
             raise ContentError(f"{work.id} holds no PDF loom can read on this computer")
-        first, _, last = (pages or "").partition("-")
-        if not first.isdigit() or (last and not last.isdigit()):
+        span = _span(pages)
+        if span is None or not 1 <= span[0] <= span[1]:
             raise ContentError("--pages is a page, or the first and last joined by a hyphen, as the PDF numbers them")
-        text = " ".join(read_page(home, p) or "" for p in range(int(first), int(last or first) + 1))
+        first, last = span
+        if last - first >= SPAN:
+            raise ContentError(f"--pages names at most {SPAN} pages, where the text stands")
+        known = _span(held_pages)
+        if known is not None and (last < known[0] or first > known[1]):
+            raise ContentError(f"the result stands on page {held_pages} of its work; read it there")
+        text = " ".join(read_page(home, p) or "" for p in range(first, last + 1))
         where: dict[str, Any] = {"ref": work.id, "pdf": work.pdf, "pages": pages}
     else:
+        if pages:
+            raise ContentError("--pages is checked on the PDF's pages, so it is given only with --from pdf")
         if not work.tex:
             raise ContentError(f"{work.id} holds no TeX source")
         src = documents.source_dir(root, work.tex)
@@ -278,7 +303,7 @@ def _record(root: Path, node: Any, by: Any, read_from: str, where: dict[str, Any
 @click.option(
     "--pages",
     default=None,
-    help="The page or pages it stands on, as the PDF numbers them (`12`, `12-13`); needed from a PDF.",
+    help="The page or pages it stands on, as the PDF numbers them (`12`, `12-13`), at most three; needed from a PDF and refused from the source.",
 )
 @click.option(
     "--mention",
@@ -306,7 +331,7 @@ def fill_command(stub: str, body: str, read_from: str, pages: str | None, mentio
     work = read(root, found.source or "")
     if work is None:
         raise ContentError(f"{stub} names no work the library holds")
-    where = _check_read(root, work, body, read_from, pages)
+    where = _check_read(root, work, body, read_from, pages, found.pages)
     uses, mentioned = _pointed(stub, body, mentions)
     node = replace(found, body=body.strip() + "\n", pages=pages or found.pages, uses=uses, mentions=mentioned)
     _record(root, node, by, read_from, where, new=False)
@@ -330,7 +355,9 @@ def fill_command(stub: str, body: str, read_from: str, pages: str | None, mentio
     help="Read from the work's PDF, or from its TeX source.",
 )
 @click.option(
-    "--pages", default=None, help="The page or pages it stands on, as the PDF numbers them; needed from a PDF."
+    "--pages",
+    default=None,
+    help="The page or pages it stands on, as the PDF numbers them, at most three; needed from a PDF and refused from the source.",
 )
 @click.option(
     "--mention", "mentions", multiple=True, metavar="NODE", help="A node the text mentions without resting on it."
