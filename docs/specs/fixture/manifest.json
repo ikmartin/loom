@@ -701,7 +701,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v1.html",
-   "hash": "f10325a0d7d13c333fca73d9bc6fd16279ce60b2bcf5cd85a0acad2291c9ac2d",
+   "hash": "fe069ee40053ddd59308920ff5ffbfb78e292d20b9b0ee17464f581c3842e404",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v1",
    "message": "widgets-v1",
@@ -716,7 +716,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v2.html",
-   "hash": "d77eb20575b9e097053aed5cfbee918324dabd5bbbe2f7288755839d4f2208db",
+   "hash": "cc439806024563afe65862b85c063742b2c67ca687b293c7c46e41c37548bbd9",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v2",
    "message": "widgets-v2",
@@ -731,7 +731,7 @@
    "action": "stamp",
    "cannot_restore": "",
    "fragment": "fragments/canon/widgets-v3.html",
-   "hash": "898b1fe940ab8ced29bef9e1f8133643fac2a8deae2de3d90e0c47b743128717",
+   "hash": "e65c7e2d5956e5988a0ace45c6dbde181b610b2c5298a9f305e9d6c95caef409",
    "in": "drafting/main.tex",
    "macros": "canon:widgets-v3",
    "message": "widgets-v3",
@@ -925,7 +925,8 @@
    "quilt.home",
    "library.online",
    "lint.disable",
-   "agents.deny"
+   "agents.deny",
+   "notes.dir"
   ],
   "library": {
    "online": false
@@ -960,6 +961,7 @@
     "loom:invalid-name",
     "loom:link-place-missing",
     "loom:link-target-missing",
+    "loom:link-words-missing",
     "loom:link-work-unknown",
     "loom:macro-shadowed",
     "loom:macros-missing",
@@ -1007,6 +1009,10 @@
     "loom:write-left"
    ],
    "disable": []
+  },
+  "notes": {
+   "default": "notes",
+   "dir": ""
   },
   "quilt": {
    "engine": "pdflatex",
