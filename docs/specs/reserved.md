@@ -14,8 +14,6 @@ Each is a constant in `loom/src/loom/paths.py` and is protected from agents (`lo
 |---|---|---|
 | `.loom/library/suggested.jsonl` | the works an agent suggested | the library |
 
-Named and not yet a constant, since each has one owner and stands under a directory that is protected already: `lean/` at the quilt's root is the Lean project, a place agents write, which the scan and the list of what changed leave out. Files outside any quilt (the switch that turns formalization on for this machine) are their owner's alone.
-
 ## Write operations
 
 None is served. The table is not in the shape of `write-api.md`'s tables, whose rows are the served endpoints.
@@ -23,8 +21,6 @@ None is served. The table is not in the shape of `write-api.md`'s tables, whose 
 | operation | does | owner |
 |---|---|---|
 | `library-dismiss` | dismisses works an agent suggested | the library |
-| `formal-enable` | turns formalization on for the quilt, on this machine | formalization |
-| `formal-check` | runs loom's own check of a formal proof again | formalization |
 | `sync-pair` | pairs the quilt with an Overleaf project from its link | Overleaf |
 | `sync-fetch` | fetches what changed there | Overleaf |
 | `changed-seen` | marks what changed as seen, one row or all | Review |
@@ -64,7 +60,6 @@ None is registered, so help, the command reference and the agent's tools are unc
 | name | owner |
 |---|---|
 | `loom library suggest REF --why`, an agent's command and tool | the library |
-| `loom formal record KEY …`, an agent's command and tool | formalization |
 | `loom formal attest KEY`, the author's | formalization |
 | the mode `formalize` | formalization |
 

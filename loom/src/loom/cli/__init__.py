@@ -11,6 +11,7 @@ from loom.cli.build_cmd import build_command
 from loom.cli.build_cmds import check, compile, source
 from loom.cli.changes_cmd import changes_command
 from loom.cli.doctor import doctor
+from loom.cli.formal_cmd import formal
 from loom.cli.graph import deps, downstream
 from loom.cli.help import LoomGroup
 from loom.cli.here_cmd import here_command
@@ -100,6 +101,7 @@ main.add_command(since_command)
 main.add_command(changes_command)
 main.add_command(mcp_command)
 main.add_command(tasks)
+main.add_command(formal)
 main.add_command(ask_command)
 main.add_command(evidence_command)
 

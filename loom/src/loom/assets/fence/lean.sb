@@ -1,0 +1,13 @@
+;; Lean's certifying check, which loom starts: one toolchain's lake, lean and leanchecker called directly (elan never runs), git from the developer tools, and loom's probe.
+;; Parameters, each a resolved absolute path, given with -D and never written into this text:
+;; PROJECT (the quilt's Lake project, which the check reads whole, its packages among it), BUILD (the project's own build, .lake/build, and the one place the build writes), OWN (loom's folder for the run, .lake/loom, its home and temporary files), TOOLCHAIN (the one toolchain its lean-toolchain names, under elan's home),
+;; DEVDIR (the developer tools' Developer folder, for the git Lake runs), PROBE (the folder of loom's own probe for this run, read only).
+(version 1)
+(deny default)
+(import "system.sb")
+(allow process-exec process-fork)
+(allow file-read* (subpath (param "PROJECT")) (subpath (param "TOOLCHAIN")) (subpath (param "DEVDIR")) (subpath (param "PROBE"))
+                  (literal "/private/etc/gitconfig"))
+(allow file-read-metadata (path-ancestors (param "PROJECT")) (path-ancestors (param "TOOLCHAIN")) (path-ancestors (param "DEVDIR")) (path-ancestors (param "PROBE")))
+;; never the packages, so nothing the build runs can change Mathlib's build, which the replay does not cover, nor the project's sources, which the record hashes
+(allow file-write* (subpath (param "BUILD")) (subpath (param "OWN")))

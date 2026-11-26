@@ -193,3 +193,73 @@ def _formal_ask(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
     assert made.what == "formalize" and made.to == "agent" and made.on == {"label": "sy-0003"}
     assert [x["label"] for x in made.get("state")] == ["sy-0001"]
     assert [x["label"] for x in made.get("prove")] == ["sy-0002"] and made.get("assume") == []
+
+
+def _settled(root: Path) -> Any:
+    """The quilt's formalization job once it has ended."""
+    import time
+
+    from loom.formal import jobs
+
+    for _ in range(200):
+        job = jobs.current(root)
+        if job is not None and job.state != "running":
+            return job
+        time.sleep(0.05)
+    raise AssertionError("the job never ended")
+
+
+@case("formal-enable")
+def _formal_enable(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The person turns it on, which installs in the background and is kept on the machine alone; an agent is refused and nothing is kept or installed."""
+    from loom.formal import install, switch
+
+    s, root = synthetic(serve, tmp_path, watch=False)
+    installed: list[Path] = []
+    monkeypatch.setattr(
+        install, "install", lambda r, say: installed.append(r) or install.Installed([("toolchain", 1.0)])
+    )
+    refuses(s, "formal-enable", {"on": True, "author": "Referee (Agent)"}, 403, "author-only", "this is the person's")
+    assert not switch.is_on(root) and installed == []
+    refuses(s, "formal-enable", {"on": "yes"}, 400, "bad-field", "true or false")
+    assert succeeds(s, "formal-enable", {"on": True})["result"] == "formalization is on; installing Lean"
+    job = _settled(root)
+    assert switch.is_on(root) and installed == [root] and (job.kind, job.state) == ("install", "done")
+    assert not (root / ".loom" / "formal").exists() and not any("formal" in p.name for p in root.iterdir())
+    state = succeeds(s, "formal-state", {})
+    assert state["on"] is True and state["job"]["state"] == "done"
+    succeeds(s, "formal-enable", {"on": False})
+    assert not switch.is_on(root)
+
+
+@case("formal-check")
+def _formal_check(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Refused while formalization is off here; on, it runs loom's check in the background, and a failed check says why on `formal-state`."""
+    from loom.formal import check, switch
+
+    s, root = synthetic(serve, tmp_path, watch=False)
+    refuses(s, "formal-check", {}, 409, "off", "formalization is off")
+    switch.turn_on(root)
+
+    def refused(r: Path, say: Any) -> Any:
+        raise check.Refused("loom could not check the Lean on this machine: the fence is not up (nested)")
+
+    monkeypatch.setattr(check, "check", refused)
+    succeeds(s, "formal-check", {})
+    job = _settled(root)
+    assert (job.kind, job.state) == ("check", "failed") and "nested" in job.said
+    assert succeeds(s, "formal-state", {})["job"]["said"] == job.said
+
+
+@case("formal-state")
+def _formal_state(serve: Serve, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    s, root = synthetic(serve, tmp_path, watch=False)
+    from loom import fence
+    from loom.formal import install, switch
+
+    state = succeeds(s, "formal-state", {})
+    assert (state["on"], state["project"], state["fence"]) == (False, None, fence.lean_state())
+    switch.turn_on(root)
+    install.make_project(root)
+    state = succeeds(s, "formal-state", {})
+    assert (state["on"], state["project"]) == (True, "lean")
