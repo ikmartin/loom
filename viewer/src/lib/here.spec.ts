@@ -1,5 +1,8 @@
-import { describe, expect, it } from 'vitest';
-import { placeOf, type PlaceInput } from './here.svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { placeOf, startReporting, type PlaceInput } from './here.svelte';
+import { write } from '$lib/write';
+
+vi.mock('$lib/write', async (real) => ({ ...(await real<typeof import('$lib/write')>()), can: vi.fn(async () => true), write: vi.fn(async () => ({ ok: true })) }));
 
 const reading = (over: Partial<PlaceInput>): PlaceInput => ({
 	route: 'reading',
@@ -58,5 +61,42 @@ describe('placeOf', () => {
 			review: { key: 'sy-0003', cause: 'edited' }
 		});
 		expect(placeOf({ ...reading(panes), route: 'elsewhere', path: '/graph' })).toEqual({ route: 'elsewhere', path: '/graph' });
+	});
+});
+
+describe('startReporting', () => {
+	afterEach(() => {
+		vi.unstubAllGlobals();
+		vi.mocked(write).mockClear();
+	});
+
+	/** A page whose visibility the test sets, with the window and document events the reports listen to. */
+	function tab(visibilityState: DocumentVisibilityState) {
+		const doc = Object.assign(new EventTarget(), { visibilityState });
+		vi.stubGlobal('document', doc);
+		vi.stubGlobal('window', Object.assign(new EventTarget(), { getSelection: () => null }));
+		return doc;
+	}
+
+	it('says nothing from a hidden tab, not even on focus, and reports once the tab comes into view', async () => {
+		const doc = tab('hidden');
+		const stop = startReporting(() => 'elsewhere', () => '/graph');
+		// the publisher's answer that it serves `here`, on which a visible tab reports at once
+		await new Promise((r) => setTimeout(r, 0));
+		expect(write).not.toHaveBeenCalled();
+		window.dispatchEvent(new Event('focus'));
+		expect(write).not.toHaveBeenCalled();
+		doc.visibilityState = 'visible';
+		doc.dispatchEvent(new Event('visibilitychange'));
+		expect(write).toHaveBeenCalledTimes(1);
+		expect(write).toHaveBeenCalledWith('here', { route: 'elsewhere', path: '/graph' });
+		stop();
+	});
+
+	it('reports at once from a visible tab', async () => {
+		tab('visible');
+		const stop = startReporting(() => 'elsewhere', () => '/graph');
+		await vi.waitFor(() => expect(write).toHaveBeenCalledWith('here', { route: 'elsewhere', path: '/graph' }));
+		stop();
 	});
 });

@@ -43,3 +43,34 @@ readOnly('beside Review\'s panel it is the block under review, and with two tabs
 	await expect.poll(() => { const l = looking(served); return `${l.route} ${l.item?.link}`; }).toBe('reading quilt:sy-0003');
 	await other.close();
 });
+
+readOnly('a tab that loads in the background says nothing until it comes into view, and then is the tab touched last', async ({ page, served }) => {
+	await page.goto('/node/sy-0003');
+	await expect.poll(() => looking(served).item?.link).toBe('quilt:sy-0003');
+	const other = await page.context().newPage();
+	// hidden as a tab behind another is; headless Chromium keeps every tab visible, so the page is told, and `show` brings it into view
+	await other.addInitScript(() => {
+		let state: DocumentVisibilityState = 'hidden';
+		Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+		Object.defineProperty(document, 'hidden', { configurable: true, get: () => state === 'hidden' });
+		(window as unknown as { show: () => void }).show = () => {
+			state = 'visible';
+			document.dispatchEvent(new Event('visibilitychange'));
+		};
+	});
+	const reports: string[] = [];
+	other.on('request', (r) => {
+		if (r.url().endsWith('/_api/here')) reports.push(r.postData() ?? '');
+	});
+	const answered = other.waitForResponse((r) => r.url().endsWith('/_api'));
+	await other.goto('/master/drafting/main');
+	await answered;
+	await other.locator('[data-pane="0"] .fragment').first().waitFor();
+	// past the pause after which a visible tab reports a settled place
+	await other.waitForTimeout(800);
+	expect(reports).toEqual([]);
+	expect(looking(served).item?.link).toBe('quilt:sy-0003');
+	await other.evaluate(() => (window as unknown as { show: () => void }).show());
+	await expect.poll(() => looking(served).item?.link).toBe('quilt:drafting/main.tex');
+	await other.close();
+});

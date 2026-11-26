@@ -1,6 +1,6 @@
 // Reading mode is items in two panes: the path names the left pane's item, `?beside` the right's. Suites that set up an arrangement build it here, so its URL shape is written once; the display preferences a test starts under are stored here too.
 
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 
 /** The query that puts `path`'s item in the right pane. */
 export function beside(path: string): string {
@@ -50,4 +50,22 @@ export async function openHere(page: Page, href: string): Promise<void> {
 		a.click();
 		a.remove();
 	}, href);
+}
+
+/** Where `words` are drawn in `el`, as a `click` position: the middle of their first line, so a click lands on them in any font, where a fixed offset lands on whatever a font's widths put there. */
+export async function wordsIn(el: Locator, words: string): Promise<{ x: number; y: number }> {
+	return el.evaluate((node, words) => {
+		const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+		for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+			const at = n.textContent?.indexOf(words) ?? -1;
+			if (at < 0) continue;
+			const range = document.createRange();
+			range.setStart(n, at);
+			range.setEnd(n, at + words.length);
+			const line = [...range.getClientRects()].find((r) => r.width > 0)!;
+			const box = node.getBoundingClientRect();
+			return { x: line.left + line.width / 2 - box.left, y: line.top + line.height / 2 - box.top };
+		}
+		throw new Error(`no "${words}" drawn in the element`);
+	}, words);
 }
