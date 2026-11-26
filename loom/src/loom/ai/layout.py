@@ -188,10 +188,29 @@ def quilt_config(root: Path) -> QuiltConfig:
         return QuiltConfig()
 
 
+#: What an agent runs in the quilt's Lean project without being asked each time (decision 10 of plan 0.32): Lake's build, and Lean on one file in the project's environment. Never `lake update` or `lake exe`, which reach the network or run a program; fetching Mathlib is the person's switch.
+LAKE_COMMANDS = ("lake build", "lake env lean")
+
+
+def lean_rules() -> tuple[list[str], list[str]]:
+    """Claude Code's rules for the quilt's Lean project (`formal.install.LEAN`): the agent edits its modules and runs `LAKE_COMMANDS` without asking, and never edits loom's marker module or the files that say what the project builds and fetches, which the person's switch writes and loom's check refuses changed.
+
+    Returns
+    -------
+    tuple of list of str
+        The `allow` rules, relative like every allow, and the `deny` rules, anchored with `/`.
+    """
+    from loom.formal.install import LEAN, MARKER_MODULE
+
+    allow = [f"Edit({LEAN}/**)", *(f"Bash({c}*)" for c in LAKE_COMMANDS)]
+    deny = [f"Edit(/{LEAN}/{f})" for f in (f"{MARKER_MODULE}.lean", "lakefile.toml", "lean-toolchain", "lake-manifest.json")]
+    return allow, deny
+
+
 def permissions_json(config: QuiltConfig, *, shell: bool = False) -> str:
     """`.claude/settings.json` for a quilt, generated from the one table rather than written by hand.
 
-    In a shell the file enumerates what is refused -- the complement of `AGENT_COMMANDS`, since Claude Code's deny rules beat its allow rules and an allow-only whitelist cannot be expressed (DR-71) -- and allows `AGENT_COMMANDS` themselves outright, so the person is never asked to approve an agent's own reads and annotations. Over MCP, the default, the loom server's tools are allowed as well, as `mcp__loom__*`; the shell stays open beside them because it filters a result and takes `--batch`, and so that a server that cannot start does not cost the agent all of loom. With `shell`, for an agent that has no MCP, the tools are left out. Loom's own refusal under an agent (K5) is the boundary either way. The paths are `loom.agents`'s: the agent's places allowed, and what is always protected and what `[agents] deny` names denied; every other file is left to the client, which asks or not as the person runs it.
+    In a shell the file enumerates what is refused -- the complement of `AGENT_COMMANDS`, since Claude Code's deny rules beat its allow rules and an allow-only whitelist cannot be expressed (DR-71) -- and allows `AGENT_COMMANDS` themselves outright, so the person is never asked to approve an agent's own reads and annotations. Over MCP, the default, the loom server's tools are allowed as well, as `mcp__loom__*`; the shell stays open beside them because it filters a result and takes `--batch`, and so that a server that cannot start does not cost the agent all of loom. With `shell`, for an agent that has no MCP, the tools are left out. Loom's own refusal under an agent (K5) is the boundary either way. The paths are `loom.agents`'s: the agent's places allowed, and what is always protected and what `[agents] deny` names denied; then the Lean project's (`lean_rules`), whose modules and build an agent works in without asking; every other file is left to the client, which asks or not as the person runs it.
 
     The file is read twice and its two path forms are for different readings (DR-343-ikmartin): as the project's settings, `/x` is the quilt root, but an untrusted folder's allow rules are dropped there; passed with `--settings`, every rule holds but `/x` is under `.claude/`. So the allows are relative to the working directory, the quilt root an agent is started in, and the denies keep `/`, which anchors `/config.toml` to the root where a relative `config.toml` would refuse every file of that name.
     """
@@ -205,7 +224,10 @@ def permissions_json(config: QuiltConfig, *, shell: bool = False) -> str:
     allow += [f"Bash(loom {c}*)" for c in [*sorted(AGENT_COMMANDS), *help_commands()]]
     if not shell:
         allow.append("mcp__loom__*")
+    lean_allow, lean_deny = lean_rules()
+    allow += lean_allow
     deny = [f"Edit({d})" for d in claude_denies(config)]
+    deny += lean_deny
     deny += [f"Bash(loom {c}*)" for c in author_commands()]
     deny.append("Bash(rm *)")
     return json.dumps({"permissions": {"allow": allow, "deny": deny}}, indent=2, ensure_ascii=False) + "\n"
@@ -418,7 +440,7 @@ def settings_left(root: Path, config: QuiltConfig | None = None) -> str:
 def codex_rules() -> str:
     """`.codex/rules/loom.rules`: the same policy as `permissions_json`, as Codex's command-prefix rules, in either variant, since these rules govern only the shell.
 
-    Codex matches commands, not paths, so the path rules have no counterpart here; the author's own verbs are refused by loom itself for an agent's name whatever the tool (DR-185). Codex reads a project's rules only once the project is trusted. Unverified: Codex was not installed where this was written.
+    Codex matches commands, not paths, so the path rules have no counterpart here, and Lake's build is allowed as a command (`LAKE_COMMANDS`); the author's own verbs are refused by loom itself for an agent's name whatever the tool (DR-185). Codex reads a project's rules only once the project is trusted. Unverified: Codex was not installed where this was written.
     """
     import json
 
@@ -431,6 +453,7 @@ def codex_rules() -> str:
         return f"prefix_rule(pattern = [{', '.join(json.dumps(w) for w in words)}], decision = {json.dumps(decision)})"
 
     body = [rule(["loom", *c.split()], "allow") for c in [*sorted(AGENT_COMMANDS), *help_commands()]]
+    body += [rule(c.split(), "allow") for c in LAKE_COMMANDS]
     body += [rule(["loom", *c.split()], "forbidden") for c in author_commands()]
     body.append(rule(["rm"], "forbidden"))
     return "\n".join(head + body) + "\n"
