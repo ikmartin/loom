@@ -9,7 +9,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from loom.render.parts import agents, formal, library, records, review
+from loom.render.parts import agents, formal, history, library, records, review
 
 if TYPE_CHECKING:
     from loom.library.gather import Gathered
@@ -39,4 +39,5 @@ ATTACH: tuple[Callable[[Attaching], None], ...] = (
     library.attach,
     agents.attach,
     formal.attach,
+    history.attach,
 )

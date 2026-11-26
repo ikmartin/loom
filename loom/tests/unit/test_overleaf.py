@@ -655,6 +655,20 @@ def bib_written_over(tmp_path: Path) -> tuple[Path, bytes, str]:
     return root, mine, theirs
 
 
+def test_history_lists_a_file_s_version_with_its_bytes_and_how_it_differs_from_now(tmp_path: Path) -> None:
+    """O-8: `history.files` names the version, publishes its bytes and its line diff against now, and says why it cannot go back while the folder mirrors Overleaf."""
+    from loom.render.parts.history import file_rows
+
+    root, mine, _ = bib_written_over(tmp_path)
+    files: dict[str, str | bytes] = {}
+    (row,) = file_rows(root, load_quilt(root).history_dir, files)
+    assert (row["path"], row["kind"], row["kept_for"], row["same"]) == ("drafting/refs.bib", "text", "sync", False)
+    assert files[row["kept"]] == mine and "+@book{b, title={B}}" in str(files[row["diff"]])
+    assert row["message"] == "Before an update from Overleaf" and "Overleaf" in row["cannot_restore"]
+    overleaf.unpair(load_quilt(root))
+    assert file_rows(root, load_quilt(root).history_dir, {})[0]["cannot_restore"] == ""
+
+
 def test_a_file_s_version_goes_back_byte_for_byte_once_its_folder_mirrors_nothing(tmp_path: Path) -> None:
     """O-8: while the folder mirrors Overleaf only an update writes it, so restoring is refused and writes nothing; once the pairing ends, restoring gives back exactly the bytes written over, the bytes it replaces kept first."""
     root, mine, theirs = bib_written_over(tmp_path)
@@ -684,6 +698,11 @@ def test_a_figure_changed_here_and_written_over_is_kept_and_goes_back_byte_for_b
     said = overleaf.update(load_quilt(root))
     assert said["overwritten"] == ["drafting/plot.png"] and (root / "drafting/plot.png").read_bytes() == PNG
     assert kept_files(root) == [("drafting/plot.png", mine, "sync")]
+    from loom.render.parts.history import file_rows
+
+    files: dict[str, str | bytes] = {}
+    (row,) = file_rows(root, load_quilt(root).history_dir, files)
+    assert row["kind"] == "image" and files[row["kept"]] == mine and "diff" not in row
     overleaf.unpair(load_quilt(root))
     from loom.history.acts import file_versions
 
