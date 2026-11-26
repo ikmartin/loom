@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from loom.evidence.web import Web
+    from loom.library.index import NodeIndex
     from loom.library.node import Node
     from loom.scan.scan import ScanResult
 
@@ -55,17 +56,17 @@ def _only(by: Who, kind: str) -> None:
         raise ActRefused(code, f"only {'a person' if kind == 'person' else 'an agent'} does this")
 
 
-def _text(root: Path, node: str) -> tuple[str, Node]:
-    """The node's hash and file now; refused when the library holds no statement or proof of that id."""
-    got = LibraryWeb(root).file(node)
+def _text(root: Path, node: str, library: LibraryWeb | None = None) -> tuple[str, Node]:
+    """The node's hash and file now, read through `library` where the caller holds one for this moment; refused when the library holds no statement or proof of that id."""
+    got = (library or LibraryWeb(root)).file(node)
     if got is None:
         raise ActRefused("no-such-node", f"the library has no statement or proof {node}")
     return got
 
 
-def _shown(root: Path, node: str, shown: str) -> Node:
+def _shown(root: Path, node: str, shown: str, library: LibraryWeb | None = None) -> Node:
     """The node now, when its text is still the one the person was shown; refused `changed` otherwise and `stub` for a text not read."""
-    now, found = _text(root, node)
+    now, found = _text(root, node, library)
     if now != shown:
         raise ActRefused("changed", f"{node} has changed since it was shown")
     if found.empty:
@@ -179,10 +180,10 @@ def _checked(kind: str, by: Who, **fields: Any) -> None:
 _TAKER = Who("person", "the person")
 
 
-def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]:
+def _takeable(node: str, data: bytes, root: Path, index: NodeIndex | None = None) -> tuple[Node, dict[str, Any]]:
     """A correction's file as `take` would write it, and the document it is compared with; refused as `take` refuses it: `refused` where the file fails the library's checks, sets or clears `awaiting` or numbers an anchor that waits (loom's digest alone does, after the person's compile), or the `compared` record taking it makes would be refused by the log, `stub` where it gives the node no text, `no-document` where its work holds no document.
 
-    `propose` calls it before filing a correction and `take` before writing one, so a correction is filed only where it can be taken, and the record is checked before any file changes.
+    `propose` calls it before filing a correction and `take` before writing one, so a correction is filed only where it can be taken, and the record is checked before any file changes; `index`, one the caller holds open, is the library it is checked against.
     """
     from loom.library.checks import check_file
     from loom.library.store import check_against, read
@@ -200,7 +201,7 @@ def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]
             f"the proposed file changes which of {node}'s anchors wait for a compile, which only loom's digest does",
         )
     # and against the library as it stands, as the store will check it when it is written
-    problems = check_against(root, new)
+    problems = check_against(root, new, index)
     if problems:
         raise ActRefused("refused", "the proposed file fails the library's checks against the library now", problems)
     if new.empty:
@@ -212,13 +213,18 @@ def _takeable(node: str, data: bytes, root: Path) -> tuple[Node, dict[str, Any]]
     return new, document
 
 
-def take_refusal(root: Path, proposal: str) -> ActRefused | None:
-    """Why `take` would refuse an agent's correction now, by take's own checks, writing nothing; None where it would take it: for Review, which offers the take only then, a correction filed while it could be taken may stop being one, as when a result its file uses leaves the library."""
+def take_refusal(
+    root: Path, proposal: str, index: NodeIndex | None = None, library: LibraryWeb | None = None
+) -> ActRefused | None:
+    """Why `take` would refuse an agent's correction now, by take's own checks, writing nothing; None where it would take it: for Review, which offers the take only then, a correction filed while it could be taken may stop being one, as when a result its file uses leaves the library.
+
+    Review passes the one `index` and `library` it reads all its corrections through; without them each call opens and refreshes an index, which stats every node file, and lists the nodes folder.
+    """
     try:
         found = _proposal(root, proposal)
         assert found.on is not None
-        _shown(root, found.on.name, found.on.hash)
-        _takeable(found.on.name, str(found.get("bytes")).encode("utf-8"), root)
+        _shown(root, found.on.name, found.on.hash, library)
+        _takeable(found.on.name, str(found.get("bytes")).encode("utf-8"), root, index)
     except ActRefused as exc:
         return exc
     return None
