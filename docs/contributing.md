@@ -110,4 +110,4 @@ The work queue, whose mechanical rules `docs/work-queue/check.py` enforces:
 
 ## Releases
 
-`loom/docs/RELEASE.md` is loom's release checklist; follow it, not a summary. It stops before publishing: publishing to PyPI is the maintainer's step, never a script's or an agent's. The viewer is not published on its own; it ships as the bundle vendored into loom (`loom/scripts/vendor_viewer.py`).
+`loom/docs/RELEASE.md` is loom's release checklist; follow it, not a summary. A release is a GitHub release that `.github/workflows/release.yml` drafts from a tag; nothing is published to a package index. Tagging, running that workflow and publishing the release are the maintainer's steps, never a script's or an agent's. The viewer is not published on its own; it ships as the bundle the workflow vendors into loom's wheel (`loom/scripts/vendor_viewer.py`).

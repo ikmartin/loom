@@ -68,7 +68,7 @@ An ordinary LaTeX project loom can read: the documents you are working on, laid 
 - `uv run pytest` runs the unit tier against a fake TeX toolchain in seconds; `uv run pytest -m tex` runs the TeX tier against your real TeX Live in an isolated environment; `LOOM_PAPER_FIXTURES=... uv run pytest -m paper` runs the paper tier.
 - `uv run ruff check src tests` and `uv run mypy` must be clean.
 - `scripts/vendor_viewer.py ../viewer/build` refreshes the vendored viewer after building it; `scripts/gen_cli_reference.py` regenerates `docs/cli-reference.md` (a test fails when it is stale).
-- `docs/RELEASE.md` is the release checklist; it stops before publishing.
+- `docs/RELEASE.md` is the release checklist: a GitHub release, drafted by the release workflow from a tag and published by the maintainer.
 
 ## License
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,12 @@ LATEX = "Is $y'$ the $\\prime$ of $f(x)$, or \\emph{its} $\\partial$?"
 def test_cli_version() -> None:
     result = ok("--version")
     assert result.output.strip() == f"loom {__version__}"
+
+
+def test_the_version_is_the_same_in_pyproject_and_version_py() -> None:
+    # the wheel is named for pyproject.toml's and loom says version.py's; a release bumps both
+    pyproject = tomllib.loads((Path(__file__).parents[2] / "pyproject.toml").read_text(encoding="utf-8"))
+    assert pyproject["project"]["version"] == __version__
 
 
 def bodies(q: Path) -> list[str]:
