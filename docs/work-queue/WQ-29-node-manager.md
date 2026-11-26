@@ -1,6 +1,6 @@
 # WQ-29 · The node manager: forks from history, retiring, merging, renaming
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -23,7 +23,7 @@ Ancestry is already a ledger entry (`rl-0042 forked from rl-0007@2`) and version
 - **A document started from another**: `loom history restore LANDMARK --to FILE` starts one and leaves every id the two share as a conflict to resolve by hand; the operation is choosing, per result, to share it (one node file, one id) or fork it, with a preview before anything is written. It absorbs WQ-53's `adopt --as`, which was this with an agent's copy as the source.
 - **Rename**: WQ-11's operation — an id change as a loom command that the editor triggers, rewriting every `\ref`, `\uses` and postnote through the language server rather than by hand.
 
-Arras shows a node's family (ancestors, forks, the version it was forked at) where the node is read, in its document, with the graph's inspector as a glance (V7); a node page is only the fallback for a node in no document.
+The viewer shows a node's family (ancestors, forks, the version it was forked at) where the node is read, in its document, with the graph's inspector as a glance (V7); a node page is only the fallback for a node in no document.
 
 ## Blast radius
 

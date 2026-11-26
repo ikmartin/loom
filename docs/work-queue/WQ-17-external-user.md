@@ -18,7 +18,7 @@ Criterion 10 gates the claim "MVP done", not the first tagged release, so [[WQ-1
 
 ## Blast radius
 
-`loom/README.md` and `arras/README.md`.6 step 7.
+`loom/README.md` and `viewer/README.md`.6 step 7.
 
 ## Related
 

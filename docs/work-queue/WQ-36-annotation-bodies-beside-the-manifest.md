@@ -1,6 +1,6 @@
 # WQ-36 · Annotation bodies and PDF geometry beside the manifest rather than inside it
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -31,7 +31,7 @@ The second step changes both sides at once, as every change to what crosses does
 
 ## Blast radius
 
-`loom/src/loom/records/store.py`'s annotation emission, `render/build.py` for the new directory, `specs/manifest.md` §9, every arras surface that renders `body_html`, and `arras/src/lib/pdf/desk.svelte.ts` for geometry.
+`loom/src/loom/records/store.py`'s annotation emission, `render/build.py` for the new directory, `specs/manifest.md` §9, every viewer surface that renders `body_html`, and `viewer/src/lib/pdf/desk.svelte.ts` for geometry.
 
 ## Related
 

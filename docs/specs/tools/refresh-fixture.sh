@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regenerate docs/specs/fixture/ from loom's build of the synthetic quilt (docs/specs/fixture.md §2), then vendor it into loom/tests/fixture and arras/tests/fixture.
+# Regenerate docs/specs/fixture/ from loom's build of the synthetic quilt (docs/specs/fixture.md §2), then vendor it into loom/tests/fixture and viewer/tests/fixture.
 # Runs the real TeX toolchain in an isolated environment so nothing outside the quilt and TeX Live can be read. Timestamps are fixed through LOOM_FIXED_TIME.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -34,7 +34,7 @@ cp -R "$Q/.loom/cache/site/fragments" "$OUT/fragments"
 [ -d "$Q/.loom/cache/site/changes" ] && cp -R "$Q/.loom/cache/site/changes" "$OUT/changes"
 VERSION=$(cd "$LOOM" && .venv/bin/loom --version | awk '{print $2}')
 printf 'loom %s\ngenerated %s\n' "$VERSION" "$LOOM_FIXED_TIME" > "$OUT/VERSION"
-for dest in "$LOOM/tests/fixture" "$WS/arras/tests/fixture"; do
+for dest in "$LOOM/tests/fixture" "$WS/viewer/tests/fixture"; do
   rm -rf "$dest"; mkdir -p "$dest"; cp -R "$OUT"/. "$dest"/
 done
 python3 "$HERE/validate-dialect.py" "$OUT/fragments"

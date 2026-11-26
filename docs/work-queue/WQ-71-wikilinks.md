@@ -1,6 +1,6 @@
 # WQ-71 · Wikilinks between Markdown notes
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -16,7 +16,7 @@ In a shown Markdown file, `[[Name]]`, `[[Name|text]]` and `[[Name#Heading]]` res
 
 ## Blast radius
 
-The Markdown dialect (`docs/specs/dialect.md`), the link resolver (`loom/src/loom/links.py`, `arras/src/lib/workspace/links.ts`), the link index.
+The Markdown dialect (`docs/specs/dialect.md`), the link resolver (`loom/src/loom/links.py`, `viewer/src/lib/workspace/links.ts`), the link index.
 
 ## Related
 

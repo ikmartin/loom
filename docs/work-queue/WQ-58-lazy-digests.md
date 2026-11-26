@@ -1,6 +1,6 @@
 # WQ-58 · Lazy digests: the extraction as an index, a result a node only when used
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -23,7 +23,7 @@ The full extraction is kept as a search index outside the node graph (`results.j
 
 ## Blast radius
 
-`scan/` (which digest regions are nodes), `refs/build.py` and `digest/extract.py` (writing the index and the promoted file), `cli/library/read.py` (search over the index), closures (`tex/bundle.py`), arras's Digest view.
+`scan/` (which digest regions are nodes), `refs/build.py` and `digest/extract.py` (writing the index and the promoted file), `cli/library/read.py` (search over the index), closures (`tex/bundle.py`), the viewer's Digest view.
 
 ## Related
 

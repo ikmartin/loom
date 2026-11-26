@@ -1,6 +1,6 @@
 # WQ-64 · What an HTML file in a quilt can reach
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 

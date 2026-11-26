@@ -1,6 +1,6 @@
 # WQ-70 · A hook that renders notes in other formats
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 

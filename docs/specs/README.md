@@ -1,6 +1,6 @@
 # The build directory loom writes and its viewer reads
 
-This directory specifies what loom publishes into `.loom/cache/site/`, which the server answers at `/build/` with each document's compile folder (`.loom/cache/tex/`) under it at `/build/tex/`, and what its viewer, arras, reads there and asks of it: the HTML dialect of fragments, the manifest, the diagnostic codes, the write API, and what loom reads from an author's LaTeX. Loom and its viewer are one tool (P11): the viewer is built from `arras/` and vendored inside loom, so the two change together and nothing between them negotiates a version. The interface files (dialect, manifest, diagnostics, fixture, write API) mark normative statements **[decided]**, a convention kept from the old design book; `source-contract.md` and `library-views.md` state their rules plainly, and `nodes.md` marks **[decided]** a rule the author settled. What the specs describe is what the code does: where one disagrees with the code, one of them is wrong.
+This directory specifies what loom publishes into `.loom/cache/site/`, which the server answers at `/build/` with each document's compile folder (`.loom/cache/tex/`) under it at `/build/tex/`, and what its viewer reads there and asks of it: the HTML dialect of fragments, the manifest, the diagnostic codes, the write API, and what loom reads from an author's LaTeX. Loom and its viewer are one tool (P11): the viewer is built from `viewer/` and vendored inside loom, so the two change together and nothing between them negotiates a version. The interface files (dialect, manifest, diagnostics, fixture, write API) mark normative statements **[decided]**, a convention kept from the old design book; `source-contract.md` and `library-views.md` state their rules plainly, and `nodes.md` marks **[decided]** a rule the author settled. What the specs describe is what the code does: where one disagrees with the code, one of them is wrong.
 
 ## Files
 
@@ -18,7 +18,7 @@ This directory specifies what loom publishes into `.loom/cache/site/`, which the
 
 ## Changing what crosses
 
-**[decided]** A change to what loom writes or what the viewer reads changes both sides and these files in one commit, and regenerates the fixture (C3, C5). No version is written into the manifest or checked by the viewer: the viewer reading a build directory is the one vendored in the loom that wrote it, and `scripts/checks/bundle.py` and `loom doctor` say when that vendored viewer is older than `arras/`'s sources.
+**[decided]** A change to what loom writes or what the viewer reads changes both sides and these files in one commit, and regenerates the fixture (C3, C5). No version is written into the manifest or checked by the viewer: the viewer reading a build directory is the one vendored in the loom that wrote it, and `scripts/checks/bundle.py` and `loom doctor` say when that vendored viewer is older than `viewer/`'s sources.
 
 ## Obligations of loom as publisher
 

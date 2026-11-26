@@ -1,14 +1,14 @@
 # WQ-28 · An annotated view as LaTeX and PDF
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
-A review has to reach someone who cannot run arras — a coauthor or a referee reading the marked-up section outside the viewer.
+A review has to reach someone who cannot run the viewer — a coauthor or a referee reading the marked-up section outside the viewer.
 
 ## Why deferred
 
-The author's review mode grew out of a chat pattern that produced a LaTeX/PDF pair with criticisms inlined in red. In loom the durable form is annotations on the text, and arras renders them live, which the author prefers; the compiled pair was declined as a run artifact on 2026-09-17. Some readers will want it, and it is cheap now that annotations carry types and suggested edits are a record of their own (plan 0.30).
+The author's review mode grew out of a chat pattern that produced a LaTeX/PDF pair with criticisms inlined in red. In loom the durable form is annotations on the text, and the viewer renders them live, which the author prefers; the compiled pair was declined as a run artifact on 2026-09-17. Some readers will want it, and it is cheap now that annotations carry types and suggested edits are a record of their own (plan 0.30).
 
 ## Rough design
 

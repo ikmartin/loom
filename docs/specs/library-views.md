@@ -40,7 +40,7 @@ Three of the views' rules reach the backend. No id and no command is drawn, so e
 - a result: `name`, its taxon's word and its number as its source prints it ("Lemma 3.2", "Definition 2.1"; the word alone when unnumbered), and `title`, its name in the source ("Test lemma"), absent when it has none;
 - a document: its path, drawn as its file's name, as the file tree draws it.
 
-A title and authors come from the reference's BibTeX body decoded: braces dropped, accents made characters (`Kova{\v{c}}` is "Kovač"), mathematics kept between `$` for the viewer to draw. Words that are loom's own, a hover card, a legend, an empty state, a confirmation, a task's sentence, are never sent: they are the viewer's, in `arras/src/lib/words/`, a file a view.
+A title and authors come from the reference's BibTeX body decoded: braces dropped, accents made characters (`Kova{\v{c}}` is "Kovač"), mathematics kept between `$` for the viewer to draw. Words that are loom's own, a hover card, a legend, an empty state, a confirmation, a task's sentence, are never sent: they are the viewer's, in `viewer/src/lib/words/`, a file a view.
 
 **Status.** One vocabulary on every surface (`library.md`, "The views"), two marks a result. A read passes on the status `evidence.md` §5 computes, and the viewer draws it in round six's marks; nothing here computes a status of its own:
 
@@ -62,7 +62,7 @@ The viewer draws `matches` as round six's filled circle ("matches the paper"), `
 
 `source` is `{"doc": "drafting/main.tex"}` for a draft's result. A work's outline is the exception, since it also lists what is not yet a node (§3.2), and so is a Review row (§4.2). A work's results are in paper order: by the place the placement records give, once digesting fills them; until then by the node index's rule, number read naturally (3.2 before 3.10 before A.1) before pages, since a stub has a number and no page (ruled with the node store).
 
-**What a refusal says.** A refused read or write is drawn in the viewer's words, a sentence for each code (`arras/src/lib/words/frame.ts`, `refused`), and a plain one for a code it has none for. Loom's own message is never drawn: it is written for the command line, and may name a setting, a request's field or an id. A test reads every code the write API's table names for the library's endpoints, and every one loom raises there, and fails on one with no sentence.
+**What a refusal says.** A refused read or write is drawn in the viewer's words, a sentence for each code (`viewer/src/lib/words/frame.ts`, `refused`), and a plain one for a code it has none for. Loom's own message is never drawn: it is written for the command line, and may name a setting, a request's field or an id. A test reads every code the write API's table names for the library's endpoints, and every one loom raises there, and fails on one with no sentence.
 
 **Who writes.** Every write this page adds is the person's and is refused to a declared agent with `author-only` (403), as the intake's are (`write-api.md` §6); the built writes it uses keep their own rules. An agent changes the web by its own commands (`library.md`, "What an agent can do to the web"). Errors are the write API's: a name that is not there answers 404 with `no-such-` and what it named (`no-such-ref`, `no-such-node`, `no-such-result`, `no-such-row`, `no-such-task`), a request refused on its merits 400, a conflict with the quilt's state 409.
 

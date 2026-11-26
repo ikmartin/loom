@@ -1,11 +1,11 @@
-# loom-arras
+# loom
 
-One repository holding loom, its viewer arras, and the documents that govern them. `loom` turns a LaTeX paper into a *quilt*, where every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` an author already writes, acceptances are recorded with content hashes, and review comments are anchored to quoted text. `arras` is the viewer it publishes to. The paper still compiles with plain `pdflatex`, from the same files, on Overleaf.
+One repository holding loom, its viewer, and the documents that govern them. `loom` turns a LaTeX paper into a *quilt*, where every theorem-like environment and section carries a permanent id as an ordinary `\label`, dependencies are read from the `\ref` and `\uses` an author already writes, acceptances are recorded with content hashes, and review comments are anchored to quoted text. The viewer, in `viewer/`, is what it publishes to. The paper still compiles with plain `pdflatex`, from the same files, on Overleaf.
 
 | directory | what it is | language |
 |---|---|---|
 | `loom/` | the CLI: scanner, reshaping commands, history, library, build | Python |
-| `arras/` | the static viewer for a published quilt | Svelte |
+| `viewer/` | the static viewer for a published quilt | Svelte |
 
 loom and its viewer are separate codebases, each with its own build, tests and dependencies, and the viewer ships inside loom. `loom` never needs the viewer: a quilt edited in a plain text editor loses nothing.
 
@@ -14,7 +14,7 @@ loom and its viewer are separate codebases, each with its own build, tests and d
 They are the reason this repository exists, and they govern loom rather than describing it after the fact.
 
 - `docs/design/` — the design: what loom is for, the three people every decision is tested against, the principles, the model, how agents take part, and the invariants that must not be lost. It records current thinking and changes as the design is discovered; what is decided but not built is marked as such.
-- `docs/specs/` — the formats: the loom–arras interface (manifest, HTML dialect, conformance fixture), the source contract, the library's nodes and diagnostics. They win over the design wherever shapes are concerned.
+- `docs/specs/` — the formats: the viewer interface (manifest, HTML dialect, conformance fixture), the source contract, the library's nodes and diagnostics. They win over the design wherever shapes are concerned.
 - `docs/contributing.md` — how to build, test, verify and release.
 - `docs/work-queue/` — deferred work, each item with an observable trigger saying when it becomes worth doing.
 - `docs/plans/` — the plan for work in progress. Earlier plans are history: what was intended at the time.
@@ -28,7 +28,7 @@ They are the reason this repository exists, and they govern loom rather than des
 On a Mac, with no password and nothing else installed first:
 
 ```sh
-curl -LsSf https://github.com/ikmartin/loom-arras/releases/latest/download/install.sh | sh
+curl -LsSf https://github.com/ikmartin/loom/releases/latest/download/install.sh | sh
 ```
 
 It installs loom with a Python of its own, and loom's own TeX (TeX Live 2026, about 400 MB on disk) with Ghostscript and poppler beside it, all under `~/Library/Application Support/loom` and `~/.local`; it edits no shell file. It writes Loom in `~/Applications` (Loom Quilts where another app is called Loom), which opens loom's home page, and opens it. The same line updates loom, and a quilt open at the time restarts with the new loom by itself. Loom uses its own TeX even where another is installed; `use = "mine"` under `[tex]` in `~/.config/loom/config.toml` keeps yours, and `home_tree = true` there lets loom's TeX read your `~/Library/texmf`. A package a paper needs is fetched the first time it is typeset. `loom doctor` names the TeX in use, and `loom doctor --repair` mends loom's own.
@@ -36,8 +36,8 @@ It installs loom with a Python of its own, and loom's own TeX (TeX Live 2026, ab
 ## Getting started from a clone
 
 ```sh
-git clone https://github.com/ikmartin/loom-arras
-cd loom-arras
+git clone https://github.com/ikmartin/loom
+cd loom
 uv tool install -e ./loom        # puts `loom` on your PATH, running this checkout
 loom --version
 ```
@@ -50,7 +50,7 @@ To see a quilt in the viewer:
 cd demos/showcase && loom serve
 ```
 
-For the viewer's own development, `cd arras && npm ci && npm run dev`.
+For the viewer's own development, `cd viewer && npm ci && npm run dev`.
 
 ## Tests
 
@@ -58,7 +58,7 @@ For the viewer's own development, `cd arras && npm ci && npm run dev`.
 |---|---|
 | loom, unit tier | `cd loom && uv run pytest -m "not tex and not paper and not network and not client"` |
 | loom, everything | `cd loom && uv run pytest` (needs a TeX distribution and poppler) |
-| arras | `cd arras && npm run test:unit` and `npm run test:e2e` |
+| viewer | `cd viewer && npm run test:unit` and `npm run test:e2e` |
 | the documents | `python docs/work-queue/check.py` |
 
 The LaTeX compiles in loom's tests run with an empty `HOME` and empty TeX trees, so a test can only read what it created.
@@ -67,9 +67,9 @@ The LaTeX compiles in loom's tests run with an empty `HOME` and empty TeX trees,
 
 A change that crosses loom and its viewer — a manifest field and the viewer code that reads it, say — is one branch and one pull request. That is why they are one repository (DR-196).
 
-CI runs `scripts/verify`, one workflow per lane: `loom`, `arras` and `docs`, each triggered only by the paths its lane reads (`docs/contributing.md`).
+CI runs `scripts/verify`, one workflow per lane: `loom`, `viewer` and `docs`, each triggered only by the paths its lane reads (`docs/contributing.md`).
 
-A release is a GitHub release holding the wheel, with arras built and vendored into it, and the install line (`.github/workflows/release.yml`); the workflow makes a draft, and publishing it is done by hand. Nothing is published to a package index.
+A release is a GitHub release holding the wheel, with the viewer built and vendored into it, and the install line (`.github/workflows/release.yml`); the workflow makes a draft, and publishing it is done by hand. Nothing is published to a package index.
 
 ## License
 

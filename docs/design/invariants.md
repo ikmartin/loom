@@ -273,7 +273,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Rule.** What points at other files is written after them: a history step's version files before its ledger line, and every build fragment, written beside its target and renamed into place, before `manifest.json`, itself written by rename.
 
-**Why.** No incident is recorded. An interrupted step must leave a directory nothing refers to, not a ledger line naming files that do not exist; and arras reloads when the manifest changes, so a manifest written first would name fragments that are not there yet.
+**Why.** No incident is recorded. An interrupted step must leave a directory nothing refers to, not a ledger line naming files that do not exist; and the viewer reloads when the manifest changes, so a manifest written first would name fragments that are not there yet.
 
 **Guard.** `loom/tests/unit/history/test_commands.py::test_a_step_is_written_whole_before_the_ledger_line_that_names_it`, `loom/tests/unit/render/test_build.py::test_the_manifest_is_renamed_into_place_after_every_file_it_publishes`
 
@@ -417,7 +417,7 @@ An invariant is a rule loom keeps because breaking it once caused a real failure
 
 **Why.** The text layer drops sub- and superscripts and keeps one `X` for a stack and its space. In the study three wrong renderings passed every text check, one moving a hypothesis from the space to the stack, and the author, editing against page text, twice deleted the paper's own words.
 
-**Guard.** `arras/tests/e2e/review-views.e2e.ts::a transcription is judged against the page itself: the paper's page at the result's place, washed there, beside loom's copy, with the copy's words the page lacks named, and the page's text layer never shown`
+**Guard.** `viewer/tests/e2e/review-views.e2e.ts::a transcription is judged against the page itself: the paper's page at the result's place, washed there, beside loom's copy, with the copy's words the page lacks named, and the page's text layer never shown`
 
 **Record.** DR-179, DR-201
 
@@ -465,7 +465,7 @@ Two differences are known and allowed: the blank space two runs of TeX over one 
 
 **Why.** Found 2026-10-30 by reading the code for the open-quilt study, and reproduced before it was fixed. An agent writes the build output, served at `/build/`, and an HTML or SVG page it left there ran as the viewer when the author opened it, for instance from a link in a transcript. The page read the token from `/_api` and posted a write naming no author, which the publisher takes for the author's own click; an acceptance posted that way was recorded as the author's. The token kept other sites out but not a page served from the viewer's own origin.
 
-**Guard.** `loom/tests/unit/render/test_write_api.py::test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers`, `loom/tests/unit/render/test_write_api.py::test_the_token_is_served_only_to_the_viewers_own_origin`, `loom/tests/unit/render/test_write_api.py::test_each_endpoint_writes_and_refuses_over_the_wire` (`review-accept`), `loom/tests/unit/render/test_files_served.py::test_a_shown_file_is_served_sandboxed_on_the_viewers_origin`, `loom/tests/unit/render/test_files_served.py::test_an_html_page_runs_on_the_frames_origin_with_the_bridge_and_nothing_of_looms`, `arras/tests/e2e-write/origin.e2e.ts`, `arras/tests/e2e-write/files.e2e.ts`, `loom/tests/unit/test_raw_html.py`, `arras/tests/e2e/files.e2e.ts`
+**Guard.** `loom/tests/unit/render/test_write_api.py::test_a_page_the_quilt_holds_is_served_with_no_origin_of_the_viewers`, `loom/tests/unit/render/test_write_api.py::test_the_token_is_served_only_to_the_viewers_own_origin`, `loom/tests/unit/render/test_write_api.py::test_each_endpoint_writes_and_refuses_over_the_wire` (`review-accept`), `loom/tests/unit/render/test_files_served.py::test_a_shown_file_is_served_sandboxed_on_the_viewers_origin`, `loom/tests/unit/render/test_files_served.py::test_an_html_page_runs_on_the_frames_origin_with_the_bridge_and_nothing_of_looms`, `viewer/tests/e2e-write/origin.e2e.ts`, `viewer/tests/e2e-write/files.e2e.ts`, `loom/tests/unit/test_raw_html.py`, `viewer/tests/e2e/files.e2e.ts`
 
 **Record.** `docs/reports/open-quilt-study.md`
 

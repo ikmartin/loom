@@ -1,10 +1,10 @@
-# Agents working in loom-arras
+# Agents working in this repository
 
-This is one repository holding loom and the documents that govern it: `loom` itself (Python, in `loom/`) and its viewer, `arras` (Svelte, in `arras/`), which ships inside loom. Each codebase keeps its own build and tests; a change that crosses them is one branch and one pull request. Read in this order:
+This is one repository holding loom and the documents that govern it: `loom` itself (Python, in `loom/`) and its viewer (Svelte, in `viewer/`), which ships inside loom. Each codebase keeps its own build and tests; a change that crosses them is one branch and one pull request. Read in this order:
 
 1. **`docs/design/README.md`: start here.** What loom is for, the three people every decision is tested against (the Learner, the Explorer, the Author), how to judge a change, and what is decided but not built. Then `principles.md`, `model.md`, `agents.md` and `invariants.md` beside it as the work needs them. Judge a change against the principles and cite them by name.
 2. `docs/work-queue/README.md`: deferred work, each item with the observable trigger that says when it becomes worth doing. It is not an ordered queue; read the triggers, not the order. If no trigger has fired and nobody has asked for something, there is no work waiting, and you should ask rather than invent some.
-3. `docs/specs/`: the formats — the loom–arras interface, the source contract, the library's nodes, diagnostics. A spec wins over the design where a shape is concerned; the design wins on what a thing means.
+3. `docs/specs/`: the formats — the viewer interface, the source contract, the library's nodes, diagnostics. A spec wins over the design where a shape is concerned; the design wins on what a thing means.
 4. `docs/contributing.md`: how to build, test, verify and release.
 5. History, which is never normative: `docs/design/decision-records-frozen.md` (the old design book's decision records), `docs/plans/` and `docs/reports/`. Read them for why something was done, not for what to do now.
 6. `docs/ideas/`: explorations nobody has committed to building, also never normative. Its README says how an idea becomes work.
@@ -20,6 +20,6 @@ Rules that are not negotiable:
 - Loom changes an author's file only when the author incorporates a change (P7); tests enforce it.
 - Adding a queue item means a row in `docs/work-queue/README.md` and a `WQ-NN-<slug>.md` beside it, with an **observable** trigger — a measurement crossing a threshold, a capability existing, a dependency landing. "Someday" is not a trigger. An item's "why deferred" must be its trigger inverted; if the two do not invert cleanly the item is too vague to add. The cap is 45 active items, so a 46th means promoting, merging or dropping one.
 - Closing a queue item means deleting its file and its row and appending one line to `docs/work-queue/closed.md`: a pointer to the plan or commit that carries it, or one sentence on why it was dropped. Ids are never reused, so references to a closed item still resolve. An item graduates to `docs/plans/` when the author commits to building it.
-- Verification is `scripts/verify`: `fast` (the default) while working, `full` before a commit, `--only loom|arras|docs` for one lane. It ends by printing the branch's latest CI runs; read them.
+- Verification is `scripts/verify`: `fast` (the default) while working, `full` before a commit, `--only loom|viewer|docs` for one lane. It ends by printing the branch's latest CI runs; read them.
 - Prose in every file is never hard-wrapped (see `CLAUDE.md`).
 - Publishing to PyPI or npm is done by the user, never by an agent.

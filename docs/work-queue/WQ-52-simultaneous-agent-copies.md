@@ -1,6 +1,6 @@
 # WQ-52 · Agent documents of overlapping scopes
 
-**Repo:** loom, arras
+**Repo:** loom, viewer
 
 ## Trigger
 
@@ -16,7 +16,7 @@ Allowing overlapping scopes needs a meaning for comparing two alternatives of on
 
 ## Blast radius
 
-`section_drafts.check_overlap` and its callers in `loom draft --ai`, `loom ai reopen` and `loom adopt`; `drafts.py`, `adopt.py`, arras's Incoming and compare.
+`section_drafts.check_overlap` and its callers in `loom draft --ai`, `loom ai reopen` and `loom adopt`; `drafts.py`, `adopt.py`, the viewer's Incoming and compare.
 
 ## Related
 
