@@ -1,12 +1,9 @@
 <script lang="ts">
 	// A whole document, virtualised: a column of pages, a window of them drawn, the rest holding their size (plan 0.13 §6).
 	//
-	// The reason to virtualise is memory rather than time — a page costs 12–16ms to draw, which is an order under the
-	// budget, but a canvas for each of a 679-page book is gigabytes. A page outside the window keeps its height, so the
-	// scrollbar never lies and nothing jumps when one is drawn.
+	// The reason to virtualise is memory rather than time — a page costs 12–16ms to draw, which is an order under the budget, but a canvas for each of a 679-page book is gigabytes. A page outside the window keeps its height, so the scrollbar never lies and nothing jumps when one is drawn.
 	//
-	// Page sizes are per page, not per document: a scan's pages differ by a point or two, and a fixed transform would
-	// creep down a long paper. Page one's size is the placeholder until a page reports its own.
+	// Page sizes are per page, not per document: a scan's pages differ by a point or two, and a fixed transform would creep down a long paper. Page one's size is the placeholder until a page reports its own.
 	import { onMount, untrack, type ComponentProps } from 'svelte';
 	import { workspace } from '$lib/workspace/store.svelte';
 	import { PdfView } from './view.svelte';
@@ -165,8 +162,7 @@
 	let sizes = $state<Record<number, { width: number; height: number }>>({});
 
 	const all = $derived(Array.from({ length: count }, (_, i) => i + 1));
-	// A link may name a page the document does not have -- a preprint's numbering against a published copy's. The last
-	// page is the honest answer; claiming page 40 of 12 is not.
+	// A link may name a page the document does not have -- a preprint's numbering against a published copy's. The last page is the honest answer; claiming page 40 of 12 is not.
 	const at = $derived(count ? Math.min(Math.max(here || page, 1), count) : here || page);
 	const shown = $derived(new Set(all.filter((n) => Math.abs(n - at) <= near)));
 	const byPage = $derived.by(() => {
@@ -227,8 +223,7 @@
 		};
 	});
 
-	// Sent to a page: scroll it into view. Not an effect on `here`, which the scroll handler also writes — that would
-	// fight the reader for the scrollbar.
+	// Sent to a page: scroll it into view. Not an effect on `here`, which the scroll handler also writes — that would fight the reader for the scrollbar.
 	$effect(() => {
 		const want = page;
 		const down = share;

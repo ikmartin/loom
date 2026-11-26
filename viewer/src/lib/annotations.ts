@@ -1,9 +1,6 @@
 // Annotations indexed by what they are about, built once per manifest.
 //
-// Every surface that draws a comment asks "which annotations are on this key", and each of them answered by scanning
-// the whole table. One fragment mount asks it once per key, so a document of a hundred keys scanned a corpus of a
-// thousand annotations a hundred times to answer a question one pass could have answered. The index is keyed on the
-// manifest object itself, so a new poll gets a new index for free and a stale one cannot be returned.
+// Every surface that draws a comment asks "which annotations are on this key", and each of them answered by scanning the whole table. One fragment mount asks it once per key, so a document of a hundred keys scanned a corpus of a thousand annotations a hundred times to answer a question one pass could have answered. The index is keyed on the manifest object itself, so a new poll gets a new index for free and a stale one cannot be returned.
 
 import type { Annotation, Manifest } from '$lib/manifest/types';
 

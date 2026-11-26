@@ -46,8 +46,7 @@ export function followReading(root: HTMLElement, ids: string[], scroller: HTMLEl
 
   const pick = () => {
     frame = 0;
-    // the last heading at or above the reading line; the first entry stands until one reaches it, so the bar
-    // is showing before a reader has scrolled at all
+    // the last heading at or above the reading line; the first entry stands until one reaches it, so the bar is showing before a reader has scrolled at all
     let found = ids[0];
     const line = topOf(scroller) + LINE;
     for (const id of ids) {

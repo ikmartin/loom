@@ -136,8 +136,7 @@ export function wire(
 		const here = opts.master ? manifest?.nodes[owner]?.reached_by?.includes(opts.master) : false;
 		set(a, 'href', here ? '#' + anchorId(key) : keyUrl(manifest, owner) + (region ? '#' + anchorId(key) : ''));
 	}
-	// One palette, two surfaces: the accent down an environment's edge and the node in the graph are the same colour
-	// because both ask `$lib/taxonomy` for it, rather than each keeping a list of taxon names.
+	// One palette, two surfaces: the accent down an environment's edge and the node in the graph are the same colour because both ask `$lib/taxonomy` for it, rather than each keeping a list of taxon names.
 	for (const env of root.querySelectorAll<HTMLElement>('.env[data-taxon]')) {
 		const tone = taxonTone(manifest, env.dataset.taxon);
 		if (env.style.getPropertyValue('--taxon-tone') !== tone) env.style.setProperty('--taxon-tone', tone);

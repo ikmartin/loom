@@ -1,5 +1,4 @@
-// When a session was last touched, in the words a person uses (plan 0.13.1). One helper, shared by the panel and the
-// discussion pane, so two surfaces cannot word the same interval differently.
+// When a session was last touched, in the words a person uses (plan 0.13.1). One helper, shared by the panel and the discussion pane, so two surfaces cannot word the same interval differently.
 
 const DAY = 86_400_000;
 const WEEKDAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

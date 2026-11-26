@@ -12,8 +12,7 @@ export function taxonTone(m: Manifest | null, taxon: string | undefined | null):
 	const style = m.taxa?.[taxon]?.style;
 	if (style === undefined) return 'var(--rule-strong)';
 	if (style === 'remark') return 'var(--taxon-aside)';
-	// Anything a publisher styles as neither a remark nor a definition is a claim: unknown styles read as results
-	// rather than as nothing, because a viewer that meets a style it has not heard of should still draw the node.
+	// Anything a publisher styles as neither a remark nor a definition is a claim: unknown styles read as results rather than as nothing, because a viewer that meets a style it has not heard of should still draw the node.
 	return style === 'definition' ? 'var(--taxon-definition)' : 'var(--taxon-result)';
 }
 

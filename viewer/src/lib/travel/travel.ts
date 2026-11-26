@@ -1,13 +1,8 @@
 // Travel between the panes (plan 0.13 §7): from a mark in the content to the annotation it belongs to, and back.
 //
-// **A brief scroll, then a flash.** Not a jump, which loses the reader's place, and not a long animation, which costs
-// time they did not ask to spend. The flash is on the destination, so the eye is told where it arrived rather than
-// being left to search the pane it was sent to.
+// **A brief scroll, then a flash.** Not a jump, which loses the reader's place, and not a long animation, which costs time they did not ask to spend. The flash is on the destination, so the eye is told where it arrived rather than being left to search the pane it was sent to.
 //
-// **Where there is nothing to travel to, nothing moves.** An annotation anchored to another document, or one whose
-// anchor has detached, has no destination; a notice says so for about a second and a half, anchored to whatever was
-// double-clicked. No approximate destination is invented — sending a reader to roughly the right place is worse than
-// telling them there is no place, because they will believe it.
+// **Where there is nothing to travel to, nothing moves.** An annotation anchored to another document, or one whose anchor has detached, has no destination; a notice says so for about a second and a half, anchored to whatever was double-clicked. No approximate destination is invented — sending a reader to roughly the right place is worse than telling them there is no place, because they will believe it.
 
 import { INPUT, scrollerOf } from '$lib/fragments/hold';
 
@@ -25,8 +20,7 @@ export function flash(el: Element): void {
 /**
  * Say, beside `from`, that there is nowhere to go.
  *
- * Placed in viewport coordinates and appended to `from`'s own pane rather than the page root: the viewer is a guest in the
- * document it renders and writes only inside its own subtree.
+ * Placed in viewport coordinates and appended to `from`'s own pane rather than the page root: the viewer is a guest in the document it renders and writes only inside its own subtree.
  */
 export function nowhere(from: Element, said = 'nothing to travel to'): void {
 	const host = document.createElement('div');

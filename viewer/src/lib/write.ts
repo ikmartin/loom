@@ -96,8 +96,7 @@ export async function can(endpoint: string): Promise<boolean> {
 /**
  * Whether one endpoint is served, from the answer already in hand; `undefined` before the first probe returns.
  *
- * The verbs on an annotation are re-mounted whenever its box is re-read, and re-asking asynchronously made the whole
- * row vanish for a frame each time — most visibly right after a write, which is exactly when a reader is looking at it.
+ * The verbs on an annotation are re-mounted whenever its box is re-read, and re-asking asynchronously made the whole row vanish for a frame each time — most visibly right after a write, which is exactly when a reader is looking at it.
  */
 export function known(endpoint: string): boolean | undefined {
 	return settled === undefined ? undefined : !!settled?.capabilities?.includes(endpoint);
@@ -118,9 +117,7 @@ export async function write(endpoint: string, body: Record<string, unknown>): Pr
 		if (endpoint === 'review-accept' || endpoint.startsWith('adopt-')) {
 			body = { reviewer: store.manifest?.reviewer?.name ?? '', ...body };
 		}
-		// The token is CSRF protection and not a login: a browser blocks a cross-origin response and never the
-		// request, so any page the author happens to be reading could otherwise POST into the corpus they are
-		// serving. A cross-site form post cannot set a custom header, which is what makes carrying one enough.
+		// The token is CSRF protection and not a login: a browser blocks a cross-origin response and never the request, so any page the author happens to be reading could otherwise POST into the corpus they are serving. A cross-site form post cannot set a custom header, which is what makes carrying one enough.
 		const send = async () => {
 			const caps = await capabilities();
 			return fetch(apiUrl('/' + endpoint), {

@@ -250,8 +250,7 @@
 		};
 	});
 
-	// The compiled paper's page boundaries, drawn only where they can be known: `p2`, in a document, from the numbers
-	// loom read out of the `.aux`. Re-run on a change of setting, and cleared when the setting is not `p2`.
+	// The compiled paper's page boundaries, drawn only where they can be known: `p2`, in a document, from the numbers loom read out of the `.aux`. Re-run on a change of setting, and cleared when the setting is not `p2`.
 	function pages(root: HTMLElement): void {
 		const paged = prefs.format === 'p2';
 		markPages(paged ? store.manifest : null, paged ? master : null, root);
@@ -526,8 +525,7 @@
 		wireComments(root);
 		if (root === el) wiredKey = annotationKey();
 		pages(root);
-		// counted as soon as the marks are wired, not after the mathematics is set: the header is about what is in the
-		// document, and a reader should not wait on MathJax to be told how much of it is annotated
+		// counted as soon as the marks are wired, not after the mathematics is set: the header is about what is in the document, and a reader should not wait on MathJax to be told how much of it is annotated
 		counts();
 		const { defaults, set } = macros(root);
 		const id = target();

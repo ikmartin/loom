@@ -3,9 +3,7 @@ import { asPercent } from './document';
 
 describe('a rectangle on a page', () => {
 	it('is placed from the top, because the publisher measures from the top', () => {
-		// The incident: the span's docstring said "PDF user space", whose origin is the bottom left. It is not — the
-		// coordinates are what `pdftotext -bbox-layout` emits, points from the top left. A viewer that believed the
-		// docstring drew every highlight mirrored about the middle of the page.
+		// The incident: the span's docstring said "PDF user space", whose origin is the bottom left. It is not — the coordinates are what `pdftotext -bbox-layout` emits, points from the top left. A viewer that believed the docstring drew every highlight mirrored about the middle of the page.
 		const at = asPercent([61.2, 79.2, 306, 158.4], { width: 612, height: 792 });
 		expect(at).toEqual({ left: '10%', top: '10%', width: '40%', height: '10%' });
 	});

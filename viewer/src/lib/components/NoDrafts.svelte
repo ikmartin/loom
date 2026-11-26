@@ -9,9 +9,7 @@
 	let { what = 'results' }: { what?: string } = $props();
 	const m = $derived(store.manifest);
 	const landmarks = $derived(m?.canon?.length ? [...m.canon].reverse() : []);
-	// Two different emptinesses, and saying the wrong one is worse than saying nothing: a corpus that declares it has
-	// no documents is not a corpus between drafts, and telling its reader that nothing is being worked on describes a
-	// state it will never leave.
+	// Two different emptinesses, and saying the wrong one is worse than saying nothing: a corpus that declares it has no documents is not a corpus between drafts, and telling its reader that nothing is being worked on describes a state it will never leave.
 	const never = $derived(m?.publishes.documents === false);
 	// the problems in the person's own LaTeX; an agent's copy's and loom's own say nothing about why none is open
 	const problems = $derived(forPerson(m?.diagnostics ?? []).filter((d) => ownerOf(d) === 'person').length);

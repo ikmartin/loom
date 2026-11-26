@@ -4,12 +4,9 @@
 	//
 	// **A dumb renderer** (plan 0.13 §6). It is given a document, a page and the rectangles to draw, and it reports what the reader did. It fetches no annotations, knows nothing of sessions, and decides nothing about what a highlight means — which is what lets the same component serve the pane and a preview.
 	//
-	// **`render` is the virtualisation seam.** A page outside the window keeps its size and loses its canvas, its text
-	// layer and its overlay; the parent decides which pages are in, and this decides nothing about scrolling.
+	// **`render` is the virtualisation seam.** A page outside the window keeps its size and loses its canvas, its text layer and its overlay; the parent decides which pages are in, and this decides nothing about scrolling.
 	//
-	// It is deliberately NOT keyed on the manifest store: the viewer polls every second and swaps the manifest whenever its
-	// hash changes, so a pane that re-derived from it would re-render a page a second — the failure `Fragment.svelte`
-	// has been patched for twice.
+	// It is deliberately NOT keyed on the manifest store: the viewer polls every second and swaps the manifest whenever its hash changes, so a pane that re-derived from it would re-render a page a second — the failure `Fragment.svelte` has been patched for twice.
 	import { onDestroy, untrack, type Snippet } from 'svelte';
 	import { asPercent, document_, pdfjs } from './document';
 	import { markAt, type PageMark } from './marks';
@@ -103,9 +100,7 @@
 	/** Box mode: forced on a page whose text layer has nothing to select. */
 	const boxing = $derived(empty);
 
-	// Stage timings go to the performance timeline rather than to a prop: they are wanted by the profiler, by whoever is
-	// deciding whether a page is cheap enough to keep in a pane, and by nothing in the app. `measure` is free when
-	// nobody is recording.
+	// Stage timings go to the performance timeline rather than to a prop: they are wanted by the profiler, by whoever is deciding whether a page is cheap enough to keep in a pane, and by nothing in the app. `measure` is free when nobody is recording.
 	function timed(name: string, from: number, to: number): void {
 		performance.measure(`pdf:${name}`, { start: from, end: to });
 	}
@@ -177,8 +172,7 @@
 			if (layerRunning === layer) layerRunning = null;
 			if (stale()) return;
 			const t3 = performance.now();
-			// The paper's links, drawn by us rather than by PDF.js's annotation layer, which wants a link service with a
-			// contract of its own; a `Link` annotation is a rectangle and a destination, and that is all a reader needs.
+			// The paper's links, drawn by us rather than by PDF.js's annotation layer, which wants a link service with a contract of its own; a `Link` annotation is a rectangle and a destination, and that is all a reader needs.
 			const found: typeof links = [];
 			const held: Embedded[] = [];
 			for (const a of await p.getAnnotations()) {
@@ -294,8 +288,7 @@
 		if (!drags(e)) return;
 		const at = host.getBoundingClientRect();
 		drawing = { x0: e.clientX - at.left, y0: e.clientY - at.top, x1: e.clientX - at.left, y1: e.clientY - at.top };
-		// captured on the layer whose handlers these are: capturing on the page redirected every later pointer event
-		// to the page, which listens for none of them, so a drag began and never ended
+		// captured on the layer whose handlers these are: capturing on the page redirected every later pointer event to the page, which listens for none of them, so a drag began and never ended
 		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
 	}
 

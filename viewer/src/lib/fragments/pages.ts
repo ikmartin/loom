@@ -1,14 +1,8 @@
 // Where the compiled paper's pages ended (the `p2` setting).
 //
-// The point of a page view is that its numbers mean something, so the boundaries are not invented: loom publishes the
-// page each numbered result fell on in the compiled PDF -- `nodes[key].numbers[master].page`, read from the `.aux` --
-// and a divider goes before the first element whose page is higher than the one before it. A divider therefore falls
-// exactly where a page ended in the paper the author compiled, and the number beside it is that paper's own.
+// The point of a page view is that its numbers mean something, so the boundaries are not invented: loom publishes the page each numbered result fell on in the compiled PDF -- `nodes[key].numbers[master].page`, read from the `.aux` -- and a divider goes before the first element whose page is higher than the one before it. A divider therefore falls exactly where a page ended in the paper the author compiled, and the number beside it is that paper's own.
 //
-// Two honest limits, both visible rather than papered over. The boundary can only be seen at a numbered element, so a
-// run of prose between two results carries no divider however many pages it spans -- a page here is "the page this
-// result is on", not a sheet of fixed height. And a master that has never been compiled publishes no numbers at all,
-// so `p2` shows what `p1` shows; nothing is guessed.
+// Two honest limits, both visible rather than papered over. The boundary can only be seen at a numbered element, so a run of prose between two results carries no divider however many pages it spans -- a page here is "the page this result is on", not a sheet of fixed height. And a master that has never been compiled publishes no numbers at all, so `p2` shows what `p1` shows; nothing is guessed.
 
 import type { Manifest } from '$lib/manifest/types';
 
@@ -26,8 +20,7 @@ export function pagesOf(m: Manifest | null, master: string | null, root: HTMLEle
 /**
  * Put a divider before each element that begins a new page of the compiled document.
  *
- * Idempotent: the dividers it made are removed before it looks again, so a re-render or a change of setting does not
- * stack them. Returns how many it drew, which is one fewer than the number of pages it could see.
+ * Idempotent: the dividers it made are removed before it looks again, so a re-render or a change of setting does not stack them. Returns how many it drew, which is one fewer than the number of pages it could see.
  */
 export function markPages(m: Manifest | null, master: string | null, root: HTMLElement): number {
 	for (const old of root.querySelectorAll('.page-break')) old.remove();
