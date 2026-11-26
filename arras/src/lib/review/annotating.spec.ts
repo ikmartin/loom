@@ -78,7 +78,7 @@ describe('the look in hand', () => {
 
 	it('writes every type for types-save, one with a new look', () => {
 		const saved = typesPayload(fixture, 'question', { ...RED, color: 'green' });
-		expect(saved.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question', 'note']);
+		expect(saved.map((t) => t.id)).toEqual(['revision', 'suggestion', 'question']);
 		expect(saved[2]).toMatchObject({ id: 'question', name: 'Question', color: 'green', style: 'highlight', weight: 2, opacity: 60, open: true });
 		expect(saved[0]).toMatchObject({ color: 'red', opacity: 60 });
 	});
