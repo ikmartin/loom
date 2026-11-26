@@ -420,7 +420,6 @@ def published(result: ScanResult) -> dict[str, Any]:
     from loom.ai.layout import SHELL, permissions_stale, variant
     from loom.paths import AI
     from loom.scan.diagnostics import LOOM, can_disable
-    from loom.sync import SyncError, SyncState
 
     quilt = result.quilt
     root = quilt.root
@@ -440,17 +439,6 @@ def published(result: ScanResult) -> dict[str, Any]:
         else:
             command = "loom ai init --mcp" if way == SHELL else "loom ai init"
         clients.append({"key": c.key, "label": c.label, "file": c.file, "set_up": set_up, "command": command})
-    try:
-        state = SyncState.read(root)
-        sync: dict[str, Any] = {
-            "paired": True,
-            "directory": state.folder,
-            "workspace": "Overleaf",
-            "branch": "",
-            "documents": [state.master],
-        }
-    except SyncError:
-        sync = {"paired": False}
     return {
         "editable": list(EDITABLE),
         "read_only": list(READ_ONLY),
@@ -478,6 +466,5 @@ def published(result: ScanResult) -> dict[str, Any]:
         },
         # '' while new notes go in the default folder, which `default` names
         "notes": {"dir": "" if cfg.notes_dir == NOTES_DIR else cfg.notes_dir, "default": NOTES_DIR},
-        "sync": sync,
         "warnings": list(cfg.warnings),
     }

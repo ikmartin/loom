@@ -1,44 +1,34 @@
 <script lang="ts">
-	// The Git workspace the quilt is paired with, such as an Overleaf project: shown, never paired from here, since pairing takes a folder on this computer and a terminal of the person's own.
-	import type { QuiltSettings } from '$lib/manifest/types';
+	// Settings › Overleaf: the pairing card while the quilt mirrors no project (`Pairing`), else the mirror's card with Update and its line (`Mirror`), from the manifest's `overleaf`. A page shown as published, and a loom that serves no `overleaf-pair`, show a line saying so.
+	import { store } from '$lib/manifest/client.svelte';
+	import Mirror from '$lib/overleaf/Mirror.svelte';
+	import Pairing from '$lib/overleaf/Pairing.svelte';
+	import { paired } from '$lib/overleaf/said';
+	import { overleaf as words } from '$lib/words/overleaf';
+	import { can, capabilities } from '$lib/write';
 	import Row from './Row.svelte';
 
-	let { config }: { config: QuiltSettings } = $props();
-	const sync = $derived(config.sync);
+	const o = $derived(paired(store.manifest?.overleaf));
+	let served = $state<boolean | null>(null);
+	let published = $state(false);
+	$effect(() => {
+		void Promise.all([can('overleaf-pair'), capabilities()]).then(([ok, caps]) => ((served = ok), (published = !caps)));
+	});
 </script>
 
-{#if sync.paired}
-	<div class="note ok" data-testid="sync-paired">Paired{sync.workspace ? ` with ${sync.workspace}` : ''}.</div>
-	<div class="card">
-		<Row id="sync" stack>
-			<dl>
-				<dt>Folder</dt><dd class="mono">{sync.directory}</dd>
-				{#if sync.branch}<dt>Branch</dt><dd class="mono">{sync.branch}</dd>{/if}
-				<dt>Documents</dt><dd class="mono">{sync.documents.join(', ')}</dd>
-			</dl>
-		</Row>
-	</div>
-{:else}
-	<div class="note info" data-testid="sync-unpaired">Not paired. Clone the project's Git address anywhere, then pair the quilt with that folder in a terminal: <code>{sync.command}</code></div>
-{/if}
+<div class="card">
+	<Row id="overleaf" stack>
+		{#if served === false}<p class="cannot" data-testid="overleaf-not-served">{published ? words.settings.published : words.settings.cannot}</p>
+		{:else if o}<Mirror {o} />
+		{:else if served}<Pairing />
+		{/if}
+	</Row>
+</div>
 
 <style>
-	dl {
-		display: grid;
-		grid-template-columns: auto minmax(0, 1fr);
-		gap: 6px 14px;
+	.cannot {
 		margin: 10px 0 0;
-		font-size: 13px;
-	}
-	dt {
-		color: var(--ink-faint);
-	}
-	dd {
-		margin: 0;
-		overflow-wrap: anywhere;
-	}
-	.mono {
-		font-family: var(--mono);
 		font-size: 12.5px;
+		color: var(--ink-faint);
 	}
 </style>

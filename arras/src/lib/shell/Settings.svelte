@@ -130,7 +130,7 @@
 				{:else if shown === 'notes'}<Notes editable={canSave} />
 				{:else if config && shown === 'agents'}<Agents {config} editable={canSave} {canUpdate} />
 				{:else if shown === 'library'}<Library editable={canSave} />
-				{:else if config && shown === 'overleaf'}<Overleaf {config} />
+				{:else if config && shown === 'overleaf'}<Overleaf />
 				{/if}
 			</div>
 			{#if draft.count || draft.message}

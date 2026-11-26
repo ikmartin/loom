@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, a collaborator's pull where the quilt has one, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
+	// Review's column (`docs/specs/library-views.md` §4.1): "Waiting for you", Everything and the kinds alphabetically with their counts, the drafts with what concerns each, then the tasks agents are still working on, which need nothing of the person, and at its foot History. Each entry has its hover card. Choosing one shows it in Review's list, from any of Review's pages. The two kinds drawn from the manifest, Results to accept and Proposed edits, are counted as their rows are drawn (`views/review/yours.ts`), and Everything and each draft with them, so the column says what is drawn.
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { route } from '$lib/paths';
@@ -10,7 +10,6 @@
 	import { COLUMN_ORDER, READS, rv } from '$lib/views/review/state.svelte';
 	import { review as words } from '$lib/words/review';
 	import { store } from '$lib/manifest/client.svelte';
-	import { pullLabel } from '$lib/review/proposed';
 	import { acted } from '$lib/review/acted.svelte';
 	import { YOURS, isYours, theirs, yoursCount, type YoursKind } from '$lib/views/review/yours';
 
@@ -45,7 +44,7 @@
 	const inList = $derived(page.route.id === '/review');
 
 	/** Shows `kind` in the list, coming back to it from History. */
-	function pick(kind: ReviewKind | 'all' | 'agents' | 'incoming'): void {
+	function pick(kind: ReviewKind | 'all' | 'agents'): void {
 		rv.choose(kind);
 		if (!inList) void goto(route('/review'));
 	}
@@ -53,7 +52,7 @@
 		rv.draft(doc);
 		if (!inList) void goto(route('/review'));
 	}
-	const on = (kind: ReviewKind | 'all' | 'agents' | 'incoming') => inList && rv.kind === kind;
+	const on = (kind: ReviewKind | 'all' | 'agents') => inList && rv.kind === kind;
 </script>
 
 <div class="rv-col rail-scroll" data-testid="review-column">
@@ -67,10 +66,6 @@
 				><span class="t">{words.kinds[k].name}</span><span class="n">{rv.doc ? '' : kindCount(k)}</span></button
 			>
 		{/each}
-		{#if m?.incoming}
-			<div class="rule"></div>
-			<button type="button" class:on={on('incoming')} aria-current={on('incoming') ? 'true' : undefined} data-testid="review-kind-incoming" use:hovercard={{ text: words.column.pullHover, place: 'beside' }} onclick={() => pick('incoming')}><span class="t">{pullLabel(m)}</span></button>
-		{/if}
 	</nav>
 	{#if counts?.drafts.length}
 		<p class="rl"><span use:hovercard={{ text: words.column.draftsHover, place: 'beside' }}>{words.column.drafts}</span></p>
@@ -152,11 +147,6 @@
 		color: var(--ink-faint);
 		font-variant-numeric: tabular-nums;
 		font-weight: 400;
-	}
-	.rule {
-		height: 1px;
-		margin: 8px 8px;
-		background: var(--rule);
 	}
 	.grow {
 		flex: 1;

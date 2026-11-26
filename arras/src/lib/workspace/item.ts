@@ -27,7 +27,7 @@ export interface Item {
 	note?: string;
 	/** Words a `quilt:` link quotes, lit where the item opens: in a document or a node, or on a project PDF's pages; a work's are its `place.quote`. */
 	quote?: string;
-	/** A document's review and incoming comparisons, which the review page opens by URL (`review`, `cause`, `incoming`). */
+	/** A document's review comparison, which the review page opens by URL (`review`, `cause`). */
 	params?: Record<string, string>;
 	/** The size the reader gave this open item, kept with it in its address: a PDF's zoom (a document's compiled PDF, a project PDF, a work's paper), an HTML draft's text size in px. Absent until one is given, and the item is read at the starting size for its kind. */
 	size?: number;
@@ -41,7 +41,7 @@ export interface Documents {
 	canon?: { path: string }[];
 }
 
-const DOC_PARAMS = ['review', 'cause', 'incoming'] as const;
+const DOC_PARAMS = ['review', 'cause'] as const;
 
 /** The identity of an item, for finding it among the open ones. */
 export function itemKey(i: Pick<Item, 'kind' | 'id'>): string {

@@ -15,7 +15,6 @@
 	import ReadAll from './ReadAll.svelte';
 	import { joined, stubsOf, type ShownGroup, type ShownKind } from './rows';
 	import SeeIt from './SeeIt.svelte';
-	import Pull from './Pull.svelte';
 	import Accepting from './Accepting.svelte';
 	import Keeping from './Keeping.svelte';
 	import { isYours as yours, yoursCount } from './yours';
@@ -24,7 +23,7 @@
 		const kind = rv.kind;
 		const doc = rv.doc ?? undefined;
 		void gen.gen;
-		if (kind !== 'incoming' && !yours(kind)) void rv.list.load(`list:${kind}:${doc ?? ''}`, (s) => readList(kind, doc, s));
+		if (!yours(kind)) void rv.list.load(`list:${kind}:${doc ?? ''}`, (s) => readList(kind, doc, s));
 	});
 
 	const groups = $derived(joined(rv.list.value?.groups ?? []).filter((g) => g.rows.length && !yours(g.kind)));
@@ -53,9 +52,7 @@
 <main class="rvw" data-testid="review-view">
 	<div class="scroll">
 	<div class="list">
-		{#if rv.kind === 'incoming'}
-			<Pull />
-		{:else if yours(rv.kind)}
+		{#if yours(rv.kind)}
 			{#if store.manifest && !yoursCount(rv.kind, store.manifest, acted.map, rv.doc)}<p class="empty" data-testid="review-empty">{words.list.empty}</p>{/if}
 			{#if rv.kind === 'accepted-changed'}<Accepting />{:else}<Keeping />{/if}
 		{:else if rv.list.error}

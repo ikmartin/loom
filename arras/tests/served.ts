@@ -139,7 +139,7 @@ type PrepareQuilt = (quilt: Pick<Served, 'root' | 'loom'>) => void | Promise<voi
  *
  * The server is started in its own process group, so stopping it also stops an agent turn it launched. A port lost to a race with another worker shows as an early exit, and is retried on a new one. The pristine copy carries a build, so its manifest answers as soon as the server listens, and the server's own first build, which only checks its cache, runs beside the test's first steps; the watcher starts after it.
  */
-async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promise<Running> {
+async function start(suite: Suite, name: string, prepare?: PrepareQuilt, overleaf = false): Promise<Running> {
 	const dir = scratchDir(suite);
 	const root = join(dir, 'quilts', name);
 	const logPath = `${root}.serve.log`;
@@ -150,6 +150,12 @@ async function start(suite: Suite, name: string, prepare?: PrepareQuilt): Promis
 	mkdirSync(tmp, { recursive: true });
 	cpSync(join(dir, 'template'), root, { recursive: true });
 	const env = reviewerEnv(suite, `${root}.config`);
+	if (overleaf) {
+		// Overleaf's git stood in by a folder beside the copy, which loom's own Python is pointed at as it starts (`overleaf-stand-in/sitecustomize.py`)
+		rmSync(`${root}.overleaf`, { recursive: true, force: true });
+		mkdirSync(join(`${root}.overleaf`, 'projects'), { recursive: true });
+		Object.assign(env, { LOOM_OVERLEAF_STAND_IN: `${root}.overleaf`, PYTHONPATH: join(ARRAS, 'tests', 'overleaf-stand-in') });
+	}
 	const loom: Served['loom'] = (args, overrides = {}) =>
 		execFileSync(LOOM, [...args, '--quilt', root], { cwd: ARRAS, env: { ...env, ...overrides } }).toString();
 	// Finish fixture writes before the publisher scans, so its first manifest describes one consistent source revision.
@@ -257,7 +263,7 @@ async function finish(running: Running, info: TestInfo): Promise<void> {
 		return;
 	}
 	const root = running.served.root;
-	for (const path of [root, `${root}.config`, `${root}.tmp`]) rmSync(path, { recursive: true, force: true });
+	for (const path of [root, `${root}.config`, `${root}.tmp`, `${root}.overleaf`]) rmSync(path, { recursive: true, force: true });
 	rmSync(running.logPath, { force: true });
 }
 
@@ -266,6 +272,8 @@ interface TestFixtures {
 	prepareQuilt: PrepareQuilt | undefined;
 	/** Whether this test gets a copy of its own; `readOnly` sets it false. */
 	ownQuilt: boolean;
+	/** Whether loom reaches a stand-in for Overleaf's git, a folder of bare repositories at `<root>.overleaf/projects/`, one a project id, never Overleaf or the Keychain; a private quilt's only. */
+	overleafStandIn: boolean;
 	served: Served;
 }
 
@@ -276,6 +284,7 @@ interface WorkerFixtures {
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
 	ownQuilt: [true, { option: true }],
+	overleafStandIn: [false, { option: true }],
 	prepareQuilt: undefined,
 	sharedServed: [
 		async ({}, use, info) => {
@@ -286,13 +295,13 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
 		{ scope: 'worker' }
 	],
 	served: [
-		async ({ ownQuilt, sharedServed, prepareQuilt }, use, info) => {
+		async ({ ownQuilt, sharedServed, prepareQuilt, overleafStandIn }, use, info) => {
 			if (!ownQuilt) {
 				if (prepareQuilt) throw new Error('prepareQuilt requires a private quilt');
 				await use(await sharedServed());
 				return;
 			}
-			const running = await start(suiteOf(info), `${info.testId}-${info.repeatEachIndex}-${info.retry}`, prepareQuilt);
+			const running = await start(suiteOf(info), `${info.testId}-${info.repeatEachIndex}-${info.retry}`, prepareQuilt, overleafStandIn);
 			await use(running.served);
 			await finish(running, info);
 		},

@@ -75,21 +75,6 @@ test("suggested edits on a copy are folded on its card and not counted, since th
 	await expect(fold.getByTestId('suggestion-on-copy')).toBeVisible();
 });
 
-test('a pull is a card first, said to be taken whole, and its review has an address', async ({ page }) => {
-	await serve(page, (m) => {
-		m.contributions = [];
-		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [], changes: [{ key: 'prose:intro', name: 'Introduction', category: 'prose', kind: 'edited', local_changed: false, conflict: false, already_local: false, local: null, incoming: null, incoming_macros: '', affected: [], current: 'Old prose', proposed: 'New prose' }] };
-	});
-	await page.goto('/review/proposed');
-	const c = card(page, 'pull');
-	await expect(c).toHaveAttribute('data-kind', 'pull');
-	await expect(c).toContainText('1 change, taken whole.');
-	await expect(c.getByTestId('proposed-chips')).toHaveText('Introduction');
-	await c.getByTestId('proposed-open').click();
-	await expect(page).toHaveURL(/\/review\/proposed\?pull/);
-	await expect(page.getByTestId('contribution-bar')).toContainText('A pull is taken whole.');
-});
-
 test('an agent copy is reviewed under a pinned bar, each change named, a clash said, and nothing to press without a publisher', async ({ page }) => {
 	await page.goto('/review/proposed?copy=' + encodeURIComponent(COPY));
 	const bar = page.getByTestId('contribution-bar');

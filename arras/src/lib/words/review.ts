@@ -27,14 +27,12 @@ export const review = {
 		record: 'History',
 		/** Hover card on History. */
 		recordHover: 'Every version of your documents loom kept, the sessions agents worked in, and everything done in this quilt.',
-		/** Hover card on a collaborator's pull, under the kinds. */
-		pullHover: "A collaborator's changes to your project, fetched for you to read and take in whole, or not.",
 		/** The column's list of kinds, its accessible name. */
 		nav: 'What waits for you'
 	},
 	/** The kinds' names, in the column and over their groups in the list, and the hover card on each in the column. */
 	kinds: {
-		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or a pull. Read each, and accept it or not; those never accepted are folded beneath.' },
+		'accepted-changed': { name: 'Results to accept', hover: 'Results you had accepted whose text has changed since come first, then those taken in from a copy or from Overleaf. Read each, and accept it or not; those never accepted are folded beneath.' },
 		questions: { name: 'Agent questions', hover: 'Questions an agent asked while working. Answer with one of its choices or in your own words.' },
 		cited: { name: "Cited results loom can't read", hover: 'Results your drafts cite that loom could not read by itself. Have an agent read them, or locate one yourself.' },
 		check: { name: 'Results to check', hover: "Loom's copies of results, each waiting for you to check it against its paper." },
@@ -348,7 +346,8 @@ export const review = {
 			'not-open': 'it was kept or discarded already.',
 			'not-utf8': 'its file is not text loom can read.',
 			'not-writable': 'its file cannot be written.',
-			'outside-quilt': 'its file is outside the quilt.'
+			'outside-quilt': 'its file is outside the quilt.',
+			mirrored: 'its document mirrors Overleaf: make the change there, then choose Done in Overleaf.'
 		} as Record<string, string>,
 		/** The column's message when the last keep or discard could not be undone. */
 		notUndone: 'The last keep or discard could not be undone.'

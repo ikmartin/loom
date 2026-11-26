@@ -47,7 +47,7 @@ test('each section opens its own page, saying where it is saved, and the window 
 		['appearance', 'Appearance', 'this browser'],
 		['profile', 'Profile', 'for every quilt'],
 		['agents', 'Agents', "this quilt's config.toml"],
-		['overleaf', 'Overleaf', '.loom/records/source-sync.json, committed with the quilt']
+		['overleaf', 'Overleaf', '.loom/records/source-sync.json and travels with the quilt']
 	]) {
 		await settings(page, section);
 		await expect(page.getByTestId('settings-title')).toHaveText(title);
@@ -93,7 +93,7 @@ test("without a publisher, the quilt's settings are shown as published and chang
 	// a quilt with no agent layer says what writes one, in the publisher's words
 	await expect(page.getByTestId('agents-no-layer')).toContainText('loom ai init');
 	await settings(page, 'overleaf');
-	await expect(page.getByTestId('sync-unpaired')).toBeVisible();
+	await expect(page.getByTestId('overleaf-not-served')).toHaveText('Shown as published. Pairing with Overleaf and updating need loom serving this quilt.');
 	await expect(page.getByTestId('settings-read-only')).toHaveCount(0);
 	await expect(page.getByTestId('settings-savebar')).toHaveCount(0);
 	// a name is saved only through a publisher

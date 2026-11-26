@@ -200,10 +200,6 @@ test("a quilt an earlier loom made: the frame's head, one sentence and one butto
 });
 
 test("in a wider font than this Mac's, every label in the four views' columns and the frame's head is one line, each count in view", async ({ page }) => {
-	// a pull, so Review's column holds its longest label too
-	await serve(page, (m) => {
-		m.incoming = { workspace: 'https://git.overleaf.com/0123', branch: 'master', base: 'a'.repeat(40), commit: 'b'.repeat(40), observed: '2026-09-28', files: [], changes: [] };
-	});
 	await page.setViewportSize({ width: 1440, height: 900 });
 	for (const [at, column] of [['/master/drafting/main', 'docs-part'], ['/library?fixture=round6', 'library-column'], ['/web?fixture=round6', 'web-column'], ['/review?fixture=round6', 'review-column']]) {
 		await page.goto(at);
