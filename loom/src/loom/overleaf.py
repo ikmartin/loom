@@ -610,9 +610,11 @@ def set_me(quilt: Quilt, me: list[str]) -> None:
 def fetch(quilt: Quilt) -> SyncState:
     """Fetch what Overleaf holds into loom's clone and record it as waiting, writing nothing of the person's; what could not be done is kept as this machine's `problem` (`here`), and cleared once a fetch succeeds. Says to ask again who the person is where the machine does not know.
 
-    The clone is made again where this machine did not make it (`_clone`). Raises MirrorError `not-paired`, `bad-record`, or what reaching Overleaf failed on.
+    The clone is made again where this machine did not make it (`_clone`). The record is written under the door's lock, read again there, so a fetch beside an update never undoes it. Raises MirrorError `not-paired`, `bad-record`, or what reaching Overleaf failed on.
     """
     from loom.clock import stamp
+    from loom.locks import locked
+    from loom.paths import WRITES_LOCK
     from loom.sync import git
 
     root = quilt.root
@@ -632,9 +634,12 @@ def fetch(quilt: Quilt) -> SyncState:
     git(clone, "update-ref", f"refs/loom/seen/{new}", new)
     _keep_here(root, problem=None)
     _ask_again(root, clone, new)
-    if new != state.incoming:
-        state.incoming, state.observed = new, stamp()
-        state.write(root)
+    # the record read again and written under the door's lock, so an update that took text in since the first read is never put back
+    with locked(root / WRITES_LOCK):
+        state = SyncState.read(root)
+        if new != state.incoming:
+            state.incoming, state.observed = new, stamp()
+            state.write(root)
     return state
 
 

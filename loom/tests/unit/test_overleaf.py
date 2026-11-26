@@ -1008,6 +1008,29 @@ def test_a_reviewer_name_an_agent_goes_by_is_refused_every_overleaf_act(tmp_path
     assert (root / "drafting/main.tex").read_text() == TWO and paired(root) is not None
 
 
+def test_a_fetch_beside_an_update_never_puts_back_what_the_update_took_in(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """O-13: an update that takes the text in after a fetch first read the record, and before the fetch writes it, stands: the fetch neither puts `integrated` back nor drops the update's `last_pull`."""
+    root, bare = two_lemmas(tmp_path)
+    mirror.edit(mirror.colleague(tmp_path, bare), "edit", {"main.tex": TWO.replace("has a leaf", "has leaves")})
+    real = overleaf._ask_again
+    answered: dict[str, Any] = {}
+
+    def update_meanwhile(*args: Any) -> None:
+        real(*args)
+        if "update" not in answered:
+            answered["update"] = None  # the update's own fetch passes straight through
+            answered["update"] = overleaf.update(load_quilt(root))
+
+    monkeypatch.setattr(overleaf, "_ask_again", update_meanwhile)
+    overleaf.fetch(load_quilt(root))
+    assert answered["update"]["state"] == "updated"
+    record = SyncState.read(root)
+    assert record.integrated == record.incoming and record.last_pull.get("when")
+    assert overleaf.published(root)["waiting"] is False
+
+
 def test_none_yet_is_asked_again_once_the_history_names_someone_new(tmp_path: Path) -> None:
     """O-7: a person who said "none yet" is asked again after their first change in Overleaf."""
     root = mirror.quilt_at(tmp_path)
