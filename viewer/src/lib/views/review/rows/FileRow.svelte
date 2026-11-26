@@ -1,5 +1,5 @@
 <script lang="ts">
-	// A file with edits made in place since the look, as one row of Proposed edits: "main.tex · proof of Theorem 3.1" where every change in it is in one block, else the file; how many edits, a chevron. Open: with more than one, `keep all N` and `discard all N` for the file; then each change as its card draws it bare (`ChangeCard`), named by its block where the file's changes are in several, with Keep and Discard and `see it in main.tex`. The column's message says what an act did in the viewer's words (`changeSaid`).
+	// A file with edits made in place since the look, as one row of Proposed edits: "main.tex · proof of Theorem 3.1" where every change in it is in one block, else the file; how many edits, and for a document holding those of the files it loads beside its text (a style file, a bibliography, a preamble), how many such files; a chevron. Open: with more than one, `keep all N` and `discard all N` for the file; then each change as its card draws it bare (`ChangeCard`), named by its block where the file's changes are in several and by its file where it is in one the document loads, with Keep and Discard and `see it in main.tex`. The column's message says what an act did in the viewer's words (`changeSaid`).
 	import Icon from '$lib/components/Icon.svelte';
 	import { said } from '$lib/library/said';
 	import { store } from '$lib/manifest/client.svelte';
@@ -24,6 +24,7 @@
 	const open = $derived(rv.open.has(id));
 	/** The block every change in the file is in, or the one whose own file it is; null where they are in several or outside any. */
 	const block = $derived.by((): string | null => {
+		if (row.also.length) return null;
 		const keys = [...new Set(row.changes.map((c) => c.key))];
 		if (keys.length === 1 && keys[0]) return keys[0];
 		const nodes = new Set(row.changes.map((c) => (c.key ? (m.keys?.[c.key]?.node ?? c.key) : null)));
@@ -34,11 +35,12 @@
 	// where it is: the draft, or the file in no draft's text; then the block, or a file of the draft's that is not the draft itself
 	const where = $derived(row.doc ? words.file(row.doc) : row.label);
 	const line = $derived(block || (where !== row.path && where !== what) ? words.at(where, what) : where);
+	const hover = $derived(row.also.length ? words.edits.loadsFileHover : words.edits.fileHover);
 	const ids = $derived(row.changes.filter((c) => ready(c)).map((c) => c.id));
 	// a change to a document that mirrors Overleaf is made there, and kept by its own Done in Overleaf
 	const keeps = $derived(row.changes.filter((c) => ready(c) && !mirrors(m.overleaf, c.path)).map((c) => c.id));
 	/** A change's block, said over its card where the file's changes are in several. */
-	const named = (c: PendingChange) => (!block && c.key ? keyName(m, c.key) : '');
+	const named = (c: PendingChange) => (c.path !== row.path ? words.file(c.path) : !block && c.key ? keyName(m, c.key) : '');
 	/** A block the card names (the note it answers) is laid over Review in the draft that holds the change, else named in words. */
 	const see = $derived(row.doc ? (key: string, name: string) => (rv.over = { doc: row.doc!, key, name }) : null);
 	/** What Keep or Discard did, said in the column's message in the viewer's words. */
@@ -56,19 +58,19 @@
 	}
 </script>
 
-<div class="rr" class:open data-testid="review-row" data-kind="edits" data-file={row.path}>
+<div class="rr" class:open data-testid="review-row" data-kind="edits" data-file={row.path} data-loads={row.also.length || null}>
 	<button type="button" class="rr-h" aria-expanded={open} onclick={() => rv.toggle(id)}>
 		<span class="slot"></span><span class="slot"></span>
 		<span class="tx">{line}</span>
-		<span class="meta">{words.edits.sinceLook(row.changes.length)}</span>
+		<span class="meta" title={row.also.length ? words.edits.loadsHover(row.also.map(words.file)) : null}>{words.quiet([words.edits.sinceLook(row.changes.length), row.also.length ? words.edits.loads(row.also.length) : ''])}</span>
 		<span class="chev"><Icon name={open ? 'caret' : 'right'} size={16} /></span>
 	</button>
 	{#if open}
 		<div class="rr-b">
 			{#if row.changes.length > 1}
 				<div class="answers file-acts">
-					<button type="button" class="btn" disabled={!keeps.length || !writes.keep || busy} title={words.edits.fileHover.keep} data-testid="file-keep-all" onclick={() => void all('keep')}>{words.edits.keepAll(keeps.length)}</button>
-					<button type="button" class="btn" disabled={!ids.length || !writes.discard || busy} title={words.edits.fileHover.discard} data-testid="file-discard-all" onclick={() => void all('discard')}>{words.edits.discardAll(ids.length)}</button>
+					<button type="button" class="btn" disabled={!keeps.length || !writes.keep || busy} title={hover.keep} data-testid="file-keep-all" onclick={() => void all('keep')}>{words.edits.keepAll(keeps.length)}</button>
+					<button type="button" class="btn" disabled={!ids.length || !writes.discard || busy} title={hover.discard} data-testid="file-discard-all" onclick={() => void all('discard')}>{words.edits.discardAll(ids.length)}</button>
 				</div>
 			{/if}
 			{#each row.changes as c (c.id)}

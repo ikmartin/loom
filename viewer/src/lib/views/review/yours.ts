@@ -1,12 +1,12 @@
-// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from a copy or a pull), the never accepted and the accepted folded beneath; "Proposed edits", a row for each file with edits made in place since the look (holding that file's changes), for each suggested edit and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
+// Review's two kinds drawn from the manifest rather than from loom's `review-list`, since their acts are the manifest's: "Results to accept", a row for each block waiting (changed since accepted, or taken in from Overleaf) and one for each adoption of an agent's copy, holding the blocks it took in, the never accepted and the accepted folded beneath; "Proposed edits", a row for each file with edits made in place since the look (holding that file's changes, and a document's those of the files it loads beside its text), for each suggested edit and for each agent's copy. The column counts for them the rows drawn, and a draft narrows them as it narrows every kind.
 
 import type { Key, Manifest, PendingChange, UnresolvedReview } from '$lib/manifest/types';
 import type { ReviewKind, ReviewList } from '$lib/library/types';
 import { isAgentDocument } from '$lib/manifest/documents';
 import { byDocument, pending, type ChangeGroup } from '$lib/review/changes';
 import { adoptionsOf } from '$lib/review/proposed';
-import { documentsWithBlocks } from '$lib/review/queue';
-import { acceptanceOf, waitingIn, type Acceptance, type BlockRow } from '$lib/review/yourChanges';
+import { documentsWithBlocks, takenLabel } from '$lib/review/queue';
+import { acceptanceOf, type Acceptance, type BlockRow } from '$lib/review/yourChanges';
 
 /** The two kinds drawn from the manifest. */
 export const YOURS = ['accepted-changed', 'edits'] as const satisfies ReviewKind[];
@@ -55,28 +55,65 @@ export interface AcceptItem {
 	taken?: string;
 }
 
-/** What Results to accept draws: the rows waiting, by document, each document's changed blocks before those taken in; beneath, folded and counting nothing, the never accepted and the accepted. */
+/** An adoption waiting in Results to accept: the blocks one agent's copy brought in, each under the document that lists it, in the order they are listed. */
+export interface AdoptionItem {
+	/** The copy, by path; for a block that names none, where it came from as its group is headed. */
+	copy: string;
+	/** The copy's name. */
+	name: string;
+	/** The document listing its first block, which its row names. */
+	doc: string;
+	blocks: AcceptItem[];
+}
+
+/** A row of Results to accept: a block of its own, or an adoption, which opens to its blocks. */
+export type AcceptRowItem = ({ type: 'block' } & AcceptItem) | ({ type: 'adoption' } & AdoptionItem);
+
+/** What Results to accept draws: the rows waiting (`rows`), by document, each document's changed blocks before those taken in, an adoption one row standing where its first block does; every block those rows hold (`waiting`); beneath, folded and counting nothing, the never accepted and the accepted. */
 export interface AcceptList {
+	rows: AcceptRowItem[];
 	waiting: AcceptItem[];
 	never: AcceptItem[];
 	accepted: { key: string; doc: string; k: Key }[];
 }
 
+/** A copy's name: its file's, without `.tex`. */
+const copyName = (path: string): string => (path.split('/').pop() ?? path).replace(/\.tex$/, '');
+
+/** The copy an adopted block came from, which its adoption's row is one for; null for a block not taken in from a copy. */
+export const adoptionOf = (row: UnresolvedReview): string | null => (row.cause === 'adopted' ? (row.contribution ?? takenLabel(row)) : null);
+
 /** Results to accept's rows, every draft's or one draft's. */
 export function acceptList(m: Manifest, doc?: string | null): AcceptList {
-	const out: AcceptList = { waiting: [], never: [], accepted: [] };
+	const out: AcceptList = { rows: [], waiting: [], never: [], accepted: [] };
+	const adoptions = new Map<string, Extract<AcceptRowItem, { type: 'adoption' }>>();
 	for (const s of acceptSections(m, doc)) {
 		const item = (b: BlockRow, taken?: string): AcceptItem => ({ key: b.key, doc: s.path, row: b.row!, ...(taken ? { taken } : {}) });
-		out.waiting.push(...s.a.changed.map((b) => item(b)), ...s.a.taken.flatMap((t) => t.rows.map((b) => item(b, t.label))));
+		const waiting = [...s.a.changed.map((b) => item(b)), ...s.a.taken.flatMap((t) => t.rows.map((b) => item(b, t.label)))];
+		out.waiting.push(...waiting);
+		for (const b of waiting) {
+			const copy = adoptionOf(b.row);
+			if (copy === null) {
+				out.rows.push({ type: 'block', ...b });
+				continue;
+			}
+			const row = adoptions.get(copy);
+			if (row) row.blocks.push(b);
+			else {
+				const r = { type: 'adoption' as const, copy, name: b.row.contribution ? copyName(b.row.contribution) : copy, doc: b.doc, blocks: [b] };
+				adoptions.set(copy, r);
+				out.rows.push(r);
+			}
+		}
 		out.never.push(...s.a.never.map((b) => item(b)));
 		out.accepted.push(...s.a.accepted.map((k) => ({ key: k.key, doc: s.path, k })));
 	}
 	return out;
 }
 
-/** The blocks Results to accept lists as waiting, changed since accepted or taken in, each once; in one draft when given. */
+/** The rows Results to accept draws as waiting: each block changed since accepted or taken in from Overleaf, each once, and each adoption; in one draft when given. */
 export function acceptWaiting(m: Manifest, doc?: string | null): number {
-	return acceptSections(m, doc).reduce((n, s) => n + waitingIn(s.a), 0);
+	return acceptList(m, doc).rows.length;
 }
 
 /** The changes Proposed edits draws, by the document listing them: every one, or, in a draft, one group of those in its text. Changes just kept or discarded (`gone`) are left out at once. */
@@ -97,14 +134,19 @@ export function changeList(m: Manifest, gone: Record<string, unknown>, doc?: str
 	return changeGroups(m, gone, doc).flatMap((g) => g.changes.map((c) => ({ c, doc: g.document ? g.path : null, label: g.label })));
 }
 
-/** A row of Proposed edits: a suggested edit alone, or a file with edits made in place, which opens to each of them. */
-export type EditRow = ({ type: 'suggested' } & ChangeItem) | ({ type: 'file'; path: string; changes: PendingChange[] } & Omit<ChangeItem, 'c'>);
+/** A row of Proposed edits: a suggested edit alone, or a file with edits made in place, which opens to each of them; a document's own file holds too the edits to the files it loads beside its text (`also`, by path). */
+export type EditRow = ({ type: 'suggested' } & ChangeItem) | ({ type: 'file'; path: string; changes: PendingChange[]; also: string[] } & Omit<ChangeItem, 'c'>);
 
 /** Whether a change was made in the file rather than suggested. */
 export const inPlace = (c: Pick<PendingChange, 'kind'>): boolean => c.kind !== 'suggested';
 
-/** Proposed edits' rows of changes, by document as `changeList` orders them: each suggested edit, and one row a file for the edits made in place, standing where the file's first change stands. */
+/** Proposed edits' rows of changes, by document as `changeList` orders them: each suggested edit, and one row a file for the edits made in place, standing where the file's first change stands; a file a document loads beside its text folded into that document's row (`folded`). */
 export function editRows(m: Manifest, gone: Record<string, unknown>, doc?: string | null): EditRow[] {
+	return folded(m, fileRows(m, gone, doc));
+}
+
+/** Each suggested edit, and one row a file for the edits made in place. */
+function fileRows(m: Manifest, gone: Record<string, unknown>, doc?: string | null): EditRow[] {
 	const out: EditRow[] = [];
 	const files = new Map<string, Extract<EditRow, { type: 'file' }>>();
 	for (const i of changeList(m, gone, doc)) {
@@ -117,12 +159,33 @@ export function editRows(m: Manifest, gone: Record<string, unknown>, doc?: strin
 		const row = files.get(at);
 		if (row) row.changes.push(i.c);
 		else {
-			const r = { type: 'file' as const, path: i.c.path, changes: [i.c], doc: i.doc, label: i.label };
+			const r = { type: 'file' as const, path: i.c.path, changes: [i.c], also: [], doc: i.doc, label: i.label };
 			files.set(at, r);
 			out.push(r);
 		}
 	}
 	return out;
+}
+
+/** The rows with each file a document loads beside its text (a style file, a bibliography, a preamble: its `loads`) folded into the row of the document's own file, where it has one, which then holds its edits too; the first such document in the quilt's order takes it, and a file whose document has no row stays a row of its own. */
+function folded(m: Manifest, rows: EditRow[]): EditRow[] {
+	type FileRow = Extract<EditRow, { type: 'file' }>;
+	const files = rows.filter((r): r is FileRow => r.type === 'file');
+	const own = new Map<string, FileRow>();
+	for (const r of files) if (!own.has(r.path)) own.set(r.path, r);
+	const live = m.masters.filter((d) => !d.closed && !d.context_only);
+	const ranked = [...live.filter((d) => !isAgentDocument(d)), ...live.filter((d) => isAgentDocument(d))];
+	const gone = new Set<FileRow>();
+	for (const r of files) {
+		if (r.also.length) continue;
+		const host = ranked.find((d) => d.path !== r.path && d.loads?.includes(r.path) && own.has(d.path) && !gone.has(own.get(d.path)!));
+		if (!host) continue;
+		const into = own.get(host.path)!;
+		into.changes.push(...r.changes);
+		into.also.push(r.path);
+		gone.add(r);
+	}
+	return rows.filter((r) => r.type !== 'file' || !gone.has(r));
 }
 
 /** The agents' copies waiting to be taken in; those into one draft when given. */

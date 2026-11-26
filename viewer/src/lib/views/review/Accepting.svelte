@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Results to accept's rows (`AcceptRow`), every draft's or the one the column chooses, from the manifest (`acceptList`): the blocks waiting, changed since accepted or taken in, each once; while some are chosen, a line over them with `accept N`; then, folded and counting nothing, the never accepted, which are accepted here too, and the accepted. Says once that the reviewer's name is git's, and where the person cannot accept, why. A link to one block's row (`#review-…`) unfolds what holds it, opens it and brings it into view.
+	// Results to accept's rows, every draft's or the one the column chooses, from the manifest (`acceptList`): the blocks waiting, changed since accepted or taken in from Overleaf, each once (`AcceptRow`), and each adoption of an agent's copy, one row opening to the blocks it took in (`AdoptionRow`); while some are chosen, a line over them with `accept N`; then, folded and counting nothing, the never accepted, which are accepted here too, and the accepted. Says once that the reviewer's name is git's, and where the person cannot accept, why. A link to one block's row (`#review-…`) unfolds and opens what holds it, opens it and brings it into view.
 	import { tick } from 'svelte';
 	import { page } from '$app/state';
 	import Icon from '$lib/components/Icon.svelte';
@@ -10,8 +10,9 @@
 	import { can } from '$lib/write';
 	import { acceptKeys, accepting } from './accept.svelte';
 	import AcceptRow from './rows/AcceptRow.svelte';
+	import AdoptionRow from './rows/AdoptionRow.svelte';
 	import { rv } from './state.svelte';
-	import { acceptList } from './yours';
+	import { acceptList, adoptionOf } from './yours';
 
 	const m = $derived(store.manifest!);
 	const list = $derived(acceptList(m, rv.doc));
@@ -33,6 +34,8 @@
 		const found = [...list.waiting, ...list.never, ...list.accepted].find(at);
 		if (!found) return;
 		if (fold) rv.folded.delete(fold);
+		const copy = 'row' in found && found.row ? adoptionOf(found.row) : null;
+		if (copy !== null) rv.open.add(`adopt:${copy}`);
 		rv.open.add(`accept:${found.key}`);
 		void tick().then(() => window.document.getElementById(hash)?.scrollIntoView({ block: 'center' }));
 	});
@@ -56,7 +59,7 @@
 			<button type="button" class="btn" onclick={() => rv.picked.clear()} data-testid="review-clear">{words.accepted.clear}</button>
 		</div>
 	{/if}
-	{#each list.waiting as b (b.key)}<AcceptRow key={b.key} doc={b.doc} row={b.row} taken={b.taken} {acts} />{/each}
+	{#each list.rows as r (r.type === 'adoption' ? `adopt:${r.copy}` : r.key)}{#if r.type === 'adoption'}<AdoptionRow item={r} {acts} />{:else}<AcceptRow key={r.key} doc={r.doc} row={r.row} taken={r.taken} {acts} />{/if}{/each}
 	{#if list.never.length}
 		{@render fold('accept:never', words.accepted.never, list.never.length)}
 		{#if !rv.folded.has('accept:never')}{#each list.never as b (b.key)}<AcceptRow key={b.key} doc={b.doc} row={b.row} {acts} />{/each}{/if}
