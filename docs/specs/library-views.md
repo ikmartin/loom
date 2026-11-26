@@ -95,6 +95,8 @@ The viewer draws `matches` as round six's filled circle ("matches the paper"), `
 
 Filtering, sorting and searching are the viewer's, over the rows it holds: "Cited in your drafts" is a work some draft cites (`used_in`); "No PDF or source" is no PDF and no TeX source.
 
+A delete a killed act left under way, its work standing without its notes, is finished by the next read of the library, and `library-works` answers it once, as `"deleted": {"undo", "ref", "short"}` beside the rows, so the viewer offers its undo as it does after `library-delete` ("Deleted Smith 2024. Undo"); every other read finishes it and says nothing (the review's M-25). The viewer draws no such answer yet: the views lane's.
+
 From: index (the references and a count of nodes by `source`), evidence (`compared`), scan (`used_in`), store (`holds`, `of`). Cost: one answer of 300 rows, about 60 KB; one grouped query on the index and one pass over the scan's citations, 50 ms warm. It opens no node file, no PDF and no source, and makes no survey.
 
 **Read `GET /_api/library/thumb/<hex>.png`.** The PDF's first page, 360 pixels wide (twice the card's width), made by poppler the first time it is asked for and kept as `.loom/cache/library/thumbs/<hex>.png`. The viewer asks for a card only as it scrolls into view, sixty at first. Cost: the first ask about 0.2 s and 25 KB, then a file read; 300 works keep under 8 MB.

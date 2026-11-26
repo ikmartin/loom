@@ -17,7 +17,7 @@ from typing import Any
 from loom.library import log
 from loom.library.entries import identifiers, read_entry
 from loom.library.ids import STATEMENT, kind_of
-from loom.library.node import SUFFIX, Node, file_name
+from loom.library.node import SUFFIX, Node, NodeUnreadable, file_name, read_node
 from loom.library.store import NodeRefused, folder, read, remove_node, write_node
 from loom.locks import locked
 from loom.paths import LIBRARY_DELETING, LIBRARY_LOCK, LIBRARY_UNDO
@@ -262,6 +262,42 @@ def finish(root: Path) -> None:
         if here.is_file() and copy.is_file() and here.read_bytes() == copy.read_bytes():
             here.unlink()
     _done(root)
+
+
+def finished(root: Path) -> dict[str, str] | None:
+    """Finish a delete a killed act left under way, as a read finds it, and say which.
+
+    Parameters
+    ----------
+    root : Path
+        The quilt.
+
+    Returns
+    -------
+    dict or None
+        `{undo, ref, short}` of the delete finished, for the read to offer its undo as `library-delete` answers it; None where none was under way, or this process has it under way.
+    """
+    from loom.library.works import described
+
+    pointer = root / LIBRARY_DELETING
+    if not pointer.is_file():
+        return None
+    with locked(root / LIBRARY_LOCK):
+        try:
+            undo = pointer.read_text(encoding="utf-8").strip()
+            record = json.loads((root / LIBRARY_UNDO / undo / "undo.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            finish(root)
+            return None
+        if undo in _active:
+            return None
+        finish(root)
+    ref = str(record["ref"])
+    try:
+        said = described(read_node((root / LIBRARY_UNDO / undo / file_name(ref)).read_bytes(), file_name(ref)).body)
+    except (OSError, NodeUnreadable):
+        said = None
+    return {"undo": undo, "ref": ref, "short": str(said["short"]) if said else str(record.get("key") or ref)}
 
 
 def restore(root: Path, undo: str, *, by: str, kind: str) -> str:
