@@ -287,6 +287,15 @@ def test_pairing_copies_the_project_into_a_new_folder_as_one_act(tmp_path: Path)
     assert not (root / ".loom/local/overleaf/main.tex").exists(), "loom's clone has no checkout"
 
 
+def test_settings_read_the_mirror_from_the_manifest_s_overleaf_alone(tmp_path: Path) -> None:
+    """The viewer's Overleaf section draws the manifest's `overleaf`; the config Settings reads names no `sync`."""
+    from loom.config_edit import published as settings
+
+    q, _ = mirrored(tmp_path)
+    assert "sync" not in settings(scan(q))
+    assert overleaf.published(q.root)["folder"] == "paper"
+
+
 def test_who_the_person_is_on_overleaf_stays_on_this_machine(tmp_path: Path) -> None:
     q, _ = mirrored(tmp_path)
     assert here(q.root)["me"] == [PAT[1]]
