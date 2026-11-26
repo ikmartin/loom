@@ -47,6 +47,23 @@ describe('what the desk writes', () => {
 	});
 });
 
+describe('a mark moved', () => {
+	it('is put back by Undo to where it was drawn, a move the manifest has not yet published included', async () => {
+		const { store } = await import('$lib/manifest/client.svelte');
+		const { undo } = await import('$lib/review/history.svelte');
+		(store.manifest as { annotations: Record<string, unknown> }).annotations = { 'a-box': { id: 'a-box', target: { work: 'Bellamy19', page: 1, key: '' }, mark: 'box', rects: [[10, 10, 50, 50]], status: 'open', author: { id: 'me' }, created: '2026-11-24T10:00:00Z', body_html: '' } };
+		const d = desk();
+		d.move({ id: 'a-box', rects: [[20, 20, 60, 60]] });
+		await settle();
+		// resized before the manifest says it moved
+		d.move({ id: 'a-box', rects: [[20, 20, 90, 90]] });
+		await settle();
+		calls.length = 0;
+		await undo();
+		expect(calls).toEqual([['edit', { annotation: 'a-box', rects: [[20, 20, 60, 60]] }]]);
+	});
+});
+
 describe('the notes on words drawn on no page', () => {
 	const note = (id: string, extra: Record<string, unknown> = {}) => ({ id, target: { work: 'Bellamy19', page: 2, key: '' }, quote: 'incidence matrix', status: 'open', author: { id: 'me' }, created: '2026-11-24T10:00:00Z', type: 'aside', body_html: '', ...extra });
 	const on = (s: Record<string, unknown>) => new MarkDesk(() => ({ on: 'Bellamy19', owns: () => true, url: '', name: 'Bellamy19.pdf', ...s }));

@@ -225,13 +225,14 @@ export class MarkDesk {
 		if (held?.strokes) void this.write('ink', held.page, { rects: held.rects, strokes: held.strokes });
 	}
 
-	/** Move or resize a mark, which the toolbar's Undo puts back. */
+	/** Move or resize a mark, which the toolbar's Undo puts back to where it was drawn: a move not yet published is where it was, not the manifest's place before it. */
 	move(e: { id: string } & Place): void {
 		const a = store.manifest?.annotations[e.id];
 		if (!a) return;
+		const was = this.#changed[e.id];
 		const now: Place = { rects: e.rects, ...(e.strokes ? { strokes: e.strokes } : {}) };
-		this.#changed = { ...this.#changed, [e.id]: { ...this.#changed[e.id], ...now } };
-		void edit(a, now).then((res) => {
+		this.#changed = { ...this.#changed, [e.id]: { ...was, ...now } };
+		void edit({ ...a, ...(was?.rects ? { rects: was.rects } : {}), ...(was?.strokes ? { strokes: was.strokes } : {}) }, now).then((res) => {
 			if (res.ok) return;
 			const { [e.id]: _, ...rest } = this.#changed;
 			this.#changed = rest;

@@ -34,7 +34,8 @@ readOnly('beside Review\'s panel it is the block under review, and with two tabs
 	await expect.poll(() => looking(served).item?.link).toBe('quilt:sy-0003');
 	const other = await page.context().newPage();
 	await other.goto('/master/drafting/main?review=sy-0001&cause=0#sy-0001');
-	await expect.poll(() => looking(served).review?.key ?? '').toBe('sy-0001');
+	// the other tab's whole report, its document and the block under review with it, so none of it lands after the first tab is touched
+	await expect.poll(() => { const l = looking(served); return `${l.route} ${l.item?.link} ${l.block?.key} ${l.review?.key}`; }).toBe('reading quilt:drafting/main.tex sy-0001 sy-0001');
 	expect(looking(served).review.cause).toBeTruthy();
 	// the first tab is touched again, and says where it is though nothing there changed; headless Chromium keeps both tabs visible and fires no focus on switching, so the test sends it
 	await page.evaluate(() => window.dispatchEvent(new Event('focus')));
