@@ -74,6 +74,32 @@ def test_locate_refuses_what_it_cannot_answer(tmp_path: Path) -> None:
 
 
 @pytest.mark.poppler
+def test_quoted_words_on_a_project_pdf_are_found_on_their_page_or_the_first_that_holds_them(tmp_path: Path) -> None:
+    """`locate` with `file`: what a `quilt:` link's quoted words on a project PDF light, found as a mark's words are; refused for a file the viewer does not show, and for words on no page."""
+    from loom.render.api import ApiError, handle
+    from tests.unit._pdfs import PROSE, lines_pdf
+
+    q = showcase(tmp_path)
+    lines_pdf(q / "papers/median.pdf", [["Nothing here."], PROSE])
+    lines_pdf(q / ".hidden/secret.pdf", [PROSE])
+    on = handle(q, "locate", {"file": "papers/median.pdf", "page": 2, "text": "incidence  matrix"})
+    assert on["page"] == 2 and len(on["anchor"]["quads"]) == 1
+    anywhere = handle(q, "locate", {"file": "papers/median.pdf", "text": "totally unimodular"})
+    assert anywhere["page"] == 2 and anywhere["anchor"]["quads"]
+    for body, code in (
+        ({"file": "papers/median.pdf", "text": "not in it at all"}, "not-found"),
+        ({"file": "papers/median.pdf", "page": 1, "text": "incidence matrix"}, "not-found"),
+        ({"file": ".hidden/secret.pdf", "text": "incidence matrix"}, "no-such-file"),
+        ({"file": "../outside.pdf", "text": "x"}, "no-such-file"),
+        ({"file": "papers/median.pdf"}, "missing-field"),
+        ({"file": "papers/median.pdf", "page": 0, "text": "x"}, "bad-field"),
+    ):
+        with pytest.raises(ApiError) as exc:
+            handle(q, "locate", body)
+        assert exc.value.code == code, body
+
+
+@pytest.mark.poppler
 def test_a_note_on_a_page_is_written_by_reference_or_key_and_refused_legibly(tmp_path: Path) -> None:
     """`loom annotate` on a work's page: the target may be the key the agent knows or the reference's id, and the record stores the reference's id and the PDF's hash. Text is mapped with the word boxes' tolerance and recorded with offsets; a box is recorded as drawn. Each way of getting it wrong says what to do instead."""
     q = showcase(tmp_path)
