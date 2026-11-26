@@ -142,6 +142,7 @@ export const frame = {
 		offline: 'This quilt keeps loom offline, so nothing was looked up.',
 		reading: 'Loom is still reading this work. Try again when it is done.',
 		'review-unavailable': 'Review could not be read just now.',
+		'state-refused': 'Loom will not write a research state that holds a link that names nothing or a character that is not text. Mend it, then try again.',
 		stub: 'Loom has no text of this result yet, so there is nothing to compare or correct.',
 		'reviewer-changed': 'Your name was changed since this page was read. Reload it and try again.',
 		unreachable: 'The service that looks papers up could not be reached. Try again later.'
